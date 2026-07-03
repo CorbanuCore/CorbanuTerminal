@@ -1256,7 +1256,7 @@ impl App {
         );
     }
 
-    fn dispatch_native_spawn_task_blocks_from_text(
+    pub(crate) fn dispatch_native_spawn_task_blocks_from_text(
         &mut self,
         source_thread_id: ThreadId,
         turn_id: &str,

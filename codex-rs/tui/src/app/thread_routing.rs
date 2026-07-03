@@ -1619,10 +1619,29 @@ impl App {
                     spawn_turn_result_message(&notification.turn),
                 )
             }
+            ServerNotification::ItemCompleted(notification) => {
+                let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
+                    return;
+                };
+                // Streaming deltas still never dispatch. A completed assistant message can
+                // dispatch immediately so dispatch-then-wait works; interrupted/truncated turns
+                // never emit ItemCompleted for that message, and TurnCompleted remains a deduped
+                // catch-all for completed turns.
+                if let codex_app_server_protocol::ThreadItem::AgentMessage { text, .. } =
+                    &notification.item
+                {
+                    self.dispatch_native_spawn_task_blocks_from_text(
+                        thread_id,
+                        &notification.turn_id,
+                        text,
+                    );
+                }
+                return;
+            }
             // Deliberately NOT AgentMessageDelta: spawn task blocks must never dispatch from a
-            // streaming turn. Dispatch happens only from TurnCompleted with a clean Completed
-            // status (see dispatch_native_spawn_task_blocks_from_turn), so an interrupted or
-            // failed turn can never fire a truncated pfterminal_send_task block.
+            // streaming turn. Dispatch happens only from completed assistant-message items or from
+            // TurnCompleted with a clean Completed status, so an interrupted or failed turn can
+            // never fire a truncated pfterminal_send_task block.
             _ => return,
         };
 

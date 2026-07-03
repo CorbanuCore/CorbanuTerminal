@@ -44,6 +44,7 @@ use codex_app_server_protocol::CommandExecutionRequestApprovalParams;
 use codex_app_server_protocol::ConfigWarningNotification;
 use codex_app_server_protocol::FileChangeRequestApprovalParams;
 use codex_app_server_protocol::FileUpdateChange;
+use codex_app_server_protocol::ItemCompletedNotification;
 use codex_app_server_protocol::ItemStartedNotification;
 use codex_app_server_protocol::JSONRPCErrorError;
 use codex_app_server_protocol::McpServerElicitationRequest;
@@ -3761,6 +3762,133 @@ D11 native dispatch reached Ghash. Write the artifact."#;
         routed_tasks[0]
             .1
             .contains("D11 native dispatch reached Snaga")
+    );
+}
+
+#[tokio::test]
+async fn completed_assistant_message_dispatches_before_turn_completed_and_dedupes() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let nazgul_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000645").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000646").expect("valid thread id");
+    let snaga_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000647").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        nazgul_thread_id,
+        Some("Angmar".to_string()),
+        Some("nazgul".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        snaga_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(troll_thread_id, nazgul_thread_id);
+    app.spawn_parent_by_thread
+        .insert(snaga_thread_id, troll_thread_id);
+
+    let message = r#"Dispatch while continuing the same turn.
+<pfterminal_send_task target="Snaga">
+Reply with exactly OK.
+</pfterminal_send_task>
+Now waiting."#;
+
+    app.update_spawn_status_for_thread_notification(&item_completed_notification(
+        troll_thread_id,
+        "turn-item-dispatch",
+        "agent-message-item-dispatch",
+        message,
+    ));
+
+    let first_task = drain_spawn_agent_task_for(&mut rx, snaga_thread_id)
+        .expect("completed assistant item should dispatch before TurnCompleted");
+    assert!(first_task.contains("Assigned by Burzum [troll] to Snaga [orc]"));
+    assert!(first_task.contains("Reply with exactly OK."));
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, snaga_thread_id).is_none(),
+        "only one task should dispatch from ItemCompleted"
+    );
+
+    app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+        troll_thread_id,
+        "turn-item-dispatch",
+        TurnStatus::Completed,
+        message,
+    ));
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, snaga_thread_id).is_none(),
+        "TurnCompleted catch-all must dedupe already-dispatched item blocks"
+    );
+}
+
+#[tokio::test]
+async fn partial_completed_assistant_message_and_interrupted_turn_do_not_dispatch() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let nazgul_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000648").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000649").expect("valid thread id");
+    let snaga_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000650").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        nazgul_thread_id,
+        Some("Angmar".to_string()),
+        Some("nazgul".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        snaga_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(troll_thread_id, nazgul_thread_id);
+    app.spawn_parent_by_thread
+        .insert(snaga_thread_id, troll_thread_id);
+
+    let partial_message = r#"Dispatch started.
+<pfterminal_send_task target="Snaga">
+Reply with exactly OK."#;
+
+    app.update_spawn_status_for_thread_notification(&item_completed_notification(
+        troll_thread_id,
+        "turn-partial-item-dispatch",
+        "agent-message-partial-item-dispatch",
+        partial_message,
+    ));
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, snaga_thread_id).is_none(),
+        "partial item blocks must not dispatch"
+    );
+
+    app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+        troll_thread_id,
+        "turn-partial-item-dispatch",
+        TurnStatus::Interrupted,
+        partial_message,
+    ));
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, snaga_thread_id).is_none(),
+        "interrupted turn catch-all must not dispatch partial blocks"
     );
 }
 
@@ -7983,6 +8111,25 @@ fn agent_message_delta_notification(
         turn_id: turn_id.to_string(),
         item_id: item_id.to_string(),
         delta: delta.to_string(),
+    })
+}
+
+fn item_completed_notification(
+    thread_id: ThreadId,
+    turn_id: &str,
+    item_id: &str,
+    message: &str,
+) -> ServerNotification {
+    ServerNotification::ItemCompleted(ItemCompletedNotification {
+        thread_id: thread_id.to_string(),
+        turn_id: turn_id.to_string(),
+        item: ThreadItem::AgentMessage {
+            id: item_id.to_string(),
+            text: message.to_string(),
+            phase: None,
+            memory_citation: None,
+        },
+        completed_at_ms: 0,
     })
 }
 
