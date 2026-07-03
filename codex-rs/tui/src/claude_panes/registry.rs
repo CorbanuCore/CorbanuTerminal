@@ -378,24 +378,6 @@ impl ClaudePaneRegistry {
             .is_some_and(ClaudePaneLiveTurn::has_emitted_visible_assistant_transcript)
     }
 
-    pub(crate) fn collect_spawn_dispatches_from_assistant_delta(
-        &mut self,
-        pane_id: &str,
-        delta: &str,
-    ) -> Vec<crate::spawn_orchestration::SpawnTaskDispatch> {
-        let Some(pane) = self.panes.iter_mut().find(|pane| pane.id == pane_id) else {
-            return Vec::new();
-        };
-        let live_turn = pane
-            .live_turn
-            .get_or_insert_with(ClaudePaneLiveTurn::starting);
-        live_turn.assistant_dispatch_buffer.push_str(delta);
-        let (_, dispatches) = crate::spawn_orchestration::extract_spawn_task_dispatches(
-            &live_turn.assistant_dispatch_buffer,
-        );
-        live_turn.filter_new_dispatches(dispatches)
-    }
-
     pub(crate) fn filter_new_spawn_dispatches(
         &mut self,
         pane_id: &str,

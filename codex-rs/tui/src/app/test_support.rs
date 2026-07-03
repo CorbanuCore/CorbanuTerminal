@@ -62,7 +62,7 @@ pub(super) async fn make_test_app() -> App {
         spawn_parent_reports_by_node: HashMap::new(),
         spawn_pending_reports_by_thread: HashMap::new(),
         spawn_processed_dispatches: HashSet::new(),
-        spawn_streaming_agent_messages: HashMap::new(),
+        spawn_auto_loop_state_by_node: HashMap::new(),
         spawn_nazgul_pane_id: None,
         side_threads: HashMap::new(),
         claude_panes: crate::claude_panes::ClaudePaneRegistry::new(),

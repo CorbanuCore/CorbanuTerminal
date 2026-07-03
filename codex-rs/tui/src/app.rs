@@ -637,7 +637,9 @@ pub(crate) struct App {
     /// flush only fires for the pane that actually became idle.
     pub(crate) spawn_pending_reports_by_thread: HashMap<ThreadId, VecDeque<String>>,
     pub(crate) spawn_processed_dispatches: HashSet<(ThreadId, String, String, String)>,
-    pub(crate) spawn_streaming_agent_messages: HashMap<(ThreadId, String, String), String>,
+    /// Loop-breaker state for auto child-report processing turns, keyed by parent node id.
+    pub(crate) spawn_auto_loop_state_by_node:
+        HashMap<String, crate::spawn_orchestration::SpawnAutoLoopState>,
     pub(crate) spawn_nazgul_pane_id: Option<String>,
     side_threads: HashMap<ThreadId, SideThreadState>,
     pub(crate) claude_panes: crate::claude_panes::ClaudePaneRegistry,
@@ -1199,7 +1201,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
             spawn_parent_reports_by_node: HashMap::new(),
             spawn_pending_reports_by_thread: HashMap::new(),
             spawn_processed_dispatches: HashSet::new(),
-            spawn_streaming_agent_messages: HashMap::new(),
+            spawn_auto_loop_state_by_node: HashMap::new(),
             spawn_nazgul_pane_id: restored_spawn_nazgul_pane_id,
             side_threads: HashMap::new(),
             claude_panes: restored_claude_panes,

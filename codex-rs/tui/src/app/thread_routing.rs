@@ -1582,6 +1582,10 @@ impl App {
                 let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
                     return;
                 };
+                // Loop breaker: a turn we auto-triggered (child-report processing) transitions
+                // pending -> running; any other turn is fresh work and resets the auto chain.
+                let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
+                self.note_spawn_turn_started_for_auto_loop(&node_key);
                 (
                     thread_id,
                     codex_app_server_protocol::CollabAgentStatus::Running,
@@ -1593,6 +1597,12 @@ impl App {
                     return;
                 };
                 self.dispatch_native_spawn_task_blocks_from_turn(thread_id, &notification.turn);
+                // Loop breaker: finalize AFTER the dispatch call above so a dispatch emitted by
+                // this turn is attributed to it before the auto-turn flags clear.
+                if notification.turn.status != TurnStatus::InProgress {
+                    let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
+                    self.note_spawn_turn_completed_for_auto_loop(&node_key);
+                }
                 let status = match notification.turn.status {
                     TurnStatus::Completed => {
                         codex_app_server_protocol::CollabAgentStatus::Completed
@@ -1609,18 +1619,10 @@ impl App {
                     spawn_turn_result_message(&notification.turn),
                 )
             }
-            ServerNotification::AgentMessageDelta(notification) => {
-                let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
-                    return;
-                };
-                self.dispatch_native_spawn_task_blocks_from_agent_message_delta(
-                    thread_id,
-                    &notification.turn_id,
-                    &notification.item_id,
-                    &notification.delta,
-                );
-                return;
-            }
+            // Deliberately NOT AgentMessageDelta: spawn task blocks must never dispatch from a
+            // streaming turn. Dispatch happens only from TurnCompleted with a clean Completed
+            // status (see dispatch_native_spawn_task_blocks_from_turn), so an interrupted or
+            // failed turn can never fire a truncated pfterminal_send_task block.
             _ => return,
         };
 

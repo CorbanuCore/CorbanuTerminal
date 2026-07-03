@@ -3579,7 +3579,7 @@ Both sent."#;
 }
 
 #[tokio::test]
-async fn native_troll_streaming_dispatch_routes_valid_blocks_before_final_summary() {
+async fn native_troll_streaming_dispatch_waits_for_clean_turn_completion() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let nazgul_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000641").expect("valid thread id");
@@ -3621,6 +3621,8 @@ async fn native_troll_streaming_dispatch_routes_valid_blocks_before_final_summar
     app.spawn_parent_by_thread
         .insert(ghash_thread_id, troll_thread_id);
 
+    // A dispatch block that is complete in the streaming buffer must NOT fire mid-turn: an
+    // interrupt after this delta would otherwise have already dispatched a truncated thought.
     let streaming_message = r#"Plan set. Dispatching to both Orcs now in parallel.
 
 <pfterminal_send_task target="Snaga">
@@ -3628,8 +3630,7 @@ D11 native dispatch reached Snaga. Write the artifact.
 </pfterminal_send_task>
 
 <pfterminal_send_task target="Ghash">
-D11 native dispatch reached Ghash. Write the artifact.
-</pfterminal_send_task</think>Both dispatches sent."#;
+D11 native dispatch reached Ghash. Write the artifact."#;
     app.update_spawn_status_for_thread_notification(&agent_message_delta_notification(
         troll_thread_id,
         "turn-d11-streaming-dispatch",
@@ -3637,9 +3638,36 @@ D11 native dispatch reached Ghash. Write the artifact.
         streaming_message,
     ));
 
+    while let Ok(event) = rx.try_recv() {
+        if let AppEvent::SubmitSpawnAgentTask { thread_id, .. } = event
+            && (thread_id == snaga_thread_id || thread_id == ghash_thread_id)
+        {
+            panic!("streaming deltas must never dispatch, even with a complete block buffered");
+        }
+    }
+
+    // Only the clean turn completion dispatches, and the partial Ghash block (no close tag in
+    // the final message) is dropped rather than dispatched.
+    let final_message = r#"Plan set. Dispatching to both Orcs now in parallel.
+
+<pfterminal_send_task target="Snaga">
+D11 native dispatch reached Snaga. Write the artifact.
+</pfterminal_send_task>
+
+<pfterminal_send_task target="Ghash">
+D11 native dispatch reached Ghash. Write the artifact."#;
+    app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+        troll_thread_id,
+        "turn-d11-streaming-dispatch",
+        TurnStatus::Completed,
+        final_message,
+    ));
+
     let mut routed_tasks = Vec::new();
     while let Ok(event) = rx.try_recv() {
-        if let AppEvent::SubmitSpawnAgentTask { thread_id, task } = event {
+        if let AppEvent::SubmitSpawnAgentTask { thread_id, task } = event
+            && (thread_id == snaga_thread_id || thread_id == ghash_thread_id)
+        {
             routed_tasks.push((thread_id, task));
         }
     }
@@ -3656,19 +3684,199 @@ D11 native dispatch reached Ghash. Write the artifact.
             .1
             .contains("D11 native dispatch reached Snaga")
     );
+}
 
+#[tokio::test]
+async fn auto_report_dispatch_loop_pauses_after_chain_limit_and_resets_on_fresh_turn() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000661").expect("valid thread id");
+    let orc_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000662").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        orc_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(orc_thread_id, troll_thread_id);
+
+    let dispatching_message = r#"Report reviewed. Sending follow-up.
+<pfterminal_send_task target="Snaga">
+Do another lap.
+</pfterminal_send_task>"#;
+
+    // Each cycle: orc reports -> parent auto processing turn starts -> parent turn completes
+    // with a fresh dispatch back to the orc. This is the self-sustaining loop shape.
+    for cycle in 0..crate::spawn_orchestration::SPAWN_AUTO_DISPATCH_CHAIN_LIMIT {
+        app.record_spawn_child_report_for_thread(
+            orc_thread_id,
+            codex_app_server_protocol::CollabAgentStatus::Completed,
+            Some(format!("lap {cycle} done")),
+        );
+        let task = drain_spawn_agent_task_for(&mut rx, troll_thread_id).unwrap_or_else(|| {
+            panic!("cycle {cycle}: parent below the chain limit should auto-process the report")
+        });
+        assert!(task.contains("A child pane has reported back"));
+
+        let turn_id = format!("turn-auto-loop-{cycle}");
+        app.update_spawn_status_for_thread_notification(&ServerNotification::TurnStarted(
+            codex_app_server_protocol::TurnStartedNotification {
+                thread_id: troll_thread_id.to_string(),
+                turn: test_turn(&turn_id, TurnStatus::InProgress, Vec::new()),
+            },
+        ));
+        app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+            troll_thread_id,
+            &turn_id,
+            TurnStatus::Completed,
+            &format!("{dispatching_message}\ncycle {cycle}"),
+        ));
+        assert!(
+            drain_spawn_agent_task_for(&mut rx, orc_thread_id).is_some(),
+            "cycle {cycle}: the auto turn's dispatch should reach the orc"
+        );
+    }
+
+    // The next report exceeds the chain limit: no auto processing turn may start.
+    app.record_spawn_child_report_for_thread(
+        orc_thread_id,
+        codex_app_server_protocol::CollabAgentStatus::Completed,
+        Some("one lap too many".to_string()),
+    );
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, troll_thread_id).is_none(),
+        "auto-processing must pause once the dispatch chain limit is reached"
+    );
+
+    // Fresh work (a turn the host did not auto-trigger, e.g. operator input or a task
+    // dispatched to the parent) resets the chain and resumes auto-processing.
+    app.update_spawn_status_for_thread_notification(&ServerNotification::TurnStarted(
+        codex_app_server_protocol::TurnStartedNotification {
+            thread_id: troll_thread_id.to_string(),
+            turn: test_turn("turn-operator-input", TurnStatus::InProgress, Vec::new()),
+        },
+    ));
     app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
         troll_thread_id,
-        "turn-d11-streaming-dispatch",
+        "turn-operator-input",
         TurnStatus::Completed,
-        "D5 acceptance choreograph complete. Report dispatched to Angmar.",
+        "Understood, standing by.",
     ));
+    while rx.try_recv().is_ok() {}
 
-    while let Ok(event) = rx.try_recv() {
-        if let AppEvent::SubmitSpawnAgentTask { thread_id, .. } = event
-            && (thread_id == snaga_thread_id || thread_id == ghash_thread_id)
-        {
-            panic!("final summary without dispatch blocks must not enqueue duplicate child tasks");
+    app.record_spawn_child_report_for_thread(
+        orc_thread_id,
+        codex_app_server_protocol::CollabAgentStatus::Completed,
+        Some("post-reset report".to_string()),
+    );
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, troll_thread_id).is_some(),
+        "a fresh non-auto turn must reset the chain and resume auto-processing"
+    );
+}
+
+#[tokio::test]
+async fn auto_report_turns_that_acknowledge_without_dispatch_do_not_trip_the_loop_breaker() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000671").expect("valid thread id");
+    let orc_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000672").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        orc_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(orc_thread_id, troll_thread_id);
+
+    // Many report -> acknowledge cycles: no dispatch in the auto turn, so the chain resets
+    // every cycle and auto-processing keeps working well past the chain limit.
+    for cycle in 0..(crate::spawn_orchestration::SPAWN_AUTO_DISPATCH_CHAIN_LIMIT * 3) {
+        app.record_spawn_child_report_for_thread(
+            orc_thread_id,
+            codex_app_server_protocol::CollabAgentStatus::Completed,
+            Some(format!("status update {cycle}")),
+        );
+        assert!(
+            drain_spawn_agent_task_for(&mut rx, troll_thread_id).is_some(),
+            "cycle {cycle}: acknowledging parents must never be paused"
+        );
+        let turn_id = format!("turn-ack-{cycle}");
+        app.update_spawn_status_for_thread_notification(&ServerNotification::TurnStarted(
+            codex_app_server_protocol::TurnStartedNotification {
+                thread_id: troll_thread_id.to_string(),
+                turn: test_turn(&turn_id, TurnStatus::InProgress, Vec::new()),
+            },
+        ));
+        app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+            troll_thread_id,
+            &turn_id,
+            TurnStatus::Completed,
+            "Acknowledged; no action needed.",
+        ));
+    }
+}
+
+#[tokio::test]
+async fn interrupted_turn_never_dispatches_even_with_complete_blocks() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let nazgul_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000651").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000652").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        nazgul_thread_id,
+        Some("Angmar".to_string()),
+        Some("nazgul".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(troll_thread_id, nazgul_thread_id);
+
+    let message = r#"Dispatching.
+<pfterminal_send_task target="Burzum">
+Task: um to remove the artifact and stop generating unvalidated busywork.
+</pfterminal_send_task>
+More text that never finished"#;
+
+    for status in [TurnStatus::Interrupted, TurnStatus::Failed] {
+        app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+            nazgul_thread_id,
+            "turn-interrupted-dispatch",
+            status.clone(),
+            message,
+        ));
+        while let Ok(event) = rx.try_recv() {
+            if let AppEvent::SubmitSpawnAgentTask { thread_id, .. } = event
+                && thread_id == troll_thread_id
+            {
+                panic!("{status:?} turn must never dispatch spawn task blocks");
+            }
         }
     }
 }
@@ -7015,7 +7223,7 @@ async fn make_test_app() -> App {
         spawn_parent_reports_by_node: HashMap::new(),
         spawn_pending_reports_by_thread: HashMap::new(),
         spawn_processed_dispatches: HashSet::new(),
-        spawn_streaming_agent_messages: HashMap::new(),
+        spawn_auto_loop_state_by_node: HashMap::new(),
         spawn_nazgul_pane_id: None,
         side_threads: HashMap::new(),
         claude_panes: crate::claude_panes::ClaudePaneRegistry::new(),
@@ -7090,7 +7298,7 @@ async fn make_test_app_with_channels() -> (
             spawn_parent_reports_by_node: HashMap::new(),
             spawn_pending_reports_by_thread: HashMap::new(),
             spawn_processed_dispatches: HashSet::new(),
-            spawn_streaming_agent_messages: HashMap::new(),
+            spawn_auto_loop_state_by_node: HashMap::new(),
             spawn_nazgul_pane_id: None,
             side_threads: HashMap::new(),
             claude_panes: crate::claude_panes::ClaudePaneRegistry::new(),

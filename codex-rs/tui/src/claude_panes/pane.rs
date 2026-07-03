@@ -166,7 +166,6 @@ pub(crate) struct ClaudePaneLiveTurn {
     pub(crate) assistant_blurbs: Vec<String>,
     pub(crate) reasoning_blurbs: Vec<String>,
     pub(crate) tool_blurbs: Vec<String>,
-    pub(crate) assistant_dispatch_buffer: String,
     pub(crate) sent_dispatch_keys: HashSet<String>,
 }
 
@@ -188,7 +187,6 @@ impl ClaudePaneLiveTurn {
             assistant_blurbs: Vec::new(),
             reasoning_blurbs: Vec::new(),
             tool_blurbs: Vec::new(),
-            assistant_dispatch_buffer: String::new(),
             sent_dispatch_keys: HashSet::new(),
         }
     }

@@ -537,6 +537,11 @@ impl App {
                 }
             };
         self.record_claude_spawn_rollout_task_started(&pane_id, &task, prepared.plan.turn_index);
+        // Loop breaker: a turn we auto-triggered (child-report processing) transitions
+        // pending -> running; any other submitted task is fresh work and resets the auto chain.
+        self.note_spawn_turn_started_for_auto_loop(&crate::spawn_orchestration::pane_node_id(
+            &pane_id,
+        ));
 
         if self.claude_panes.active_user_pane_id() == pane_id {
             self.chat_widget.begin_external_pane_turn();
@@ -566,14 +571,10 @@ impl App {
 
     pub(crate) fn on_claude_pane_turn_progress(&mut self, progress: ClaudePaneTurnProgress) {
         let is_active = self.claude_panes.active_user_pane_id() == progress.pane_id;
-        if let Some(delta) = progress.assistant_text_delta.as_deref() {
-            let dispatches = self
-                .claude_panes
-                .collect_spawn_dispatches_from_assistant_delta(&progress.pane_id, delta);
-            if !dispatches.is_empty() {
-                self.dispatch_spawn_task_blocks(&progress.pane_id, dispatches);
-            }
-        }
+        // Deliberately no dispatch scanning here: spawn task blocks must never dispatch from a
+        // streaming turn. Dispatch happens only in on_claude_pane_turn_finished for turns that
+        // ended with ClaudePaneTurnStatus::Success, so an interrupted or failed pane turn can
+        // never fire a truncated pfterminal_send_task block.
         if let Some(status) = self.claude_panes.update_live_progress(&progress)
             && is_active
         {
@@ -627,9 +628,17 @@ impl App {
                     &report_status,
                     Some(&report_text),
                 );
-                if !dispatches.is_empty() {
+                // Dispatch only from cleanly completed turns. Interrupted, paused, and failed
+                // turns must never dispatch: their text can contain a complete-looking
+                // pfterminal_send_task block whose task was truncated mid-thought.
+                if output.status.is_success() && !dispatches.is_empty() {
                     self.dispatch_spawn_task_blocks(&pane_id, dispatches);
                 }
+                // Loop breaker: finalize AFTER the dispatch call above so a dispatch emitted by
+                // this turn is attributed to it before the auto-turn flags clear.
+                self.note_spawn_turn_completed_for_auto_loop(
+                    &crate::spawn_orchestration::pane_node_id(&pane_id),
+                );
                 if !output.text.trim().is_empty() {
                     if is_active && !active_text_streamed {
                         self.chat_widget
@@ -687,6 +696,9 @@ impl App {
             }
             Err(error) => {
                 self.claude_panes.finish_turn(&pane_id, &Err(error.clone()));
+                self.note_spawn_turn_completed_for_auto_loop(
+                    &crate::spawn_orchestration::pane_node_id(&pane_id),
+                );
                 self.record_spawn_child_report_for_claude_pane(&pane_id, "error", Some(&error));
                 if self.claude_panes.active_user_pane_id() == pane_id {
                     self.chat_widget.fail_external_pane_turn(error);

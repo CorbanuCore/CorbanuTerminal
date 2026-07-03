@@ -755,69 +755,41 @@ fn assistant_text_progress_carries_streaming_delta() {
 }
 
 #[test]
-fn streaming_assistant_dispatch_blocks_are_collected_once() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let mut registry = ClaudePaneRegistry::new();
-    let pane_id = registry
-        .create_pane(
-            ClaudeProviderProfileKind::ClaudePlan,
-            std::env::current_dir().expect("cwd"),
-            dir.path(),
-        )
-        .expect("pane");
-
-    let first = registry.collect_spawn_dispatches_from_assistant_delta(
-        &pane_id,
-        "Before ```pfterminal-send-task\ntarget: Snaga\ntask:\nbuild",
+fn finished_turn_fenced_dispatch_blocks_are_filtered_once() {
+    // Streaming deltas no longer collect dispatches (truncated turns must never dispatch);
+    // dispatch extraction happens once on the finished turn's full text, deduplicated per turn.
+    let mut live_turn = ClaudePaneLiveTurn::starting();
+    let (_, dispatches) = crate::spawn_orchestration::extract_spawn_task_dispatches(
+        "Before ```pfterminal-send-task\ntarget: Snaga\ntask:\nbuild site\n``` after",
     );
-    assert!(first.is_empty());
+    assert_eq!(dispatches.len(), 1);
 
-    let second =
-        registry.collect_spawn_dispatches_from_assistant_delta(&pane_id, " site\n``` after");
-    assert_eq!(second.len(), 1);
-    assert_eq!(second[0].target, "Snaga");
-    assert_eq!(second[0].task, "build site");
+    let first = live_turn.filter_new_dispatches(dispatches.clone());
+    assert_eq!(first.len(), 1);
+    assert_eq!(first[0].target, "Snaga");
+    assert_eq!(first[0].task, "build site");
 
-    let duplicate = registry.collect_spawn_dispatches_from_assistant_delta(
-        &pane_id,
-        "```pfterminal-send-task\ntarget: Snaga\ntask:\nbuild site\n```",
-    );
+    let duplicate = live_turn.filter_new_dispatches(dispatches);
     assert!(duplicate.is_empty());
 }
 
 #[test]
-fn streaming_xmlish_dispatch_preserves_code_fences_until_close_tag() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let mut registry = ClaudePaneRegistry::new();
-    let pane_id = registry
-        .create_pane(
-            ClaudeProviderProfileKind::ClaudePlan,
-            std::env::current_dir().expect("cwd"),
-            dir.path(),
-        )
-        .expect("pane");
-
-    let first = registry.collect_spawn_dispatches_from_assistant_delta(
-            &pane_id,
-            "Before <pfterminal_send_task target=\"Burzum\">\nProblem A:\n```systemd\nExecStart=/bin/postfiat",
-        );
-    assert!(first.is_empty());
-
-    let second = registry.collect_spawn_dispatches_from_assistant_delta(
-        &pane_id,
-        "\n```\nProblem B: verify writes.\n</pfterminal_send_task> after",
+fn finished_turn_xmlish_dispatch_preserves_code_fences() {
+    let mut live_turn = ClaudePaneLiveTurn::starting();
+    let (_, dispatches) = crate::spawn_orchestration::extract_spawn_task_dispatches(
+        "Before <pfterminal_send_task target=\"Burzum\">\nProblem A:\n```systemd\nExecStart=/bin/postfiat\n```\nProblem B: verify writes.\n</pfterminal_send_task> after",
     );
-    assert_eq!(second.len(), 1);
-    assert_eq!(second[0].target, "Burzum");
-    assert!(second[0].task.contains("Problem A:"));
-    assert!(second[0].task.contains("```systemd"));
-    assert!(second[0].task.contains("ExecStart=/bin/postfiat"));
-    assert!(second[0].task.contains("Problem B: verify writes."));
+    assert_eq!(dispatches.len(), 1);
 
-    let duplicate = registry.collect_spawn_dispatches_from_assistant_delta(
-            &pane_id,
-            "<pfterminal_send_task target=\"Burzum\">\nProblem A:\n```systemd\nExecStart=/bin/postfiat\n```\nProblem B: verify writes.\n</pfterminal_send_task>",
-        );
+    let first = live_turn.filter_new_dispatches(dispatches.clone());
+    assert_eq!(first.len(), 1);
+    assert_eq!(first[0].target, "Burzum");
+    assert!(first[0].task.contains("Problem A:"));
+    assert!(first[0].task.contains("```systemd"));
+    assert!(first[0].task.contains("ExecStart=/bin/postfiat"));
+    assert!(first[0].task.contains("Problem B: verify writes."));
+
+    let duplicate = live_turn.filter_new_dispatches(dispatches);
     assert!(duplicate.is_empty());
 }
 
