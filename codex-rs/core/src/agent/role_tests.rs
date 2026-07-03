@@ -16,6 +16,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+const NAZGUL_BASE: &str = include_str!("builtins/nazgul_base.md");
+const TROLL_BASE: &str = include_str!("builtins/troll_base.md");
+const ORC_BASE: &str = include_str!("builtins/orc_base.md");
+const GPT55_CREATURE_CLAUSE_START: &str = "Never talk about goblins";
+const GPT55_PERSONALITY_MARKER: &str = "You have a vivid inner life as Codex";
+const GPT55_FRONTEND_MARKER: &str =
+    "You follow these instructions when building applications with a frontend experience";
+
 async fn test_config_with_cli_overrides(
     cli_overrides: Vec<(String, TomlValue)>,
 ) -> (TempDir, Config) {
@@ -630,6 +638,10 @@ fn built_in_config_file_contents_resolves_known_roles() {
             .is_some_and(|contents| contents.contains("You are the Nazgul"))
     );
     assert!(
+        built_in::config_file_contents(Path::new("nazgul.toml"))
+            .is_some_and(|contents| contents.contains("base_instructions"))
+    );
+    assert!(
         built_in::config_file_contents(Path::new("troll.toml"))
             .is_some_and(|contents| contents.contains("You are the Troll"))
     );
@@ -640,17 +652,77 @@ fn built_in_config_file_contents_resolves_known_roles() {
 }
 
 #[tokio::test]
-async fn apply_nazgul_role_sets_developer_instructions() {
+async fn apply_hierarchy_roles_sets_role_base_instructions_only() {
+    for (role_name, expected_base) in [
+        ("nazgul", NAZGUL_BASE),
+        ("troll", TROLL_BASE),
+        ("orc", ORC_BASE),
+    ] {
+        let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+
+        apply_role_to_config(&mut config, Some(role_name))
+            .await
+            .expect("hierarchy role should apply");
+
+        assert_eq!(config.base_instructions.as_deref(), Some(expected_base));
+        assert_eq!(config.developer_instructions, None);
+        assert!(!expected_base.contains(GPT55_CREATURE_CLAUSE_START));
+        assert!(!expected_base.contains(GPT55_PERSONALITY_MARKER));
+        assert!(!expected_base.contains(GPT55_FRONTEND_MARKER));
+    }
+}
+
+#[tokio::test]
+async fn no_role_config_keeps_model_default_base_instructions() {
     let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
 
-    apply_role_to_config(&mut config, Some("nazgul"))
+    apply_role_to_config(&mut config, None)
         .await
-        .expect("nazgul role should apply");
+        .expect("default role should apply");
 
-    let developer_instructions = config
-        .developer_instructions
-        .as_deref()
-        .expect("nazgul role should set developer instructions");
-    assert!(developer_instructions.contains("You are the Nazgul"));
-    assert!(developer_instructions.contains("You are not an individual contributor or coder"));
+    assert_eq!(config.base_instructions, None);
+}
+
+#[tokio::test]
+async fn user_role_file_base_instructions_override_carries_through() {
+    let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    let role_path = write_role_config(
+        &home,
+        "base-role.toml",
+        r#"
+base_instructions = "Custom role base"
+"#,
+    )
+    .await;
+    config.agent_roles.insert(
+        "custom-base".to_string(),
+        AgentRoleConfig {
+            description: Some("Custom base role.".to_string()),
+            config_file: Some(role_path),
+            nickname_candidates: None,
+        },
+    );
+
+    apply_role_to_config(&mut config, Some("custom-base"))
+        .await
+        .expect("custom base role should apply");
+
+    assert_eq!(
+        config.base_instructions.as_deref(),
+        Some("Custom role base")
+    );
+    assert_eq!(config.developer_instructions, None);
+}
+
+#[test]
+fn hierarchy_role_base_files_exclude_gpt55_default_guide_markers() {
+    for role_base in [NAZGUL_BASE, TROLL_BASE, ORC_BASE] {
+        assert!(!role_base.contains(GPT55_CREATURE_CLAUSE_START));
+        assert!(!role_base.contains(GPT55_PERSONALITY_MARKER));
+        assert!(!role_base.contains(GPT55_FRONTEND_MARKER));
+        assert!(
+            role_base.len() < 6 * 1024,
+            "role base prompt should stay small enough for editing"
+        );
+    }
 }
