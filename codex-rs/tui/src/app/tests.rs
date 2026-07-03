@@ -4277,6 +4277,62 @@ async fn bound_nazgul_root_persists_role_metadata_to_state_db() {
 }
 
 #[tokio::test]
+async fn native_spawn_registration_persists_started_session_model_provider_pair() {
+    let mut app = make_test_app().await;
+    let codex_home = tempdir().expect("codex home");
+    app.config.codex_home = codex_home.path().to_path_buf().abs();
+    app.config.sqlite_home = codex_home.path().to_path_buf();
+    app.config.model_provider_id = "claude-plan".to_string();
+    let state_db = codex_state::StateRuntime::init(
+        codex_home.path().to_path_buf(),
+        app.config.model_provider_id.clone(),
+    )
+    .await
+    .expect("state db");
+    app.state_db = Some(state_db.clone());
+
+    let parent_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000238").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000239").expect("valid thread id");
+    app.upsert_agent_picker_thread(
+        parent_thread_id,
+        Some("Main".to_string()),
+        Some("nazgul".to_string()),
+        /*is_closed*/ false,
+    );
+
+    let started = crate::app_server_session::AppServerStartedThread {
+        session: ThreadSessionState {
+            model: "gpt-5.5".to_string(),
+            model_provider_id: "openai".to_string(),
+            reasoning_effort: Some(ReasoningEffortConfig::XHigh),
+            ..test_thread_session(troll_thread_id, test_path_buf("/tmp/project"))
+        },
+        turns: Vec::new(),
+    };
+    app.register_spawn_agent_pane(
+        troll_thread_id,
+        parent_thread_id,
+        crate::spawn_orchestration::thread_node_id(parent_thread_id),
+        Some("Burzum".to_string()),
+        "troll",
+        started,
+    )
+    .await;
+
+    let metadata = state_db
+        .get_thread(troll_thread_id)
+        .await
+        .expect("read metadata")
+        .expect("spawn row should be persisted");
+    assert_eq!(metadata.agent_role.as_deref(), Some("troll"));
+    assert_eq!(metadata.agent_nickname.as_deref(), Some("Burzum"));
+    assert_eq!(metadata.model.as_deref(), Some("gpt-5.5"));
+    assert_eq!(metadata.model_provider, "openai");
+}
+
+#[tokio::test]
 async fn claude_orc_has_routing_thread_row_and_dispatches_by_thread_id() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let codex_home = tempdir().expect("codex home");

@@ -2089,6 +2089,8 @@ impl App {
             Some(agent_role.to_string()),
             /*is_closed*/ false,
         );
+        let session_model = started.session.model.clone();
+        let session_model_provider = started.session.model_provider_id.clone();
         let channel = self.ensure_thread_channel(thread_id);
         channel.set_session(started.session, started.turns).await;
         self.persist_spawn_thread_state_metadata(SpawnThreadStateMetadata {
@@ -2099,8 +2101,8 @@ impl App {
                 .agent_navigation
                 .get(&thread_id)
                 .and_then(|entry| entry.agent_nickname.clone()),
-            model: self.native_spawn_fallback_model_for_thread(thread_id),
-            model_provider: self.config.model_provider_id.clone(),
+            model: session_model,
+            model_provider: session_model_provider,
             rollout_path: None,
         })
         .await;
@@ -4996,7 +4998,10 @@ mod tests {
         );
 
         // Empty inputs: untouched.
-        assert_eq!(corrected_native_spawn_provider("", AMBIENT_PROVIDER_ID), None);
+        assert_eq!(
+            corrected_native_spawn_provider("", AMBIENT_PROVIDER_ID),
+            None
+        );
         assert_eq!(corrected_native_spawn_provider("gpt-5.5", ""), None);
     }
 
