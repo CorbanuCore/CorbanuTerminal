@@ -1430,16 +1430,22 @@ impl App {
             return;
         }
         // Native Codex parent thread (a spawned Nazgul/Troll) or `codex-main` (the primary thread).
-        let parent_thread_id = if parent_node_id == pane_node_id(CODEX_MAIN_PANE_ID) {
+        let codex_main_node_id = pane_node_id(CODEX_MAIN_PANE_ID);
+        let parent_thread_id = if parent_node_id == codex_main_node_id {
             self.primary_thread_id
         } else {
             node_id_thread(parent_node_id)
         };
+        let parent_is_codex_main = parent_node_id == codex_main_node_id
+            || parent_thread_id.is_some_and(|thread_id| self.primary_thread_id == Some(thread_id));
         if let Some(parent_thread_id) = parent_thread_id {
             if self.active_thread_id == Some(parent_thread_id)
                 && self.claude_panes.active_user_pane_id() == CODEX_MAIN_PANE_ID
             {
                 self.chat_widget.add_info_message(summary, hint);
+            }
+            if parent_is_codex_main {
+                return;
             }
             // Deliver the report as a real parent processing turn when the parent is idle. When the
             // parent is mid-turn, enqueue the report instead of dropping it; it is flushed into a
@@ -1481,43 +1487,66 @@ impl App {
         );
     }
 
+    pub(crate) fn requeue_spawn_report_processing_task(
+        &mut self,
+        parent_thread_id: ThreadId,
+        task: &str,
+    ) -> bool {
+        let Some(report) = child_report_from_processing_prompt(task) else {
+            return false;
+        };
+        self.enqueue_pending_report(parent_thread_id, report);
+        true
+    }
+
     /// Drain pending child reports for a native Codex parent thread that has just gone idle, turning
     /// each into a parent processing turn. Returns true if any report was flushed.
     ///
     /// This is the fix for the multi-turn race: a report that arrived while the parent was mid-turn
     /// is no longer dropped; it is processed as soon as the parent becomes idle, like a user query.
     pub(crate) fn flush_pending_reports_for_thread(&mut self, parent_thread_id: ThreadId) -> bool {
-        let Some(queue) = self
-            .spawn_pending_reports_by_thread
-            .get_mut(&parent_thread_id)
-        else {
-            return false;
-        };
-        if queue.is_empty() {
-            return false;
-        }
-        // Drain the queue into a single combined processing turn so the parent reviews every pending
-        // report at once rather than starting one turn per report. This keeps the parent's attention
-        // on the full set of outstanding child results and avoids interleaving many short turns.
-        let mut reports: Vec<String> = queue.drain(..).collect();
-        let body = if reports.len() == 1 {
-            reports.remove(0)
-        } else {
-            let mut combined = String::from(
-                "Multiple child panes have reported back while you were busy. Review every report \
-                 below, triage each, dispatch follow-up work or acknowledge, and do not skip any \
-                 of them.\n\n",
-            );
-            for (index, report) in reports.into_iter().enumerate() {
-                let _ = writeln!(combined, "## Child report {index}\n{report}\n");
+        // Submit the queue as a single combined processing turn so the parent reviews every pending
+        // report at once rather than starting one turn per report. Keep the queue until the event is
+        // accepted; if the later turn submission is rejected, the event handler re-queues the report
+        // body from the generated processing prompt.
+        let body = {
+            let Some(queue) = self.spawn_pending_reports_by_thread.get(&parent_thread_id) else {
+                return false;
+            };
+            if queue.is_empty() {
+                return false;
             }
-            combined
+            let mut reports: Vec<String> = queue.iter().cloned().collect();
+            if reports.len() == 1 {
+                reports.remove(0)
+            } else {
+                let mut combined = String::from(
+                    "Multiple child panes have reported back while you were busy. Review every report \
+                     below, triage each, dispatch follow-up work or acknowledge, and do not skip any \
+                     of them.\n\n",
+                );
+                for (index, report) in reports.into_iter().enumerate() {
+                    let _ = writeln!(combined, "## Child report {index}\n{report}\n");
+                }
+                combined
+            }
         };
         let trigger_prompt = child_report_processing_prompt(&body);
-        self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
-            thread_id: parent_thread_id,
-            task: trigger_prompt,
-        });
+        if !self
+            .app_event_tx
+            .send_checked(AppEvent::SubmitSpawnAgentTask {
+                thread_id: parent_thread_id,
+                task: trigger_prompt,
+            })
+        {
+            return false;
+        }
+        if let Some(queue) = self
+            .spawn_pending_reports_by_thread
+            .get_mut(&parent_thread_id)
+        {
+            queue.clear();
+        }
         true
     }
 
@@ -4611,13 +4640,22 @@ fn spawn_child_report(child_title: &str, status: &str, result: Option<&str>) -> 
     report
 }
 
+const CHILD_REPORT_PROCESSING_PROMPT_PREFIX: &str = "A child pane has reported back. Review the child report below and act on it immediately — triage, dispatch follow-up work, or acknowledge. Do not wait for Sauron to prompt you.\n\n";
+
 /// The prompt that turns a delivered child report into a real parent processing turn, so a manager
 /// treats a direct report like a user query (triage, dispatch follow-up work, or acknowledge) rather
 /// than letting it sit as a passive transcript line.
 fn child_report_processing_prompt(report: &str) -> String {
-    format!(
-        "A child pane has reported back. Review the child report below and act on it immediately — triage, dispatch follow-up work, or acknowledge. Do not wait for Sauron to prompt you.\n\n{report}"
-    )
+    format!("{CHILD_REPORT_PROCESSING_PROMPT_PREFIX}{report}")
+}
+
+fn child_report_from_processing_prompt(task: &str) -> Option<&str> {
+    let report = task.strip_prefix(CHILD_REPORT_PROCESSING_PROMPT_PREFIX)?;
+    if report.trim().is_empty() {
+        None
+    } else {
+        Some(report)
+    }
 }
 
 #[cfg(test)]

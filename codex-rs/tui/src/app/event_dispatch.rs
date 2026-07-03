@@ -2365,6 +2365,7 @@ impl App {
                             }
                         }
                         Err(err) => {
+                            self.requeue_spawn_report_processing_task(thread_id, &task);
                             self.chat_widget.add_error_message(format!(
                                 "Cannot send task to {label}; failed to attach pane session: {err}"
                             ));
@@ -2414,6 +2415,7 @@ impl App {
                                     }
                                 }
                                 Err(materialize_err) => {
+                                    self.requeue_spawn_report_processing_task(thread_id, &task);
                                     self.chat_widget.add_error_message(format!(
                                         "Cannot send task to {label}; failed to read pane metadata: {err}; failed to materialize saved pane: {materialize_err}"
                                     ));
@@ -2424,6 +2426,7 @@ impl App {
                     }
                 }
                 let Some(session) = session else {
+                    self.requeue_spawn_report_processing_task(thread_id, &task);
                     let detail = self
                         .unloaded_agent_thread_reason(thread_id)
                         .unwrap_or_else(|| "Pane session is not loaded.".to_string());
@@ -2434,6 +2437,7 @@ impl App {
                 if let Some(message) =
                     self.native_spawn_provider_auth_error(Some(session.model_provider_id.as_str()))
                 {
+                    self.requeue_spawn_report_processing_task(thread_id, &task);
                     self.chat_widget
                         .add_error_message(format!("Cannot send task to {label}: {message}"));
                     return Ok(AppRunControl::Continue);
@@ -2483,6 +2487,7 @@ impl App {
                         }
                     }
                     Err(err) => {
+                        self.requeue_spawn_report_processing_task(thread_id, &task);
                         self.chat_widget
                             .add_error_message(format!("Failed to send task to {label}: {err}"));
                     }

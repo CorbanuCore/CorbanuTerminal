@@ -25,6 +25,7 @@ use crate::history_cell::UserHistoryCell;
 use crate::history_cell::new_session_info;
 use crate::multi_agents::AgentPickerThreadEntry;
 use crate::multi_agents::SubAgentActivityDisplay;
+use crate::spawn_orchestration::thread_node_id;
 use assert_matches::assert_matches;
 
 use crate::app_command::AppCommand as Op;
@@ -1316,7 +1317,7 @@ async fn spawn_status_shows_orc_task_preview_from_troll_activity() {
 
 #[tokio::test]
 async fn pane_spawn_tree_hides_task_actions() {
-    let mut app = make_test_app().await;
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let main_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000228").expect("valid thread id");
     let troll_thread_id =
@@ -1372,6 +1373,34 @@ async fn pane_spawn_tree_hides_task_actions() {
             .iter()
             .any(|item| item.name.contains("Send task to Snaga [orc]"))
     );
+
+    let troll_task_item = status_items
+        .iter()
+        .find(|item| item.name.contains("Send task to Burzum [troll]"))
+        .expect("Burzum task action row");
+    assert_eq!(troll_task_item.actions.len(), 1);
+    (troll_task_item.actions[0])(&app.app_event_tx);
+    match rx
+        .try_recv()
+        .expect("Burzum task action should emit an event")
+    {
+        AppEvent::OpenSpawnAgentTaskPrompt { thread_id } => assert_eq!(thread_id, troll_thread_id),
+        event => panic!("expected Burzum task prompt event, got {event:?}"),
+    }
+
+    let orc_task_item = status_items
+        .iter()
+        .find(|item| item.name.contains("Send task to Snaga [orc]"))
+        .expect("Snaga task action row");
+    assert_eq!(orc_task_item.actions.len(), 1);
+    (orc_task_item.actions[0])(&app.app_event_tx);
+    match rx
+        .try_recv()
+        .expect("Snaga task action should emit an event")
+    {
+        AppEvent::OpenSpawnAgentTaskPrompt { thread_id } => assert_eq!(thread_id, orc_thread_id),
+        event => panic!("expected Snaga task prompt event, got {event:?}"),
+    }
 }
 
 #[tokio::test]
@@ -2038,6 +2067,63 @@ async fn child_report_to_busy_parent_is_queued_not_dropped_then_flushed_on_idle(
         app.spawn_pending_reports_by_thread
             .get(&troll_thread_id)
             .is_none_or(std::collections::VecDeque::is_empty)
+    );
+}
+
+#[tokio::test]
+async fn flushed_child_report_is_requeued_when_parent_submission_fails() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000413").expect("valid thread id");
+    let orc_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000414").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        orc_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(orc_thread_id, troll_thread_id);
+    app.agent_navigation.set_running(troll_thread_id, true);
+
+    app.record_spawn_child_report_for_thread(
+        orc_thread_id,
+        codex_app_server_protocol::CollabAgentStatus::Completed,
+        Some("report that must survive a rejected parent turn".to_string()),
+    );
+
+    assert!(app.flush_pending_reports_for_thread(troll_thread_id));
+    let task = drain_spawn_agent_task_for(&mut rx, troll_thread_id)
+        .expect("flush should produce a parent report-processing task");
+    assert!(
+        app.spawn_pending_reports_by_thread
+            .get(&troll_thread_id)
+            .is_none_or(std::collections::VecDeque::is_empty)
+    );
+
+    assert!(
+        app.requeue_spawn_report_processing_task(troll_thread_id, &task),
+        "rejected report-processing submission should be recoverable from the task body"
+    );
+    let queue = app
+        .spawn_pending_reports_by_thread
+        .get(&troll_thread_id)
+        .expect("failed report-processing turn should be queued for retry");
+    assert_eq!(queue.len(), 1);
+    assert!(queue.front().expect("queued report").contains("Snaga"));
+    assert!(
+        queue
+            .front()
+            .expect("queued report")
+            .contains("must survive a rejected parent turn")
     );
 }
 
@@ -3022,11 +3108,10 @@ async fn nazgul_root_does_not_report_up_to_itself() {
 }
 
 #[tokio::test]
-async fn child_report_to_codex_main_routes_to_native_primary_not_claude_pane() {
-    // When the Nazgul root is codex-main (the primary native thread, not a Claude pane), a child
-    // report routed to `pane:codex-main` must NOT be sent as a SubmitSpawnClaudePaneTask (which
-    // errors with "Claude pane `codex-main` does not exist"). It must route to the native primary
-    // thread as a SubmitSpawnAgentTask.
+async fn child_report_to_codex_main_is_recorded_without_auto_submitting_main_turn() {
+    // codex-main is the human-facing primary native thread. Child reports should be recorded and
+    // surfaced there, but not auto-submitted as a model turn; the QA repro showed those automatic
+    // Main tasks made dispatch look duplicated and left Main busy after child completions.
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let primary_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000511").expect("valid thread id");
@@ -3050,28 +3135,34 @@ async fn child_report_to_codex_main_routes_to_native_primary_not_claude_pane() {
         Some("orcs done".to_string()),
     );
 
-    // Expect a native SubmitSpawnAgentTask targeted at the primary thread, and no Claude pane task.
-    let mut got_native = false;
     while let Ok(event) = rx.try_recv() {
-        match event {
-            AppEvent::SubmitSpawnAgentTask { thread_id, task }
-                if thread_id == primary_thread_id =>
-            {
-                got_native = true;
-                assert!(task.contains("A child pane has reported back"));
-                assert!(task.contains("Burzum"));
-            }
-            AppEvent::SubmitSpawnClaudePaneTask { ref pane_id, .. } => {
-                panic!(
-                    "codex-main must not route to a Claude pane task, got SubmitSpawnClaudePaneTask for `{pane_id}`"
-                );
-            }
-            _ => {}
-        }
+        assert!(
+            !matches!(
+                event,
+                AppEvent::SubmitSpawnAgentTask {
+                    thread_id,
+                    ..
+                } if thread_id == primary_thread_id
+            ),
+            "report to codex-main must not auto-submit a Main model turn"
+        );
+        assert!(
+            !matches!(event, AppEvent::SubmitSpawnClaudePaneTask { .. }),
+            "codex-main must not route to a Claude pane task"
+        );
     }
+    let reports = app
+        .spawn_parent_reports_by_node
+        .get(&thread_node_id(primary_thread_id))
+        .expect("report should be retained for codex-main");
+    assert_eq!(reports.len(), 1);
+    assert!(reports.front().expect("report").contains("Burzum"));
+    assert!(reports.front().expect("report").contains("orcs done"));
     assert!(
-        got_native,
-        "report to codex-main should produce a native SubmitSpawnAgentTask on the primary thread"
+        app.spawn_pending_reports_by_thread
+            .get(&primary_thread_id)
+            .is_none_or(std::collections::VecDeque::is_empty),
+        "codex-main reports should not be queued for automatic model turns"
     );
 }
 
