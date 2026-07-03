@@ -1439,13 +1439,14 @@ impl App {
         let parent_is_codex_main = parent_node_id == codex_main_node_id
             || parent_thread_id.is_some_and(|thread_id| self.primary_thread_id == Some(thread_id));
         if let Some(parent_thread_id) = parent_thread_id {
+            if parent_is_codex_main {
+                self.chat_widget.add_info_message(summary, hint);
+                return;
+            }
             if self.active_thread_id == Some(parent_thread_id)
                 && self.claude_panes.active_user_pane_id() == CODEX_MAIN_PANE_ID
             {
                 self.chat_widget.add_info_message(summary, hint);
-            }
-            if parent_is_codex_main {
-                return;
             }
             // Deliver the report as a real parent processing turn when the parent is idle. When the
             // parent is mid-turn, enqueue the report instead of dropping it; it is flushed into a
@@ -4649,7 +4650,7 @@ fn child_report_processing_prompt(report: &str) -> String {
     format!("{CHILD_REPORT_PROCESSING_PROMPT_PREFIX}{report}")
 }
 
-fn child_report_from_processing_prompt(task: &str) -> Option<&str> {
+pub(crate) fn child_report_from_processing_prompt(task: &str) -> Option<&str> {
     let report = task.strip_prefix(CHILD_REPORT_PROCESSING_PROMPT_PREFIX)?;
     if report.trim().is_empty() {
         None

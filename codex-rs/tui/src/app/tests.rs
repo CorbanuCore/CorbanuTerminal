@@ -3167,6 +3167,63 @@ async fn child_report_to_codex_main_is_recorded_without_auto_submitting_main_tur
 }
 
 #[tokio::test]
+async fn child_report_to_codex_main_is_visible_even_when_child_thread_active() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let primary_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000531").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000532").expect("valid thread id");
+    let orc_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000533").expect("valid thread id");
+    app.primary_thread_id = Some(primary_thread_id);
+    app.active_thread_id = Some(orc_thread_id);
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        orc_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(troll_thread_id, primary_thread_id);
+
+    app.record_spawn_child_report_for_thread(
+        troll_thread_id,
+        codex_app_server_protocol::CollabAgentStatus::Completed,
+        Some("QA_TROLL_REPORT_DELIVERED".to_string()),
+    );
+
+    let mut rendered_history = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        match event {
+            AppEvent::InsertHistoryCell(cell) => {
+                rendered_history.push(lines_to_single_string(&cell.display_lines(/*width*/ 120)));
+            }
+            AppEvent::SubmitSpawnAgentTask { thread_id, .. } if thread_id == primary_thread_id => {
+                panic!("report to codex-main must not auto-submit a Main model turn");
+            }
+            AppEvent::SubmitSpawnAgentTask { .. } | AppEvent::SubmitSpawnClaudePaneTask { .. } => {
+                panic!("codex-main report should surface as history, not as a worker task");
+            }
+            _ => {}
+        }
+    }
+
+    let rendered = rendered_history.join("\n");
+    assert!(
+        rendered.contains("Child report delivered."),
+        "Main report should be surfaced visibly even while another native pane is active; got: {rendered}"
+    );
+    assert!(rendered.contains("Burzum"));
+    assert!(rendered.contains("QA_TROLL_REPORT_DELIVERED"));
+}
+
+#[tokio::test]
 async fn native_nazgul_sees_live_troll_and_orc_tree_even_if_spawned_before_them() {
     // The bug: a spawned Nazgul's base_instructions are frozen at spawn time, so if it was created
     // before its Troll/Orcs it would forever answer "none spawned yet". The fix renders the live

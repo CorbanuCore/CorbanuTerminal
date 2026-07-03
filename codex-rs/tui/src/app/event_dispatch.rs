@@ -2285,8 +2285,10 @@ impl App {
                             );
                             self.persist_bound_nazgul_root_thread_metadata().await;
                         }
-                        self.select_agent_thread_and_discard_side(tui, app_server, thread_id)
-                            .await?;
+                        if self.active_thread_id.is_none() {
+                            self.select_agent_thread_and_discard_side(tui, app_server, thread_id)
+                                .await?;
+                        }
                         let binding_suffix = if bound_as_nazgul {
                             " and bound it as the Nazgul root"
                         } else {
@@ -2479,7 +2481,12 @@ impl App {
                             .set_running(thread_id, /*is_running*/ true);
                         self.agent_navigation
                             .set_last_task_message(thread_id, Some(task_preview));
-                        if !task.starts_with("Assigned by ") {
+                        if !task.starts_with("Assigned by ")
+                            && crate::spawn_orchestration::child_report_from_processing_prompt(
+                                &task,
+                            )
+                            .is_none()
+                        {
                             self.chat_widget.add_info_message(
                                 format!("Task sent to {label}."),
                                 Some("The pane will run it as a normal turn.".to_string()),
