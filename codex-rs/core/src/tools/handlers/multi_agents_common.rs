@@ -297,7 +297,7 @@ pub(crate) async fn apply_requested_spawn_agent_model_overrides(
             }
             return Ok(());
         }
-        reject_spawn_agent_model_switch_for_third_party_provider(turn, requested_model)?;
+        reject_spawn_agent_model_switch_for_third_party_provider(turn, config, requested_model)?;
         let available_models = session
             .services
             .models_manager
@@ -430,6 +430,7 @@ fn find_spawn_agent_model_name(
 
 fn reject_spawn_agent_model_switch_for_third_party_provider(
     turn: &TurnContext,
+    child_config: &Config,
     requested_model: &str,
 ) -> Result<(), FunctionCallError> {
     let provider_info = turn.provider.info();
@@ -438,6 +439,13 @@ fn reject_spawn_agent_model_switch_for_third_party_provider(
         || provider_info.is_openrouter()
         || provider_info.is_baseten()
         || provider_info.is_vercel())
+    {
+        return Ok(());
+    }
+    if let Some(corrected) = codex_model_provider_info::corrected_catalog_provider(
+        requested_model,
+        &turn.config.model_provider_id,
+    ) && child_config.model_providers.contains_key(corrected)
     {
         return Ok(());
     }
