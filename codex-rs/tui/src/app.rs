@@ -640,6 +640,9 @@ pub(crate) struct App {
     /// Loop-breaker state for auto child-report processing turns, keyed by parent node id.
     pub(crate) spawn_auto_loop_state_by_node:
         HashMap<String, crate::spawn_orchestration::SpawnAutoLoopState>,
+    /// False after resume until a live operator/non-auto turn proves current intent.
+    pub(crate) spawn_operator_input_seen: bool,
+    pub(crate) spawn_quarantine_notified_by_node: HashSet<String>,
     pub(crate) spawn_nazgul_pane_id: Option<String>,
     side_threads: HashMap<ThreadId, SideThreadState>,
     pub(crate) claude_panes: crate::claude_panes::ClaudePaneRegistry,
@@ -1202,6 +1205,8 @@ See the PFTerminal keymap documentation for supported actions and examples."
             spawn_pending_reports_by_thread: HashMap::new(),
             spawn_processed_dispatches: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
+            spawn_operator_input_seen: false,
+            spawn_quarantine_notified_by_node: HashSet::new(),
             spawn_nazgul_pane_id: restored_spawn_nazgul_pane_id,
             side_threads: HashMap::new(),
             claude_panes: restored_claude_panes,

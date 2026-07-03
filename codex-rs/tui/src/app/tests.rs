@@ -1922,6 +1922,7 @@ fn drain_spawn_agent_task_for(
 #[tokio::test]
 async fn child_report_to_idle_parent_triggers_a_processing_turn() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000401").expect("valid thread id");
     let orc_thread_id =
@@ -1967,8 +1968,77 @@ async fn child_report_to_idle_parent_triggers_a_processing_turn() {
 }
 
 #[tokio::test]
+async fn resumed_child_report_to_idle_parent_waits_for_operator_input_before_auto_processing() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000403").expect("valid thread id");
+    let orc_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000404").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        orc_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(orc_thread_id, troll_thread_id);
+
+    assert!(!app.spawn_operator_input_seen);
+    app.record_spawn_child_report_for_thread(
+        orc_thread_id,
+        codex_app_server_protocol::CollabAgentStatus::Completed,
+        Some("resume-era report".to_string()),
+    );
+
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, troll_thread_id).is_none(),
+        "resumed sessions must not auto-submit child-report processing before live input"
+    );
+    let queue = app
+        .spawn_pending_reports_by_thread
+        .get(&troll_thread_id)
+        .expect("quarantined idle parent report should be queued");
+    assert_eq!(queue.len(), 1);
+    assert!(queue.front().expect("queued report").contains("Snaga"));
+    let parent_node_id = app.spawn_auto_loop_node_for_thread(troll_thread_id);
+    assert!(
+        !app.spawn_auto_loop_state_by_node
+            .get(&parent_node_id)
+            .is_some_and(|state| state.pending_auto_turn),
+        "quarantine must not mark the next parent turn as auto-triggered"
+    );
+
+    app.update_spawn_status_for_thread_notification(&ServerNotification::TurnStarted(
+        codex_app_server_protocol::TurnStartedNotification {
+            thread_id: troll_thread_id.to_string(),
+            turn: test_turn("turn-operator-input", TurnStatus::InProgress, Vec::new()),
+        },
+    ));
+    assert!(app.spawn_operator_input_seen);
+    app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+        troll_thread_id,
+        "turn-operator-input",
+        TurnStatus::Completed,
+        "Acknowledged.",
+    ));
+
+    let task = drain_spawn_agent_task_for(&mut rx, troll_thread_id)
+        .expect("first live parent turn should release queued report processing");
+    assert!(task.contains("A child pane has reported back"));
+    assert!(task.contains("resume-era report"));
+}
+
+#[tokio::test]
 async fn child_report_processing_turn_preserves_actionable_tail_content() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000405").expect("valid thread id");
     let orc_thread_id =
@@ -2031,6 +2101,7 @@ async fn child_report_processing_turn_preserves_actionable_tail_content() {
 #[tokio::test]
 async fn native_turn_completion_report_preserves_actionable_tail_content() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000407").expect("valid thread id");
     let orc_thread_id =
@@ -2073,6 +2144,7 @@ async fn native_turn_completion_report_preserves_actionable_tail_content() {
 #[tokio::test]
 async fn child_report_to_busy_parent_is_queued_not_dropped_then_flushed_on_idle() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000411").expect("valid thread id");
     let orc_thread_id =
@@ -2128,6 +2200,7 @@ async fn child_report_to_busy_parent_is_queued_not_dropped_then_flushed_on_idle(
 #[tokio::test]
 async fn flushed_child_report_is_requeued_when_parent_submission_fails() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000413").expect("valid thread id");
     let orc_thread_id =
@@ -2185,6 +2258,7 @@ async fn flushed_child_report_is_requeued_when_parent_submission_fails() {
 #[tokio::test]
 async fn multiple_reports_to_busy_parent_flush_as_one_combined_turn() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000421").expect("valid thread id");
     let orc_a =
@@ -3020,6 +3094,7 @@ async fn make_child_report_auto_claude_pane_app() -> (
     String,
 ) {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_pane_id = app
         .claude_panes
         .create_pane_with_role(
@@ -3692,6 +3767,7 @@ D11 native dispatch reached Ghash. Write the artifact."#;
 #[tokio::test]
 async fn auto_report_dispatch_loop_pauses_after_chain_limit_and_resets_on_fresh_turn() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000661").expect("valid thread id");
     let orc_thread_id =
@@ -3790,6 +3866,7 @@ Do another lap.
 #[tokio::test]
 async fn auto_report_turns_that_acknowledge_without_dispatch_do_not_trip_the_loop_breaker() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000671").expect("valid thread id");
     let orc_thread_id =
@@ -7271,6 +7348,8 @@ async fn make_test_app() -> App {
         spawn_pending_reports_by_thread: HashMap::new(),
         spawn_processed_dispatches: HashSet::new(),
         spawn_auto_loop_state_by_node: HashMap::new(),
+        spawn_operator_input_seen: false,
+        spawn_quarantine_notified_by_node: HashSet::new(),
         spawn_nazgul_pane_id: None,
         side_threads: HashMap::new(),
         claude_panes: crate::claude_panes::ClaudePaneRegistry::new(),
@@ -7346,6 +7425,8 @@ async fn make_test_app_with_channels() -> (
             spawn_pending_reports_by_thread: HashMap::new(),
             spawn_processed_dispatches: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
+            spawn_operator_input_seen: false,
+            spawn_quarantine_notified_by_node: HashSet::new(),
             spawn_nazgul_pane_id: None,
             side_threads: HashMap::new(),
             claude_panes: crate::claude_panes::ClaudePaneRegistry::new(),

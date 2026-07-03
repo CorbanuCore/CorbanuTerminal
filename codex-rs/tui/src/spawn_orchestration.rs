@@ -56,6 +56,8 @@ const SPAWN_REPORT_RESULT_MAX_CHARS: usize = 12_000;
 /// chain resets when an auto turn acknowledges without dispatching or when the node receives a
 /// turn it did not auto-trigger (operator input or a task dispatched to it).
 pub(crate) const SPAWN_AUTO_DISPATCH_CHAIN_LIMIT: u32 = 3;
+const SPAWN_RESUME_AUTO_PROCESSING_PAUSED_MESSAGE: &str =
+    "Session resumed: child report delivered; auto-processing is paused until you send input.";
 
 /// Per-parent-node loop-breaker state for auto child-report processing turns.
 #[derive(Debug, Clone, Default)]
@@ -1302,6 +1304,9 @@ impl App {
     /// false when the loop breaker has paused auto-processing for that node; the caller must
     /// then surface the report without starting a turn.
     fn begin_spawn_auto_processing_turn(&mut self, node_key: &str) -> bool {
+        if !self.spawn_operator_input_seen {
+            return false;
+        }
         let state = self
             .spawn_auto_loop_state_by_node
             .entry(node_key.to_string())
@@ -1311,6 +1316,12 @@ impl App {
         }
         state.pending_auto_turn = true;
         true
+    }
+
+    pub(crate) fn abort_spawn_auto_processing_turn(&mut self, node_key: &str) {
+        if let Some(state) = self.spawn_auto_loop_state_by_node.get_mut(node_key) {
+            state.pending_auto_turn = false;
+        }
     }
 
     pub(crate) fn note_spawn_turn_started_for_auto_loop(&mut self, node_key: &str) {
@@ -1325,6 +1336,7 @@ impl App {
         } else {
             // A turn this node did not auto-trigger: operator input or a task dispatched to it.
             // Fresh work resets the auto-processing chain and resumes paused auto-processing.
+            self.spawn_operator_input_seen = true;
             state.auto_turn_running = false;
             state.auto_turn_dispatched = false;
             state.chain = 0;
@@ -1370,6 +1382,27 @@ impl App {
                  work. {report_count} report(s) delivered without auto-processing; send the pane \
                  a new task to resume."
             ),
+            reports,
+        );
+    }
+
+    fn spawn_auto_processing_quarantined(&self) -> bool {
+        !self.spawn_operator_input_seen
+    }
+
+    fn notify_spawn_resume_auto_processing_quarantined(
+        &mut self,
+        parent_node_id: &str,
+        reports: Option<String>,
+    ) {
+        if !self
+            .spawn_quarantine_notified_by_node
+            .insert(parent_node_id.to_string())
+        {
+            return;
+        }
+        self.chat_widget.add_info_message(
+            SPAWN_RESUME_AUTO_PROCESSING_PAUSED_MESSAGE.to_string(),
             reports,
         );
     }
@@ -1521,11 +1554,18 @@ impl App {
                         task: trigger_prompt,
                     });
                 } else {
-                    self.notify_spawn_auto_processing_paused(
-                        parent_node_id,
-                        /*report_count*/ 1,
-                        Some(report.to_string()),
-                    );
+                    if self.spawn_auto_processing_quarantined() {
+                        self.notify_spawn_resume_auto_processing_quarantined(
+                            parent_node_id,
+                            Some(report.to_string()),
+                        );
+                    } else {
+                        self.notify_spawn_auto_processing_paused(
+                            parent_node_id,
+                            /*report_count*/ 1,
+                            Some(report.to_string()),
+                        );
+                    }
                 }
             }
             return;
@@ -1566,11 +1606,19 @@ impl App {
                     task: trigger_prompt,
                 });
             } else {
-                self.notify_spawn_auto_processing_paused(
-                    parent_node_id,
-                    /*report_count*/ 1,
-                    Some(report.to_string()),
-                );
+                if self.spawn_auto_processing_quarantined() {
+                    self.enqueue_pending_report(parent_thread_id, report);
+                    self.notify_spawn_resume_auto_processing_quarantined(
+                        parent_node_id,
+                        Some(report.to_string()),
+                    );
+                } else {
+                    self.notify_spawn_auto_processing_paused(
+                        parent_node_id,
+                        /*report_count*/ 1,
+                        Some(report.to_string()),
+                    );
+                }
             }
         }
     }
@@ -1643,12 +1691,16 @@ impl App {
         };
         let parent_node_id = self.spawn_auto_loop_node_for_thread(parent_thread_id);
         if !self.begin_spawn_auto_processing_turn(&parent_node_id) {
-            self.notify_spawn_auto_processing_paused(&parent_node_id, report_count, Some(body));
-            if let Some(queue) = self
-                .spawn_pending_reports_by_thread
-                .get_mut(&parent_thread_id)
-            {
-                queue.clear();
+            if self.spawn_auto_processing_quarantined() {
+                self.notify_spawn_resume_auto_processing_quarantined(&parent_node_id, Some(body));
+            } else {
+                self.notify_spawn_auto_processing_paused(&parent_node_id, report_count, Some(body));
+                if let Some(queue) = self
+                    .spawn_pending_reports_by_thread
+                    .get_mut(&parent_thread_id)
+                {
+                    queue.clear();
+                }
             }
             return false;
         }

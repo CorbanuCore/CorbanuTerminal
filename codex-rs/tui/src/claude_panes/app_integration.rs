@@ -525,6 +525,14 @@ impl App {
             .set_latest_task_message(&pane_id, Some(task.clone()));
         let prompt_context = self.claude_pane_prompt_context(&pane_id);
         let prompt = compose_claude_pane_prompt(task.clone(), prompt_context.as_deref());
+        let node_key = crate::spawn_orchestration::pane_node_id(&pane_id);
+        let auto_processing_turn = self
+            .spawn_auto_loop_state_by_node
+            .get(&node_key)
+            .is_some_and(|state| state.pending_auto_turn);
+        if !auto_processing_turn {
+            self.spawn_operator_input_seen = true;
+        }
         let prepared =
             match self
                 .claude_panes
@@ -532,6 +540,7 @@ impl App {
             {
                 Ok(prepared) => prepared,
                 Err(err) => {
+                    self.abort_spawn_auto_processing_turn(&node_key);
                     self.chat_widget.add_error_message(err.to_string());
                     return;
                 }
@@ -539,9 +548,7 @@ impl App {
         self.record_claude_spawn_rollout_task_started(&pane_id, &task, prepared.plan.turn_index);
         // Loop breaker: a turn we auto-triggered (child-report processing) transitions
         // pending -> running; any other submitted task is fresh work and resets the auto chain.
-        self.note_spawn_turn_started_for_auto_loop(&crate::spawn_orchestration::pane_node_id(
-            &pane_id,
-        ));
+        self.note_spawn_turn_started_for_auto_loop(&node_key);
 
         if self.claude_panes.active_user_pane_id() == pane_id {
             self.chat_widget.begin_external_pane_turn();
