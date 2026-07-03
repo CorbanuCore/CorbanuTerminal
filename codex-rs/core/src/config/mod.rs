@@ -76,34 +76,23 @@ use codex_mcp::McpPluginAttribution;
 use codex_mcp::McpServerRegistration;
 use codex_mcp::ResolvedMcpCatalog;
 use codex_memories_read::memory_root;
-use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
-use codex_model_provider_info::AMBIENT_KIMI_K2_7_CODE_MODEL;
-use codex_model_provider_info::AMBIENT_LEGACY_GLM_5_2_FP8_MODEL;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
-use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
-use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OLLAMA_CHAT_PROVIDER_REMOVED_ERROR;
 use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
-use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
 use codex_model_provider_info::VERCEL_PROVIDER_ID;
 use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_model_provider_info::built_in_model_providers;
 use codex_model_provider_info::merge_configured_model_providers;
+use codex_model_provider_info::resolve_model_for_provider;
 use codex_models_manager::ModelsManagerConfig;
 use codex_protocol::config_types::AltScreenMode;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
@@ -2476,79 +2465,6 @@ fn resolve_web_search_config(config_toml: &ConfigToml) -> Option<WebSearchConfig
         .and_then(|tools| tools.web_search.as_ref())
         .cloned()
         .map(Into::into)
-}
-
-fn resolve_model_for_provider(model: Option<String>, model_provider_id: &str) -> Option<String> {
-    match model_provider_id {
-        AMBIENT_PROVIDER_ID => match model {
-            Some(model) if model.trim() == AMBIENT_LEGACY_GLM_5_2_FP8_MODEL => {
-                Some(AMBIENT_DEFAULT_MODEL.to_string())
-            }
-            Some(model)
-                if model.trim().starts_with("ambient/")
-                    || model.trim().starts_with("z-ai/")
-                    || model.trim() == AMBIENT_KIMI_K2_7_CODE_MODEL
-                    || (model.trim().starts_with("zai-org/")
-                        && model.trim() != BASETEN_DEFAULT_MODEL) =>
-            {
-                Some(model)
-            }
-            _ => Some(AMBIENT_DEFAULT_MODEL.to_string()),
-        },
-        ZAI_PROVIDER_ID | ZAI_ANTHROPIC_PROVIDER_ID => match model {
-            Some(model) if model.trim().starts_with("glm-") => Some(model),
-            _ => Some(ZAI_DEFAULT_MODEL.to_string()),
-        },
-        ANTHROPIC_PROVIDER_ID => match model {
-            Some(model)
-                if model.trim().starts_with("claude-")
-                    && model.trim() != CLAUDE_PLAN_MODEL
-                    && model.trim() != CLAUDE_FABLE_5_PLAN_MODEL =>
-            {
-                Some(model)
-            }
-            _ => Some(ANTHROPIC_DEFAULT_MODEL.to_string()),
-        },
-        CLAUDE_PLAN_PROVIDER_ID => match model {
-            Some(model)
-                if matches!(model.trim(), CLAUDE_PLAN_MODEL | CLAUDE_FABLE_5_PLAN_MODEL) =>
-            {
-                Some(model)
-            }
-            _ => Some(CLAUDE_PLAN_MODEL.to_string()),
-        },
-        OPENROUTER_PROVIDER_ID | OPENROUTER_ANTHROPIC_PROVIDER_ID => match model {
-            Some(model) if model.trim().starts_with("z-ai/") => Some(model),
-            _ => Some(OPENROUTER_DEFAULT_MODEL.to_string()),
-        },
-        BASETEN_PROVIDER_ID | BASETEN_ANTHROPIC_PROVIDER_ID => match model {
-            Some(model) if model.trim() == BASETEN_DEFAULT_MODEL => Some(model),
-            _ => Some(BASETEN_DEFAULT_MODEL.to_string()),
-        },
-        VERCEL_PROVIDER_ID | VERCEL_ANTHROPIC_PROVIDER_ID => match model {
-            Some(model)
-                if matches!(
-                    model.trim(),
-                    VERCEL_DEFAULT_MODEL | VERCEL_GLM_5_2_FAST_MODEL
-                ) =>
-            {
-                Some(model)
-            }
-            _ => Some(VERCEL_DEFAULT_MODEL.to_string()),
-        },
-        VERCEL_ANTHROPIC_FAST_PROVIDER_ID => match model {
-            Some(model)
-                if matches!(
-                    model.trim(),
-                    VERCEL_DEFAULT_MODEL | VERCEL_GLM_5_2_FAST_MODEL
-                ) =>
-            {
-                Some(model)
-            }
-            _ => Some(VERCEL_GLM_5_2_FAST_MODEL.to_string()),
-        },
-        _ => model,
-    }
 }
 
 fn openrouter_provider_body_provider(

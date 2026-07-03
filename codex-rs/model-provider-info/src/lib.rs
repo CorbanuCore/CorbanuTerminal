@@ -98,6 +98,82 @@ pub const VERCEL_DEFAULT_MODEL: &str = "zai/glm-5.2";
 pub const VERCEL_GLM_5_2_FAST_MODEL: &str = "zai/glm-5.2-fast";
 pub const VERCEL_API_KEY_ENV_VAR: &str = "AI_GATEWAY_API_KEY";
 
+pub fn resolve_model_for_provider(
+    model: Option<String>,
+    model_provider_id: &str,
+) -> Option<String> {
+    match model_provider_id {
+        AMBIENT_PROVIDER_ID => match model {
+            Some(model) if model.trim() == AMBIENT_LEGACY_GLM_5_2_FP8_MODEL => {
+                Some(AMBIENT_DEFAULT_MODEL.to_string())
+            }
+            Some(model)
+                if model.trim().starts_with("ambient/")
+                    || model.trim().starts_with("z-ai/")
+                    || model.trim() == AMBIENT_KIMI_K2_7_CODE_MODEL
+                    || (model.trim().starts_with("zai-org/")
+                        && model.trim() != BASETEN_DEFAULT_MODEL) =>
+            {
+                Some(model)
+            }
+            _ => Some(AMBIENT_DEFAULT_MODEL.to_string()),
+        },
+        ZAI_PROVIDER_ID | ZAI_ANTHROPIC_PROVIDER_ID => match model {
+            Some(model) if model.trim().starts_with("glm-") => Some(model),
+            _ => Some(ZAI_DEFAULT_MODEL.to_string()),
+        },
+        ANTHROPIC_PROVIDER_ID => match model {
+            Some(model)
+                if model.trim().starts_with("claude-")
+                    && model.trim() != CLAUDE_PLAN_MODEL
+                    && model.trim() != CLAUDE_FABLE_5_PLAN_MODEL =>
+            {
+                Some(model)
+            }
+            _ => Some(ANTHROPIC_DEFAULT_MODEL.to_string()),
+        },
+        CLAUDE_PLAN_PROVIDER_ID => match model {
+            Some(model)
+                if matches!(model.trim(), CLAUDE_PLAN_MODEL | CLAUDE_FABLE_5_PLAN_MODEL) =>
+            {
+                Some(model)
+            }
+            _ => Some(CLAUDE_PLAN_MODEL.to_string()),
+        },
+        OPENROUTER_PROVIDER_ID | OPENROUTER_ANTHROPIC_PROVIDER_ID => match model {
+            Some(model) if model.trim().starts_with("z-ai/") => Some(model),
+            _ => Some(OPENROUTER_DEFAULT_MODEL.to_string()),
+        },
+        BASETEN_PROVIDER_ID | BASETEN_ANTHROPIC_PROVIDER_ID => match model {
+            Some(model) if model.trim() == BASETEN_DEFAULT_MODEL => Some(model),
+            _ => Some(BASETEN_DEFAULT_MODEL.to_string()),
+        },
+        VERCEL_PROVIDER_ID | VERCEL_ANTHROPIC_PROVIDER_ID => match model {
+            Some(model)
+                if matches!(
+                    model.trim(),
+                    VERCEL_DEFAULT_MODEL | VERCEL_GLM_5_2_FAST_MODEL
+                ) =>
+            {
+                Some(model)
+            }
+            _ => Some(VERCEL_DEFAULT_MODEL.to_string()),
+        },
+        VERCEL_ANTHROPIC_FAST_PROVIDER_ID => match model {
+            Some(model)
+                if matches!(
+                    model.trim(),
+                    VERCEL_DEFAULT_MODEL | VERCEL_GLM_5_2_FAST_MODEL
+                ) =>
+            {
+                Some(model)
+            }
+            _ => Some(VERCEL_GLM_5_2_FAST_MODEL.to_string()),
+        },
+        _ => model,
+    }
+}
+
 fn provider_api_key_vault_instructions() -> String {
     [
         "Run `/providers` and select the matching provider key:",

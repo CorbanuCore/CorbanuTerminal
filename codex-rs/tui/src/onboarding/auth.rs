@@ -84,7 +84,9 @@ pub(crate) enum SignInState {
     ChatGptSuccessMessage,
     ChatGptSuccess,
     ApiKeyEntry(ApiKeyInputState),
-    ApiKeyConfigured,
+    ApiKeyConfigured {
+        provider: Option<String>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -974,9 +976,9 @@ impl AuthModeWidget {
         let error = self.error.clone();
         let request_frame = self.request_frame.clone();
         tokio::spawn(async move {
-            let params = match provider {
+            let params = match provider.as_ref() {
                 Some(provider) => LoginAccountParams::ProviderApiKey {
-                    provider,
+                    provider: provider.clone(),
                     api_key: api_key.clone(),
                 },
                 None => LoginAccountParams::ApiKey {
@@ -992,7 +994,7 @@ impl AuthModeWidget {
             {
                 Ok(LoginAccountResponse::ApiKey {}) => {
                     *error.write().unwrap() = None;
-                    *sign_in_state.write().unwrap() = SignInState::ApiKeyConfigured;
+                    *sign_in_state.write().unwrap() = SignInState::ApiKeyConfigured { provider };
                 }
                 Ok(other) => {
                     *error.write().unwrap() = Some(format!(
@@ -1121,6 +1123,13 @@ impl AuthModeWidget {
             .map(LoginStatus::AuthMode)
             .unwrap_or(LoginStatus::NotAuthenticated);
     }
+
+    pub(crate) fn configured_provider_api_key(&self) -> Option<String> {
+        match &*self.sign_in_state.read().unwrap() {
+            SignInState::ApiKeyConfigured { provider } => provider.clone(),
+            _ => None,
+        }
+    }
 }
 
 impl StepStateProvider for AuthModeWidget {
@@ -1132,7 +1141,9 @@ impl StepStateProvider for AuthModeWidget {
             | SignInState::ChatGptContinueInBrowser(_)
             | SignInState::ChatGptDeviceCode(_)
             | SignInState::ChatGptSuccessMessage => StepState::InProgress,
-            SignInState::ChatGptSuccess | SignInState::ApiKeyConfigured => StepState::Complete,
+            SignInState::ChatGptSuccess | SignInState::ApiKeyConfigured { .. } => {
+                StepState::Complete
+            }
         }
     }
 }
@@ -1159,7 +1170,7 @@ impl WidgetRef for AuthModeWidget {
             SignInState::ApiKeyEntry(state) => {
                 self.render_api_key_entry(area, buf, state);
             }
-            SignInState::ApiKeyConfigured => {
+            SignInState::ApiKeyConfigured { .. } => {
                 self.render_api_key_configured(area, buf);
             }
         }
@@ -1418,6 +1429,19 @@ mod tests {
             SignInState::PickMode
         ));
         assert_eq!(widget.login_status, LoginStatus::NotAuthenticated);
+    }
+
+    #[tokio::test]
+    async fn configured_provider_api_key_reads_provider_success_state() {
+        let (widget, _tmp) = widget_forced_chatgpt().await;
+        *widget.sign_in_state.write().unwrap() = SignInState::ApiKeyConfigured {
+            provider: Some(codex_model_provider_info::OPENROUTER_PROVIDER_ID.to_string()),
+        };
+
+        assert_eq!(
+            widget.configured_provider_api_key().as_deref(),
+            Some(codex_model_provider_info::OPENROUTER_PROVIDER_ID)
+        );
     }
 
     #[tokio::test]
