@@ -17,7 +17,13 @@ use codex_app_server_protocol::AdditionalContextKind;
 use codex_app_server_protocol::SessionSource as AppServerSessionSource;
 use codex_app_server_protocol::ThreadStatus;
 use codex_features::Feature;
+use codex_model_provider_info::AMBIENT_PROVIDER_ID;
+use codex_model_provider_info::BASETEN_PROVIDER_ID;
+use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
+use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
+use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
@@ -434,7 +440,23 @@ impl App {
             session.model = self.native_spawn_fallback_model_for_thread(thread_id);
         }
         if session.model_provider_id.trim().is_empty() {
-            session.model_provider_id = self.config.model_provider_id.clone();
+            // Derive the provider from the model, not the config default: the config default
+            // provider has no relationship to a role-derived or rollout-restored model, and a
+            // mismatched pair 400s at the remote ("Unknown model").
+            session.model_provider_id =
+                crate::chatwidget::ChatWidget::model_provider_for_selection(&session.model)
+                    .unwrap_or_else(|| self.config.model_provider_id.clone());
+        } else if let Some(corrected) =
+            corrected_native_spawn_provider(&session.model, &session.model_provider_id)
+        {
+            tracing::warn!(
+                thread_id = %thread_id,
+                model = %session.model,
+                stored_provider = %session.model_provider_id,
+                corrected_provider = %corrected,
+                "correcting impossible model/provider pair on native spawn session bind"
+            );
+            session.model_provider_id = corrected;
         }
         if session.runtime_workspace_roots.is_empty() {
             session.runtime_workspace_roots = self.config.workspace_roots.clone();
@@ -4294,6 +4316,48 @@ pub(crate) fn node_id_thread(node_id: &str) -> Option<ThreadId> {
         .and_then(|value| ThreadId::from_string(value).ok())
 }
 
+/// Catalog providers that never serve bare `gpt-*` model slugs. A stored or fallback
+/// (model, provider) pair combining them is always a binding bug, never an intentional setup.
+const KNOWN_NON_GPT_CATALOG_PROVIDERS: [&str; 6] = [
+    AMBIENT_PROVIDER_ID,
+    ZAI_PROVIDER_ID,
+    VERCEL_ANTHROPIC_FAST_PROVIDER_ID,
+    CLAUDE_PLAN_PROVIDER_ID,
+    OPENROUTER_PROVIDER_ID,
+    BASETEN_PROVIDER_ID,
+];
+
+/// Returns the provider a native spawn session must use when its stored (model, provider) pair is
+/// impossible — the model belongs to exactly one catalog provider and the stored provider is a
+/// different one. Stored pairs go stale when thread metadata loses the provider and a fallback
+/// (server config default, parent provider) is recorded next to a role- or rollout-derived model;
+/// running such a turn 400s at the remote with "Unknown model". Pairs that are merely unusual but
+/// servable (e.g. ambient serving `z-ai/glm-5.2`) and unknown models are left alone so intentional
+/// cross-provider setups keep working.
+pub(crate) fn corrected_native_spawn_provider(model: &str, provider: &str) -> Option<String> {
+    let model = model.trim();
+    let provider = provider.trim();
+    if model.is_empty() || provider.is_empty() {
+        return None;
+    }
+    // `zai/…` slugs (e.g. zai/glm-5.2-fast) are Vercel-fast exclusive. The similarly named
+    // `z-ai/…` and `zai-org/…` slugs belong to other providers and are not corrected.
+    if model.starts_with("zai/") && provider != VERCEL_ANTHROPIC_FAST_PROVIDER_ID {
+        return Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID.to_string());
+    }
+    if (model == CLAUDE_PLAN_MODEL || model == CLAUDE_FABLE_5_PLAN_MODEL)
+        && provider != CLAUDE_PLAN_PROVIDER_ID
+    {
+        return Some(CLAUDE_PLAN_PROVIDER_ID.to_string());
+    }
+    // Bedrock's GPT ids are `openai.gpt-*`, so bare `gpt-*` on a known non-GPT catalog provider
+    // is unambiguous. User-defined providers (e.g. Azure) are not in the list and stay untouched.
+    if model.starts_with("gpt-") && KNOWN_NON_GPT_CATALOG_PROVIDERS.contains(&provider) {
+        return Some(OPENAI_PROVIDER_ID.to_string());
+    }
+    None
+}
+
 /// Normalizes the mixed identifiers used on dispatch paths (node ids like `thread:...`/`pane:...`
 /// from native turns, raw pane ids from Claude pane turns) to one loop-breaker state key.
 fn spawn_auto_loop_key(source_node_or_pane_id: &str) -> String {
@@ -4843,6 +4907,65 @@ fn format_spawn_agent_nickname(name: &str, nickname_reset_count: usize) -> Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn corrected_native_spawn_provider_fixes_impossible_pairs_only() {
+        // Impossible pairs observed in the field: fixed.
+        assert_eq!(
+            corrected_native_spawn_provider("zai/glm-5.2-fast", "zai").as_deref(),
+            Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID)
+        );
+        assert_eq!(
+            corrected_native_spawn_provider("zai/glm-5.2-fast", AMBIENT_PROVIDER_ID).as_deref(),
+            Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID)
+        );
+        assert_eq!(
+            corrected_native_spawn_provider(CLAUDE_FABLE_5_PLAN_MODEL, AMBIENT_PROVIDER_ID)
+                .as_deref(),
+            Some(CLAUDE_PLAN_PROVIDER_ID)
+        );
+        assert_eq!(
+            corrected_native_spawn_provider("gpt-5.5", AMBIENT_PROVIDER_ID).as_deref(),
+            Some(OPENAI_PROVIDER_ID)
+        );
+        assert_eq!(
+            corrected_native_spawn_provider("gpt-5.5", ZAI_PROVIDER_ID).as_deref(),
+            Some(OPENAI_PROVIDER_ID)
+        );
+
+        // Consistent pairs: untouched.
+        assert_eq!(
+            corrected_native_spawn_provider("zai/glm-5.2-fast", VERCEL_ANTHROPIC_FAST_PROVIDER_ID),
+            None
+        );
+        assert_eq!(
+            corrected_native_spawn_provider(CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+            None
+        );
+        assert_eq!(corrected_native_spawn_provider("gpt-5.5", "openai"), None);
+
+        // Servable-but-unusual and unknown pairs: untouched (intentional cross-provider setups).
+        assert_eq!(
+            corrected_native_spawn_provider(ZAI_DEFAULT_MODEL, AMBIENT_PROVIDER_ID),
+            None
+        );
+        assert_eq!(
+            corrected_native_spawn_provider("zai-org/GLM-5.1-FP8", AMBIENT_PROVIDER_ID),
+            None
+        );
+        assert_eq!(
+            corrected_native_spawn_provider("gpt-5.5", "my-azure-provider"),
+            None
+        );
+        assert_eq!(
+            corrected_native_spawn_provider("openai.gpt-5.5", AMBIENT_PROVIDER_ID),
+            None
+        );
+
+        // Empty inputs: untouched.
+        assert_eq!(corrected_native_spawn_provider("", AMBIENT_PROVIDER_ID), None);
+        assert_eq!(corrected_native_spawn_provider("gpt-5.5", ""), None);
+    }
 
     #[test]
     fn spawn_agent_nickname_uses_role_specific_pool() {

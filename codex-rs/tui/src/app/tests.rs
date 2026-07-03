@@ -1837,7 +1837,10 @@ async fn native_spawn_task_session_fallback_fills_model_for_restored_troll() {
     app.apply_native_spawn_task_session_fallbacks(troll_thread_id, &mut session);
 
     assert_eq!(session.model, VERCEL_GLM_5_2_FAST_MODEL);
-    assert_eq!(session.model_provider_id, app.config.model_provider_id);
+    // The fallback provider must be the one that serves the fallback model, not the config
+    // default: a config default like `ambient` cannot run `zai/glm-5.2-fast` and the turn
+    // would 400 at the remote with "Unknown model".
+    assert_eq!(session.model_provider_id, "vercel-anthropic-fast");
 }
 
 #[tokio::test]
@@ -3833,6 +3836,50 @@ async fn auto_report_turns_that_acknowledge_without_dispatch_do_not_trip_the_loo
             "Acknowledged; no action needed.",
         ));
     }
+}
+
+#[tokio::test]
+async fn native_spawn_session_fallbacks_bind_provider_from_model() {
+    let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000681").expect("valid thread id");
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+
+    // Restored session with no model and no provider: the role fallback model must bind the
+    // provider that serves it, not the config default provider.
+    let mut session = ThreadSessionState {
+        model: String::new(),
+        model_provider_id: String::new(),
+        ..test_thread_session(troll_thread_id, test_path_buf("/tmp/troll"))
+    };
+    app.apply_native_spawn_task_session_fallbacks(troll_thread_id, &mut session);
+    assert_eq!(session.model, "zai/glm-5.2-fast");
+    assert_eq!(session.model_provider_id, "vercel-anthropic-fast");
+
+    // Impossible stored pair (field incident: orc metadata said gpt-5.5 on ambient): corrected.
+    let mut session = ThreadSessionState {
+        model: "gpt-5.5".to_string(),
+        model_provider_id: "ambient".to_string(),
+        ..test_thread_session(troll_thread_id, test_path_buf("/tmp/troll"))
+    };
+    app.apply_native_spawn_task_session_fallbacks(troll_thread_id, &mut session);
+    assert_eq!(session.model, "gpt-5.5");
+    assert_eq!(session.model_provider_id, "openai");
+
+    // Servable cross-provider pair (ambient serves z-ai/glm-5.2): untouched.
+    let mut session = ThreadSessionState {
+        model: "z-ai/glm-5.2".to_string(),
+        model_provider_id: "ambient".to_string(),
+        ..test_thread_session(troll_thread_id, test_path_buf("/tmp/troll"))
+    };
+    app.apply_native_spawn_task_session_fallbacks(troll_thread_id, &mut session);
+    assert_eq!(session.model, "z-ai/glm-5.2");
+    assert_eq!(session.model_provider_id, "ambient");
 }
 
 #[tokio::test]
