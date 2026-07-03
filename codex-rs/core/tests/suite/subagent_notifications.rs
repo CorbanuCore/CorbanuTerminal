@@ -1397,29 +1397,31 @@ async fn spawn_agent_tool_description_mentions_role_locked_settings() -> Result<
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
-        config
-            .features
-            .enable(Feature::Collab)
-            .expect("test config should allow feature update");
-        config.multi_agent_v2.hide_spawn_agent_metadata = false;
-        let role_path = config.codex_home.join("custom-role.toml");
-        std::fs::write(
-            &role_path,
-            format!(
-                "developer_instructions = \"Stay focused\"\nmodel = \"{ROLE_MODEL}\"\nmodel_reasoning_effort = \"{ROLE_REASONING_EFFORT}\"\n",
-            ),
-        )
-        .expect("write role config");
-        config.agent_roles.insert(
-            "custom".to_string(),
-            AgentRoleConfig {
-                description: Some("Custom role".to_string()),
-                config_file: Some(role_path.to_path_buf()),
-                nickname_candidates: None,
-            },
-        );
-    });
+    let mut builder = test_codex()
+        .with_model("gpt-5.4")
+        .with_config(|config| {
+            config
+                .features
+                .enable(Feature::Collab)
+                .expect("test config should allow feature update");
+            config.multi_agent_v2.hide_spawn_agent_metadata = false;
+            let role_path = config.codex_home.join("custom-role.toml");
+            std::fs::write(
+                &role_path,
+                format!(
+                    "developer_instructions = \"Stay focused\"\nmodel = \"{ROLE_MODEL}\"\nmodel_reasoning_effort = \"{ROLE_REASONING_EFFORT}\"\n",
+                ),
+            )
+            .expect("write role config");
+            config.agent_roles.insert(
+                "custom".to_string(),
+                AgentRoleConfig {
+                    description: Some("Custom role".to_string()),
+                    config_file: Some(role_path.to_path_buf()),
+                    nickname_candidates: None,
+                },
+            );
+        });
     let test = builder.build(&server).await?;
 
     test.submit_turn(TURN_1_PROMPT).await?;
@@ -1428,7 +1430,9 @@ async fn spawn_agent_tool_description_mentions_role_locked_settings() -> Result<
     assert_eq!(requests.len(), 2);
     let output = requests[1].tool_search_output(call_id);
     let spawn_agent = namespace_child_tool(&output, "multi_agent_v1", "spawn_agent")
-        .expect("tool_search should return multi_agent_v1.spawn_agent");
+        .unwrap_or_else(|| {
+            panic!("tool_search should return multi_agent_v1.spawn_agent; output={output}")
+        });
     let agent_type_description = tool_parameter_description(spawn_agent, "agent_type")
         .expect("spawn_agent agent_type description");
     let custom_role_description =

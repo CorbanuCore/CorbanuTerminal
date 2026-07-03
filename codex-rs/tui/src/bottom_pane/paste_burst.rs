@@ -153,6 +153,7 @@ use std::time::Instant;
 // Detect quickly to avoid showing typed prefix before paste is recognized
 const PASTE_BURST_MIN_CHARS: u16 = 3;
 const PASTE_ENTER_SUPPRESS_WINDOW: Duration = Duration::from_millis(120);
+const SINGLE_LINE_SUBMIT_MIN_CHARS: usize = 16;
 
 // Maximum delay between consecutive chars to be considered part of a paste burst.
 const PASTE_BURST_CHAR_INTERVAL: Duration = Duration::from_millis(8);
@@ -335,6 +336,25 @@ impl PasteBurst {
     pub fn newline_should_insert_instead_of_submit(&self, now: Instant) -> bool {
         let in_burst_window = self.burst_window_until.is_some_and(|until| now <= until);
         self.is_active() || in_burst_window
+    }
+
+    /// Decide if an Enter during a burst should submit a long single-line input.
+    ///
+    /// The normal burst rule treats Enter as a pasted newline. That is correct for
+    /// short/multiline paste streams, but automated terminal drivers and some
+    /// shells emit a long single-line prompt as rapid chars followed by a real
+    /// submit Enter. Without this escape hatch the prompt remains in the
+    /// composer until Ctrl+C clears it into history without dispatching a turn.
+    pub fn single_line_burst_enter_should_submit(&self, visible_text: &str) -> bool {
+        if !self.is_active() {
+            return false;
+        }
+        if visible_text.contains('\n') || self.buffer.contains('\n') {
+            return false;
+        }
+        let buffered_chars =
+            self.buffer.chars().count() + usize::from(self.pending_first_char.is_some());
+        visible_text.chars().count() + buffered_chars >= SINGLE_LINE_SUBMIT_MIN_CHARS
     }
 
     /// Decide if Enter should insert a newline for callers that insert chars immediately.

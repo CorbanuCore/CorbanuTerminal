@@ -2285,8 +2285,10 @@ impl App {
                             );
                             self.persist_bound_nazgul_root_thread_metadata().await;
                         }
-                        self.select_agent_thread_and_discard_side(tui, app_server, thread_id)
-                            .await?;
+                        if self.active_thread_id.is_none() {
+                            self.select_agent_thread_and_discard_side(tui, app_server, thread_id)
+                                .await?;
+                        }
                         let binding_suffix = if bound_as_nazgul {
                             " and bound it as the Nazgul root"
                         } else {
@@ -2365,6 +2367,7 @@ impl App {
                             }
                         }
                         Err(err) => {
+                            self.requeue_spawn_report_processing_task(thread_id, &task);
                             self.chat_widget.add_error_message(format!(
                                 "Cannot send task to {label}; failed to attach pane session: {err}"
                             ));
@@ -2414,6 +2417,7 @@ impl App {
                                     }
                                 }
                                 Err(materialize_err) => {
+                                    self.requeue_spawn_report_processing_task(thread_id, &task);
                                     self.chat_widget.add_error_message(format!(
                                         "Cannot send task to {label}; failed to read pane metadata: {err}; failed to materialize saved pane: {materialize_err}"
                                     ));
@@ -2424,6 +2428,7 @@ impl App {
                     }
                 }
                 let Some(session) = session else {
+                    self.requeue_spawn_report_processing_task(thread_id, &task);
                     let detail = self
                         .unloaded_agent_thread_reason(thread_id)
                         .unwrap_or_else(|| "Pane session is not loaded.".to_string());
@@ -2434,6 +2439,7 @@ impl App {
                 if let Some(message) =
                     self.native_spawn_provider_auth_error(Some(session.model_provider_id.as_str()))
                 {
+                    self.requeue_spawn_report_processing_task(thread_id, &task);
                     self.chat_widget
                         .add_error_message(format!("Cannot send task to {label}: {message}"));
                     return Ok(AppRunControl::Continue);
@@ -2475,7 +2481,12 @@ impl App {
                             .set_running(thread_id, /*is_running*/ true);
                         self.agent_navigation
                             .set_last_task_message(thread_id, Some(task_preview));
-                        if !task.starts_with("Assigned by ") {
+                        if !task.starts_with("Assigned by ")
+                            && crate::spawn_orchestration::child_report_from_processing_prompt(
+                                &task,
+                            )
+                            .is_none()
+                        {
                             self.chat_widget.add_info_message(
                                 format!("Task sent to {label}."),
                                 Some("The pane will run it as a normal turn.".to_string()),
@@ -2483,6 +2494,7 @@ impl App {
                         }
                     }
                     Err(err) => {
+                        self.requeue_spawn_report_processing_task(thread_id, &task);
                         self.chat_widget
                             .add_error_message(format!("Failed to send task to {label}: {err}"));
                     }

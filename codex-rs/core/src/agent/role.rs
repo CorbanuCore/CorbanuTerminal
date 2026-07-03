@@ -19,9 +19,11 @@ use codex_config::ConfigLayerStackOrdering;
 use codex_config::config_toml::ConfigToml;
 use codex_config::loader::resolve_relative_paths_in_config_toml;
 use codex_exec_server::LOCAL_FS;
+use codex_protocol::openai_models::ReasoningEffort;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::LazyLock;
 use toml::Value as TomlValue;
 
@@ -95,7 +97,14 @@ async fn apply_role_to_config_inner(
     }
     let role_sets_model_runtime =
         role_layer_toml.get("model").is_some() || role_layer_toml.get("model_provider").is_some();
+    let explicit_role_model = role_layer_toml
+        .get("model")
+        .and_then(TomlValue::as_str)
+        .map(ToOwned::to_owned);
     let preserve_current_model = !role_sets_model_runtime;
+    let preserved_current_model = preserve_current_model
+        .then(|| config.model.clone())
+        .flatten();
     let preserve_current_provider = role_layer_toml.get("model_provider").is_none();
     let preserve_current_service_tier = role_layer_toml.get("service_tier").is_none();
     if !role_sets_model_runtime
@@ -108,8 +117,12 @@ async fn apply_role_to_config_inner(
             TomlValue::String(reasoning_effort.to_string()),
         );
     }
+    let role_reasoning_effort = role_layer_toml
+        .get("model_reasoning_effort")
+        .and_then(TomlValue::as_str)
+        .and_then(|value| ReasoningEffort::from_str(value).ok());
 
-    *config = reload::build_next_config(
+    let mut next_config = reload::build_next_config(
         config,
         role_layer_toml,
         preserve_current_model,
@@ -117,6 +130,15 @@ async fn apply_role_to_config_inner(
         preserve_current_service_tier,
     )
     .await?;
+    if let Some(model) = explicit_role_model {
+        next_config.model = Some(model);
+    } else if let Some(model) = preserved_current_model {
+        next_config.model = Some(model);
+    }
+    if let Some(reasoning_effort) = role_reasoning_effort {
+        next_config.model_reasoning_effort = Some(reasoning_effort);
+    }
+    *config = next_config;
     Ok(())
 }
 

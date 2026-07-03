@@ -391,10 +391,11 @@ impl ChatStreamActivity {
         if bytes.is_empty() {
             return;
         }
-        if comment_frames > 0 {
-            self.comment_frame_count
-                .fetch_add(comment_frames, Ordering::Relaxed);
+        if comment_frames == 0 {
+            return;
         }
+        self.comment_frame_count
+            .fetch_add(comment_frames, Ordering::Relaxed);
         let sequence = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
         let _ = self.tx_activity.send(sequence);
     }
@@ -1028,11 +1029,11 @@ async fn process_chat_sse(
         .await
         {
             ChatSsePoll::Activity => {
+                let now = Instant::now();
                 if first_activity_at.is_none() {
-                    let now = Instant::now();
                     first_activity_at = Some(now);
-                    actionable_deadline_at = Some(now + actionable_silence_timeout);
                 }
+                actionable_deadline_at = Some(now + actionable_silence_timeout);
                 continue;
             }
             ChatSsePoll::ActionableTimeout => {
@@ -1616,7 +1617,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn comment_only_stream_hits_actionable_silence_timeout() {
+    async fn comment_only_stream_survives_actionable_silence_timeout() {
         let body = delayed_body(vec![
             (Duration::ZERO, b": OPENROUTER PROCESSING\n\n".to_vec()),
             (
@@ -1648,12 +1649,19 @@ mod tests {
         )
         .await;
 
-        let event = rx_event.recv().await.expect("event should be emitted");
+        let mut events = Vec::new();
+        while let Some(event) = rx_event.recv().await {
+            events.push(event);
+        }
+
+        assert!(
+            events.iter().all(Result::is_ok),
+            "comment keepalives should keep actionable silence alive: {events:?}"
+        );
         assert_matches!(
-            event,
-            Err(ApiError::Stream(message))
-                if message.contains("actionable silence timeout")
-                    && message.contains("comment_frame_count=")
+            events.last(),
+            Some(Ok(ResponseEvent::Completed { response_id, .. }))
+                if response_id == "chatcmpl-late"
         );
     }
 

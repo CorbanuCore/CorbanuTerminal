@@ -2834,9 +2834,21 @@ impl ChatComposer {
                     .next()
                     .unwrap_or("")
                     .starts_with('/'));
+        let single_line_burst_enter_should_submit = !in_slash_context
+            && !self.draft.disable_paste_burst
+            && self
+                .draft
+                .paste_burst
+                .single_line_burst_enter_should_submit(self.draft.textarea.text());
+        if single_line_burst_enter_should_submit
+            && let Some(pasted) = self.draft.paste_burst.flush_before_modified_input()
+        {
+            self.handle_paste(pasted);
+        }
         if !self.draft.disable_paste_burst
             && self.draft.paste_burst.is_active()
             && !in_slash_context
+            && !single_line_burst_enter_should_submit
             && self.draft.paste_burst.append_newline_if_active(now)
         {
             return (InputResult::None, true);
@@ -2845,6 +2857,7 @@ impl ChatComposer {
         // During a paste-like burst, treat Enter/Ctrl+Shift+Q as a newline instead of submit.
         if !in_slash_context
             && !self.draft.disable_paste_burst
+            && !single_line_burst_enter_should_submit
             && self
                 .draft
                 .paste_burst
@@ -7312,6 +7325,49 @@ mod tests {
         let flushed = composer.handle_paste_burst_flush(flush_time);
         assert!(flushed, "expected paste burst to flush");
         assert_eq!(composer.draft.textarea.text(), "hi\nthere");
+    }
+
+    /// Behavior: terminal drivers often inject a full prompt as rapid chars and then send a real
+    /// Enter key. For long single-line prompts, that Enter should submit instead of leaving the
+    /// draft stuck until Ctrl+C appends it to history without dispatching a turn.
+    #[test]
+    fn long_single_line_burst_enter_submits() {
+        use crossterm::event::KeyCode;
+        use crossterm::event::KeyEvent;
+        use crossterm::event::KeyModifiers;
+
+        let (tx, _rx) = unbounded_channel::<AppEvent>();
+        let sender = AppEventSender::new(tx);
+        let mut composer = ChatComposer::new(
+            /*has_input_focus*/ true,
+            sender,
+            /*enhanced_keys_supported*/ false,
+            "Ask PFTerminal to do anything".to_string(),
+            /*disable_paste_burst*/ false,
+        );
+
+        let prompt = "Create file qa_loop.txt containing exactly QA_FILE_EDIT_OK.";
+        let mut now = Instant::now();
+        let step = Duration::from_millis(1);
+        for ch in prompt.chars() {
+            let _ = composer.handle_input_basic_with_time(
+                KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
+                now,
+            );
+            now += step;
+        }
+
+        let (result, _) = composer.handle_submission_with_time(/*should_queue*/ false, now);
+
+        assert_eq!(
+            result,
+            InputResult::Submitted {
+                text: prompt.to_string(),
+                text_elements: Vec::new(),
+            }
+        );
+        assert!(composer.draft.textarea.text().is_empty());
+        assert!(!composer.is_in_paste_burst());
     }
 
     /// Behavior: startup-pending submissions are queued immediately, so Enter should flush any

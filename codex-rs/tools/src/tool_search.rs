@@ -32,6 +32,8 @@ impl ToolSearchInfo {
         spec: ToolSpec,
         source_info: Option<ToolSearchSourceInfo>,
     ) -> Option<Self> {
+        let spec_search_text = default_tool_search_text(&spec);
+        let search_text = combine_search_text(search_text, spec_search_text);
         let output = match spec {
             ToolSpec::Function(mut tool) => {
                 tool.defer_loading = Some(true);
@@ -62,6 +64,17 @@ impl ToolSearchInfo {
             },
             source_info,
         })
+    }
+}
+
+fn combine_search_text(primary: String, fallback: String) -> String {
+    let primary = primary.trim();
+    let fallback = fallback.trim();
+    match (primary.is_empty(), fallback.is_empty()) {
+        (true, true) => String::new(),
+        (true, false) => fallback.to_string(),
+        (false, true) => primary.to_string(),
+        (false, false) => format!("{primary} {fallback}"),
     }
 }
 
