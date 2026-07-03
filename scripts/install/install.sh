@@ -529,19 +529,7 @@ current_installed_version() {
     return 0
   fi
 
-  version="$(version_from_binary "$CURRENT_LINK/bin/codex" || true)"
-  if [ -n "$version" ]; then
-    printf '%s\n' "$version"
-    return 0
-  fi
-
   version="$(version_from_binary "$CURRENT_LINK/pfterminal" || true)"
-  if [ -n "$version" ]; then
-    printf '%s\n' "$version"
-    return 0
-  fi
-
-  version="$(version_from_binary "$CURRENT_LINK/codex" || true)"
   if [ -n "$version" ]; then
     printf '%s\n' "$version"
     return 0
@@ -788,10 +776,9 @@ release_pfterminal_relative_path() {
     printf 'bin/pfterminal\n'
   elif [ -x "$release_dir/pfterminal" ]; then
     printf 'pfterminal\n'
-  elif [ -x "$release_dir/bin/codex" ]; then
-    printf 'bin/codex\n'
   else
-    printf 'codex\n'
+    echo "Installed PFTerminal release does not contain a pfterminal binary: $release_dir" >&2
+    return 1
   fi
 }
 
@@ -823,7 +810,9 @@ update_visible_command() {
   release_dir="$1"
   mkdir -p "$BIN_DIR"
   tmp_script="$BIN_DIR/.pfterminal.$$"
-  pfterminal_relative_path="$(release_pfterminal_relative_path "$release_dir")"
+  if ! pfterminal_relative_path="$(release_pfterminal_relative_path "$release_dir")"; then
+    exit 1
+  fi
 
   write_visible_command_wrapper "$CURRENT_LINK/$pfterminal_relative_path" "$tmp_script"
 }
