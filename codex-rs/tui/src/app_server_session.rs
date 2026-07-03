@@ -112,7 +112,6 @@ use codex_app_server_protocol::TurnSteerParams;
 use codex_app_server_protocol::TurnSteerResponse;
 use codex_app_server_protocol::UserInput;
 use codex_login::AuthDotJson;
-use codex_login::AuthManagerConfig;
 use codex_login::load_auth_dot_json;
 use codex_otel::TelemetryAuthMode;
 use codex_protocol::ThreadId;
@@ -172,7 +171,7 @@ fn stored_auth_at_path_has_codex_backend_auth(
     match load_auth_dot_json(
         codex_home,
         config.cli_auth_credentials_store_mode,
-        AuthManagerConfig::auth_keyring_backend_kind(config),
+        config.auth_keyring_backend_kind(),
     ) {
         Ok(Some(auth)) => auth_dot_json_has_codex_backend_auth(&auth),
         Ok(None) => false,
