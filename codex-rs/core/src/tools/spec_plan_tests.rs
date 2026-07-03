@@ -11,6 +11,7 @@ use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
+use codex_models_manager::model_info;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
 use codex_protocol::models::PermissionProfile;
@@ -181,6 +182,7 @@ async fn probe_with(
     inputs: ToolPlanInputs,
 ) -> ToolPlanProbe {
     let (_session, mut turn) = make_session_and_context().await;
+    use_openai_provider(&mut turn);
     configure_turn(&mut turn);
     let router = ToolRouter::from_turn_context(
         &turn,
@@ -271,6 +273,7 @@ fn use_openai_provider(turn: &mut TurnContext) {
         config.model_provider = provider_info.clone();
     });
     turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+    turn.model_info = model_info::model_info_from_slug("gpt-5.4");
 }
 
 fn use_bedrock_provider(turn: &mut TurnContext) {
@@ -654,6 +657,7 @@ async fn environment_count_controls_environment_backed_tools() {
         duplicate_primary_environment(turn);
         set_feature(turn, Feature::ShellTool, /*enabled*/ true);
         set_feature(turn, Feature::UnifiedExec, /*enabled*/ true);
+        turn.permission_profile = PermissionProfile::workspace_write();
         turn.model_info.apply_patch_tool_type = Some(ApplyPatchToolType::Freeform);
     })
     .await;
@@ -909,6 +913,7 @@ async fn tool_search_cache_rebuilds_when_deferred_sources_change() {
     let cache = ToolSearchHandlerCache::default();
 
     let (_session, mut first_turn) = make_session_and_context().await;
+    use_openai_provider(&mut first_turn);
     first_turn.model_info.supports_search_tool = true;
     let first_router = ToolRouter::from_turn_context(
         &first_turn,
@@ -924,6 +929,7 @@ async fn tool_search_cache_rebuilds_when_deferred_sources_change() {
     let first_plan = ToolPlanProbe::from_router(first_router);
 
     let (_session, mut second_turn) = make_session_and_context().await;
+    use_openai_provider(&mut second_turn);
     second_turn.model_info.supports_search_tool = true;
     let second_router = ToolRouter::from_turn_context(
         &second_turn,

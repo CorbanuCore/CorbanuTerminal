@@ -3464,6 +3464,7 @@ impl Config {
             merge_configured_model_providers(built_in_model_providers, cfg.model_providers)
                 .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
 
+        let model_provider_was_explicit = model_provider.is_some() || cfg.model_provider.is_some();
         let model_provider_id = model_provider
             .or(cfg.model_provider)
             .unwrap_or_else(|| AMBIENT_PROVIDER_ID.to_string());
@@ -3635,8 +3636,15 @@ impl Config {
                     .then_some(ForcedLoginMethod::Api)
             });
 
-        let model = resolve_model_for_provider(model.or(cfg.model), &model_provider_id);
-        let model_reasoning_effort = if ambient_provider_selected || zai_chat_provider_selected {
+        let model_without_explicit_provider = !model_provider_was_explicit && cfg.model.is_some();
+        let model = match model {
+            Some(model_override) => Some(model_override),
+            None if model_without_explicit_provider => cfg.model,
+            None => resolve_model_for_provider(cfg.model, &model_provider_id),
+        };
+        let model_reasoning_effort = if (ambient_provider_selected && !model_without_explicit_provider)
+            || zai_chat_provider_selected
+        {
             cfg.model_reasoning_effort
                 .map(normalize_ambient_reasoning_effort)
         } else {

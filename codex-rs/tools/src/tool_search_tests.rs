@@ -46,3 +46,50 @@ fn default_search_text_uses_model_visible_namespace_metadata_once() {
         "codex_app Manage Codex automations. automation_update automation update Create or update automations. Automation options. mode Update mode. schedule Schedule settings. timezone IANA timezone."
     );
 }
+
+#[test]
+fn custom_search_text_is_augmented_with_spec_metadata() {
+    let spec = ToolSpec::Namespace(crate::ResponsesApiNamespace {
+        name: "multi_agent_v1".to_string(),
+        description: "Spawn and manage sub-agents.".to_string(),
+        tools: vec![ResponsesApiNamespaceTool::Function(ResponsesApiTool {
+            name: "spawn_agent".to_string(),
+            description: "Delegate work to a sub-agent.".to_string(),
+            strict: false,
+            defer_loading: None,
+            parameters: JsonSchema::object(
+                BTreeMap::from([(
+                    "agent_type".to_string(),
+                    JsonSchema::string(Some(
+                        "custom: Custom role with locked model settings.".to_string(),
+                    )),
+                )]),
+                /*required*/ None,
+                /*additional_properties*/ None,
+            ),
+            output_schema: None,
+        })],
+    });
+
+    let search_info = ToolSearchInfo::from_spec(
+        "spawn agent delegate".to_string(),
+        spec,
+        /*source_info*/ None,
+    )
+    .expect("namespace should be searchable");
+
+    assert!(
+        search_info
+            .entry
+            .search_text
+            .contains("spawn agent delegate")
+    );
+    assert!(search_info.entry.search_text.contains("multi_agent_v1"));
+    assert!(search_info.entry.search_text.contains("agent_type"));
+    assert!(
+        search_info
+            .entry
+            .search_text
+            .contains("custom: Custom role")
+    );
+}

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::config::Config;
 use crate::function_tool::FunctionCallError;
 use crate::session::tests::make_session_and_context;
+use crate::session::turn_context::TurnContext;
 use crate::tools::context::ToolPayload;
 use crate::turn_diff_tracker::TurnDiffTracker;
 use codex_extension_api::ExtensionData;
@@ -11,6 +12,10 @@ use codex_extension_api::ExtensionRegistryBuilder;
 use codex_extension_api::ResponsesApiTool;
 use codex_extension_api::ToolCall as ExtensionToolCall;
 use codex_extension_api::ToolExecutor;
+use codex_model_provider::create_model_provider;
+use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::OPENAI_PROVIDER_ID;
+use codex_models_manager::model_info;
 use codex_protocol::dynamic_tools::DynamicToolFunctionSpec;
 use codex_protocol::dynamic_tools::DynamicToolNamespaceSpec;
 use codex_protocol::dynamic_tools::DynamicToolNamespaceTool;
@@ -33,6 +38,16 @@ use super::ToolCallSource;
 use super::ToolRouter;
 use super::ToolRouterParams;
 use super::extension_tool_executors;
+
+fn use_openai_provider(turn: &mut TurnContext) {
+    let provider_info = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+    let mut config = (*turn.config).clone();
+    config.model_provider_id = OPENAI_PROVIDER_ID.to_string();
+    config.model_provider = provider_info.clone();
+    turn.config = Arc::new(config);
+    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+    turn.model_info = model_info::model_info_from_slug("gpt-5.4");
+}
 
 struct ExtensionEchoContributor;
 
@@ -281,7 +296,8 @@ async fn tools_without_handlers_do_not_support_parallel() -> anyhow::Result<()> 
 
 #[tokio::test]
 async fn specs_filter_deferred_dynamic_tools() -> anyhow::Result<()> {
-    let (_, turn) = make_session_and_context().await;
+    let (_, mut turn) = make_session_and_context().await;
+    use_openai_provider(&mut turn);
     let hidden_tool = "hidden_dynamic_tool";
     let visible_tool = "visible_dynamic_tool";
     let dynamic_tools = vec![DynamicToolSpec::Namespace(DynamicToolNamespaceSpec {
@@ -359,7 +375,8 @@ fn mcp_tool_info(
 
 #[tokio::test]
 async fn extension_tool_executors_are_model_visible_and_dispatchable() -> anyhow::Result<()> {
-    let (mut session, turn) = make_session_and_context().await;
+    let (mut session, mut turn) = make_session_and_context().await;
+    use_openai_provider(&mut turn);
     session.services.extensions = extension_tool_test_registry();
     let history_item = ResponseItem::Message {
         id: None,
