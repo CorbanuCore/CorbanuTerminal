@@ -463,6 +463,7 @@ fn parses_web_search_call() {
             query: Some("weather".to_string()),
             queries: None,
         }),
+        anthropic_content_block: None,
         metadata: None,
     };
 
@@ -492,6 +493,7 @@ fn parses_web_search_open_page_call() {
         action: Some(WebSearchAction::OpenPage {
             url: Some("https://example.com".to_string()),
         }),
+        anthropic_content_block: None,
         metadata: None,
     };
 
@@ -521,6 +523,7 @@ fn parses_web_search_find_in_page_call() {
             url: Some("https://example.com".to_string()),
             pattern: Some("needle".to_string()),
         }),
+        anthropic_content_block: None,
         metadata: None,
     };
 
@@ -548,6 +551,7 @@ fn parses_partial_web_search_call_without_action_as_other() {
         id: Some("ws_partial".to_string()),
         status: Some("in_progress".to_string()),
         action: None,
+        anthropic_content_block: None,
         metadata: None,
     };
 

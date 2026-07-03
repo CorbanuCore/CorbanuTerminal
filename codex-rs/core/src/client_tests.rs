@@ -41,6 +41,7 @@ use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::models::WebSearchAction;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::InternalSessionSource;
@@ -496,6 +497,147 @@ fn chat_completions_never_serializes_web_search_into_tools_without_zai() {
     .expect("chat tools");
 
     assert_eq!(tools, Vec::<serde_json::Value>::new());
+}
+
+#[test]
+fn anthropic_messages_serializes_native_web_search_tool() {
+    let tool = ToolSpec::WebSearch {
+        external_web_access: Some(true),
+        index_gated_web_access: None,
+        filters: None,
+        user_location: None,
+        search_context_size: Some(WebSearchContextSize::High),
+        search_content_types: None,
+    };
+    let latest =
+        super::anthropic_web_search_tool_with_type(&tool, super::ANTHROPIC_WEB_SEARCH_TOOL_TYPE);
+    assert_eq!(
+        latest.pointer("/type").and_then(serde_json::Value::as_str),
+        Some("web_search_20260209")
+    );
+    assert_eq!(
+        latest.pointer("/name").and_then(serde_json::Value::as_str),
+        Some("web_search")
+    );
+    assert_eq!(latest.pointer("/max_uses"), Some(&json!(8)));
+    assert_eq!(latest.pointer("/allowed_callers/0"), Some(&json!("direct")));
+
+    let legacy = super::anthropic_web_search_tool_with_type(
+        &tool,
+        super::ANTHROPIC_WEB_SEARCH_TOOL_TYPE_LEGACY,
+    );
+    assert_eq!(
+        legacy.pointer("/type").and_then(serde_json::Value::as_str),
+        Some("web_search_20250305")
+    );
+
+    let client = test_model_client(SessionSource::Cli);
+    let prompt = super::Prompt {
+        input: vec![ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText {
+                text: "search".to_string(),
+            }],
+            phase: None,
+            metadata: None,
+        }],
+        tools: vec![
+            ToolSpec::Function(ResponsesApiTool {
+                name: "exec_command".to_string(),
+                description: "Run a command.".to_string(),
+                strict: true,
+                defer_loading: None,
+                parameters: JsonSchema::object(BTreeMap::new(), None, Some(false.into())),
+                output_schema: None,
+            }),
+            tool,
+        ],
+        ..Default::default()
+    };
+    let request = client
+        .build_anthropic_messages_request(&prompt, &test_claude_plan_model_info(), None)
+        .expect("Anthropic request");
+    let body = serde_json::to_value(&request).expect("serialize request");
+    assert_eq!(
+        body.pointer("/tools/0/type")
+            .and_then(serde_json::Value::as_str),
+        Some("web_search_20260209")
+    );
+    assert_eq!(
+        body.pointer("/tools/0/cache_control/type"),
+        None,
+        "server-side Anthropic web_search tools should not receive cache_control"
+    );
+    assert_eq!(
+        body.pointer("/tools/0/allowed_callers/0"),
+        Some(&json!("direct"))
+    );
+    assert_eq!(
+        body.pointer("/tools/1/name")
+            .and_then(serde_json::Value::as_str),
+        Some("exec_command"),
+        "executable tools stay available after the native web_search tool"
+    );
+    assert_eq!(
+        body.pointer("/tools/1/cache_control/type"),
+        Some(&json!("ephemeral")),
+        "the final executable tool still receives the cache breakpoint"
+    );
+}
+
+#[test]
+fn anthropic_replays_server_side_web_search_blocks() {
+    let server_tool_use = json!({
+        "type": "server_tool_use",
+        "id": "srvtoolu_1",
+        "name": "web_search",
+        "input": { "query": "10 year treasury yield" }
+    });
+    let web_search_result = json!({
+        "type": "web_search_tool_result",
+        "tool_use_id": "srvtoolu_1",
+        "content": [
+            {
+                "type": "web_search_result",
+                "url": "https://example.com/yield",
+                "title": "Yield",
+                "encrypted_content": "abc"
+            }
+        ]
+    });
+    let mut messages = Vec::new();
+    let mut skipped = std::collections::HashSet::new();
+    super::append_anthropic_message_for_response_item(
+        ResponseItem::WebSearchCall {
+            id: Some("srvtoolu_1".to_string()),
+            status: Some("in_progress".to_string()),
+            action: Some(WebSearchAction::Search {
+                query: Some("10 year treasury yield".to_string()),
+                queries: None,
+            }),
+            anthropic_content_block: Some(server_tool_use.clone()),
+            metadata: None,
+        },
+        &mut messages,
+        &mut skipped,
+    );
+    super::append_anthropic_message_for_response_item(
+        ResponseItem::WebSearchCall {
+            id: Some("wsr_1".to_string()),
+            status: Some("completed".to_string()),
+            action: None,
+            anthropic_content_block: Some(web_search_result.clone()),
+            metadata: None,
+        },
+        &mut messages,
+        &mut skipped,
+    );
+
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].pointer("/role"), Some(&json!("assistant")));
+    assert_eq!(messages[0].pointer("/content/0"), Some(&server_tool_use));
+    assert_eq!(messages[0].pointer("/content/1"), Some(&web_search_result));
 }
 
 #[test]

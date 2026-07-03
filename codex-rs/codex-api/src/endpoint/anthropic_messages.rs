@@ -18,6 +18,7 @@ use codex_protocol::models::ContentItem;
 use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ReasoningItemReasoningSummary;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::models::WebSearchAction;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::TokenUsage;
 use eventsource_stream::Eventsource;
@@ -183,6 +184,8 @@ struct AnthropicContentBlock {
     id: Option<String>,
     name: Option<String>,
     input: Option<Value>,
+    tool_use_id: Option<String>,
+    content: Option<Value>,
     text: Option<String>,
     thinking: Option<String>,
 }
@@ -235,6 +238,21 @@ struct AnthropicToolCallState {
     emitted: bool,
 }
 
+#[derive(Default)]
+struct AnthropicServerToolUseState {
+    id: Option<String>,
+    name: String,
+    arguments: String,
+    emitted: bool,
+}
+
+#[derive(Default)]
+struct AnthropicWebSearchResultState {
+    tool_use_id: Option<String>,
+    content: Option<Value>,
+    emitted: bool,
+}
+
 struct AnthropicStreamState {
     response_id: Option<String>,
     response_id_hint: Option<String>,
@@ -245,6 +263,8 @@ struct AnthropicStreamState {
     reasoning_added: bool,
     reasoning_done: bool,
     tool_calls: BTreeMap<usize, AnthropicToolCallState>,
+    server_tool_uses: BTreeMap<usize, AnthropicServerToolUseState>,
+    web_search_results: BTreeMap<usize, AnthropicWebSearchResultState>,
     token_usage: Option<TokenUsage>,
     end_turn: Option<bool>,
 }
@@ -261,6 +281,8 @@ impl AnthropicStreamState {
             reasoning_added: false,
             reasoning_done: false,
             tool_calls: BTreeMap::new(),
+            server_tool_uses: BTreeMap::new(),
+            web_search_results: BTreeMap::new(),
             token_usage: None,
             end_turn: None,
         }
@@ -385,6 +407,32 @@ impl AnthropicStreamState {
                 }
                 self.tool_calls.insert(index, state);
             }
+            "server_tool_use" => {
+                let index = event.index.unwrap_or(self.server_tool_uses.len());
+                let mut state = AnthropicServerToolUseState {
+                    id: block.id,
+                    name: block.name.unwrap_or_default(),
+                    arguments: String::new(),
+                    emitted: false,
+                };
+                if let Some(input) = block.input
+                    && input != Value::Object(Default::default())
+                {
+                    state.arguments = input.to_string();
+                }
+                self.server_tool_uses.insert(index, state);
+            }
+            "web_search_tool_result" => {
+                let index = event.index.unwrap_or(self.web_search_results.len());
+                self.web_search_results.insert(
+                    index,
+                    AnthropicWebSearchResultState {
+                        tool_use_id: block.tool_use_id,
+                        content: block.content,
+                        emitted: false,
+                    },
+                );
+            }
             _ => {}
         }
         true
@@ -417,9 +465,12 @@ impl AnthropicStreamState {
             Some("input_json_delta") => {
                 if let Some(index) = event.index
                     && let Some(partial_json) = delta.partial_json
-                    && let Some(tool_call) = self.tool_calls.get_mut(&index)
                 {
-                    tool_call.arguments.push_str(&partial_json);
+                    if let Some(tool_call) = self.tool_calls.get_mut(&index) {
+                        tool_call.arguments.push_str(&partial_json);
+                    } else if let Some(server_tool_use) = self.server_tool_uses.get_mut(&index) {
+                        server_tool_use.arguments.push_str(&partial_json);
+                    }
                 }
             }
             _ => {}
@@ -435,6 +486,12 @@ impl AnthropicStreamState {
         let Some(index) = event.index else {
             return true;
         };
+        if !self.emit_server_tool_use(index, tx_event).await {
+            return false;
+        }
+        if !self.emit_web_search_result(index, tx_event).await {
+            return false;
+        }
         self.emit_tool_call(index, tx_event).await
     }
 
@@ -446,6 +503,7 @@ impl AnthropicStreamState {
             self.end_turn = match delta.stop_reason.as_deref() {
                 Some("end_turn") => Some(true),
                 Some("tool_use") => Some(false),
+                Some("pause_turn") => Some(false),
                 Some(_) => None,
                 None => self.end_turn,
             };
@@ -593,6 +651,76 @@ impl AnthropicStreamState {
             .is_ok()
     }
 
+    async fn emit_server_tool_use(
+        &mut self,
+        index: usize,
+        tx_event: &mpsc::Sender<Result<ResponseEvent, ApiError>>,
+    ) -> bool {
+        let Some(server_tool_use) = self.server_tool_uses.get_mut(&index) else {
+            return true;
+        };
+        if server_tool_use.emitted {
+            return true;
+        }
+        if server_tool_use.name != "web_search" {
+            server_tool_use.emitted = true;
+            return true;
+        }
+
+        let input = parse_anthropic_json_object(&server_tool_use.arguments);
+        let block = anthropic_server_tool_use_block(
+            server_tool_use.id.as_deref(),
+            &server_tool_use.name,
+            input.clone(),
+        );
+        let item = ResponseItem::WebSearchCall {
+            id: server_tool_use.id.clone(),
+            status: Some("in_progress".to_string()),
+            action: anthropic_web_search_action_from_input(&input),
+            anthropic_content_block: Some(block),
+            metadata: None,
+        };
+        server_tool_use.emitted = true;
+        tx_event
+            .send(Ok(ResponseEvent::OutputItemDone(item)))
+            .await
+            .is_ok()
+    }
+
+    async fn emit_web_search_result(
+        &mut self,
+        index: usize,
+        tx_event: &mpsc::Sender<Result<ResponseEvent, ApiError>>,
+    ) -> bool {
+        let response_id = self.response_id();
+        let Some(result) = self.web_search_results.get_mut(&index) else {
+            return true;
+        };
+        if result.emitted {
+            return true;
+        }
+
+        let content = result.content.clone().unwrap_or_else(|| json_array());
+        let status = if content.is_object() {
+            "failed"
+        } else {
+            "completed"
+        };
+        let block = anthropic_web_search_tool_result_block(result.tool_use_id.as_deref(), content);
+        let item = ResponseItem::WebSearchCall {
+            id: Some(format!("wsr_{response_id}_{index}")),
+            status: Some(status.to_string()),
+            action: None,
+            anthropic_content_block: Some(block),
+            metadata: None,
+        };
+        result.emitted = true;
+        tx_event
+            .send(Ok(ResponseEvent::OutputItemDone(item)))
+            .await
+            .is_ok()
+    }
+
     async fn complete(&mut self, tx_event: &mpsc::Sender<Result<ResponseEvent, ApiError>>) {
         let response_id = self.response_id();
         if !self.finish_reasoning_item(tx_event).await {
@@ -621,6 +749,18 @@ impl AnthropicStreamState {
                 return;
             }
         }
+        let pending = self.server_tool_uses.keys().copied().collect::<Vec<_>>();
+        for index in pending {
+            if !self.emit_server_tool_use(index, tx_event).await {
+                return;
+            }
+        }
+        let pending = self.web_search_results.keys().copied().collect::<Vec<_>>();
+        for index in pending {
+            if !self.emit_web_search_result(index, tx_event).await {
+                return;
+            }
+        }
         let _ = tx_event
             .send(Ok(ResponseEvent::Completed {
                 response_id,
@@ -628,6 +768,71 @@ impl AnthropicStreamState {
                 end_turn: self.end_turn,
             }))
             .await;
+    }
+}
+
+fn json_array() -> Value {
+    Value::Array(Vec::new())
+}
+
+fn parse_anthropic_json_object(arguments: &str) -> Value {
+    if arguments.trim().is_empty() {
+        return Value::Object(Default::default());
+    }
+    serde_json::from_str(arguments).unwrap_or_else(|_| Value::Object(Default::default()))
+}
+
+fn anthropic_server_tool_use_block(id: Option<&str>, name: &str, input: Value) -> Value {
+    let mut block = serde_json::Map::new();
+    block.insert(
+        "type".to_string(),
+        Value::String("server_tool_use".to_string()),
+    );
+    if let Some(id) = id {
+        block.insert("id".to_string(), Value::String(id.to_string()));
+    }
+    block.insert("name".to_string(), Value::String(name.to_string()));
+    block.insert("input".to_string(), input);
+    Value::Object(block)
+}
+
+fn anthropic_web_search_tool_result_block(tool_use_id: Option<&str>, content: Value) -> Value {
+    let mut block = serde_json::Map::new();
+    block.insert(
+        "type".to_string(),
+        Value::String("web_search_tool_result".to_string()),
+    );
+    if let Some(tool_use_id) = tool_use_id {
+        block.insert(
+            "tool_use_id".to_string(),
+            Value::String(tool_use_id.to_string()),
+        );
+    }
+    block.insert("content".to_string(), content);
+    Value::Object(block)
+}
+
+fn anthropic_web_search_action_from_input(input: &Value) -> Option<WebSearchAction> {
+    let query = input
+        .get("query")
+        .or_else(|| input.get("search_query"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let queries = input
+        .get("queries")
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .filter(|queries| !queries.is_empty());
+    if query.is_none() && queries.is_none() {
+        None
+    } else {
+        Some(WebSearchAction::Search { query, queries })
     }
 }
 
@@ -837,5 +1042,111 @@ data: {"type":"message_stop"}
             }) if response_id == "msg_tool"
         );
         assert_eq!(events.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn parses_server_side_web_search_blocks_and_pause_turn() {
+        let events = collect_events(&[
+            br#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_web","model":"claude-fable","usage":{"input_tokens":2,"output_tokens":0}}}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Found current data."}}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{}}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"query\":"}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"10 year treasury yield\"}"}}
+
+"#,
+            br#"event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":2,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","url":"https://example.com/yield","title":"Yield","encrypted_content":"abc"}]}}
+
+"#,
+            br#"event: content_block_stop
+data: {"type":"content_block_stop","index":2}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":3,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_2","content":{"type":"web_search_tool_result_error","error_code":"max_uses_exceeded"}}}
+
+"#,
+            br#"event: content_block_stop
+data: {"type":"content_block_stop","index":3}
+
+"#,
+            br#"event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"pause_turn"},"usage":{"input_tokens":2,"output_tokens":4}}
+
+"#,
+            br#"event: message_stop
+data: {"type":"message_stop"}
+
+"#,
+        ])
+        .await;
+
+        assert_matches!(&events[0], Ok(ResponseEvent::ServerModel(model)) if model == "claude-fable");
+        assert_matches!(
+            &events[1],
+            Ok(ResponseEvent::OutputItemAdded(ResponseItem::Message { .. }))
+        );
+        assert_matches!(
+            &events[3],
+            Ok(ResponseEvent::OutputItemDone(ResponseItem::WebSearchCall {
+                id,
+                status,
+                action: Some(WebSearchAction::Search { query: Some(query), .. }),
+                anthropic_content_block: Some(block),
+                ..
+            })) if id.as_deref() == Some("srvtoolu_1")
+                && status.as_deref() == Some("in_progress")
+                && query == "10 year treasury yield"
+                && block.pointer("/type").and_then(Value::as_str) == Some("server_tool_use")
+                && block.pointer("/input/query").and_then(Value::as_str) == Some("10 year treasury yield")
+        );
+        assert_matches!(
+            &events[4],
+            Ok(ResponseEvent::OutputItemDone(ResponseItem::WebSearchCall {
+                status,
+                anthropic_content_block: Some(block),
+                ..
+            })) if status.as_deref() == Some("completed")
+                && block.pointer("/content/0/type").and_then(Value::as_str) == Some("web_search_result")
+        );
+        assert_matches!(
+            &events[5],
+            Ok(ResponseEvent::OutputItemDone(ResponseItem::WebSearchCall {
+                status,
+                anthropic_content_block: Some(block),
+                ..
+            })) if status.as_deref() == Some("failed")
+                && block.pointer("/content/type").and_then(Value::as_str) == Some("web_search_tool_result_error")
+        );
+        assert_matches!(
+            &events[7],
+            Ok(ResponseEvent::Completed {
+                response_id,
+                end_turn: Some(false),
+                ..
+            }) if response_id == "msg_web"
+        );
+        assert_eq!(events.len(), 8);
     }
 }
