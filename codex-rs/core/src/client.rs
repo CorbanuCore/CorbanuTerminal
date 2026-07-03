@@ -1313,15 +1313,13 @@ impl ModelClient {
             }));
         }
         if !instructions.is_empty() {
-            let mut instruction_block = json!({
+            let instruction_block = json!({
                 "type": "text",
                 "text": instructions,
             });
-            if !is_claude_plan && let Some(object) = instruction_block.as_object_mut() {
-                object.insert("cache_control".to_string(), json!({ "type": "ephemeral" }));
-            }
             system.push(instruction_block);
         }
+        apply_anthropic_cache_control_to_last_system_block(&mut system);
 
         let input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
         let mut messages = Vec::new();
@@ -3032,6 +3030,14 @@ fn apply_anthropic_cache_control_to_last_user_messages(messages: &mut [Value]) {
         if let Some(message) = messages.get_mut(index) {
             mark_anthropic_message_cache_control(message);
         }
+    }
+}
+
+fn apply_anthropic_cache_control_to_last_system_block(system: &mut [Value]) {
+    if let Some(block) = system.last_mut()
+        && let Some(object) = block.as_object_mut()
+    {
+        object.insert("cache_control".to_string(), json!({ "type": "ephemeral" }));
     }
 }
 

@@ -1221,8 +1221,8 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
     );
     assert_eq!(
         body.pointer("/system/1/cache_control/type"),
-        None,
-        "Claude Plan keeps the Codex instruction block uncached to preserve the four-block limit"
+        Some(&json!("ephemeral")),
+        "Claude Plan caches the final system block while preserving the four-block limit"
     );
     assert!(
         count_cache_control_markers(&body) <= 4,
@@ -1272,12 +1272,31 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
     );
     assert_eq!(
         body.pointer("/system/1/cache_control/type"),
-        None,
-        "Claude Fable Plan keeps the Codex instruction block uncached to preserve the four-block limit"
+        Some(&json!("ephemeral")),
+        "Claude Fable Plan caches the final system block while preserving the four-block limit"
     );
     assert!(
         count_cache_control_markers(&body) <= 4,
         "Anthropic Messages rejects more than four cache_control blocks"
+    );
+
+    let mut identity_only_prompt = prompt.clone();
+    identity_only_prompt.base_instructions = BaseInstructions {
+        text: String::new(),
+    };
+    let identity_only_request = client
+        .build_anthropic_messages_request(
+            &identity_only_prompt,
+            &claude_plan_model,
+            Some(ReasoningEffortConfig::XHigh),
+        )
+        .expect("Claude Plan identity-only request");
+    let body = serde_json::to_value(&identity_only_request)
+        .expect("serialize Claude Plan identity-only request");
+    assert_eq!(
+        body.pointer("/system/0/cache_control/type"),
+        Some(&json!("ephemeral")),
+        "Claude Plan identity-only requests cache the identity block"
     );
 }
 
