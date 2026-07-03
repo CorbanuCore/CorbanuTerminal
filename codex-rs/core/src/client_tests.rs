@@ -23,6 +23,9 @@ use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::AMBIENT_LEGACY_GLM_5_2_FP8_MODEL;
 use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
 use codex_model_provider_info::CHATGPT_CODEX_BASE_URL;
+use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
+use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
+use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::ModelProviderInfo;
@@ -217,6 +220,20 @@ fn test_claude_plan_model_info() -> ModelInfo {
     let mut model = test_anthropic_opus_model_info();
     model.slug = CLAUDE_PLAN_MODEL.to_string();
     model.display_name = "Claude Opus 4.8 Plan".to_string();
+    model
+}
+
+fn test_claude_fable_model_info() -> ModelInfo {
+    let mut model = test_anthropic_opus_model_info();
+    model.slug = CLAUDE_FABLE_5_MODEL.to_string();
+    model.display_name = "Claude Fable 5".to_string();
+    model
+}
+
+fn test_claude_fable_plan_model_info() -> ModelInfo {
+    let mut model = test_claude_fable_model_info();
+    model.slug = CLAUDE_FABLE_5_PLAN_MODEL.to_string();
+    model.display_name = "Claude Fable 5 Plan".to_string();
     model
 }
 
@@ -1215,6 +1232,52 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
         body.pointer("/output_config/effort")
             .and_then(serde_json::Value::as_str),
         Some("xhigh")
+    );
+
+    let fable_model = test_claude_fable_model_info();
+    let fable_request = client
+        .build_anthropic_messages_request(&prompt, &fable_model, Some(ReasoningEffortConfig::XHigh))
+        .expect("Anthropic Fable request");
+    let body = serde_json::to_value(&fable_request).expect("serialize Fable request");
+    assert_eq!(
+        body.pointer("/model").and_then(serde_json::Value::as_str),
+        Some(CLAUDE_FABLE_5_MODEL)
+    );
+    assert_ne!(
+        body.pointer("/system/0/text")
+            .and_then(serde_json::Value::as_str),
+        Some("You are Claude Code, Anthropic's official CLI for Claude."),
+        "Anthropic API-key Fable must not get the Claude Plan identity block"
+    );
+
+    let fable_plan_model = test_claude_fable_plan_model_info();
+    let fable_plan_request = client
+        .build_anthropic_messages_request(
+            &prompt,
+            &fable_plan_model,
+            Some(ReasoningEffortConfig::XHigh),
+        )
+        .expect("Claude Fable Plan request");
+    let body = serde_json::to_value(&fable_plan_request).expect("serialize Fable Plan request");
+    assert_eq!(
+        body.pointer("/model").and_then(serde_json::Value::as_str),
+        Some(CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL),
+        "PFTerminal's visible Claude Fable Plan slug must not be sent upstream"
+    );
+    assert_eq!(
+        body.pointer("/system/0/text")
+            .and_then(serde_json::Value::as_str),
+        Some("You are Claude Code, Anthropic's official CLI for Claude."),
+        "Claude Fable Plan OAuth requests need the Claude Code identity block"
+    );
+    assert_eq!(
+        body.pointer("/system/1/cache_control/type"),
+        None,
+        "Claude Fable Plan keeps the Codex instruction block uncached to preserve the four-block limit"
+    );
+    assert!(
+        count_cache_control_markers(&body) <= 4,
+        "Anthropic Messages rejects more than four cache_control blocks"
     );
 }
 

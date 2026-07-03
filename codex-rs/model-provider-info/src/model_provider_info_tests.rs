@@ -426,6 +426,7 @@ fn test_create_anthropic_provider() {
         }
     );
     assert_eq!(ANTHROPIC_DEFAULT_MODEL, "claude-opus-4-8");
+    assert_eq!(CLAUDE_FABLE_5_MODEL, "claude-fable-5");
 }
 
 #[test]
@@ -467,6 +468,8 @@ fn test_create_claude_plan_provider() {
     );
     assert_eq!(CLAUDE_PLAN_MODEL, "claude-opus-4-8-plan");
     assert_eq!(CLAUDE_PLAN_UPSTREAM_MODEL, ANTHROPIC_DEFAULT_MODEL);
+    assert_eq!(CLAUDE_FABLE_5_PLAN_MODEL, "claude-fable-5-plan");
+    assert_eq!(CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL, CLAUDE_FABLE_5_MODEL);
 }
 
 #[test]

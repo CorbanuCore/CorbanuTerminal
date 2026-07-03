@@ -1079,33 +1079,23 @@ fn bundled_models_json_contains_openrouter_models() {
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
 
-    let openrouter_glm = response
+    let openrouter_owl = response
         .models
         .iter()
-        .find(|model| model.slug == "z-ai/glm-5.2")
-        .expect("bundled models.json should include OpenRouter GLM 5.2");
+        .find(|model| model.slug == "openrouter/owl-alpha")
+        .expect("bundled models.json should include OpenRouter Owl Alpha");
 
-    assert_eq!(openrouter_glm.display_name, "OpenRouter GLM 5.2");
-    assert_eq!(openrouter_glm.context_window, Some(1_048_576));
-    assert_eq!(
-        openrouter_glm.default_reasoning_level,
-        Some(ReasoningEffort::High)
-    );
-    assert_eq!(
-        openrouter_glm
-            .supported_reasoning_levels
-            .iter()
-            .map(|level| level.effort.clone())
-            .collect::<Vec<_>>(),
-        vec![ReasoningEffort::High, ReasoningEffort::XHigh]
-    );
-    assert_eq!(openrouter_glm.visibility, ModelVisibility::List);
+    assert_eq!(openrouter_owl.display_name, "OpenRouter Owl Alpha");
+    assert_eq!(openrouter_owl.context_window, Some(1_048_756));
+    assert_eq!(openrouter_owl.default_reasoning_level, None);
+    assert!(openrouter_owl.supported_reasoning_levels.is_empty());
+    assert_eq!(openrouter_owl.visibility, ModelVisibility::List);
     assert!(
-        openrouter_glm
+        openrouter_owl
             .description
             .as_deref()
             .unwrap_or_default()
-            .contains("$0.98/M input, $3.08/M output")
+            .contains("$0/M input, $0/M output")
     );
 
     let claude_opus = response
@@ -1135,6 +1125,56 @@ fn bundled_models_json_contains_openrouter_models() {
         ]
     );
     assert_eq!(claude_opus.visibility, ModelVisibility::List);
+
+    let claude_fable_plan = response
+        .models
+        .iter()
+        .find(|model| model.slug == "claude-fable-5-plan")
+        .expect("bundled models.json should include Claude Fable 5 Plan");
+
+    assert_eq!(claude_fable_plan.display_name, "Claude Fable 5 Plan");
+    assert_eq!(
+        claude_fable_plan.description.as_deref(),
+        Some("Claude Fable 5 through Claude Code subscription auth in the Codex harness.")
+    );
+    assert_eq!(claude_fable_plan.context_window, Some(1_000_000));
+    assert_eq!(
+        claude_fable_plan.default_reasoning_level,
+        Some(ReasoningEffort::High)
+    );
+    assert_eq!(
+        claude_fable_plan
+            .supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            ReasoningEffort::Low,
+            ReasoningEffort::Medium,
+            ReasoningEffort::High,
+            ReasoningEffort::XHigh,
+            ReasoningEffort::Custom("max".to_string()),
+        ]
+    );
+    assert_eq!(claude_fable_plan.visibility, ModelVisibility::List);
+
+    let claude_fable = response
+        .models
+        .iter()
+        .find(|model| model.slug == "claude-fable-5")
+        .expect("bundled models.json should include Claude Fable 5");
+
+    assert_eq!(claude_fable.display_name, "Claude Fable 5");
+    assert_eq!(
+        claude_fable.description.as_deref(),
+        Some("Claude Fable 5 through the Anthropic Messages API.")
+    );
+    assert_eq!(claude_fable.context_window, Some(1_000_000));
+    assert_eq!(
+        claude_fable.default_reasoning_level,
+        Some(ReasoningEffort::High)
+    );
+    assert_eq!(claude_fable.visibility, ModelVisibility::List);
 
     for slug in [
         "minimax/minimax-m3",
