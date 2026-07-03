@@ -85,6 +85,7 @@ use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
+use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
@@ -2500,14 +2501,20 @@ fn resolve_model_for_provider(model: Option<String>, model_provider_id: &str) ->
         },
         ANTHROPIC_PROVIDER_ID => match model {
             Some(model)
-                if model.trim().starts_with("claude-") && model.trim() != CLAUDE_PLAN_MODEL =>
+                if model.trim().starts_with("claude-")
+                    && model.trim() != CLAUDE_PLAN_MODEL
+                    && model.trim() != CLAUDE_FABLE_5_PLAN_MODEL =>
             {
                 Some(model)
             }
             _ => Some(ANTHROPIC_DEFAULT_MODEL.to_string()),
         },
         CLAUDE_PLAN_PROVIDER_ID => match model {
-            Some(model) if model.trim() == CLAUDE_PLAN_MODEL => Some(model),
+            Some(model)
+                if matches!(model.trim(), CLAUDE_PLAN_MODEL | CLAUDE_FABLE_5_PLAN_MODEL) =>
+            {
+                Some(model)
+            }
             _ => Some(CLAUDE_PLAN_MODEL.to_string()),
         },
         OPENROUTER_PROVIDER_ID | OPENROUTER_ANTHROPIC_PROVIDER_ID => match model {

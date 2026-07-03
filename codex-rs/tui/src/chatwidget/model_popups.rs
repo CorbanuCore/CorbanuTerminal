@@ -15,6 +15,7 @@ use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
+use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
@@ -207,7 +208,7 @@ impl ChatWidget {
         if trimmed == ZAI_DEFAULT_MODEL || trimmed.starts_with("glm-") {
             return Some(ZAI_PROVIDER_ID.to_string());
         }
-        if trimmed == CLAUDE_PLAN_MODEL {
+        if trimmed == CLAUDE_PLAN_MODEL || trimmed == CLAUDE_FABLE_5_PLAN_MODEL {
             return Some(CLAUDE_PLAN_PROVIDER_ID.to_string());
         }
         if trimmed == ANTHROPIC_DEFAULT_MODEL || trimmed.starts_with("claude-") {
@@ -825,6 +826,10 @@ mod tests {
             Some(CLAUDE_PLAN_PROVIDER_ID)
         );
         assert_eq!(
+            ChatWidget::model_provider_for_selection(CLAUDE_FABLE_5_PLAN_MODEL).as_deref(),
+            Some(CLAUDE_PLAN_PROVIDER_ID)
+        );
+        assert_eq!(
             ChatWidget::model_provider_for_selection(ANTHROPIC_DEFAULT_MODEL).as_deref(),
             Some(ANTHROPIC_PROVIDER_ID)
         );
@@ -833,8 +838,8 @@ mod tests {
             Some(BASETEN_PROVIDER_ID)
         );
         assert_eq!(
-            ChatWidget::model_provider_for_selection(OPENROUTER_DEFAULT_MODEL).as_deref(),
-            Some(OPENROUTER_ANTHROPIC_PROVIDER_ID)
+            ChatWidget::model_provider_for_selection(OPENROUTER_OWL_ALPHA_MODEL).as_deref(),
+            Some(OPENROUTER_PROVIDER_ID)
         );
         assert_eq!(
             ChatWidget::model_provider_for_selection(VERCEL_DEFAULT_MODEL).as_deref(),
@@ -884,6 +889,10 @@ mod tests {
         )));
         assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
             CLAUDE_PLAN_MODEL,
+            true
+        )));
+        assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
+            CLAUDE_FABLE_5_PLAN_MODEL,
             true
         )));
         assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(

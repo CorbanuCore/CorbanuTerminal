@@ -435,6 +435,8 @@ mod tests {
     use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
     use codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR;
     use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
+    use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
+    use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
     use codex_model_provider_info::ModelProviderAwsAuthInfo;
     use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
     use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
@@ -512,6 +514,7 @@ mod tests {
             query_params: None,
             http_headers: None,
             env_http_headers: None,
+            chat_completions_provider: None,
             request_max_retries: Some(0),
             stream_max_retries: Some(0),
             stream_idle_timeout_ms: Some(5_000),
@@ -636,6 +639,13 @@ mod tests {
                 .any(|model| model.slug == CLAUDE_PLAN_MODEL),
             "Claude Plan should not poll Anthropic /models during startup"
         );
+        assert!(
+            catalog
+                .models
+                .iter()
+                .any(|model| model.slug == CLAUDE_FABLE_5_PLAN_MODEL),
+            "Claude Fable Plan should be available in the static Claude Plan catalog"
+        );
     }
 
     #[tokio::test]
@@ -655,6 +665,13 @@ mod tests {
                 .iter()
                 .any(|model| model.slug == "claude-opus-4-8"),
             "Anthropic API-key models should not be refreshed through OpenAI-compatible /models"
+        );
+        assert!(
+            catalog
+                .models
+                .iter()
+                .any(|model| model.slug == CLAUDE_FABLE_5_MODEL),
+            "Claude Fable should be available in the static Anthropic API-key catalog"
         );
     }
 
