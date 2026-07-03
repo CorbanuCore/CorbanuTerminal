@@ -1,0 +1,35 @@
+startup_model_xhigh_yolo=True
+slash_spawn_surface_opened=True
+orc_before_troll_blocked=True
+troll_spawned_current_model=True
+orc_spawned_current_model=True
+status_hierarchy_addressable=True
+burzum_report_visible=True
+snaga_done_or_reported=True
+snaga_not_main_prompt=True
+file_content_exact=False
+file_done_visible_or_logged=True
+main_responsive_after_ctrlc=True
+model_picker_surface_seen=True
+exec_devnull_no_hang_expected_nonzero=True
+create_file_qa_loop_append_once=True
+create_file_qa_loop_userturn_once=True
+Create file qa_loop.txt _delta_seconds=0.0
+create_file_qa_loop_userturn_immediate=True
+run_the_shell_command_sleep_120,_then_reply_qa_sleep_done_append_once=True
+run_the_shell_command_sleep_120,_then_reply_qa_sleep_done_userturn_once=True
+Run the shell command sl_delta_seconds=0.0
+run_the_shell_command_sleep_120,_then_reply_qa_sleep_done_userturn_immediate=True
+reply_exactly_qa_main_responsive_append_once=True
+reply_exactly_qa_main_responsive_userturn_once=True
+Reply exactly QA_MAIN_RE_delta_seconds=0.0
+reply_exactly_qa_main_responsive_userturn_immediate=True
+no_concat_file_sleep_event=True
+## relevant session events
+Create file qa_loop.txt containing exactly QA_FILE_EDIT_OK and nothing else. Then reply QA_FILE_EDIT_DONE.	2026-07-03T07:09:23.926Z	to_tui	AppendMessageHistoryEntry
+Create file qa_loop.txt containing exactly QA_FILE_EDIT_OK and nothing else. Then reply QA_FILE_EDIT_DONE.	2026-07-03T07:09:23.926Z	from_tui	UserTurn
+Run the shell command sleep 120, then reply QA_SLEEP_DONE.	2026-07-03T07:10:09.952Z	to_tui	AppendMessageHistoryEntry
+Run the shell command sleep 120, then reply QA_SLEEP_DONE.	2026-07-03T07:10:09.952Z	from_tui	UserTurn
+Reply exactly QA_MAIN_RESPONSIVE.	2026-07-03T07:10:20.977Z	to_tui	AppendMessageHistoryEntry
+Reply exactly QA_MAIN_RESPONSIVE.	2026-07-03T07:10:20.977Z	from_tui	UserTurn
+pass_all=False

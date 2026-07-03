@@ -1,0 +1,44 @@
+                                      
+              _+***\++_               
+             *'`+*+\~/_*,             
+            ^_,||/~~-~+\,,            
+           |__/\|;_.\,''\\,           
+           / ;||"|^   /_/|/           
+          |` '|*~//\   `_"|           
+          \  ~*"*||~|*   |/,          
+          "  ||\+/+||-_ .\||          
+          "  ~\ \\|;~~+\+;||          
+          |  ,|\,|_/_*___|*`          
+           , "|||||""!\,"\|`          
+           \`',\,*"   "",//           
+            |' |||~*,:,/|/`           
+             ;`**/|+;_!//'            
+              *, _*\_,;*              
+                                      
+
+  Welcome to PFTerminal, your crypto-native AI terminal
+
+  Choose a provider account for PFTerminal
+
+  1. Provider: OpenAI Codex Account
+     Sign in with device code
+
+  2. Provider: Anthropic API Key
+     Use a key stored as ANTHROPIC_API_KEY
+
+> 3. Provider: Ambient API Key
+     Use a key stored as AMBIENT_API_KEY
+
+  4. Provider: Z.AI API Key
+     Use a key stored as ZAI_API_KEY
+
+  5. Provider: OpenRouter API Key
+     Use a key stored as OPENROUTER_API_KEY
+
+  6. Provider: Baseten API Key
+     Use a key stored as BASETEN_API_KEY
+
+  7. Provider: Vercel API Key
+     Use a key stored as AI_GATEWAY_API_KEY
+
+  Press enter to continue

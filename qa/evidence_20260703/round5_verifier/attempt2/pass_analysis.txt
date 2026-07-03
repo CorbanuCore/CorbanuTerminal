@@ -1,0 +1,26 @@
+session_log_present=True
+file_append_count=1
+file_userturn_count=1
+file_userturn_immediate=True
+file_userturn_delta_seconds=0.0
+file_content_exact=True
+file_done_visible_or_logged=True
+sleep_append_count=1
+sleep_userturn_count=1
+resp_append_count=1
+resp_userturn_count=1
+resp_userturn_immediate=True
+resp_userturn_delta_seconds=0.001
+resp_done_visible_or_logged=True
+concat_event_count=0
+pass_all=True
+## relevant events
+### Create file qa_loop.txt containing exactly QA_FILE_EDIT_OK and nothing else. Then reply QA_FILE_EDIT_DONE.
+2026-07-03T06:59:31.481Z to_tui app_event  AppendMessageHistoryEntry { thread_id: ThreadId { uuid: 019f26c5-63be-70d1-8061-5272d6b5c0c6 }, text: "Create file qa_loop.txt containing exactly QA_FILE_EDIT_OK and nothing else. Then reply QA_FILE_EDIT_DONE." }
+2026-07-03T06:59:31.481Z from_tui op UserTurn
+### Run the shell command sleep 120, then reply QA_SLEEP_DONE.
+2026-07-03T07:00:16.503Z to_tui app_event  AppendMessageHistoryEntry { thread_id: ThreadId { uuid: 019f26c5-63be-70d1-8061-5272d6b5c0c6 }, text: "Run the shell command sleep 120, then reply QA_SLEEP_DONE." }
+2026-07-03T07:00:16.504Z from_tui op UserTurn
+### Reply exactly QA_MAIN_RESPONSIVE.
+2026-07-03T07:00:27.530Z to_tui app_event  AppendMessageHistoryEntry { thread_id: ThreadId { uuid: 019f26c5-63be-70d1-8061-5272d6b5c0c6 }, text: "Reply exactly QA_MAIN_RESPONSIVE." }
+2026-07-03T07:00:27.531Z from_tui op UserTurn

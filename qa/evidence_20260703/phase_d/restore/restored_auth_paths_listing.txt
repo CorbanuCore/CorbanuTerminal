@@ -1,0 +1,4 @@
+-rw-------	pfrpc	pfrpc	2119	/home/pfrpc/.pfterminal/secrets/local.age
+-rw-------	pfrpc	pfrpc	2745	/home/pfrpc/.pfterminal/config.toml
+drwx------	pfrpc	pfrpc	4096	/home/pfrpc/.pfterminal/secrets
+drwx------	pfrpc	pfrpc	4096	/home/pfrpc/.pfterminal/secrets/keyring-fallback

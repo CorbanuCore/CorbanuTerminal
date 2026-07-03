@@ -1,0 +1,10 @@
+# restore log
+started_utc=2026-07-03T09:37:04Z
+source=/home/pfrpc/.pfterminal.pre012-20260703T092534Z
+dest=/home/pfrpc/.pfterminal
+method=rsync -a --exclude=/packages/standalone source/ dest/
+finished_rsync_utc=2026-07-03T09:37:06Z
+version_after_restore=codex-cli 0.1.2
+which_after_restore=/home/pfrpc/.local/bin/pfterminal
+current_binary_version=codex-cli 0.1.2
+finished_utc=2026-07-03T09:37:06Z

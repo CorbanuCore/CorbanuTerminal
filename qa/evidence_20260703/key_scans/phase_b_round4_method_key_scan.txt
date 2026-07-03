@@ -1,0 +1,3 @@
+files_scanned=80
+bytes_scanned=181534
+hit_count=0

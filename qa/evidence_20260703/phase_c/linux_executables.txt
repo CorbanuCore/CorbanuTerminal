@@ -1,0 +1,4 @@
+linux_extract/bin/codex
+linux_extract/bin/pfterminal
+linux_extract/codex-path/rg
+linux_extract/codex-resources/bwrap

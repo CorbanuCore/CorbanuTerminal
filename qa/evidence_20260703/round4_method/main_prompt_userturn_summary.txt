@@ -1,0 +1,8 @@
+## Create file qa_loop.txt
+2026-07-03T06:34:47.246Z visible_history_append
+NO from_tui UserTurn FOUND
+## Run the shell command sleep 120
+2026-07-03T06:34:47.246Z visible_history_append
+NO from_tui UserTurn FOUND
+## Reply exactly QA_MAIN_RESPONSIVE
+NO from_tui UserTurn FOUND

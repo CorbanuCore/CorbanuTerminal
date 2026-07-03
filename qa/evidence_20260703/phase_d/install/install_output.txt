@@ -1,0 +1,12 @@
+# install command
+started_utc=2026-07-03T09:28:19Z
+PFTERMINAL_RELEASE=0.1.2 PFTERMINAL_NON_INTERACTIVE=1 PFTERMINAL_INSTALL_DIR=/home/pfrpc/.local/bin PFTERMINAL_HOME=/home/pfrpc/.pfterminal PFTERMINAL_PACKAGE_ARCHIVE=/home/pfrpc/repos/pfterminal_qa_20260703/phase_d_install_0.1.2/pfterminal-package-x86_64-unknown-linux-gnu.tar.gz PFTERMINAL_CHECKSUM_MANIFEST=/home/pfrpc/repos/pfterminal_qa_20260703/phase_d_install_0.1.2/pfterminal-package_SHA256SUMS sh /home/pfrpc/repos/pfterminal_qa_20260703/phase_d_install_0.1.2/install.sh --release 0.1.2
+==> Installing PFTerminal CLI
+==> Detected platform: Linux (x64)
+==> Resolved version: 0.1.2
+==> Installing standalone package to /home/pfrpc/.pfterminal/packages/standalone/releases/0.1.2-x86_64-unknown-linux-gnu
+==> /home/pfrpc/.local/bin is already on PATH
+==> Current terminal: pfterminal
+==> Future terminals: open a new terminal and run: pfterminal
+PFTerminal CLI 0.1.2 installed successfully.
+finished_utc=2026-07-03T09:28:22Z

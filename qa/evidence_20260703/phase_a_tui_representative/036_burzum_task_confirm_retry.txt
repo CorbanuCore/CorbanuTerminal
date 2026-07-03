@@ -1,0 +1,19 @@
+
+╭───────────────────────────────────────────────────────╮
+│ >_ PFTerminal (v0.1.1)                                │
+│                                                       │
+│ model:       zai/glm-5.2-fast none   /model to change │
+│ directory:   ~/repos/pfterminal_qa_20260703/scratch   │
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────╯
+
+• Spawned Codex Orc pane Snaga. zai/glm-5.2-fast; no task was started.
+
+• Task sent to Burzum [troll]. The pane will run it as a normal turn.
+
+• Task sent to Main [default]. The pane will run it as a normal turn.
+
+
+› Use /skills to list available skills
+
+  zai/glm-5.2-fast default · ~/repos/pfterminal_qa_20260703/scratch · Post Fiat Terminal…

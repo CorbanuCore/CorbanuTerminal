@@ -1,0 +1,5 @@
+3c5cf6ddc41d842b25fd8ae9d7cabdeceb20191f5ea431f64db64985d881cdd0  pfterminal-package-aarch64-apple-darwin.tar.gz
+842148058dcfb7c7a7dd71e54493451c8b0eb50df2049c32f8240e011b5682a6  pfterminal-package-aarch64-unknown-linux-musl.tar.gz
+110e06ce8da23f0870560e81ece34e335b53d1be08c3b12241e361522c44a9b5  pfterminal-package-x86_64-apple-darwin.tar.gz
+2edc9cd92b793ff4a2823e3edca435da8d34e05bd337ed62b87a5ceb474da1be  pfterminal-package-x86_64-pc-windows-msvc.zip
+22e639fd0d3c4d2889a25bb0285b7d5d30005dee552a80bb6ad8929f284263d9  pfterminal-package-x86_64-unknown-linux-gnu.tar.gz

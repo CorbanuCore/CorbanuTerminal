@@ -1,0 +1,33 @@
+
+╭────────────────────────────────────────────────────╮
+│ >_ PFTerminal (v0.1.2)                             │
+│                                                    │
+│ model:       loading   /model to change            │
+│ directory:   ~/repos/…/scratch_phase_d_fresh_clean │
+│ permissions: YOLO mode                             │
+╰────────────────────────────────────────────────────╯
+
+
+› Use /skills to list available skills
+
+  zai/glm-5.2-fast default · ~/repos/pfterminal_qa_20260703/scratch_phase_d_fresh_clean …
+
+╭────────────────────────────────────────────────────╮
+│ >_ PFTerminal (v0.1.2)                             │
+│                                                    │
+│ model:       zai/glm-5.2-fast   /model to change   │
+│ directory:   ~/repos/…/scratch_phase_d_fresh_clean │
+│ permissions: YOLO mode                             │
+╰────────────────────────────────────────────────────╯
+
+
+  Spawn Status
+  Nazgul -> Troll -> Orc hierarchy.
+
+  Search spawned work
+  Nazgul
+› Nazgul: Codex - Main (current)  Bound root pane; no worker thread.
+  Trolls
+  No Trolls spawned yet
+
+  Press enter to confirm or esc to go back

@@ -1,0 +1,3 @@
+roots_scanned=4
+key_values_scanned=42
+hit_count=0

@@ -1,0 +1,13 @@
+# clean reinstall after harness contamination
+started_utc=2026-07-03T09:32:46Z
+moved fresh test home /home/pfrpc/.pfterminal -> /home/pfrpc/.pfterminal.phaseD-contaminated-20260703T093246Z
+==> Installing PFTerminal CLI
+==> Detected platform: Linux (x64)
+==> Resolved version: 0.1.2
+==> Installing standalone package to /home/pfrpc/.pfterminal/packages/standalone/releases/0.1.2-x86_64-unknown-linux-gnu
+==> /home/pfrpc/.local/bin is already on PATH
+==> Current terminal: pfterminal
+==> Future terminals: open a new terminal and run: pfterminal
+PFTerminal CLI 0.1.2 installed successfully.
+version_after_reinstall=codex-cli 0.1.2
+finished_utc=2026-07-03T09:32:50Z

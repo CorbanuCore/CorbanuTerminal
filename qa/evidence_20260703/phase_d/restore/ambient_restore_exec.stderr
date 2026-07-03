@@ -1,0 +1,17 @@
+Reading additional input from stdin...
+PFTerminal v0.1.2
+--------
+workdir: /home/pfrpc/repos/pfterminal_qa_20260703/scratch_phase_d_restore_plan
+model: zai-org/GLM-5.2-FP8
+provider: ambient
+approval: never
+sandbox: danger-full-access
+session id: 019f2756-ed00-7190-9da9-6072e5f847a8
+--------
+user
+Reply exactly QA_PHASE_D_RESTORE_OK.
+{"tag":"pfterminal_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":59924,"ms_to_response_headers":2452,"ms_to_first_sse_byte":2453,"ms_to_first_parsed_data_event":2453,"ms_to_first_actionable_event":2462,"total_stream_ms":2623,"comment_frame_count":0,"parsed_event_count":10,"x_request_id":"e084893ebf86433a96b817f46d3dbec1","generation_id":"chatcmpl-e084893ebf86433a96b817f46d3dbec1","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+codex
+QA_PHASE_D_RESTORE_OK
+tokens used
+13,041

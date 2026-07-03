@@ -1,0 +1,79 @@
+corrected_file_pass=0
+corrected_ctrl_exact_response_pass=0
+failure_boundary=visible Main prompts appended, but no from_tui UserTurn emitted for file edit or exact-response prompts
+
+Relevant session_log excerpt:
+26:{"ts":"2026-07-03T06:32:20.070Z","dir":"to_tui","kind":"app_event","variant":"SubmitSpawnAgentTask { thread_id: ThreadId { uuid: 019f26ad-568d-70c2-9902-5ba00ba08887 }, task: \"Reply exactly QA_TROLL_REPORT_DELIVERED. Do not run commands.\" }"}
+32:{"ts":"2026-07-03T06:32:35.142Z","dir":"to_tui","kind":"app_event","variant":"SubmitSpawnAgentTask { thread_id: ThreadId { uuid: 019f26ad-7a06-7113-9062-ee88658e7495 }, task: \"Reply exactly QA_ORC_REPORT_DELIVERED. Do not run commands.\" }"}
+34:{"ts":"2026-07-03T06:32:36.479Z","dir":"to_tui","kind":"app_event","variant":"SubmitSpawnAgentTask { thread_id: ThreadId { uuid: 019f26ad-568d-70c2-9902-5ba00ba08887 }, task: \"A child pane has reported back. Review the child report below and act on it immediately — triage, dispatch follow-up work, or acknowledge. Do not wait for Sauron to prompt you.\\n\\nSnaga [orc]; status=done; result=QA_ORC_REPORT_DELIVERED\" }"}
+37:{"ts":"2026-07-03T06:34:47.246Z","dir":"to_tui","kind":"app_event","variant":"AppendMessageHistoryEntry { thread_id: ThreadId { uuid: 019f26ad-3f0a-7ee0-b133-88a972872a1c }, text: \"Create file qa_loop.txt containing exactly QA_FILE_EDIT_OK and nothing else. Then reply QA_FILE_EDIT_DONE.Run the shell command sleep 120, then reply QA_SLEEP_DONE.\\n\" }"}
+
+Timing tail:
+2026-07-03T06:31:53Z	launch counted run=1 head=37698e1d0 session_log_enabled=1
+2026-07-03T06:31:55Z	capture 001_startup
+2026-07-03T06:31:55Z	send Enter trust
+2026-07-03T06:31:57Z	capture 002_trusted_status
+2026-07-03T06:31:57Z	send /spawn first enter
+2026-07-03T06:31:58Z	capture 003_spawn_first_enter
+2026-07-03T06:31:58Z	send Enter execute sticky /spawn
+2026-07-03T06:31:59Z	capture 004_spawn_open
+2026-07-03T06:31:59Z	select Troll role
+2026-07-03T06:32:00Z	capture 005_troll_harness
+2026-07-03T06:32:00Z	select Codex harness
+2026-07-03T06:32:01Z	capture 006_troll_model
+2026-07-03T06:32:01Z	select current Troll model
+2026-07-03T06:32:05Z	capture 007_troll_spawned
+2026-07-03T06:32:05Z	send /spawn for orc first enter
+2026-07-03T06:32:06Z	capture 008_spawn_orc_first_enter
+2026-07-03T06:32:06Z	send Enter execute sticky /spawn
+2026-07-03T06:32:07Z	capture 009_spawn_orc_open
+2026-07-03T06:32:07Z	select Orc role
+2026-07-03T06:32:08Z	capture 010_orc_supervisor
+2026-07-03T06:32:08Z	select Burzum supervisor
+2026-07-03T06:32:09Z	capture 011_orc_harness
+2026-07-03T06:32:09Z	select Codex harness
+2026-07-03T06:32:10Z	capture 012_orc_model
+2026-07-03T06:32:10Z	select current Orc model
+2026-07-03T06:32:15Z	capture 013_orc_spawned
+2026-07-03T06:32:15Z	open /spawn status
+2026-07-03T06:32:16Z	capture 014_status_first_enter
+2026-07-03T06:32:16Z	execute sticky /spawn and choose status
+2026-07-03T06:32:18Z	capture 015_spawn_status_initial
+2026-07-03T06:32:18Z	select Send task to Burzum
+2026-07-03T06:32:19Z	capture 016_burzum_task_prompt
+2026-07-03T06:32:19Z	enter Burzum task text
+2026-07-03T06:32:20Z	capture 017_burzum_task_text
+2026-07-03T06:32:20Z	confirm Burzum task
+2026-07-03T06:32:30Z	capture 018_burzum_report
+2026-07-03T06:32:30Z	open status before Snaga
+2026-07-03T06:32:31Z	capture 019_status_before_snaga_first_enter
+2026-07-03T06:32:31Z	execute sticky /spawn choose status
+2026-07-03T06:32:33Z	capture 020_status_before_snaga
+2026-07-03T06:32:33Z	select Send task to Snaga
+2026-07-03T06:32:34Z	capture 021_snaga_task_prompt
+2026-07-03T06:32:34Z	enter Snaga task text
+2026-07-03T06:32:35Z	capture 022_snaga_task_text
+2026-07-03T06:32:35Z	confirm Snaga task
+2026-07-03T06:32:50Z	capture 023_snaga_task_wait15
+2026-07-03T06:32:50Z	extra wait for Snaga completion
+2026-07-03T06:33:05Z	capture 024_snaga_task_wait30
+2026-07-03T06:33:05Z	open status after Snaga
+2026-07-03T06:33:06Z	capture 025_status_after_snaga_first_enter
+2026-07-03T06:33:06Z	execute sticky /spawn choose status
+2026-07-03T06:33:08Z	capture 026_status_after_snaga
+2026-07-03T06:33:08Z	exit status picker
+2026-07-03T06:33:09Z	capture 027_after_escape_status
+2026-07-03T06:33:09Z	send Main file edit prompt
+2026-07-03T06:33:54Z	capture 028_file_edit_wait45
+2026-07-03T06:33:54Z	file_check 029_qa_loop_check_after45
+2026-07-03T06:34:39Z	capture 030_file_edit_wait90
+2026-07-03T06:34:39Z	file_check 031_qa_loop_check_after90
+2026-07-03T06:34:39Z	send controlled sleep prompt for ctrl-c recovery
+2026-07-03T06:34:47Z	capture 032_sleep_turn_wait8
+2026-07-03T06:34:47Z	send Ctrl-C during sleep turn
+2026-07-03T06:34:50Z	capture 033_sleep_ctrlc
+2026-07-03T06:34:50Z	send Main exact response after ctrl-c
+2026-07-03T06:35:15Z	capture 034_main_responsive_after_ctrlc
+2026-07-03T06:35:15Z	final capture before kill
+2026-07-03T06:35:15Z	capture 035_final_before_kill
+2026-07-03T06:35:15Z	killed session

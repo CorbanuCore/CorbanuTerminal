@@ -1,0 +1,14 @@
+initial_provider_picker_no_panic=True
+env_trust_prompt=True
+env_loaded_installed_012=True
+basic_env_turn_pass=True
+troll_spawned_current_model=True
+orc_spawned_current_model=True
+status_hierarchy=True
+burzum_report_visible=True
+main_responsive_after_dispatch=True
+env_exit_clean=True
+relaunch_loaded_no_panic=True
+relaunch_state_sane=True
+relaunch_exit_clean=True
+pass_all=True

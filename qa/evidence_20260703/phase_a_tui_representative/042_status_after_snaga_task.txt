@@ -1,0 +1,46 @@
+
+╭───────────────────────────────────────────────────────╮
+│ >_ PFTerminal (v0.1.1)                                │
+│                                                       │
+│ model:       zai/glm-5.2-fast none   /model to change │
+│ directory:   ~/repos/pfterminal_qa_20260703/scratch   │
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────╯
+
+• Spawned Codex Orc pane Snaga. zai/glm-5.2-fast; no task was started.
+
+• Task sent to Burzum [troll]. The pane will run it as a normal turn.
+
+• Task sent to Main [default]. The pane will run it as a normal turn.
+
+• Task sent to Snaga [orc]. The pane will run it as a normal turn.
+
+
+› Reply exactly QA_ORC_REPORT_DELIVERED. Do not run commands.
+
+
+• QA_ORC_REPORT_DELIVERED
+
+• Task sent to Burzum [troll]. The pane will run it as a normal turn.
+
+
+  Spawn Status
+  Nazgul -> Troll -> Orc hierarchy.
+
+  Search spawned work
+  Nazgul
+› Nazgul: Codex - Main (current)  Bound root pane; no worker thread.
+  Trolls
+  • Burzum [troll]                done; current task: A child pane has reported back.
+                                  Review the child report below and act on it
+                                  immediately — triage, dispatch follow-up work, or
+                                  acknowledge. Do not wait for Sauron to prompt you.
+                                  Snaga [orc]; status=done; result=QA_ORC_...; latest
+                                  result: QA_TROLL_REPORT_DELIVERED
+    Send task to Burzum [troll]   Start a turn in this pane.
+  •   Snaga [orc] (current)       done; current task: Reply exactly
+                                  QA_ORC_REPORT_DELIVERED. Do not run commands.; latest
+                                  result: QA_ORC_REPORT_DELIVERED
+      Send task to Snaga [orc]    Start a turn in this pane.
+
+  Press enter to confirm or esc to go back

@@ -1,0 +1,46 @@
+> You are in /home/pfrpc/repos/pfterminal_qa_20260703/scratch_phase_b_final_sweep_tasknod
+
+  Do you trust the contents of this directory? Working with untrusted contents comes with
+  higher risk of prompt injection. Trusting the directory allows project-local config,
+  hooks, and exec policies to load.
+
+› 1. Yes, continue
+  2. No, quit
+
+  Press enter to continue
+
+╭───────────────────────────────────────────────────────╮
+│ >_ PFTerminal (v0.1.1)                                │
+│                                                       │
+│ model:       loading   /model to change               │
+│ directory:   ~/…/scratch_phase_b_final_sweep_tasknode │
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────╯
+
+
+› Implement {feature}
+
+  zai/glm-5.2-fast default · ~/repos/pfterminal_qa_20260703/scratch_phase_b_final_sweep_…
+
+╭────────────────────────────────────────────────────────╮
+│ >_ PFTerminal (v0.1.1)                                 │
+│                                                        │
+│ model:       zai/glm-5.2-fast xhigh   /model to change │
+│ directory:   ~/…/scratch_phase_b_final_sweep_tasknode  │
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+
+■ Spawn a Troll before creating Orc panes, then choose that Troll as supervisor.
+
+• Spawned Codex Troll pane Burzum. zai/glm-5.2-fast; no task was started.
+
+• Spawned Codex Orc pane Snaga. zai/glm-5.2-fast; no task was started.
+
+• Task sent to Burzum [troll]. The pane will run it as a normal turn.
+
+• Child report delivered. Burzum [troll]; status=done; result=QA_TROLL_REPORT_DELIVERED
+
+
+› Implement {feature}
+
+  zai/glm-5.2-fast xhigh · ~/repos/pfterminal_qa_20260703/scratch_phase_b_final_sweep_ta…

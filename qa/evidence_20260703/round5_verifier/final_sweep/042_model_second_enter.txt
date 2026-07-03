@@ -1,0 +1,103 @@
+> You are in /home/pfrpc/repos/pfterminal_qa_20260703/scratch_phase_b_final_sweep_tasknod
+
+  Do you trust the contents of this directory? Working with untrusted contents comes with
+  higher risk of prompt injection. Trusting the directory allows project-local config,
+  hooks, and exec policies to load.
+
+› 1. Yes, continue
+  2. No, quit
+
+  Press enter to continue
+
+╭───────────────────────────────────────────────────────╮
+│ >_ PFTerminal (v0.1.1)                                │
+│                                                       │
+│ model:       loading   /model to change               │
+│ directory:   ~/…/scratch_phase_b_final_sweep_tasknode │
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────╯
+
+
+› Implement {feature}
+
+  zai/glm-5.2-fast default · ~/repos/pfterminal_qa_20260703/scratch_phase_b_final_sweep_…
+
+╭────────────────────────────────────────────────────────╮
+│ >_ PFTerminal (v0.1.1)                                 │
+│                                                        │
+│ model:       zai/glm-5.2-fast xhigh   /model to change │
+│ directory:   ~/…/scratch_phase_b_final_sweep_tasknode  │
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+
+■ Spawn a Troll before creating Orc panes, then choose that Troll as supervisor.
+
+• Spawned Codex Troll pane Burzum. zai/glm-5.2-fast; no task was started.
+
+• Spawned Codex Orc pane Snaga. zai/glm-5.2-fast; no task was started.
+
+• Task sent to Burzum [troll]. The pane will run it as a normal turn.
+
+• Child report delivered. Burzum [troll]; status=done; result=QA_TROLL_REPORT_DELIVERED
+
+• Task sent to Snaga [orc]. The pane will run it as a normal turn.
+
+
+› Create file qa_loop.txt containing exactly QA_FILE_EDIT_OK and nothing else. Then
+  reply QA_FILE_EDIT_DONE.
+
+
+• Added qa_loop.txt (+1 -0)
+    1 +QA_FILE_EDIT_OK
+
+• I'll create the file now.
+
+─────────────────────────────────────────────────────────────────────────────────────────
+
+• QA_FILE_EDIT_DONE
+
+─────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Run the shell command sleep 120, then reply QA_SLEEP_DONE.
+
+
+• Running the sleep command now.
+
+■ Conversation interrupted - tell the model what to do differently. Something went wrong?
+Hit `/feedback` to report the issue.
+
+
+› Reply exactly QA_MAIN_RESPONSIVE.
+
+
+• QA_MAIN_RESPONSIVE
+
+
+  Select Model and Effort
+  Anthropic, OpenRouter, Baseten, and Vercel API-key models
+
+  Coding Plans  [API Key Models]
+
+  1. claude-opus-4-8             Claude Opus 4.8 through the Anthropic Messages API.
+  2. zai-org/GLM-5.2             Baseten: GLM 5.2 - $1.50/M input, $0.30/M cached
+                                 input, $4.50/M output.
+  3. openrouter/owl-alpha        OpenRouter: Owl Alpha - $0/M input, $0/M output.
+  4. zai/glm-5.2                 GLM-5.2 delivers powerful coding capabilities, usable
+                                 1M-context support, and continued strengths in long-
+                                 horizon tasks.
+› 5. zai/glm-5.2-fast (current)  GLM-5.2 delivers powerful coding capabilities, usable
+                                 1M-context support, and continued strengths in long-
+                                 horizon tasks.
+  6. minimax/minimax-m3          MiniMax-M3 is a frontier-class foundation model that
+                                 unites the three capabilities defining today's
+                                 frontier: a 1M-token context window, frontier coding
+                                 and agentic performance, and native multimodality —
+                                 the first open-weight model to deliver all three in a
+                                 single system.
+  7. google/gemini-3.5-flash     Google's latest model, highly optimized for coding
+                                 proficiency and parallel agentic execution loops.
+                                 Defaults to medium thinking effort for faster and more
+                                 cost-efficient responses.
+
+  Use Left/Right to switch groups. Press Enter to confirm or Esc to go back
