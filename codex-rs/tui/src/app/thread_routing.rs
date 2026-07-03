@@ -173,6 +173,26 @@ impl App {
         store.active_turn_id().map(ToOwned::to_owned)
     }
 
+    pub(super) async fn active_turn_id_for_submission(
+        &mut self,
+        thread_id: ThreadId,
+    ) -> Option<String> {
+        let active_turn_id = self.active_turn_id_for_thread(thread_id).await?;
+        if self.active_thread_id == Some(thread_id) && !self.chat_widget.visible_task_running() {
+            tracing::warn!(
+                thread_id = %thread_id,
+                turn_id = active_turn_id,
+                "clearing stale active turn id for visibly idle thread"
+            );
+            if let Some(channel) = self.thread_event_channels.get(&thread_id) {
+                let mut store = channel.store.lock().await;
+                store.clear_active_turn_id();
+            }
+            return None;
+        }
+        Some(active_turn_id)
+    }
+
     pub(crate) fn thread_label(&self, thread_id: ThreadId) -> String {
         let is_primary = self.primary_thread_id == Some(thread_id);
         let fallback_label = if is_primary {
@@ -572,7 +592,7 @@ impl App {
     ) -> Result<bool> {
         match op {
             AppCommand::Interrupt { .. } => {
-                if let Some(turn_id) = self.active_turn_id_for_thread(thread_id).await {
+                if let Some(turn_id) = self.active_turn_id_for_submission(thread_id).await {
                     let mut interrupt_turn_id = turn_id;
                     for retried_after_turn_mismatch in [false, true] {
                         match app_server
@@ -627,7 +647,7 @@ impl App {
                 personality,
             } => {
                 let mut should_start_turn = true;
-                if let Some(turn_id) = self.active_turn_id_for_thread(thread_id).await {
+                if let Some(turn_id) = self.active_turn_id_for_submission(thread_id).await {
                     let mut steer_turn_id = turn_id;
                     let mut retried_after_turn_mismatch = false;
                     loop {

@@ -585,6 +585,58 @@ async fn active_turn_id_for_thread_uses_snapshot_turns() {
 }
 
 #[tokio::test]
+async fn active_turn_submission_clears_stale_visible_idle_turn_id() {
+    let mut app = make_test_app().await;
+    let thread_id = ThreadId::new();
+    let session = test_thread_session(thread_id, test_path_buf("/tmp/project"));
+    app.primary_thread_id = Some(thread_id);
+    app.active_thread_id = Some(thread_id);
+    app.thread_event_channels.insert(
+        thread_id,
+        ThreadEventChannel::new_with_session(
+            THREAD_EVENT_CHANNEL_CAPACITY,
+            session.clone(),
+            vec![test_turn("turn-stale", TurnStatus::InProgress, Vec::new())],
+        ),
+    );
+    app.chat_widget.handle_thread_session(session);
+    assert!(
+        !app.chat_widget.visible_task_running(),
+        "repro requires the visible Main pane to be idle"
+    );
+
+    assert_eq!(app.active_turn_id_for_submission(thread_id).await, None);
+    assert_eq!(app.active_turn_id_for_thread(thread_id).await, None);
+}
+
+#[tokio::test]
+async fn active_turn_submission_keeps_inactive_thread_turn_id() {
+    let mut app = make_test_app().await;
+    let main_thread_id = ThreadId::new();
+    let child_thread_id = ThreadId::new();
+    let child_session = test_thread_session(child_thread_id, test_path_buf("/tmp/project"));
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+    app.thread_event_channels.insert(
+        child_thread_id,
+        ThreadEventChannel::new_with_session(
+            THREAD_EVENT_CHANNEL_CAPACITY,
+            child_session,
+            vec![test_turn("turn-child", TurnStatus::InProgress, Vec::new())],
+        ),
+    );
+
+    assert_eq!(
+        app.active_turn_id_for_submission(child_thread_id).await,
+        Some("turn-child".to_string())
+    );
+    assert_eq!(
+        app.active_turn_id_for_thread(child_thread_id).await,
+        Some("turn-child".to_string())
+    );
+}
+
+#[tokio::test]
 async fn replayed_turn_complete_submits_restored_queued_follow_up() {
     let (mut app, _app_event_rx, _op_rx) = make_test_app_with_channels().await;
     let thread_id = ThreadId::new();
