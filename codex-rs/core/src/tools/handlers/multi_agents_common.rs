@@ -311,6 +311,22 @@ pub(crate) async fn apply_requested_spawn_agent_model_overrides(
             .await;
 
         config.model = Some(selected_model_name.clone());
+        // A model switch must not silently keep the parent's provider when that provider cannot
+        // serve the selected model — the child's first turn would 400/404 with "Unknown model".
+        if let Some(corrected) = codex_model_provider_info::corrected_catalog_provider(
+            &selected_model_name,
+            &config.model_provider_id,
+        ) && let Some(info) = config.model_providers.get(corrected)
+        {
+            tracing::warn!(
+                model = %selected_model_name,
+                parent_provider = %config.model_provider_id,
+                corrected_provider = corrected,
+                "correcting inherited provider for spawn_agent model switch"
+            );
+            config.model_provider_id = corrected.to_string();
+            config.model_provider = info.clone();
+        }
         if let Some(reasoning_effort) = requested_reasoning_effort {
             validate_spawn_agent_reasoning_effort(
                 &selected_model_name,

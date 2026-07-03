@@ -17,18 +17,9 @@ use codex_app_server_protocol::AdditionalContextKind;
 use codex_app_server_protocol::SessionSource as AppServerSessionSource;
 use codex_app_server_protocol::ThreadStatus;
 use codex_features::Feature;
-use codex_model_provider_info::AMBIENT_PROVIDER_ID;
-use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::BASETEN_PROVIDER_ID;
-use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
-use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
-use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_protocol::ThreadId;
@@ -4319,58 +4310,13 @@ pub(crate) fn node_id_thread(node_id: &str) -> Option<ThreadId> {
         .and_then(|value| ThreadId::from_string(value).ok())
 }
 
-/// Built-in catalog providers. Pair corrections only ever fire when the stored provider is one
-/// of these — user-defined providers (e.g. a private Azure deployment) are never second-guessed.
-const KNOWN_CATALOG_PROVIDERS: [&str; 10] = [
-    AMBIENT_PROVIDER_ID,
-    ZAI_PROVIDER_ID,
-    ZAI_ANTHROPIC_PROVIDER_ID,
-    VERCEL_ANTHROPIC_FAST_PROVIDER_ID,
-    CLAUDE_PLAN_PROVIDER_ID,
-    OPENROUTER_PROVIDER_ID,
-    OPENROUTER_ANTHROPIC_PROVIDER_ID,
-    BASETEN_PROVIDER_ID,
-    OPENAI_PROVIDER_ID,
-    ANTHROPIC_PROVIDER_ID,
-];
-
-/// Returns the provider a native spawn session must use when its stored (model, provider) pair is
-/// impossible — the model belongs to a specific catalog provider family and the stored provider
-/// is a different catalog provider that cannot serve it. Stored pairs go stale when thread
-/// metadata loses the provider and a fallback (server config default, parent provider) is
-/// recorded next to a role- or rollout-derived model; running such a turn 400s/404s at the
-/// remote ("Unknown model"). Pairs that are merely unusual but servable (e.g. ambient serving
-/// `z-ai/glm-5.2`, either Z.AI dialect serving `glm-*`) and unknown models or user-defined
-/// providers are left alone so intentional setups keep working.
+/// Returns the provider a native spawn session must use when its stored (model, provider) pair
+/// is impossible. Thin wrapper over the shared catalog rule — see
+/// [`codex_model_provider_info::corrected_catalog_provider`] for the semantics. The same rule
+/// also runs server-side during config derivation, so this TUI-side pass is defense in depth
+/// for session state that never round-trips through a config load.
 pub(crate) fn corrected_native_spawn_provider(model: &str, provider: &str) -> Option<String> {
-    let model = model.trim();
-    let provider = provider.trim();
-    if model.is_empty() || provider.is_empty() || !KNOWN_CATALOG_PROVIDERS.contains(&provider) {
-        return None;
-    }
-    // `zai/…` slugs (e.g. zai/glm-5.2-fast) are Vercel-fast exclusive. The similarly named
-    // `z-ai/…` and `zai-org/…` slugs belong to other providers and are not corrected.
-    if model.starts_with("zai/") && provider != VERCEL_ANTHROPIC_FAST_PROVIDER_ID {
-        return Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID.to_string());
-    }
-    if (model == CLAUDE_PLAN_MODEL || model == CLAUDE_FABLE_5_PLAN_MODEL)
-        && provider != CLAUDE_PLAN_PROVIDER_ID
-    {
-        return Some(CLAUDE_PLAN_PROVIDER_ID.to_string());
-    }
-    // Bare `glm-*` slugs (e.g. glm-5.2) are Z.AI-direct exclusive; gateways use vendor-prefixed
-    // slugs (`z-ai/…`, `zai-org/…`, `zai/…`). Both Z.AI wire dialects legitimately serve them.
-    if model.starts_with("glm-")
-        && provider != ZAI_PROVIDER_ID
-        && provider != ZAI_ANTHROPIC_PROVIDER_ID
-    {
-        return Some(ZAI_PROVIDER_ID.to_string());
-    }
-    // Bedrock's GPT ids are `openai.gpt-*`, so bare `gpt-*` off OpenAI is unambiguous.
-    if model.starts_with("gpt-") && provider != OPENAI_PROVIDER_ID {
-        return Some(OPENAI_PROVIDER_ID.to_string());
-    }
-    None
+    codex_model_provider_info::corrected_catalog_provider(model, provider).map(str::to_string)
 }
 
 /// Normalizes the mixed identifiers used on dispatch paths (node ids like `thread:...`/`pane:...`
@@ -4922,6 +4868,10 @@ fn format_spawn_agent_nickname(name: &str, nickname_reset_count: usize) -> Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codex_model_provider_info::AMBIENT_PROVIDER_ID;
+    use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+    use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
 
     #[test]
     fn corrected_native_spawn_provider_fixes_impossible_pairs_only() {

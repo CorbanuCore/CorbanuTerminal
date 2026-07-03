@@ -103,6 +103,7 @@ use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_model_provider_info::built_in_model_providers;
+use codex_model_provider_info::corrected_catalog_provider;
 use codex_model_provider_info::merge_configured_model_providers;
 use codex_models_manager::ModelsManagerConfig;
 use codex_protocol::config_types::AltScreenMode;
@@ -3487,6 +3488,36 @@ impl Config {
             })?
             .clone();
 
+        let model_without_explicit_provider = !model_provider_was_explicit && cfg.model.is_some();
+        let model = match model {
+            Some(model_override) => Some(model_override),
+            None if model_without_explicit_provider => cfg.model,
+            None => resolve_model_for_provider(cfg.model, &model_provider_id),
+        };
+        // Final pair validation: a stored or inherited provider that cannot serve the resolved
+        // model (stale thread metadata, dropped spawn override, config default recorded next to
+        // a role-derived model) would 400/404 at the remote with "Unknown model". Correct the
+        // unambiguous cases; see corrected_catalog_provider for what qualifies.
+        let (model_provider_id, model_provider) = match model
+            .as_deref()
+            .and_then(|value| corrected_catalog_provider(value, &model_provider_id))
+            .and_then(|corrected| {
+                model_providers
+                    .get(corrected)
+                    .map(|info| (corrected, info.clone()))
+            }) {
+            Some((corrected, info)) => {
+                tracing::warn!(
+                    model = model.as_deref().unwrap_or_default(),
+                    stored_provider = %model_provider_id,
+                    corrected_provider = corrected,
+                    "correcting impossible model/provider pair during config derivation"
+                );
+                (corrected.to_string(), info)
+            }
+            None => (model_provider_id, model_provider),
+        };
+
         let shell_environment_policy = cfg.shell_environment_policy.into();
         let allow_login_shell = cfg.allow_login_shell.unwrap_or(true);
 
@@ -3643,12 +3674,6 @@ impl Config {
                     .then_some(ForcedLoginMethod::Api)
             });
 
-        let model_without_explicit_provider = !model_provider_was_explicit && cfg.model.is_some();
-        let model = match model {
-            Some(model_override) => Some(model_override),
-            None if model_without_explicit_provider => cfg.model,
-            None => resolve_model_for_provider(cfg.model, &model_provider_id),
-        };
         let model_reasoning_effort = if (ambient_provider_selected && !model_without_explicit_provider)
             || zai_chat_provider_selected
         {
