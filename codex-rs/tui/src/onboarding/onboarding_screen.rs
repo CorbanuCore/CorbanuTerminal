@@ -106,6 +106,7 @@ pub(crate) struct OnboardingScreenArgs {
 pub(crate) struct OnboardingResult {
     pub directory_trust_persisted: bool,
     pub should_exit: bool,
+    pub configured_provider_api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -374,6 +375,15 @@ impl OnboardingScreen {
 
     pub fn should_exit(&self) -> bool {
         self.should_exit
+    }
+
+    fn configured_provider_api_key(&self) -> Option<String> {
+        self.steps.iter().find_map(|step| {
+            if let Step::Auth(widget) = step {
+                return widget.configured_provider_api_key();
+            }
+            None
+        })
     }
 
     fn cancel_auth_if_active(&self) {
@@ -722,6 +732,7 @@ pub(crate) async fn run_onboarding_app(
     Ok(OnboardingResult {
         directory_trust_persisted,
         should_exit: onboarding_screen.should_exit(),
+        configured_provider_api_key: onboarding_screen.configured_provider_api_key(),
     })
 }
 

@@ -81,6 +81,8 @@ use codex_app_server_protocol::UserInput;
 use codex_app_server_protocol::UserInput as AppServerUserInput;
 use codex_app_server_protocol::WarningNotification;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
+use codex_model_provider_info::OPENROUTER_API_KEY_ENV_VAR;
+use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_API_KEY_ENV_VAR;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
@@ -4636,6 +4638,26 @@ async fn native_spawn_auth_guard_accepts_provider_key_storage() -> Result<()> {
         app.native_spawn_provider_auth_error(Some(VERCEL_PROVIDER_ID))
             .is_none()
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_spawn_auth_guard_uses_selected_provider_after_onboarding() -> Result<()> {
+    let mut app = make_test_app().await;
+    let provider = app
+        .config
+        .model_providers
+        .get(OPENROUTER_PROVIDER_ID)
+        .expect("OpenRouter provider should be configured")
+        .clone();
+    app.config.model_provider_id = OPENROUTER_PROVIDER_ID.to_string();
+    app.config.model_provider = provider;
+    std::fs::write(
+        app.config.codex_home.join("provider_auth.json"),
+        format!(r#"{{"api_keys":{{"{OPENROUTER_API_KEY_ENV_VAR}":"test-key"}}}}"#),
+    )?;
+
+    assert!(app.native_spawn_provider_auth_error(None).is_none());
     Ok(())
 }
 
