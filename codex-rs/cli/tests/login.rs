@@ -29,6 +29,14 @@ fn write_file_auth_config(codex_home: &Path) -> Result<()> {
     Ok(())
 }
 
+fn write_chatgpt_file_auth_config(codex_home: &Path) -> Result<()> {
+    std::fs::write(
+        codex_home.join("config.toml"),
+        "cli_auth_credentials_store = \"file\"\nforced_login_method = \"chatgpt\"\n",
+    )?;
+    Ok(())
+}
+
 fn read_auth_json(codex_home: &Path) -> Result<Value> {
     let auth_json = std::fs::read_to_string(codex_home.join("auth.json"))?;
     Ok(serde_json::from_str(&auth_json)?)
@@ -62,7 +70,7 @@ fn login_with_api_key_reads_stdin_and_writes_auth_json() -> Result<()> {
 #[test]
 fn login_with_access_token_rejects_invalid_jwt() -> Result<()> {
     let codex_home = TempDir::new()?;
-    write_file_auth_config(codex_home.path())?;
+    write_chatgpt_file_auth_config(codex_home.path())?;
 
     let mut cmd = codex_command(codex_home.path())?;
     cmd.args(["login", "--with-access-token"])
@@ -115,7 +123,7 @@ async fn device_login_revokes_existing_auth_before_requesting_new_tokens() -> Re
         .await;
 
     let codex_home = TempDir::new()?;
-    write_file_auth_config(codex_home.path())?;
+    write_chatgpt_file_auth_config(codex_home.path())?;
     std::fs::write(
         codex_home.path().join("auth.json"),
         serde_json::to_vec(&json!({
