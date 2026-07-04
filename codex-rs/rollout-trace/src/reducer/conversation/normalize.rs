@@ -45,6 +45,7 @@ pub(super) fn normalize_model_items(
 pub(super) fn token_usage_from_value(value: &Value) -> Option<TokenUsage> {
     Some(TokenUsage {
         input_tokens: u64_field(value, "input_tokens")?,
+        cache_creation_input_tokens: u64_field(value, "cache_creation_input_tokens").unwrap_or(0),
         cached_input_tokens: u64_field(value, "cached_input_tokens")?,
         output_tokens: u64_field(value, "output_tokens")?,
         reasoning_output_tokens: u64_field(value, "reasoning_output_tokens")?,

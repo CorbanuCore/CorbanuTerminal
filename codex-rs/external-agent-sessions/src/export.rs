@@ -152,6 +152,7 @@ fn message_byte_count(message: &ConversationMessage) -> i64 {
 fn token_count_item(last_model_visible_tokens: i64) -> RolloutItem {
     let usage = TokenUsage {
         total_tokens: last_model_visible_tokens,
+        cache_creation_input_tokens: 0,
         ..TokenUsage::default()
     };
     RolloutItem::EventMsg(EventMsg::TokenCount(TokenCountEvent {

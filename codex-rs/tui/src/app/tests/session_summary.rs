@@ -167,6 +167,7 @@ async fn session_summary_includes_resume_hint_for_persisted_rollout() {
         input_tokens: 10,
         output_tokens: 2,
         total_tokens: 12,
+        cache_creation_input_tokens: 0,
         ..Default::default()
     };
     let conversation = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174000").unwrap();
@@ -197,6 +198,7 @@ async fn session_summary_names_picker_item_when_thread_has_name() {
         input_tokens: 10,
         output_tokens: 2,
         total_tokens: 12,
+        cache_creation_input_tokens: 0,
         ..Default::default()
     };
     let conversation = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174000").unwrap();

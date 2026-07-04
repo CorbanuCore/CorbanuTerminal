@@ -11,6 +11,8 @@ const BASELINE_TOKENS: i64 = 12000;
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenUsage {
     pub input_tokens: i64,
+    #[serde(default)]
+    pub cache_creation_input_tokens: i64,
     pub cached_input_tokens: i64,
     pub output_tokens: i64,
     pub reasoning_output_tokens: i64,
@@ -24,6 +26,10 @@ impl TokenUsage {
 
     pub(crate) fn cached_input(&self) -> i64 {
         self.cached_input_tokens.max(0)
+    }
+
+    pub(crate) fn cache_creation_input(&self) -> i64 {
+        self.cache_creation_input_tokens.max(0)
     }
 
     pub(crate) fn non_cached_input(&self) -> i64 {
@@ -64,13 +70,21 @@ impl fmt::Display for TokenUsage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Token usage: total={} input={}{} output={}{}",
+            "Token usage: total={} input={}{}{} output={}{}",
             format_with_separators(self.blended_total()),
             format_with_separators(self.non_cached_input()),
             if self.cached_input() > 0 {
                 format!(
                     " (+ {} cached)",
                     format_with_separators(self.cached_input())
+                )
+            } else {
+                String::new()
+            },
+            if self.cache_creation_input() > 0 {
+                format!(
+                    " (+ {} cache-write)",
+                    format_with_separators(self.cache_creation_input())
                 )
             } else {
                 String::new()

@@ -222,6 +222,7 @@ impl From<AnthropicUsage> for TokenUsage {
         let output_tokens = usage.output_tokens.unwrap_or(0);
         Self {
             input_tokens,
+            cache_creation_input_tokens: cache_creation,
             cached_input_tokens: cache_read,
             output_tokens,
             reasoning_output_tokens: 0,
@@ -363,7 +364,7 @@ impl AnthropicStreamState {
             self.last_server_model = Some(model);
         }
         if let Some(usage) = message.usage {
-            self.token_usage = Some(usage.into());
+            self.merge_token_usage(usage.into());
         }
         true
     }
@@ -497,7 +498,7 @@ impl AnthropicStreamState {
 
     fn on_message_delta(&mut self, event: AnthropicStreamEvent) {
         if let Some(usage) = event.usage {
-            self.token_usage = Some(usage.into());
+            self.merge_token_usage(usage.into());
         }
         if let Some(delta) = event.delta {
             self.end_turn = match delta.stop_reason.as_deref() {
@@ -508,6 +509,13 @@ impl AnthropicStreamState {
                 None => self.end_turn,
             };
         }
+    }
+
+    fn merge_token_usage(&mut self, usage: TokenUsage) {
+        self.token_usage = Some(match self.token_usage.take() {
+            Some(existing) => merge_anthropic_token_usage(existing, usage),
+            None => usage,
+        });
     }
 
     async fn emit_text_delta(
@@ -771,6 +779,34 @@ impl AnthropicStreamState {
     }
 }
 
+fn merge_anthropic_token_usage(existing: TokenUsage, next: TokenUsage) -> TokenUsage {
+    let existing_non_cached = (existing.input_tokens
+        - existing.cache_creation_input_tokens
+        - existing.cached_input_tokens)
+        .max(0);
+    let next_non_cached =
+        (next.input_tokens - next.cache_creation_input_tokens - next.cached_input_tokens).max(0);
+    let non_cached_input = existing_non_cached.max(next_non_cached);
+    let cache_creation_input_tokens = existing
+        .cache_creation_input_tokens
+        .max(next.cache_creation_input_tokens);
+    let cached_input_tokens = existing.cached_input_tokens.max(next.cached_input_tokens);
+    let output_tokens = existing.output_tokens.max(next.output_tokens);
+    let reasoning_output_tokens = existing
+        .reasoning_output_tokens
+        .max(next.reasoning_output_tokens);
+    let input_tokens = non_cached_input + cache_creation_input_tokens + cached_input_tokens;
+
+    TokenUsage {
+        input_tokens,
+        cache_creation_input_tokens,
+        cached_input_tokens,
+        output_tokens,
+        reasoning_output_tokens,
+        total_tokens: input_tokens + output_tokens,
+    }
+}
+
 fn json_array() -> Value {
     Value::Array(Vec::new())
 }
@@ -903,6 +939,7 @@ mod tests {
     use codex_client::TransportError;
     use futures::TryStreamExt;
     use pretty_assertions::assert_eq;
+    use serde_json::json;
     use tokio_test::io::Builder as IoBuilder;
     use tokio_util::io::ReaderStream;
 
@@ -930,6 +967,25 @@ mod tests {
             events.push(event);
         }
         events
+    }
+
+    #[test]
+    fn anthropic_usage_preserves_all_input_buckets() {
+        let usage: AnthropicUsage = serde_json::from_value(json!({
+            "input_tokens": 11,
+            "cache_creation_input_tokens": 13,
+            "cache_read_input_tokens": 17,
+            "output_tokens": 19
+        }))
+        .expect("usage should parse");
+
+        let token_usage = TokenUsage::from(usage);
+        assert_eq!(token_usage.input_tokens, 41);
+        assert_eq!(token_usage.cache_creation_input_tokens, 13);
+        assert_eq!(token_usage.cached_input_tokens, 17);
+        assert_eq!(token_usage.output_tokens, 19);
+        assert_eq!(token_usage.reasoning_output_tokens, 0);
+        assert_eq!(token_usage.total_tokens, 60);
     }
 
     #[tokio::test]
@@ -974,11 +1030,12 @@ data: {"type":"message_stop"}
             Ok(ResponseEvent::Completed {
                 response_id,
                 token_usage: Some(TokenUsage {
-                    input_tokens: 21,
+                    input_tokens: 26,
+                    cache_creation_input_tokens: 5,
                     cached_input_tokens: 12,
                     output_tokens: 2,
                     reasoning_output_tokens: 0,
-                    total_tokens: 23,
+                    total_tokens: 28,
                 }),
                 end_turn: Some(true),
             }) if response_id == "msg_1"

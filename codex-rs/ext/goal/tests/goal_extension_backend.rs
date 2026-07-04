@@ -1440,6 +1440,7 @@ fn token_usage(
 ) -> TokenUsage {
     TokenUsage {
         input_tokens,
+        cache_creation_input_tokens: 0,
         cached_input_tokens,
         output_tokens,
         reasoning_output_tokens,

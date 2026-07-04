@@ -3495,6 +3495,7 @@ mod tests {
         let token_usage = TokenUsage {
             output_tokens: 2,
             total_tokens: 2,
+            cache_creation_input_tokens: 0,
             ..Default::default()
         };
         let thread_id = conversation_id

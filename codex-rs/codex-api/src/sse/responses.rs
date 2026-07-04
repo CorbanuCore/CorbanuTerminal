@@ -120,6 +120,7 @@ impl From<ResponseCompletedUsage> for TokenUsage {
     fn from(val: ResponseCompletedUsage) -> Self {
         TokenUsage {
             input_tokens: val.input_tokens,
+            cache_creation_input_tokens: 0,
             cached_input_tokens: val
                 .input_tokens_details
                 .map(|d| d.cached_tokens)
@@ -699,6 +700,30 @@ mod tests {
 
     fn idle_timeout() -> Duration {
         Duration::from_millis(1000)
+    }
+
+    #[test]
+    fn responses_usage_sets_cache_creation_to_zero() {
+        let usage: ResponseCompletedUsage = serde_json::from_value(json!({
+            "input_tokens": 20,
+            "input_tokens_details": {
+                "cached_tokens": 8
+            },
+            "output_tokens": 5,
+            "output_tokens_details": {
+                "reasoning_tokens": 3
+            },
+            "total_tokens": 25
+        }))
+        .expect("usage should parse");
+
+        let token_usage = TokenUsage::from(usage);
+        assert_eq!(token_usage.input_tokens, 20);
+        assert_eq!(token_usage.cache_creation_input_tokens, 0);
+        assert_eq!(token_usage.cached_input_tokens, 8);
+        assert_eq!(token_usage.output_tokens, 5);
+        assert_eq!(token_usage.reasoning_output_tokens, 3);
+        assert_eq!(token_usage.total_tokens, 25);
     }
 
     #[tokio::test]

@@ -153,6 +153,7 @@ mod tests {
         window.ensure_server_observed_prefill_from_usage(&TokenUsage {
             input_tokens: 120,
             total_tokens: 170,
+            cache_creation_input_tokens: 0,
             ..Default::default()
         });
         assert_eq!(
@@ -165,6 +166,7 @@ mod tests {
         window.ensure_server_observed_prefill_from_usage(&TokenUsage {
             input_tokens: 130,
             total_tokens: 180,
+            cache_creation_input_tokens: 0,
             ..Default::default()
         });
         window.set_estimated_prefill(/*tokens*/ 90);

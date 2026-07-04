@@ -353,6 +353,7 @@ fn sample_turn_token_usage_fact(thread_id: &str, turn_id: &str) -> TurnTokenUsag
         token_usage: TokenUsage {
             total_tokens: 321,
             input_tokens: 123,
+            cache_creation_input_tokens: 0,
             cached_input_tokens: 45,
             output_tokens: 140,
             reasoning_output_tokens: 13,

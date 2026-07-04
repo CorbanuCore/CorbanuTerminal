@@ -46,6 +46,7 @@ use codex_api::ChatMessageContent;
 use codex_api::ChatStreamOptions;
 use codex_api::ChatToolCall;
 use codex_api::ChatToolFunction;
+use codex_api::ChatUsageOptions;
 use codex_api::CompactClient as ApiCompactClient;
 use codex_api::CompactionInput as ApiCompactionInput;
 use codex_api::Compression;
@@ -1284,6 +1285,11 @@ impl ModelClient {
             stream_options: Some(ChatStreamOptions {
                 include_usage: true,
             }),
+            usage: {
+                let provider_info = self.state.provider.info();
+                (provider_info.is_openrouter() || provider_info.is_openrouter_anthropic())
+                    .then_some(ChatUsageOptions { include: true })
+            },
             tool_choice: (!tools.is_empty()).then(|| "auto".to_string()),
             parallel_tool_calls: (!tools.is_empty() && prompt.parallel_tool_calls).then_some(true),
             prompt_cache_key: chat_cache_policy

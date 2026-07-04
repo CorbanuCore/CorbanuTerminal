@@ -8162,6 +8162,7 @@ fn token_usage_notification(
             total: TokenUsageBreakdown {
                 total_tokens: 10,
                 input_tokens: 4,
+                cache_creation_input_tokens: 0,
                 cached_input_tokens: 1,
                 output_tokens: 5,
                 reasoning_output_tokens: 0,
@@ -8169,6 +8170,7 @@ fn token_usage_notification(
             last: TokenUsageBreakdown {
                 total_tokens: 10,
                 input_tokens: 4,
+                cache_creation_input_tokens: 0,
                 cached_input_tokens: 1,
                 output_tokens: 5,
                 reasoning_output_tokens: 0,

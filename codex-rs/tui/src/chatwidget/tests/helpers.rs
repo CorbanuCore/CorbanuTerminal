@@ -432,6 +432,7 @@ pub(super) fn make_token_info(total_tokens: i64, context_window: i64) -> TokenUs
     fn usage(total_tokens: i64) -> TokenUsage {
         TokenUsage {
             total_tokens,
+            cache_creation_input_tokens: 0,
             ..TokenUsage::default()
         }
     }
@@ -451,6 +452,7 @@ fn token_usage_breakdown(usage: TokenUsage) -> codex_app_server_protocol::TokenU
     codex_app_server_protocol::TokenUsageBreakdown {
         total_tokens: usage.total_tokens,
         input_tokens: usage.input_tokens,
+        cache_creation_input_tokens: 0,
         cached_input_tokens: usage.cached_input_tokens,
         output_tokens: usage.output_tokens,
         reasoning_output_tokens: usage.reasoning_output_tokens,

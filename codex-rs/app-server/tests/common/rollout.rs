@@ -79,6 +79,7 @@ pub fn create_fake_rollout_with_token_usage(
         info: Some(TokenUsageInfo {
             total_token_usage: TokenUsage {
                 input_tokens: 120,
+                cache_creation_input_tokens: 0,
                 cached_input_tokens: 20,
                 output_tokens: 30,
                 reasoning_output_tokens: 10,
@@ -86,6 +87,7 @@ pub fn create_fake_rollout_with_token_usage(
             },
             last_token_usage: TokenUsage {
                 input_tokens: 70,
+                cache_creation_input_tokens: 0,
                 cached_input_tokens: 10,
                 output_tokens: 20,
                 reasoning_output_tokens: 5,

@@ -797,6 +797,7 @@ mod tests {
                 outcome: JobOutcome::SucceededWithOutput,
                 token_usage: Some(TokenUsage {
                     input_tokens: 10,
+                    cache_creation_input_tokens: 0,
                     cached_input_tokens: 2,
                     output_tokens: 3,
                     reasoning_output_tokens: 1,
@@ -807,6 +808,7 @@ mod tests {
                 outcome: JobOutcome::SucceededNoOutput,
                 token_usage: Some(TokenUsage {
                     input_tokens: 7,
+                    cache_creation_input_tokens: 0,
                     cached_input_tokens: 1,
                     output_tokens: 2,
                     reasoning_output_tokens: 0,
@@ -827,6 +829,7 @@ mod tests {
             counts.total_token_usage,
             Some(TokenUsage {
                 input_tokens: 17,
+                cache_creation_input_tokens: 0,
                 cached_input_tokens: 3,
                 output_tokens: 5,
                 reasoning_output_tokens: 1,

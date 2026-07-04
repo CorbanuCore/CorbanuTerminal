@@ -253,6 +253,7 @@ mod tests {
             output_tokens,
             reasoning_output_tokens,
             total_tokens: output_tokens.saturating_add(reasoning_output_tokens),
+            cache_creation_input_tokens: 0,
             ..TokenUsage::default()
         }
     }
