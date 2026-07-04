@@ -721,8 +721,8 @@ fn hierarchy_role_base_files_exclude_gpt55_default_guide_markers() {
         assert!(!role_base.contains(GPT55_PERSONALITY_MARKER));
         assert!(!role_base.contains(GPT55_FRONTEND_MARKER));
         assert!(
-            role_base.len() < 6 * 1024,
-            "role base prompt should stay small enough for editing"
+            role_base.len() < 10 * 1024,
+            "scored role doctrine should stay below the gpt-5.5 default guide size"
         );
     }
 }
