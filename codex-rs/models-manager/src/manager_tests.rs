@@ -26,6 +26,17 @@ use tempfile::tempdir;
 #[path = "model_info_overrides_tests.rs"]
 mod model_info_overrides_tests;
 
+const STANDARD_BASE: &str = include_str!("../../core/src/agent/builtins/standard_base.md");
+const STANDARD_BASE_OUTCOME_MARKER: &str =
+    "carry the user's request through to a real, verified outcome";
+const STANDARD_BASE_EVIDENCE_MARKER: &str = "Evidence lives on disk";
+const OLD_STANDARD_STUB_MARKER: &str = "use rg or rg --files";
+const GPT55_GUIDE_MARKER: &str = "vivid inner life";
+
+fn assert_standard_base(actual: &str) {
+    assert_eq!(actual.trim_end(), STANDARD_BASE.trim_end());
+}
+
 fn remote_model(slug: &str, display: &str, priority: i32) -> ModelInfo {
     remote_model_with_visibility(slug, display, priority, "list")
 }
@@ -1020,11 +1031,7 @@ fn bundled_models_json_contains_ambient_models() {
     );
     assert_eq!(ambient_default.visibility, ModelVisibility::List);
     assert!(ambient_default.supports_parallel_tool_calls);
-    assert!(
-        ambient_default
-            .base_instructions
-            .contains("Never run recursive grep over a repo root")
-    );
+    assert_standard_base(&ambient_default.base_instructions);
     assert!(!ambient_default.used_fallback_model_metadata);
 
     let ambient_kimi = response
@@ -1049,11 +1056,7 @@ fn bundled_models_json_contains_ambient_models() {
     );
     assert_eq!(ambient_kimi.visibility, ModelVisibility::List);
     assert!(ambient_kimi.supports_parallel_tool_calls);
-    assert!(
-        ambient_kimi
-            .base_instructions
-            .contains("Never run recursive grep over a repo root")
-    );
+    assert_standard_base(&ambient_kimi.base_instructions);
     assert!(!ambient_kimi.used_fallback_model_metadata);
 
     let ambient = response
@@ -1066,12 +1069,64 @@ fn bundled_models_json_contains_ambient_models() {
     assert_eq!(ambient.context_window, Some(131_072));
     assert_eq!(ambient.visibility, ModelVisibility::Hide);
     assert!(ambient.supports_parallel_tool_calls);
-    assert!(
-        ambient
-            .base_instructions
-            .contains("Never run recursive grep over a repo root")
-    );
+    assert_standard_base(&ambient.base_instructions);
     assert!(!ambient.used_fallback_model_metadata);
+}
+
+#[test]
+fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+
+    for slug in [
+        "z-ai/glm-5.2",
+        "moonshotai/kimi-k2.7-code",
+        "zai/glm-5.2",
+        "zai/glm-5.2-fast",
+        "zai-org/GLM-5.2",
+        "ambient/large",
+        "glm-5.2",
+        "minimax/minimax-m3",
+        "openrouter/owl-alpha",
+        "google/gemini-3.5-flash",
+        "claude-opus-4-8-plan",
+        "claude-fable-5-plan",
+        "claude-opus-4-8",
+        "claude-fable-5",
+    ] {
+        let model = response
+            .models
+            .iter()
+            .find(|model| model.slug == slug)
+            .unwrap_or_else(|| panic!("bundled models.json should include {slug}"));
+
+        assert_standard_base(&model.base_instructions);
+        assert!(
+            model
+                .base_instructions
+                .contains(STANDARD_BASE_OUTCOME_MARKER)
+        );
+        assert!(
+            model
+                .base_instructions
+                .contains(STANDARD_BASE_EVIDENCE_MARKER)
+        );
+        assert!(!model.base_instructions.contains(OLD_STANDARD_STUB_MARKER));
+    }
+
+    let gpt55 = response
+        .models
+        .iter()
+        .find(|model| model.slug == "gpt-5.5")
+        .expect("bundled models.json should include gpt-5.5");
+
+    assert!(gpt55.base_instructions.contains(GPT55_GUIDE_MARKER));
+    assert!(
+        !gpt55
+            .base_instructions
+            .contains(STANDARD_BASE_EVIDENCE_MARKER)
+    );
+    assert_ne!(gpt55.base_instructions.trim_end(), STANDARD_BASE.trim_end());
 }
 
 #[test]

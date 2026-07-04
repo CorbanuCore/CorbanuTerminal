@@ -19,6 +19,8 @@ use tempfile::TempDir;
 const NAZGUL_BASE: &str = include_str!("builtins/nazgul_base.md");
 const TROLL_BASE: &str = include_str!("builtins/troll_base.md");
 const ORC_BASE: &str = include_str!("builtins/orc_base.md");
+const STANDARD_BASE_OUTCOME_MARKER: &str =
+    "carry the user's request through to a real, verified outcome";
 const GPT55_CREATURE_CLAUSE_START: &str = "Never talk about goblins";
 const GPT55_PERSONALITY_MARKER: &str = "You have a vivid inner life as Codex";
 const GPT55_FRONTEND_MARKER: &str =
@@ -670,6 +672,59 @@ async fn apply_hierarchy_roles_sets_role_base_instructions_only() {
         assert!(!expected_base.contains(GPT55_PERSONALITY_MARKER));
         assert!(!expected_base.contains(GPT55_FRONTEND_MARKER));
     }
+}
+
+#[tokio::test]
+async fn hierarchy_role_base_precedence_over_standard_model_defaults_is_deterministic() {
+    for (role_name, expected_base, role_marker) in [
+        (
+            "nazgul",
+            NAZGUL_BASE,
+            "You are the Nazgul in this hierarchy",
+        ),
+        ("troll", TROLL_BASE, "You are the Troll in this hierarchy"),
+        ("orc", ORC_BASE, "You are the Orc in this hierarchy"),
+    ] {
+        let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+        config.base_instructions = Some(STANDARD_BASE_OUTCOME_MARKER.to_string());
+
+        apply_role_to_config(&mut config, Some(role_name))
+            .await
+            .expect("hierarchy role should apply");
+
+        let resolved_base = config
+            .base_instructions
+            .as_deref()
+            .expect("hierarchy role should set base instructions");
+        assert_eq!(resolved_base, expected_base);
+        assert!(resolved_base.contains(role_marker));
+        assert!(!resolved_base.contains(STANDARD_BASE_OUTCOME_MARKER));
+    }
+
+    let bundled_models =
+        codex_models_manager::bundled_models_response().expect("bundled models.json should parse");
+    let fable = bundled_models
+        .models
+        .iter()
+        .find(|model| model.slug == "claude-fable-5")
+        .expect("bundled models.json should include claude-fable-5");
+    assert!(
+        fable
+            .base_instructions
+            .contains(STANDARD_BASE_OUTCOME_MARKER)
+    );
+
+    let gpt55 = bundled_models
+        .models
+        .iter()
+        .find(|model| model.slug == "gpt-5.5")
+        .expect("bundled models.json should include gpt-5.5");
+    assert!(gpt55.base_instructions.contains("vivid inner life"));
+    assert!(
+        !gpt55
+            .base_instructions
+            .contains(STANDARD_BASE_OUTCOME_MARKER)
+    );
 }
 
 #[tokio::test]

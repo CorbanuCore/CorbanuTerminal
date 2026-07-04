@@ -6,6 +6,13 @@ use anyhow::Result;
 use tempfile::TempDir;
 
 const BWRAP_UNAVAILABLE_ERR: &str = "bubblewrap is unavailable";
+const MANAGED_PROXY_PERMISSION_ERR_SNIPPETS: &[&str] = &[
+    "loopback: Failed RTM_NEWADDR",
+    "loopback: Failed RTM_NEWLINK",
+    "setting up uid map: Permission denied",
+    "No permissions to create a new namespace",
+    "error isolating Linux network namespace for proxy mode",
+];
 
 #[test]
 fn sandbox_with_network_proxy_blocks_direct_loopback_access() -> Result<()> {
@@ -54,6 +61,13 @@ mode = "full"
     let stderr = String::from_utf8_lossy(&output.stderr);
     if stderr.contains(BWRAP_UNAVAILABLE_ERR) {
         eprintln!("skipping network proxy sandbox test: bubblewrap is unavailable");
+        return Ok(());
+    }
+    if MANAGED_PROXY_PERMISSION_ERR_SNIPPETS
+        .iter()
+        .any(|snippet| stderr.contains(snippet))
+    {
+        eprintln!("skipping network proxy sandbox test: bubblewrap lacks namespace permissions");
         return Ok(());
     }
 

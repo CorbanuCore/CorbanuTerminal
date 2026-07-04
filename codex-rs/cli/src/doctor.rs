@@ -452,7 +452,7 @@ async fn build_report(
                             "config could not be loaded",
                         )
                         .detail(err.to_string())
-                        .remediation("Fix the reported config error, then rerun codex doctor.")
+                        .remediation("Fix the reported config error, then rerun pfterminal doctor.")
                     })
                 },
                 async { run_sync_check("network", progress.clone(), network_check) },
@@ -517,7 +517,7 @@ async fn load_config(
         .harness_overrides(overrides)
         .build()
         .await
-        .context("failed to load Codex config")
+        .context("failed to load PFTerminal config")
 }
 
 fn config_overrides_from_interactive(
@@ -1237,8 +1237,8 @@ fn auth_check(config: &Config) -> DoctorCheck {
             let mut check =
                 DoctorCheck::new("auth.credentials", "auth", status, summary).details(details);
             if status == CheckStatus::Fail {
-                check =
-                    check.remediation("Run codex login again or provide a supported auth env var.");
+                check = check
+                    .remediation("Run pfterminal login again or provide a supported auth env var.");
             }
             check
         }
@@ -1253,10 +1253,12 @@ fn auth_check(config: &Config) -> DoctorCheck {
             "auth.credentials",
             "auth",
             CheckStatus::Fail,
-            "no Codex credentials were found",
+            "no PFTerminal credentials were found",
         )
         .details(details)
-        .remediation("Run codex login or provide an API key through a supported auth env var."),
+        .remediation(
+            "Run pfterminal login or provide an API key through a supported auth env var.",
+        ),
         Err(err) => DoctorCheck::new(
             "auth.credentials",
             "auth",
@@ -1264,7 +1266,7 @@ fn auth_check(config: &Config) -> DoctorCheck {
             "stored credentials could not be read",
         )
         .detail(err.to_string())
-        .remediation("Fix auth storage access or run codex login again."),
+        .remediation("Fix auth storage access or run pfterminal login again."),
     }
 }
 
@@ -3470,7 +3472,7 @@ mod tests {
         let check = provider_specific_auth_check(
             /*requires_openai_auth*/ false,
             Some("PROVIDER_API_KEY"),
-            Some("Set PROVIDER_API_KEY before running Codex."),
+            Some("Set PROVIDER_API_KEY before running PFTerminal."),
             Vec::new(),
             |_| false,
         )
@@ -3483,7 +3485,7 @@ mod tests {
         );
         assert_eq!(
             check.remediation,
-            Some("Set PROVIDER_API_KEY before running Codex.".to_string())
+            Some("Set PROVIDER_API_KEY before running PFTerminal.".to_string())
         );
     }
 

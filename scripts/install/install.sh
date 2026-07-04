@@ -625,7 +625,12 @@ print_launch_instructions() {
 maybe_launch_pfterminal_now() {
   if prompt_yes_no "Start PFTerminal now?"; then
     step "Launching PFTerminal"
-    "$BIN_PATH"
+    release_install_lock 2>/dev/null || true
+    if [ -e /dev/tty ]; then
+      exec "$BIN_PATH" </dev/tty
+    else
+      exec "$BIN_PATH"
+    fi
   fi
 }
 
