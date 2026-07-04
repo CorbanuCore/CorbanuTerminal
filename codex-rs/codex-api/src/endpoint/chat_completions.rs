@@ -33,7 +33,9 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::fs::OpenOptions;
 use std::io::IsTerminal;
+use std::io::Write;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicU64;
@@ -58,6 +60,27 @@ const DEFAULT_ACTIONABLE_SILENCE_TIMEOUT: Duration = Duration::from_secs(180);
 const SERIALIZED_TOOL_TEXT_PROBE_CHARS: usize = 96;
 const CALL_METRICS_TAG: &str = "pfterminal_call_metrics";
 static CHAT_CALL_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+fn maybe_dump_chat_usage_frame(data: &str) {
+    let Ok(path) = std::env::var("PFTERMINAL_DUMP_CHAT_USAGE") else {
+        return;
+    };
+    let Ok(value) = serde_json::from_str::<Value>(data) else {
+        return;
+    };
+    let Some(usage) = value.get("usage").filter(|usage| usage.is_object()) else {
+        return;
+    };
+    let frame = serde_json::json!({
+        "source": "chat.usage",
+        "usage": usage,
+    });
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path)
+        && serde_json::to_writer(&mut file, &frame).is_ok()
+    {
+        let _ = file.write_all(b"\n");
+    }
+}
 
 pub struct ChatCompletionsClient<T: HttpTransport> {
     session: EndpointSession<T>,
@@ -1127,6 +1150,7 @@ async fn process_chat_sse(
             }
             return;
         }
+        maybe_dump_chat_usage_frame(&sse.data);
 
         if let Ok(error) = serde_json::from_str::<ChatErrorEnvelope>(&sse.data) {
             let mut message = error

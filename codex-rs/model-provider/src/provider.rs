@@ -329,12 +329,11 @@ impl ModelProvider for ConfiguredModelProvider {
 
     fn auth(&self) -> ModelProviderFuture<'_, Option<CodexAuth>> {
         Box::pin(async move {
-            let auth_manager = self.auth_manager.as_ref()?;
-
             if let Some(provider_key_id) = self.info.env_key.as_deref() {
                 return self.provider_env_auth(provider_key_id);
             }
 
+            let auth_manager = self.auth_manager.as_ref()?;
             auth_manager.auth().await
         })
     }
@@ -878,6 +877,31 @@ mod tests {
             .api_auth()
             .await
             .expect("provider auth should resolve");
+
+        assert_eq!(
+            auth.to_auth_headers()
+                .get(http::header::AUTHORIZATION)
+                .and_then(|value| value.to_str().ok()),
+            Some("Bearer env-provider-key")
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_provider_uses_env_key_without_auth_manager() {
+        let env_key = format!("PFT_PROVIDER_NO_AUTH_MANAGER_{}", std::process::id());
+        let _guard = EnvVarGuard::set(env_key.clone(), "env-provider-key");
+        let provider = create_model_provider(
+            ModelProviderInfo {
+                env_key: Some(env_key),
+                ..provider_for("https://example.test/v1".to_string())
+            },
+            /*auth_manager*/ None,
+        );
+
+        let auth = provider
+            .api_auth()
+            .await
+            .expect("provider auth should resolve from env");
 
         assert_eq!(
             auth.to_auth_headers()

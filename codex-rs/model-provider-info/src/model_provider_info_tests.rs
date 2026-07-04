@@ -989,7 +989,10 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider("zai/glm-5.2-fast", VERCEL_ANTHROPIC_FAST_PROVIDER_ID),
         None
     );
-    assert_eq!(corrected_catalog_provider(VERCEL_DEFAULT_MODEL, VERCEL_PROVIDER_ID), None);
+    assert_eq!(
+        corrected_catalog_provider(VERCEL_DEFAULT_MODEL, VERCEL_PROVIDER_ID),
+        None
+    );
     assert_eq!(
         corrected_catalog_provider(VERCEL_DEFAULT_MODEL, VERCEL_ANTHROPIC_PROVIDER_ID),
         None
@@ -998,20 +1001,32 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider(CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         None
     );
-    assert_eq!(corrected_catalog_provider(ZAI_DEFAULT_MODEL, ZAI_PROVIDER_ID), None);
+    assert_eq!(
+        corrected_catalog_provider(ZAI_DEFAULT_MODEL, ZAI_PROVIDER_ID),
+        None
+    );
     assert_eq!(
         corrected_catalog_provider(ZAI_DEFAULT_MODEL, ZAI_ANTHROPIC_PROVIDER_ID),
         None
     );
-    assert_eq!(corrected_catalog_provider("gpt-5.5", OPENAI_PROVIDER_ID), None);
+    assert_eq!(
+        corrected_catalog_provider("gpt-5.5", OPENAI_PROVIDER_ID),
+        None
+    );
 
     // Servable cross-provider pairs, unknown models, user-defined providers: untouched.
-    assert_eq!(corrected_catalog_provider(AMBIENT_DEFAULT_MODEL, AMBIENT_PROVIDER_ID), None);
+    assert_eq!(
+        corrected_catalog_provider(AMBIENT_DEFAULT_MODEL, AMBIENT_PROVIDER_ID),
+        None
+    );
     assert_eq!(
         corrected_catalog_provider("zai-org/GLM-5.1-FP8", AMBIENT_PROVIDER_ID),
         None
     );
-    assert_eq!(corrected_catalog_provider("gpt-5.5", "my-azure-provider"), None);
+    assert_eq!(
+        corrected_catalog_provider("gpt-5.5", "my-azure-provider"),
+        None
+    );
     assert_eq!(
         corrected_catalog_provider(AMAZON_BEDROCK_GPT_5_5_MODEL_ID, AMBIENT_PROVIDER_ID),
         None

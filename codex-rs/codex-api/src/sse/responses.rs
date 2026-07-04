@@ -13,6 +13,8 @@ use eventsource_stream::Eventsource;
 use futures::StreamExt;
 use serde::Deserialize;
 use serde_json::Value;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -27,6 +29,32 @@ const X_CODEX_TURN_STATE_HEADER: &str = "x-codex-turn-state";
 const OPENAI_MODEL_HEADER: &str = "openai-model";
 const REQUEST_ID_HEADER: &str = "x-request-id";
 const TRUSTED_ACCESS_FOR_CYBER_VERIFICATION: &str = "trusted_access_for_cyber";
+
+fn maybe_dump_responses_usage_frame(data: &str) {
+    let Ok(path) = std::env::var("PFTERMINAL_DUMP_RESPONSES_USAGE") else {
+        return;
+    };
+    let Ok(value) = serde_json::from_str::<Value>(data) else {
+        return;
+    };
+    let Some(usage) = value
+        .get("response")
+        .and_then(|response| response.get("usage"))
+        .or_else(|| value.get("usage"))
+        .filter(|usage| usage.is_object())
+    else {
+        return;
+    };
+    let frame = serde_json::json!({
+        "source": "responses.usage",
+        "usage": usage,
+    });
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path)
+        && serde_json::to_writer(&mut file, &frame).is_ok()
+    {
+        let _ = file.write_all(b"\n");
+    }
+}
 
 pub fn spawn_response_stream(
     stream_response: StreamResponse,
@@ -486,6 +514,7 @@ pub async fn process_sse(
         };
 
         trace!("SSE event: {}", &sse.data);
+        maybe_dump_responses_usage_frame(&sse.data);
 
         let event: ResponsesStreamEvent = match serde_json::from_str(&sse.data) {
             Ok(event) => event,

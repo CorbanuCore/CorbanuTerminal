@@ -29,6 +29,8 @@ use http::Method;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -39,6 +41,42 @@ use tracing::instrument;
 use tracing::trace;
 
 const REQUEST_ID_HEADER: &str = "x-request-id";
+
+fn maybe_dump_anthropic_usage_frame(data: &str) {
+    let Ok(path) = std::env::var("PFTERMINAL_DUMP_ANTHROPIC_USAGE") else {
+        return;
+    };
+    let Ok(value) = serde_json::from_str::<Value>(data) else {
+        return;
+    };
+    let mut frames = Vec::new();
+    if let Some(usage) = value
+        .get("message")
+        .and_then(|message| message.get("usage"))
+        .filter(|usage| usage.is_object())
+    {
+        frames.push(serde_json::json!({
+            "source": "anthropic.message.usage",
+            "usage": usage,
+        }));
+    }
+    if let Some(usage) = value.get("usage").filter(|usage| usage.is_object()) {
+        frames.push(serde_json::json!({
+            "source": "anthropic.usage",
+            "usage": usage,
+        }));
+    }
+    if frames.is_empty() {
+        return;
+    }
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        for frame in frames {
+            if serde_json::to_writer(&mut file, &frame).is_ok() {
+                let _ = file.write_all(b"\n");
+            }
+        }
+    }
+}
 
 pub struct AnthropicMessagesClient<T: HttpTransport> {
     session: EndpointSession<T>,
@@ -205,6 +243,13 @@ struct AnthropicUsage {
     output_tokens: Option<i64>,
     cache_creation_input_tokens: Option<i64>,
     cache_read_input_tokens: Option<i64>,
+    output_tokens_details: Option<AnthropicOutputTokensDetails>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+struct AnthropicOutputTokensDetails {
+    thinking_tokens: Option<i64>,
+    reasoning_tokens: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -220,12 +265,21 @@ impl From<AnthropicUsage> for TokenUsage {
         let cache_read = usage.cache_read_input_tokens.unwrap_or(0);
         let input_tokens = non_cached + cache_creation + cache_read;
         let output_tokens = usage.output_tokens.unwrap_or(0);
+        let reasoning_output_tokens = usage
+            .output_tokens_details
+            .map(|details| {
+                details
+                    .thinking_tokens
+                    .unwrap_or(0)
+                    .max(details.reasoning_tokens.unwrap_or(0))
+            })
+            .unwrap_or(0);
         Self {
             input_tokens,
             cache_creation_input_tokens: cache_creation,
             cached_input_tokens: cache_read,
             output_tokens,
-            reasoning_output_tokens: 0,
+            reasoning_output_tokens,
             total_tokens: input_tokens + output_tokens,
         }
     }
@@ -912,6 +966,7 @@ async fn process_anthropic_sse(
         };
 
         trace!("Anthropic messages SSE event: {}", &sse.data);
+        maybe_dump_anthropic_usage_frame(&sse.data);
 
         let event = match serde_json::from_str::<AnthropicStreamEvent>(&sse.data) {
             Ok(event) => event,
@@ -986,6 +1041,29 @@ mod tests {
         assert_eq!(token_usage.output_tokens, 19);
         assert_eq!(token_usage.reasoning_output_tokens, 0);
         assert_eq!(token_usage.total_tokens, 60);
+    }
+
+    #[test]
+    fn anthropic_usage_maps_fable_thinking_tokens() {
+        let usage: AnthropicUsage = serde_json::from_value(json!({
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 75,
+            "cache_read_input_tokens": 137191,
+            "output_tokens": 30,
+            "output_tokens_details": {
+                "thinking_tokens": 9
+            }
+        }))
+        .expect("usage should parse");
+
+        let token_usage = TokenUsage::from(usage);
+
+        assert_eq!(token_usage.input_tokens, 137268);
+        assert_eq!(token_usage.cache_creation_input_tokens, 75);
+        assert_eq!(token_usage.cached_input_tokens, 137191);
+        assert_eq!(token_usage.output_tokens, 30);
+        assert_eq!(token_usage.reasoning_output_tokens, 9);
+        assert_eq!(token_usage.total_tokens, 137298);
     }
 
     #[tokio::test]
