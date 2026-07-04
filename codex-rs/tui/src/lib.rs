@@ -50,11 +50,6 @@ use codex_login::AuthConfig;
 use codex_login::default_client::originator;
 use codex_login::default_client::set_default_client_residency_requirement;
 use codex_login::enforce_login_restrictions;
-use codex_model_provider_info::AMBIENT_API_KEY_ENV_VAR;
-use codex_model_provider_info::BASETEN_API_KEY_ENV_VAR;
-use codex_model_provider_info::OPENROUTER_API_KEY_ENV_VAR;
-use codex_model_provider_info::VERCEL_API_KEY_ENV_VAR;
-use codex_model_provider_info::ZAI_API_KEY_ENV_VAR;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::AltScreenMode;
 use codex_protocol::config_types::ForcedLoginMethod;
@@ -1432,6 +1427,22 @@ async fn run_ratatui_app(
         {
             trust_decision_was_made = onboarding_result.directory_trust_persisted;
         }
+        if let Some(provider) = onboarding_result.configured_provider_api_key.as_deref() {
+            let Some(app_server_session) = app_server.as_ref() else {
+                unreachable!("app server should exist when onboarding stores a provider key");
+            };
+            config_update::write_config_batch(
+                app_server_session.request_handle(),
+                config_update::build_onboarding_provider_selection_edits(
+                    initial_config.model.as_deref(),
+                    provider,
+                ),
+            )
+            .await
+            .wrap_err_with(|| {
+                format!("failed to persist onboarding provider selection for `{provider}`")
+            })?;
+        }
         // If this onboarding run included the login step, always refresh the cloud config bundle
         // and rebuild config. This avoids missing newly available cloud-managed policy due to login
         // status detection edge cases.
@@ -2064,25 +2075,12 @@ fn is_model_affecting_resume_config_key(key: &str) -> bool {
     )
 }
 
-const KNOWN_PROVIDER_API_KEY_ENV_VARS: &[&str] = &[
-    AMBIENT_API_KEY_ENV_VAR,
-    ZAI_API_KEY_ENV_VAR,
-    OPENROUTER_API_KEY_ENV_VAR,
-    BASETEN_API_KEY_ENV_VAR,
-    VERCEL_API_KEY_ENV_VAR,
-];
-
 fn has_linked_provider_credentials(config: &Config) -> bool {
-    KNOWN_PROVIDER_API_KEY_ENV_VARS
-        .iter()
-        .copied()
-        .chain(
-            config
-                .model_providers
-                .values()
-                .filter_map(|provider| provider.env_key.as_deref()),
-        )
-        .any(|env_key| provider_credential_is_linked(config, env_key))
+    config
+        .model_provider
+        .env_key
+        .as_deref()
+        .is_some_and(|env_key| provider_credential_is_linked(config, env_key))
 }
 
 fn provider_credential_is_linked(config: &Config, env_key: &str) -> bool {
@@ -2128,7 +2126,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn stored_provider_key_suppresses_startup_login_screen() {
+    async fn stored_active_provider_key_suppresses_startup_login_screen() {
         let temp_dir = TempDir::new().unwrap();
         let config = build_config(&temp_dir).await.unwrap();
         assert!(provider_requires_login(&config));
@@ -2139,9 +2137,54 @@ mod tests {
 
         std::fs::write(
             temp_dir.path().join("provider_auth.json"),
-            r#"{"api_keys":{"ZAI_API_KEY":"zai-test-key"}}"#,
+            r#"{"api_keys":{"AMBIENT_API_KEY":"ambient-test-key"}}"#,
         )
         .unwrap();
+
+        assert!(!should_show_login_screen(
+            LoginStatus::NotAuthenticated,
+            &config
+        ));
+    }
+
+    #[tokio::test]
+    async fn stored_non_active_provider_key_does_not_suppress_startup_login_screen() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = build_config(&temp_dir).await.unwrap();
+        assert_eq!(
+            config.model_provider_id,
+            codex_model_provider_info::AMBIENT_PROVIDER_ID
+        );
+        std::fs::write(
+            temp_dir.path().join("provider_auth.json"),
+            r#"{"api_keys":{"OPENROUTER_API_KEY":"openrouter-test-key"}}"#,
+        )
+        .unwrap();
+
+        assert!(should_show_login_screen(
+            LoginStatus::NotAuthenticated,
+            &config
+        ));
+    }
+
+    #[tokio::test]
+    async fn persisted_non_ambient_provider_key_suppresses_startup_login_screen() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::write(
+            temp_dir.path().join("config.toml"),
+            r#"model_provider = "openrouter""#,
+        )
+        .unwrap();
+        std::fs::write(
+            temp_dir.path().join("provider_auth.json"),
+            r#"{"api_keys":{"OPENROUTER_API_KEY":"openrouter-test-key"}}"#,
+        )
+        .unwrap();
+        let config = build_config(&temp_dir).await.unwrap();
+        assert_eq!(
+            config.model_provider_id,
+            codex_model_provider_info::OPENROUTER_PROVIDER_ID
+        );
 
         assert!(!should_show_login_screen(
             LoginStatus::NotAuthenticated,
