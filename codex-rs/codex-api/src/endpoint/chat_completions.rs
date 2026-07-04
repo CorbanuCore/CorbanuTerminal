@@ -33,6 +33,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::io::IsTerminal;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicU64;
@@ -558,7 +559,15 @@ impl ChatCallMetrics {
             }
         };
 
-        eprintln!("{}", serialize_chat_call_metrics(&record));
+        let serialized = serialize_chat_call_metrics(&record);
+        // Bench/exec harnesses consume these records from redirected stderr. When stderr IS the
+        // terminal (interactive TUI), printing them corrupts the rendered UI with one JSON line
+        // per API call, so route them to the tracing log instead.
+        if std::io::stderr().is_terminal() {
+            tracing::info!(target: "pfterminal_call_metrics", "{serialized}");
+        } else {
+            eprintln!("{serialized}");
+        }
     }
 
     fn elapsed_ms(&self) -> u64 {

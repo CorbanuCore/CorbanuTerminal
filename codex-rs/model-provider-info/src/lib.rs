@@ -98,6 +98,74 @@ pub const VERCEL_DEFAULT_MODEL: &str = "zai/glm-5.2";
 pub const VERCEL_GLM_5_2_FAST_MODEL: &str = "zai/glm-5.2-fast";
 pub const VERCEL_API_KEY_ENV_VAR: &str = "AI_GATEWAY_API_KEY";
 
+/// Built-in catalog providers eligible for impossible-pair correction. User-defined providers
+/// (e.g. a private Azure deployment) are never second-guessed.
+const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 14] = [
+    OPENAI_PROVIDER_ID,
+    ANTHROPIC_PROVIDER_ID,
+    CLAUDE_PLAN_PROVIDER_ID,
+    AMBIENT_PROVIDER_ID,
+    ZAI_PROVIDER_ID,
+    ZAI_ANTHROPIC_PROVIDER_ID,
+    OPENROUTER_PROVIDER_ID,
+    OPENROUTER_ANTHROPIC_PROVIDER_ID,
+    BASETEN_PROVIDER_ID,
+    BASETEN_ANTHROPIC_PROVIDER_ID,
+    VERCEL_PROVIDER_ID,
+    VERCEL_ANTHROPIC_PROVIDER_ID,
+    VERCEL_ANTHROPIC_FAST_PROVIDER_ID,
+    AMAZON_BEDROCK_PROVIDER_ID,
+];
+
+const VERCEL_FAMILY_PROVIDERS: [&str; 3] = [
+    VERCEL_PROVIDER_ID,
+    VERCEL_ANTHROPIC_PROVIDER_ID,
+    VERCEL_ANTHROPIC_FAST_PROVIDER_ID,
+];
+
+/// Returns the provider a session must use when its (model, provider) pair is impossible — the
+/// model belongs to a specific catalog provider family and the given provider is a different
+/// catalog provider that cannot serve it. Pairs go stale when thread metadata loses the provider
+/// and a fallback (config default, parent provider) is recorded next to a role- or
+/// rollout-derived model; running such a turn 400s/404s at the remote ("Unknown model").
+///
+/// Only unambiguous families are corrected:
+/// - `zai/…` slugs (Vercel gateway GLM ids) off the Vercel provider family;
+/// - the Claude plan models off `claude-plan`;
+/// - bare `glm-…` slugs (Z.AI-direct ids) off either Z.AI dialect;
+/// - bare `gpt-…` slugs off OpenAI (Bedrock uses `openai.gpt-…` ids).
+///
+/// Servable-but-unusual pairs (e.g. ambient serving `z-ai/glm-5.2`), unknown models, and
+/// user-defined providers return `None` so intentional setups keep working.
+pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'static str> {
+    let model = model.trim();
+    let provider = provider.trim();
+    if model.is_empty()
+        || provider.is_empty()
+        || !PAIR_CORRECTION_KNOWN_PROVIDERS.contains(&provider)
+    {
+        return None;
+    }
+    if model.starts_with("zai/") && !VERCEL_FAMILY_PROVIDERS.contains(&provider) {
+        return Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID);
+    }
+    if (model == CLAUDE_PLAN_MODEL || model == CLAUDE_FABLE_5_PLAN_MODEL)
+        && provider != CLAUDE_PLAN_PROVIDER_ID
+    {
+        return Some(CLAUDE_PLAN_PROVIDER_ID);
+    }
+    if model.starts_with("glm-")
+        && provider != ZAI_PROVIDER_ID
+        && provider != ZAI_ANTHROPIC_PROVIDER_ID
+    {
+        return Some(ZAI_PROVIDER_ID);
+    }
+    if model.starts_with("gpt-") && provider != OPENAI_PROVIDER_ID {
+        return Some(OPENAI_PROVIDER_ID);
+    }
+    None
+}
+
 pub fn resolve_model_for_provider(
     model: Option<String>,
     model_provider_id: &str,

@@ -235,6 +235,7 @@ pub struct ConfigToml {
     pub notify: Option<Vec<String>>,
 
     /// System instructions.
+    #[serde(alias = "base_instructions")]
     pub instructions: Option<String>,
 
     /// Developer instructions inserted as a `developer` role message.

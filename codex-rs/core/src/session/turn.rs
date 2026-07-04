@@ -144,6 +144,7 @@ const THIRD_PARTY_PREFLIGHT_WARNING_INPUT_TOKENS: i64 = 32_000;
 const THIRD_PARTY_PREFLIGHT_WARNING_REQUEST_BYTES: i64 = 128 * 1024;
 const THIRD_PARTY_CACHE_HEALTH_MIN_INPUT_TOKENS: i64 = 8_000;
 const THIRD_PARTY_CACHE_HEALTHY_HIT_RATE: f64 = 0.70;
+const MAX_SERVER_SIDE_MODEL_CONTINUATIONS: u64 = 5;
 
 fn trace_turn_timing(label: &str, start: Instant) {
     if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
@@ -236,6 +237,7 @@ pub(crate) async fn run_turn(
 
     let mut last_agent_message: Option<String> = None;
     let mut stop_hook_active = false;
+    let mut consecutive_server_side_model_continuations = 0_u64;
     // Although from the perspective of codex.rs, TurnDiffTracker has the lifecycle of a Task which contains
     // many turns, from the perspective of the user, it is a single turn.
     let display_roots = turn_diff_display_roots(turn_context.as_ref()).await;
@@ -323,7 +325,24 @@ pub(crate) async fn run_turn(
                     needs_follow_up: model_needs_follow_up,
                     last_agent_message: sampling_request_last_agent_message,
                     token_usage: _,
+                    server_side_model_continuation,
                 } = sampling_request_output;
+                if server_side_model_continuation {
+                    consecutive_server_side_model_continuations += 1;
+                    if consecutive_server_side_model_continuations
+                        > MAX_SERVER_SIDE_MODEL_CONTINUATIONS
+                    {
+                        return Err(CodexErr::Stream(
+                            format!(
+                                "model requested more than {MAX_SERVER_SIDE_MODEL_CONTINUATIONS} \
+                                 server-side continuations in one turn"
+                            ),
+                            None,
+                        ));
+                    }
+                } else {
+                    consecutive_server_side_model_continuations = 0;
+                }
                 can_drain_pending_input = true;
                 let (has_pending_input, token_status, estimated_token_count) = async {
                     let has_pending_input =
@@ -1434,6 +1453,7 @@ struct SamplingRequestResult {
     needs_follow_up: bool,
     last_agent_message: Option<String>,
     token_usage: Option<TokenUsage>,
+    server_side_model_continuation: bool,
 }
 
 /// Ephemeral per-response state for streaming a single proposed plan.
@@ -2573,6 +2593,7 @@ async fn try_run_sampling_request(
     )> = None;
     let mut should_emit_turn_diff = false;
     let mut should_emit_token_count = false;
+    let mut saw_client_tool_call = false;
     let reasoning_effort = turn_context.effective_reasoning_effort_for_tracing();
     let plan_mode = turn_context.collaboration_mode.mode == ModeKind::Plan;
     let mut assistant_message_stream_parsers = AssistantMessageStreamParsers::new(plan_mode);
@@ -2703,6 +2724,7 @@ async fn try_run_sampling_request(
                         Err(err) => break Err(err),
                     };
                 if let Some(tool_future) = output_result.tool_future {
+                    saw_client_tool_call = true;
                     in_flight.push_back(tool_future);
                 }
                 if let Some(agent_message) = output_result.last_agent_message {
@@ -2715,6 +2737,7 @@ async fn try_run_sampling_request(
                         needs_follow_up: true,
                         last_agent_message,
                         token_usage: None,
+                        server_side_model_continuation: false,
                     });
                 }
             }
@@ -2864,11 +2887,15 @@ async fn try_run_sampling_request(
                 if let Some(false) = end_turn {
                     needs_follow_up = true;
                 }
+                let server_side_model_continuation = matches!(end_turn, Some(false))
+                    && !saw_client_tool_call
+                    && in_flight.is_empty();
                 let completed_token_usage = token_usage.clone();
                 break Ok(SamplingRequestResult {
                     needs_follow_up,
                     last_agent_message,
                     token_usage: completed_token_usage,
+                    server_side_model_continuation,
                 });
             }
             ResponseEvent::OutputTextDelta(delta) => {

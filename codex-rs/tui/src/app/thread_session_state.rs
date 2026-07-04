@@ -127,6 +127,22 @@ impl App {
         } else if thread.path.is_some() {
             session.model.clear();
         }
+        // Stored thread metadata can carry a provider that cannot serve the restored model
+        // (a fallback or parent provider recorded at creation); running a turn on such a pair
+        // 400s at the remote with "Unknown model". Correct impossible pairs at bind time.
+        if let Some(corrected) = crate::spawn_orchestration::corrected_native_spawn_provider(
+            &session.model,
+            &session.model_provider_id,
+        ) {
+            tracing::warn!(
+                thread_id = %thread_id,
+                model = %session.model,
+                stored_provider = %session.model_provider_id,
+                corrected_provider = %corrected,
+                "correcting impossible model/provider pair from thread/read metadata"
+            );
+            session.model_provider_id = corrected;
+        }
         session.message_history = None;
         session
     }

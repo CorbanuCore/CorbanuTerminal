@@ -50,6 +50,27 @@ const SPAWN_PARENT_REPORT_LIMIT: usize = 12;
 const SPAWN_PROCESSED_DISPATCH_TURN_LIMIT: usize = 1024;
 const SPAWN_PROCESSED_DISPATCH_TURN_RETAIN: usize = SPAWN_PROCESSED_DISPATCH_TURN_LIMIT / 2;
 const SPAWN_REPORT_RESULT_MAX_CHARS: usize = 12_000;
+/// Loop breaker: maximum consecutive auto-triggered child-report processing turns that may each
+/// dispatch follow-up work before auto-processing pauses for that parent node. Without a ceiling,
+/// report -> auto processing turn -> dispatch -> report cycles never terminate on their own. The
+/// chain resets when an auto turn acknowledges without dispatching or when the node receives a
+/// turn it did not auto-trigger (operator input or a task dispatched to it).
+pub(crate) const SPAWN_AUTO_DISPATCH_CHAIN_LIMIT: u32 = 3;
+const SPAWN_RESUME_AUTO_PROCESSING_PAUSED_MESSAGE: &str =
+    "Session resumed: child report delivered; auto-processing is paused until you send input.";
+
+/// Per-parent-node loop-breaker state for auto child-report processing turns.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct SpawnAutoLoopState {
+    /// Consecutive auto-triggered processing turns that each dispatched follow-up work.
+    pub(crate) chain: u32,
+    /// An auto processing prompt was submitted; the node's next turn is auto-triggered.
+    pub(crate) pending_auto_turn: bool,
+    /// The node's currently running turn was auto-triggered by a child report.
+    pub(crate) auto_turn_running: bool,
+    /// The currently running auto turn already dispatched (already counted toward the chain).
+    pub(crate) auto_turn_dispatched: bool,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SpawnTaskDispatch {
@@ -415,7 +436,23 @@ impl App {
             session.model = self.native_spawn_fallback_model_for_thread(thread_id);
         }
         if session.model_provider_id.trim().is_empty() {
-            session.model_provider_id = self.config.model_provider_id.clone();
+            // Derive the provider from the model, not the config default: the config default
+            // provider has no relationship to a role-derived or rollout-restored model, and a
+            // mismatched pair 400s at the remote ("Unknown model").
+            session.model_provider_id =
+                crate::chatwidget::ChatWidget::model_provider_for_selection(&session.model)
+                    .unwrap_or_else(|| self.config.model_provider_id.clone());
+        } else if let Some(corrected) =
+            corrected_native_spawn_provider(&session.model, &session.model_provider_id)
+        {
+            tracing::warn!(
+                thread_id = %thread_id,
+                model = %session.model,
+                stored_provider = %session.model_provider_id,
+                corrected_provider = %corrected,
+                "correcting impossible model/provider pair on native spawn session bind"
+            );
+            session.model_provider_id = corrected;
         }
         if session.runtime_workspace_roots.is_empty() {
             session.runtime_workspace_roots = self.config.workspace_roots.clone();
@@ -1127,6 +1164,7 @@ impl App {
         let source_title = self
             .spawn_node_title(source_pane_id)
             .unwrap_or_else(|| self.user_pane_title(source_pane_id));
+        let mut any_queued = false;
         for dispatch in dispatches {
             if dispatch.task.trim().is_empty() {
                 self.record_spawn_dispatch_error(
@@ -1145,6 +1183,7 @@ impl App {
                     let task = task_with_dispatch_provenance(&dispatch.task, &source_title, &label);
                     self.app_event_tx
                         .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
+                    any_queued = true;
                     self.record_spawn_dispatch_queued(
                         source_pane_id,
                         source_is_active,
@@ -1172,6 +1211,7 @@ impl App {
                     let task = task_with_dispatch_provenance(&dispatch.task, &source_title, &title);
                     self.app_event_tx
                         .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task });
+                    any_queued = true;
                     self.record_spawn_dispatch_queued(
                         source_pane_id,
                         source_is_active,
@@ -1184,6 +1224,9 @@ impl App {
                 }
             }
         }
+        if any_queued {
+            self.note_spawn_dispatch_for_auto_loop(source_pane_id);
+        }
     }
 
     pub(crate) fn dispatch_native_spawn_task_blocks_from_turn(
@@ -1191,7 +1234,10 @@ impl App {
         source_thread_id: ThreadId,
         turn: &codex_app_server_protocol::Turn,
     ) {
-        if turn.status == codex_app_server_protocol::TurnStatus::InProgress {
+        // Dispatch only from cleanly completed turns. Interrupted, failed, and in-progress turns
+        // must never dispatch: an interrupted generation can contain a complete-looking
+        // pfterminal_send_task block whose task text was truncated mid-thought.
+        if turn.status != codex_app_server_protocol::TurnStatus::Completed {
             return;
         }
         let mut assistant_text = String::new();
@@ -1208,36 +1254,9 @@ impl App {
             &turn.id,
             &assistant_text,
         );
-        self.clear_spawn_streaming_agent_message_buffers(source_thread_id, &turn.id);
     }
 
-    pub(crate) fn dispatch_native_spawn_task_blocks_from_agent_message_delta(
-        &mut self,
-        source_thread_id: ThreadId,
-        turn_id: &str,
-        item_id: &str,
-        delta: &str,
-    ) {
-        if !self.is_spawn_orchestration_thread(source_thread_id) || delta.is_empty() {
-            return;
-        }
-        let buffer_key = (source_thread_id, turn_id.to_string(), item_id.to_string());
-        let assistant_text = {
-            let buffer = self
-                .spawn_streaming_agent_messages
-                .entry(buffer_key)
-                .or_default();
-            buffer.push_str(delta);
-            buffer.clone()
-        };
-        self.dispatch_native_spawn_task_blocks_from_text(
-            source_thread_id,
-            turn_id,
-            &assistant_text,
-        );
-    }
-
-    fn dispatch_native_spawn_task_blocks_from_text(
+    pub(crate) fn dispatch_native_spawn_task_blocks_from_text(
         &mut self,
         source_thread_id: ThreadId,
         turn_id: &str,
@@ -1270,6 +1289,124 @@ impl App {
         self.dispatch_spawn_task_blocks(&source_node_id, pending_dispatches);
     }
 
+    /// Canonical loop-breaker state key for a native spawn thread; mirrors the source-node
+    /// mapping used by dispatch_native_spawn_task_blocks_from_text so turn events and dispatch
+    /// attribution land on the same key.
+    pub(crate) fn spawn_auto_loop_node_for_thread(&self, thread_id: ThreadId) -> String {
+        if self.is_codex_main_bound_spawn_root_thread(thread_id) {
+            self.spawn_root_node_id()
+        } else {
+            thread_node_id(thread_id)
+        }
+    }
+
+    /// Gate for submitting an auto child-report processing prompt to a parent node. Returns
+    /// false when the loop breaker has paused auto-processing for that node; the caller must
+    /// then surface the report without starting a turn.
+    fn begin_spawn_auto_processing_turn(&mut self, node_key: &str) -> bool {
+        if !self.spawn_operator_input_seen {
+            return false;
+        }
+        let state = self
+            .spawn_auto_loop_state_by_node
+            .entry(node_key.to_string())
+            .or_default();
+        if state.chain >= SPAWN_AUTO_DISPATCH_CHAIN_LIMIT {
+            return false;
+        }
+        state.pending_auto_turn = true;
+        true
+    }
+
+    pub(crate) fn abort_spawn_auto_processing_turn(&mut self, node_key: &str) {
+        if let Some(state) = self.spawn_auto_loop_state_by_node.get_mut(node_key) {
+            state.pending_auto_turn = false;
+        }
+    }
+
+    pub(crate) fn note_spawn_turn_started_for_auto_loop(&mut self, node_key: &str) {
+        let state = self
+            .spawn_auto_loop_state_by_node
+            .entry(node_key.to_string())
+            .or_default();
+        if state.pending_auto_turn {
+            state.pending_auto_turn = false;
+            state.auto_turn_running = true;
+            state.auto_turn_dispatched = false;
+        } else {
+            // A turn this node did not auto-trigger: operator input or a task dispatched to it.
+            // Fresh work resets the auto-processing chain and resumes paused auto-processing.
+            self.spawn_operator_input_seen = true;
+            state.auto_turn_running = false;
+            state.auto_turn_dispatched = false;
+            state.chain = 0;
+        }
+    }
+
+    pub(crate) fn note_spawn_turn_completed_for_auto_loop(&mut self, node_key: &str) {
+        let Some(state) = self.spawn_auto_loop_state_by_node.get_mut(node_key) else {
+            return;
+        };
+        if state.auto_turn_running && !state.auto_turn_dispatched {
+            // The auto processing turn acknowledged without dispatching follow-up work.
+            state.chain = 0;
+        }
+        state.auto_turn_running = false;
+        state.auto_turn_dispatched = false;
+    }
+
+    fn note_spawn_dispatch_for_auto_loop(&mut self, source_node_or_pane_id: &str) {
+        let key = spawn_auto_loop_key(source_node_or_pane_id);
+        let Some(state) = self.spawn_auto_loop_state_by_node.get_mut(&key) else {
+            return;
+        };
+        if state.auto_turn_running && !state.auto_turn_dispatched {
+            state.auto_turn_dispatched = true;
+            state.chain += 1;
+        }
+    }
+
+    fn notify_spawn_auto_processing_paused(
+        &mut self,
+        parent_node_id: &str,
+        report_count: usize,
+        reports: Option<String>,
+    ) {
+        let title = self
+            .spawn_node_title(parent_node_id)
+            .unwrap_or_else(|| parent_node_id.to_string());
+        self.chat_widget.add_info_message(
+            format!(
+                "Auto child-report processing paused for {title}: \
+                 {SPAWN_AUTO_DISPATCH_CHAIN_LIMIT} consecutive auto turns dispatched follow-up \
+                 work. {report_count} report(s) delivered without auto-processing; send the pane \
+                 a new task to resume."
+            ),
+            reports,
+        );
+    }
+
+    fn spawn_auto_processing_quarantined(&self) -> bool {
+        !self.spawn_operator_input_seen
+    }
+
+    fn notify_spawn_resume_auto_processing_quarantined(
+        &mut self,
+        parent_node_id: &str,
+        reports: Option<String>,
+    ) {
+        if !self
+            .spawn_quarantine_notified_by_node
+            .insert(parent_node_id.to_string())
+        {
+            return;
+        }
+        self.chat_widget.add_info_message(
+            SPAWN_RESUME_AUTO_PROCESSING_PAUSED_MESSAGE.to_string(),
+            reports,
+        );
+    }
+
     fn mark_spawn_task_dispatch_processed(
         &mut self,
         source_thread_id: ThreadId,
@@ -1287,17 +1424,6 @@ impl App {
             self.evict_spawn_processed_dispatches_if_needed(&dispatch_key);
         }
         inserted
-    }
-
-    fn clear_spawn_streaming_agent_message_buffers(
-        &mut self,
-        source_thread_id: ThreadId,
-        turn_id: &str,
-    ) {
-        self.spawn_streaming_agent_messages
-            .retain(|(thread_id, buffered_turn_id, _), _| {
-                *thread_id != source_thread_id || buffered_turn_id != turn_id
-            });
     }
 
     fn evict_spawn_processed_dispatches_if_needed(
@@ -1421,11 +1547,26 @@ impl App {
                 );
             }
             if !self.claude_panes.claude_pane_is_running(parent_pane_id) {
-                let trigger_prompt = child_report_processing_prompt(report);
-                self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
-                    pane_id: parent_pane_id.to_string(),
-                    task: trigger_prompt,
-                });
+                if self.begin_spawn_auto_processing_turn(parent_node_id) {
+                    let trigger_prompt = child_report_processing_prompt(report);
+                    self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
+                        pane_id: parent_pane_id.to_string(),
+                        task: trigger_prompt,
+                    });
+                } else {
+                    if self.spawn_auto_processing_quarantined() {
+                        self.notify_spawn_resume_auto_processing_quarantined(
+                            parent_node_id,
+                            Some(report.to_string()),
+                        );
+                    } else {
+                        self.notify_spawn_auto_processing_paused(
+                            parent_node_id,
+                            /*report_count*/ 1,
+                            Some(report.to_string()),
+                        );
+                    }
+                }
             }
             return;
         }
@@ -1458,12 +1599,26 @@ impl App {
                 .unwrap_or(false);
             if is_running {
                 self.enqueue_pending_report(parent_thread_id, report);
-            } else {
+            } else if self.begin_spawn_auto_processing_turn(parent_node_id) {
                 let trigger_prompt = child_report_processing_prompt(report);
                 self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
                     thread_id: parent_thread_id,
                     task: trigger_prompt,
                 });
+            } else {
+                if self.spawn_auto_processing_quarantined() {
+                    self.enqueue_pending_report(parent_thread_id, report);
+                    self.notify_spawn_resume_auto_processing_quarantined(
+                        parent_node_id,
+                        Some(report.to_string()),
+                    );
+                } else {
+                    self.notify_spawn_auto_processing_paused(
+                        parent_node_id,
+                        /*report_count*/ 1,
+                        Some(report.to_string()),
+                    );
+                }
             }
         }
     }
@@ -1510,7 +1665,7 @@ impl App {
         // report at once rather than starting one turn per report. Keep the queue until the event is
         // accepted; if the later turn submission is rejected, the event handler re-queues the report
         // body from the generated processing prompt.
-        let body = {
+        let (body, report_count) = {
             let Some(queue) = self.spawn_pending_reports_by_thread.get(&parent_thread_id) else {
                 return false;
             };
@@ -1518,7 +1673,8 @@ impl App {
                 return false;
             }
             let mut reports: Vec<String> = queue.iter().cloned().collect();
-            if reports.len() == 1 {
+            let report_count = reports.len();
+            let body = if reports.len() == 1 {
                 reports.remove(0)
             } else {
                 let mut combined = String::from(
@@ -1530,8 +1686,24 @@ impl App {
                     let _ = writeln!(combined, "## Child report {index}\n{report}\n");
                 }
                 combined
-            }
+            };
+            (body, report_count)
         };
+        let parent_node_id = self.spawn_auto_loop_node_for_thread(parent_thread_id);
+        if !self.begin_spawn_auto_processing_turn(&parent_node_id) {
+            if self.spawn_auto_processing_quarantined() {
+                self.notify_spawn_resume_auto_processing_quarantined(&parent_node_id, Some(body));
+            } else {
+                self.notify_spawn_auto_processing_paused(&parent_node_id, report_count, Some(body));
+                if let Some(queue) = self
+                    .spawn_pending_reports_by_thread
+                    .get_mut(&parent_thread_id)
+                {
+                    queue.clear();
+                }
+            }
+            return false;
+        }
         let trigger_prompt = child_report_processing_prompt(&body);
         if !self
             .app_event_tx
@@ -1917,6 +2089,8 @@ impl App {
             Some(agent_role.to_string()),
             /*is_closed*/ false,
         );
+        let session_model = started.session.model.clone();
+        let session_model_provider = started.session.model_provider_id.clone();
         let channel = self.ensure_thread_channel(thread_id);
         channel.set_session(started.session, started.turns).await;
         self.persist_spawn_thread_state_metadata(SpawnThreadStateMetadata {
@@ -1927,8 +2101,8 @@ impl App {
                 .agent_navigation
                 .get(&thread_id)
                 .and_then(|entry| entry.agent_nickname.clone()),
-            model: self.native_spawn_fallback_model_for_thread(thread_id),
-            model_provider: self.config.model_provider_id.clone(),
+            model: session_model,
+            model_provider: session_model_provider,
             rollout_path: None,
         })
         .await;
@@ -4190,6 +4364,26 @@ pub(crate) fn node_id_thread(node_id: &str) -> Option<ThreadId> {
         .and_then(|value| ThreadId::from_string(value).ok())
 }
 
+/// Returns the provider a native spawn session must use when its stored (model, provider) pair
+/// is impossible. Thin wrapper over the shared catalog rule — see
+/// [`codex_model_provider_info::corrected_catalog_provider`] for the semantics. The same rule
+/// also runs server-side during config derivation, so this TUI-side pass is defense in depth
+/// for session state that never round-trips through a config load.
+pub(crate) fn corrected_native_spawn_provider(model: &str, provider: &str) -> Option<String> {
+    codex_model_provider_info::corrected_catalog_provider(model, provider).map(str::to_string)
+}
+
+/// Normalizes the mixed identifiers used on dispatch paths (node ids like `thread:...`/`pane:...`
+/// from native turns, raw pane ids from Claude pane turns) to one loop-breaker state key.
+fn spawn_auto_loop_key(source_node_or_pane_id: &str) -> String {
+    if source_node_or_pane_id.starts_with("thread:") || source_node_or_pane_id.starts_with("pane:")
+    {
+        source_node_or_pane_id.to_string()
+    } else {
+        pane_node_id(source_node_or_pane_id)
+    }
+}
+
 fn node_id_pane(node_id: &str) -> Option<&str> {
     node_id.strip_prefix("pane:")
 }
@@ -4728,6 +4922,88 @@ fn format_spawn_agent_nickname(name: &str, nickname_reset_count: usize) -> Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codex_model_provider_info::AMBIENT_PROVIDER_ID;
+    use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+    use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
+
+    #[test]
+    fn corrected_native_spawn_provider_fixes_impossible_pairs_only() {
+        // Impossible pairs observed in the field: fixed.
+        assert_eq!(
+            corrected_native_spawn_provider("zai/glm-5.2-fast", "zai").as_deref(),
+            Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID)
+        );
+        assert_eq!(
+            corrected_native_spawn_provider("zai/glm-5.2-fast", AMBIENT_PROVIDER_ID).as_deref(),
+            Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID)
+        );
+        assert_eq!(
+            corrected_native_spawn_provider(CLAUDE_FABLE_5_PLAN_MODEL, AMBIENT_PROVIDER_ID)
+                .as_deref(),
+            Some(CLAUDE_PLAN_PROVIDER_ID)
+        );
+        assert_eq!(
+            corrected_native_spawn_provider("gpt-5.5", AMBIENT_PROVIDER_ID).as_deref(),
+            Some(OPENAI_PROVIDER_ID)
+        );
+        assert_eq!(
+            corrected_native_spawn_provider("gpt-5.5", ZAI_PROVIDER_ID).as_deref(),
+            Some(OPENAI_PROVIDER_ID)
+        );
+
+        // Consistent pairs: untouched.
+        assert_eq!(
+            corrected_native_spawn_provider("zai/glm-5.2-fast", VERCEL_ANTHROPIC_FAST_PROVIDER_ID),
+            None
+        );
+        assert_eq!(
+            corrected_native_spawn_provider(CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+            None
+        );
+        assert_eq!(corrected_native_spawn_provider("gpt-5.5", "openai"), None);
+
+        // Field incident 2: bare glm-5.2 bound to claude-plan sent Z.AI's model to
+        // api.anthropic.com (404). Bare glm-* belongs to Z.AI direct.
+        assert_eq!(
+            corrected_native_spawn_provider(ZAI_DEFAULT_MODEL, CLAUDE_PLAN_PROVIDER_ID).as_deref(),
+            Some(ZAI_PROVIDER_ID)
+        );
+        assert_eq!(
+            corrected_native_spawn_provider(ZAI_DEFAULT_MODEL, AMBIENT_PROVIDER_ID).as_deref(),
+            Some(ZAI_PROVIDER_ID)
+        );
+        // Both Z.AI wire dialects legitimately serve bare glm-*: untouched.
+        assert_eq!(
+            corrected_native_spawn_provider(ZAI_DEFAULT_MODEL, ZAI_PROVIDER_ID),
+            None
+        );
+        assert_eq!(
+            corrected_native_spawn_provider(ZAI_DEFAULT_MODEL, ZAI_ANTHROPIC_PROVIDER_ID),
+            None
+        );
+
+        // Servable-but-unusual and unknown pairs: untouched (intentional cross-provider setups).
+        assert_eq!(
+            corrected_native_spawn_provider("zai-org/GLM-5.1-FP8", AMBIENT_PROVIDER_ID),
+            None
+        );
+        assert_eq!(
+            corrected_native_spawn_provider("gpt-5.5", "my-azure-provider"),
+            None
+        );
+        assert_eq!(
+            corrected_native_spawn_provider("openai.gpt-5.5", AMBIENT_PROVIDER_ID),
+            None
+        );
+
+        // Empty inputs: untouched.
+        assert_eq!(
+            corrected_native_spawn_provider("", AMBIENT_PROVIDER_ID),
+            None
+        );
+        assert_eq!(corrected_native_spawn_provider("gpt-5.5", ""), None);
+    }
 
     #[test]
     fn spawn_agent_nickname_uses_role_specific_pool() {

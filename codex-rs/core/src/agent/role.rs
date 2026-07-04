@@ -502,9 +502,24 @@ Orcs follow the Troll's assignment exactly, do not expand scope, produce concret
     pub(super) fn config_file_contents(path: &Path) -> Option<&'static str> {
         const EXPLORER: &str = include_str!("builtins/explorer.toml");
         const AWAITER: &str = include_str!("builtins/awaiter.toml");
-        const NAZGUL: &str = include_str!("builtins/nazgul.toml");
-        const TROLL: &str = include_str!("builtins/troll.toml");
-        const ORC: &str = include_str!("builtins/orc.toml");
+        const NAZGUL: &str = concat!(
+            include_str!("builtins/nazgul.toml"),
+            "\nbase_instructions = '''",
+            include_str!("builtins/nazgul_base.md"),
+            "'''\n"
+        );
+        const TROLL: &str = concat!(
+            include_str!("builtins/troll.toml"),
+            "\nbase_instructions = '''",
+            include_str!("builtins/troll_base.md"),
+            "'''\n"
+        );
+        const ORC: &str = concat!(
+            include_str!("builtins/orc.toml"),
+            "\nbase_instructions = '''",
+            include_str!("builtins/orc_base.md"),
+            "'''\n"
+        );
         match path.to_str()? {
             "explorer.toml" => Some(EXPLORER),
             "awaiter.toml" => Some(AWAITER),

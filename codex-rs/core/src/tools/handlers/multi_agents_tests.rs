@@ -484,6 +484,97 @@ async fn spawn_agent_rejects_cross_provider_model_override_for_zai() {
 }
 
 #[tokio::test]
+async fn spawn_agent_allows_catalog_mapped_model_override_for_zai() {
+    #[derive(Debug, Deserialize)]
+    struct SpawnAgentResult {
+        agent_id: String,
+    }
+
+    let (mut session, mut turn) = make_session_and_context().await;
+    let provider_info =
+        built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)[ZAI_PROVIDER_ID]
+            .clone();
+    let mut config = (*turn.config).clone();
+    config.model = Some("glm-5.2".to_string());
+    config.model_provider_id = ZAI_PROVIDER_ID.to_string();
+    config.model_provider = provider_info.clone();
+    turn.model_info.slug = "glm-5.2".to_string();
+    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+    turn.config = Arc::new(config);
+
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = root.thread_id;
+
+    let output = SpawnAgentHandler::default()
+        .handle(invocation(
+            Arc::new(session),
+            Arc::new(turn),
+            "spawn_agent",
+            function_payload(json!({
+                "message": "inspect this repo",
+                "model": "gpt-5.5"
+            })),
+        ))
+        .await
+        .expect("Z.AI spawn should allow a catalog-mapped OpenAI model override");
+    let (content, success) = expect_text_output(output);
+    let result: SpawnAgentResult =
+        serde_json::from_str(&content).expect("spawn_agent result should be json");
+    let snapshot = manager
+        .get_thread(parse_agent_id(&result.agent_id))
+        .await
+        .expect("spawned agent thread should exist")
+        .config_snapshot()
+        .await;
+    assert_eq!(snapshot.model, "gpt-5.5");
+    assert_eq!(snapshot.model_provider_id, OPENAI_PROVIDER_ID);
+    assert_eq!(success, Some(true));
+}
+
+#[tokio::test]
+async fn spawn_agent_rejects_unmapped_model_override_for_zai() {
+    let (session, mut turn) = make_session_and_context().await;
+    let provider_info =
+        built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)[ZAI_PROVIDER_ID]
+            .clone();
+    let mut config = (*turn.config).clone();
+    config.model = Some("glm-5.2".to_string());
+    config.model_provider_id = ZAI_PROVIDER_ID.to_string();
+    config.model_provider = provider_info.clone();
+    turn.model_info.slug = "glm-5.2".to_string();
+    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+    turn.config = Arc::new(config);
+
+    let err = SpawnAgentHandler::default()
+        .handle(invocation(
+            Arc::new(session),
+            Arc::new(turn),
+            "spawn_agent",
+            function_payload(json!({
+                "message": "inspect this repo",
+                "model": "some-unknown-model"
+            })),
+        ))
+        .await
+        .err()
+        .expect("Z.AI spawn should reject unmapped model overrides");
+
+    match err {
+        FunctionCallError::RespondToModel(message) => {
+            assert!(message.contains("provider `zai` model `glm-5.2`"));
+            assert!(message.contains("model `some-unknown-model`"));
+            assert!(message.contains("Subagents inherit the parent provider"));
+        }
+        other => panic!("expected RespondToModel, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn multi_agent_v2_spawn_fork_turns_all_rejects_agent_type_override() {
     let (mut session, mut turn) = make_session_and_context().await;
     let role_name = install_role_with_model_override(&mut turn).await;

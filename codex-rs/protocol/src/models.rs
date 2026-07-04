@@ -1083,6 +1083,11 @@ pub enum ResponseItem {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         action: Option<WebSearchAction>,
+        /// Provider-native server-side search blocks that must be replayed as
+        /// assistant content for providers that own the web-search execution.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "unknown", optional)]
+        anthropic_content_block: Option<serde_json::Value>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         metadata: Option<ResponseItemMetadata>,
@@ -3134,6 +3139,7 @@ mod tests {
                 id: expected_id.clone(),
                 status: expected_status.clone(),
                 action: expected_action.clone(),
+                anthropic_content_block: None,
                 metadata: None,
             };
             assert_eq!(parsed, expected);

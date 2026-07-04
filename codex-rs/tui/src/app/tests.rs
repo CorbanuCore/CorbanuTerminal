@@ -44,6 +44,7 @@ use codex_app_server_protocol::CommandExecutionRequestApprovalParams;
 use codex_app_server_protocol::ConfigWarningNotification;
 use codex_app_server_protocol::FileChangeRequestApprovalParams;
 use codex_app_server_protocol::FileUpdateChange;
+use codex_app_server_protocol::ItemCompletedNotification;
 use codex_app_server_protocol::ItemStartedNotification;
 use codex_app_server_protocol::JSONRPCErrorError;
 use codex_app_server_protocol::McpServerElicitationRequest;
@@ -1839,7 +1840,10 @@ async fn native_spawn_task_session_fallback_fills_model_for_restored_troll() {
     app.apply_native_spawn_task_session_fallbacks(troll_thread_id, &mut session);
 
     assert_eq!(session.model, VERCEL_GLM_5_2_FAST_MODEL);
-    assert_eq!(session.model_provider_id, app.config.model_provider_id);
+    // The fallback provider must be the one that serves the fallback model, not the config
+    // default: a config default like `ambient` cannot run `zai/glm-5.2-fast` and the turn
+    // would 400 at the remote with "Unknown model".
+    assert_eq!(session.model_provider_id, "vercel-anthropic-fast");
 }
 
 #[tokio::test]
@@ -1921,6 +1925,7 @@ fn drain_spawn_agent_task_for(
 #[tokio::test]
 async fn child_report_to_idle_parent_triggers_a_processing_turn() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000401").expect("valid thread id");
     let orc_thread_id =
@@ -1966,8 +1971,77 @@ async fn child_report_to_idle_parent_triggers_a_processing_turn() {
 }
 
 #[tokio::test]
+async fn resumed_child_report_to_idle_parent_waits_for_operator_input_before_auto_processing() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000403").expect("valid thread id");
+    let orc_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000404").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        orc_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(orc_thread_id, troll_thread_id);
+
+    assert!(!app.spawn_operator_input_seen);
+    app.record_spawn_child_report_for_thread(
+        orc_thread_id,
+        codex_app_server_protocol::CollabAgentStatus::Completed,
+        Some("resume-era report".to_string()),
+    );
+
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, troll_thread_id).is_none(),
+        "resumed sessions must not auto-submit child-report processing before live input"
+    );
+    let queue = app
+        .spawn_pending_reports_by_thread
+        .get(&troll_thread_id)
+        .expect("quarantined idle parent report should be queued");
+    assert_eq!(queue.len(), 1);
+    assert!(queue.front().expect("queued report").contains("Snaga"));
+    let parent_node_id = app.spawn_auto_loop_node_for_thread(troll_thread_id);
+    assert!(
+        !app.spawn_auto_loop_state_by_node
+            .get(&parent_node_id)
+            .is_some_and(|state| state.pending_auto_turn),
+        "quarantine must not mark the next parent turn as auto-triggered"
+    );
+
+    app.update_spawn_status_for_thread_notification(&ServerNotification::TurnStarted(
+        codex_app_server_protocol::TurnStartedNotification {
+            thread_id: troll_thread_id.to_string(),
+            turn: test_turn("turn-operator-input", TurnStatus::InProgress, Vec::new()),
+        },
+    ));
+    assert!(app.spawn_operator_input_seen);
+    app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+        troll_thread_id,
+        "turn-operator-input",
+        TurnStatus::Completed,
+        "Acknowledged.",
+    ));
+
+    let task = drain_spawn_agent_task_for(&mut rx, troll_thread_id)
+        .expect("first live parent turn should release queued report processing");
+    assert!(task.contains("A child pane has reported back"));
+    assert!(task.contains("resume-era report"));
+}
+
+#[tokio::test]
 async fn child_report_processing_turn_preserves_actionable_tail_content() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000405").expect("valid thread id");
     let orc_thread_id =
@@ -2030,6 +2104,7 @@ async fn child_report_processing_turn_preserves_actionable_tail_content() {
 #[tokio::test]
 async fn native_turn_completion_report_preserves_actionable_tail_content() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000407").expect("valid thread id");
     let orc_thread_id =
@@ -2072,6 +2147,7 @@ async fn native_turn_completion_report_preserves_actionable_tail_content() {
 #[tokio::test]
 async fn child_report_to_busy_parent_is_queued_not_dropped_then_flushed_on_idle() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000411").expect("valid thread id");
     let orc_thread_id =
@@ -2127,6 +2203,7 @@ async fn child_report_to_busy_parent_is_queued_not_dropped_then_flushed_on_idle(
 #[tokio::test]
 async fn flushed_child_report_is_requeued_when_parent_submission_fails() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000413").expect("valid thread id");
     let orc_thread_id =
@@ -2184,6 +2261,7 @@ async fn flushed_child_report_is_requeued_when_parent_submission_fails() {
 #[tokio::test]
 async fn multiple_reports_to_busy_parent_flush_as_one_combined_turn() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000421").expect("valid thread id");
     let orc_a =
@@ -3019,6 +3097,7 @@ async fn make_child_report_auto_claude_pane_app() -> (
     String,
 ) {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
     let troll_pane_id = app
         .claude_panes
         .create_pane_with_role(
@@ -3581,7 +3660,7 @@ Both sent."#;
 }
 
 #[tokio::test]
-async fn native_troll_streaming_dispatch_routes_valid_blocks_before_final_summary() {
+async fn native_troll_streaming_dispatch_waits_for_clean_turn_completion() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let nazgul_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000641").expect("valid thread id");
@@ -3623,6 +3702,8 @@ async fn native_troll_streaming_dispatch_routes_valid_blocks_before_final_summar
     app.spawn_parent_by_thread
         .insert(ghash_thread_id, troll_thread_id);
 
+    // A dispatch block that is complete in the streaming buffer must NOT fire mid-turn: an
+    // interrupt after this delta would otherwise have already dispatched a truncated thought.
     let streaming_message = r#"Plan set. Dispatching to both Orcs now in parallel.
 
 <pfterminal_send_task target="Snaga">
@@ -3630,8 +3711,7 @@ D11 native dispatch reached Snaga. Write the artifact.
 </pfterminal_send_task>
 
 <pfterminal_send_task target="Ghash">
-D11 native dispatch reached Ghash. Write the artifact.
-</pfterminal_send_task</think>Both dispatches sent."#;
+D11 native dispatch reached Ghash. Write the artifact."#;
     app.update_spawn_status_for_thread_notification(&agent_message_delta_notification(
         troll_thread_id,
         "turn-d11-streaming-dispatch",
@@ -3639,9 +3719,36 @@ D11 native dispatch reached Ghash. Write the artifact.
         streaming_message,
     ));
 
+    while let Ok(event) = rx.try_recv() {
+        if let AppEvent::SubmitSpawnAgentTask { thread_id, .. } = event
+            && (thread_id == snaga_thread_id || thread_id == ghash_thread_id)
+        {
+            panic!("streaming deltas must never dispatch, even with a complete block buffered");
+        }
+    }
+
+    // Only the clean turn completion dispatches, and the partial Ghash block (no close tag in
+    // the final message) is dropped rather than dispatched.
+    let final_message = r#"Plan set. Dispatching to both Orcs now in parallel.
+
+<pfterminal_send_task target="Snaga">
+D11 native dispatch reached Snaga. Write the artifact.
+</pfterminal_send_task>
+
+<pfterminal_send_task target="Ghash">
+D11 native dispatch reached Ghash. Write the artifact."#;
+    app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+        troll_thread_id,
+        "turn-d11-streaming-dispatch",
+        TurnStatus::Completed,
+        final_message,
+    ));
+
     let mut routed_tasks = Vec::new();
     while let Ok(event) = rx.try_recv() {
-        if let AppEvent::SubmitSpawnAgentTask { thread_id, task } = event {
+        if let AppEvent::SubmitSpawnAgentTask { thread_id, task } = event
+            && (thread_id == snaga_thread_id || thread_id == ghash_thread_id)
+        {
             routed_tasks.push((thread_id, task));
         }
     }
@@ -3658,19 +3765,372 @@ D11 native dispatch reached Ghash. Write the artifact.
             .1
             .contains("D11 native dispatch reached Snaga")
     );
+}
+
+#[tokio::test]
+async fn completed_assistant_message_dispatches_before_turn_completed_and_dedupes() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let nazgul_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000645").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000646").expect("valid thread id");
+    let snaga_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000647").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        nazgul_thread_id,
+        Some("Angmar".to_string()),
+        Some("nazgul".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        snaga_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(troll_thread_id, nazgul_thread_id);
+    app.spawn_parent_by_thread
+        .insert(snaga_thread_id, troll_thread_id);
+
+    let message = r#"Dispatch while continuing the same turn.
+<pfterminal_send_task target="Snaga">
+Reply with exactly OK.
+</pfterminal_send_task>
+Now waiting."#;
+
+    app.update_spawn_status_for_thread_notification(&item_completed_notification(
+        troll_thread_id,
+        "turn-item-dispatch",
+        "agent-message-item-dispatch",
+        message,
+    ));
+
+    let first_task = drain_spawn_agent_task_for(&mut rx, snaga_thread_id)
+        .expect("completed assistant item should dispatch before TurnCompleted");
+    assert!(first_task.contains("Assigned by Burzum [troll] to Snaga [orc]"));
+    assert!(first_task.contains("Reply with exactly OK."));
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, snaga_thread_id).is_none(),
+        "only one task should dispatch from ItemCompleted"
+    );
 
     app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
         troll_thread_id,
-        "turn-d11-streaming-dispatch",
+        "turn-item-dispatch",
         TurnStatus::Completed,
-        "D5 acceptance choreograph complete. Report dispatched to Angmar.",
+        message,
     ));
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, snaga_thread_id).is_none(),
+        "TurnCompleted catch-all must dedupe already-dispatched item blocks"
+    );
+}
 
-    while let Ok(event) = rx.try_recv() {
-        if let AppEvent::SubmitSpawnAgentTask { thread_id, .. } = event
-            && (thread_id == snaga_thread_id || thread_id == ghash_thread_id)
-        {
-            panic!("final summary without dispatch blocks must not enqueue duplicate child tasks");
+#[tokio::test]
+async fn partial_completed_assistant_message_and_interrupted_turn_do_not_dispatch() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let nazgul_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000648").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000649").expect("valid thread id");
+    let snaga_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000650").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        nazgul_thread_id,
+        Some("Angmar".to_string()),
+        Some("nazgul".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        snaga_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(troll_thread_id, nazgul_thread_id);
+    app.spawn_parent_by_thread
+        .insert(snaga_thread_id, troll_thread_id);
+
+    let partial_message = r#"Dispatch started.
+<pfterminal_send_task target="Snaga">
+Reply with exactly OK."#;
+
+    app.update_spawn_status_for_thread_notification(&item_completed_notification(
+        troll_thread_id,
+        "turn-partial-item-dispatch",
+        "agent-message-partial-item-dispatch",
+        partial_message,
+    ));
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, snaga_thread_id).is_none(),
+        "partial item blocks must not dispatch"
+    );
+
+    app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+        troll_thread_id,
+        "turn-partial-item-dispatch",
+        TurnStatus::Interrupted,
+        partial_message,
+    ));
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, snaga_thread_id).is_none(),
+        "interrupted turn catch-all must not dispatch partial blocks"
+    );
+}
+
+#[tokio::test]
+async fn auto_report_dispatch_loop_pauses_after_chain_limit_and_resets_on_fresh_turn() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000661").expect("valid thread id");
+    let orc_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000662").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        orc_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(orc_thread_id, troll_thread_id);
+
+    let dispatching_message = r#"Report reviewed. Sending follow-up.
+<pfterminal_send_task target="Snaga">
+Do another lap.
+</pfterminal_send_task>"#;
+
+    // Each cycle: orc reports -> parent auto processing turn starts -> parent turn completes
+    // with a fresh dispatch back to the orc. This is the self-sustaining loop shape.
+    for cycle in 0..crate::spawn_orchestration::SPAWN_AUTO_DISPATCH_CHAIN_LIMIT {
+        app.record_spawn_child_report_for_thread(
+            orc_thread_id,
+            codex_app_server_protocol::CollabAgentStatus::Completed,
+            Some(format!("lap {cycle} done")),
+        );
+        let task = drain_spawn_agent_task_for(&mut rx, troll_thread_id).unwrap_or_else(|| {
+            panic!("cycle {cycle}: parent below the chain limit should auto-process the report")
+        });
+        assert!(task.contains("A child pane has reported back"));
+
+        let turn_id = format!("turn-auto-loop-{cycle}");
+        app.update_spawn_status_for_thread_notification(&ServerNotification::TurnStarted(
+            codex_app_server_protocol::TurnStartedNotification {
+                thread_id: troll_thread_id.to_string(),
+                turn: test_turn(&turn_id, TurnStatus::InProgress, Vec::new()),
+            },
+        ));
+        app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+            troll_thread_id,
+            &turn_id,
+            TurnStatus::Completed,
+            &format!("{dispatching_message}\ncycle {cycle}"),
+        ));
+        assert!(
+            drain_spawn_agent_task_for(&mut rx, orc_thread_id).is_some(),
+            "cycle {cycle}: the auto turn's dispatch should reach the orc"
+        );
+    }
+
+    // The next report exceeds the chain limit: no auto processing turn may start.
+    app.record_spawn_child_report_for_thread(
+        orc_thread_id,
+        codex_app_server_protocol::CollabAgentStatus::Completed,
+        Some("one lap too many".to_string()),
+    );
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, troll_thread_id).is_none(),
+        "auto-processing must pause once the dispatch chain limit is reached"
+    );
+
+    // Fresh work (a turn the host did not auto-trigger, e.g. operator input or a task
+    // dispatched to the parent) resets the chain and resumes auto-processing.
+    app.update_spawn_status_for_thread_notification(&ServerNotification::TurnStarted(
+        codex_app_server_protocol::TurnStartedNotification {
+            thread_id: troll_thread_id.to_string(),
+            turn: test_turn("turn-operator-input", TurnStatus::InProgress, Vec::new()),
+        },
+    ));
+    app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+        troll_thread_id,
+        "turn-operator-input",
+        TurnStatus::Completed,
+        "Understood, standing by.",
+    ));
+    while rx.try_recv().is_ok() {}
+
+    app.record_spawn_child_report_for_thread(
+        orc_thread_id,
+        codex_app_server_protocol::CollabAgentStatus::Completed,
+        Some("post-reset report".to_string()),
+    );
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, troll_thread_id).is_some(),
+        "a fresh non-auto turn must reset the chain and resume auto-processing"
+    );
+}
+
+#[tokio::test]
+async fn auto_report_turns_that_acknowledge_without_dispatch_do_not_trip_the_loop_breaker() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    app.spawn_operator_input_seen = true;
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000671").expect("valid thread id");
+    let orc_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000672").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        orc_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(orc_thread_id, troll_thread_id);
+
+    // Many report -> acknowledge cycles: no dispatch in the auto turn, so the chain resets
+    // every cycle and auto-processing keeps working well past the chain limit.
+    for cycle in 0..(crate::spawn_orchestration::SPAWN_AUTO_DISPATCH_CHAIN_LIMIT * 3) {
+        app.record_spawn_child_report_for_thread(
+            orc_thread_id,
+            codex_app_server_protocol::CollabAgentStatus::Completed,
+            Some(format!("status update {cycle}")),
+        );
+        assert!(
+            drain_spawn_agent_task_for(&mut rx, troll_thread_id).is_some(),
+            "cycle {cycle}: acknowledging parents must never be paused"
+        );
+        let turn_id = format!("turn-ack-{cycle}");
+        app.update_spawn_status_for_thread_notification(&ServerNotification::TurnStarted(
+            codex_app_server_protocol::TurnStartedNotification {
+                thread_id: troll_thread_id.to_string(),
+                turn: test_turn(&turn_id, TurnStatus::InProgress, Vec::new()),
+            },
+        ));
+        app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+            troll_thread_id,
+            &turn_id,
+            TurnStatus::Completed,
+            "Acknowledged; no action needed.",
+        ));
+    }
+}
+
+#[tokio::test]
+async fn native_spawn_session_fallbacks_bind_provider_from_model() {
+    let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000681").expect("valid thread id");
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+
+    // Restored session with no model and no provider: the role fallback model must bind the
+    // provider that serves it, not the config default provider.
+    let mut session = ThreadSessionState {
+        model: String::new(),
+        model_provider_id: String::new(),
+        ..test_thread_session(troll_thread_id, test_path_buf("/tmp/troll"))
+    };
+    app.apply_native_spawn_task_session_fallbacks(troll_thread_id, &mut session);
+    assert_eq!(session.model, "zai/glm-5.2-fast");
+    assert_eq!(session.model_provider_id, "vercel-anthropic-fast");
+
+    // Impossible stored pair (field incident: orc metadata said gpt-5.5 on ambient): corrected.
+    let mut session = ThreadSessionState {
+        model: "gpt-5.5".to_string(),
+        model_provider_id: "ambient".to_string(),
+        ..test_thread_session(troll_thread_id, test_path_buf("/tmp/troll"))
+    };
+    app.apply_native_spawn_task_session_fallbacks(troll_thread_id, &mut session);
+    assert_eq!(session.model, "gpt-5.5");
+    assert_eq!(session.model_provider_id, "openai");
+
+    // Servable cross-provider pair (ambient serves z-ai/glm-5.2): untouched.
+    let mut session = ThreadSessionState {
+        model: "z-ai/glm-5.2".to_string(),
+        model_provider_id: "ambient".to_string(),
+        ..test_thread_session(troll_thread_id, test_path_buf("/tmp/troll"))
+    };
+    app.apply_native_spawn_task_session_fallbacks(troll_thread_id, &mut session);
+    assert_eq!(session.model, "z-ai/glm-5.2");
+    assert_eq!(session.model_provider_id, "ambient");
+}
+
+#[tokio::test]
+async fn interrupted_turn_never_dispatches_even_with_complete_blocks() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let nazgul_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000651").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000652").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        nazgul_thread_id,
+        Some("Angmar".to_string()),
+        Some("nazgul".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(troll_thread_id, nazgul_thread_id);
+
+    let message = r#"Dispatching.
+<pfterminal_send_task target="Burzum">
+Task: um to remove the artifact and stop generating unvalidated busywork.
+</pfterminal_send_task>
+More text that never finished"#;
+
+    for status in [TurnStatus::Interrupted, TurnStatus::Failed] {
+        app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+            nazgul_thread_id,
+            "turn-interrupted-dispatch",
+            status.clone(),
+            message,
+        ));
+        while let Ok(event) = rx.try_recv() {
+            if let AppEvent::SubmitSpawnAgentTask { thread_id, .. } = event
+                && thread_id == troll_thread_id
+            {
+                panic!("{status:?} turn must never dispatch spawn task blocks");
+            }
         }
     }
 }
@@ -3816,6 +4276,62 @@ async fn bound_nazgul_root_persists_role_metadata_to_state_db() {
         .expect("root row should be persisted");
     assert_eq!(metadata.agent_role.as_deref(), Some("nazgul"));
     assert_eq!(metadata.agent_nickname.as_deref(), Some("Main"));
+}
+
+#[tokio::test]
+async fn native_spawn_registration_persists_started_session_model_provider_pair() {
+    let mut app = make_test_app().await;
+    let codex_home = tempdir().expect("codex home");
+    app.config.codex_home = codex_home.path().to_path_buf().abs();
+    app.config.sqlite_home = codex_home.path().to_path_buf();
+    app.config.model_provider_id = "claude-plan".to_string();
+    let state_db = codex_state::StateRuntime::init(
+        codex_home.path().to_path_buf(),
+        app.config.model_provider_id.clone(),
+    )
+    .await
+    .expect("state db");
+    app.state_db = Some(state_db.clone());
+
+    let parent_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000238").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000239").expect("valid thread id");
+    app.upsert_agent_picker_thread(
+        parent_thread_id,
+        Some("Main".to_string()),
+        Some("nazgul".to_string()),
+        /*is_closed*/ false,
+    );
+
+    let started = crate::app_server_session::AppServerStartedThread {
+        session: ThreadSessionState {
+            model: "gpt-5.5".to_string(),
+            model_provider_id: "openai".to_string(),
+            reasoning_effort: Some(ReasoningEffortConfig::XHigh),
+            ..test_thread_session(troll_thread_id, test_path_buf("/tmp/project"))
+        },
+        turns: Vec::new(),
+    };
+    app.register_spawn_agent_pane(
+        troll_thread_id,
+        parent_thread_id,
+        crate::spawn_orchestration::thread_node_id(parent_thread_id),
+        Some("Burzum".to_string()),
+        "troll",
+        started,
+    )
+    .await;
+
+    let metadata = state_db
+        .get_thread(troll_thread_id)
+        .await
+        .expect("read metadata")
+        .expect("spawn row should be persisted");
+    assert_eq!(metadata.agent_role.as_deref(), Some("troll"));
+    assert_eq!(metadata.agent_nickname.as_deref(), Some("Burzum"));
+    assert_eq!(metadata.model.as_deref(), Some("gpt-5.5"));
+    assert_eq!(metadata.model_provider, "openai");
 }
 
 #[tokio::test]
@@ -7037,7 +7553,9 @@ async fn make_test_app() -> App {
         spawn_parent_reports_by_node: HashMap::new(),
         spawn_pending_reports_by_thread: HashMap::new(),
         spawn_processed_dispatches: HashSet::new(),
-        spawn_streaming_agent_messages: HashMap::new(),
+        spawn_auto_loop_state_by_node: HashMap::new(),
+        spawn_operator_input_seen: false,
+        spawn_quarantine_notified_by_node: HashSet::new(),
         spawn_nazgul_pane_id: None,
         side_threads: HashMap::new(),
         claude_panes: crate::claude_panes::ClaudePaneRegistry::new(),
@@ -7112,7 +7630,9 @@ async fn make_test_app_with_channels() -> (
             spawn_parent_reports_by_node: HashMap::new(),
             spawn_pending_reports_by_thread: HashMap::new(),
             spawn_processed_dispatches: HashSet::new(),
-            spawn_streaming_agent_messages: HashMap::new(),
+            spawn_auto_loop_state_by_node: HashMap::new(),
+            spawn_operator_input_seen: false,
+            spawn_quarantine_notified_by_node: HashSet::new(),
             spawn_nazgul_pane_id: None,
             side_threads: HashMap::new(),
             claude_panes: crate::claude_panes::ClaudePaneRegistry::new(),
@@ -7669,6 +8189,25 @@ fn agent_message_delta_notification(
         turn_id: turn_id.to_string(),
         item_id: item_id.to_string(),
         delta: delta.to_string(),
+    })
+}
+
+fn item_completed_notification(
+    thread_id: ThreadId,
+    turn_id: &str,
+    item_id: &str,
+    message: &str,
+) -> ServerNotification {
+    ServerNotification::ItemCompleted(ItemCompletedNotification {
+        thread_id: thread_id.to_string(),
+        turn_id: turn_id.to_string(),
+        item: ThreadItem::AgentMessage {
+            id: item_id.to_string(),
+            text: message.to_string(),
+            phase: None,
+            memory_citation: None,
+        },
+        completed_at_ms: 0,
     })
 }
 

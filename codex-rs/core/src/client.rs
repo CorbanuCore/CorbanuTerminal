@@ -178,6 +178,9 @@ const CHAT_COMPLETIONS_ENDPOINT: &str = "/chat/completions";
 const ANTHROPIC_MESSAGES_ENDPOINT: &str = "/messages";
 const ANTHROPIC_MESSAGES_DEFAULT_MAX_TOKENS: i64 = 32_000;
 const ANTHROPIC_MESSAGES_MAX_CACHE_CONTROL_BLOCKS: usize = 4;
+const ANTHROPIC_WEB_SEARCH_TOOL_TYPE: &str = "web_search_20260209";
+const ANTHROPIC_WEB_SEARCH_TOOL_TYPE_LEGACY: &str = "web_search_20250305";
+const ANTHROPIC_WEB_SEARCH_MAX_USES: i64 = 8;
 const CLAUDE_CODE_IDENTITY_PROMPT: &str =
     "You are Claude Code, Anthropic's official CLI for Claude.";
 const RESPONSES_COMPACT_ENDPOINT: &str = "/responses/compact";
@@ -1313,15 +1316,13 @@ impl ModelClient {
             }));
         }
         if !instructions.is_empty() {
-            let mut instruction_block = json!({
+            let instruction_block = json!({
                 "type": "text",
                 "text": instructions,
             });
-            if !is_claude_plan && let Some(object) = instruction_block.as_object_mut() {
-                object.insert("cache_control".to_string(), json!({ "type": "ephemeral" }));
-            }
             system.push(instruction_block);
         }
+        apply_anthropic_cache_control_to_last_system_block(&mut system);
 
         let input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
         let mut messages = Vec::new();
@@ -2987,6 +2988,12 @@ fn append_anthropic_message_for_response_item(
                 }),
             );
         }
+        ResponseItem::WebSearchCall {
+            anthropic_content_block: Some(block),
+            ..
+        } => {
+            push_anthropic_message(messages, "assistant", block);
+        }
         ResponseItem::Reasoning { .. }
         | ResponseItem::LocalShellCall { .. }
         | ResponseItem::ToolSearchCall { .. }
@@ -3032,6 +3039,14 @@ fn apply_anthropic_cache_control_to_last_user_messages(messages: &mut [Value]) {
         if let Some(message) = messages.get_mut(index) {
             mark_anthropic_message_cache_control(message);
         }
+    }
+}
+
+fn apply_anthropic_cache_control_to_last_system_block(system: &mut [Value]) {
+    if let Some(block) = system.last_mut()
+        && let Some(object) = block.as_object_mut()
+    {
+        object.insert("cache_control".to_string(), json!({ "type": "ephemeral" }));
     }
 }
 
@@ -3130,12 +3145,27 @@ fn create_tools_json_for_anthropic_messages(tools: &[ToolSpec]) -> Result<Vec<Va
         .iter()
         .filter_map(|tool| tool_spec_to_anthropic_tool(tool))
         .collect::<Result<Vec<_>>>()?;
+    tools.sort_by_key(|tool| {
+        usize::from(
+            tool.get("type").and_then(Value::as_str) != Some(ANTHROPIC_WEB_SEARCH_TOOL_TYPE),
+        )
+    });
     mark_last_anthropic_tool_cache_control(&mut tools);
     Ok(tools)
 }
 
 fn mark_last_anthropic_tool_cache_control(tools: &mut [Value]) {
-    if let Some(object) = tools.last_mut().and_then(Value::as_object_mut) {
+    if let Some(object) = tools
+        .iter_mut()
+        .rev()
+        .filter_map(Value::as_object_mut)
+        .find(|object| {
+            !matches!(
+                object.get("type").and_then(Value::as_str),
+                Some(ANTHROPIC_WEB_SEARCH_TOOL_TYPE) | Some(ANTHROPIC_WEB_SEARCH_TOOL_TYPE_LEGACY)
+            )
+        })
+    {
         object.insert("cache_control".to_string(), json!({ "type": "ephemeral" }));
     }
 }
@@ -3150,11 +3180,41 @@ fn tool_spec_to_anthropic_tool(tool: &ToolSpec) -> Option<Result<Value>> {
             },
         )),
         ToolSpec::Freeform(tool) => Some(Ok(freeform_tool_to_anthropic_tool(tool))),
-        ToolSpec::Namespace(_)
-        | ToolSpec::ToolSearch { .. }
-        | ToolSpec::ImageGeneration { .. }
-        | ToolSpec::WebSearch { .. } => None,
+        ToolSpec::WebSearch { .. } => Some(Ok(anthropic_web_search_tool_with_type(
+            tool,
+            ANTHROPIC_WEB_SEARCH_TOOL_TYPE,
+        ))),
+        ToolSpec::Namespace(_) | ToolSpec::ToolSearch { .. } | ToolSpec::ImageGeneration { .. } => {
+            None
+        }
     }
+}
+
+fn anthropic_web_search_tool_with_type(tool: &ToolSpec, tool_type: &str) -> Value {
+    let ToolSpec::WebSearch {
+        filters,
+        user_location,
+        ..
+    } = tool
+    else {
+        return Value::Null;
+    };
+
+    let mut object = serde_json::Map::new();
+    object.insert("type".to_string(), json!(tool_type));
+    object.insert("name".to_string(), json!("web_search"));
+    object.insert("max_uses".to_string(), json!(ANTHROPIC_WEB_SEARCH_MAX_USES));
+    object.insert("allowed_callers".to_string(), json!(["direct"]));
+    if let Some(filters) = filters
+        && let Some(allowed_domains) = filters.allowed_domains.as_ref()
+        && !allowed_domains.is_empty()
+    {
+        object.insert("allowed_domains".to_string(), json!(allowed_domains));
+    }
+    if let Some(user_location) = user_location {
+        object.insert("user_location".to_string(), json!(user_location));
+    }
+    Value::Object(object)
 }
 
 fn responses_tool_to_anthropic_tool(mut tool: Value) -> Option<Value> {

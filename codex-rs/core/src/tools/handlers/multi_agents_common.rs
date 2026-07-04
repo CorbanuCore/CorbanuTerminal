@@ -297,7 +297,7 @@ pub(crate) async fn apply_requested_spawn_agent_model_overrides(
             }
             return Ok(());
         }
-        reject_spawn_agent_model_switch_for_third_party_provider(turn, requested_model)?;
+        reject_spawn_agent_model_switch_for_third_party_provider(turn, config, requested_model)?;
         let available_models = session
             .services
             .models_manager
@@ -311,6 +311,22 @@ pub(crate) async fn apply_requested_spawn_agent_model_overrides(
             .await;
 
         config.model = Some(selected_model_name.clone());
+        // A model switch must not silently keep the parent's provider when that provider cannot
+        // serve the selected model — the child's first turn would 400/404 with "Unknown model".
+        if let Some(corrected) = codex_model_provider_info::corrected_catalog_provider(
+            &selected_model_name,
+            &config.model_provider_id,
+        ) && let Some(info) = config.model_providers.get(corrected)
+        {
+            tracing::warn!(
+                model = %selected_model_name,
+                parent_provider = %config.model_provider_id,
+                corrected_provider = corrected,
+                "correcting inherited provider for spawn_agent model switch"
+            );
+            config.model_provider_id = corrected.to_string();
+            config.model_provider = info.clone();
+        }
         if let Some(reasoning_effort) = requested_reasoning_effort {
             validate_spawn_agent_reasoning_effort(
                 &selected_model_name,
@@ -414,6 +430,7 @@ fn find_spawn_agent_model_name(
 
 fn reject_spawn_agent_model_switch_for_third_party_provider(
     turn: &TurnContext,
+    child_config: &Config,
     requested_model: &str,
 ) -> Result<(), FunctionCallError> {
     let provider_info = turn.provider.info();
@@ -422,6 +439,13 @@ fn reject_spawn_agent_model_switch_for_third_party_provider(
         || provider_info.is_openrouter()
         || provider_info.is_baseten()
         || provider_info.is_vercel())
+    {
+        return Ok(());
+    }
+    if let Some(corrected) = codex_model_provider_info::corrected_catalog_provider(
+        requested_model,
+        &turn.config.model_provider_id,
+    ) && child_config.model_providers.contains_key(corrected)
     {
         return Ok(());
     }
