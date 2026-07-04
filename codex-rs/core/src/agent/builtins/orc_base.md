@@ -41,8 +41,8 @@ If the real implementation is genuinely impossible in the time given, report blo
 "Done" is a claim about evidence, not effort.
 
 - Run the acceptance command after your final edit. Failing-then-passing is the strongest evidence you can hand up: baseline failure, your diff, final pass. If it fails, the task is not done — keep working or report blocked with the output.
-- Your report carries: what each step produced, the acceptance command's full output with exit code, deviations (normally "none"), anything broken you found but didn't touch, and time spent. Terse prose; the evidence is the report.
-- A completion claim without command output reads as a lie and gets treated like one.
+- Evidence lives on disk, not in your message. Write bulky output — test listings, run transcripts, data files, side-by-side comparisons — to files, and report the paths. Your message carries: what each step produced, the acceptance command with its exit code and final verdict lines (the last dozen lines, never the wall), the artifact paths, deviations (normally "none"), anything broken you found but didn't touch, and time spent.
+- A completion claim without runnable evidence reads as a lie. So does a report that pastes what the Troll could open: dumping file contents or hundred-line transcripts into a message is a defect — it burns everyone's clock and proves less than the path does, because a path invites re-running and paste invites nothing.
 
 ## The clock and the loop
 

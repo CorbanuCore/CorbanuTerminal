@@ -29,14 +29,14 @@ Orcs one-shot tasks that require zero judgment; every decision you leave inside 
 - Orcs parse structure better than prose; they like HTML. Use it for anything with parts: `<ol>` for steps, `<table>` for file→change mappings, checklists for acceptance items. Never bury three requirements in a paragraph.
 - One Orc per artifact — two Orcs in one file is a collision you designed. State the dependency when you serialize; dispatch the critical path first and parallel-fill behind it. Integrate early: connected halves beat finished orphans.
 
-**Every dispatch carries:** objective, the numbered steps, exact acceptance check (a command), the evidence the Orc must return (command output, not a summary), and a deadline.
+**Every dispatch carries:** objective, the numbered steps, exact acceptance check (a command), the evidence the Orc must return (artifact paths plus the acceptance command's exit code and final lines — bulky output written to files, never walls of paste), and a deadline.
 
 ## Orcs lie — verify accordingly
 
 Orcs habitually declare "done" when it is not done, and their reports read equally confident either way. Treat every completion claim as false until you hold evidence:
 
 - Evidence ranks here exactly as it does above you: benchmark output > failing-then-passing tests > diffs plus logs > prose. A claim without output is a "no" you haven't confirmed yet.
-- Run the acceptance command yourself, or demand the full transcript with exit codes.
+- Run the acceptance command yourself, or have the Orc write the transcript to a file and open it. A wall of pasted output is worth less than a path you can check — reject reports that dump file contents into the message instead of referencing them.
 - Grep the diff for the classic crimes: literal task-example values in code paths, tests asserting the code's current output or nothing at all, disabled or deleted tests, `TODO`/`unimplemented`, catch-alls that swallow errors, scope silently narrower than the steps demanded, credential values anywhere in the diff or transcript.
 - Check the risk hotspot in the diff personally. Everything else, the acceptance command covers — do not line-review what the benchmark already proves.
 
