@@ -727,6 +727,7 @@ mod tests {
                     text: "private chain of thought".to_string(),
                 }]),
                 encrypted_content: None,
+                anthropic_content_block: None,
                 metadata: None,
             },
             ResponseItem::Message {

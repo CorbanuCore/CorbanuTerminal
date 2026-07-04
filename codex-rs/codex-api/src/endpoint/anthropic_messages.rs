@@ -195,6 +195,7 @@ struct AnthropicDelta {
     r#type: Option<String>,
     text: Option<String>,
     thinking: Option<String>,
+    signature: Option<String>,
     partial_json: Option<String>,
     stop_reason: Option<String>,
 }
@@ -260,7 +261,9 @@ struct AnthropicStreamState {
     message_text: String,
     message_added: bool,
     reasoning_text: String,
+    reasoning_signature: Option<String>,
     reasoning_added: bool,
+    reasoning_header_emitted: bool,
     reasoning_done: bool,
     tool_calls: BTreeMap<usize, AnthropicToolCallState>,
     server_tool_uses: BTreeMap<usize, AnthropicServerToolUseState>,
@@ -278,7 +281,9 @@ impl AnthropicStreamState {
             message_text: String::new(),
             message_added: false,
             reasoning_text: String::new(),
+            reasoning_signature: None,
             reasoning_added: false,
+            reasoning_header_emitted: false,
             reasoning_done: false,
             tool_calls: BTreeMap::new(),
             server_tool_uses: BTreeMap::new(),
@@ -462,6 +467,13 @@ impl AnthropicStreamState {
                     return self.emit_reasoning_delta(thinking, tx_event).await;
                 }
             }
+            Some("signature_delta") => {
+                if let Some(signature) = delta.signature
+                    && !signature.is_empty()
+                {
+                    self.reasoning_signature = Some(signature);
+                }
+            }
             Some("input_json_delta") => {
                 if let Some(index) = event.index
                     && let Some(partial_json) = delta.partial_json
@@ -555,6 +567,7 @@ impl AnthropicStreamState {
                 summary: Vec::new(),
                 content: None,
                 encrypted_content: None,
+                anthropic_content_block: None,
                 metadata: None,
             };
             if tx_event
@@ -566,11 +579,24 @@ impl AnthropicStreamState {
             }
             self.reasoning_added = true;
         }
+        if !self.reasoning_header_emitted {
+            if tx_event
+                .send(Ok(ResponseEvent::ReasoningSummaryDelta {
+                    delta: "**Reasoning**\n\n".to_string(),
+                    summary_index: 0,
+                }))
+                .await
+                .is_err()
+            {
+                return false;
+            }
+            self.reasoning_header_emitted = true;
+        }
         self.reasoning_text.push_str(&thinking);
         tx_event
-            .send(Ok(ResponseEvent::ReasoningContentDelta {
+            .send(Ok(ResponseEvent::ReasoningSummaryDelta {
                 delta: thinking,
-                content_index: 0,
+                summary_index: 0,
             }))
             .await
             .is_ok()
@@ -588,11 +614,24 @@ impl AnthropicStreamState {
                 text: self.reasoning_text.clone(),
             }]
         });
+        let anthropic_content_block = (!self.reasoning_text.is_empty()).then(|| {
+            let mut block = serde_json::Map::new();
+            block.insert("type".to_string(), Value::String("thinking".to_string()));
+            block.insert(
+                "thinking".to_string(),
+                Value::String(self.reasoning_text.clone()),
+            );
+            if let Some(signature) = self.reasoning_signature.clone() {
+                block.insert("signature".to_string(), Value::String(signature));
+            }
+            Value::Object(block)
+        });
         let item = ResponseItem::Reasoning {
             id: Some(self.reasoning_id()),
             summary: Vec::<ReasoningItemReasoningSummary>::new(),
             content,
             encrypted_content: None,
+            anthropic_content_block,
             metadata: None,
         };
         if tx_event
@@ -984,6 +1023,80 @@ data: {"type":"message_stop"}
             }) if response_id == "msg_1"
         );
         assert_eq!(events.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn parses_thinking_as_visible_reasoning_summary_and_preserves_signed_block() {
+        let events = collect_events(&[
+            br#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_think","model":"claude-fable-5","usage":{"input_tokens":1,"output_tokens":0}}}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"first thought"}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-123"}}
+
+"#,
+            br#"event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"visible"}}
+
+"#,
+            br#"event: message_stop
+data: {"type":"message_stop"}
+
+"#,
+        ])
+        .await;
+
+        assert_matches!(
+            &events[1],
+            Ok(ResponseEvent::OutputItemAdded(
+                ResponseItem::Reasoning { .. }
+            ))
+        );
+        assert_matches!(
+            &events[2],
+            Ok(ResponseEvent::ReasoningSummaryDelta { delta, summary_index })
+                if delta == "**Reasoning**\n\n" && *summary_index == 0
+        );
+        assert_matches!(
+            &events[3],
+            Ok(ResponseEvent::ReasoningSummaryDelta { delta, summary_index })
+                if delta == "first thought" && *summary_index == 0
+        );
+        assert_matches!(
+            &events[4],
+            Ok(ResponseEvent::OutputItemDone(ResponseItem::Reasoning {
+                content: Some(content),
+                anthropic_content_block: Some(block),
+                ..
+            })) if content == &vec![ReasoningItemContent::ReasoningText {
+                text: "first thought".to_string(),
+            }]
+                && block.pointer("/type").and_then(Value::as_str) == Some("thinking")
+                && block.pointer("/thinking").and_then(Value::as_str) == Some("first thought")
+                && block.pointer("/signature").and_then(Value::as_str) == Some("sig-123")
+        );
+        assert_matches!(
+            &events[5],
+            Ok(ResponseEvent::OutputItemAdded(ResponseItem::Message { .. }))
+        );
+        assert_matches!(&events[6], Ok(ResponseEvent::OutputTextDelta(delta)) if delta == "visible");
     }
 
     #[tokio::test]

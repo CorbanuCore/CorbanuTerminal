@@ -82,6 +82,7 @@ fn truncates_before_requested_user_message() {
             }],
             content: None,
             encrypted_content: None,
+            anthropic_content_block: None,
             metadata: None,
         },
         ResponseItem::FunctionCall {

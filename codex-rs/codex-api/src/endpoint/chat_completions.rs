@@ -820,6 +820,7 @@ impl ChatStreamState {
             summary: Vec::new(),
             content: Some(Vec::new()),
             encrypted_content: None,
+            anthropic_content_block: None,
             metadata: None,
         };
         if tx_event
@@ -851,6 +852,7 @@ impl ChatStreamState {
             summary: Vec::<ReasoningItemReasoningSummary>::new(),
             content,
             encrypted_content: None,
+            anthropic_content_block: None,
             metadata: None,
         };
         if tx_event

@@ -40,6 +40,8 @@ use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
+use codex_protocol::models::ReasoningItemContent;
+use codex_protocol::models::ReasoningItemReasoningSummary;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::models::WebSearchAction;
 use codex_protocol::openai_models::ModelInfo;
@@ -638,6 +640,35 @@ fn anthropic_replays_server_side_web_search_blocks() {
     assert_eq!(messages[0].pointer("/role"), Some(&json!("assistant")));
     assert_eq!(messages[0].pointer("/content/0"), Some(&server_tool_use));
     assert_eq!(messages[0].pointer("/content/1"), Some(&web_search_result));
+}
+
+#[test]
+fn anthropic_replays_signed_thinking_blocks() {
+    let thinking_block = json!({
+        "type": "thinking",
+        "thinking": "summarized thinking",
+        "signature": "sig-abc"
+    });
+    let mut messages = Vec::new();
+    let mut skipped = std::collections::HashSet::new();
+    super::append_anthropic_message_for_response_item(
+        ResponseItem::Reasoning {
+            id: Some("rs_msg".to_string()),
+            summary: Vec::<ReasoningItemReasoningSummary>::new(),
+            content: Some(vec![ReasoningItemContent::ReasoningText {
+                text: "summarized thinking".to_string(),
+            }]),
+            encrypted_content: None,
+            anthropic_content_block: Some(thinking_block.clone()),
+            metadata: None,
+        },
+        &mut messages,
+        &mut skipped,
+    );
+
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].pointer("/role"), Some(&json!("assistant")));
+    assert_eq!(messages[0].pointer("/content/0"), Some(&thinking_block));
 }
 
 #[test]
@@ -1326,6 +1357,12 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
         Some("adaptive")
     );
     assert_eq!(
+        body.pointer("/thinking/display")
+            .and_then(serde_json::Value::as_str),
+        Some("summarized"),
+        "adaptive Anthropic models should request readable thinking summaries"
+    );
+    assert_eq!(
         body.pointer("/thinking/budget_tokens"),
         None,
         "Opus 4.8 rejects fixed thinking budgets"
@@ -1384,6 +1421,12 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
     assert_eq!(
         body.pointer("/model").and_then(serde_json::Value::as_str),
         Some(CLAUDE_FABLE_5_MODEL)
+    );
+    assert_eq!(
+        body.pointer("/thinking/display")
+            .and_then(serde_json::Value::as_str),
+        Some("summarized"),
+        "Fable otherwise returns omitted thinking blocks with only signatures"
     );
     assert_ne!(
         body.pointer("/system/0/text")

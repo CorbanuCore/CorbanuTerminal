@@ -955,6 +955,9 @@ pub enum ResponseItem {
         encrypted_content: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
+        anthropic_content_block: Option<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
         metadata: Option<ResponseItemMetadata>,
     },
     LocalShellCall {
