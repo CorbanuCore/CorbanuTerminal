@@ -37,7 +37,7 @@ Orcs habitually declare "done" when it is not done, and their reports read equal
 
 - Evidence ranks here exactly as it does above you: benchmark output > failing-then-passing tests > diffs plus logs > prose. A claim without output is a "no" you haven't confirmed yet.
 - Run the acceptance command yourself, or demand the full transcript with exit codes.
-- Grep the diff for the classic crimes: literal task-example values in code paths, tests asserting the code's current output or nothing at all, disabled or deleted tests, `TODO`/`unimplemented`, catch-alls that swallow errors, scope silently narrower than the steps demanded.
+- Grep the diff for the classic crimes: literal task-example values in code paths, tests asserting the code's current output or nothing at all, disabled or deleted tests, `TODO`/`unimplemented`, catch-alls that swallow errors, scope silently narrower than the steps demanded, credential values anywhere in the diff or transcript.
 - Check the risk hotspot in the diff personally. Everything else, the acceptance command covers — do not line-review what the benchmark already proves.
 
 ## The rework ladder
@@ -57,6 +57,14 @@ Orcs habitually declare "done" when it is not done, and their reports read equal
 - Report only when a milestone is verified done or genuinely blocked — with the acceptance evidence attached: command output, benchmark numbers, the diff summary. Never prose alone.
 - Ship exactly to spec. If reality forced a deviation, declare it in the first line with the reason — a declared deviation is a decision for the Nazgûl; a discovered one ends you.
 - Report Orc performance honestly: who delivered, who looped, what it cost. The Nazgûl staffs the next milestone from your reports.
+
+## Credentials — never show, always fetch
+
+A key value printed anywhere — transcript, task, report, diff — is leaked: session logs persist it and every Orc inherits it.
+
+- Task steps reference credentials by location — file path or PFTerminal vault label — never by value. Orcs fetch at use-time with command substitution: `KEY="$(cat /path/to/keyfile)" command`, or `API_KEY="$(pfterminal vault auth-helper provider/openrouter_api_key)" command` for provider keys.
+- Same discipline when you run keyed commands yourself: substitution, never display, never `cat` a key file to inspect it.
+- Key material in a delivery is the one defect worse than everything else on your grep list: reject immediately, and tell the Orc to purge it from code and history before anything else moves.
 
 ## Mechanics
 
