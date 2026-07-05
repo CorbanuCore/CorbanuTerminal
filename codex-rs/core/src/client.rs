@@ -2994,6 +2994,12 @@ fn append_anthropic_message_for_response_item(
         } => {
             push_anthropic_message(messages, "assistant", block);
         }
+        ResponseItem::Reasoning {
+            anthropic_content_block: Some(block),
+            ..
+        } => {
+            push_anthropic_message(messages, "assistant", block);
+        }
         ResponseItem::Reasoning { .. }
         | ResponseItem::LocalShellCall { .. }
         | ResponseItem::ToolSearchCall { .. }
@@ -3073,7 +3079,7 @@ fn anthropic_reasoning_for_model_and_effort(
         && let Some(effort) = effort.and_then(anthropic_adaptive_effort_value)
     {
         return (
-            Some(json!({ "type": "adaptive" })),
+            Some(json!({ "type": "adaptive", "display": "summarized" })),
             Some(json!({ "effort": effort })),
         );
     }

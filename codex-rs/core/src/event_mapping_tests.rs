@@ -404,6 +404,7 @@ fn parses_reasoning_summary_and_raw_content() {
             text: "raw details".to_string(),
         }]),
         encrypted_content: None,
+        anthropic_content_block: None,
         metadata: None,
     };
 
@@ -436,6 +437,7 @@ fn parses_reasoning_including_raw_content() {
                 text: "final thought".to_string(),
             },
         ]),
+        anthropic_content_block: None,
         encrypted_content: None,
         metadata: None,
     };

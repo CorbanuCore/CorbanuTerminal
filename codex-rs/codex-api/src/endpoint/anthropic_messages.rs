@@ -165,7 +165,7 @@ struct AnthropicStreamEvent {
     r#type: String,
     message: Option<AnthropicMessageStart>,
     index: Option<usize>,
-    content_block: Option<AnthropicContentBlock>,
+    content_block: Option<Value>,
     delta: Option<AnthropicDelta>,
     usage: Option<AnthropicUsage>,
     error: Option<AnthropicError>,
@@ -179,22 +179,11 @@ struct AnthropicMessageStart {
 }
 
 #[derive(Debug, Deserialize)]
-struct AnthropicContentBlock {
-    r#type: String,
-    id: Option<String>,
-    name: Option<String>,
-    input: Option<Value>,
-    tool_use_id: Option<String>,
-    content: Option<Value>,
-    text: Option<String>,
-    thinking: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
 struct AnthropicDelta {
     r#type: Option<String>,
     text: Option<String>,
     thinking: Option<String>,
+    signature: Option<String>,
     partial_json: Option<String>,
     stop_reason: Option<String>,
 }
@@ -260,8 +249,11 @@ struct AnthropicStreamState {
     message_text: String,
     message_added: bool,
     reasoning_text: String,
+    reasoning_block: Option<Value>,
     reasoning_added: bool,
-    reasoning_done: bool,
+    reasoning_header_emitted: bool,
+    reasoning_sequence: usize,
+    block_types: BTreeMap<usize, String>,
     tool_calls: BTreeMap<usize, AnthropicToolCallState>,
     server_tool_uses: BTreeMap<usize, AnthropicServerToolUseState>,
     web_search_results: BTreeMap<usize, AnthropicWebSearchResultState>,
@@ -278,8 +270,11 @@ impl AnthropicStreamState {
             message_text: String::new(),
             message_added: false,
             reasoning_text: String::new(),
+            reasoning_block: None,
             reasoning_added: false,
-            reasoning_done: false,
+            reasoning_header_emitted: false,
+            reasoning_sequence: 0,
+            block_types: BTreeMap::new(),
             tool_calls: BTreeMap::new(),
             server_tool_uses: BTreeMap::new(),
             web_search_results: BTreeMap::new(),
@@ -300,7 +295,12 @@ impl AnthropicStreamState {
     }
 
     fn reasoning_id(&self) -> String {
-        format!("rs_{}", self.response_id())
+        let response_id = self.response_id();
+        if self.reasoning_sequence == 0 {
+            format!("rs_{response_id}")
+        } else {
+            format!("rs_{response_id}_{}", self.reasoning_sequence)
+        }
     }
 
     async fn process_event(
@@ -376,59 +376,89 @@ impl AnthropicStreamState {
         let Some(block) = event.content_block else {
             return true;
         };
-        match block.r#type.as_str() {
+        let block_type = block
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let index = event.index.unwrap_or_else(|| self.block_types.len());
+        self.block_types.insert(index, block_type.clone());
+        match block_type.as_str() {
             "text" => {
-                if let Some(text) = block.text
+                if let Some(text) = block.get("text").and_then(Value::as_str)
                     && !text.is_empty()
                 {
+                    let text = text.to_string();
                     self.message_text.push_str(&text);
                     return self.emit_text_delta(text, tx_event).await;
                 }
             }
             "thinking" => {
-                if let Some(thinking) = block.thinking
+                if !self.start_reasoning_block(block, tx_event).await {
+                    return false;
+                }
+                if let Some(thinking) = self
+                    .reasoning_block
+                    .as_ref()
+                    .and_then(|block| block.get("thinking"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
                     && !thinking.is_empty()
                 {
-                    return self.emit_reasoning_delta(thinking, tx_event).await;
+                    self.reasoning_text.push_str(&thinking);
+                    return self.emit_reasoning_visible_delta(thinking, tx_event).await;
+                }
+            }
+            "redacted_thinking" => {
+                if !self.start_reasoning_block(block, tx_event).await {
+                    return false;
                 }
             }
             "tool_use" => {
-                let index = event.index.unwrap_or(self.tool_calls.len());
                 let mut state = AnthropicToolCallState {
-                    id: block.id,
-                    name: block.name.unwrap_or_default(),
+                    id: block.get("id").and_then(Value::as_str).map(str::to_string),
+                    name: block
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
                     arguments: String::new(),
                     emitted: false,
                 };
-                if let Some(input) = block.input
-                    && input != Value::Object(Default::default())
+                if let Some(input) = block.get("input")
+                    && !matches!(input, Value::Object(map) if map.is_empty())
                 {
-                    state.arguments = input.to_string();
+                    state.arguments = input.clone().to_string();
                 }
                 self.tool_calls.insert(index, state);
             }
             "server_tool_use" => {
-                let index = event.index.unwrap_or(self.server_tool_uses.len());
                 let mut state = AnthropicServerToolUseState {
-                    id: block.id,
-                    name: block.name.unwrap_or_default(),
+                    id: block.get("id").and_then(Value::as_str).map(str::to_string),
+                    name: block
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
                     arguments: String::new(),
                     emitted: false,
                 };
-                if let Some(input) = block.input
-                    && input != Value::Object(Default::default())
+                if let Some(input) = block.get("input")
+                    && !matches!(input, Value::Object(map) if map.is_empty())
                 {
-                    state.arguments = input.to_string();
+                    state.arguments = input.clone().to_string();
                 }
                 self.server_tool_uses.insert(index, state);
             }
             "web_search_tool_result" => {
-                let index = event.index.unwrap_or(self.web_search_results.len());
                 self.web_search_results.insert(
                     index,
                     AnthropicWebSearchResultState {
-                        tool_use_id: block.tool_use_id,
-                        content: block.content,
+                        tool_use_id: block
+                            .get("tool_use_id")
+                            .and_then(Value::as_str)
+                            .map(str::to_string),
+                        content: block.get("content").cloned(),
                         emitted: false,
                     },
                 );
@@ -459,7 +489,15 @@ impl AnthropicStreamState {
                 if let Some(thinking) = delta.thinking
                     && !thinking.is_empty()
                 {
+                    self.append_reasoning_block_string_field("thinking", &thinking);
                     return self.emit_reasoning_delta(thinking, tx_event).await;
+                }
+            }
+            Some("signature_delta") => {
+                if let Some(signature) = delta.signature
+                    && !signature.is_empty()
+                {
+                    self.set_reasoning_block_string_field("signature", &signature);
                 }
             }
             Some("input_json_delta") => {
@@ -486,6 +524,15 @@ impl AnthropicStreamState {
         let Some(index) = event.index else {
             return true;
         };
+        if matches!(
+            self.block_types.get(&index).map(String::as_str),
+            Some("thinking" | "redacted_thinking")
+        ) {
+            return self.finish_reasoning_item(tx_event).await;
+        }
+        if !self.finish_reasoning_item(tx_event).await {
+            return false;
+        }
         if !self.emit_server_tool_use(index, tx_event).await {
             return false;
         }
@@ -546,15 +593,36 @@ impl AnthropicStreamState {
         thinking: String,
         tx_event: &mpsc::Sender<Result<ResponseEvent, ApiError>>,
     ) -> bool {
-        if self.reasoning_done || self.message_added {
-            return true;
+        self.reasoning_text.push_str(&thinking);
+        self.emit_reasoning_visible_delta(thinking, tx_event).await
+    }
+
+    async fn start_reasoning_block(
+        &mut self,
+        block: Value,
+        tx_event: &mpsc::Sender<Result<ResponseEvent, ApiError>>,
+    ) -> bool {
+        if !self.finish_reasoning_item(tx_event).await {
+            return false;
         }
+        self.reasoning_text.clear();
+        self.reasoning_block = Some(block);
+        self.reasoning_added = false;
+        self.reasoning_header_emitted = false;
+        self.ensure_reasoning_item_added(tx_event).await
+    }
+
+    async fn ensure_reasoning_item_added(
+        &mut self,
+        tx_event: &mpsc::Sender<Result<ResponseEvent, ApiError>>,
+    ) -> bool {
         if !self.reasoning_added {
             let item = ResponseItem::Reasoning {
                 id: Some(self.reasoning_id()),
                 summary: Vec::new(),
                 content: None,
                 encrypted_content: None,
+                anthropic_content_block: None,
                 metadata: None,
             };
             if tx_event
@@ -566,11 +634,34 @@ impl AnthropicStreamState {
             }
             self.reasoning_added = true;
         }
-        self.reasoning_text.push_str(&thinking);
+        true
+    }
+
+    async fn emit_reasoning_visible_delta(
+        &mut self,
+        thinking: String,
+        tx_event: &mpsc::Sender<Result<ResponseEvent, ApiError>>,
+    ) -> bool {
+        if !self.ensure_reasoning_item_added(tx_event).await {
+            return false;
+        }
+        if !self.reasoning_header_emitted {
+            if tx_event
+                .send(Ok(ResponseEvent::ReasoningSummaryDelta {
+                    delta: "**Reasoning**\n\n".to_string(),
+                    summary_index: 0,
+                }))
+                .await
+                .is_err()
+            {
+                return false;
+            }
+            self.reasoning_header_emitted = true;
+        }
         tx_event
-            .send(Ok(ResponseEvent::ReasoningContentDelta {
+            .send(Ok(ResponseEvent::ReasoningSummaryDelta {
                 delta: thinking,
-                content_index: 0,
+                summary_index: 0,
             }))
             .await
             .is_ok()
@@ -580,7 +671,7 @@ impl AnthropicStreamState {
         &mut self,
         tx_event: &mpsc::Sender<Result<ResponseEvent, ApiError>>,
     ) -> bool {
-        if !self.reasoning_added || self.reasoning_done {
+        if !self.reasoning_added {
             return true;
         }
         let content = (!self.reasoning_text.is_empty()).then(|| {
@@ -588,11 +679,13 @@ impl AnthropicStreamState {
                 text: self.reasoning_text.clone(),
             }]
         });
+        let anthropic_content_block = self.reasoning_block.take();
         let item = ResponseItem::Reasoning {
             id: Some(self.reasoning_id()),
             summary: Vec::<ReasoningItemReasoningSummary>::new(),
             content,
             encrypted_content: None,
+            anthropic_content_block,
             metadata: None,
         };
         if tx_event
@@ -602,8 +695,31 @@ impl AnthropicStreamState {
         {
             return false;
         }
-        self.reasoning_done = true;
+        self.reasoning_text.clear();
+        self.reasoning_added = false;
+        self.reasoning_header_emitted = false;
+        self.reasoning_sequence += 1;
         true
+    }
+
+    fn append_reasoning_block_string_field(&mut self, key: &str, delta: &str) {
+        let Some(Value::Object(block)) = self.reasoning_block.as_mut() else {
+            return;
+        };
+        let entry = block
+            .entry(key.to_string())
+            .or_insert_with(|| Value::String(String::new()));
+        match entry {
+            Value::String(existing) => existing.push_str(delta),
+            other => *other = Value::String(delta.to_string()),
+        }
+    }
+
+    fn set_reasoning_block_string_field(&mut self, key: &str, value: &str) {
+        let Some(Value::Object(block)) = self.reasoning_block.as_mut() else {
+            return;
+        };
+        block.insert(key.to_string(), Value::String(value.to_string()));
     }
 
     async fn emit_tool_call(
@@ -984,6 +1100,217 @@ data: {"type":"message_stop"}
             }) if response_id == "msg_1"
         );
         assert_eq!(events.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn parses_thinking_as_visible_reasoning_summary_and_preserves_signed_block() {
+        let events = collect_events(&[
+            br#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_think","model":"claude-fable-5","usage":{"input_tokens":1,"output_tokens":0}}}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"first thought"}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-123"}}
+
+"#,
+            br#"event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"visible"}}
+
+"#,
+            br#"event: message_stop
+data: {"type":"message_stop"}
+
+"#,
+        ])
+        .await;
+
+        assert_matches!(
+            &events[1],
+            Ok(ResponseEvent::OutputItemAdded(
+                ResponseItem::Reasoning { .. }
+            ))
+        );
+        assert_matches!(
+            &events[2],
+            Ok(ResponseEvent::ReasoningSummaryDelta { delta, summary_index })
+                if delta == "**Reasoning**\n\n" && *summary_index == 0
+        );
+        assert_matches!(
+            &events[3],
+            Ok(ResponseEvent::ReasoningSummaryDelta { delta, summary_index })
+                if delta == "first thought" && *summary_index == 0
+        );
+        assert_matches!(
+            &events[4],
+            Ok(ResponseEvent::OutputItemDone(ResponseItem::Reasoning {
+                content: Some(content),
+                anthropic_content_block: Some(block),
+                ..
+            })) if content == &vec![ReasoningItemContent::ReasoningText {
+                text: "first thought".to_string(),
+            }]
+                && block.pointer("/type").and_then(Value::as_str) == Some("thinking")
+                && block.pointer("/thinking").and_then(Value::as_str) == Some("first thought")
+                && block.pointer("/signature").and_then(Value::as_str) == Some("sig-123")
+        );
+        assert_matches!(
+            &events[5],
+            Ok(ResponseEvent::OutputItemAdded(ResponseItem::Message { .. }))
+        );
+        assert_matches!(&events[6], Ok(ResponseEvent::OutputTextDelta(delta)) if delta == "visible");
+    }
+
+    #[tokio::test]
+    async fn preserves_thinking_before_tool_use_in_stream_order() {
+        let events = collect_events(&[
+            br#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_think_tool","model":"claude-fable-5","usage":{"input_tokens":1,"output_tokens":0}}}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"need a file"}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-tool"}}
+
+"#,
+            br#"event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_read","name":"exec_command","input":{}}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"cmd\":\"pwd\"}"}}
+
+"#,
+            br#"event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+"#,
+            br#"event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":1,"output_tokens":3}}
+
+"#,
+            br#"event: message_stop
+data: {"type":"message_stop"}
+
+"#,
+        ])
+        .await;
+
+        let reasoning_done = events.iter().position(|event| {
+            matches!(
+                event,
+                Ok(ResponseEvent::OutputItemDone(
+                    ResponseItem::Reasoning { .. }
+                ))
+            )
+        });
+        let tool_done = events.iter().position(|event| {
+            matches!(
+                event,
+                Ok(ResponseEvent::OutputItemDone(
+                    ResponseItem::FunctionCall { .. }
+                ))
+            )
+        });
+        assert!(reasoning_done.is_some_and(|index| index < tool_done.unwrap_or(usize::MAX)));
+        assert_matches!(
+            &events[4],
+            Ok(ResponseEvent::OutputItemDone(ResponseItem::Reasoning {
+                anthropic_content_block: Some(block),
+                ..
+            })) if block.pointer("/type").and_then(Value::as_str) == Some("thinking")
+                && block.pointer("/thinking").and_then(Value::as_str) == Some("need a file")
+                && block.pointer("/signature").and_then(Value::as_str) == Some("sig-tool")
+        );
+        assert_matches!(
+            &events[5],
+            Ok(ResponseEvent::OutputItemDone(ResponseItem::FunctionCall {
+                name,
+                call_id,
+                arguments,
+                ..
+            })) if name == "exec_command"
+                && call_id == "toolu_read"
+                && arguments == "{\"cmd\":\"pwd\"}"
+        );
+    }
+
+    #[tokio::test]
+    async fn preserves_redacted_thinking_before_tool_use() {
+        let events = collect_events(&[
+            br#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_redacted","model":"claude-fable-5","usage":{"input_tokens":1,"output_tokens":0}}}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"redacted_thinking","data":"opaque-redacted"}}
+
+"#,
+            br#"event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_read","name":"exec_command","input":{"cmd":"pwd"}}}
+
+"#,
+            br#"event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+"#,
+            br#"event: message_stop
+data: {"type":"message_stop"}
+
+"#,
+        ])
+        .await;
+
+        assert_matches!(
+            &events[1],
+            Ok(ResponseEvent::OutputItemAdded(
+                ResponseItem::Reasoning { .. }
+            ))
+        );
+        assert_matches!(
+            &events[2],
+            Ok(ResponseEvent::OutputItemDone(ResponseItem::Reasoning {
+                content: None,
+                anthropic_content_block: Some(block),
+                ..
+            })) if block.pointer("/type").and_then(Value::as_str) == Some("redacted_thinking")
+                && block.pointer("/data").and_then(Value::as_str) == Some("opaque-redacted")
+        );
+        assert_matches!(
+            &events[3],
+            Ok(ResponseEvent::OutputItemDone(ResponseItem::FunctionCall { call_id, .. }))
+                if call_id == "toolu_read"
+        );
     }
 
     #[tokio::test]
