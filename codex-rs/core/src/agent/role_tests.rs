@@ -20,7 +20,7 @@ const NAZGUL_BASE: &str = include_str!("builtins/nazgul_base.md");
 const TROLL_BASE: &str = include_str!("builtins/troll_base.md");
 const ORC_BASE: &str = include_str!("builtins/orc_base.md");
 const STANDARD_BASE_OUTCOME_MARKER: &str =
-    "carry the user's request through to a real, verified outcome";
+    "inspect code before changing it, keep edits scoped";
 const GPT55_CREATURE_CLAUSE_START: &str = "Never talk about goblins";
 const GPT55_PERSONALITY_MARKER: &str = "You have a vivid inner life as Codex";
 const GPT55_FRONTEND_MARKER: &str =

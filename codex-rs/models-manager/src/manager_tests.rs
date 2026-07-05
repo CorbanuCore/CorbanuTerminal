@@ -28,9 +28,9 @@ mod model_info_overrides_tests;
 
 const STANDARD_BASE: &str = include_str!("../../core/src/agent/builtins/standard_base.md");
 const STANDARD_BASE_OUTCOME_MARKER: &str =
-    "carry the user's request through to a real, verified outcome";
-const STANDARD_BASE_EVIDENCE_MARKER: &str = "Evidence lives on disk";
-const OLD_STANDARD_STUB_MARKER: &str = "use rg or rg --files";
+    "inspect code before changing it, keep edits scoped";
+const STANDARD_BASE_EVIDENCE_MARKER: &str = "only narrate when needed";
+const OLD_STANDARD_BASE_MARKER: &str = "Narrate as you work";
 const GPT55_GUIDE_MARKER: &str = "vivid inner life";
 
 fn assert_standard_base(actual: &str) {
@@ -1111,7 +1111,7 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
                 .base_instructions
                 .contains(STANDARD_BASE_EVIDENCE_MARKER)
         );
-        assert!(!model.base_instructions.contains(OLD_STANDARD_STUB_MARKER));
+        assert!(!model.base_instructions.contains(OLD_STANDARD_BASE_MARKER));
     }
 
     let gpt55 = response
