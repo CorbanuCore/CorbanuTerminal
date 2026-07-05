@@ -2499,6 +2499,13 @@ impl App {
                     .await
                 {
                     Ok(_) => {
+                        self.spawn_status_by_thread.insert(
+                            thread_id,
+                            codex_app_server_protocol::CollabAgentState {
+                                status: codex_app_server_protocol::CollabAgentStatus::Running,
+                                message: None,
+                            },
+                        );
                         self.agent_navigation
                             .set_running(thread_id, /*is_running*/ true);
                         self.agent_navigation

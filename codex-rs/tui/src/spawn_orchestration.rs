@@ -1121,7 +1121,11 @@ impl App {
             );
             let _ = writeln!(
                 context,
-                "Observe completion from child report messages and /spawn status before reviewing or claiming completion."
+                "Each turn, read this roster before acting. An Orc with status=idle or status=completed has finished; if has_new_report=true, review the delivered report before doing anything else."
+            );
+            let _ = writeln!(
+                context,
+                "Never call a listed Orc silent or unresponsive until you have checked its roster status and report marker. Never execute a listed Orc's assigned task yourself; re-dispatch a narrowed task or escalate instead."
             );
             let _ = writeln!(
                 context,
@@ -3885,9 +3889,11 @@ impl App {
             self.primary_thread_id == Some(thread_id),
         );
         let status = spawn_entry_status(self, thread_id, entry);
+        let child_node_id = thread_node_id(thread_id);
+        let has_new_report = self.child_has_new_report(&child_node_id, &name);
         let _ = writeln!(
             context,
-            "{prefix}{name}; status={status}; thread={thread_id}"
+            "{prefix}{name}; status={status}; has_new_report={has_new_report}; thread={thread_id}"
         );
         if let Some(task) = entry
             .last_task_message
@@ -3924,23 +3930,27 @@ impl App {
             crate::claude_panes::ClaudePaneStatus::Idle => "idle",
             crate::claude_panes::ClaudePaneStatus::Running => "running",
         };
+        let child_node_id = pane_node_id(&pane.id);
+        let has_new_report = self.child_has_new_report(&child_node_id, &pane.title);
         if let Some(thread_id) = pane.spawn_thread_id {
             let _ = writeln!(
                 context,
-                "{prefix}{}; role={}; harness=Claude Code; status={}; thread={}; pane={}",
+                "{prefix}{}; role={}; harness=Claude Code; status={}; has_new_report={}; thread={}; pane={}",
                 pane.title,
                 role.label(),
                 status,
+                has_new_report,
                 thread_id,
                 pane.id
             );
         } else {
             let _ = writeln!(
                 context,
-                "{prefix}{}; role={}; harness=Claude Code; status={}; pane={}",
+                "{prefix}{}; role={}; harness=Claude Code; status={}; has_new_report={}; pane={}",
                 pane.title,
                 role.label(),
                 status,
+                has_new_report,
                 pane.id
             );
         }
@@ -3958,6 +3968,29 @@ impl App {
                 compact_spawn_context_value(result)
             );
         }
+    }
+
+    fn child_has_new_report(&self, child_node_id: &str, child_title: &str) -> bool {
+        let parent_node_id = self
+            .spawn_parent_by_node
+            .get(child_node_id)
+            .cloned()
+            .or_else(|| {
+                let child_thread_id = node_id_thread(child_node_id)?;
+                let parent_thread_id = self.spawn_parent_by_thread.get(&child_thread_id)?;
+                Some(thread_node_id(*parent_thread_id))
+            });
+        let Some(parent_node_id) = parent_node_id else {
+            return false;
+        };
+        let Some(reports) = self.spawn_parent_reports_by_node.get(&parent_node_id) else {
+            return false;
+        };
+        reports.iter().rev().any(|report| {
+            report
+                .strip_prefix(child_title)
+                .is_some_and(|rest| rest.starts_with(';'))
+        })
     }
 
     fn write_spawn_parent_reports(&self, context: &mut String, parent_node_id: &str) {
@@ -4029,6 +4062,14 @@ fn write_spawn_dispatch_contract(context: &mut String) {
     let _ = writeln!(
         context,
         "Use exact target names, nicknames, pane ids, or thread ids from this live hierarchy."
+    );
+    let _ = writeln!(
+        context,
+        "Each turn, read this injected roster before declaring a child stalled: status=idle or status=completed means that child is finished and ready for review; has_new_report=true means its report is available in the Recent child reports section."
+    );
+    let _ = writeln!(
+        context,
+        "Never report a child pane as silent or unresponsive until you have checked its roster status and report marker. Managers delegate and review; they do not execute a listed child's assigned task themselves."
     );
 }
 
@@ -4863,7 +4904,7 @@ fn collab_status_label(status: &codex_app_server_protocol::CollabAgentStatus) ->
         codex_app_server_protocol::CollabAgentStatus::PendingInit => "pending",
         codex_app_server_protocol::CollabAgentStatus::Running => "running",
         codex_app_server_protocol::CollabAgentStatus::Interrupted => "interrupted",
-        codex_app_server_protocol::CollabAgentStatus::Completed => "done",
+        codex_app_server_protocol::CollabAgentStatus::Completed => "completed",
         codex_app_server_protocol::CollabAgentStatus::Errored => "error",
         codex_app_server_protocol::CollabAgentStatus::Shutdown => "closed",
         codex_app_server_protocol::CollabAgentStatus::NotFound => "not found",
