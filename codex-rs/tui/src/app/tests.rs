@@ -3660,6 +3660,94 @@ Both sent."#;
 }
 
 #[tokio::test]
+async fn exec_wrapped_native_dispatch_sends_correction_instead_of_routing() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let nazgul_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000635").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000636").expect("valid thread id");
+    let snaga_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000637").expect("valid thread id");
+
+    app.active_thread_id = Some(troll_thread_id);
+    app.upsert_agent_picker_thread(
+        nazgul_thread_id,
+        Some("Angmar".to_string()),
+        Some("nazgul".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        snaga_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(troll_thread_id, nazgul_thread_id);
+    app.spawn_parent_by_thread
+        .insert(snaga_thread_id, troll_thread_id);
+
+    let command = r#"cat <<'DISPATCH'
+<pfterminal_send_task target="Snaga">
+Write /tmp/pfterminal-dispatch-proof.txt with exactly OK and report the path.
+</pfterminal_send_task>
+DISPATCH"#;
+    let notification = ServerNotification::TurnCompleted(TurnCompletedNotification {
+        thread_id: troll_thread_id.to_string(),
+        turn: Turn {
+            completed_at: Some(0),
+            duration_ms: Some(1),
+            ..test_turn(
+                "turn-exec-wrapped-dispatch",
+                TurnStatus::Completed,
+                vec![ThreadItem::CommandExecution {
+                    id: "command-execution-1".to_string(),
+                    command: command.to_string(),
+                    cwd: test_path_buf("/tmp/project").abs().into(),
+                    process_id: None,
+                    source: codex_app_server_protocol::CommandExecutionSource::Agent,
+                    status: codex_app_server_protocol::CommandExecutionStatus::Completed,
+                    command_actions: Vec::new(),
+                    aggregated_output: None,
+                    exit_code: Some(0),
+                    duration_ms: Some(1),
+                }],
+            )
+        },
+    });
+
+    app.update_spawn_status_for_thread_notification(&notification);
+    app.update_spawn_status_for_thread_notification(&notification);
+
+    let mut corrections = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        match event {
+            AppEvent::SubmitSpawnAgentTask { thread_id, .. } if thread_id == snaga_thread_id => {
+                panic!("exec-wrapped dispatch must not route to the Orc");
+            }
+            AppEvent::SubmitSpawnAgentTask { thread_id, task } if thread_id == troll_thread_id => {
+                corrections.push(task);
+            }
+            _ => {}
+        }
+    }
+
+    assert_eq!(
+        corrections.len(),
+        1,
+        "duplicate TurnCompleted replay must not duplicate the correction"
+    );
+    assert!(corrections[0].contains("inside exec_command/shell text"));
+    assert!(corrections[0].contains("plain assistant message text"));
+}
+
+#[tokio::test]
 async fn native_troll_streaming_dispatch_waits_for_clean_turn_completion() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let nazgul_thread_id =
