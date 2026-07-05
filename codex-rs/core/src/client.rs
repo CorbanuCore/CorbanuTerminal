@@ -454,6 +454,16 @@ fn maybe_dump_responses_request(request: &ResponsesApiRequest) {
     let _ = std::fs::write(path, payload);
 }
 
+fn maybe_dump_responses_ws_request(request: &ResponseCreateWsRequest) {
+    let Ok(path) = std::env::var("PFTERMINAL_DUMP_RESPONSES_REQUEST") else {
+        return;
+    };
+    let Ok(payload) = serde_json::to_vec_pretty(request) else {
+        return;
+    };
+    let _ = std::fs::write(path, payload);
+}
+
 fn maybe_dump_chat_request(request: &ChatCompletionsRequest) {
     let Ok(path) = std::env::var("PFTERMINAL_DUMP_CHAT_REQUEST") else {
         return;
@@ -2465,6 +2475,7 @@ impl ModelClientSession {
             let store = ws_payload.store;
             self.client
                 .prepare_response_items_for_request(&mut ws_payload.input, store);
+            maybe_dump_responses_ws_request(ws_payload);
             if previous_response_id_from_untraced_warmup {
                 // The transport can reuse an untraced warmup response id and omit the
                 // already-sent input, but rollout replay needs the logical model-visible

@@ -672,6 +672,38 @@ fn anthropic_replays_signed_thinking_blocks() {
 }
 
 #[test]
+fn chat_replay_drops_anthropic_reasoning_blocks() {
+    let thinking_block = json!({
+        "type": "thinking",
+        "thinking": "summarized thinking",
+        "signature": "sig-abc"
+    });
+    let mut messages = Vec::<codex_api::ChatMessage>::new();
+    let mut skipped = std::collections::HashSet::new();
+    super::append_chat_messages_for_response_item(
+        ResponseItem::Reasoning {
+            id: Some("rs_msg".to_string()),
+            summary: Vec::<ReasoningItemReasoningSummary>::new(),
+            content: Some(vec![ReasoningItemContent::ReasoningText {
+                text: "summarized thinking".to_string(),
+            }]),
+            encrypted_content: None,
+            anthropic_content_block: Some(thinking_block),
+            metadata: None,
+        },
+        &mut messages,
+        &mut skipped,
+    );
+
+    assert_eq!(messages, Vec::<codex_api::ChatMessage>::new());
+    assert!(
+        !serde_json::to_string(&messages)
+            .expect("serialize chat messages")
+            .contains("anthropic_content_block")
+    );
+}
+
+#[test]
 fn anthropic_replays_thinking_before_tool_use_in_same_assistant_turn() {
     let thinking_block = json!({
         "type": "thinking",
