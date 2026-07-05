@@ -116,6 +116,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering as AtomicOrdering;
 use tempfile::tempdir;
 use tokio::time;
 
@@ -125,6 +126,76 @@ macro_rules! assert_app_snapshot {
             assert_snapshot!($name, $value);
         });
     };
+}
+
+#[tokio::test]
+async fn tui_event_drainer_keeps_polling_during_in_process_event_flood() {
+    let terminal_events = (0..512).map(|_| {
+        TuiEvent::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('x'),
+            KeyModifiers::NONE,
+        ))
+    });
+    let mut drained = spawn_tui_event_drainer(Box::pin(tokio_stream::iter(terminal_events)));
+    let (event_tx, _event_rx) =
+        tokio::sync::mpsc::unbounded_channel::<codex_app_server_client::InProcessServerEvent>();
+
+    let flood_task = tokio::spawn(async move {
+        for agent_index in 0..4 {
+            for chunk_index in 0..2048 {
+                event_tx
+                    .send(
+                        codex_app_server_client::InProcessServerEvent::ServerNotification(
+                            ServerNotification::AgentMessageDelta(AgentMessageDeltaNotification {
+                                thread_id: format!("child-thread-{agent_index}"),
+                                turn_id: "turn".to_string(),
+                                item_id: format!("agent-item-{agent_index}"),
+                                delta: "streaming-output\n".to_string(),
+                            }),
+                        ),
+                    )
+                    .expect("simulated app-server event receiver should stay alive");
+                if chunk_index % 256 == 0 {
+                    tokio::task::yield_now().await;
+                }
+            }
+        }
+    });
+
+    time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            if drained
+                .watchdog
+                .pending_events
+                .load(AtomicOrdering::Relaxed)
+                == 512
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("terminal input drainer should not wait for app-server events to be consumed");
+
+    for _ in 0..512 {
+        drained
+            .rx
+            .recv()
+            .await
+            .expect("drained terminal event should be available");
+        drained.watchdog.note_handled();
+    }
+    assert_eq!(
+        drained
+            .watchdog
+            .pending_events
+            .load(AtomicOrdering::Relaxed),
+        0
+    );
+    flood_task
+        .await
+        .expect("simulated app-server event flood should finish");
 }
 
 fn test_absolute_path(path: &str) -> AbsolutePathBuf {

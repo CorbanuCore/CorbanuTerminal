@@ -25,22 +25,53 @@ pub const WS_REQUEST_HEADER_TRACEPARENT_CLIENT_METADATA_KEY: &str = "ws_request_
 pub const WS_REQUEST_HEADER_TRACESTATE_CLIENT_METADATA_KEY: &str = "ws_request_header_tracestate";
 
 /// Canonical input payload for the compaction endpoint.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct CompactionInput<'a> {
     pub model: &'a str,
     pub input: &'a [ResponseItem],
-    #[serde(skip_serializing_if = "str::is_empty")]
     pub instructions: &'a str,
     pub tools: Vec<Value>,
     pub parallel_tool_calls: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<Reasoning>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<TextControls>,
+}
+
+impl Serialize for CompactionInput<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut field_count = 4;
+        field_count += usize::from(!self.instructions.is_empty());
+        field_count += usize::from(self.reasoning.is_some());
+        field_count += usize::from(self.service_tier.is_some());
+        field_count += usize::from(self.prompt_cache_key.is_some());
+        field_count += usize::from(self.text.is_some());
+
+        let mut state = serializer.serialize_struct("CompactionInput", field_count)?;
+        state.serialize_field("model", self.model)?;
+        state.serialize_field("input", &non_anthropic_request_input(self.input))?;
+        if !self.instructions.is_empty() {
+            state.serialize_field("instructions", self.instructions)?;
+        }
+        state.serialize_field("tools", &self.tools)?;
+        state.serialize_field("parallel_tool_calls", &self.parallel_tool_calls)?;
+        if let Some(reasoning) = &self.reasoning {
+            state.serialize_field("reasoning", reasoning)?;
+        }
+        if let Some(service_tier) = self.service_tier {
+            state.serialize_field("service_tier", service_tier)?;
+        }
+        if let Some(prompt_cache_key) = self.prompt_cache_key {
+            state.serialize_field("prompt_cache_key", prompt_cache_key)?;
+        }
+        if let Some(text) = &self.text {
+            state.serialize_field("text", text)?;
+        }
+        state.end()
+    }
 }
 
 /// Canonical input payload for the memory summarize endpoint.
@@ -249,7 +280,7 @@ impl Serialize for ResponsesApiRequest {
         if self.uses_ambient_input_format() {
             state.serialize_field("input", &ambient_input_from_response_items(&self.input))?;
         } else {
-            state.serialize_field("input", &self.input)?;
+            state.serialize_field("input", &non_anthropic_request_input(&self.input))?;
         }
         state.serialize_field("tools", &self.tools)?;
         state.serialize_field("tool_choice", &self.tool_choice)?;
@@ -354,13 +385,55 @@ fn ambient_chunk_from_response_item(item: &ResponseItem) -> Option<AmbientReason
 }
 
 fn ambient_json_chunk(role: &str, item: &ResponseItem) -> Option<AmbientReasoningContentChunk> {
-    serde_json::to_string(item)
+    serde_json::to_string(&response_item_for_non_anthropic_request(item))
         .ok()
         .filter(|content| !content.trim().is_empty())
         .map(|content| AmbientReasoningContentChunk {
             role: role.to_string(),
             content,
         })
+}
+
+fn non_anthropic_request_input(input: &[ResponseItem]) -> Vec<ResponseItem> {
+    input
+        .iter()
+        .map(response_item_for_non_anthropic_request)
+        .collect()
+}
+
+fn response_item_for_non_anthropic_request(item: &ResponseItem) -> ResponseItem {
+    let mut item = item.clone();
+    match &mut item {
+        ResponseItem::Reasoning {
+            anthropic_content_block,
+            content,
+            ..
+        } => {
+            *anthropic_content_block = None;
+            *content = Some(Vec::new());
+        }
+        ResponseItem::WebSearchCall {
+            anthropic_content_block,
+            ..
+        } => {
+            *anthropic_content_block = None;
+        }
+        ResponseItem::Message { .. }
+        | ResponseItem::AgentMessage { .. }
+        | ResponseItem::LocalShellCall { .. }
+        | ResponseItem::FunctionCall { .. }
+        | ResponseItem::FunctionCallOutput { .. }
+        | ResponseItem::CustomToolCall { .. }
+        | ResponseItem::CustomToolCallOutput { .. }
+        | ResponseItem::ToolSearchCall { .. }
+        | ResponseItem::ToolSearchOutput { .. }
+        | ResponseItem::ImageGenerationCall { .. }
+        | ResponseItem::Compaction { .. }
+        | ResponseItem::CompactionTrigger { .. }
+        | ResponseItem::ContextCompaction { .. }
+        | ResponseItem::Other => {}
+    }
+    item
 }
 
 fn ambient_text_from_content_items(content: &[ContentItem]) -> Option<String> {
@@ -543,40 +616,96 @@ impl From<&ResponsesApiRequest> for ResponseCreateWsRequest {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct ResponseCreateWsRequest {
     pub model: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
     pub instructions: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub previous_response_id: Option<String>,
     pub input: Vec<ResponseItem>,
     pub tools: Vec<Value>,
     pub tool_choice: String,
     pub parallel_tool_calls: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<Reasoning>,
     pub store: bool,
     pub stream: bool,
     pub include: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<TextControls>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub generate: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub client_metadata: Option<HashMap<String, String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub emit_usage: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub enable_thinking: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
+}
+
+impl Serialize for ResponseCreateWsRequest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut field_count = 8;
+        field_count += usize::from(!self.instructions.is_empty());
+        field_count += usize::from(self.previous_response_id.is_some());
+        field_count += usize::from(self.reasoning.is_some());
+        field_count += usize::from(self.service_tier.is_some());
+        field_count += usize::from(self.prompt_cache_key.is_some());
+        field_count += usize::from(self.text.is_some());
+        field_count += usize::from(self.generate.is_some());
+        field_count += usize::from(self.client_metadata.is_some());
+        field_count += usize::from(self.thinking_budget.is_some());
+        field_count += usize::from(self.emit_usage.is_some());
+        field_count += usize::from(self.enable_thinking.is_some());
+        field_count += usize::from(self.reasoning_effort.is_some());
+
+        let mut state = serializer.serialize_struct("ResponseCreateWsRequest", field_count)?;
+        state.serialize_field("model", &self.model)?;
+        if !self.instructions.is_empty() {
+            state.serialize_field("instructions", &self.instructions)?;
+        }
+        if let Some(previous_response_id) = &self.previous_response_id {
+            state.serialize_field("previous_response_id", previous_response_id)?;
+        }
+        state.serialize_field("input", &non_anthropic_request_input(&self.input))?;
+        state.serialize_field("tools", &self.tools)?;
+        state.serialize_field("tool_choice", &self.tool_choice)?;
+        state.serialize_field("parallel_tool_calls", &self.parallel_tool_calls)?;
+        if let Some(reasoning) = &self.reasoning {
+            state.serialize_field("reasoning", reasoning)?;
+        }
+        state.serialize_field("store", &self.store)?;
+        state.serialize_field("stream", &self.stream)?;
+        state.serialize_field("include", &self.include)?;
+        if let Some(service_tier) = &self.service_tier {
+            state.serialize_field("service_tier", service_tier)?;
+        }
+        if let Some(prompt_cache_key) = &self.prompt_cache_key {
+            state.serialize_field("prompt_cache_key", prompt_cache_key)?;
+        }
+        if let Some(text) = &self.text {
+            state.serialize_field("text", text)?;
+        }
+        if let Some(generate) = self.generate {
+            state.serialize_field("generate", &generate)?;
+        }
+        if let Some(client_metadata) = &self.client_metadata {
+            state.serialize_field("client_metadata", client_metadata)?;
+        }
+        if let Some(thinking_budget) = self.thinking_budget {
+            state.serialize_field("thinking_budget", &thinking_budget)?;
+        }
+        if let Some(emit_usage) = self.emit_usage {
+            state.serialize_field("emit_usage", &emit_usage)?;
+        }
+        if let Some(enable_thinking) = self.enable_thinking {
+            state.serialize_field("enable_thinking", &enable_thinking)?;
+        }
+        if let Some(reasoning_effort) = &self.reasoning_effort {
+            state.serialize_field("reasoning_effort", reasoning_effort)?;
+        }
+        state.end()
+    }
 }
 
 pub fn response_create_client_metadata(
@@ -646,7 +775,10 @@ impl Stream for ResponseStream {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codex_protocol::models::ContentItem;
     use codex_protocol::models::ReasoningItemContent;
+    use codex_protocol::models::ReasoningItemReasoningSummary;
+    use codex_protocol::models::WebSearchAction;
     use pretty_assertions::assert_eq;
     use serde_json::json;
 
@@ -744,6 +876,166 @@ mod tests {
         assert_eq!(
             ambient_input_from_response_items(&input),
             "inspect StakeHub".to_string()
+        );
+    }
+
+    fn reasoning_item_with_anthropic_block() -> ResponseItem {
+        ResponseItem::Reasoning {
+            id: Some("rs_anthropic".to_string()),
+            summary: Vec::<ReasoningItemReasoningSummary>::new(),
+            content: Some(vec![ReasoningItemContent::ReasoningText {
+                text: "summarized thinking".to_string(),
+            }]),
+            encrypted_content: None,
+            anthropic_content_block: Some(json!({
+                "type": "thinking",
+                "thinking": "summarized thinking",
+                "signature": "sig-abc"
+            })),
+            metadata: None,
+        }
+    }
+
+    fn web_search_item_with_anthropic_block() -> ResponseItem {
+        ResponseItem::WebSearchCall {
+            id: Some("srvtoolu_1".to_string()),
+            status: Some("completed".to_string()),
+            action: Some(WebSearchAction::Search {
+                query: Some("yield".to_string()),
+                queries: None,
+            }),
+            anthropic_content_block: Some(json!({
+                "type": "server_tool_use",
+                "id": "srvtoolu_1",
+                "name": "web_search",
+                "input": { "query": "yield" }
+            })),
+            metadata: None,
+        }
+    }
+
+    fn responses_request_with_anthropic_blocks(ambient: bool) -> ResponsesApiRequest {
+        ResponsesApiRequest {
+            model: "gpt-5.5".to_string(),
+            instructions: String::new(),
+            previous_response_id: None,
+            input: vec![
+                reasoning_item_with_anthropic_block(),
+                web_search_item_with_anthropic_block(),
+                ResponseItem::Message {
+                    id: Some("msg_1".to_string()),
+                    role: "user".to_string(),
+                    content: vec![ContentItem::InputText {
+                        text: "continue".to_string(),
+                    }],
+                    phase: None,
+                    metadata: None,
+                },
+            ],
+            tools: Vec::new(),
+            tool_choice: "auto".to_string(),
+            parallel_tool_calls: false,
+            reasoning: None,
+            store: false,
+            stream: true,
+            include: Vec::new(),
+            service_tier: None,
+            prompt_cache_key: None,
+            text: None,
+            client_metadata: None,
+            thinking_budget: None,
+            emit_usage: ambient.then_some(true),
+            enable_thinking: None,
+            reasoning_effort: None,
+        }
+    }
+
+    #[test]
+    fn responses_request_strips_anthropic_content_blocks_from_input() {
+        let request = responses_request_with_anthropic_blocks(/*ambient*/ false);
+
+        let serialized = serde_json::to_value(&request).expect("serialize request");
+        assert_eq!(
+            request.input[0],
+            reasoning_item_with_anthropic_block(),
+            "request history keeps the persisted Anthropic replay block"
+        );
+        assert_eq!(
+            serialized
+                .pointer("/input/0/anthropic_content_block")
+                .cloned(),
+            None
+        );
+        assert_eq!(serialized.pointer("/input/0/content").cloned(), None);
+        assert_eq!(
+            serialized
+                .pointer("/input/1/anthropic_content_block")
+                .cloned(),
+            None
+        );
+        assert!(
+            !serialized.to_string().contains("anthropic_content_block"),
+            "OpenAI Responses request body must not contain Anthropic-only replay fields"
+        );
+        assert!(
+            !serialized.to_string().contains("summarized thinking"),
+            "OpenAI Responses request body must not replay Anthropic reasoning text"
+        );
+    }
+
+    #[test]
+    fn responses_ambient_input_strips_anthropic_content_blocks() {
+        let request = responses_request_with_anthropic_blocks(/*ambient*/ true);
+
+        let serialized = serde_json::to_value(&request).expect("serialize request");
+        let input = serialized
+            .get("input")
+            .and_then(Value::as_str)
+            .expect("ambient input string");
+        assert!(!input.contains("anthropic_content_block"));
+        assert!(!input.contains("sig-abc"));
+        assert!(!input.contains("summarized thinking"));
+    }
+
+    #[test]
+    fn websocket_response_create_strips_anthropic_content_blocks_from_input() {
+        let responses_request = responses_request_with_anthropic_blocks(/*ambient*/ false);
+        let request = ResponseCreateWsRequest::from(&responses_request);
+
+        let serialized = serde_json::to_value(&request).expect("serialize websocket request");
+        assert!(
+            !serialized.to_string().contains("anthropic_content_block"),
+            "Responses websocket request body must not contain Anthropic-only replay fields"
+        );
+        assert!(
+            !serialized.to_string().contains("summarized thinking"),
+            "Responses websocket request body must not replay Anthropic reasoning text"
+        );
+    }
+
+    #[test]
+    fn compaction_input_strips_anthropic_content_blocks() {
+        let input = vec![reasoning_item_with_anthropic_block()];
+        let request = CompactionInput {
+            model: "gpt-5.5",
+            input: &input,
+            instructions: "",
+            tools: Vec::new(),
+            parallel_tool_calls: false,
+            reasoning: None,
+            service_tier: None,
+            prompt_cache_key: None,
+            text: None,
+        };
+
+        let serialized = serde_json::to_value(&request).expect("serialize compaction input");
+        assert!(
+            !serialized.to_string().contains("anthropic_content_block"),
+            "compaction request body must not contain Anthropic-only replay fields"
+        );
+        assert!(
+            !serialized.to_string().contains("summarized thinking"),
+            "compaction request body must not replay Anthropic reasoning text"
         );
     }
 }

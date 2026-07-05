@@ -18,10 +18,12 @@ use tokio_util::sync::CancellationToken;
 use tracing::error;
 use tracing::warn;
 
-/// Size of the bounded channels used to communicate between tasks. The value
-/// is a balance between throughput and memory usage - 128 messages should be
-/// plenty for an interactive CLI.
-pub const CHANNEL_CAPACITY: usize = 128;
+/// Size of the bounded channels used to communicate between tasks.
+///
+/// Interactive sessions can fan out multiple streaming child agents, so this
+/// headroom absorbs short bursts without turning normal streaming output into
+/// overload pressure on control-plane traffic.
+pub const CHANNEL_CAPACITY: usize = 4096;
 
 mod remote_control;
 mod stdio;
