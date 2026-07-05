@@ -184,8 +184,11 @@ use std::collections::VecDeque;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::Duration;
@@ -197,6 +200,8 @@ use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::task::JoinHandle;
+use tokio_stream::Stream;
+use tokio_stream::StreamExt;
 use toml::Value as TomlValue;
 use uuid::Uuid;
 mod agent_message_consolidation;
@@ -240,6 +245,113 @@ use self::thread_events::*;
 
 const EXTERNAL_EDITOR_HINT: &str = "Save and close external editor to continue.";
 const THREAD_EVENT_CHANNEL_CAPACITY: usize = 32768;
+const TUI_INPUT_WATCHDOG_INTERVAL: Duration = Duration::from_secs(5);
+const TUI_INPUT_WATCHDOG_STALLED_AFTER: Duration = Duration::from_secs(10);
+
+type BoxedTuiEventStream = Pin<Box<dyn Stream<Item = TuiEvent> + Send + 'static>>;
+
+struct DrainedTuiEvents {
+    rx: mpsc::UnboundedReceiver<TuiEvent>,
+    watchdog: TuiInputDrainWatchdog,
+}
+
+#[derive(Clone)]
+struct TuiInputDrainWatchdog {
+    pending_events: Arc<AtomicUsize>,
+    last_drained_ms: Arc<AtomicU64>,
+    last_handled_ms: Arc<AtomicU64>,
+    started_at: Instant,
+}
+
+impl TuiInputDrainWatchdog {
+    fn new() -> Self {
+        let started_at = Instant::now();
+        Self {
+            pending_events: Arc::new(AtomicUsize::new(0)),
+            last_drained_ms: Arc::new(AtomicU64::new(0)),
+            last_handled_ms: Arc::new(AtomicU64::new(0)),
+            started_at,
+        }
+    }
+
+    fn elapsed_ms(&self) -> u64 {
+        self.started_at
+            .elapsed()
+            .as_millis()
+            .min(u128::from(u64::MAX)) as u64
+    }
+
+    fn note_drained(&self) {
+        self.last_drained_ms
+            .store(self.elapsed_ms(), Ordering::Relaxed);
+        self.pending_events.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn note_drainer_send_failed(&self) {
+        self.pending_events
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |pending| {
+                pending.checked_sub(1)
+            })
+            .ok();
+    }
+
+    fn note_handled(&self) {
+        self.last_handled_ms
+            .store(self.elapsed_ms(), Ordering::Relaxed);
+        self.pending_events
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |pending| {
+                pending.checked_sub(1)
+            })
+            .ok();
+    }
+}
+
+fn spawn_tui_event_drainer(mut tui_events: BoxedTuiEventStream) -> DrainedTuiEvents {
+    let (tx, rx) = mpsc::unbounded_channel();
+    let watchdog = TuiInputDrainWatchdog::new();
+    let drainer_watchdog = watchdog.clone();
+    tokio::spawn(async move {
+        while let Some(event) = tui_events.next().await {
+            drainer_watchdog.note_drained();
+            if tx.send(event).is_err() {
+                drainer_watchdog.note_drainer_send_failed();
+                break;
+            }
+        }
+    });
+
+    DrainedTuiEvents { rx, watchdog }
+}
+
+fn spawn_tui_input_watchdog(
+    watchdog: TuiInputDrainWatchdog,
+    frame_requester: tui::FrameRequester,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(TUI_INPUT_WATCHDOG_INTERVAL);
+        loop {
+            interval.tick().await;
+            let pending_events = watchdog.pending_events.load(Ordering::Relaxed);
+            if pending_events == 0 {
+                continue;
+            }
+
+            let now_ms = watchdog.elapsed_ms();
+            let last_handled_ms = watchdog.last_handled_ms.load(Ordering::Relaxed);
+            if now_ms.saturating_sub(last_handled_ms)
+                >= TUI_INPUT_WATCHDOG_STALLED_AFTER.as_millis() as u64
+            {
+                tracing::warn!(
+                    pending_events,
+                    last_drained_ms = watchdog.last_drained_ms.load(Ordering::Relaxed),
+                    last_handled_ms,
+                    "tui input watchdog observed queued terminal events without handler progress"
+                );
+                frame_requester.schedule_frame();
+            }
+        }
+    })
+}
 
 enum ThreadInteractiveRequest {
     AppLink(AppLinkViewParams),
@@ -876,7 +988,6 @@ impl App {
         startup_bootstrap: Option<AppServerBootstrap>,
         startup_hooks_browser: Option<HooksListEntry>,
     ) -> Result<AppExitInfo> {
-        use tokio_stream::StreamExt;
         let startup_started_at = Instant::now();
         let (app_event_tx, mut app_event_rx) = unbounded_channel();
         let app_event_tx = AppEventSender::new(app_event_tx);
@@ -1271,8 +1382,11 @@ See the PFTerminal keymap documentation for supported actions and examples."
         }
 
         let event_stream_started_at = Instant::now();
-        let tui_events = tui.event_stream();
-        tokio::pin!(tui_events);
+        let drained_tui_events = spawn_tui_event_drainer(tui.event_stream());
+        let tui_input_watchdog =
+            spawn_tui_input_watchdog(drained_tui_events.watchdog.clone(), tui.frame_requester());
+        let mut tui_event_rx = drained_tui_events.rx;
+        let tui_input_watchdog_state = drained_tui_events.watchdog;
 
         tui.frame_requester().schedule_frame();
         tracing::info!(
@@ -1352,8 +1466,9 @@ See the PFTerminal keymap documentation for supported actions and examples."
                         }
                         AppRunControl::Continue
                     }
-                    event = tui_events.next() => {
+                    event = tui_event_rx.recv() => {
                         if let Some(event) = event {
+                            tui_input_watchdog_state.note_handled();
                             match app.handle_tui_event(tui, &mut app_server, event).await {
                                 Ok(control) => control,
                                 Err(err) => break Err(err),
@@ -1410,6 +1525,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
         if let Err(err) = app_server.shutdown().await {
             tracing::warn!(error = %err, "failed to shut down embedded app server");
         }
+        tui_input_watchdog.abort();
         let clear_pet_result = tui.clear_ambient_pet_image();
         let clear_result = tui.terminal.clear();
         let exit_reason = match exit_reason_result {

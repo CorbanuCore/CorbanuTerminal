@@ -106,19 +106,13 @@ fn trace_in_process_timing(label: &str, start: Instant) {
         );
     }
 }
-/// Default bounded channel capacity for in-process runtime queues.
+/// Default bounded channel capacity for in-process command/control queues.
+///
+/// The embedded server event stream is unbounded so app-server notifications
+/// never block the runtime task waiting for a UI consumer.
 pub const DEFAULT_IN_PROCESS_CHANNEL_CAPACITY: usize = CHANNEL_CAPACITY;
 
 type PendingClientRequestResponse = std::result::Result<Result, JSONRPCErrorError>;
-
-fn server_notification_requires_delivery(notification: &ServerNotification) -> bool {
-    matches!(
-        notification,
-        ServerNotification::TurnCompleted(_)
-            | ServerNotification::ThreadSettingsUpdated(_)
-            | ServerNotification::ExternalAgentConfigImportCompleted(_)
-    )
-}
 
 /// Input needed to start an in-process app-server runtime.
 ///
@@ -269,7 +263,7 @@ impl InProcessClientSender {
 /// request/response helpers, and surface-specific startup policy.
 pub struct InProcessClientHandle {
     client: InProcessClientSender,
-    event_rx: mpsc::Receiver<InProcessServerEvent>,
+    event_rx: mpsc::UnboundedReceiver<InProcessServerEvent>,
     runtime_handle: tokio::task::JoinHandle<()>,
     #[cfg(test)]
     _test_codex_home: Option<tempfile::TempDir>,
@@ -393,7 +387,7 @@ async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClie
     let installation_id = resolve_installation_id(&args.config.codex_home).await?;
     trace_in_process_timing("after_resolve_installation_id", start_uninitialized_at);
     let (client_tx, mut client_rx) = mpsc::channel::<InProcessClientMessage>(channel_capacity);
-    let (event_tx, event_rx) = mpsc::channel::<InProcessServerEvent>(channel_capacity);
+    let (event_tx, event_rx) = mpsc::unbounded_channel::<InProcessServerEvent>();
 
     let runtime_handle = tokio::spawn(async move {
         let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<OutgoingEnvelope>(channel_capacity);
@@ -647,25 +641,11 @@ async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClie
                             // Send directly to avoid cloning; on failure the
                             // original value is returned inside the error.
                             if let Err(send_error) = event_tx
-                                .try_send(InProcessServerEvent::ServerRequest(request))
+                                .send(InProcessServerEvent::ServerRequest(request))
                             {
-                                let (error, inner) = match send_error {
-                                    mpsc::error::TrySendError::Full(inner) => (
-                                        JSONRPCErrorError {
-                                            code: OVERLOADED_ERROR_CODE,
-                                            message:
-                                                "in-process server request queue is full".to_string(),
-                                            data: None,
-                                        },
-                                        inner,
-                                    ),
-                                    mpsc::error::TrySendError::Closed(inner) => (
-                                        internal_error(
-                                            "in-process server request consumer is closed",
-                                        ),
-                                        inner,
-                                    ),
-                                };
+                                let error =
+                                    internal_error("in-process server request consumer is closed");
+                                let inner = send_error.0;
                                 let request_id = match inner {
                                     InProcessServerEvent::ServerRequest(req) => req.id().clone(),
                                     _ => unreachable!("we just sent a ServerRequest variant"),
@@ -676,25 +656,11 @@ async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClie
                             }
                         }
                         OutgoingMessage::AppServerNotification(notification) => {
-                            if server_notification_requires_delivery(&notification) {
-                                if event_tx
-                                    .send(InProcessServerEvent::ServerNotification(notification))
-                                    .await
-                                    .is_err()
-                                {
-                                    break;
-                                }
-                            } else if let Err(send_error) =
-                                event_tx.try_send(InProcessServerEvent::ServerNotification(notification))
+                            if event_tx
+                                .send(InProcessServerEvent::ServerNotification(notification))
+                                .is_err()
                             {
-                                match send_error {
-                                    mpsc::error::TrySendError::Full(_) => {
-                                        warn!("dropping in-process server notification (queue full)");
-                                    }
-                                    mpsc::error::TrySendError::Closed(_) => {
-                                        break;
-                                    }
-                                }
+                                break;
                             }
                         }
                     }
@@ -749,14 +715,9 @@ mod tests {
     use super::*;
     use codex_app_server_protocol::ClientInfo;
     use codex_app_server_protocol::ConfigRequirementsReadResponse;
-    use codex_app_server_protocol::ExternalAgentConfigImportCompletedNotification;
     use codex_app_server_protocol::SessionSource as ApiSessionSource;
     use codex_app_server_protocol::ThreadStartParams;
     use codex_app_server_protocol::ThreadStartResponse;
-    use codex_app_server_protocol::Turn;
-    use codex_app_server_protocol::TurnCompletedNotification;
-    use codex_app_server_protocol::TurnItemsView;
-    use codex_app_server_protocol::TurnStatus;
     use codex_core::config::ConfigBuilder;
     use pretty_assertions::assert_eq;
     use std::path::Path;
@@ -935,29 +896,7 @@ mod tests {
     }
 
     #[test]
-    fn guaranteed_delivery_helpers_cover_terminal_server_notifications() {
-        assert!(server_notification_requires_delivery(
-            &ServerNotification::TurnCompleted(TurnCompletedNotification {
-                thread_id: "thread-1".to_string(),
-                turn: Turn {
-                    id: "turn-1".to_string(),
-                    items: Vec::new(),
-                    items_view: TurnItemsView::NotLoaded,
-                    status: TurnStatus::Completed,
-                    error: None,
-                    started_at: None,
-                    completed_at: Some(0),
-                    duration_ms: None,
-                },
-            })
-        ));
-        assert!(server_notification_requires_delivery(
-            &ServerNotification::ExternalAgentConfigImportCompleted(
-                ExternalAgentConfigImportCompletedNotification {
-                    import_id: "import".to_string(),
-                    item_type_results: Vec::new(),
-                },
-            )
-        ));
+    fn default_in_process_capacity_has_streaming_burst_headroom() {
+        assert!(DEFAULT_IN_PROCESS_CHANNEL_CAPACITY >= 4096);
     }
 }
