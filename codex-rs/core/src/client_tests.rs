@@ -672,6 +672,55 @@ fn anthropic_replays_signed_thinking_blocks() {
 }
 
 #[test]
+fn anthropic_replays_thinking_before_tool_use_in_same_assistant_turn() {
+    let thinking_block = json!({
+        "type": "thinking",
+        "thinking": "need a file",
+        "signature": "sig-tool"
+    });
+    let mut messages = Vec::new();
+    let mut skipped = std::collections::HashSet::new();
+    super::append_anthropic_message_for_response_item(
+        ResponseItem::Reasoning {
+            id: Some("rs_msg".to_string()),
+            summary: Vec::<ReasoningItemReasoningSummary>::new(),
+            content: Some(vec![ReasoningItemContent::ReasoningText {
+                text: "need a file".to_string(),
+            }]),
+            encrypted_content: None,
+            anthropic_content_block: Some(thinking_block.clone()),
+            metadata: None,
+        },
+        &mut messages,
+        &mut skipped,
+    );
+    super::append_anthropic_message_for_response_item(
+        ResponseItem::FunctionCall {
+            id: Some("fc_msg_1".to_string()),
+            name: "exec_command".to_string(),
+            namespace: None,
+            arguments: "{\"cmd\":\"pwd\"}".to_string(),
+            call_id: "toolu_read".to_string(),
+            metadata: None,
+        },
+        &mut messages,
+        &mut skipped,
+    );
+
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].pointer("/role"), Some(&json!("assistant")));
+    assert_eq!(messages[0].pointer("/content/0"), Some(&thinking_block));
+    assert_eq!(
+        messages[0].pointer("/content/1/type"),
+        Some(&json!("tool_use"))
+    );
+    assert_eq!(
+        messages[0].pointer("/content/1/id"),
+        Some(&json!("toolu_read"))
+    );
+}
+
+#[test]
 fn baseten_reasoning_effort_maps_to_glm52_supported_set() {
     let effort = |s: &str| ReasoningEffortConfig::Custom(s.to_string());
     let map = |model: &str, e: &str| {
