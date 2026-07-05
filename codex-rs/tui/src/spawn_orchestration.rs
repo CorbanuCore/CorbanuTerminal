@@ -46,6 +46,9 @@ const SEND_TASK_FENCE_OPEN: &str = "```pfterminal-send-task";
 const SEND_TASK_FENCE_CLOSE: &str = "```";
 const SEND_TASK_OPEN: &str = "<pfterminal_send_task";
 const SEND_TASK_CLOSE: &str = "</pfterminal_send_task>";
+const EXEC_WRAPPED_DISPATCH_CORRECTION_TARGET: &str =
+    "__pfterminal_exec_wrapped_dispatch_correction__";
+const EXEC_WRAPPED_DISPATCH_CORRECTION_TASK: &str = "PFTerminal host correction: you emitted a <pfterminal_send_task> dispatch block inside exec_command/shell text, so it was not routed to the target pane. Re-emit the same dispatch now as plain assistant message text, not inside a shell command, cat, echo, heredoc, markdown fence, or tool call. Do not claim it was sent until the plain-text block appears.";
 const SPAWN_PARENT_REPORT_LIMIT: usize = 12;
 const SPAWN_PROCESSED_DISPATCH_TURN_LIMIT: usize = 1024;
 const SPAWN_PROCESSED_DISPATCH_TURN_RETAIN: usize = SPAWN_PROCESSED_DISPATCH_TURN_LIMIT / 2;
@@ -1249,11 +1252,14 @@ impl App {
                 assistant_text.push_str(text);
             }
         }
-        self.dispatch_native_spawn_task_blocks_from_text(
+        let saw_assistant_dispatch = self.dispatch_native_spawn_task_blocks_from_text(
             source_thread_id,
             &turn.id,
             &assistant_text,
         );
+        if !saw_assistant_dispatch && turn_contains_exec_wrapped_spawn_task_dispatch(turn) {
+            self.correct_exec_wrapped_spawn_task_dispatch(source_thread_id, &turn.id);
+        }
     }
 
     pub(crate) fn dispatch_native_spawn_task_blocks_from_text(
@@ -1261,16 +1267,16 @@ impl App {
         source_thread_id: ThreadId,
         turn_id: &str,
         assistant_text: &str,
-    ) {
+    ) -> bool {
         if !self.is_spawn_orchestration_thread(source_thread_id) {
-            return;
+            return false;
         }
         if assistant_text.trim().is_empty() {
-            return;
+            return false;
         }
-        let (_visible, dispatches) = extract_spawn_task_dispatches(&assistant_text);
+        let (_visible, dispatches) = extract_spawn_task_dispatches(assistant_text);
         if dispatches.is_empty() {
-            return;
+            return false;
         }
         let mut pending_dispatches = Vec::new();
         for dispatch in dispatches {
@@ -1279,7 +1285,7 @@ impl App {
             }
         }
         if pending_dispatches.is_empty() {
-            return;
+            return true;
         }
         let source_node_id = if self.is_codex_main_bound_spawn_root_thread(source_thread_id) {
             self.spawn_root_node_id()
@@ -1287,6 +1293,32 @@ impl App {
             thread_node_id(source_thread_id)
         };
         self.dispatch_spawn_task_blocks(&source_node_id, pending_dispatches);
+        true
+    }
+
+    fn correct_exec_wrapped_spawn_task_dispatch(
+        &mut self,
+        source_thread_id: ThreadId,
+        turn_id: &str,
+    ) {
+        let correction_dispatch = SpawnTaskDispatch {
+            target: EXEC_WRAPPED_DISPATCH_CORRECTION_TARGET.to_string(),
+            task: EXEC_WRAPPED_DISPATCH_CORRECTION_TASK.to_string(),
+        };
+        if !self.mark_spawn_task_dispatch_processed(source_thread_id, turn_id, &correction_dispatch)
+        {
+            return;
+        }
+        self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+            thread_id: source_thread_id,
+            task: EXEC_WRAPPED_DISPATCH_CORRECTION_TASK.to_string(),
+        });
+        if self.claude_panes.active_user_pane_id() == CODEX_MAIN_PANE_ID
+            && self.active_thread_id == Some(source_thread_id)
+        {
+            self.chat_widget
+                .add_error_message(EXEC_WRAPPED_DISPATCH_CORRECTION_TASK.to_string());
+        }
     }
 
     /// Canonical loop-breaker state key for a native spawn thread; mirrors the source-node
@@ -3984,7 +4016,7 @@ fn write_spawn_dispatch_contract(context: &mut String) {
     );
     let _ = writeln!(
         context,
-        "Dispatch blocks are plain assistant text, not Claude tools. Use only the pfterminal_send_task host tags; do not use <invoke>, <arg_key>, <arg_value>, or tool-call syntax for dispatch."
+        "Dispatch blocks are plain assistant text, not Claude tools or shell commands. Use only the pfterminal_send_task host tags; never put the block inside exec_command, cat, echo, a heredoc, <invoke>, <arg_key>, <arg_value>, or tool-call syntax for dispatch."
     );
     let _ = writeln!(
         context,
@@ -4526,6 +4558,17 @@ pub(crate) fn extract_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTas
     let (visible, legacy_dispatches) = extract_xmlish_spawn_task_dispatches(&visible);
     dispatches.extend(legacy_dispatches);
     (visible, dispatches)
+}
+
+fn turn_contains_exec_wrapped_spawn_task_dispatch(turn: &codex_app_server_protocol::Turn) -> bool {
+    turn.items.iter().any(|item| {
+        if let codex_app_server_protocol::ThreadItem::CommandExecution { command, .. } = item {
+            let (_visible, dispatches) = extract_spawn_task_dispatches(command);
+            !dispatches.is_empty()
+        } else {
+            false
+        }
+    })
 }
 
 fn extract_fenced_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTaskDispatch>) {
@@ -5190,6 +5233,7 @@ Done."#;
         assert!(context.contains("Do not claim you sent a task unless you emit a dispatch block"));
         assert!(context.contains("do not read skills first in the root pane"));
         assert!(context.contains("Dispatch blocks are plain assistant text"));
+        assert!(context.contains("never put the block inside exec_command"));
         assert!(context.contains("Listed Troll/Orc panes are routable"));
         assert!(context.contains("dispatching a task to them materializes the pane"));
         assert!(context.contains("Do not spawn fresh panes"));
