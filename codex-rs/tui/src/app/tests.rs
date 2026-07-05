@@ -2670,11 +2670,88 @@ async fn native_spawn_turn_completion_updates_status_and_result_preview() {
     assert!(status_items.iter().any(|item| {
         item.name.contains("Snaga [orc]")
             && item.description.as_deref().is_some_and(|description| {
-                description.contains("done")
+                description.contains("completed")
                     && description.contains("latest result: Created the missing components")
                     && !description.starts_with("running")
             })
     }));
+}
+
+#[tokio::test]
+async fn stale_receiver_running_status_does_not_hide_completed_orc_report() {
+    let mut app = make_test_app().await;
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000163").expect("valid thread id");
+    let orc_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000164").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        orc_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(orc_thread_id, troll_thread_id);
+    app.spawn_parent_by_node.insert(
+        crate::spawn_orchestration::thread_node_id(orc_thread_id),
+        crate::spawn_orchestration::thread_node_id(troll_thread_id),
+    );
+
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+        turn_started_notification(orc_thread_id, "turn-1"),
+    ));
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+        turn_completed_with_agent_message(
+            orc_thread_id,
+            "turn-1",
+            TurnStatus::Completed,
+            "Wrote /tmp/pfterminal-orc-proof.txt and verified it.",
+        ),
+    ));
+
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+        ServerNotification::ItemCompleted(codex_app_server_protocol::ItemCompletedNotification {
+            thread_id: troll_thread_id.to_string(),
+            turn_id: "turn-wait".to_string(),
+            completed_at_ms: 0,
+            item: ThreadItem::CollabAgentToolCall {
+                id: "wait-1".to_string(),
+                tool: codex_app_server_protocol::CollabAgentTool::Wait,
+                status: codex_app_server_protocol::CollabAgentToolCallStatus::Completed,
+                sender_thread_id: troll_thread_id.to_string(),
+                receiver_thread_ids: vec![orc_thread_id.to_string()],
+                prompt: None,
+                model: None,
+                reasoning_effort: None,
+                agents_states: HashMap::from([(
+                    orc_thread_id.to_string(),
+                    codex_app_server_protocol::CollabAgentState {
+                        status: codex_app_server_protocol::CollabAgentStatus::Running,
+                        message: None,
+                    },
+                )]),
+            },
+        }),
+    ));
+
+    let context = app.spawn_agent_task_for_submission(troll_thread_id, "review child reports");
+    assert!(
+        context.contains("Snaga [orc]; status=completed; has_new_report=true"),
+        "Troll roster must show the completed Orc and report marker, got: {context}"
+    );
+    assert!(
+        !context.contains("Snaga [orc]; status=running"),
+        "stale receiver status must not regress the completed Orc to running, got: {context}"
+    );
+    assert!(context.contains("Recent child reports delivered to this pane:"));
+    assert!(context.contains("result=Wrote /tmp/pfterminal-orc-proof.txt and verified it."));
 }
 
 #[tokio::test]
@@ -2716,7 +2793,7 @@ async fn native_orc_completion_is_reported_to_parent_troll_context() {
 
     let context = app.spawn_agent_task_for_submission(troll_thread_id, "review child reports");
     assert!(context.contains("Recent child reports delivered to this pane:"));
-    assert!(context.contains("Snaga [orc]; status=done"));
+    assert!(context.contains("Snaga [orc]; status=completed; has_new_report=true"));
     assert!(context.contains("result=Found two latency issues and no blockers."));
 }
 
@@ -2763,7 +2840,7 @@ async fn native_orc_completion_is_reported_to_claude_troll_context() {
         .spawn_context_for_user_pane(&troll_pane_id)
         .expect("Troll pane should receive spawn context");
     assert!(context.contains("Recent child reports delivered to this pane:"));
-    assert!(context.contains("Ghash [orc]; status=done"));
+    assert!(context.contains("Ghash [orc]; status=completed; has_new_report=true"));
     assert!(
         context.contains("result=Delivered the code-quality audit with three concrete findings.")
     );
@@ -2874,7 +2951,7 @@ async fn direct_six_orc_turn_reports_are_visible_to_claude_troll_context() {
     let context = app
         .spawn_context_for_user_pane(&troll_pane_id)
         .expect("Troll pane should receive spawn context");
-    assert!(context.contains("Snaga [orc]; status=done"));
+    assert!(context.contains("Snaga [orc]; status=completed; has_new_report=true"));
     assert!(context.contains("Claude Code Ghash [orc] - Opus 4.8 Claude Plan; status=success"));
 }
 
@@ -2932,7 +3009,7 @@ async fn enqueued_native_spawn_turn_completion_updates_status_before_replay() {
     assert!(status_items.iter().any(|item| {
         item.name.contains("Snaga [orc]")
             && item.description.as_deref().is_some_and(|description| {
-                description.contains("done")
+                description.contains("completed")
                     && description
                         .contains("latest result: Wrote /tmp/pfterminal-spawn-status-proof")
                     && !description.starts_with("idle")

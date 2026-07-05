@@ -1051,7 +1051,12 @@ impl App {
                 parent_map_changed = true;
             }
 
-            if let Some(status) = collab_receiver_status(notification, receiver_thread_id) {
+            if let Some(status) = collab_receiver_status(notification, receiver_thread_id)
+                && should_apply_collab_receiver_status(
+                    self.spawn_status_by_thread.get(&thread_id),
+                    status,
+                )
+            {
                 self.spawn_status_by_thread
                     .insert(thread_id, status.clone());
                 self.agent_navigation.set_running(
@@ -1771,6 +1776,25 @@ fn spawn_turn_result_message(turn: &codex_app_server_protocol::Turn) -> Option<S
     })?;
 
     Some(crate::spawn_orchestration::bounded_spawn_report_value(text))
+}
+
+fn should_apply_collab_receiver_status(
+    current: Option<&codex_app_server_protocol::CollabAgentState>,
+    incoming: &codex_app_server_protocol::CollabAgentState,
+) -> bool {
+    let Some(current) = current else {
+        return true;
+    };
+    !collab_agent_status_is_running(&incoming.status)
+        || collab_agent_status_is_running(&current.status)
+}
+
+fn collab_agent_status_is_running(status: &codex_app_server_protocol::CollabAgentStatus) -> bool {
+    matches!(
+        status,
+        codex_app_server_protocol::CollabAgentStatus::PendingInit
+            | codex_app_server_protocol::CollabAgentStatus::Running
+    )
 }
 
 #[cfg(test)]
