@@ -75,6 +75,8 @@ When accepting a task, inspect the full card before acting. Confirm objective, s
 
 When submitting evidence, make it easy for the verifier to prove the work happened. Include artifacts, exact commands, test output summaries, PRs, commits, screenshots, route probes, or file references as applicable.
 
+The submission parser scans evidence prose for URLs and registers each one it finds as a formal evidence item. Because of this, only cite durable, reviewable artifacts in the evidence body: real file paths, commit hashes, task IDs, event IDs, or production URLs. Never embed transient or non-reviewable endpoints — localhost, 127.0.0.1, deliberately-broken origins (for example an invalid host used to trigger a failure), or throwaway stub-server URLs. Describe test setup by the exact command run and the observed output, not by citing the throwaway endpoint. A localhost URL registered as an evidence item is worthless to a reviewer and cannot be removed after submission.
+
 When responding to verification, answer the specific verifier request. If the verifier asks for a complete generated text, a pass/fail summary, a missing artifact, or a clearer proof point, provide exactly that. Do not dodge, summarize away required detail, or claim success if the work failed.
 
 ## Reward Standard
