@@ -127,6 +127,39 @@ Do not put long-lived provider keys in `experimental_bearer_token` unless you
 are intentionally running an automation-only setup. For interactive use, use
 onboarding or `/vault`.
 
+## Telegram Connector
+
+`pfterminal telegram` runs a Telegram long-polling connector that drives the
+same in-process app-server harness as the terminal UI and `pfterminal exec`.
+Telegram-specific configuration is read locally by the connector from the
+`[telegram]` table; it is not part of the inherited Codex config schema.
+
+```toml
+[telegram]
+enabled = true
+bot_token_env = "PFTERMINAL_TELEGRAM_TOKEN"
+allowed_chat_ids = [21000038, -1001941234987]
+mode = "polling"
+default_model = "glm-5.2"
+approval_policy = "on-request"
+webhook_url = ""
+```
+
+The bot token is never read from `config.toml`. Resolution order is:
+
+1. The environment variable named by `bot_token_env`.
+2. The encrypted vault label `telegram/bot_token`.
+3. Startup error.
+
+Chats are default-deny. Only numeric Telegram chat IDs in `allowed_chat_ids`
+can start turns or answer approval prompts. The connector stores recovered
+thread IDs in `$CODEX_HOME/telegram/state.json` so a restarted poller can resume
+the same app-server threads.
+
+Telegram messages use HTML parse mode, split outbound text at Telegram's
+4096-character raw-text limit, and surface sensitive operations through inline
+approval buttons rather than auto-approving them.
+
 ## Provider Overrides
 
 Advanced users can still define custom providers under `[model_providers]`.
