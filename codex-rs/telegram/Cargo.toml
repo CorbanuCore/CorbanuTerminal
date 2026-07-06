@@ -1,0 +1,50 @@
+[package]
+name = "codex-telegram"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+autotests = false
+
+[lib]
+name = "codex_telegram"
+path = "src/lib.rs"
+doctest = false
+
+[[test]]
+name = "all"
+path = "tests/all.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+codex-app-server-client = { workspace = true }
+codex-app-server-protocol = { workspace = true }
+codex-arg0 = { workspace = true }
+codex-config = { workspace = true }
+codex-core = { workspace = true }
+codex-feedback = { workspace = true }
+codex-protocol = { workspace = true }
+codex-vault = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+teloxide = { version = "0.17", features = ["macros"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = [
+    "fs",
+    "macros",
+    "rt-multi-thread",
+    "signal",
+    "sync",
+    "time",
+] }
+toml = { workspace = true }
+tracing = { workspace = true }
+urlencoding = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }

@@ -150,6 +150,9 @@ enum Subcommand {
     /// Agent JSON helper for GitHub-linked Task Node terminal sessions.
     Tasknode(tasknode_cmd::TaskNodeCli),
 
+    /// Run the Telegram connector.
+    Telegram(codex_telegram::Cli),
+
     /// Run live Claude pane smoke checks and write a machine-readable report.
     #[clap(name = "claude-pane-smoke")]
     ClaudePaneSmoke(ClaudePaneSmokeCommand),
@@ -1186,6 +1189,25 @@ async fn cli_main(
                 }
             }
         }
+        Some(Subcommand::Telegram(telegram_cli)) => {
+            reject_remote_mode_for_subcommand(
+                root_remote.as_deref(),
+                root_remote_auth_token_env.as_deref(),
+                "telegram",
+            )?;
+            let loader_overrides =
+                loader_overrides_for_profile(interactive.config_profile_v2.as_ref())?;
+            let cli_overrides = root_config_overrides
+                .parse_overrides()
+                .map_err(anyhow::Error::msg)?;
+            codex_telegram::run(codex_telegram::RunConfig {
+                cli: telegram_cli,
+                arg0_paths: arg0_paths.clone(),
+                cli_overrides,
+                loader_overrides,
+            })
+            .await?;
+        }
         Some(Subcommand::AppServer(app_server_cli)) => {
             let AppServerCommand {
                 subcommand,
@@ -1803,13 +1825,14 @@ fn profile_v2_for_subcommand<'a>(
         | Subcommand::Delete(_)
         | Subcommand::Unarchive(_)
         | Subcommand::Fork(_)
+        | Subcommand::Telegram(_)
         | Subcommand::Mcp(_)
         | Subcommand::Sandbox(_)
         | Subcommand::Debug(DebugCommand {
             subcommand: DebugSubcommand::PromptInput(_),
         }) => Ok(Some(profile_v2)),
         _ => anyhow::bail!(
-            "--profile only applies to runtime commands and `pfterminal mcp`: `pfterminal`, `pfterminal exec`, `pfterminal review`, `pfterminal resume`, `pfterminal archive`, `pfterminal delete`, `pfterminal unarchive`, `pfterminal fork`, `pfterminal mcp`, `pfterminal sandbox`, and `pfterminal debug prompt-input`."
+            "--profile only applies to runtime commands and `pfterminal mcp`: `pfterminal`, `pfterminal exec`, `pfterminal review`, `pfterminal resume`, `pfterminal archive`, `pfterminal delete`, `pfterminal unarchive`, `pfterminal fork`, `pfterminal telegram`, `pfterminal mcp`, `pfterminal sandbox`, and `pfterminal debug prompt-input`."
         ),
     }
 }
@@ -2452,6 +2475,7 @@ fn unsupported_subcommand_name_for_strict_config(
         | Some(Subcommand::Delete(_))
         | Some(Subcommand::Unarchive(_))
         | Some(Subcommand::Fork(_))
+        | Some(Subcommand::Telegram(_))
         | Some(Subcommand::Doctor(_))
         | Some(Subcommand::InternalClaudeOauthToken) => None,
         Some(Subcommand::AppServer(app_server)) if app_server.subcommand.is_none() => None,
