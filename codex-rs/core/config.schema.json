@@ -5414,6 +5414,12 @@
       "description": "Suppress warnings about unstable (under development) features.",
       "type": "boolean"
     },
+    "telegram": {
+      "additionalProperties": true,
+      "default": null,
+      "description": "Telegram connector settings. The connector parses this table itself; core only accepts it so strict config validation does not reject it.",
+      "type": "object"
+    },
     "tool_output_token_limit": {
       "description": "Token budget applied when storing tool/function outputs in the context manager.",
       "format": "uint",

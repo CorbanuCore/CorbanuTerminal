@@ -132,7 +132,8 @@ onboarding or `/vault`.
 `pfterminal telegram` runs a Telegram long-polling connector that drives the
 same in-process app-server harness as the terminal UI and `pfterminal exec`.
 Telegram-specific configuration is read locally by the connector from the
-`[telegram]` table; it is not part of the inherited Codex config schema.
+`[telegram]` table. Core accepts this table during strict config validation,
+but the connector owns the individual settings.
 
 ```toml
 [telegram]
@@ -152,7 +153,8 @@ The bot token is never read from `config.toml`. Resolution order is:
 3. Startup error.
 
 Chats are default-deny. Only numeric Telegram chat IDs in `allowed_chat_ids`
-can start turns or answer approval prompts. The connector stores recovered
+can start turns. Approval buttons are accepted only from the same authorized
+chat that owns the pending request. The connector stores recovered
 thread IDs in `$CODEX_HOME/telegram/state.json` so a restarted poller can resume
 the same app-server threads.
 
