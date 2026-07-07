@@ -664,6 +664,7 @@ impl Codex {
             auth_manager.clone(),
             models_manager.clone(),
             exec_policy,
+            tx_sub.clone(),
             tx_event.clone(),
             agent_status_tx.clone(),
             conversation_history,
@@ -950,9 +951,11 @@ fn push_prompt_fragment(
 impl Session {
     fn trace_session_timing(label: &str, start: Instant) {
         if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
-            eprintln!(
-                "[pfterminal-session] {label} elapsed_ms={}",
-                start.elapsed().as_millis()
+            debug!(
+                target: "pfterminal_session",
+                label,
+                elapsed_ms = start.elapsed().as_millis(),
+                "pfterminal session timing"
             );
         }
     }
@@ -3821,6 +3824,66 @@ impl Session {
             )
             .await;
         Ok(active_turn_id.clone())
+    }
+
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "active turn checks and turn state updates must remain atomic"
+    )]
+    pub(crate) async fn defer_user_input_until_active_turn_finished(
+        &self,
+        input: Vec<UserInput>,
+        additional_context: BTreeMap<String, AdditionalContextEntry>,
+        client_user_message_id: Option<String>,
+    ) -> Result<String, SteerInputError> {
+        let mut active = self.active_turn.lock().await;
+        let Some(active_turn) = active.as_mut() else {
+            return Err(SteerInputError::NoActiveTurn(input));
+        };
+
+        let Some(active_task) = active_turn.task.as_ref() else {
+            return Err(SteerInputError::NoActiveTurn(input));
+        };
+
+        if input.is_empty() {
+            return Err(SteerInputError::EmptyInput);
+        }
+
+        let additional_context_input = {
+            let mut state = self.state.lock().await;
+            state.additional_context.merge(additional_context)
+        };
+
+        let mut pending_input = additional_context_input
+            .into_iter()
+            .map(ResponseItem::from)
+            .map(TurnInput::ResponseItem)
+            .collect::<Vec<_>>();
+        pending_input.push(TurnInput::UserInput {
+            content: input,
+            client_id: client_user_message_id,
+        });
+        self.input_queue
+            .extend_pending_input_for_turn_state(active_turn.turn_state.as_ref(), pending_input)
+            .await;
+        Ok(active_task.turn_context.sub_id.clone())
+    }
+
+    pub(crate) async fn submit_internal_follow_up(
+        &self,
+        op: Op,
+        client_user_message_id: Option<String>,
+    ) -> CodexResult<()> {
+        let sub = Submission {
+            id: Uuid::now_v7().to_string(),
+            op,
+            client_user_message_id,
+            trace: current_span_w3c_trace_context(),
+        };
+        self.tx_sub
+            .send(sub)
+            .await
+            .map_err(|_| CodexErr::InternalAgentDied)
     }
 
     pub(crate) async fn record_memory_citation_for_turn(&self, sub_id: &str) {

@@ -141,6 +141,7 @@ fn registry_restores_persisted_pane_metadata() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec![pane_id.clone()],
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
     let restored = ClaudePaneRegistry::restore_from_disk(codex_home.path(), Some(&layout));
     assert_eq!(restored.panes().len(), 1);
@@ -168,6 +169,7 @@ fn registry_restores_persisted_pane_metadata() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec![pane_id.clone()],
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
     let restored = ClaudePaneRegistry::restore_from_disk(codex_home.path(), Some(&layout));
     assert_eq!(restored.active_user_pane_id(), pane_id);
@@ -241,6 +243,7 @@ fn registry_restores_legacy_pane_from_latest_audit() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec![pane_id.to_string()],
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
     let restored = ClaudePaneRegistry::restore_from_disk(codex_home.path(), Some(&layout));
     assert_eq!(restored.panes().len(), 1);
@@ -319,6 +322,7 @@ fn registry_restores_session_id_from_artifact_when_interrupted_audit_lost_it() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec![pane_id.to_string()],
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
     let mut restored = ClaudePaneRegistry::restore_from_disk(codex_home.path(), Some(&layout));
     assert_eq!(restored.panes().len(), 1);
@@ -409,6 +413,7 @@ fn registry_restores_legacy_claude_plan_pane_from_old_audit_title() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec![pane_id.to_string()],
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
     let restored = ClaudePaneRegistry::restore_from_disk(codex_home.path(), Some(&layout));
     assert_eq!(restored.panes().len(), 1);
@@ -433,6 +438,22 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
     let codex_home = tempfile::tempdir().expect("codex home");
     let mut parents = BTreeMap::new();
     parents.insert("pane:orc".to_string(), "pane:troll".to_string());
+    let mut pending_native_dispatches = BTreeMap::new();
+    pending_native_dispatches.insert(
+        "019f0657-1d67-7103-9d65-89e71587347d".to_string(),
+        vec![crate::spawn_orchestration::PendingSpawnDispatch::new(
+            "native queued task".to_string(),
+            Vec::new(),
+        )],
+    );
+    let mut pending_claude_dispatches = BTreeMap::new();
+    pending_claude_dispatches.insert(
+        "claude-active".to_string(),
+        vec![crate::spawn_orchestration::PendingSpawnDispatch::new(
+            "claude queued task".to_string(),
+            Vec::new(),
+        )],
+    );
     let layout = PaneLayoutState {
         version: 0,
         codex_thread_id: Some("019f0657-1d67-7103-9d65-89e71587347d".to_string()),
@@ -440,6 +461,10 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
         spawn_nazgul_pane_id: Some("claude-root".to_string()),
         claude_pane_ids: vec!["claude-root".to_string(), "claude-active".to_string()],
         spawn_parent_by_node: parents.clone(),
+        spawn_pending_dispatches_by_thread: pending_native_dispatches.clone(),
+        spawn_pending_dispatches_by_pane: pending_claude_dispatches.clone(),
+        spawn_next_dispatch_seq: 42,
+        spawn_processed_dispatch_seq_ids: vec![39, 41],
     };
 
     persist_pane_layout(codex_home.path(), &layout).expect("persist layout");
@@ -460,6 +485,16 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
     );
     assert_eq!(restored.claude_pane_ids, layout.claude_pane_ids);
     assert_eq!(restored.spawn_parent_by_node, parents);
+    assert_eq!(
+        restored.spawn_pending_dispatches_by_thread,
+        pending_native_dispatches
+    );
+    assert_eq!(
+        restored.spawn_pending_dispatches_by_pane,
+        pending_claude_dispatches
+    );
+    assert_eq!(restored.spawn_next_dispatch_seq, 42);
+    assert_eq!(restored.spawn_processed_dispatch_seq_ids, vec![39, 41]);
 }
 
 #[test]
@@ -474,6 +509,7 @@ fn pane_layout_persistence_is_thread_scoped() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec!["claude-first".to_string()],
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
     let second_layout = PaneLayoutState {
         version: 0,
@@ -482,6 +518,7 @@ fn pane_layout_persistence_is_thread_scoped() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec!["claude-second".to_string()],
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
 
     persist_pane_layout(codex_home.path(), &first_layout).expect("persist first layout");
@@ -516,6 +553,7 @@ fn pane_layout_load_finds_related_root_layout_for_native_spawn_thread() {
         spawn_nazgul_pane_id: Some(format!("thread:{nazgul_thread}")),
         claude_pane_ids: Vec::new(),
         spawn_parent_by_node: parents.clone(),
+        ..Default::default()
     };
     let empty_child_layout = PaneLayoutState {
         version: 0,
@@ -524,6 +562,7 @@ fn pane_layout_load_finds_related_root_layout_for_native_spawn_thread() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: Vec::new(),
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
 
     persist_pane_layout(codex_home.path(), &root_layout).expect("persist root layout");

@@ -47,6 +47,7 @@ use codex_otel::TURN_TOOL_CALL_METRIC;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::MultiAgentVersion;
+use codex_protocol::protocol::Op;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TurnAbortReason;
 use codex_protocol::protocol::TurnAbortedEvent;
@@ -275,7 +276,7 @@ pub(crate) trait AnySessionTask: Send + Sync + 'static {
 
 impl<T> AnySessionTask for T
 where
-    T: SessionTask,
+    T: SessionTask + Send + Sync + 'static,
 {
     fn kind(&self) -> TaskKind {
         SessionTask::kind(self)
@@ -311,7 +312,7 @@ where
 }
 
 impl Session {
-    pub async fn spawn_task<T: SessionTask>(
+    pub async fn spawn_task<T: SessionTask + Send + Sync + 'static>(
         self: &Arc<Self>,
         turn_context: Arc<TurnContext>,
         input: Vec<TurnInput>,
@@ -322,7 +323,7 @@ impl Session {
         self.start_task(turn_context, input, task).await;
     }
 
-    pub(crate) async fn start_task<T: SessionTask>(
+    pub(crate) async fn start_task<T: SessionTask + Send + Sync + 'static>(
         self: &Arc<Self>,
         turn_context: Arc<TurnContext>,
         input: Vec<TurnInput>,
@@ -565,12 +566,12 @@ impl Session {
         turn_context: Arc<TurnContext>,
         task_result: SessionTaskResult,
     ) {
-        let (last_agent_message, abort_reason) = match task_result {
-            Ok(last_agent_message) => (last_agent_message, None),
-            Err(CodexErr::TurnAborted) => (None, Some(TurnAbortReason::Interrupted)),
+        let (last_agent_message, abort_reason, completed_naturally) = match task_result {
+            Ok(last_agent_message) => (last_agent_message, None, true),
+            Err(CodexErr::TurnAborted) => (None, Some(TurnAbortReason::Interrupted), false),
             Err(err) => {
                 warn!(%err, "session task returned an unexpected error");
-                (None, None)
+                (None, None, false)
             }
         };
         turn_context
@@ -600,25 +601,30 @@ impl Session {
                 ts.token_usage_at_turn_start.clone(),
             )
         };
+        let mut follow_up_input = Vec::new();
         if !pending_input.is_empty() {
             for pending_input_item in pending_input {
-                let hook_outcome =
-                    inspect_pending_input(self, &turn_context, &pending_input_item).await;
-                if hook_outcome.should_stop {
-                    record_additional_contexts(
-                        self,
-                        &turn_context,
-                        hook_outcome.additional_contexts,
-                    )
-                    .await;
+                if completed_naturally && pending_input_seeds_follow_up(&pending_input_item) {
+                    follow_up_input.push(pending_input_item);
                 } else {
-                    record_pending_input(
-                        self,
-                        &turn_context,
-                        pending_input_item,
-                        hook_outcome.additional_contexts,
-                    )
-                    .await;
+                    let hook_outcome =
+                        inspect_pending_input(self, &turn_context, &pending_input_item).await;
+                    if hook_outcome.should_stop {
+                        record_additional_contexts(
+                            self,
+                            &turn_context,
+                            hook_outcome.additional_contexts,
+                        )
+                        .await;
+                    } else {
+                        record_pending_input(
+                            self,
+                            &turn_context,
+                            pending_input_item,
+                            hook_outcome.additional_contexts,
+                        )
+                        .await;
+                    }
                 }
             }
         }
@@ -793,9 +799,14 @@ impl Session {
                 false
             }
         };
+        if !follow_up_input.is_empty() {
+            self.submit_follow_up_input(follow_up_input).await;
+            return;
+        }
         if !cleared_active_turn {
             return;
         }
+        self.submit_pending_work_wake().await;
         self.emit_thread_idle_lifecycle_if_idle().await;
     }
 
@@ -820,6 +831,50 @@ impl Session {
             .unified_exec_manager
             .terminate_process(process_id)
             .await
+    }
+
+    async fn submit_follow_up_input(&self, follow_up_input: Vec<TurnInput>) {
+        for input in follow_up_input {
+            let (op, client_user_message_id) = match input {
+                TurnInput::UserInput { content, client_id } => (
+                    Op::UserInput {
+                        items: content,
+                        final_output_json_schema: None,
+                        responsesapi_client_metadata: None,
+                        additional_context: Default::default(),
+                        thread_settings: Default::default(),
+                    },
+                    client_id,
+                ),
+                TurnInput::InterAgentCommunication(mut communication) => {
+                    communication.trigger_turn = true;
+                    (
+                        Op::InterAgentCommunication { communication },
+                        /*client_user_message_id*/ None,
+                    )
+                }
+                TurnInput::ResponseItem(_) => continue,
+            };
+            if let Err(err) = self
+                .submit_internal_follow_up(op, client_user_message_id)
+                .await
+            {
+                warn!(%err, "failed to submit follow-up input after task finished");
+                continue;
+            }
+        }
+    }
+
+    async fn submit_pending_work_wake(&self) {
+        if !self.input_queue.has_trigger_turn_mailbox_items().await {
+            return;
+        }
+        if let Err(err) = self
+            .submit_internal_follow_up(Op::WakePendingWork, /*client_user_message_id*/ None)
+            .await
+        {
+            warn!(%err, "failed to submit pending-work wake after task finished");
+        }
     }
 
     async fn handle_task_abort(self: &Arc<Self>, task: RunningTask, reason: TurnAbortReason) {
@@ -896,6 +951,14 @@ impl Session {
             .lock()
             .await
             .clear_turn(&task.turn_context.sub_id);
+    }
+}
+
+fn pending_input_seeds_follow_up(input: &TurnInput) -> bool {
+    match input {
+        TurnInput::UserInput { content, .. } => !content.is_empty(),
+        TurnInput::InterAgentCommunication(_) => true,
+        TurnInput::ResponseItem(_) => false,
     }
 }
 

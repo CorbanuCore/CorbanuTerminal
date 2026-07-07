@@ -748,6 +748,19 @@ pub(crate) struct App {
     /// into a parent processing turn) when the parent goes idle. Keyed by parent thread id so a
     /// flush only fires for the pane that actually became idle.
     pub(crate) spawn_pending_reports_by_thread: HashMap<ThreadId, VecDeque<String>>,
+    /// Spawn tasks destined for a native Codex thread that arrived while the target was busy.
+    ///
+    /// These are flushed as a fresh turn when the target thread next goes idle so dispatches never
+    /// rely on mid-turn steer semantics.
+    pub(crate) spawn_pending_dispatches_by_thread:
+        HashMap<ThreadId, VecDeque<crate::spawn_orchestration::PendingSpawnDispatch>>,
+    /// Spawn tasks destined for Claude panes that arrived while the pane was already running.
+    pub(crate) spawn_pending_dispatches_by_pane:
+        HashMap<String, VecDeque<crate::spawn_orchestration::PendingSpawnDispatch>>,
+    pub(crate) spawn_dispatch_acks_by_target_task:
+        HashMap<(String, String), VecDeque<crate::spawn_orchestration::SpawnDispatchAck>>,
+    pub(crate) spawn_next_dispatch_seq: u64,
+    pub(crate) spawn_processed_dispatch_seq_ids: HashSet<u64>,
     pub(crate) spawn_processed_dispatches: HashSet<(ThreadId, String, String, String)>,
     /// Loop-breaker state for auto child-report processing turns, keyed by parent node id.
     pub(crate) spawn_auto_loop_state_by_node:
@@ -755,6 +768,11 @@ pub(crate) struct App {
     /// False after resume until a live operator/non-auto turn proves current intent.
     pub(crate) spawn_operator_input_seen: bool,
     pub(crate) spawn_quarantine_notified_by_node: HashSet<String>,
+    pub(crate) spawn_context_left_by_thread: HashMap<ThreadId, i64>,
+    pub(crate) spawn_low_context_warned_by_thread: HashSet<ThreadId>,
+    pub(crate) spawn_last_report_seq_by_node: HashMap<String, u64>,
+    pub(crate) spawn_last_dispatch_seq_by_node: HashMap<String, u64>,
+    pub(crate) spawn_last_event_at_by_node: HashMap<String, String>,
     pub(crate) spawn_nazgul_pane_id: Option<String>,
     side_threads: HashMap<ThreadId, SideThreadState>,
     pub(crate) claude_panes: crate::claude_panes::ClaudePaneRegistry,
@@ -1268,6 +1286,19 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     .iter()
                     .any(|pane| pane.id == *pane_id)
             });
+        let restored_spawn_next_dispatch_seq = restored_pane_layout
+            .as_ref()
+            .map(|layout| layout.spawn_next_dispatch_seq.max(1))
+            .unwrap_or(1);
+        let restored_spawn_processed_dispatch_seq_ids = restored_pane_layout
+            .as_ref()
+            .map(|layout| {
+                crate::spawn_orchestration::bounded_spawn_processed_dispatch_seq_ids(
+                    layout.spawn_processed_dispatch_seq_ids.iter().copied(),
+                    restored_spawn_next_dispatch_seq,
+                )
+            })
+            .unwrap_or_default();
 
         let mut app = Self {
             model_catalog,
@@ -1314,10 +1345,42 @@ See the PFTerminal keymap documentation for supported actions and examples."
             spawn_status_by_thread: HashMap::new(),
             spawn_parent_reports_by_node: HashMap::new(),
             spawn_pending_reports_by_thread: HashMap::new(),
+            spawn_pending_dispatches_by_thread: restored_pane_layout
+                .as_ref()
+                .map(|layout| {
+                    layout
+                        .spawn_pending_dispatches_by_thread
+                        .iter()
+                        .filter_map(|(thread_id, queue)| {
+                            ThreadId::from_string(thread_id)
+                                .ok()
+                                .map(|thread_id| (thread_id, queue.iter().cloned().collect()))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            spawn_pending_dispatches_by_pane: restored_pane_layout
+                .as_ref()
+                .map(|layout| {
+                    layout
+                        .spawn_pending_dispatches_by_pane
+                        .iter()
+                        .map(|(pane_id, queue)| (pane_id.clone(), queue.iter().cloned().collect()))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            spawn_dispatch_acks_by_target_task: HashMap::new(),
+            spawn_next_dispatch_seq: restored_spawn_next_dispatch_seq,
+            spawn_processed_dispatch_seq_ids: restored_spawn_processed_dispatch_seq_ids,
             spawn_processed_dispatches: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
             spawn_operator_input_seen: false,
             spawn_quarantine_notified_by_node: HashSet::new(),
+            spawn_context_left_by_thread: HashMap::new(),
+            spawn_low_context_warned_by_thread: HashSet::new(),
+            spawn_last_report_seq_by_node: HashMap::new(),
+            spawn_last_dispatch_seq_by_node: HashMap::new(),
+            spawn_last_event_at_by_node: HashMap::new(),
             spawn_nazgul_pane_id: restored_spawn_nazgul_pane_id,
             side_threads: HashMap::new(),
             claude_panes: restored_claude_panes,

@@ -2353,6 +2353,7 @@ impl App {
             }
             AppEvent::SubmitSpawnAgentTask { thread_id, task } => {
                 let task = task.trim().to_string();
+                let original_target_node_id = crate::spawn_orchestration::thread_node_id(thread_id);
                 if task.is_empty() {
                     self.chat_widget
                         .add_error_message("Spawn task cannot be empty.".to_string());
@@ -2384,6 +2385,11 @@ impl App {
                             let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                             self.abort_spawn_auto_processing_turn(&node_key);
                             self.requeue_spawn_report_processing_task(thread_id, &task);
+                            self.record_spawn_dispatch_failed_for_task(
+                                &original_target_node_id,
+                                &task,
+                                format!("failed to attach pane session: {err}"),
+                            );
                             self.chat_widget.add_error_message(format!(
                                 "Cannot send task to {label}; failed to attach pane session: {err}"
                             ));
@@ -2436,6 +2442,13 @@ impl App {
                                     let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                                     self.abort_spawn_auto_processing_turn(&node_key);
                                     self.requeue_spawn_report_processing_task(thread_id, &task);
+                                    self.record_spawn_dispatch_failed_for_task(
+                                        &original_target_node_id,
+                                        &task,
+                                        format!(
+                                            "failed to read pane metadata: {err}; failed to materialize saved pane: {materialize_err}"
+                                        ),
+                                    );
                                     self.chat_widget.add_error_message(format!(
                                         "Cannot send task to {label}; failed to read pane metadata: {err}; failed to materialize saved pane: {materialize_err}"
                                     ));
@@ -2452,6 +2465,11 @@ impl App {
                     let detail = self
                         .unloaded_agent_thread_reason(thread_id)
                         .unwrap_or_else(|| "Pane session is not loaded.".to_string());
+                    self.record_spawn_dispatch_failed_for_task(
+                        &original_target_node_id,
+                        &task,
+                        &detail,
+                    );
                     self.chat_widget
                         .add_error_message(format!("Cannot send task to {label}; {detail}"));
                     return Ok(AppRunControl::Continue);
@@ -2462,8 +2480,29 @@ impl App {
                     let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                     self.abort_spawn_auto_processing_turn(&node_key);
                     self.requeue_spawn_report_processing_task(thread_id, &task);
+                    self.record_spawn_dispatch_failed_for_task(
+                        &original_target_node_id,
+                        &task,
+                        &message,
+                    );
                     self.chat_widget
                         .add_error_message(format!("Cannot send task to {label}: {message}"));
+                    return Ok(AppRunControl::Continue);
+                }
+                if self.native_spawn_target_is_busy(thread_id) {
+                    let pending =
+                        self.pending_dispatch_from_registered_task(&original_target_node_id, task);
+                    self.record_spawn_dispatch_acks(
+                        &pending.acks,
+                        "queued_busy",
+                        "target became busy before turn start; will deliver when idle",
+                        false,
+                    );
+                    self.enqueue_pending_dispatch_for_thread(thread_id, pending);
+                    self.chat_widget.add_info_message(
+                        format!("Task queued for {label}."),
+                        Some("The target pane is busy; PFTerminal will deliver it when the pane goes idle.".to_string()),
+                    );
                     return Ok(AppRunControl::Continue);
                 }
                 // Inject the live spawn hierarchy as additional context so native spawn panes
@@ -2506,6 +2545,10 @@ impl App {
                                 message: None,
                             },
                         );
+                        self.record_spawn_dispatch_delivered_for_task(
+                            &original_target_node_id,
+                            &task,
+                        );
                         self.agent_navigation
                             .set_running(thread_id, /*is_running*/ true);
                         self.agent_navigation
@@ -2526,6 +2569,11 @@ impl App {
                         let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                         self.abort_spawn_auto_processing_turn(&node_key);
                         self.requeue_spawn_report_processing_task(thread_id, &task);
+                        self.record_spawn_dispatch_failed_for_task(
+                            &original_target_node_id,
+                            &task,
+                            err.to_string(),
+                        );
                         self.chat_widget
                             .add_error_message(format!("Failed to send task to {label}: {err}"));
                     }

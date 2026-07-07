@@ -490,9 +490,11 @@ fn trace_stream_timing_enabled() -> bool {
 
 fn trace_stream_timing(label: &str, start: Instant) {
     if trace_stream_timing_enabled() {
-        eprintln!(
-            "[pfterminal-stream] {label} elapsed_ms={}",
-            start.elapsed().as_millis()
+        debug!(
+            target: "pfterminal_stream",
+            label,
+            elapsed_ms = start.elapsed().as_millis(),
+            "pfterminal stream timing"
         );
     }
 }
@@ -2769,15 +2771,14 @@ fn apply_chat_cache_control(messages: &mut [ChatMessage]) {
         mark_chat_message_cache_control(system_message);
     }
 
-    let user_indices = messages
-        .iter()
-        .enumerate()
-        .filter_map(|(index, message)| (message.role == "user").then_some(index))
-        .collect::<Vec<_>>();
-
-    for index in user_indices.into_iter().rev().take(2) {
-        if let Some(message) = messages.get_mut(index) {
-            mark_chat_message_cache_control(message);
+    let mut marked_user_messages = 0usize;
+    for index in (0..messages.len()).rev() {
+        if messages[index].role == "user" {
+            mark_chat_message_cache_control(&mut messages[index]);
+            marked_user_messages += 1;
+            if marked_user_messages >= 2 {
+                break;
+            }
         }
     }
 }
@@ -3040,21 +3041,16 @@ fn push_anthropic_message(messages: &mut Vec<Value>, role: &str, block: Value) {
 }
 
 fn apply_anthropic_cache_control_to_last_user_messages(messages: &mut [Value]) {
-    let user_indices = messages
-        .iter()
-        .enumerate()
-        .filter_map(|(index, message)| {
-            (message.get("role").and_then(Value::as_str) == Some("user")).then_some(index)
-        })
-        .collect::<Vec<_>>();
-
-    for index in user_indices
-        .into_iter()
-        .rev()
-        .take(ANTHROPIC_MESSAGES_MAX_CACHE_CONTROL_BLOCKS.saturating_sub(2))
-    {
-        if let Some(message) = messages.get_mut(index) {
+    let max_user_messages = ANTHROPIC_MESSAGES_MAX_CACHE_CONTROL_BLOCKS.saturating_sub(2);
+    let mut marked_user_messages = 0usize;
+    for index in (0..messages.len()).rev() {
+        let is_user = messages[index].get("role").and_then(Value::as_str) == Some("user");
+        if is_user && let Some(message) = messages.get_mut(index) {
             mark_anthropic_message_cache_control(message);
+            marked_user_messages += 1;
+            if marked_user_messages >= max_user_messages {
+                break;
+            }
         }
     }
 }
@@ -3160,7 +3156,7 @@ fn anthropic_thinking_for_effort(effort: Option<&ReasoningEffortConfig>) -> Opti
 fn create_tools_json_for_anthropic_messages(tools: &[ToolSpec]) -> Result<Vec<Value>> {
     let mut tools = tools
         .iter()
-        .filter_map(|tool| tool_spec_to_anthropic_tool(tool))
+        .filter_map(tool_spec_to_anthropic_tool)
         .collect::<Result<Vec<_>>>()?;
     tools.sort_by_key(|tool| {
         usize::from(

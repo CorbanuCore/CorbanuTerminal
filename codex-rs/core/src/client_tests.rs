@@ -1546,7 +1546,7 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
         "Anthropic Messages rejects more than four cache_control blocks"
     );
 
-    let mut identity_only_prompt = prompt.clone();
+    let mut identity_only_prompt = prompt;
     identity_only_prompt.base_instructions = BaseInstructions {
         text: String::new(),
     };

@@ -245,6 +245,23 @@ impl App {
                 .iter()
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect(),
+            spawn_pending_dispatches_by_thread: self
+                .spawn_pending_dispatches_by_thread
+                .iter()
+                .map(|(thread_id, queue)| {
+                    (
+                        thread_id.to_string(),
+                        queue.iter().cloned().collect::<Vec<_>>(),
+                    )
+                })
+                .collect(),
+            spawn_pending_dispatches_by_pane: self
+                .spawn_pending_dispatches_by_pane
+                .iter()
+                .map(|(pane_id, queue)| (pane_id.clone(), queue.iter().cloned().collect()))
+                .collect(),
+            spawn_next_dispatch_seq: self.spawn_next_dispatch_seq.max(1),
+            spawn_processed_dispatch_seq_ids: self.recent_spawn_processed_dispatch_seq_ids(),
         };
         if let Err(err) = persist_pane_layout(self.config.codex_home.as_ref(), &layout) {
             tracing::warn!(error = %err, "failed to persist pane layout");
@@ -507,9 +524,29 @@ impl App {
 
     pub(crate) fn submit_claude_pane_task(&mut self, pane_id: String, task: String) {
         let task = task.trim().to_string();
+        let target_node_id = crate::spawn_orchestration::pane_node_id(&pane_id);
         if task.is_empty() {
             self.chat_widget
                 .add_error_message("Claude pane task cannot be empty.".to_string());
+            return;
+        }
+        if self.claude_panes.claude_pane_is_running(&pane_id) {
+            let title = self.user_pane_title(&pane_id);
+            let pending = self.pending_dispatch_from_registered_task(&target_node_id, task);
+            self.record_spawn_dispatch_acks(
+                &pending.acks,
+                "queued_busy",
+                "target became busy before turn start; will deliver when idle",
+                false,
+            );
+            self.enqueue_pending_dispatch_for_claude_pane(pane_id, pending);
+            self.chat_widget.add_info_message(
+                format!("Task queued for {title}."),
+                Some(
+                    "The target pane is busy; PFTerminal will deliver it when the pane goes idle."
+                        .to_string(),
+                ),
+            );
             return;
         }
         let is_active = self.claude_panes.active_user_pane_id() == pane_id;
@@ -541,10 +578,16 @@ impl App {
                 Ok(prepared) => prepared,
                 Err(err) => {
                     self.abort_spawn_auto_processing_turn(&node_key);
+                    self.record_spawn_dispatch_failed_for_task(
+                        &target_node_id,
+                        &task,
+                        err.to_string(),
+                    );
                     self.chat_widget.add_error_message(err.to_string());
                     return;
                 }
             };
+        self.record_spawn_dispatch_delivered_for_task(&target_node_id, &task);
         self.record_claude_spawn_rollout_task_started(&pane_id, &task, prepared.plan.turn_index);
         // Loop breaker: a turn we auto-triggered (child-report processing) transitions
         // pending -> running; any other submitted task is fresh work and resets the auto chain.
@@ -623,6 +666,7 @@ impl App {
                     .claude_panes
                     .filter_new_spawn_dispatches(&pane_id, dispatches);
                 self.claude_panes.finish_turn(&pane_id, &Ok(output.clone()));
+                self.flush_pending_dispatches_for_claude_pane(&pane_id);
                 let report_status = output.status.label().to_string();
                 let report_text = if output.text.trim().is_empty() {
                     output.failure_message()
@@ -706,6 +750,7 @@ impl App {
                 self.note_spawn_turn_completed_for_auto_loop(
                     &crate::spawn_orchestration::pane_node_id(&pane_id),
                 );
+                self.flush_pending_dispatches_for_claude_pane(&pane_id);
                 self.record_spawn_child_report_for_claude_pane(&pane_id, "error", Some(&error));
                 if self.claude_panes.active_user_pane_id() == pane_id {
                     self.chat_widget.fail_external_pane_turn(error);

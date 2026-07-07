@@ -17,6 +17,7 @@ use codex_core::config::ConfigBuilder;
 use codex_core::config::ConfigOverrides;
 pub use codex_core::test_support::TestCodexResponsesRequestKind;
 pub use codex_core::test_support::responses_metadata;
+use codex_protocol::models::PermissionProfile;
 use codex_utils_absolute_path::AbsolutePathBuf;
 pub use codex_utils_absolute_path::test_support::PathBufExt;
 pub use codex_utils_absolute_path::test_support::PathExt;
@@ -41,6 +42,7 @@ pub use test_environment::get_remote_test_env;
 pub use test_environment::test_environment;
 
 static TEST_ARG0_PATH_ENTRY: OnceLock<Option<Arg0PathEntryGuard>> = OnceLock::new();
+static LINUX_SANDBOX_SKIP_REASON: OnceLock<Option<String>> = OnceLock::new();
 
 #[ctor]
 fn enable_deterministic_unified_exec_process_ids_for_tests() {
@@ -360,6 +362,26 @@ pub fn sandbox_network_env_var() -> &'static str {
     codex_core::spawn::CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR
 }
 
+pub fn sandbox_skip_reason() -> Option<&'static str> {
+    if std::env::var(sandbox_env_var()) == Ok("seatbelt".to_string()) {
+        return Some("seatbelt sandbox is active");
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        LINUX_SANDBOX_SKIP_REASON
+            .get_or_init(|| {
+                codex_core::config::system_bwrap_warning(&PermissionProfile::read_only())
+            })
+            .as_deref()
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
 pub fn format_with_current_shell(command: &str) -> Vec<String> {
     codex_core::shell::default_user_shell().derive_exec_args(command, /*use_login_shell*/ true)
 }
@@ -530,24 +552,14 @@ pub mod fs_wait {
 #[macro_export]
 macro_rules! skip_if_sandbox {
     () => {{
-        if ::std::env::var($crate::sandbox_env_var())
-            == ::core::result::Result::Ok("seatbelt".to_string())
-        {
-            eprintln!(
-                "{} is set to 'seatbelt', skipping test.",
-                $crate::sandbox_env_var()
-            );
+        if let Some(reason) = $crate::sandbox_skip_reason() {
+            eprintln!("Sandbox-dependent test skipped: {reason}");
             return;
         }
     }};
     ($return_value:expr $(,)?) => {{
-        if ::std::env::var($crate::sandbox_env_var())
-            == ::core::result::Result::Ok("seatbelt".to_string())
-        {
-            eprintln!(
-                "{} is set to 'seatbelt', skipping test.",
-                $crate::sandbox_env_var()
-            );
+        if let Some(reason) = $crate::sandbox_skip_reason() {
+            eprintln!("Sandbox-dependent test skipped: {reason}");
             return $return_value;
         }
     }};

@@ -14,9 +14,11 @@ const THREAD_LIST_MAX_LIMIT: usize = 100;
 
 fn trace_thread_processor_timing(label: &str, start: std::time::Instant) {
     if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
-        eprintln!(
-            "[pfterminal-thread-processor] {label} elapsed_ms={}",
-            start.elapsed().as_millis()
+        tracing::debug!(
+            target: "pfterminal_thread_processor",
+            label,
+            elapsed_ms = start.elapsed().as_millis(),
+            "pfterminal thread processor timing"
         );
     }
 }
