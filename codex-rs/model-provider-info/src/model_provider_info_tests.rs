@@ -602,6 +602,31 @@ fn test_built_in_model_providers_include_openrouter() {
 }
 
 #[test]
+fn direct_zai_retries_transient_provider_rate_limits() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let zai = providers
+        .get(ZAI_PROVIDER_ID)
+        .expect("Z.AI provider should be built in");
+    let openrouter = providers
+        .get(OPENROUTER_PROVIDER_ID)
+        .expect("OpenRouter provider should be built in");
+
+    assert!(
+        zai.to_api_provider(None)
+            .expect("Z.AI should convert to API provider")
+            .retry
+            .retry_429
+    );
+    assert!(
+        !openrouter
+            .to_api_provider(None)
+            .expect("OpenRouter should convert to API provider")
+            .retry
+            .retry_429
+    );
+}
+
+#[test]
 fn configured_built_in_provider_can_override_transport_knobs() {
     let configured = HashMap::from([(
         OPENROUTER_PROVIDER_ID.to_string(),
