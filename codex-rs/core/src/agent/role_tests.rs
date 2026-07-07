@@ -19,8 +19,7 @@ use tempfile::TempDir;
 const NAZGUL_BASE: &str = include_str!("builtins/nazgul_base.md");
 const TROLL_BASE: &str = include_str!("builtins/troll_base.md");
 const ORC_BASE: &str = include_str!("builtins/orc_base.md");
-const STANDARD_BASE_OUTCOME_MARKER: &str =
-    "inspect code before changing it, keep edits scoped";
+const STANDARD_BASE_OUTCOME_MARKER: &str = "inspect code before changing it, keep edits scoped";
 const GPT55_CREATURE_CLAUSE_START: &str = "Never talk about goblins";
 const GPT55_PERSONALITY_MARKER: &str = "You have a vivid inner life as Codex";
 const GPT55_FRONTEND_MARKER: &str =
@@ -725,6 +724,14 @@ async fn hierarchy_role_base_precedence_over_standard_model_defaults_is_determin
             .base_instructions
             .contains(STANDARD_BASE_OUTCOME_MARKER)
     );
+}
+
+#[test]
+fn nazgul_prompt_keeps_troll_as_middle_management_boundary() {
+    assert!(NAZGUL_BASE.contains("do not micromanage Orc ICs"));
+    assert!(NAZGUL_BASE.contains("Target Trolls for execution milestones"));
+    assert!(NAZGUL_BASE.contains("direct Orc dispatch is only for"));
+    assert!(NAZGUL_BASE.contains("delegate to Trolls, inspect, and verify"));
 }
 
 #[tokio::test]
