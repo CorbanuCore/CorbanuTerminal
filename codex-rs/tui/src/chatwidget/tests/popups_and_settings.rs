@@ -2644,6 +2644,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     chat.thread_id = Some(ThreadId::new());
 
     assert_eq!(chat.config.model_provider_id, AMBIENT_PROVIDER_ID);
+    assert_eq!(chat.model_display_name(), "Ambient GLM 5.2");
 
     let presets = chat
         .model_catalog
@@ -2653,8 +2654,12 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 40);
 
     assert!(
+        popup.contains("Ambient GLM 5.2"),
+        "expected Ambient GLM display name in /model picker:\n{popup}"
+    );
+    assert!(
         popup.contains(AMBIENT_DEFAULT_MODEL),
-        "expected Ambient GLM 5.2 in /model picker:\n{popup}"
+        "expected Ambient GLM slug in /model picker description:\n{popup}"
     );
     assert!(
         popup.contains("Coding Plans"),
@@ -2673,8 +2678,12 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         "expected Ambient Kimi description in /model picker:\n{popup}"
     );
     assert!(
+        popup.contains("Z.AI GLM 5.2"),
+        "expected Z.AI GLM display name in /model picker:\n{popup}"
+    );
+    assert!(
         popup.contains(ZAI_DEFAULT_MODEL),
-        "expected direct Z.AI GLM model in /model picker:\n{popup}"
+        "expected direct Z.AI GLM slug in /model picker description:\n{popup}"
     );
     assert!(
         popup.contains(CLAUDE_PLAN_MODEL),

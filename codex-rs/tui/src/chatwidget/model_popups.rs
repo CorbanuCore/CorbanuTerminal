@@ -114,8 +114,8 @@ impl ChatWidget {
         let current_label = presets
             .iter()
             .find(|preset| preset.model.as_str() == current_model)
-            .map(|preset| preset.model.to_string())
-            .unwrap_or_else(|| self.model_display_name().to_string());
+            .map(Self::model_display_label_for_preset)
+            .unwrap_or_else(|| self.model_display_name());
 
         let (mut auto_presets, other_presets): (Vec<ModelPreset>, Vec<ModelPreset>) = presets
             .into_iter()
@@ -130,9 +130,9 @@ impl ChatWidget {
         let mut items: Vec<SelectionItem> = auto_presets
             .into_iter()
             .map(|preset| {
-                let description =
-                    (!preset.description.is_empty()).then_some(preset.description.clone());
+                let description = Self::model_description_for_preset(&preset);
                 let model = preset.model.clone();
+                let display_name = Self::model_display_label_for_preset(&preset);
                 let should_prompt_plan_mode_scope = self.should_prompt_plan_mode_reasoning_scope(
                     model.as_str(),
                     Some(preset.default_reasoning_effort.clone()),
@@ -143,10 +143,11 @@ impl ChatWidget {
                     should_prompt_plan_mode_scope,
                 );
                 SelectionItem {
-                    name: model.clone(),
+                    name: display_name.clone(),
                     description,
                     is_current: model.as_str() == current_model,
                     is_default: preset.is_default,
+                    search_value: Some(format!("{display_name} {model}")),
                     actions,
                     dismiss_on_select: true,
                     ..Default::default()
@@ -356,11 +357,12 @@ impl ChatWidget {
     }
 
     fn model_picker_item(&self, preset: ModelPreset) -> SelectionItem {
-        let description =
-            (!preset.description.is_empty()).then_some(preset.description.to_string());
+        let description = Self::model_description_for_preset(&preset);
         let is_current = preset.model.as_str() == self.current_model();
         let direct_select = preset.supported_reasoning_efforts.len() <= 1;
         let preset_for_action = preset.clone();
+        let display_name = Self::model_display_label_for_preset(&preset);
+        let model = preset.model.clone();
         let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
             let preset_for_event = preset_for_action.clone();
             tx.send(AppEvent::OpenReasoningPopup {
@@ -368,14 +370,37 @@ impl ChatWidget {
             });
         })];
         SelectionItem {
-            name: preset.model.clone(),
+            name: display_name.clone(),
             description,
             is_current,
             is_default: preset.is_default,
+            search_value: Some(format!("{display_name} {model}")),
             actions,
             dismiss_on_select: direct_select,
             dismiss_parent_on_child_accept: !direct_select,
             ..Default::default()
+        }
+    }
+
+    fn model_display_label_for_preset(preset: &ModelPreset) -> String {
+        let display_name = preset.display_name.trim();
+        if display_name.is_empty() {
+            preset.model.clone()
+        } else {
+            display_name.to_string()
+        }
+    }
+
+    fn model_description_for_preset(preset: &ModelPreset) -> Option<String> {
+        let description = preset.description.trim();
+        let display_name = Self::model_display_label_for_preset(preset);
+        let slug = preset.model.as_str();
+        let slug_prefix = (display_name != slug).then(|| format!("Model: {slug}"));
+        match (slug_prefix, description.is_empty()) {
+            (Some(prefix), false) => Some(format!("{prefix}. {description}")),
+            (Some(prefix), true) => Some(prefix),
+            (None, false) => Some(description.to_string()),
+            (None, true) => None,
         }
     }
 
@@ -574,6 +599,7 @@ impl ChatWidget {
 
     /// Open a popup to choose the reasoning effort (stage 2) for the given model.
     pub(crate) fn open_reasoning_popup(&mut self, preset: ModelPreset) {
+        let model_label = Self::model_display_label_for_preset(&preset);
         let default_effort = preset.default_reasoning_effort;
         let supported = preset.supported_reasoning_efforts;
         let in_plan_mode =
@@ -719,7 +745,7 @@ impl ChatWidget {
             "Select Reasoning Level"
         };
         header.push(Line::from(
-            format!("{header_title} for {model_slug}").bold(),
+            format!("{header_title} for {model_label}").bold(),
         ));
 
         self.bottom_pane.show_selection_view(SelectionViewParams {
@@ -874,6 +900,41 @@ mod tests {
                 &ReasoningEffortConfig::XHigh,
             ),
             "Deep"
+        );
+        assert_eq!(
+            ChatWidget::reasoning_effort_label_for_model(
+                ZAI_DEFAULT_MODEL,
+                &ReasoningEffortConfig::Medium,
+            ),
+            "Standard"
+        );
+    }
+
+    #[test]
+    fn model_picker_display_label_uses_catalog_name_with_slug_in_description() {
+        let mut ambient = preset(AMBIENT_DEFAULT_MODEL, true);
+        ambient.display_name = "Ambient GLM 5.2".to_string();
+        ambient.description = "Ambient-backed GLM.".to_string();
+
+        assert_eq!(
+            ChatWidget::model_display_label_for_preset(&ambient),
+            "Ambient GLM 5.2"
+        );
+        assert_eq!(
+            ChatWidget::model_description_for_preset(&ambient),
+            Some(format!(
+                "Model: {AMBIENT_DEFAULT_MODEL}. Ambient-backed GLM."
+            ))
+        );
+
+        let fallback = preset("custom-model", true);
+        assert_eq!(
+            ChatWidget::model_display_label_for_preset(&fallback),
+            "custom-model"
+        );
+        assert_eq!(
+            ChatWidget::model_description_for_preset(&fallback),
+            Some("custom-model description".to_string())
         );
     }
 

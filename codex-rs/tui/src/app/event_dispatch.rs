@@ -1824,10 +1824,30 @@ impl App {
                             "Selected model: {model}, Selected provider: {:?}, Selected effort: {effort_label}",
                             provider
                         );
-                        let mut message = if let Some(provider) = provider {
-                            format!("Model changed to {model} via {provider}")
+                        let model_label = self
+                            .model_catalog
+                            .try_list_models()
+                            .ok()
+                            .and_then(|models| {
+                                models
+                                    .into_iter()
+                                    .find(|preset| preset.model == model)
+                                    .map(|preset| preset.display_name)
+                            })
+                            .filter(|display_name| !display_name.trim().is_empty())
+                            .unwrap_or_else(|| model.clone());
+                        let provider_label = provider.as_deref().map(|provider_id| {
+                            self.config
+                                .model_providers
+                                .get(provider_id)
+                                .map(|provider| provider.name.clone())
+                                .filter(|name| !name.trim().is_empty())
+                                .unwrap_or_else(|| provider_id.to_string())
+                        });
+                        let mut message = if let Some(provider_label) = provider_label {
+                            format!("Model changed to {model_label} via {provider_label}")
                         } else {
-                            format!("Model changed to {model}")
+                            format!("Model changed to {model_label}")
                         };
                         if let Some(label) = Self::reasoning_label_for(&model, effort.as_ref()) {
                             message.push(' ');
