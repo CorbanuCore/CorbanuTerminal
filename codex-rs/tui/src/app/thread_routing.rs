@@ -1591,6 +1591,7 @@ impl App {
                 // pending -> running; any other turn is fresh work and resets the auto chain.
                 let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                 self.note_spawn_turn_started_for_auto_loop(&node_key);
+                self.note_whip_target_started(&node_key);
                 (
                     thread_id,
                     codex_app_server_protocol::CollabAgentStatus::Running,
@@ -1635,6 +1636,8 @@ impl App {
                 if let codex_app_server_protocol::ThreadItem::AgentMessage { text, .. } =
                     &notification.item
                 {
+                    let source_node_id = self.spawn_auto_loop_node_for_thread(thread_id);
+                    self.dispatch_orchestrate_blocks_from_text(&source_node_id, text);
                     self.dispatch_native_spawn_task_blocks_from_text(
                         thread_id,
                         &notification.turn_id,
@@ -1676,7 +1679,16 @@ impl App {
             self.record_spawn_child_report_for_thread(thread_id, status, report_message);
             // This thread just went idle. If child reports arrived while it was mid-turn, flush them
             // now into a real processing turn so no report is silently dropped (the multi-turn race).
-            self.flush_pending_reports_for_thread(thread_id);
+            let flushed_reports = self.flush_pending_reports_for_thread(thread_id);
+            if !flushed_reports {
+                let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
+                let last_result = self
+                    .agent_navigation
+                    .get(&thread_id)
+                    .and_then(|entry| entry.last_result_message.as_deref())
+                    .map(str::to_string);
+                self.note_whip_target_idle(&node_key, last_result.as_deref());
+            }
         }
     }
 

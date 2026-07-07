@@ -1223,6 +1223,35 @@ async fn slash_spawn_status_opens_status_picker() {
 }
 
 #[tokio::test]
+async fn slash_orchestrate_routes_to_app_event() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.dispatch_command(SlashCommand::Orchestrate);
+
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::HandleOrchestrateCommand { args }) if args.is_empty()
+    );
+}
+
+#[tokio::test]
+async fn slash_orchestrate_with_args_routes_to_app_event() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.dispatch_command_with_args(
+        SlashCommand::Orchestrate,
+        "attach Krimp quant --mode auto".to_string(),
+        Vec::new(),
+    );
+
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::HandleOrchestrateCommand { args })
+            if args == "attach Krimp quant --mode auto"
+    );
+}
+
+#[tokio::test]
 async fn slash_spawn_role_without_task_opens_parent_picker() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
 

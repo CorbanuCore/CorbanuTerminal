@@ -153,6 +153,10 @@ pub(crate) struct PaneLayoutState {
     pub(crate) spawn_nazgul_pane_id: Option<String>,
     pub(crate) claude_pane_ids: Vec<String>,
     pub(crate) spawn_parent_by_node: BTreeMap<String, String>,
+    #[serde(default)]
+    pub(crate) orchestrate_whips: BTreeMap<String, crate::orchestrate::Whip>,
+    #[serde(default)]
+    pub(crate) orchestrate_next_whip_seq: u64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

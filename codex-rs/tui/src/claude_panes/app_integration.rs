@@ -245,6 +245,12 @@ impl App {
                 .iter()
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect(),
+            orchestrate_whips: self
+                .orchestrate_whips
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect(),
+            orchestrate_next_whip_seq: self.orchestrate_next_whip_seq,
         };
         if let Err(err) = persist_pane_layout(self.config.codex_home.as_ref(), &layout) {
             tracing::warn!(error = %err, "failed to persist pane layout");
@@ -549,6 +555,7 @@ impl App {
         // Loop breaker: a turn we auto-triggered (child-report processing) transitions
         // pending -> running; any other submitted task is fresh work and resets the auto chain.
         self.note_spawn_turn_started_for_auto_loop(&node_key);
+        self.note_whip_target_started(&node_key);
 
         if self.claude_panes.active_user_pane_id() == pane_id {
             self.chat_widget.begin_external_pane_turn();
@@ -605,6 +612,13 @@ impl App {
         match result {
             Ok(mut output) => {
                 let is_active = self.claude_panes.active_user_pane_id() == pane_id;
+                let source_node_id = crate::spawn_orchestration::pane_node_id(&pane_id);
+                if output.status.is_success() {
+                    self.dispatch_orchestrate_blocks_from_text(&source_node_id, &output.text);
+                    let (visible_text, _) =
+                        crate::orchestrate::extract_orchestrate_blocks(&output.text);
+                    output.text = visible_text;
+                }
                 let (visible_text, dispatches) =
                     crate::spawn_orchestration::extract_spawn_task_dispatches(&output.text);
                 output.text = visible_text;
@@ -646,6 +660,7 @@ impl App {
                 self.note_spawn_turn_completed_for_auto_loop(
                     &crate::spawn_orchestration::pane_node_id(&pane_id),
                 );
+                self.note_whip_target_idle(&source_node_id, Some(&report_text));
                 if !output.text.trim().is_empty() {
                     if is_active && !active_text_streamed {
                         self.chat_widget
@@ -703,10 +718,10 @@ impl App {
             }
             Err(error) => {
                 self.claude_panes.finish_turn(&pane_id, &Err(error.clone()));
-                self.note_spawn_turn_completed_for_auto_loop(
-                    &crate::spawn_orchestration::pane_node_id(&pane_id),
-                );
+                let source_node_id = crate::spawn_orchestration::pane_node_id(&pane_id);
+                self.note_spawn_turn_completed_for_auto_loop(&source_node_id);
                 self.record_spawn_child_report_for_claude_pane(&pane_id, "error", Some(&error));
+                self.note_whip_target_idle(&source_node_id, Some(&error));
                 if self.claude_panes.active_user_pane_id() == pane_id {
                     self.chat_widget.fail_external_pane_turn(error);
                 } else {

@@ -2537,6 +2537,12 @@ impl App {
             AppEvent::OpenSpawnStatus => {
                 self.open_spawn_status();
             }
+            AppEvent::HandleOrchestrateCommand { args } => {
+                self.handle_orchestrate_command(args);
+            }
+            AppEvent::WhipSweepTick => {
+                self.sweep_orchestrate_whips();
+            }
             AppEvent::SelectUserPane { pane_id } => {
                 let is_codex_main = pane_id == crate::claude_panes::CODEX_MAIN_PANE_ID;
                 self.select_user_pane(tui, pane_id).await;

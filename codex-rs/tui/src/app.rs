@@ -247,6 +247,7 @@ const EXTERNAL_EDITOR_HINT: &str = "Save and close external editor to continue."
 const THREAD_EVENT_CHANNEL_CAPACITY: usize = 32768;
 const TUI_INPUT_WATCHDOG_INTERVAL: Duration = Duration::from_secs(5);
 const TUI_INPUT_WATCHDOG_STALLED_AFTER: Duration = Duration::from_secs(10);
+const WHIP_SWEEP_INTERVAL: Duration = Duration::from_secs(45);
 
 type BoxedTuiEventStream = Pin<Box<dyn Stream<Item = TuiEvent> + Send + 'static>>;
 
@@ -349,6 +350,16 @@ fn spawn_tui_input_watchdog(
                 );
                 frame_requester.schedule_frame();
             }
+        }
+    })
+}
+
+fn spawn_whip_sweep_tick(app_event_tx: AppEventSender) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(WHIP_SWEEP_INTERVAL);
+        loop {
+            interval.tick().await;
+            app_event_tx.send(AppEvent::WhipSweepTick);
         }
     })
 }
@@ -756,6 +767,9 @@ pub(crate) struct App {
     pub(crate) spawn_operator_input_seen: bool,
     pub(crate) spawn_quarantine_notified_by_node: HashSet<String>,
     pub(crate) spawn_nazgul_pane_id: Option<String>,
+    pub(crate) orchestrate_whips: Box<HashMap<String, crate::orchestrate::Whip>>,
+    pub(crate) orchestrate_next_whip_seq: u64,
+    pub(crate) orchestrate_idle_generation_by_target: Box<HashMap<String, u64>>,
     side_threads: HashMap<ThreadId, SideThreadState>,
     pub(crate) claude_panes: crate::claude_panes::ClaudePaneRegistry,
     pub(crate) active_thread_id: Option<ThreadId>,
@@ -1268,6 +1282,30 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     .iter()
                     .any(|pane| pane.id == *pane_id)
             });
+        let restored_orchestrate_whips: HashMap<_, _> = restored_pane_layout
+            .as_ref()
+            .map(|layout| {
+                layout
+                    .orchestrate_whips
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let restored_orchestrate_next_whip_seq = restored_pane_layout
+            .as_ref()
+            .map(|layout| layout.orchestrate_next_whip_seq)
+            .unwrap_or_else(|| {
+                restored_orchestrate_whips
+                    .keys()
+                    .filter_map(|id| id.strip_prefix("whip-")?.parse::<u64>().ok())
+                    .max()
+                    .unwrap_or(0)
+            });
+        let restored_orchestrate_idle_generation_by_target = restored_orchestrate_whips
+            .values()
+            .map(|whip| (whip.target.clone(), 0))
+            .collect();
 
         let mut app = Self {
             model_catalog,
@@ -1319,6 +1357,11 @@ See the PFTerminal keymap documentation for supported actions and examples."
             spawn_operator_input_seen: false,
             spawn_quarantine_notified_by_node: HashSet::new(),
             spawn_nazgul_pane_id: restored_spawn_nazgul_pane_id,
+            orchestrate_whips: Box::new(restored_orchestrate_whips),
+            orchestrate_next_whip_seq: restored_orchestrate_next_whip_seq,
+            orchestrate_idle_generation_by_target: Box::new(
+                restored_orchestrate_idle_generation_by_target,
+            ),
             side_threads: HashMap::new(),
             claude_panes: restored_claude_panes,
             active_thread_id: None,
@@ -1385,6 +1428,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
         let drained_tui_events = spawn_tui_event_drainer(tui.event_stream());
         let tui_input_watchdog =
             spawn_tui_input_watchdog(drained_tui_events.watchdog.clone(), tui.frame_requester());
+        let _whip_sweep_tick = spawn_whip_sweep_tick(app.app_event_tx.clone());
         let mut tui_event_rx = drained_tui_events.rx;
         let tui_input_watchdog_state = drained_tui_events.watchdog;
 

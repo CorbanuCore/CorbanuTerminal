@@ -324,6 +324,11 @@ impl ChatWidget {
             SlashCommand::Spawn => {
                 self.app_event_tx.send(AppEvent::OpenSpawnRolePicker);
             }
+            SlashCommand::Orchestrate => {
+                self.app_event_tx.send(AppEvent::HandleOrchestrateCommand {
+                    args: String::new(),
+                });
+            }
             SlashCommand::Tasknode => {
                 self.app_event_tx.send(AppEvent::OpenTaskNodeMenu);
             }
@@ -765,6 +770,11 @@ impl ChatWidget {
                     _ => self
                         .add_error_message("Usage: /spawn [status|nazgul|troll|orc]".to_string()),
                 }
+            }
+            SlashCommand::Orchestrate => {
+                self.app_event_tx.send(AppEvent::HandleOrchestrateCommand {
+                    args: trimmed.to_string(),
+                });
             }
             SlashCommand::Tasknode => {
                 let mut parts = trimmed.splitn(2, ' ');
@@ -1240,6 +1250,7 @@ impl ChatWidget {
             | SlashCommand::Providers
             | SlashCommand::Panes
             | SlashCommand::Spawn
+            | SlashCommand::Orchestrate
             | SlashCommand::Tasknode
             | SlashCommand::Rollout
             | SlashCommand::Vault

@@ -152,6 +152,8 @@ async fn pane_layout_thread_resume_hint_does_not_require_rollout() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec!["claude-child".to_string()],
         spawn_parent_by_node: BTreeMap::new(),
+        orchestrate_whips: BTreeMap::new(),
+        orchestrate_next_whip_seq: 0,
     };
     persist_pane_layout(app.config.codex_home.as_ref(), &layout).expect("persist layout");
 

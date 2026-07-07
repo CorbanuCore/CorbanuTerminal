@@ -42,6 +42,7 @@ pub enum SlashCommand {
     Goal,
     Agent,
     Spawn,
+    Orchestrate,
     Tasknode,
     Panes,
     Side,
@@ -129,6 +130,7 @@ impl SlashCommand {
             SlashCommand::Goal => "set or view the goal for a long-running task",
             SlashCommand::Agent | SlashCommand::MultiAgents => "switch the active agent thread",
             SlashCommand::Spawn => "orchestrate Nazgul, Troll, and Orc agent roles",
+            SlashCommand::Orchestrate => "attach and manage native pane whips",
             SlashCommand::Tasknode => "interact with Task Node tasks and rewards",
             SlashCommand::Panes => "switch PFTerminal, Claude Code, or agent panes",
             SlashCommand::Side | SlashCommand::Btw => {
@@ -181,6 +183,7 @@ impl SlashCommand {
                 | SlashCommand::Resume
                 | SlashCommand::SandboxReadRoot
                 | SlashCommand::Spawn
+                | SlashCommand::Orchestrate
                 | SlashCommand::Tasknode
                 | SlashCommand::Vault
         )
@@ -200,6 +203,7 @@ impl SlashCommand {
                 | SlashCommand::Ide
                 | SlashCommand::Providers
                 | SlashCommand::Tasknode
+                | SlashCommand::Orchestrate
                 | SlashCommand::Vault
         )
     }
@@ -251,6 +255,7 @@ impl SlashCommand {
             | SlashCommand::Providers
             | SlashCommand::Panes
             | SlashCommand::Spawn
+            | SlashCommand::Orchestrate
             | SlashCommand::Tasknode
             | SlashCommand::Title
             | SlashCommand::Statusline

@@ -81,7 +81,7 @@ pub(crate) struct SpawnTaskDispatch {
     pub(crate) task: String,
 }
 
-enum SpawnTaskTarget {
+pub(crate) enum SpawnTaskTarget {
     Native(ThreadId),
     ClaudePane(String),
     UnavailableNative(ThreadId),
@@ -1188,6 +1188,8 @@ impl App {
                 Ok(SpawnTaskTarget::Native(thread_id)) => {
                     let label = self.thread_label(thread_id);
                     let task = task_with_dispatch_provenance(&dispatch.task, &source_title, &label);
+                    let target_node_id = thread_node_id(thread_id);
+                    self.note_whip_holder_dispatched(source_pane_id, &target_node_id);
                     self.app_event_tx
                         .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
                     any_queued = true;
@@ -1216,6 +1218,8 @@ impl App {
                     }
                     let title = self.user_pane_title(&pane_id);
                     let task = task_with_dispatch_provenance(&dispatch.task, &source_title, &title);
+                    let target_node_id = pane_node_id(&pane_id);
+                    self.note_whip_holder_dispatched(source_pane_id, &target_node_id);
                     self.app_event_tx
                         .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task });
                     any_queued = true;
@@ -1256,6 +1260,12 @@ impl App {
                 assistant_text.push_str(text);
             }
         }
+        let source_node_id = if self.is_codex_main_bound_spawn_root_thread(source_thread_id) {
+            self.spawn_root_node_id()
+        } else {
+            thread_node_id(source_thread_id)
+        };
+        self.dispatch_orchestrate_blocks_from_text(&source_node_id, &assistant_text);
         let saw_assistant_dispatch = self.dispatch_native_spawn_task_blocks_from_text(
             source_thread_id,
             &turn.id,
@@ -3038,7 +3048,7 @@ impl App {
         self.user_pane_title(target)
     }
 
-    fn spawn_root_node_id(&self) -> String {
+    pub(crate) fn spawn_root_node_id(&self) -> String {
         let target = self.spawn_nazgul_bound_target();
         if node_id_thread(target).is_some() {
             return target.to_string();
@@ -3246,7 +3256,7 @@ impl App {
         self.claude_panes.claude_pane_spawn_thread_id(pane_id)
     }
 
-    fn spawn_node_title(&self, node_id: &str) -> Option<String> {
+    pub(crate) fn spawn_node_title(&self, node_id: &str) -> Option<String> {
         if let Some(thread_id) = node_id_thread(node_id) {
             let entry = self.agent_navigation.get(&thread_id)?;
             return Some(format_agent_picker_item_name(
@@ -3261,7 +3271,10 @@ impl App {
         None
     }
 
-    fn resolve_spawn_task_target(&self, target: &str) -> Result<SpawnTaskTarget, String> {
+    pub(crate) fn resolve_spawn_task_target(
+        &self,
+        target: &str,
+    ) -> Result<SpawnTaskTarget, String> {
         let target = target.trim();
         if target.is_empty() {
             return Err("Spawn task dispatch target cannot be empty.".to_string());
@@ -3469,12 +3482,13 @@ impl App {
         );
         let prefix = " ".repeat(indent);
         let status = spawn_entry_status(self, thread_id, entry);
-        let description = spawn_agent_description(
+        let mut description = spawn_agent_description(
             status,
             thread_id,
             entry.last_task_message.as_deref(),
             entry.last_result_message.as_deref(),
         );
+        description.push_str(&self.whip_status_suffix_for_target(&thread_node_id(thread_id)));
         let task_search = entry.last_task_message.as_deref().unwrap_or_default();
         let result_search = entry.last_result_message.as_deref().unwrap_or_default();
         let mut item = SelectionItem {
@@ -3534,6 +3548,7 @@ impl App {
                 compact_spawn_context_value(result)
             ));
         }
+        description.push_str(&self.whip_status_suffix_for_target(&pane_node_id(&pane.id)));
         let pane_id = pane.id.clone();
         SelectionItem {
             name: format!("{prefix}{}", pane.title),
@@ -4457,7 +4472,7 @@ fn spawn_auto_loop_key(source_node_or_pane_id: &str) -> String {
     }
 }
 
-fn node_id_pane(node_id: &str) -> Option<&str> {
+pub(crate) fn node_id_pane(node_id: &str) -> Option<&str> {
     node_id.strip_prefix("pane:")
 }
 

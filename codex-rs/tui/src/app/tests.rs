@@ -3286,6 +3286,158 @@ fn drain_claude_pane_task_events(
     submitted_tasks
 }
 
+fn write_test_whip(app: &App, name: &str, body: &str) {
+    let dir = app.config.codex_home.join("whips");
+    std::fs::create_dir_all(&dir).expect("create whips dir");
+    std::fs::write(dir.join(format!("{name}.md")), body).expect("write whip");
+}
+
+#[tokio::test]
+async fn orchestrate_auto_whip_fires_once_for_idle_sweep() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "keep-going", "# whip: keep-going\nContinue the work.");
+    let pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Orc),
+            Some("Krimp".to_string()),
+        )
+        .expect("create pane");
+
+    app.handle_orchestrate_command(format!(
+        "attach {} keep-going --mode auto --holder none --max 3",
+        pane_id
+    ));
+    app.sweep_orchestrate_whips();
+    app.sweep_orchestrate_whips();
+
+    let submitted_tasks = drain_claude_pane_task_events(&mut app_event_rx);
+    assert_eq!(submitted_tasks.len(), 1);
+    assert_eq!(submitted_tasks[0].0, pane_id);
+    assert!(submitted_tasks[0].1.contains("Whip #whip-1 fire 1/3"));
+    assert!(submitted_tasks[0].1.contains("Continue the work."));
+}
+
+#[tokio::test]
+async fn orchestrate_stop_marker_pauses_before_fire() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(
+        &app,
+        "stop-aware",
+        "# whip: stop-aware\nContinue until done.",
+    );
+    let pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Orc),
+            Some("Krimp".to_string()),
+        )
+        .expect("create pane");
+    let target_node_id = crate::spawn_orchestration::pane_node_id(&pane_id);
+
+    app.handle_orchestrate_command(format!(
+        "attach {} stop-aware --mode auto --holder none --max 3",
+        pane_id
+    ));
+    app.note_whip_target_idle(&target_node_id, Some("done\nWHIP_DONE"));
+
+    assert!(drain_claude_pane_task_events(&mut app_event_rx).is_empty());
+    assert_eq!(
+        app.orchestrate_whips.get("whip-1").map(|whip| whip.state),
+        Some(crate::orchestrate::WhipState::Paused)
+    );
+}
+
+#[tokio::test]
+async fn orchestrate_empty_output_loop_pauses_whip() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(
+        &app,
+        "loop-aware",
+        "# whip: loop-aware\nContinue unless spinning.",
+    );
+    let pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Orc),
+            Some("Krimp".to_string()),
+        )
+        .expect("create pane");
+    let target_node_id = crate::spawn_orchestration::pane_node_id(&pane_id);
+
+    app.handle_orchestrate_command(format!(
+        "attach {} loop-aware --mode auto --holder none --max 3 --cooldown 1s",
+        pane_id
+    ));
+    app.note_whip_target_idle(&target_node_id, Some(""));
+    app.note_whip_target_idle(&target_node_id, Some("   "));
+
+    let submitted_tasks = drain_claude_pane_task_events(&mut app_event_rx);
+    assert_eq!(submitted_tasks.len(), 1);
+    assert_eq!(
+        app.orchestrate_whips.get("whip-1").map(|whip| whip.state),
+        Some(crate::orchestrate::WhipState::Paused)
+    );
+}
+
+#[tokio::test]
+async fn orchestrate_review_holder_ignored_twice_pauses_whip() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "review-loop", "# whip: review-loop\nReview target.");
+    let holder_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Troll),
+            Some("Burzum".to_string()),
+        )
+        .expect("create holder pane");
+    let target_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Orc),
+            Some("Krimp".to_string()),
+        )
+        .expect("create target pane");
+    let holder_node_id = crate::spawn_orchestration::pane_node_id(&holder_pane_id);
+
+    app.handle_orchestrate_command(format!(
+        "attach {} review-loop --mode review --holder {} --max 5",
+        target_pane_id, holder_pane_id
+    ));
+    app.handle_orchestrate_command("fire whip-1".to_string());
+    app.note_whip_target_idle(&holder_node_id, Some("no dispatch"));
+    app.handle_orchestrate_command("fire whip-1".to_string());
+    app.note_whip_target_idle(&holder_node_id, Some("still no dispatch"));
+
+    let submitted_tasks = drain_claude_pane_task_events(&mut app_event_rx);
+    assert_eq!(
+        submitted_tasks
+            .iter()
+            .filter(|(pane_id, _)| pane_id == &holder_pane_id)
+            .count(),
+        2
+    );
+    assert_eq!(
+        app.orchestrate_whips.get("whip-1").map(|whip| whip.state),
+        Some(crate::orchestrate::WhipState::Paused)
+    );
+}
+
 #[tokio::test]
 async fn child_report_auto_starts_turn_on_idle_claude_pane_parent() {
     let (mut app, mut app_event_rx, troll_pane_id, orc_pane_id) =
@@ -7793,6 +7945,9 @@ async fn make_test_app() -> App {
         spawn_operator_input_seen: false,
         spawn_quarantine_notified_by_node: HashSet::new(),
         spawn_nazgul_pane_id: None,
+        orchestrate_whips: Box::new(HashMap::new()),
+        orchestrate_next_whip_seq: 0,
+        orchestrate_idle_generation_by_target: Box::new(HashMap::new()),
         side_threads: HashMap::new(),
         claude_panes: crate::claude_panes::ClaudePaneRegistry::new(),
         active_thread_id: None,
@@ -7870,6 +8025,9 @@ async fn make_test_app_with_channels() -> (
             spawn_operator_input_seen: false,
             spawn_quarantine_notified_by_node: HashSet::new(),
             spawn_nazgul_pane_id: None,
+            orchestrate_whips: Box::new(HashMap::new()),
+            orchestrate_next_whip_seq: 0,
+            orchestrate_idle_generation_by_target: Box::new(HashMap::new()),
             side_threads: HashMap::new(),
             claude_panes: crate::claude_panes::ClaudePaneRegistry::new(),
             active_thread_id: None,

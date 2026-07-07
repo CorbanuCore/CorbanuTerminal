@@ -226,6 +226,12 @@ pub(crate) enum AppEvent {
     },
     /// Show the current orchestration tree.
     OpenSpawnStatus,
+    /// Handle a native `/orchestrate` whip command.
+    HandleOrchestrateCommand {
+        args: String,
+    },
+    /// Periodic native whip sweep; intentionally low priority and no-op when no whips are armed.
+    WhipSweepTick,
     /// Switch the active user pane.
     SelectUserPane {
         pane_id: String,
