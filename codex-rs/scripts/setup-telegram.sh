@@ -7,17 +7,20 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 CODEX_RS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
 TOKEN_ENV_VAR="PFTERMINAL_TELEGRAM_TOKEN"
 DEFAULT_ENV_FILE="$HOME/.config/pfterminal/telegram.env"
+DEFAULT_WORKSPACE="$HOME/pfterminal-telegram"
 
 usage() {
     cat <<'USAGE'
-Usage: setup-telegram.sh [OPTIONS] [BOT_TOKEN]
+Usage: setup-telegram.sh [OPTIONS]
 
 Options:
-  --token TOKEN          Telegram bot token; also accepted as the first positional arg.
   --chat-id ID          Allowed chat ID. Repeat or pass comma-separated IDs.
-  --workspace DIR       Telegram default_cwd. Defaults to $HOME.
+  --workspace DIR       Telegram default_cwd. Defaults to ~/pfterminal-telegram.
   --env-file PATH       EnvironmentFile to write. Defaults to ~/.config/pfterminal/telegram.env.
   --approval-policy VAL Approval policy. Defaults to on-request.
+  --allow-danger-full-access
+                        Allow writing top-level sandbox_mode="danger-full-access"
+                        after sandbox preflight failure. This disables the sandbox globally.
   --install-systemd     Install the systemd --user service template.
   --no-token-required   Skip token prompt/write for dry runs.
   -h, --help            Show this help.
@@ -85,27 +88,84 @@ add_chat_ids() {
 read_existing_chat_ids() {
     [[ -f "$1" ]] || return 0
     python3 - "$1" <<'PY'
-import ast
 import sys
 from pathlib import Path
 
-section = None
-for raw in Path(sys.argv[1]).read_text().splitlines():
-    line = raw.strip()
-    if not line or line.startswith("#"):
-        continue
-    if line.startswith("[") and line.endswith("]"):
-        section = line.strip("[]")
-        continue
-    if section == "telegram" and line.startswith("allowed_chat_ids") and "=" in line:
-        try:
-            ids = ast.literal_eval(line.split("=", 1)[1].strip())
-        except Exception as exc:
-            print(f"failed to parse existing allowed_chat_ids: {exc}", file=sys.stderr)
-            sys.exit(1)
-        if ids:
-            print(",".join(str(int(item)) for item in ids))
-        break
+try:
+    import tomllib
+except ModuleNotFoundError:
+    try:
+        import tomli as tomllib
+    except ModuleNotFoundError:
+        tomllib = None
+
+contents = Path(sys.argv[1]).read_text()
+if tomllib is not None:
+    try:
+        ids = tomllib.loads(contents).get("telegram", {}).get("allowed_chat_ids")
+    except Exception as exc:
+        print(f"failed to parse existing allowed_chat_ids: {exc}", file=sys.stderr)
+        sys.exit(1)
+else:
+    import re
+
+    ids = []
+    in_telegram = False
+    capturing = False
+    buffer = ""
+    for raw in contents.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            in_telegram = line == "[telegram]"
+            capturing = False
+            buffer = ""
+            continue
+        if not in_telegram:
+            continue
+        if capturing:
+            buffer += line
+        elif line.startswith("allowed_chat_ids") and "=" in line:
+            buffer = line.split("=", 1)[1]
+            capturing = True
+        if capturing and "]" in buffer:
+            ids = [int(value) for value in re.findall(r"-?\d+", buffer)]
+            break
+
+if ids:
+    print(",".join(str(int(item)) for item in ids))
+PY
+}
+
+read_existing_sandbox_mode() {
+    [[ -f "$1" ]] || return 0
+    python3 - "$1" <<'PY'
+import sys
+from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    try:
+        import tomli as tomllib
+    except ModuleNotFoundError:
+        tomllib = None
+
+try:
+    contents = Path(sys.argv[1]).read_text()
+    if tomllib is not None:
+        sandbox_mode = tomllib.loads(contents).get("sandbox_mode")
+    else:
+        import re
+
+        match = re.search(r'(?m)^\s*sandbox_mode\s*=\s*"([^"]+)"', contents)
+        sandbox_mode = match.group(1) if match else None
+except Exception:
+    sys.exit(0)
+
+if sandbox_mode:
+    print(sandbox_mode)
 PY
 }
 
@@ -123,12 +183,23 @@ sandbox_issue() {
             return 0
         fi
     fi
+    if [[ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+        value="$(tr -d '[:space:]' < /proc/sys/kernel/apparmor_restrict_unprivileged_userns)"
+        if [[ "$value" == "1" ]]; then
+            printf '/proc/sys/kernel/apparmor_restrict_unprivileged_userns reads as 1'
+            return 0
+        fi
+    fi
     if [[ -r /proc/sys/kernel/unprivileged_userns_clone ]]; then
         value="$(tr -d '[:space:]' < /proc/sys/kernel/unprivileged_userns_clone)"
         if [[ "$value" == "0" ]]; then
             printf '/proc/sys/kernel/unprivileged_userns_clone reads as 0'
             return 0
         fi
+    fi
+    if ! bwrap --ro-bind / / true >/dev/null 2>&1; then
+        printf 'bwrap live probe failed: bwrap --ro-bind / / true'
+        return 0
     fi
 }
 
@@ -140,6 +211,12 @@ env_file_has_token() {
 write_env_file() {
     local token_action=preserve
     [[ -n "$3" ]] && token_action=set
+    mkdir -p -- "$(dirname -- "$1")"
+    if [[ -e "$1" ]]; then
+        chmod 600 -- "$1"
+    else
+        install -m 600 /dev/null "$1"
+    fi
     python3 - "$1" "$2" "$token_action" "$3" "$TOKEN_ENV_VAR" <<'PY'
 import re
 import sys
@@ -170,10 +247,8 @@ for line in lines:
 for key, value in updates.items():
     if key not in seen:
         out.append(f"{key}={quote(value)}")
-path.parent.mkdir(parents=True, exist_ok=True)
 path.write_text("\n".join(out) + "\n")
 PY
-    chmod 600 -- "$1"
 }
 
 backup_config() {
@@ -188,23 +263,25 @@ merge_config() {
     local workspace=$2
     local sandbox_mode=$3
     local approval_policy=$4
-    shift 4
-    python3 - "$config_path" "$workspace" "$sandbox_mode" "$approval_policy" "$@" <<'PY'
+    local explicit_keys=$5
+    shift 5
+    python3 - "$config_path" "$workspace" "$sandbox_mode" "$approval_policy" "$explicit_keys" "$@" <<'PY'
 import json
 import re
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
-updates = {
+explicit_keys = {key for key in sys.argv[5].split(",") if key}
+candidates = {
     "enabled": True,
     "bot_token_env": "PFTERMINAL_TELEGRAM_TOKEN",
-    "allowed_chat_ids": [int(value) for value in sys.argv[5:]],
+    "allowed_chat_ids": [int(value) for value in sys.argv[6:]],
     "mode": "polling",
     "approval_policy": sys.argv[4],
     "default_cwd": sys.argv[2],
 }
-order = list(updates)
+order = list(candidates)
 top = {"sandbox_mode": sys.argv[3]} if sys.argv[3] else {}
 header_re = re.compile(r"^\s*\[\[?([^\]]+)\]\]?\s*(?:#.*)?$")
 key_re = re.compile(r"^(\s*)([A-Za-z0-9_-]+)(\s*=).*$")
@@ -243,7 +320,7 @@ def apply_range(lines, start, end, values, key_order):
         else:
             out.append(lines[index])
             index += 1
-    missing = [key for key in key_order if key not in seen]
+    missing = [key for key in key_order if key in values and key not in seen]
     out.extend(f"{key} = {fmt(values[key])}" for key in missing)
     return out, missing
 
@@ -253,6 +330,18 @@ def table_range(lines, name):
             end = next((i for i in range(start + 1, len(lines)) if section(lines[i]) is not None), len(lines))
             return start, end
     return None
+
+def keys_in_range(lines, start, end):
+    keys = set()
+    index = start
+    while index < end:
+        match = key_re.match(lines[index])
+        if match:
+            keys.add(match.group(2))
+            index = skip(lines, index)
+        else:
+            index += 1
+    return keys
 
 lines = (path.read_text() if path.exists() else "").splitlines()
 if top:
@@ -264,24 +353,40 @@ if top:
 
 table = table_range(lines, "telegram")
 if table is None:
+    updates = dict(candidates)
     if lines and lines[-1].strip():
         lines.append("")
     lines.append("[telegram]")
     lines.extend(f"{key} = {fmt(updates[key])}" for key in order)
 else:
     start, end = table
+    existing_keys = keys_in_range(lines, start + 1, end)
+    updates = {
+        key: value
+        for key, value in candidates.items()
+        if key in explicit_keys or key not in existing_keys
+    }
     body, _missing = apply_range(lines, start + 1, end, updates, order)
     lines = lines[: start + 1] + body + lines[end:]
 
 output = "\n".join(lines) + "\n"
 try:
     import tomllib
-    tomllib.loads(output)
 except ModuleNotFoundError:
-    pass
+    try:
+        import tomli as tomllib
+    except ModuleNotFoundError:
+        print("validation skipped: Python 3.11+ tomllib or tomli is required", file=sys.stderr)
+        tomllib = None
 except Exception as exc:
     print(f"refusing to write invalid TOML: {exc}", file=sys.stderr)
     sys.exit(1)
+if tomllib is not None:
+    try:
+        tomllib.loads(output)
+    except Exception as exc:
+        print(f"refusing to write invalid TOML: {exc}", file=sys.stderr)
+        sys.exit(1)
 path.parent.mkdir(parents=True, exist_ok=True)
 path.write_text(output)
 PY
@@ -304,47 +409,66 @@ seed_agents_md() {
 install_systemd_unit() {
     local source="$CODEX_RS_DIR/telegram/dist/pfterminal-telegram.service"
     local target_dir="$HOME/.config/systemd/user"
+    local target="$target_dir/pfterminal-telegram.service"
+    local pfterminal_bin
     [[ -r "$source" ]] || die "missing systemd service template: $source"
+    pfterminal_bin="$(command -v pfterminal || true)"
+    [[ -n "$pfterminal_bin" ]] || die "pfterminal was not found on PATH; install it before --install-systemd"
+    [[ "$pfterminal_bin" == /* ]] || die "command -v pfterminal did not return an absolute path: $pfterminal_bin"
     mkdir -p -- "$target_dir"
-    cp -f -- "$source" "$target_dir/pfterminal-telegram.service"
-    printf 'Installed systemd user unit at %s\n' "$target_dir/pfterminal-telegram.service"
+    python3 - "$source" "$target" "$pfterminal_bin" "$ENV_FILE" <<'PY'
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1])
+target = Path(sys.argv[2])
+pfterminal_bin = sys.argv[3]
+env_file = sys.argv[4]
+
+lines = source.read_text().splitlines()
+out = []
+for line in lines:
+    if line.startswith("ExecStart="):
+        out.append(f"ExecStart={pfterminal_bin} telegram")
+    elif line.startswith("EnvironmentFile="):
+        out.append(f"EnvironmentFile={env_file}")
+    else:
+        out.append(line)
+target.write_text("\n".join(out) + "\n")
+PY
+    printf 'Installed systemd user unit at %s\n' "$target"
     printf 'Enable it with:\n  systemctl --user daemon-reload\n  systemctl --user enable --now pfterminal-telegram.service\n'
 }
 
 TOKEN_VALUE=""
-TOKEN_FROM_ARG=0
-WORKSPACE="$HOME"
+WORKSPACE="$DEFAULT_WORKSPACE"
 ENV_FILE="$DEFAULT_ENV_FILE"
 APPROVAL_POLICY="on-request"
 INSTALL_SYSTEMD=0
 NO_TOKEN_REQUIRED=0
+ALLOW_DANGER_FULL_ACCESS=0
+CHAT_IDS_EXPLICIT=0
+WORKSPACE_EXPLICIT=0
+APPROVAL_POLICY_EXPLICIT=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --token) [[ $# -ge 2 ]] || die "--token requires a value"; TOKEN_VALUE=$2; TOKEN_FROM_ARG=1; shift 2 ;;
-        --token=*) TOKEN_VALUE=${1#--token=}; TOKEN_FROM_ARG=1; shift ;;
-        --chat-id) [[ $# -ge 2 ]] || die "--chat-id requires a value"; add_chat_ids "$2"; shift 2 ;;
-        --chat-id=*) add_chat_ids "${1#--chat-id=}"; shift ;;
-        --workspace) [[ $# -ge 2 ]] || die "--workspace requires a value"; WORKSPACE=$2; shift 2 ;;
-        --workspace=*) WORKSPACE=${1#--workspace=}; shift ;;
+        --token|--token=*) die "do not pass Telegram bot tokens on the command line; set $TOKEN_ENV_VAR or enter the prompt" ;;
+        --chat-id) [[ $# -ge 2 ]] || die "--chat-id requires a value"; add_chat_ids "$2"; CHAT_IDS_EXPLICIT=1; shift 2 ;;
+        --chat-id=*) add_chat_ids "${1#--chat-id=}"; CHAT_IDS_EXPLICIT=1; shift ;;
+        --workspace) [[ $# -ge 2 ]] || die "--workspace requires a value"; WORKSPACE=$2; WORKSPACE_EXPLICIT=1; shift 2 ;;
+        --workspace=*) WORKSPACE=${1#--workspace=}; WORKSPACE_EXPLICIT=1; shift ;;
         --env-file) [[ $# -ge 2 ]] || die "--env-file requires a value"; ENV_FILE=$2; shift 2 ;;
         --env-file=*) ENV_FILE=${1#--env-file=}; shift ;;
-        --approval-policy) [[ $# -ge 2 ]] || die "--approval-policy requires a value"; APPROVAL_POLICY=$2; shift 2 ;;
-        --approval-policy=*) APPROVAL_POLICY=${1#--approval-policy=}; shift ;;
+        --approval-policy) [[ $# -ge 2 ]] || die "--approval-policy requires a value"; APPROVAL_POLICY=$2; APPROVAL_POLICY_EXPLICIT=1; shift 2 ;;
+        --approval-policy=*) APPROVAL_POLICY=${1#--approval-policy=}; APPROVAL_POLICY_EXPLICIT=1; shift ;;
+        --allow-danger-full-access) ALLOW_DANGER_FULL_ACCESS=1; shift ;;
         --install-systemd) INSTALL_SYSTEMD=1; shift ;;
         --no-token-required) NO_TOKEN_REQUIRED=1; shift ;;
         -h|--help) usage; exit 0 ;;
         --) shift; break ;;
         -*) die "unknown option: $1" ;;
-        *)
-            if [[ $TOKEN_FROM_ARG -eq 0 && -z "$TOKEN_VALUE" ]]; then
-                TOKEN_VALUE=$1
-                TOKEN_FROM_ARG=1
-                shift
-            else
-                die "unexpected argument: $1"
-            fi
-            ;;
+        *) die "unexpected argument: $1" ;;
     esac
 done
 
@@ -364,6 +488,7 @@ if [[ ${#CHAT_IDS[@]} -eq 0 ]]; then
     elif [[ -t 0 ]]; then
         read -r -p "Telegram chat ID(s), comma-separated: " CHAT_ID_INPUT
         add_chat_ids "$CHAT_ID_INPUT"
+        CHAT_IDS_EXPLICIT=1
     else
         die "provide at least one --chat-id in non-interactive mode"
     fi
@@ -379,16 +504,33 @@ if [[ $NO_TOKEN_REQUIRED -eq 0 && -z "$TOKEN_VALUE" ]]; then
         read -r -s -p "Telegram bot token: " TOKEN_VALUE
         printf '\n'
     else
-        die "provide --token, set $TOKEN_ENV_VAR, or use --no-token-required"
+        die "set $TOKEN_ENV_VAR, use an existing env file entry, or use --no-token-required"
     fi
 fi
 
 SANDBOX_ISSUE="$(sandbox_issue)"
 SANDBOX_MODE_TO_SET=""
 if [[ -n "$SANDBOX_ISSUE" ]]; then
-    SANDBOX_MODE_TO_SET="danger-full-access"
     printf 'Sandbox preflight: %s.\n' "$SANDBOX_ISSUE"
-    printf 'Setting sandbox_mode = "danger-full-access" for this trusted-host always-on setup; otherwise enable unprivileged user namespaces and bwrap.\n'
+    printf 'Remediation: install bwrap and enable unprivileged user namespaces, then rerun this script.\n'
+    printf 'On Ubuntu 24.04, also ensure kernel.apparmor_restrict_unprivileged_userns allows bwrap to start.\n'
+    EXISTING_SANDBOX_MODE="$(read_existing_sandbox_mode "$CONFIG_PATH")"
+    if [[ "$EXISTING_SANDBOX_MODE" == "danger-full-access" ]]; then
+        printf 'Existing config already sets sandbox_mode = "danger-full-access"; leaving it unchanged.\n'
+    elif [[ $ALLOW_DANGER_FULL_ACCESS -eq 1 ]]; then
+        SANDBOX_MODE_TO_SET="danger-full-access"
+        printf 'Writing top-level sandbox_mode = "danger-full-access" because --allow-danger-full-access was passed.\n'
+    elif [[ -t 0 ]]; then
+        read -r -p 'Set sandbox_mode = "danger-full-access" globally? This disables the sandbox for all PFTerminal surfaces and is only appropriate on a trusted single-user host. Type y to continue [y/N]: ' DANGER_REPLY
+        if [[ "$DANGER_REPLY" == "y" || "$DANGER_REPLY" == "Y" ]]; then
+            SANDBOX_MODE_TO_SET="danger-full-access"
+            printf 'Writing top-level sandbox_mode = "danger-full-access" after interactive confirmation.\n'
+        else
+            die 'not writing sandbox_mode; fix the sandbox preflight issue or rerun with --allow-danger-full-access'
+        fi
+    else
+        die 'not writing sandbox_mode in non-interactive mode; fix the sandbox preflight issue or pass --allow-danger-full-access'
+    fi
 else
     printf 'Sandbox preflight: OK; leaving existing sandbox_mode/default unchanged.\n'
 fi
@@ -396,7 +538,12 @@ fi
 write_env_file "$ENV_FILE" "$CODEX_HOME_RESOLVED" "$TOKEN_VALUE"
 printf 'Wrote environment file at %s\n' "$ENV_FILE"
 backup_config "$CONFIG_PATH"
-merge_config "$CONFIG_PATH" "$WORKSPACE" "$SANDBOX_MODE_TO_SET" "$APPROVAL_POLICY" "${CHAT_IDS[@]}"
+EXPLICIT_CONFIG_KEYS=""
+[[ $CHAT_IDS_EXPLICIT -eq 1 ]] && EXPLICIT_CONFIG_KEYS="${EXPLICIT_CONFIG_KEYS},allowed_chat_ids"
+[[ $WORKSPACE_EXPLICIT -eq 1 ]] && EXPLICIT_CONFIG_KEYS="${EXPLICIT_CONFIG_KEYS},default_cwd"
+[[ $APPROVAL_POLICY_EXPLICIT -eq 1 ]] && EXPLICIT_CONFIG_KEYS="${EXPLICIT_CONFIG_KEYS},approval_policy"
+EXPLICIT_CONFIG_KEYS="${EXPLICIT_CONFIG_KEYS#,}"
+merge_config "$CONFIG_PATH" "$WORKSPACE" "$SANDBOX_MODE_TO_SET" "$APPROVAL_POLICY" "$EXPLICIT_CONFIG_KEYS" "${CHAT_IDS[@]}"
 printf 'Configured Telegram connector in %s\n' "$CONFIG_PATH"
 seed_agents_md "$WORKSPACE"
 [[ $INSTALL_SYSTEMD -eq 1 ]] && install_systemd_unit

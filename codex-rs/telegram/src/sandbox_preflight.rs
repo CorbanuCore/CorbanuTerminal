@@ -21,6 +21,7 @@ pub(crate) fn warn_if_sandbox_may_fail(sandbox_policy: &SandboxPolicy) {
 struct SandboxPreflightSignals {
     bwrap_on_path: bool,
     max_user_namespaces: Option<String>,
+    apparmor_restrict_unprivileged_userns: Option<String>,
     unprivileged_userns_clone: Option<String>,
 }
 
@@ -29,6 +30,7 @@ struct SandboxPreflightSignals {
 enum SandboxPreflightIssue {
     BwrapMissing,
     MaxUserNamespacesDisabled,
+    AppArmorRestrictsUnprivilegedUserns,
     UnprivilegedUsernsCloneDisabled,
 }
 
@@ -47,6 +49,9 @@ fn preflight_issue_for_policy(
     if proc_value_is_zero(signals.max_user_namespaces.as_deref()) {
         return Some(SandboxPreflightIssue::MaxUserNamespacesDisabled);
     }
+    if proc_value_is_one(signals.apparmor_restrict_unprivileged_userns.as_deref()) {
+        return Some(SandboxPreflightIssue::AppArmorRestrictsUnprivilegedUserns);
+    }
     if proc_value_is_zero(signals.unprivileged_userns_clone.as_deref()) {
         return Some(SandboxPreflightIssue::UnprivilegedUsernsCloneDisabled);
     }
@@ -60,11 +65,21 @@ fn proc_value_is_zero(value: Option<&str>) -> bool {
         .is_some_and(|value| value == 0)
 }
 
+#[cfg(any(test, target_os = "linux"))]
+fn proc_value_is_one(value: Option<&str>) -> bool {
+    value
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .is_some_and(|value| value == 1)
+}
+
 #[cfg(target_os = "linux")]
 fn collect_runtime_signals() -> SandboxPreflightSignals {
     SandboxPreflightSignals {
         bwrap_on_path: find_executable_on_path("bwrap"),
         max_user_namespaces: read_proc_value("/proc/sys/user/max_user_namespaces"),
+        apparmor_restrict_unprivileged_userns: read_proc_value(
+            "/proc/sys/kernel/apparmor_restrict_unprivileged_userns",
+        ),
         unprivileged_userns_clone: read_proc_value("/proc/sys/kernel/unprivileged_userns_clone"),
     }
 }
@@ -111,6 +126,9 @@ impl SandboxPreflightIssue {
             SandboxPreflightIssue::BwrapMissing => "bwrap was not found on PATH",
             SandboxPreflightIssue::MaxUserNamespacesDisabled => {
                 "/proc/sys/user/max_user_namespaces reads as 0"
+            }
+            SandboxPreflightIssue::AppArmorRestrictsUnprivilegedUserns => {
+                "/proc/sys/kernel/apparmor_restrict_unprivileged_userns reads as 1"
             }
             SandboxPreflightIssue::UnprivilegedUsernsCloneDisabled => {
                 "/proc/sys/kernel/unprivileged_userns_clone reads as 0"

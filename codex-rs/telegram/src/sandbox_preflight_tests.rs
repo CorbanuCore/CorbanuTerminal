@@ -10,7 +10,12 @@ use super::warning_for_issue;
 fn danger_full_access_is_quiet_even_when_host_signals_fail() {
     let issue = preflight_issue_for_policy(
         &SandboxPolicy::DangerFullAccess,
-        signals(/*bwrap_on_path*/ false, Some("0\n"), Some("0\n")),
+        signals(
+            /*bwrap_on_path*/ false,
+            Some("0\n"),
+            Some("1\n"),
+            Some("0\n"),
+        ),
     );
 
     assert_eq!(issue, None);
@@ -20,7 +25,12 @@ fn danger_full_access_is_quiet_even_when_host_signals_fail() {
 fn sandboxed_policy_is_quiet_when_host_signals_pass() {
     let issue = preflight_issue_for_policy(
         &read_only_policy(),
-        signals(/*bwrap_on_path*/ true, Some("1024\n"), Some("1\n")),
+        signals(
+            /*bwrap_on_path*/ true,
+            Some("1024\n"),
+            Some("0\n"),
+            Some("1\n"),
+        ),
     );
 
     assert_eq!(issue, None);
@@ -30,7 +40,7 @@ fn sandboxed_policy_is_quiet_when_host_signals_pass() {
 fn missing_optional_unprivileged_userns_clone_file_is_quiet() {
     let issue = preflight_issue_for_policy(
         &read_only_policy(),
-        signals(/*bwrap_on_path*/ true, Some("1024\n"), None),
+        signals(/*bwrap_on_path*/ true, Some("1024\n"), None, None),
     );
 
     assert_eq!(issue, None);
@@ -40,7 +50,12 @@ fn missing_optional_unprivileged_userns_clone_file_is_quiet() {
 fn missing_bwrap_warns_for_sandboxed_policy() {
     let issue = preflight_issue_for_policy(
         &read_only_policy(),
-        signals(/*bwrap_on_path*/ false, Some("1024\n"), Some("1\n")),
+        signals(
+            /*bwrap_on_path*/ false,
+            Some("1024\n"),
+            Some("0\n"),
+            Some("1\n"),
+        ),
     );
 
     assert_eq!(issue, Some(SandboxPreflightIssue::BwrapMissing));
@@ -50,7 +65,12 @@ fn missing_bwrap_warns_for_sandboxed_policy() {
 fn disabled_max_user_namespaces_warns() {
     let issue = preflight_issue_for_policy(
         &read_only_policy(),
-        signals(/*bwrap_on_path*/ true, Some("0\n"), Some("1\n")),
+        signals(
+            /*bwrap_on_path*/ true,
+            Some("0\n"),
+            Some("0\n"),
+            Some("1\n"),
+        ),
     );
 
     assert_eq!(
@@ -60,10 +80,33 @@ fn disabled_max_user_namespaces_warns() {
 }
 
 #[test]
+fn apparmor_restricting_unprivileged_userns_warns() {
+    let issue = preflight_issue_for_policy(
+        &read_only_policy(),
+        signals(
+            /*bwrap_on_path*/ true,
+            Some("1024\n"),
+            Some("1\n"),
+            Some("1\n"),
+        ),
+    );
+
+    assert_eq!(
+        issue,
+        Some(SandboxPreflightIssue::AppArmorRestrictsUnprivilegedUserns)
+    );
+}
+
+#[test]
 fn disabled_unprivileged_userns_clone_warns() {
     let issue = preflight_issue_for_policy(
         &read_only_policy(),
-        signals(/*bwrap_on_path*/ true, Some("1024\n"), Some("0\n")),
+        signals(
+            /*bwrap_on_path*/ true,
+            Some("1024\n"),
+            Some("0\n"),
+            Some("0\n"),
+        ),
     );
 
     assert_eq!(
@@ -78,6 +121,7 @@ fn invalid_proc_values_are_not_treated_as_disabled() {
         &read_only_policy(),
         signals(
             /*bwrap_on_path*/ true,
+            Some("not-a-number\n"),
             Some("not-a-number\n"),
             Some(""),
         ),
@@ -104,11 +148,14 @@ fn read_only_policy() -> SandboxPolicy {
 fn signals(
     bwrap_on_path: bool,
     max_user_namespaces: Option<&str>,
+    apparmor_restrict_unprivileged_userns: Option<&str>,
     unprivileged_userns_clone: Option<&str>,
 ) -> SandboxPreflightSignals {
     SandboxPreflightSignals {
         bwrap_on_path,
         max_user_namespaces: max_user_namespaces.map(str::to_string),
+        apparmor_restrict_unprivileged_userns: apparmor_restrict_unprivileged_userns
+            .map(str::to_string),
         unprivileged_userns_clone: unprivileged_userns_clone.map(str::to_string),
     }
 }
