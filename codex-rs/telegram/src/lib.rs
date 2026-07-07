@@ -7,6 +7,7 @@ pub mod config;
 pub mod error;
 mod polling;
 pub mod render;
+mod sandbox_preflight;
 mod session;
 
 #[cfg(test)]
@@ -84,6 +85,8 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         cli.strict_config,
     )
     .await?;
+    let sandbox_policy = core_config.legacy_sandbox_policy();
+    sandbox_preflight::warn_if_sandbox_may_fail(&sandbox_policy);
     let state_db = codex_core::init_state_db(&core_config).await;
     let runtime_paths = ExecServerRuntimePaths::from_optional_paths(
         arg0_paths.codex_self_exe.clone(),

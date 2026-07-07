@@ -127,6 +127,8 @@ Do not put long-lived provider keys in `experimental_bearer_token` unless you
 are intentionally running an automation-only setup. For interactive use, use
 onboarding or `/vault`.
 
+<a id="telegram"></a>
+
 ## Telegram Connector
 
 `pfterminal telegram` runs a Telegram long-polling connector that drives the
@@ -143,6 +145,7 @@ allowed_chat_ids = [21000038, -1001941234987]
 mode = "polling"
 default_model = "glm-5.2"
 approval_policy = "on-request"
+default_cwd = "/home/alice"
 webhook_url = ""
 ```
 
@@ -161,6 +164,54 @@ the same app-server threads.
 Telegram messages use HTML parse mode, split outbound text at Telegram's
 4096-character raw-text limit, and surface sensitive operations through inline
 approval buttons rather than auto-approving them.
+
+`default_cwd` is the workspace used for Telegram-created turns. Set it to the
+directory where the agent should work, not to the PFTerminal source tree. Codex
+automatically loads `AGENTS.md` from that workspace. The setup script seeds one
+from `codex-rs/telegram/dist/AGENTS.md.template` when the workspace does not
+already have one, giving the Telegram harness its identity and operating rules.
+
+The recommended setup path is:
+
+```bash
+export PFTERMINAL_TELEGRAM_TOKEN="123456:telegram-token"
+codex-rs/scripts/setup-telegram.sh --chat-id 21000038 --workspace "$HOME"
+```
+
+The script resolves `CODEX_HOME` the same way `pfterminal telegram` does,
+writes the token to `~/.config/pfterminal/telegram.env`, writes or merges the
+`[telegram]` block, sets `default_cwd`, and backs up an existing
+`config.toml` before editing it. Use `--install-systemd` to copy the user
+service template and print the `systemctl --user` enable/start commands.
+
+On Linux, the connector emits one advisory startup warning when the resolved
+sandbox policy is not `danger-full-access` and cheap host probes indicate the
+sandbox is unlikely to launch: `bwrap` is missing from `PATH`,
+`/proc/sys/user/max_user_namespaces` reads as `0`, or
+`/proc/sys/kernel/unprivileged_userns_clone` exists and reads as `0`. In that
+state, even simple shell commands can require manual Telegram approval because
+the sandboxed launch fails before command execution.
+
+On a trusted single-user host where unprivileged user namespaces are unavailable,
+set top-level `sandbox_mode = "danger-full-access"` so the always-on connector
+can execute commands without sandbox-launch approval churn. This disables the
+filesystem sandbox, so do not use it on shared or untrusted hosts; install
+`bwrap` and enable unprivileged user namespaces instead. The setup script makes
+this decision automatically and prints the reason when it sets
+`sandbox_mode = "danger-full-access"`.
+
+To keep the poller always on, install the user service:
+
+```bash
+codex-rs/scripts/setup-telegram.sh --chat-id 21000038 --workspace "$HOME" --install-systemd
+systemctl --user daemon-reload
+systemctl --user enable --now pfterminal-telegram.service
+```
+
+The service runs `pfterminal telegram`, reads `CODEX_HOME` and
+`PFTERMINAL_TELEGRAM_TOKEN` from
+`~/.config/pfterminal/telegram.env`, and restarts automatically. Run only one
+poller per Telegram bot token.
 
 ## Provider Overrides
 

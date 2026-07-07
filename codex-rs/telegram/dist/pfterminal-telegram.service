@@ -1,0 +1,27 @@
+# PFTerminal Telegram connector systemd user service.
+#
+# Install with:
+#   mkdir -p ~/.config/systemd/user
+#   cp codex-rs/telegram/dist/pfterminal-telegram.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now pfterminal-telegram.service
+#
+# The setup script can install this file with:
+#   codex-rs/scripts/setup-telegram.sh --install-systemd
+#
+# Run only one poller per Telegram bot token.
+
+[Unit]
+Description=PFTerminal Telegram connector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/pfterminal/telegram.env
+ExecStart=pfterminal telegram
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

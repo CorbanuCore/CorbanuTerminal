@@ -107,3 +107,9 @@ the vault:
 /vault
 /vault credential add
 ```
+
+## Telegram Connector
+
+See [Telegram Connector](config.md#telegram) for the canonical `[telegram]`
+table, setup script, workspace `AGENTS.md` seeding, sandbox caveat, and systemd
+service instructions.
