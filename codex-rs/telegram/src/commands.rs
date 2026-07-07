@@ -32,7 +32,7 @@ pub fn parse_incoming(text: &str) -> IncomingCommand {
         Some("/new") => IncomingCommand::Known(Command::New),
         Some("/cancel") => IncomingCommand::Known(Command::Cancel),
         Some("/status") => IncomingCommand::Known(Command::Status),
-        Some(command) if command.contains('@') => {
+        Some(command) if command.starts_with('/') && command.contains('@') => {
             let without_bot = command.split('@').next().unwrap_or(command);
             let rest = trimmed.get(command.len()..).unwrap_or_default();
             parse_incoming(&format!("{without_bot}{rest}"))

@@ -4,6 +4,7 @@ use teloxide::dptree;
 use teloxide::prelude::Requester;
 use teloxide::prelude::*;
 use teloxide::types::ParseMode;
+use teloxide::utils::command::BotCommands;
 use tracing::info;
 use tracing::instrument;
 use tracing::warn;
@@ -24,15 +25,16 @@ pub async fn run_bot(
     allowlist: ChatAllowlist,
     max_consecutive_polling_failures: u32,
 ) -> anyhow::Result<()> {
-    let me = bot
-        .get_me()
+    bot.set_my_commands(Command::bot_commands())
         .await
-        .context("failed to validate Telegram bot token")?;
-    info!(bot_username = ?me.user.username, "Telegram bot token validated");
+        .context("failed to register Telegram bot commands")?;
+    info!("Telegram bot commands registered");
 
     let mut listener =
         crate::polling::guarded_polling(bot.clone(), max_consecutive_polling_failures).await;
-    let listener_error_handler = crate::polling::listener_error_handler(listener.stop_token());
+    let fatal_polling = listener.fatal_flag();
+    let listener_error_handler =
+        crate::polling::listener_error_handler(listener.stop_token(), fatal_polling.clone());
 
     let mut dispatcher = Dispatcher::builder(bot, schema())
         .dependencies(dptree::deps![bridge, allowlist])
@@ -42,6 +44,9 @@ pub async fn run_bot(
         .try_dispatch_with_listener(listener, listener_error_handler)
         .await
         .context("Telegram dispatcher failed")?;
+    if fatal_polling.is_fatal() {
+        return Err(crate::error::TelegramError::PollingConflict.into());
+    }
     Ok(())
 }
 
@@ -97,19 +102,33 @@ async fn handle_message(
     Ok(())
 }
 
-#[instrument(skip(bot, query, bridge))]
-async fn handle_callback(bot: Bot, query: CallbackQuery, bridge: BridgeHandle) -> HandlerResult {
-    let Some(data) = query.data.as_deref() else {
-        return Ok(());
+#[instrument(skip(bot, query, bridge, allowlist))]
+async fn handle_callback(
+    bot: Bot,
+    query: CallbackQuery,
+    bridge: BridgeHandle,
+    allowlist: ChatAllowlist,
+) -> HandlerResult {
+    let response = match callback_chat_id(&query) {
+        Some(chat_id) if allowlist.reject_if_unauthorized(chat_id) => {
+            match query.data.as_deref().and_then(ApprovalCallback::decode) {
+                Some(callback) => bridge.handle_approval_callback(chat_id, callback).await?,
+                None => {
+                    warn!("ignoring unknown Telegram callback data");
+                    "Unsupported callback.".to_string()
+                }
+            }
+        }
+        Some(_) => "This chat is not authorized to use PFTerminal.".to_string(),
+        None => "Approval callbacks must come from the original Telegram chat.".to_string(),
     };
-    let Some(callback) = ApprovalCallback::decode(data) else {
-        warn!("ignoring unknown Telegram callback data");
-        return Ok(());
-    };
-    let response = bridge.handle_approval_callback(callback).await?;
     bot.answer_callback_query(query.id)
         .text(response)
         .await
         .context("answer Telegram callback query")?;
     Ok(())
+}
+
+fn callback_chat_id(query: &CallbackQuery) -> Option<ChatId> {
+    query.message.as_ref().map(|message| message.chat().id)
 }

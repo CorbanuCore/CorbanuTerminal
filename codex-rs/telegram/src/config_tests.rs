@@ -1,5 +1,9 @@
 use codex_protocol::protocol::AskForApproval;
 use pretty_assertions::assert_eq;
+use std::fs;
+use std::path::PathBuf;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use codex_telegram::config::DEFAULT_TOKEN_ENV;
 use codex_telegram::config::TelegramConfig;
@@ -74,4 +78,40 @@ fn token_resolution_errors_without_env_or_vault() {
         .expect_err("token missing");
 
     assert!(err.to_string().contains(DEFAULT_TOKEN_ENV));
+}
+
+#[test]
+fn load_from_codex_home_reads_config_file() {
+    let codex_home = unique_temp_dir("codex-telegram-config");
+    fs::create_dir_all(&codex_home).expect("create codex home");
+    fs::write(
+        codex_home.join("config.toml"),
+        r#"
+        [telegram]
+        enabled = true
+        allowed_chat_ids = [42]
+        "#,
+    )
+    .expect("write config");
+
+    let config = TelegramConfig::load_from_codex_home(&codex_home).expect("load config");
+
+    assert_eq!(
+        config,
+        TelegramConfig {
+            enabled: true,
+            allowed_chat_ids: vec![42],
+            ..Default::default()
+        }
+    );
+
+    fs::remove_dir_all(codex_home).expect("remove codex home");
+}
+
+fn unique_temp_dir(prefix: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    std::env::temp_dir().join(format!("{prefix}-{}-{nanos}", std::process::id()))
 }

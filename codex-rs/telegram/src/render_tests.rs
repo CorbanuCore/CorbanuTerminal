@@ -62,7 +62,7 @@ fn streaming_text_coalesces_fast_deltas() {
         false
     );
     assert_eq!(
-        stream.push_delta("c", start + Duration::from_millis(50)),
+        stream.push_delta("c", start + Duration::from_millis(1_300)),
         true
     );
     assert_eq!(stream.raw(), "abc");

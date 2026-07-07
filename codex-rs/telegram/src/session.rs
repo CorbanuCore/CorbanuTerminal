@@ -1,8 +1,11 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use anyhow::Context;
 use codex_app_server_protocol::RequestId;
@@ -11,9 +14,16 @@ use serde::Serialize;
 use teloxide::types::ChatId;
 use teloxide::types::MessageId;
 use tokio::sync::Mutex;
+use tracing::warn;
 
 use crate::approvals::PendingApproval;
 use crate::render::StreamingText;
+
+#[derive(Debug, Clone, PartialEq)]
+struct PendingApprovalState {
+    approval: PendingApproval,
+    message_id: Option<MessageId>,
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct ChatSession {
@@ -23,7 +33,15 @@ pub struct ChatSession {
     pub streaming_item_id: Option<String>,
     pub streaming_text: StreamingText,
     pub streaming_message_id: Option<MessageId>,
-    pub pending_approvals: HashMap<RequestId, PendingApproval>,
+    pending_approvals: HashMap<RequestId, PendingApprovalState>,
+    delivered_item_ids: HashSet<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PendingApprovalRecord {
+    pub chat_id: ChatId,
+    pub approval: PendingApproval,
+    pub message_id: Option<MessageId>,
 }
 
 #[derive(Debug, Clone)]
@@ -55,20 +73,41 @@ impl SessionStore {
         let mut sessions = HashMap::new();
         match tokio::fs::read_to_string(&state_path).await {
             Ok(contents) => {
-                let persisted = serde_json::from_str::<PersistedState>(&contents)
-                    .with_context(|| format!("failed to parse {}", state_path.display()))?;
-                for (chat_id, chat) in persisted.chats {
-                    let chat_id = ChatId(chat_id.parse().with_context(|| {
-                        format!("invalid Telegram chat id in {}", state_path.display())
-                    })?);
-                    sessions.insert(
-                        chat_id,
-                        ChatSession {
-                            thread_id: Some(chat.thread_id),
-                            thread_loaded: false,
-                            ..Default::default()
-                        },
-                    );
+                let parsed = serde_json::from_str::<PersistedState>(&contents)
+                    .with_context(|| format!("failed to parse {}", state_path.display()))
+                    .and_then(|persisted| {
+                        let mut sessions = HashMap::new();
+                        for (chat_id, chat) in persisted.chats {
+                            let chat_id = ChatId(chat_id.parse().with_context(|| {
+                                format!("invalid Telegram chat id in {}", state_path.display())
+                            })?);
+                            sessions.insert(
+                                chat_id,
+                                ChatSession {
+                                    thread_id: Some(chat.thread_id),
+                                    thread_loaded: false,
+                                    ..Default::default()
+                                },
+                            );
+                        }
+                        Ok(sessions)
+                    });
+                match parsed {
+                    Ok(parsed_sessions) => {
+                        sessions = parsed_sessions;
+                    }
+                    Err(err) => {
+                        warn!(
+                            path = %state_path.display(),
+                            "ignoring corrupt Telegram state file: {err}"
+                        );
+                        if let Err(rename_err) = rename_corrupt_state(&state_path).await {
+                            warn!(
+                                path = %state_path.display(),
+                                "failed to rename corrupt Telegram state file: {rename_err}"
+                            );
+                        }
+                    }
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -154,6 +193,7 @@ impl SessionStore {
                 session.streaming_item_id = None;
                 session.streaming_message_id = None;
                 session.streaming_text = StreamingText::new();
+                session.pending_approvals.clear();
             }
         }
     }
@@ -192,20 +232,77 @@ impl SessionStore {
             .entry(chat_id)
             .or_default()
             .pending_approvals
-            .insert(approval.request_id.clone(), approval);
+            .insert(
+                approval.request_id.clone(),
+                PendingApprovalState {
+                    approval,
+                    message_id: None,
+                },
+            );
+    }
+
+    pub async fn set_pending_approval_message(
+        &self,
+        chat_id: ChatId,
+        request_id: &RequestId,
+        message_id: MessageId,
+    ) {
+        let mut sessions = self.inner.lock().await;
+        if let Some(state) = sessions
+            .get_mut(&chat_id)
+            .and_then(|session| session.pending_approvals.get_mut(request_id))
+        {
+            state.message_id = Some(message_id);
+        }
+    }
+
+    pub async fn remove_pending_approval(
+        &self,
+        chat_id: ChatId,
+        request_id: &RequestId,
+    ) -> Option<PendingApproval> {
+        self.inner
+            .lock()
+            .await
+            .get_mut(&chat_id)
+            .and_then(|session| session.pending_approvals.remove(request_id))
+            .map(|state| state.approval)
     }
 
     pub async fn take_pending_approval(
         &self,
+        chat_id: ChatId,
         request_id: &RequestId,
-    ) -> Option<(ChatId, PendingApproval)> {
+    ) -> Option<PendingApprovalRecord> {
         let mut sessions = self.inner.lock().await;
-        for (chat_id, session) in sessions.iter_mut() {
-            if let Some(approval) = session.pending_approvals.remove(request_id) {
-                return Some((*chat_id, approval));
-            }
+        let state = sessions
+            .get_mut(&chat_id)?
+            .pending_approvals
+            .remove(request_id)?;
+        Some(PendingApprovalRecord {
+            chat_id,
+            approval: state.approval,
+            message_id: state.message_id,
+        })
+    }
+
+    pub async fn mark_item_delivered(&self, thread_id: &str, item_id: &str) {
+        let mut sessions = self.inner.lock().await;
+        if let Some(session) = sessions
+            .values_mut()
+            .find(|session| session.thread_id.as_deref() == Some(thread_id))
+        {
+            session.delivered_item_ids.insert(item_id.to_string());
         }
-        None
+    }
+
+    pub async fn item_delivered(&self, thread_id: &str, item_id: &str) -> bool {
+        self.inner
+            .lock()
+            .await
+            .values()
+            .find(|session| session.thread_id.as_deref() == Some(thread_id))
+            .is_some_and(|session| session.delivered_item_ids.contains(item_id))
     }
 
     pub async fn append_stream_delta(
@@ -281,4 +378,14 @@ impl SessionStore {
         tokio::fs::write(&self.state_path, bytes).await?;
         Ok(())
     }
+}
+
+async fn rename_corrupt_state(state_path: &Path) -> anyhow::Result<()> {
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default();
+    let aside_path = state_path.with_extension(format!("json.corrupt.{suffix}"));
+    tokio::fs::rename(state_path, aside_path).await?;
+    Ok(())
 }

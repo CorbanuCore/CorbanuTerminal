@@ -4,7 +4,6 @@ use pretty_assertions::assert_eq;
 
 use codex_telegram::error::PollingBackoff;
 use codex_telegram::error::is_http_409_conflict;
-use codex_telegram::error::redact_secret;
 
 #[test]
 fn backoff_doubles_and_caps() {
@@ -34,16 +33,8 @@ fn backoff_doubles_and_caps() {
 }
 
 #[test]
-fn conflict_detection_checks_error_text() {
+fn conflict_detection_does_not_match_plain_error_text() {
     let err = anyhow::anyhow!("Telegram returned HTTP 409 Conflict");
 
-    assert_eq!(is_http_409_conflict(err.as_ref()), true);
-}
-
-#[test]
-fn redaction_replaces_secret_material() {
-    assert_eq!(
-        redact_secret("token abc123 failed", "abc123"),
-        "token [REDACTED] failed"
-    );
+    assert_eq!(is_http_409_conflict(err.as_ref()), false);
 }

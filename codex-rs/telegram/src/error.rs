@@ -57,19 +57,15 @@ impl PollingBackoff {
 pub fn is_http_409_conflict(error: &(dyn std::error::Error + 'static)) -> bool {
     let mut current = Some(error);
     while let Some(err) = current {
-        let text = err.to_string();
-        if text.contains("409") || text.to_ascii_lowercase().contains("conflict") {
+        if let Some(teloxide::RequestError::Network(network)) =
+            err.downcast_ref::<teloxide::RequestError>()
+            && network
+                .status()
+                .is_some_and(|status| status.as_u16() == 409)
+        {
             return true;
         }
         current = err.source();
     }
     false
-}
-
-pub fn redact_secret(text: &str, secret: &str) -> String {
-    if secret.is_empty() {
-        text.to_string()
-    } else {
-        text.replace(secret, "[REDACTED]")
-    }
 }

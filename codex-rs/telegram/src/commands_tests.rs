@@ -35,4 +35,8 @@ fn regular_text_passes_to_agent_unchanged() {
         parse_incoming("  explain the repo\n"),
         IncomingCommand::AgentInput("  explain the repo\n".to_string())
     );
+    assert_eq!(
+        parse_incoming("zoz@example.com sent this"),
+        IncomingCommand::AgentInput("zoz@example.com sent this".to_string())
+    );
 }

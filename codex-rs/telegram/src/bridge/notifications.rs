@@ -1,6 +1,5 @@
 use std::time::Instant;
 
-use anyhow::Context;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::ServerNotification;
 use codex_app_server_protocol::ThreadItem;
@@ -14,6 +13,7 @@ use teloxide::types::ParseMode;
 use tracing::warn;
 
 use super::BridgeRuntime;
+use super::finish_edit_result;
 use crate::render::render_html_chunks;
 use crate::session::StreamUpdate;
 
@@ -175,6 +175,7 @@ impl BridgeRuntime {
         _turn_id: &str,
         item: ThreadItem,
     ) -> anyhow::Result<()> {
+        let item_id = item.id().to_string();
         match item {
             ThreadItem::AgentMessage { id, text, .. } => {
                 let stream = self.sessions.take_stream_for_item(thread_id, &id).await;
@@ -187,7 +188,6 @@ impl BridgeRuntime {
                 } else if let Some(chat_id) = self.sessions.chat_for_thread(thread_id).await {
                     self.send_text(chat_id, &text).await?;
                 }
-                Ok(())
             }
             ThreadItem::CommandExecution {
                 command, status, ..
@@ -196,14 +196,12 @@ impl BridgeRuntime {
                     self.send_text(chat_id, &format!("Command {status:?}: {command}"))
                         .await?;
                 }
-                Ok(())
             }
             ThreadItem::FileChange { status, .. } => {
                 if let Some(chat_id) = self.sessions.chat_for_thread(thread_id).await {
                     self.send_text(chat_id, &format!("File change {status:?}."))
                         .await?;
                 }
-                Ok(())
             }
             ThreadItem::McpToolCall {
                 server,
@@ -215,7 +213,6 @@ impl BridgeRuntime {
                     self.send_text(chat_id, &format!("MCP {server}/{tool} {status:?}."))
                         .await?;
                 }
-                Ok(())
             }
             ThreadItem::UserMessage { .. }
             | ThreadItem::HookPrompt { .. }
@@ -230,15 +227,17 @@ impl BridgeRuntime {
             | ThreadItem::EnteredReviewMode { .. }
             | ThreadItem::ExitedReviewMode { .. }
             | ThreadItem::ContextCompaction { .. }
-            | ThreadItem::Sleep { .. } => Ok(()),
-        }
+            | ThreadItem::Sleep { .. } => {}
+        };
+        self.sessions.mark_item_delivered(thread_id, &item_id).await;
+        Ok(())
     }
 
     pub(super) async fn handle_lagged(&mut self, skipped: u64) -> anyhow::Result<()> {
         warn!(skipped, "Telegram bridge lagged behind app-server events");
         for thread_id in self.sessions.thread_ids().await {
             let request_id = self.request_ids.next();
-            let _: ThreadReadResponse = self
+            let response: ThreadReadResponse = match self
                 .request_typed(
                     ClientRequest::ThreadRead {
                         request_id,
@@ -249,13 +248,41 @@ impl BridgeRuntime {
                     },
                     "thread/read",
                 )
-                .await?;
-            if let Some(chat_id) = self.sessions.chat_for_thread(&thread_id).await {
-                self.send_text(
-                    chat_id,
-                    &format!("Recovered after missing {skipped} app-server events."),
-                )
-                .await?;
+                .await
+            {
+                Ok(response) => response,
+                Err(err) => {
+                    warn!(thread_id, "failed to recover Telegram lagged thread: {err}");
+                    continue;
+                }
+            };
+            for turn in response.thread.turns {
+                for item in turn.items {
+                    if self.sessions.item_delivered(&thread_id, item.id()).await {
+                        continue;
+                    }
+                    if let Err(err) = self.handle_item_completed(&thread_id, &turn.id, item).await {
+                        warn!(
+                            thread_id,
+                            turn_id = turn.id,
+                            "failed to deliver Telegram backfill item: {err}"
+                        );
+                        break;
+                    }
+                }
+            }
+            if let Some(chat_id) = self.sessions.chat_for_thread(&thread_id).await
+                && let Err(err) = self
+                    .send_text(
+                        chat_id,
+                        &format!("Recovered after missing {skipped} app-server events."),
+                    )
+                    .await
+            {
+                warn!(
+                    thread_id,
+                    "failed to send Telegram lag recovery notice: {err}"
+                );
             }
         }
         Ok(())
@@ -264,11 +291,14 @@ impl BridgeRuntime {
     async fn apply_stream_update(&self, update: StreamUpdate) -> anyhow::Result<()> {
         match update.message_id {
             Some(message_id) => {
-                self.bot
-                    .edit_message_text(update.chat_id, message_id, update.html)
-                    .parse_mode(ParseMode::Html)
-                    .await
-                    .context("edit Telegram streaming message")?;
+                finish_edit_result(
+                    self.bot
+                        .edit_message_text(update.chat_id, message_id, update.html)
+                        .parse_mode(ParseMode::Html)
+                        .await,
+                    "edit Telegram streaming message",
+                )
+                .await?;
             }
             None => {
                 let message = self.send_html(update.chat_id, &update.html).await?;

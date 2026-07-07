@@ -2,7 +2,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 pub const TELEGRAM_TEXT_LIMIT: usize = 4096;
-const STREAM_EDIT_INTERVAL: Duration = Duration::from_millis(40);
+const STREAM_EDIT_INTERVAL: Duration = Duration::from_millis(1_300);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HtmlChunk {

@@ -9,6 +9,10 @@ mod polling;
 pub mod render;
 mod session;
 
+#[cfg(test)]
+#[path = "session_tests.rs"]
+mod session_tests;
+
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -75,7 +79,7 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
     let core_config = build_core_config(
         &telegram_config,
         &arg0_paths,
-        cli_overrides,
+        cli_overrides.clone(),
         loader_overrides.clone(),
         cli.strict_config,
     )
@@ -91,7 +95,7 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
     let start_args = InProcessClientStartArgs {
         arg0_paths,
         config: Arc::new(core_config.clone()),
-        cli_overrides: Vec::new(),
+        cli_overrides,
         loader_overrides,
         strict_config: cli.strict_config,
         cloud_config_bundle: CloudConfigBundleLoader::default(),

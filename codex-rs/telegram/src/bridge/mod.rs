@@ -4,10 +4,7 @@ use anyhow::Context;
 use codex_app_server_client::InProcessAppServerClient;
 use codex_app_server_client::InProcessServerEvent;
 use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::CommandExecutionRequestApprovalParams;
-use codex_app_server_protocol::JSONRPCErrorError;
 use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerRequest;
 use codex_app_server_protocol::ThreadResumeParams;
 use codex_app_server_protocol::ThreadResumeResponse;
 use codex_app_server_protocol::ThreadSource;
@@ -22,7 +19,9 @@ use codex_app_server_protocol::TurnStartResponse;
 use codex_core::config::Config;
 use codex_protocol::user_input::UserInput;
 use serde::de::DeserializeOwned;
+use teloxide::ApiError;
 use teloxide::Bot;
+use teloxide::RequestError;
 use teloxide::payloads::EditMessageTextSetters;
 use teloxide::payloads::SendMessageSetters;
 use teloxide::prelude::Requester;
@@ -33,17 +32,16 @@ use teloxide::types::MessageId;
 use teloxide::types::ParseMode;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
+use tokio::time::sleep;
 use tracing::instrument;
 use tracing::warn;
 
 use crate::approvals::ApprovalCallback;
-use crate::approvals::PendingApproval;
-use crate::approvals::PendingApprovalKind;
-use crate::approvals::rejection_error;
 use crate::render::render_html_chunks;
 use crate::session::SessionStore;
 
 mod notifications;
+mod server_requests;
 
 const BRIDGE_CHANNEL_CAPACITY: usize = 128;
 
@@ -80,6 +78,7 @@ enum BridgeCommand {
         response_tx: oneshot::Sender<String>,
     },
     Approval {
+        chat_id: ChatId,
         callback: ApprovalCallback,
         response_tx: oneshot::Sender<String>,
     },
@@ -150,11 +149,13 @@ impl BridgeHandle {
 
     pub async fn handle_approval_callback(
         &self,
+        chat_id: ChatId,
         callback: ApprovalCallback,
     ) -> anyhow::Result<String> {
         let (response_tx, response_rx) = oneshot::channel();
         self.command_tx
             .send(BridgeCommand::Approval {
+                chat_id,
                 callback,
                 response_tx,
             })
@@ -189,8 +190,16 @@ impl BridgeRuntime {
                     match command {
                         Some(BridgeCommand::Shutdown) | None => break,
                         Some(command) => {
+                            let error_chat_id = command.error_chat_id();
                             if let Err(err) = self.handle_command(command).await {
                                 warn!("telegram bridge command failed: {err}");
+                                if let Some(chat_id) = error_chat_id
+                                    && let Err(send_err) = self
+                                        .send_text(chat_id, &format!("Error: {err:#}"))
+                                        .await
+                                {
+                                    warn!("failed to report Telegram bridge error to chat: {send_err}");
+                                }
                             }
                         }
                     }
@@ -234,10 +243,11 @@ impl BridgeRuntime {
                 Ok(())
             }
             BridgeCommand::Approval {
+                chat_id,
                 callback,
                 response_tx,
             } => {
-                let result = self.resolve_approval(callback).await;
+                let result = self.resolve_approval(chat_id, callback).await;
                 let text = match result {
                     Ok(text) => text,
                     Err(err) => format!("Approval failed: {err}"),
@@ -409,169 +419,6 @@ impl BridgeRuntime {
         }
     }
 
-    async fn handle_server_request(&mut self, request: ServerRequest) -> anyhow::Result<()> {
-        match request {
-            ServerRequest::CommandExecutionRequestApproval { request_id, params } => {
-                self.queue_approval(
-                    request_id,
-                    PendingApprovalKind::Command(sanitize_command_params(params)),
-                )
-                .await
-            }
-            ServerRequest::FileChangeRequestApproval { request_id, params } => {
-                self.queue_approval(request_id, PendingApprovalKind::FileChange(params))
-                    .await
-            }
-            ServerRequest::PermissionsRequestApproval { request_id, params } => {
-                self.queue_approval(request_id, PendingApprovalKind::Permissions(params))
-                    .await
-            }
-            ServerRequest::ToolRequestUserInput { request_id, params } => {
-                self.reject_request(
-                    request_id,
-                    format!(
-                        "tool user input is not supported from Telegram for thread `{}`",
-                        params.thread_id
-                    ),
-                )
-                .await
-            }
-            ServerRequest::McpServerElicitationRequest { request_id, .. } => {
-                self.reject_request(
-                    request_id,
-                    "MCP elicitation is not supported from Telegram".to_string(),
-                )
-                .await
-            }
-            ServerRequest::DynamicToolCall { request_id, params } => {
-                self.reject_request(
-                    request_id,
-                    format!(
-                        "dynamic tool calls are not supported from Telegram for thread `{}`",
-                        params.thread_id
-                    ),
-                )
-                .await
-            }
-            ServerRequest::ChatgptAuthTokensRefresh { request_id, .. } => {
-                self.reject_request(
-                    request_id,
-                    "ChatGPT auth token refresh is not supported from Telegram".to_string(),
-                )
-                .await
-            }
-            ServerRequest::AttestationGenerate { request_id, .. } => {
-                self.reject_request(
-                    request_id,
-                    "attestation generation is not supported from Telegram".to_string(),
-                )
-                .await
-            }
-            ServerRequest::CurrentTimeRead { request_id, .. } => {
-                self.reject_request(
-                    request_id,
-                    "external current time is not supported from Telegram".to_string(),
-                )
-                .await
-            }
-            ServerRequest::ApplyPatchApproval { request_id, params } => {
-                self.reject_request(
-                    request_id,
-                    format!(
-                        "legacy apply_patch approval is not supported for thread `{}`",
-                        params.conversation_id
-                    ),
-                )
-                .await
-            }
-            ServerRequest::ExecCommandApproval { request_id, params } => {
-                self.reject_request(
-                    request_id,
-                    format!(
-                        "legacy exec approval is not supported for thread `{}`",
-                        params.conversation_id
-                    ),
-                )
-                .await
-            }
-        }
-    }
-
-    async fn queue_approval(
-        &mut self,
-        request_id: RequestId,
-        kind: PendingApprovalKind,
-    ) -> anyhow::Result<()> {
-        let approval = PendingApproval { request_id, kind };
-        let Some(chat_id) = self.sessions.chat_for_thread(approval.thread_id()).await else {
-            self.reject_request(
-                approval.request_id.clone(),
-                format!("no Telegram chat owns thread `{}`", approval.thread_id()),
-            )
-            .await?;
-            return Ok(());
-        };
-        let message = approval.message();
-        let keyboard = approval.keyboard();
-        self.sessions
-            .insert_pending_approval(chat_id, approval)
-            .await;
-        self.bot
-            .send_message(chat_id, message)
-            .parse_mode(ParseMode::Html)
-            .reply_markup(keyboard)
-            .await
-            .context("send Telegram approval prompt")?;
-        Ok(())
-    }
-
-    async fn resolve_approval(&mut self, callback: ApprovalCallback) -> anyhow::Result<String> {
-        let Some((chat_id, approval)) = self
-            .sessions
-            .take_pending_approval(&callback.request_id)
-            .await
-        else {
-            return Ok("Approval is no longer pending.".to_string());
-        };
-
-        match approval.resolve_value(callback.action)? {
-            Some(value) => {
-                self.client
-                    .resolve_server_request(callback.request_id, value)
-                    .await
-                    .context("resolve server request")?;
-                self.send_text(chat_id, "Approved.").await?;
-                Ok("Approved.".to_string())
-            }
-            None => {
-                self.client
-                    .reject_server_request(callback.request_id, rejection_error())
-                    .await
-                    .context("reject server request")?;
-                self.send_text(chat_id, "Declined.").await?;
-                Ok("Declined.".to_string())
-            }
-        }
-    }
-
-    async fn reject_request(
-        &mut self,
-        request_id: RequestId,
-        reason: String,
-    ) -> anyhow::Result<()> {
-        self.client
-            .reject_server_request(
-                request_id,
-                JSONRPCErrorError {
-                    code: -32000,
-                    message: reason,
-                    data: None,
-                },
-            )
-            .await
-            .context("reject server request")
-    }
-
     pub(super) async fn send_text(&self, chat_id: ChatId, text: &str) -> anyhow::Result<()> {
         for chunk in render_html_chunks(text) {
             self.send_html(chat_id, &chunk.html).await?;
@@ -595,11 +442,14 @@ impl BridgeRuntime {
     ) -> anyhow::Result<()> {
         let chunks = render_html_chunks(text);
         if let Some(first) = chunks.first() {
-            self.bot
-                .edit_message_text(chat_id, message_id, first.html.clone())
-                .parse_mode(ParseMode::Html)
-                .await
-                .context("edit Telegram message")?;
+            finish_edit_result(
+                self.bot
+                    .edit_message_text(chat_id, message_id, first.html.clone())
+                    .parse_mode(ParseMode::Html)
+                    .await,
+                "edit Telegram message",
+            )
+            .await?;
         }
         Ok(())
     }
@@ -635,21 +485,28 @@ impl BridgeRuntime {
     }
 }
 
-fn sanitize_command_params(
-    mut params: CommandExecutionRequestApprovalParams,
-) -> CommandExecutionRequestApprovalParams {
-    if let Some(command) = params.command.as_mut() {
-        *command = truncate_sensitive(command);
+impl BridgeCommand {
+    fn error_chat_id(&self) -> Option<ChatId> {
+        match self {
+            Self::UserText { chat_id, .. }
+            | Self::NewThread { chat_id }
+            | Self::Cancel { chat_id } => Some(*chat_id),
+            Self::Status { .. } | Self::Approval { .. } | Self::Shutdown => None,
+        }
     }
-    params
 }
 
-fn truncate_sensitive(text: &str) -> String {
-    const MAX: usize = 2048;
-    if text.chars().count() <= MAX {
-        return text.to_string();
+pub(super) async fn finish_edit_result(
+    result: Result<Message, RequestError>,
+    context: &str,
+) -> anyhow::Result<()> {
+    match result {
+        Ok(_) => Ok(()),
+        Err(RequestError::Api(ApiError::MessageNotModified)) => Ok(()),
+        Err(RequestError::RetryAfter(delay)) => {
+            sleep(delay.duration()).await;
+            Ok(())
+        }
+        Err(err) => Err(err).context(context.to_string()),
     }
-    let mut truncated = text.chars().take(MAX).collect::<String>();
-    truncated.push_str("...(truncated)");
-    truncated
 }

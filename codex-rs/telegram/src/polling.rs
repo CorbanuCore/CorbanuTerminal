@@ -1,5 +1,7 @@
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use futures::Stream;
@@ -74,11 +76,31 @@ impl PollingState {
 pub struct GuardedPolling {
     inner: Polling<Bot>,
     state: Arc<Mutex<PollingState>>,
+    fatal: FatalPollingFlag,
 }
 
 impl GuardedPolling {
     pub fn stop_token(&mut self) -> StopToken {
         self.inner.stop_token()
+    }
+
+    pub fn fatal_flag(&self) -> FatalPollingFlag {
+        self.fatal.clone()
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct FatalPollingFlag {
+    fatal: Arc<AtomicBool>,
+}
+
+impl FatalPollingFlag {
+    fn mark_fatal(&self) {
+        self.fatal.store(true, Ordering::SeqCst);
+    }
+
+    pub fn is_fatal(&self) -> bool {
+        self.fatal.load(Ordering::SeqCst)
     }
 }
 
@@ -92,17 +114,21 @@ pub async fn guarded_polling(bot: Bot, max_consecutive_failures: u32) -> Guarded
     GuardedPolling {
         inner,
         state: Arc::new(Mutex::new(PollingState::new(max_consecutive_failures))),
+        fatal: FatalPollingFlag::default(),
     }
 }
 
 pub fn listener_error_handler(
     stop_token: StopToken,
+    fatal: FatalPollingFlag,
 ) -> Arc<impl ErrorHandler<RequestError> + Send + Sync> {
     Arc::new(move |error: RequestError| {
         let stop_token = stop_token.clone();
+        let fatal = fatal.clone();
         async move {
             if is_polling_conflict(&error) {
                 error!("Telegram polling stopped because another poller is using this bot token");
+                fatal.mark_fatal();
                 stop_token.stop();
             } else {
                 warn!("Telegram polling listener error: {error}");
@@ -118,6 +144,7 @@ impl<'a> AsUpdateStream<'a> for GuardedPolling {
     fn as_stream(&'a mut self) -> Self::Stream {
         let state = Arc::clone(&self.state);
         let stop_token = self.inner.stop_token();
+        let fatal = self.fatal.clone();
         Box::pin(self.inner.as_stream().map(move |result| {
             let should_stop = {
                 let mut state = match state.lock() {
@@ -136,6 +163,7 @@ impl<'a> AsUpdateStream<'a> for GuardedPolling {
                 }
             };
             if should_stop {
+                fatal.mark_fatal();
                 stop_token.stop();
             }
             result

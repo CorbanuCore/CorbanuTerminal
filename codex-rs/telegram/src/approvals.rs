@@ -6,7 +6,6 @@ use codex_app_server_protocol::FileChangeApprovalDecision;
 use codex_app_server_protocol::FileChangeRequestApprovalParams;
 use codex_app_server_protocol::FileChangeRequestApprovalResponse;
 use codex_app_server_protocol::GrantedPermissionProfile;
-use codex_app_server_protocol::JSONRPCErrorError;
 use codex_app_server_protocol::PermissionGrantScope;
 use codex_app_server_protocol::PermissionsRequestApprovalParams;
 use codex_app_server_protocol::PermissionsRequestApprovalResponse;
@@ -153,11 +152,7 @@ impl PendingApproval {
         ]])
     }
 
-    pub fn resolve_value(&self, action: ApprovalAction) -> anyhow::Result<Option<Value>> {
-        if action == ApprovalAction::Decline {
-            return Ok(None);
-        }
-
+    pub fn resolve_value(&self, action: ApprovalAction) -> anyhow::Result<Value> {
         let value = match &self.kind {
             PendingApprovalKind::Command(_) => {
                 let decision = match action {
@@ -165,7 +160,7 @@ impl PendingApproval {
                     ApprovalAction::ApproveForSession => {
                         CommandExecutionApprovalDecision::AcceptForSession
                     }
-                    ApprovalAction::Decline => unreachable!(),
+                    ApprovalAction::Decline => CommandExecutionApprovalDecision::Decline,
                 };
                 serde_json::to_value(CommandExecutionRequestApprovalResponse { decision })
                     .context("serialize command approval response")?
@@ -176,7 +171,7 @@ impl PendingApproval {
                     ApprovalAction::ApproveForSession => {
                         FileChangeApprovalDecision::AcceptForSession
                     }
-                    ApprovalAction::Decline => unreachable!(),
+                    ApprovalAction::Decline => FileChangeApprovalDecision::Decline,
                 };
                 serde_json::to_value(FileChangeRequestApprovalResponse { decision })
                     .context("serialize file approval response")?
@@ -185,27 +180,25 @@ impl PendingApproval {
                 let scope = match action {
                     ApprovalAction::Approve => PermissionGrantScope::Turn,
                     ApprovalAction::ApproveForSession => PermissionGrantScope::Session,
-                    ApprovalAction::Decline => unreachable!(),
+                    ApprovalAction::Decline => PermissionGrantScope::Turn,
+                };
+                let permissions = match action {
+                    ApprovalAction::Approve | ApprovalAction::ApproveForSession => {
+                        GrantedPermissionProfile {
+                            network: params.permissions.network.clone(),
+                            file_system: params.permissions.file_system.clone(),
+                        }
+                    }
+                    ApprovalAction::Decline => GrantedPermissionProfile::default(),
                 };
                 serde_json::to_value(PermissionsRequestApprovalResponse {
-                    permissions: GrantedPermissionProfile {
-                        network: params.permissions.network.clone(),
-                        file_system: params.permissions.file_system.clone(),
-                    },
+                    permissions,
                     scope,
                     strict_auto_review: None,
                 })
                 .context("serialize permissions approval response")?
             }
         };
-        Ok(Some(value))
-    }
-}
-
-pub fn rejection_error() -> JSONRPCErrorError {
-    JSONRPCErrorError {
-        code: -32000,
-        message: "declined from Telegram".to_string(),
-        data: None,
+        Ok(value)
     }
 }
