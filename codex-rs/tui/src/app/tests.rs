@@ -4189,8 +4189,7 @@ async fn orchestrate_auto_whip_fires_once_for_idle_sweep() {
         .expect("create pane");
 
     app.handle_orchestrate_command(format!(
-        "attach {} keep-going --mode auto --holder none --max 3",
-        pane_id
+        "attach {pane_id} keep-going --mode auto --holder none --max 3"
     ));
     app.sweep_orchestrate_whips();
     app.sweep_orchestrate_whips();
@@ -4223,8 +4222,7 @@ async fn orchestrate_stop_marker_pauses_before_fire() {
     let target_node_id = crate::spawn_orchestration::pane_node_id(&pane_id);
 
     app.handle_orchestrate_command(format!(
-        "attach {} stop-aware --mode auto --holder none --max 3",
-        pane_id
+        "attach {pane_id} stop-aware --mode auto --holder none --max 3"
     ));
     app.note_whip_target_idle_with_fire_control(&target_node_id, Some("done\nWHIP_DONE"), true);
 
@@ -4256,8 +4254,7 @@ async fn orchestrate_empty_output_loop_pauses_whip() {
     let target_node_id = crate::spawn_orchestration::pane_node_id(&pane_id);
 
     app.handle_orchestrate_command(format!(
-        "attach {} loop-aware --mode auto --holder none --max 3 --cooldown 1s",
-        pane_id
+        "attach {pane_id} loop-aware --mode auto --holder none --max 3 --cooldown 1s"
     ));
     app.note_whip_target_idle_with_fire_control(&target_node_id, Some(""), true);
     app.note_whip_target_idle_with_fire_control(&target_node_id, Some("   "), true);
@@ -4297,17 +4294,12 @@ async fn orchestrate_review_holder_ignored_twice_pauses_whip() {
     let holder_node_id = crate::spawn_orchestration::pane_node_id(&holder_pane_id);
 
     app.handle_orchestrate_command(format!(
-        "attach {} review-loop --mode review --holder {} --max 5",
-        target_pane_id, holder_pane_id
+        "attach {target_pane_id} review-loop --mode review --holder {holder_pane_id} --max 5"
     ));
     app.handle_orchestrate_command("fire whip-1".to_string());
     app.note_whip_target_idle_with_fire_control(&holder_node_id, Some("no dispatch"), true);
     app.handle_orchestrate_command("fire whip-1".to_string());
-    app.note_whip_target_idle_with_fire_control(
-        &holder_node_id,
-        Some("still no dispatch"),
-        true,
-    );
+    app.note_whip_target_idle_with_fire_control(&holder_node_id, Some("still no dispatch"), true);
 
     let submitted_tasks = drain_claude_pane_task_events(&mut app_event_rx);
     assert_eq!(
@@ -4321,6 +4313,235 @@ async fn orchestrate_review_holder_ignored_twice_pauses_whip() {
         app.orchestrate_whips.get("whip-1").map(|whip| whip.state),
         Some(crate::orchestrate::WhipState::Paused)
     );
+}
+
+#[tokio::test]
+async fn orchestrate_detached_expired_whip_stays_detached() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "keep-going", "# whip: keep-going\nContinue the work.");
+    let pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Orc),
+            Some("Krimp".to_string()),
+        )
+        .expect("create pane");
+
+    app.handle_orchestrate_command(format!(
+        "attach {pane_id} keep-going --mode auto --holder none --max 3"
+    ));
+    app.handle_orchestrate_command("detach whip-1".to_string());
+    app.orchestrate_whips
+        .get_mut("whip-1")
+        .expect("whip")
+        .expires_at = Some(chrono::Utc::now() - chrono::Duration::minutes(1));
+
+    app.sweep_orchestrate_whips();
+
+    assert!(drain_claude_pane_task_events(&mut app_event_rx).is_empty());
+    assert_eq!(
+        app.orchestrate_whips.get("whip-1").map(|whip| whip.state),
+        Some(crate::orchestrate::WhipState::Detached)
+    );
+}
+
+#[tokio::test]
+async fn orchestrate_rejects_pathy_whip_names() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+
+    app.handle_orchestrate_command(
+        "attach x ../../etc/hosts --mode auto --holder none".to_string(),
+    );
+
+    assert!(app.orchestrate_whips.is_empty());
+    assert!(drain_claude_pane_task_events(&mut app_event_rx).is_empty());
+}
+
+#[tokio::test]
+async fn orchestrate_fire_suppression_still_counts_ignored_review() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "review-loop", "# whip: review-loop\nReview target.");
+    let holder_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Troll),
+            Some("Burzum".to_string()),
+        )
+        .expect("create holder pane");
+    let target_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Orc),
+            Some("Krimp".to_string()),
+        )
+        .expect("create target pane");
+    let holder_node_id = crate::spawn_orchestration::pane_node_id(&holder_pane_id);
+
+    app.handle_orchestrate_command(format!(
+        "attach {target_pane_id} review-loop --mode review --holder {holder_pane_id} --max 5"
+    ));
+    app.handle_orchestrate_command("fire whip-1".to_string());
+    app.note_whip_target_idle_with_fire_control(&holder_node_id, Some("no dispatch"), false);
+
+    let submitted_tasks = drain_claude_pane_task_events(&mut app_event_rx);
+    assert_eq!(
+        submitted_tasks
+            .iter()
+            .filter(|(pane_id, _)| pane_id == &holder_pane_id)
+            .count(),
+        1
+    );
+    let whip = app.orchestrate_whips.get("whip-1").expect("whip");
+    assert_eq!(whip.ignored_review_fires, 1);
+    assert_eq!(whip.pending_review_fire, None);
+    assert_eq!(whip.state, crate::orchestrate::WhipState::Armed);
+}
+
+#[tokio::test]
+async fn orchestrate_agent_block_cannot_replace_user_held_whip() {
+    let (mut app, _app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "first", "# whip: first\nFirst mandate.");
+    write_test_whip(&app, "second", "# whip: second\nSecond mandate.");
+    let holder_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Troll),
+            Some("Burzum".to_string()),
+        )
+        .expect("create holder pane");
+    let agent_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Troll),
+            Some("Gorbag".to_string()),
+        )
+        .expect("create agent pane");
+    let target_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Orc),
+            Some("Krimp".to_string()),
+        )
+        .expect("create target pane");
+
+    app.handle_orchestrate_command(format!(
+        "attach {target_pane_id} first --mode review --holder {holder_pane_id} --max 5"
+    ));
+    let agent_node_id = crate::spawn_orchestration::pane_node_id(&agent_pane_id);
+    app.dispatch_orchestrate_blocks_from_text(
+        &agent_node_id,
+        &format!(
+            "```pfterminal-orchestrate\naction: attach\ntarget: {target_pane_id}\nwhip: second\nmode: auto\n```"
+        ),
+    );
+
+    let active_whips: Vec<_> = app
+        .orchestrate_whips
+        .values()
+        .filter(|whip| whip.state != crate::orchestrate::WhipState::Detached)
+        .collect();
+    assert_eq!(active_whips.len(), 1);
+    assert_eq!(active_whips[0].instructions, "first");
+    assert_eq!(
+        active_whips[0].holder.as_deref(),
+        Some(crate::spawn_orchestration::pane_node_id(&holder_pane_id).as_str())
+    );
+}
+
+#[tokio::test]
+async fn orchestrate_agent_unlimited_attach_is_rejected() {
+    let (mut app, _app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "forever", "# whip: forever\nDo not run forever.");
+    let agent_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Troll),
+            Some("Burzum".to_string()),
+        )
+        .expect("create agent pane");
+    let target_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Orc),
+            Some("Krimp".to_string()),
+        )
+        .expect("create target pane");
+    let agent_node_id = crate::spawn_orchestration::pane_node_id(&agent_pane_id);
+
+    app.dispatch_orchestrate_blocks_from_text(
+        &agent_node_id,
+        &format!(
+            "```pfterminal-orchestrate\naction: attach\ntarget: {target_pane_id}\nwhip: forever\nfor: unlimited\n```"
+        ),
+    );
+
+    assert!(app.orchestrate_whips.is_empty());
+}
+
+#[tokio::test]
+async fn orchestrate_agent_can_pause_own_whip() {
+    let (mut app, _app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "review-loop", "# whip: review-loop\nReview target.");
+    let agent_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Troll),
+            Some("Burzum".to_string()),
+        )
+        .expect("create agent pane");
+    let target_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Orc),
+            Some("Krimp".to_string()),
+        )
+        .expect("create target pane");
+    let agent_node_id = crate::spawn_orchestration::pane_node_id(&agent_pane_id);
+
+    app.dispatch_orchestrate_blocks_from_text(
+        &agent_node_id,
+        &format!(
+            "```pfterminal-orchestrate\naction: attach\ntarget: {target_pane_id}\nwhip: review-loop\nmode: review\n```"
+        ),
+    );
+    app.dispatch_orchestrate_blocks_from_text(
+        &agent_node_id,
+        "```pfterminal-orchestrate\naction: pause\nid: whip-1\n```",
+    );
+
+    let whip = app.orchestrate_whips.get("whip-1").expect("whip");
+    assert_eq!(whip.holder.as_deref(), Some(agent_node_id.as_str()));
+    assert_eq!(whip.state, crate::orchestrate::WhipState::Paused);
 }
 
 fn successful_claude_turn_output(

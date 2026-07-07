@@ -55,20 +55,15 @@ impl WhipMode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum WhipState {
+    #[default]
     Armed,
     Paused,
     Exhausted,
     Expired,
     Detached,
-}
-
-impl Default for WhipState {
-    fn default() -> Self {
-        Self::Armed
-    }
 }
 
 impl WhipState {
@@ -379,11 +374,27 @@ fn parse_orchestrate_block_content(content: &str) -> Option<OrchestrateCommand> 
                 .transpose()
                 .ok()?;
             let holder = fields.get("holder").map(|value| parse_holder_arg(value));
+            let expiry = fields
+                .get("for")
+                .map(|value| {
+                    if value.trim().eq_ignore_ascii_case("unlimited") {
+                        Ok(ExpiryArg::Unlimited)
+                    } else {
+                        parse_duration_arg(value).map(ExpiryArg::Duration)
+                    }
+                })
+                .or_else(|| {
+                    fields
+                        .get("until")
+                        .map(|value| parse_until_arg(value.trim()))
+                })
+                .transpose()
+                .ok()?;
             Some(OrchestrateCommand::Attach {
                 target,
                 whip_name,
                 mode,
-                expiry: None,
+                expiry,
                 max_fires: fields
                     .get("max")
                     .and_then(|value| value.trim().parse::<u32>().ok()),
@@ -461,7 +472,8 @@ pub(crate) fn resolve_whip_instruction_path(
     codex_home: &Path,
     cwd: &Path,
     name: &str,
-) -> Option<PathBuf> {
+) -> Result<Option<PathBuf>, String> {
+    validate_whip_name(name)?;
     let file_name = if name.ends_with(".md") {
         name.to_string()
     } else {
@@ -469,10 +481,23 @@ pub(crate) fn resolve_whip_instruction_path(
     };
     let project_path = cwd.join(".pfterminal").join("whips").join(&file_name);
     if project_path.exists() {
-        return Some(project_path);
+        return Ok(Some(project_path));
     }
     let global_path = codex_home.join("whips").join(file_name);
-    global_path.exists().then_some(global_path)
+    Ok(global_path.exists().then_some(global_path))
+}
+
+fn validate_whip_name(name: &str) -> Result<(), String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("Whip name cannot be empty.".to_string());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
+        return Err(format!(
+            "Invalid whip name `{name}`; use a basename from the whips directory."
+        ));
+    }
+    Ok(())
 }
 
 fn read_whip_instruction(
@@ -480,7 +505,7 @@ fn read_whip_instruction(
     cwd: &Path,
     name: &str,
 ) -> Result<(PathBuf, String), String> {
-    let path = resolve_whip_instruction_path(codex_home, cwd, name)
+    let path = resolve_whip_instruction_path(codex_home, cwd, name)?
         .ok_or_else(|| format!("No whip instruction file found for `{name}`."))?;
     let contents = fs::read_to_string(&path)
         .map_err(|err| format!("Failed to read whip `{}`: {err}", path.display()))?;
@@ -615,6 +640,10 @@ impl App {
         command: OrchestrateCommand,
         origin: CommandOrigin<'_>,
     ) {
+        if let Err(err) = self.authorize_orchestrate_command(&command, origin) {
+            self.chat_widget.add_error_message(err);
+            return;
+        }
         match command {
             OrchestrateCommand::Status => self.chat_widget.add_info_message(
                 format_whip_status(&self.orchestrate_whips, Utc::now()),
@@ -693,6 +722,7 @@ impl App {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn attach_whip(
         &mut self,
         target: String,
@@ -721,7 +751,10 @@ impl App {
                 resolved_mode = WhipMode::Auto;
                 None
             }
-            HolderArg::Me => Some(self.current_holder_node()?),
+            HolderArg::Me => Some(match origin {
+                CommandOrigin::User => self.current_holder_node()?,
+                CommandOrigin::Agent(node) => normalize_orchestrate_node_id(node),
+            }),
             HolderArg::Target(value) => Some(self.resolve_orchestrate_target_node(&value)?),
         };
         if resolved_mode == WhipMode::Review && holder_node_id.is_none() {
@@ -1026,13 +1059,101 @@ impl App {
     }
 
     fn expire_whip_if_needed(&mut self, id: &str, now: DateTime<Utc>) {
-        let should_expire = self
-            .orchestrate_whips
-            .get(id)
-            .and_then(|whip| whip.expires_at)
-            .is_some_and(|expires_at| expires_at <= now);
+        let should_expire = self.orchestrate_whips.get(id).is_some_and(|whip| {
+            whip.state == WhipState::Armed
+                && whip.expires_at.is_some_and(|expires_at| expires_at <= now)
+        });
         if should_expire {
             self.mark_whip_terminal(id, WhipState::Expired, "expired");
+        }
+    }
+
+    fn authorize_orchestrate_command(
+        &self,
+        command: &OrchestrateCommand,
+        origin: CommandOrigin<'_>,
+    ) -> Result<(), String> {
+        let CommandOrigin::Agent(agent_node) = origin else {
+            return Ok(());
+        };
+        let agent_node = normalize_orchestrate_node_id(agent_node);
+        match command {
+            OrchestrateCommand::Status => Ok(()),
+            OrchestrateCommand::Pause(id_or_target) | OrchestrateCommand::Detach(id_or_target) => {
+                self.ensure_agent_controls_whip(id_or_target, &agent_node)
+            }
+            OrchestrateCommand::Extend { id, .. } => {
+                self.ensure_agent_controls_whip(id, &agent_node)
+            }
+            OrchestrateCommand::Attach { target, expiry, .. } => {
+                self.ensure_agent_attach_expiry_allowed(*expiry)?;
+                let target_node_id = self.resolve_orchestrate_target_node(target)?;
+                for whip in self.orchestrate_whips.values().filter(|whip| {
+                    whip.target == target_node_id && whip.state != WhipState::Detached
+                }) {
+                    if whip
+                        .holder
+                        .as_deref()
+                        .is_some_and(|holder| holder != agent_node)
+                    {
+                        return Err(format!(
+                            "Agent `{agent_node}` cannot replace whip {} held by `{}`.",
+                            whip.id,
+                            whip.holder.as_deref().unwrap_or_default()
+                        ));
+                    }
+                }
+                Ok(())
+            }
+            OrchestrateCommand::Resume(_)
+            | OrchestrateCommand::Fire(_)
+            | OrchestrateCommand::Test(_) => {
+                Err("Only the user can resume, fire, or test whips.".to_string())
+            }
+        }
+    }
+
+    fn ensure_agent_controls_whip(
+        &self,
+        id_or_target: &str,
+        agent_node: &str,
+    ) -> Result<(), String> {
+        let id = self
+            .find_whip_id(id_or_target)
+            .ok_or_else(|| format!("No whip found for `{id_or_target}`."))?;
+        let Some(whip) = self.orchestrate_whips.get(&id) else {
+            return Err(format!("No whip found for `{id}`."));
+        };
+        if whip.holder.as_deref() == Some(agent_node) || whip.target == agent_node {
+            return Ok(());
+        }
+        Err(format!(
+            "Agent `{agent_node}` cannot control whip {id}; it neither holds nor targets that whip."
+        ))
+    }
+
+    fn ensure_agent_attach_expiry_allowed(&self, expiry: Option<ExpiryArg>) -> Result<(), String> {
+        let Some(expiry) = expiry else {
+            return Ok(());
+        };
+        match expiry {
+            ExpiryArg::Unlimited => Err("Agent-origin whips cannot be unlimited.".to_string()),
+            ExpiryArg::Duration(duration) if duration.seconds > DEFAULT_EXPIRY_SECONDS => {
+                Err("Agent-origin whips cannot request a duration longer than 4h.".to_string())
+            }
+            ExpiryArg::UntilTodayOrTomorrow { .. } => {
+                let now = Utc::now();
+                let Some(expires_at) = resolve_expiry_arg(expiry, now)? else {
+                    return Err("Agent-origin whips cannot be unlimited.".to_string());
+                };
+                if expires_at - now > Duration::seconds(DEFAULT_EXPIRY_SECONDS) {
+                    return Err(
+                        "Agent-origin whips cannot request a duration longer than 4h.".to_string(),
+                    );
+                }
+                Ok(())
+            }
+            _ => Ok(()),
         }
     }
 
@@ -1051,10 +1172,10 @@ impl App {
     }
 
     fn resolve_orchestrate_target_node(&self, target: &str) -> Result<String, String> {
-        if target == CODEX_MAIN_PANE_ID || target == pane_node_id(CODEX_MAIN_PANE_ID) {
-            if let Some(thread_id) = self.primary_thread_id {
-                return Ok(thread_node_id(thread_id));
-            }
+        if (target == CODEX_MAIN_PANE_ID || target == pane_node_id(CODEX_MAIN_PANE_ID))
+            && let Some(thread_id) = self.primary_thread_id
+        {
+            return Ok(thread_node_id(thread_id));
         }
         match self.resolve_spawn_task_target(target)? {
             SpawnTaskTarget::Native(thread_id) | SpawnTaskTarget::UnavailableNative(thread_id) => {

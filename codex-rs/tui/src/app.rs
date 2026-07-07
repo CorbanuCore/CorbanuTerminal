@@ -785,8 +785,10 @@ pub(crate) struct App {
     pub(crate) spawn_last_dispatch_seq_by_node: HashMap<String, u64>,
     pub(crate) spawn_last_event_at_by_node: HashMap<String, String>,
     pub(crate) spawn_nazgul_pane_id: Option<String>,
+    #[allow(clippy::box_collection)]
     pub(crate) orchestrate_whips: Box<HashMap<String, crate::orchestrate::Whip>>,
     pub(crate) orchestrate_next_whip_seq: u64,
+    #[allow(clippy::box_collection)]
     pub(crate) orchestrate_idle_generation_by_target: Box<HashMap<String, u64>>,
     side_threads: HashMap<ThreadId, SideThreadState>,
     pub(crate) claude_panes: crate::claude_panes::ClaudePaneRegistry,

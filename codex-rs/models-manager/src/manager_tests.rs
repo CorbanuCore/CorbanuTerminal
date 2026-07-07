@@ -27,8 +27,7 @@ use tempfile::tempdir;
 mod model_info_overrides_tests;
 
 const STANDARD_BASE: &str = include_str!("../../core/src/agent/builtins/standard_base.md");
-const STANDARD_BASE_OUTCOME_MARKER: &str =
-    "inspect code before changing it, keep edits scoped";
+const STANDARD_BASE_OUTCOME_MARKER: &str = "inspect code before changing it, keep edits scoped";
 const STANDARD_BASE_EVIDENCE_MARKER: &str = "only narrate when needed";
 const OLD_STANDARD_BASE_MARKER: &str = "Narrate as you work";
 const GPT55_GUIDE_MARKER: &str = "vivid inner life";
