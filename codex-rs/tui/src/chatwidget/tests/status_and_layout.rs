@@ -2487,7 +2487,7 @@ async fn status_line_model_uses_active_external_pane_model() {
 
     assert_eq!(
         status_line_text(&chat),
-        Some("gpt-5.5 xhigh · xhigh".to_string())
+        Some("GPT-5.5 xhigh · xhigh".to_string())
     );
 
     chat.set_active_external_model_display(Some("GLM 5.2 Z.AI".to_string()));
@@ -2498,7 +2498,7 @@ async fn status_line_model_uses_active_external_pane_model() {
 
     assert_eq!(
         status_line_text(&chat),
-        Some("gpt-5.5 xhigh · xhigh".to_string())
+        Some("GPT-5.5 xhigh · xhigh".to_string())
     );
 }
 
