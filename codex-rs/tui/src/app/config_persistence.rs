@@ -6,6 +6,10 @@
 
 use super::*;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
+use codex_model_provider_info::AMBIENT_KIMI_K2_7_CODE_MODEL;
+use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
+use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
+use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 #[cfg(target_os = "windows")]
 use codex_utils_approval_presets::ApprovalPreset;
 
@@ -728,7 +732,7 @@ impl App {
         reasoning_effort: Option<&ReasoningEffortConfig>,
     ) -> Option<String> {
         (!model.starts_with("codex-auto-")).then(|| {
-            if model == AMBIENT_DEFAULT_MODEL {
+            if Self::uses_glm_reasoning_modes(model) {
                 match reasoning_effort {
                     Some(ReasoningEffortConfig::High | ReasoningEffortConfig::XHigh) => {
                         "deep".to_string()
@@ -747,6 +751,17 @@ impl App {
                 Self::reasoning_label(reasoning_effort)
             }
         })
+    }
+
+    fn uses_glm_reasoning_modes(model: &str) -> bool {
+        matches!(
+            model,
+            AMBIENT_DEFAULT_MODEL
+                | AMBIENT_KIMI_K2_7_CODE_MODEL
+                | ZAI_DEFAULT_MODEL
+                | VERCEL_DEFAULT_MODEL
+                | VERCEL_GLM_5_2_FAST_MODEL
+        )
     }
 
     pub(crate) fn token_usage(&self) -> crate::token_usage::TokenUsage {

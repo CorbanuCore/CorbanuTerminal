@@ -574,12 +574,22 @@ impl ChatWidget {
         self.refresh_model_dependent_surfaces();
     }
 
-    pub(super) fn model_display_name(&self) -> &str {
+    pub(super) fn model_display_name(&self) -> String {
         let model = self.current_model();
         if model.is_empty() {
-            DEFAULT_MODEL_DISPLAY_NAME
+            return DEFAULT_MODEL_DISPLAY_NAME.to_string();
         } else {
-            model
+            self.model_catalog
+                .try_list_models()
+                .ok()
+                .and_then(|models| {
+                    models
+                        .into_iter()
+                        .find(|preset| preset.model == model)
+                        .map(|preset| preset.display_name)
+                })
+                .filter(|display_name| !display_name.trim().is_empty())
+                .unwrap_or_else(|| model.to_string())
         }
     }
 
@@ -706,7 +716,8 @@ impl ChatWidget {
         if previous_mode != next_mode
             && (previous_model != next_model || previous_effort != next_effort)
         {
-            let mut message = format!("Model changed to {next_model}");
+            let next_model_label = self.model_display_name();
+            let mut message = format!("Model changed to {next_model_label}");
             if !next_model.starts_with("codex-auto-") {
                 let reasoning_label = Self::status_line_reasoning_effort_label_for_model(
                     next_model,

@@ -785,7 +785,7 @@ impl ChatWidget {
     fn status_model_display_name(&self) -> String {
         self.active_external_model_display
             .clone()
-            .unwrap_or_else(|| self.model_display_name().to_string())
+            .unwrap_or_else(|| self.model_display_name())
     }
 
     fn reasoning_display_name(&self) -> String {
