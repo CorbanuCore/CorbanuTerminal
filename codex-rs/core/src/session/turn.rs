@@ -2218,14 +2218,25 @@ async fn maybe_emit_provider_request_pressure_warning(
         );
         return;
     }
-    let message = format!(
-        "Provider cache miss: {}/{} is about to send input={} request_bytes={} after the previous large request had cached_input={}. This may hit third-party provider limits; compact or start a fresh thread if this was a tiny follow-up.",
-        key.provider_id,
-        key.model,
-        preflight.input_tokens,
-        preflight.request_bytes,
-        preflight.cached_input_tokens
-    );
+    if turn_context
+        .provider_cache_pressure_warning_emitted
+        .swap(true, Ordering::Relaxed)
+    {
+        info!(
+            turn_id = %turn_context.sub_id,
+            provider = %key.provider_id,
+            model = %key.model,
+            input_tokens = preflight.input_tokens,
+            cached_input_tokens = preflight.cached_input_tokens,
+            request_bytes = preflight.request_bytes,
+            "suppressing duplicate third-party provider cache pressure warning for turn"
+        );
+        return;
+    }
+    let Some(cache_details) = cache_hit_details(last_token_usage) else {
+        return;
+    };
+    let message = provider_cache_pressure_warning_message(key, preflight, cache_details);
     sess.send_event(turn_context, EventMsg::Warning(WarningEvent { message }))
         .await;
 }
@@ -2236,6 +2247,41 @@ fn third_party_cache_looks_healthy(last_token_usage: Option<&TokenUsage>) -> boo
 
 fn third_party_cache_miss_is_known(last_token_usage: Option<&TokenUsage>) -> bool {
     cache_hit_rate(last_token_usage).is_some_and(|rate| rate < THIRD_PARTY_CACHE_HEALTHY_HIT_RATE)
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CacheHitDetails {
+    input_tokens: i64,
+    cached_input_tokens: i64,
+    hit_rate: f64,
+}
+
+fn provider_cache_pressure_warning_message(
+    key: &ProviderRequestKey,
+    preflight: &ProviderRequestPreflight,
+    cache_details: CacheHitDetails,
+) -> String {
+    if cache_details.cached_input_tokens <= 0 {
+        return format!(
+            "Provider cache miss: {}/{} is about to send input={} request_bytes={} after the previous large request had cached_input=0/{} (0.0%). This may hit third-party provider limits; compact or start a fresh thread if this was a tiny follow-up.",
+            key.provider_id,
+            key.model,
+            preflight.input_tokens,
+            preflight.request_bytes,
+            cache_details.input_tokens,
+        );
+    }
+
+    format!(
+        "Provider cache low hit rate: {}/{} is about to send input={} request_bytes={} after the previous large request reused cached_input={}/{} ({:.1}%). This may hit third-party provider limits; compact or start a fresh thread if this was a tiny follow-up.",
+        key.provider_id,
+        key.model,
+        preflight.input_tokens,
+        preflight.request_bytes,
+        cache_details.cached_input_tokens,
+        cache_details.input_tokens,
+        cache_details.hit_rate * 100.0,
+    )
 }
 
 fn provider_request_active_lease_needed(
@@ -2252,12 +2298,21 @@ fn provider_request_active_lease_needed(
 }
 
 fn cache_hit_rate(last_token_usage: Option<&TokenUsage>) -> Option<f64> {
+    cache_hit_details(last_token_usage).map(|details| details.hit_rate)
+}
+
+fn cache_hit_details(last_token_usage: Option<&TokenUsage>) -> Option<CacheHitDetails> {
     let usage = last_token_usage?;
     let input = usage.input_tokens.max(0);
     if input < THIRD_PARTY_CACHE_HEALTH_MIN_INPUT_TOKENS {
         return None;
     }
-    Some(usage.cached_input() as f64 / input as f64)
+    let cached = usage.cached_input().max(0);
+    Some(CacheHitDetails {
+        input_tokens: input,
+        cached_input_tokens: cached,
+        hit_rate: cached as f64 / input as f64,
+    })
 }
 
 async fn record_provider_request_result_for_lease(
