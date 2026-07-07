@@ -128,6 +128,7 @@ mod unified_exec_zsh_fork_approvals;
 mod unstable_features_warning;
 mod user_notification;
 mod user_shell_cmd;
+mod vercel_server_state;
 mod view_image;
 mod web_search;
 mod websocket_fallback;

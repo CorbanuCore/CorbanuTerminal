@@ -423,6 +423,38 @@ fn items_after_last_model_output(input: &[ResponseItem]) -> Option<Vec<ResponseI
     (!incremental_items.is_empty()).then(|| incremental_items.to_vec())
 }
 
+/// Whether an outbound Responses `input` contains at least one user-role message.
+///
+/// The Vercel gateway rejects `previous_response_id` continuations whose `input`
+/// holds only tool results (`invalid_request_error`: "At least one user message
+/// is required in the input"), which broke tool-call follow-up turns.
+fn responses_input_includes_user_message(items: &[ResponseItem]) -> bool {
+    items
+        .iter()
+        .any(|item| matches!(item, ResponseItem::Message { role, .. } if role == "user"))
+}
+
+/// Adopts a server-state incremental continuation only when the incremental
+/// `input` is a shape the Vercel gateway accepts (at least one user-role
+/// message). Otherwise the request is left as a full-context replay with no
+/// `previous_response_id`; server-conversation state still updates from the
+/// response, so later user-initiated continuations stay incremental.
+fn apply_http_server_state_continuation(
+    request: &mut ResponsesApiRequest,
+    response_id: String,
+    incremental_items: Vec<ResponseItem>,
+) {
+    if !responses_input_includes_user_message(&incremental_items) {
+        debug!(
+            "skipping server-state incremental continuation without a user message; \
+             sending full-context responses request"
+        );
+        return;
+    }
+    request.previous_response_id = Some(response_id);
+    request.input = incremental_items;
+}
+
 fn is_model_output_item(item: &ResponseItem) -> bool {
     match item {
         ResponseItem::Message { role, .. } => role == "assistant",
@@ -1886,15 +1918,21 @@ impl ModelClientSession {
                     self.client.state.provider.info().is_openai(),
                     /*allow_empty_delta*/ false,
                 ) {
-                    request.previous_response_id = Some(state.last_response.response_id);
-                    request.input = incremental_items;
+                    apply_http_server_state_continuation(
+                        request,
+                        state.last_response.response_id,
+                        incremental_items,
+                    );
                     return;
                 }
             } else if let Some(incremental_items) =
                 items_after_last_model_output(&logical_request.input)
             {
-                request.previous_response_id = Some(state.last_response.response_id);
-                request.input = incremental_items;
+                apply_http_server_state_continuation(
+                    request,
+                    state.last_response.response_id,
+                    incremental_items,
+                );
                 return;
             }
         }
@@ -1907,9 +1945,28 @@ impl ModelClientSession {
                 /*allow_empty_delta*/ false,
             )
         {
-            request.previous_response_id = Some(last_response.response_id);
-            request.input = incremental_items;
+            apply_http_server_state_continuation(
+                request,
+                last_response.response_id,
+                incremental_items,
+            );
         }
+    }
+
+    /// Drops every source `prepare_http_server_state_request` can draw a
+    /// `previous_response_id` continuation from, so the next attempt in the
+    /// retry loop rebuilds as a full-context request. Used to self-heal after
+    /// the provider rejects a server-state continuation.
+    fn clear_http_server_conversation_state(&mut self) {
+        {
+            let handle = self.client.server_conversation_state_handle();
+            let mut state = handle
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            *state = None;
+        }
+        self.websocket_session.last_request = None;
+        self.websocket_session.last_response_rx = None;
     }
 
     fn prepare_websocket_request(
@@ -2228,6 +2285,7 @@ impl ModelClientSession {
             .as_ref()
             .map(AuthManager::unauthorized_recovery);
         let mut pending_retry = PendingUnauthorizedRetry::default();
+        let mut server_state_retry_used = false;
         loop {
             let provider_request_started_at = Instant::now();
             trace_stream_timing(
@@ -2274,6 +2332,7 @@ impl ModelClientSession {
             if uses_http_server_state {
                 self.prepare_http_server_state_request(&mut request, &logical_request);
             }
+            let request_used_server_state = request.previous_response_id.is_some();
             let store = request.store;
             self.client
                 .prepare_response_items_for_request(&mut request.input, store);
@@ -2342,6 +2401,32 @@ impl ModelClientSession {
                         )
                         .await?,
                     );
+                    continue;
+                }
+                Err(ApiError::Transport(
+                    bad_request_transport @ TransportError::Http { status, .. },
+                )) if status == StatusCode::BAD_REQUEST
+                    && request_used_server_state
+                    && !server_state_retry_used =>
+                {
+                    // Self-heal: the provider rejected a `previous_response_id`
+                    // continuation (e.g. the Vercel gateway requires a user
+                    // message in `input`). Drop the server-conversation state
+                    // and retry once with a full-context request instead of
+                    // failing the turn.
+                    let response_debug_context =
+                        extract_response_debug_context(&bad_request_transport);
+                    inference_trace_attempt.record_failed(
+                        &bad_request_transport,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    warn!(
+                        "server-state responses continuation rejected with 400; \
+                         clearing server conversation state and retrying with full context"
+                    );
+                    self.clear_http_server_conversation_state();
+                    server_state_retry_used = true;
                     continue;
                 }
                 Err(err) => {
