@@ -17,6 +17,9 @@ pub enum TelegramError {
 
     #[error("another Telegram poller is already running for this bot token")]
     PollingConflict,
+
+    #[error("Telegram polling exceeded the configured consecutive failure cap")]
+    PollingFailureCapExceeded,
 }
 
 #[derive(Debug, Clone)]
@@ -44,7 +47,7 @@ impl PollingBackoff {
     pub fn record_failure(&mut self) -> Result<Duration, TelegramError> {
         self.consecutive_failures += 1;
         if self.consecutive_failures >= self.max_consecutive_failures {
-            return Err(TelegramError::PollingConflict);
+            return Err(TelegramError::PollingFailureCapExceeded);
         }
 
         let multiplier = 1_u32

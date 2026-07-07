@@ -1,5 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
+use std::time::Duration;
+use std::time::Instant;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
@@ -74,6 +76,63 @@ async fn clear_turn_for_thread_removes_pending_approvals() {
             .take_pending_approval(ChatId(10), &request_id)
             .await,
         None
+    );
+
+    fs::remove_dir_all(codex_home).expect("remove codex home");
+}
+
+#[tokio::test]
+async fn delivered_item_marker_survives_reload() {
+    let codex_home = unique_temp_dir("codex-telegram-session-delivered");
+    fs::create_dir_all(&codex_home).expect("create codex home");
+    let sessions = SessionStore::load(&codex_home)
+        .await
+        .expect("load session store");
+    sessions
+        .set_thread(ChatId(10), "thread".to_string())
+        .await
+        .expect("set thread");
+    sessions.mark_item_delivered("thread", "item-2").await;
+
+    let reloaded = SessionStore::load(&codex_home)
+        .await
+        .expect("reload session store");
+
+    assert_eq!(
+        reloaded.last_delivered_item_id("thread").await,
+        Some("item-2".to_string())
+    );
+    assert_eq!(reloaded.item_delivered("thread", "item-2").await, true);
+
+    fs::remove_dir_all(codex_home).expect("remove codex home");
+}
+
+#[tokio::test]
+async fn stream_edit_suppression_expires() {
+    let codex_home = unique_temp_dir("codex-telegram-session-suppress");
+    fs::create_dir_all(&codex_home).expect("create codex home");
+    let sessions = SessionStore::load(&codex_home)
+        .await
+        .expect("load session store");
+    let now = Instant::now();
+
+    sessions
+        .suppress_stream_edits_until(ChatId(10), now + Duration::from_secs(5))
+        .await;
+
+    assert_eq!(
+        sessions.stream_edits_suppressed(ChatId(10), now).await,
+        true
+    );
+    assert_eq!(
+        sessions
+            .stream_edits_suppressed(ChatId(10), now + Duration::from_secs(5))
+            .await,
+        false
+    );
+    assert_eq!(
+        sessions.stream_edits_suppressed(ChatId(10), now).await,
+        false
     );
 
     fs::remove_dir_all(codex_home).expect("remove codex home");

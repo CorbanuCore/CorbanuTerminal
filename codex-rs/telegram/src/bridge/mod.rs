@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Context;
 use codex_app_server_client::InProcessAppServerClient;
@@ -30,9 +31,11 @@ use teloxide::types::ChatId;
 use teloxide::types::Message;
 use teloxide::types::MessageId;
 use teloxide::types::ParseMode;
+use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use tokio::time::sleep;
+use tokio::task::JoinHandle;
+use tokio::time::timeout;
 use tracing::instrument;
 use tracing::warn;
 
@@ -88,6 +91,7 @@ enum BridgeCommand {
 #[derive(Clone)]
 pub struct BridgeHandle {
     command_tx: mpsc::Sender<BridgeCommand>,
+    task: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 impl BridgeHandle {
@@ -105,10 +109,13 @@ impl BridgeHandle {
             sessions,
             request_ids: RequestIdSequencer::new(),
         };
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             runtime.run(command_rx).await;
         });
-        Self { command_tx }
+        Self {
+            command_tx,
+            task: Arc::new(Mutex::new(Some(task))),
+        }
     }
 
     #[instrument(skip(self, text))]
@@ -167,10 +174,22 @@ impl BridgeHandle {
     }
 
     pub async fn shutdown(&self) -> anyhow::Result<()> {
-        self.command_tx
-            .send(BridgeCommand::Shutdown)
-            .await
-            .context("telegram bridge task stopped")
+        if let Err(err) = self.command_tx.send(BridgeCommand::Shutdown).await {
+            warn!("telegram bridge task already stopped before shutdown request: {err}");
+        }
+        let task = {
+            let mut task = self.task.lock().await;
+            task.take()
+        };
+        let Some(task) = task else {
+            return Ok(());
+        };
+        match timeout(Duration::from_secs(10), task).await {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => warn!("telegram bridge task failed during shutdown: {err}"),
+            Err(_) => warn!("timed out waiting for Telegram bridge shutdown"),
+        }
+        Ok(())
     }
 }
 
@@ -439,19 +458,23 @@ impl BridgeRuntime {
         chat_id: ChatId,
         message_id: MessageId,
         text: &str,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<bool> {
         let chunks = render_html_chunks(text);
-        if let Some(first) = chunks.first() {
-            finish_edit_result(
+        if let Some(first) = chunks.first()
+            && let Some(delay) = finish_edit_result(
                 self.bot
                     .edit_message_text(chat_id, message_id, first.html.clone())
                     .parse_mode(ParseMode::Html)
                     .await,
                 "edit Telegram message",
-            )
-            .await?;
+            )?
+        {
+            self.sessions
+                .suppress_stream_edits_until(chat_id, std::time::Instant::now() + delay)
+                .await;
+            return Ok(false);
         }
-        Ok(())
+        Ok(true)
     }
 
     async fn unsubscribe_thread(&mut self, thread_id: &str) -> anyhow::Result<()> {
@@ -496,17 +519,14 @@ impl BridgeCommand {
     }
 }
 
-pub(super) async fn finish_edit_result(
+pub(super) fn finish_edit_result(
     result: Result<Message, RequestError>,
     context: &str,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Option<Duration>> {
     match result {
-        Ok(_) => Ok(()),
-        Err(RequestError::Api(ApiError::MessageNotModified)) => Ok(()),
-        Err(RequestError::RetryAfter(delay)) => {
-            sleep(delay.duration()).await;
-            Ok(())
-        }
+        Ok(_) => Ok(None),
+        Err(RequestError::Api(ApiError::MessageNotModified)) => Ok(None),
+        Err(RequestError::RetryAfter(delay)) => Ok(Some(delay.duration())),
         Err(err) => Err(err).context(context.to_string()),
     }
 }

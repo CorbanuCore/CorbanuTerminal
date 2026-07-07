@@ -11,7 +11,6 @@ use teloxide::types::ParseMode;
 use tracing::warn;
 
 use super::BridgeRuntime;
-use crate::approvals::ApprovalAction;
 use crate::approvals::ApprovalCallback;
 use crate::approvals::PendingApproval;
 use crate::approvals::PendingApprovalKind;
@@ -168,6 +167,22 @@ impl BridgeRuntime {
         chat_id: ChatId,
         callback: ApprovalCallback,
     ) -> anyhow::Result<String> {
+        let Some(pending) = self
+            .sessions
+            .pending_approval(chat_id, &callback.request_id)
+            .await
+        else {
+            return Ok("Approval is not pending for this chat.".to_string());
+        };
+        let value = match pending.approval.resolve_value(callback.decision_index) {
+            Ok(value) => value,
+            Err(err) => {
+                warn!("rejecting unavailable Telegram approval decision: {err}");
+                return Ok("Approval decision is not available for this request.".to_string());
+            }
+        };
+        let response = pending.approval.response_text(callback.decision_index)?;
+
         let Some(record) = self
             .sessions
             .take_pending_approval(chat_id, &callback.request_id)
@@ -176,7 +191,6 @@ impl BridgeRuntime {
             return Ok("Approval is not pending for this chat.".to_string());
         };
 
-        let value = record.approval.resolve_value(callback.action)?;
         self.client
             .resolve_server_request(callback.request_id, value)
             .await
@@ -188,10 +202,6 @@ impl BridgeRuntime {
         {
             warn!("failed to clear Telegram approval keyboard: {err}");
         }
-        let response = match callback.action {
-            ApprovalAction::Approve | ApprovalAction::ApproveForSession => "Approved.",
-            ApprovalAction::Decline => "Declined.",
-        };
         self.send_text(record.chat_id, response).await?;
         Ok(response.to_string())
     }
@@ -231,12 +241,12 @@ fn sanitize_command_params(
     mut params: CommandExecutionRequestApprovalParams,
 ) -> CommandExecutionRequestApprovalParams {
     if let Some(command) = params.command.as_mut() {
-        *command = truncate_sensitive(command);
+        *command = truncate_command_for_prompt(command);
     }
     params
 }
 
-fn truncate_sensitive(text: &str) -> String {
+fn truncate_command_for_prompt(text: &str) -> String {
     const MAX: usize = 2048;
     if text.chars().count() <= MAX {
         return text.to_string();

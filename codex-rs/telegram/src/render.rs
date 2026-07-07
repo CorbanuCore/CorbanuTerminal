@@ -68,7 +68,7 @@ pub fn split_raw_text(text: &str) -> Vec<String> {
 
     let mut chunks = Vec::new();
     let mut remaining = text;
-    while remaining.chars().count() > TELEGRAM_TEXT_LIMIT {
+    while utf16_len(remaining) > TELEGRAM_TEXT_LIMIT {
         let split_at = preferred_split_byte(remaining, TELEGRAM_TEXT_LIMIT);
         let (head, tail) = remaining.split_at(split_at);
         chunks.push(head.to_string());
@@ -89,12 +89,20 @@ pub fn render_html_chunks(text: &str) -> Vec<HtmlChunk> {
         .collect()
 }
 
-fn preferred_split_byte(text: &str, max_chars: usize) -> usize {
-    let hard_limit = text
-        .char_indices()
-        .nth(max_chars)
-        .map(|(idx, _)| idx)
-        .unwrap_or(text.len());
+fn utf16_len(text: &str) -> usize {
+    text.encode_utf16().count()
+}
+
+fn preferred_split_byte(text: &str, max_utf16_units: usize) -> usize {
+    let mut units = 0;
+    let mut hard_limit = text.len();
+    for (idx, ch) in text.char_indices() {
+        units += ch.len_utf16();
+        if units > max_utf16_units {
+            hard_limit = idx;
+            break;
+        }
+    }
     text[..hard_limit]
         .rfind('\n')
         .filter(|idx| *idx > 0)

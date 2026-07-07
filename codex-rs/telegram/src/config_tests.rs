@@ -46,6 +46,23 @@ fn telegram_config_parses_local_table() {
 }
 
 #[test]
+fn telegram_config_rejects_unknown_fields() {
+    let err = TelegramConfig::from_toml_str(
+        r#"
+        [telegram]
+        enabled = true
+        alowed_chat_ids = [42]
+        "#,
+    )
+    .expect_err("unknown telegram key is rejected");
+
+    assert!(
+        err.to_string()
+            .contains("failed to parse [telegram] config")
+    );
+}
+
+#[test]
 fn token_resolution_prefers_env_over_vault() {
     let config = TelegramConfig {
         bot_token_env: "BOT_ENV".to_string(),

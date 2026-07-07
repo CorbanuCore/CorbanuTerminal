@@ -61,7 +61,7 @@ impl PollingState {
                 );
                 false
             }
-            Err(TelegramError::PollingConflict) => {
+            Err(TelegramError::PollingFailureCapExceeded) => {
                 error!("Telegram polling exceeded configured consecutive failure cap");
                 true
             }

@@ -2,10 +2,14 @@ use anyhow::Context;
 use codex_app_server_protocol::CommandExecutionApprovalDecision;
 use codex_app_server_protocol::CommandExecutionRequestApprovalParams;
 use codex_app_server_protocol::CommandExecutionRequestApprovalResponse;
+use codex_app_server_protocol::ExecPolicyAmendment;
 use codex_app_server_protocol::FileChangeApprovalDecision;
 use codex_app_server_protocol::FileChangeRequestApprovalParams;
 use codex_app_server_protocol::FileChangeRequestApprovalResponse;
 use codex_app_server_protocol::GrantedPermissionProfile;
+use codex_app_server_protocol::NetworkApprovalContext;
+use codex_app_server_protocol::NetworkPolicyAmendment;
+use codex_app_server_protocol::NetworkPolicyRuleAction;
 use codex_app_server_protocol::PermissionGrantScope;
 use codex_app_server_protocol::PermissionsRequestApprovalParams;
 use codex_app_server_protocol::PermissionsRequestApprovalResponse;
@@ -18,35 +22,9 @@ use crate::render::escape_html;
 
 const CALLBACK_PREFIX: &str = "tg";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ApprovalAction {
-    Approve,
-    ApproveForSession,
-    Decline,
-}
-
-impl ApprovalAction {
-    fn code(self) -> &'static str {
-        match self {
-            Self::Approve => "a",
-            Self::ApproveForSession => "s",
-            Self::Decline => "d",
-        }
-    }
-
-    fn from_code(code: &str) -> Option<Self> {
-        match code {
-            "a" => Some(Self::Approve),
-            "s" => Some(Self::ApproveForSession),
-            "d" => Some(Self::Decline),
-            _ => None,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApprovalCallback {
-    pub action: ApprovalAction,
+    pub decision_index: usize,
     pub request_id: RequestId,
 }
 
@@ -56,7 +34,7 @@ impl ApprovalCallback {
             RequestId::Integer(value) => ("i", value.to_string()),
             RequestId::String(value) => ("s", urlencoding::encode(value).into_owned()),
         };
-        format!("{CALLBACK_PREFIX}:{}:{kind}:{value}", self.action.code())
+        format!("{CALLBACK_PREFIX}:{}:{kind}:{value}", self.decision_index)
     }
 
     pub fn decode(raw: &str) -> Option<Self> {
@@ -64,7 +42,7 @@ impl ApprovalCallback {
         if parts.next()? != CALLBACK_PREFIX {
             return None;
         }
-        let action = ApprovalAction::from_code(parts.next()?)?;
+        let decision_index = parts.next()?.parse().ok()?;
         let kind = parts.next()?;
         let value = parts.next()?;
         let request_id = match kind {
@@ -72,7 +50,10 @@ impl ApprovalCallback {
             "s" => RequestId::String(urlencoding::decode(value).ok()?.into_owned()),
             _ => return None,
         };
-        Some(Self { action, request_id })
+        Some(Self {
+            decision_index,
+            request_id,
+        })
     }
 }
 
@@ -130,67 +111,38 @@ impl PendingApproval {
     }
 
     pub fn keyboard(&self) -> InlineKeyboardMarkup {
-        let approve = ApprovalCallback {
-            action: ApprovalAction::Approve,
-            request_id: self.request_id.clone(),
-        }
-        .encode();
-        let session = ApprovalCallback {
-            action: ApprovalAction::ApproveForSession,
-            request_id: self.request_id.clone(),
-        }
-        .encode();
-        let decline = ApprovalCallback {
-            action: ApprovalAction::Decline,
-            request_id: self.request_id.clone(),
-        }
-        .encode();
-        InlineKeyboardMarkup::new(vec![vec![
-            InlineKeyboardButton::callback("Approve", approve),
-            InlineKeyboardButton::callback("Approve for session", session),
-            InlineKeyboardButton::callback("Decline", decline),
-        ]])
+        let buttons = self
+            .approval_options()
+            .into_iter()
+            .enumerate()
+            .map(|(decision_index, option)| {
+                let callback = ApprovalCallback {
+                    decision_index,
+                    request_id: self.request_id.clone(),
+                }
+                .encode();
+                InlineKeyboardButton::callback(option.label, callback)
+            })
+            .collect::<Vec<_>>();
+        InlineKeyboardMarkup::new(vec![buttons])
     }
 
-    pub fn resolve_value(&self, action: ApprovalAction) -> anyhow::Result<Value> {
-        let value = match &self.kind {
-            PendingApprovalKind::Command(_) => {
-                let decision = match action {
-                    ApprovalAction::Approve => CommandExecutionApprovalDecision::Accept,
-                    ApprovalAction::ApproveForSession => {
-                        CommandExecutionApprovalDecision::AcceptForSession
-                    }
-                    ApprovalAction::Decline => CommandExecutionApprovalDecision::Decline,
-                };
+    pub fn resolve_value(&self, decision_index: usize) -> anyhow::Result<Value> {
+        let value = match self
+            .approval_options()
+            .get(decision_index)
+            .map(|option| option.decision.clone())
+            .with_context(|| format!("approval decision {decision_index} is not available"))?
+        {
+            ApprovalDecision::Command(decision) => {
                 serde_json::to_value(CommandExecutionRequestApprovalResponse { decision })
                     .context("serialize command approval response")?
             }
-            PendingApprovalKind::FileChange(_) => {
-                let decision = match action {
-                    ApprovalAction::Approve => FileChangeApprovalDecision::Accept,
-                    ApprovalAction::ApproveForSession => {
-                        FileChangeApprovalDecision::AcceptForSession
-                    }
-                    ApprovalAction::Decline => FileChangeApprovalDecision::Decline,
-                };
+            ApprovalDecision::FileChange(decision) => {
                 serde_json::to_value(FileChangeRequestApprovalResponse { decision })
                     .context("serialize file approval response")?
             }
-            PendingApprovalKind::Permissions(params) => {
-                let scope = match action {
-                    ApprovalAction::Approve => PermissionGrantScope::Turn,
-                    ApprovalAction::ApproveForSession => PermissionGrantScope::Session,
-                    ApprovalAction::Decline => PermissionGrantScope::Turn,
-                };
-                let permissions = match action {
-                    ApprovalAction::Approve | ApprovalAction::ApproveForSession => {
-                        GrantedPermissionProfile {
-                            network: params.permissions.network.clone(),
-                            file_system: params.permissions.file_system.clone(),
-                        }
-                    }
-                    ApprovalAction::Decline => GrantedPermissionProfile::default(),
-                };
+            ApprovalDecision::Permissions { permissions, scope } => {
                 serde_json::to_value(PermissionsRequestApprovalResponse {
                     permissions,
                     scope,
@@ -201,4 +153,196 @@ impl PendingApproval {
         };
         Ok(value)
     }
+
+    pub fn response_text(&self, decision_index: usize) -> anyhow::Result<&'static str> {
+        let options = self.approval_options();
+        let option = options
+            .get(decision_index)
+            .with_context(|| format!("approval decision {decision_index} is not available"))?;
+        Ok(option.response_text)
+    }
+
+    fn approval_options(&self) -> Vec<ApprovalOption> {
+        match &self.kind {
+            PendingApprovalKind::Command(params) => command_approval_options(params),
+            PendingApprovalKind::FileChange(_) => file_change_approval_options(),
+            PendingApprovalKind::Permissions(params) => permissions_approval_options(params),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ApprovalOption {
+    label: String,
+    decision: ApprovalDecision,
+    response_text: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum ApprovalDecision {
+    Command(CommandExecutionApprovalDecision),
+    FileChange(FileChangeApprovalDecision),
+    Permissions {
+        permissions: GrantedPermissionProfile,
+        scope: PermissionGrantScope,
+    },
+}
+
+fn command_approval_options(params: &CommandExecutionRequestApprovalParams) -> Vec<ApprovalOption> {
+    effective_command_decisions(params)
+        .into_iter()
+        .map(|decision| {
+            let response_text = command_response_text(&decision);
+            ApprovalOption {
+                label: command_decision_label(&decision),
+                decision: ApprovalDecision::Command(decision),
+                response_text,
+            }
+        })
+        .collect()
+}
+
+fn effective_command_decisions(
+    params: &CommandExecutionRequestApprovalParams,
+) -> Vec<CommandExecutionApprovalDecision> {
+    params.available_decisions.clone().unwrap_or_else(|| {
+        default_command_decisions(
+            params.network_approval_context.as_ref(),
+            params.proposed_execpolicy_amendment.as_ref(),
+            params.proposed_network_policy_amendments.as_deref(),
+            params.additional_permissions.as_ref(),
+        )
+    })
+}
+
+fn default_command_decisions(
+    network_approval_context: Option<&NetworkApprovalContext>,
+    proposed_execpolicy_amendment: Option<&ExecPolicyAmendment>,
+    proposed_network_policy_amendments: Option<&[NetworkPolicyAmendment]>,
+    additional_permissions: Option<&codex_app_server_protocol::AdditionalPermissionProfile>,
+) -> Vec<CommandExecutionApprovalDecision> {
+    if network_approval_context.is_some() {
+        let mut decisions = vec![
+            CommandExecutionApprovalDecision::Accept,
+            CommandExecutionApprovalDecision::AcceptForSession,
+        ];
+        if let Some(amendment) = proposed_network_policy_amendments.and_then(|amendments| {
+            amendments
+                .iter()
+                .find(|amendment| amendment.action == NetworkPolicyRuleAction::Allow)
+        }) {
+            decisions.push(
+                CommandExecutionApprovalDecision::ApplyNetworkPolicyAmendment {
+                    network_policy_amendment: amendment.clone(),
+                },
+            );
+        }
+        decisions.push(CommandExecutionApprovalDecision::Cancel);
+        return decisions;
+    }
+
+    if additional_permissions.is_some() {
+        return vec![
+            CommandExecutionApprovalDecision::Accept,
+            CommandExecutionApprovalDecision::Cancel,
+        ];
+    }
+
+    let mut decisions = vec![CommandExecutionApprovalDecision::Accept];
+    if let Some(amendment) = proposed_execpolicy_amendment {
+        decisions.push(
+            CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment {
+                execpolicy_amendment: amendment.clone(),
+            },
+        );
+    }
+    decisions.push(CommandExecutionApprovalDecision::Cancel);
+    decisions
+}
+
+fn command_decision_label(decision: &CommandExecutionApprovalDecision) -> String {
+    match decision {
+        CommandExecutionApprovalDecision::Accept => "Approve".to_string(),
+        CommandExecutionApprovalDecision::AcceptForSession => "Approve for session".to_string(),
+        CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment { .. } => {
+            "Approve and remember command".to_string()
+        }
+        CommandExecutionApprovalDecision::ApplyNetworkPolicyAmendment {
+            network_policy_amendment,
+        } => match network_policy_amendment.action {
+            NetworkPolicyRuleAction::Allow => "Approve and allow host".to_string(),
+            NetworkPolicyRuleAction::Deny => "Decline and block host".to_string(),
+        },
+        CommandExecutionApprovalDecision::Decline => "Decline".to_string(),
+        CommandExecutionApprovalDecision::Cancel => "Cancel".to_string(),
+    }
+}
+
+fn command_response_text(decision: &CommandExecutionApprovalDecision) -> &'static str {
+    match decision {
+        CommandExecutionApprovalDecision::Accept
+        | CommandExecutionApprovalDecision::AcceptForSession
+        | CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment { .. } => "Approved.",
+        CommandExecutionApprovalDecision::ApplyNetworkPolicyAmendment {
+            network_policy_amendment,
+        } => match network_policy_amendment.action {
+            NetworkPolicyRuleAction::Allow => "Approved.",
+            NetworkPolicyRuleAction::Deny => "Declined.",
+        },
+        CommandExecutionApprovalDecision::Decline => "Declined.",
+        CommandExecutionApprovalDecision::Cancel => "Cancelled.",
+    }
+}
+
+fn file_change_approval_options() -> Vec<ApprovalOption> {
+    [
+        (FileChangeApprovalDecision::Accept, "Approve", "Approved."),
+        (
+            FileChangeApprovalDecision::AcceptForSession,
+            "Approve for session",
+            "Approved.",
+        ),
+        (FileChangeApprovalDecision::Decline, "Decline", "Declined."),
+        (FileChangeApprovalDecision::Cancel, "Cancel", "Cancelled."),
+    ]
+    .into_iter()
+    .map(|(decision, label, response_text)| ApprovalOption {
+        label: label.to_string(),
+        decision: ApprovalDecision::FileChange(decision),
+        response_text,
+    })
+    .collect()
+}
+
+fn permissions_approval_options(params: &PermissionsRequestApprovalParams) -> Vec<ApprovalOption> {
+    let granted_permissions = GrantedPermissionProfile {
+        network: params.permissions.network.clone(),
+        file_system: params.permissions.file_system.clone(),
+    };
+    vec![
+        ApprovalOption {
+            label: "Approve".to_string(),
+            decision: ApprovalDecision::Permissions {
+                permissions: granted_permissions.clone(),
+                scope: PermissionGrantScope::Turn,
+            },
+            response_text: "Approved.",
+        },
+        ApprovalOption {
+            label: "Approve for session".to_string(),
+            decision: ApprovalDecision::Permissions {
+                permissions: granted_permissions,
+                scope: PermissionGrantScope::Session,
+            },
+            response_text: "Approved.",
+        },
+        ApprovalOption {
+            label: "Decline".to_string(),
+            decision: ApprovalDecision::Permissions {
+                permissions: GrantedPermissionProfile::default(),
+                scope: PermissionGrantScope::Turn,
+            },
+            response_text: "Declined.",
+        },
+    ]
 }

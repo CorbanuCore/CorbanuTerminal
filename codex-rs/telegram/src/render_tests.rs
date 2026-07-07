@@ -28,6 +28,17 @@ fn splitter_limits_raw_text_not_escaped_text() {
 }
 
 #[test]
+fn splitter_limits_utf16_units_for_astral_emoji() {
+    let raw = "🧪".repeat(TELEGRAM_TEXT_LIMIT);
+    let chunks = split_raw_text(&raw);
+
+    assert!(chunks.len() > 1);
+    for chunk in chunks {
+        assert!(chunk.encode_utf16().count() <= TELEGRAM_TEXT_LIMIT);
+    }
+}
+
+#[test]
 fn splitter_prefers_newline_boundaries() {
     let raw = format!("{}\n{}", "a".repeat(100), "b".repeat(TELEGRAM_TEXT_LIMIT));
     let chunks = split_raw_text(&raw);

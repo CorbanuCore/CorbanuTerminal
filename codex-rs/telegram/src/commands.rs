@@ -24,7 +24,7 @@ pub enum IncomingCommand {
     AgentInput(String),
 }
 
-pub fn parse_incoming(text: &str) -> IncomingCommand {
+pub fn parse_incoming(text: &str, bot_username: Option<&str>) -> IncomingCommand {
     let trimmed = text.trim();
     match trimmed.split_ascii_whitespace().next() {
         Some("/start") => IncomingCommand::Known(Command::Start),
@@ -33,9 +33,17 @@ pub fn parse_incoming(text: &str) -> IncomingCommand {
         Some("/cancel") => IncomingCommand::Known(Command::Cancel),
         Some("/status") => IncomingCommand::Known(Command::Status),
         Some(command) if command.starts_with('/') && command.contains('@') => {
-            let without_bot = command.split('@').next().unwrap_or(command);
+            let Some((without_bot, mentioned_bot)) = command.split_once('@') else {
+                return IncomingCommand::AgentInput(trimmed.into());
+            };
+            let Some(bot_username) = bot_username else {
+                return IncomingCommand::AgentInput(trimmed.into());
+            };
+            if !mentioned_bot.eq_ignore_ascii_case(bot_username.trim_start_matches('@')) {
+                return IncomingCommand::AgentInput(trimmed.into());
+            }
             let rest = trimmed.get(command.len()..).unwrap_or_default();
-            parse_incoming(&format!("{without_bot}{rest}"))
+            parse_incoming(&format!("{without_bot}{rest}"), Some(bot_username))
         }
         Some(command) if command.starts_with('/') => IncomingCommand::AgentInput(trimmed.into()),
         _ => IncomingCommand::AgentInput(text.into()),

@@ -33,8 +33,10 @@ pub struct ChatSession {
     pub streaming_item_id: Option<String>,
     pub streaming_text: StreamingText,
     pub streaming_message_id: Option<MessageId>,
+    pub stream_edits_suppressed_until: Option<Instant>,
     pending_approvals: HashMap<RequestId, PendingApprovalState>,
     delivered_item_ids: HashSet<String>,
+    last_delivered_item_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -59,6 +61,8 @@ struct PersistedState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PersistedChat {
     thread_id: String,
+    #[serde(default)]
+    last_delivered_item_id: Option<String>,
 }
 
 #[derive(Debug)]
@@ -81,11 +85,17 @@ impl SessionStore {
                             let chat_id = ChatId(chat_id.parse().with_context(|| {
                                 format!("invalid Telegram chat id in {}", state_path.display())
                             })?);
+                            let mut delivered_item_ids = HashSet::new();
+                            if let Some(item_id) = &chat.last_delivered_item_id {
+                                delivered_item_ids.insert(item_id.clone());
+                            }
                             sessions.insert(
                                 chat_id,
                                 ChatSession {
                                     thread_id: Some(chat.thread_id),
                                     thread_loaded: false,
+                                    delivered_item_ids,
+                                    last_delivered_item_id: chat.last_delivered_item_id,
                                     ..Default::default()
                                 },
                             );
@@ -171,6 +181,8 @@ impl SessionStore {
             session.streaming_message_id = None;
             session.streaming_text = StreamingText::new();
             session.pending_approvals.clear();
+            session.delivered_item_ids.clear();
+            session.last_delivered_item_id = None;
         }
         self.persist().await
     }
@@ -193,6 +205,7 @@ impl SessionStore {
                 session.streaming_item_id = None;
                 session.streaming_message_id = None;
                 session.streaming_text = StreamingText::new();
+                session.stream_edits_suppressed_until = None;
                 session.pending_approvals.clear();
             }
         }
@@ -269,6 +282,20 @@ impl SessionStore {
             .map(|state| state.approval)
     }
 
+    pub async fn pending_approval(
+        &self,
+        chat_id: ChatId,
+        request_id: &RequestId,
+    ) -> Option<PendingApprovalRecord> {
+        let sessions = self.inner.lock().await;
+        let state = sessions.get(&chat_id)?.pending_approvals.get(request_id)?;
+        Some(PendingApprovalRecord {
+            chat_id,
+            approval: state.approval.clone(),
+            message_id: state.message_id,
+        })
+    }
+
     pub async fn take_pending_approval(
         &self,
         chat_id: ChatId,
@@ -287,12 +314,21 @@ impl SessionStore {
     }
 
     pub async fn mark_item_delivered(&self, thread_id: &str, item_id: &str) {
-        let mut sessions = self.inner.lock().await;
-        if let Some(session) = sessions
-            .values_mut()
-            .find(|session| session.thread_id.as_deref() == Some(thread_id))
-        {
-            session.delivered_item_ids.insert(item_id.to_string());
+        let updated = {
+            let mut sessions = self.inner.lock().await;
+            if let Some(session) = sessions
+                .values_mut()
+                .find(|session| session.thread_id.as_deref() == Some(thread_id))
+            {
+                session.delivered_item_ids.insert(item_id.to_string());
+                session.last_delivered_item_id = Some(item_id.to_string());
+                true
+            } else {
+                false
+            }
+        };
+        if updated && let Err(err) = self.persist().await {
+            warn!("failed to persist Telegram delivered item marker: {err}");
         }
     }
 
@@ -303,6 +339,15 @@ impl SessionStore {
             .values()
             .find(|session| session.thread_id.as_deref() == Some(thread_id))
             .is_some_and(|session| session.delivered_item_ids.contains(item_id))
+    }
+
+    pub async fn last_delivered_item_id(&self, thread_id: &str) -> Option<String> {
+        self.inner
+            .lock()
+            .await
+            .values()
+            .find(|session| session.thread_id.as_deref() == Some(thread_id))
+            .and_then(|session| session.last_delivered_item_id.clone())
     }
 
     pub async fn append_stream_delta(
@@ -336,6 +381,29 @@ impl SessionStore {
         sessions.entry(chat_id).or_default().streaming_message_id = Some(message_id);
     }
 
+    pub async fn stream_edits_suppressed(&self, chat_id: ChatId, now: Instant) -> bool {
+        let mut sessions = self.inner.lock().await;
+        let Some(session) = sessions.get_mut(&chat_id) else {
+            return false;
+        };
+        match session.stream_edits_suppressed_until {
+            Some(until) if now < until => true,
+            Some(_) => {
+                session.stream_edits_suppressed_until = None;
+                false
+            }
+            None => false,
+        }
+    }
+
+    pub async fn suppress_stream_edits_until(&self, chat_id: ChatId, until: Instant) {
+        let mut sessions = self.inner.lock().await;
+        sessions
+            .entry(chat_id)
+            .or_default()
+            .stream_edits_suppressed_until = Some(until);
+    }
+
     pub async fn take_stream_for_item(
         &self,
         thread_id: &str,
@@ -364,6 +432,7 @@ impl SessionStore {
                                 chat_id.0.to_string(),
                                 PersistedChat {
                                     thread_id: thread_id.clone(),
+                                    last_delivered_item_id: session.last_delivered_item_id.clone(),
                                 },
                             )
                         })

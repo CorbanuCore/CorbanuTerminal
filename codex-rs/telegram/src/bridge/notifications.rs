@@ -180,10 +180,18 @@ impl BridgeRuntime {
             ThreadItem::AgentMessage { id, text, .. } => {
                 let stream = self.sessions.take_stream_for_item(thread_id, &id).await;
                 if let Some((chat_id, Some(message_id))) = stream {
-                    self.edit_message(chat_id, message_id, &text).await?;
-                    let chunks = render_html_chunks(&text);
-                    for chunk in chunks.into_iter().skip(1) {
-                        self.send_html(chat_id, &chunk.html).await?;
+                    if self
+                        .sessions
+                        .stream_edits_suppressed(chat_id, Instant::now())
+                        .await
+                        || !self.edit_message(chat_id, message_id, &text).await?
+                    {
+                        self.send_text(chat_id, &text).await?;
+                    } else {
+                        let chunks = render_html_chunks(&text);
+                        for chunk in chunks.into_iter().skip(1) {
+                            self.send_html(chat_id, &chunk.html).await?;
+                        }
                     }
                 } else if let Some(chat_id) = self.sessions.chat_for_thread(thread_id).await {
                     self.send_text(chat_id, &text).await?;
@@ -256,8 +264,28 @@ impl BridgeRuntime {
                     continue;
                 }
             };
-            for turn in response.thread.turns {
+            let last_delivered_item_id = self.sessions.last_delivered_item_id(&thread_id).await;
+            let marker_found = last_delivered_item_id.as_ref().is_some_and(|last| {
+                response
+                    .thread
+                    .turns
+                    .iter()
+                    .any(|turn| turn.items.iter().any(|item| item.id() == last))
+            });
+            let fallback_to_latest_turn = last_delivered_item_id.is_some() && !marker_found;
+            let turn_count = response.thread.turns.len();
+            let mut marker_reached = last_delivered_item_id.is_none() || fallback_to_latest_turn;
+            for (turn_index, turn) in response.thread.turns.into_iter().enumerate() {
+                if fallback_to_latest_turn && turn_index + 1 != turn_count {
+                    continue;
+                }
                 for item in turn.items {
+                    if !marker_reached {
+                        if Some(item.id()) == last_delivered_item_id.as_deref() {
+                            marker_reached = true;
+                        }
+                        continue;
+                    }
                     if self.sessions.item_delivered(&thread_id, item.id()).await {
                         continue;
                     }
@@ -291,14 +319,24 @@ impl BridgeRuntime {
     async fn apply_stream_update(&self, update: StreamUpdate) -> anyhow::Result<()> {
         match update.message_id {
             Some(message_id) => {
-                finish_edit_result(
+                if self
+                    .sessions
+                    .stream_edits_suppressed(update.chat_id, Instant::now())
+                    .await
+                {
+                    return Ok(());
+                }
+                if let Some(delay) = finish_edit_result(
                     self.bot
                         .edit_message_text(update.chat_id, message_id, update.html)
                         .parse_mode(ParseMode::Html)
                         .await,
                     "edit Telegram streaming message",
-                )
-                .await?;
+                )? {
+                    self.sessions
+                        .suppress_stream_edits_until(update.chat_id, Instant::now() + delay)
+                        .await;
+                }
             }
             None => {
                 let message = self.send_html(update.chat_id, &update.html).await?;

@@ -18,6 +18,10 @@ use crate::commands::help_text;
 use crate::commands::parse_incoming;
 
 type HandlerResult = anyhow::Result<()>;
+const CALLBACK_ANSWER_TEXT_LIMIT: usize = 200;
+
+#[derive(Clone, Debug)]
+struct BotUsername(String);
 
 pub async fn run_bot(
     bot: Bot,
@@ -29,6 +33,14 @@ pub async fn run_bot(
         .await
         .context("failed to register Telegram bot commands")?;
     info!("Telegram bot commands registered");
+    let bot_username = BotUsername(
+        bot.get_me()
+            .await
+            .context("failed to fetch Telegram bot identity")?
+            .username()
+            .to_string(),
+    );
+    info!(username = %bot_username.0, "Telegram bot identity loaded");
 
     let mut listener =
         crate::polling::guarded_polling(bot.clone(), max_consecutive_polling_failures).await;
@@ -37,7 +49,7 @@ pub async fn run_bot(
         crate::polling::listener_error_handler(listener.stop_token(), fatal_polling.clone());
 
     let mut dispatcher = Dispatcher::builder(bot, schema())
-        .dependencies(dptree::deps![bridge, allowlist])
+        .dependencies(dptree::deps![bridge, allowlist, bot_username])
         .enable_ctrlc_handler()
         .build();
     dispatcher
@@ -56,12 +68,13 @@ fn schema() -> UpdateHandler<anyhow::Error> {
         .branch(Update::filter_callback_query().endpoint(handle_callback))
 }
 
-#[instrument(skip(bot, message, bridge, allowlist))]
+#[instrument(skip(bot, message, bridge, allowlist, bot_username))]
 async fn handle_message(
     bot: Bot,
     message: Message,
     bridge: BridgeHandle,
     allowlist: ChatAllowlist,
+    bot_username: BotUsername,
 ) -> HandlerResult {
     let chat_id = message.chat.id;
     if !allowlist.reject_if_unauthorized(chat_id) {
@@ -75,7 +88,7 @@ async fn handle_message(
         return Ok(());
     };
 
-    match parse_incoming(text) {
+    match parse_incoming(text, Some(&bot_username.0)) {
         IncomingCommand::Known(Command::Start | Command::Help) => {
             bot.send_message(chat_id, help_text())
                 .parse_mode(ParseMode::Html)
@@ -109,7 +122,8 @@ async fn handle_callback(
     bridge: BridgeHandle,
     allowlist: ChatAllowlist,
 ) -> HandlerResult {
-    let response = match callback_chat_id(&query) {
+    let chat_id = callback_chat_id(&query);
+    let response = match chat_id {
         Some(chat_id) if allowlist.reject_if_unauthorized(chat_id) => {
             match query.data.as_deref().and_then(ApprovalCallback::decode) {
                 Some(callback) => bridge.handle_approval_callback(chat_id, callback).await?,
@@ -122,8 +136,16 @@ async fn handle_callback(
         Some(_) => "This chat is not authorized to use PFTerminal.".to_string(),
         None => "Approval callbacks must come from the original Telegram chat.".to_string(),
     };
+    let answer_text = callback_answer_text(&response);
+    if answer_text != response
+        && let Some(chat_id) = chat_id
+    {
+        bot.send_message(chat_id, response)
+            .await
+            .context("send Telegram callback details")?;
+    }
     bot.answer_callback_query(query.id)
-        .text(response)
+        .text(answer_text)
         .await
         .context("answer Telegram callback query")?;
     Ok(())
@@ -131,4 +153,16 @@ async fn handle_callback(
 
 fn callback_chat_id(query: &CallbackQuery) -> Option<ChatId> {
     query.message.as_ref().map(|message| message.chat().id)
+}
+
+fn callback_answer_text(text: &str) -> String {
+    if text.chars().count() <= CALLBACK_ANSWER_TEXT_LIMIT {
+        return text.to_string();
+    }
+    let mut truncated = text
+        .chars()
+        .take(CALLBACK_ANSWER_TEXT_LIMIT.saturating_sub(3))
+        .collect::<String>();
+    truncated.push_str("...");
+    truncated
 }

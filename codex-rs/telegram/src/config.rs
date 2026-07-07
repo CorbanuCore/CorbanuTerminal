@@ -22,7 +22,7 @@ pub enum TelegramMode {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct TelegramConfig {
     pub enabled: bool,
     pub bot_token_env: String,

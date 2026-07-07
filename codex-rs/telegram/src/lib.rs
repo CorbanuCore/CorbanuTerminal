@@ -27,6 +27,8 @@ use codex_arg0::Arg0DispatchPaths;
 use codex_config::CloudConfigBundleLoader;
 use codex_config::LoaderOverrides;
 use codex_feedback::CodexFeedback;
+use codex_protocol::protocol::AskForApproval;
+use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::SessionSource;
 use teloxide::Bot;
 use tracing::instrument;
@@ -76,6 +78,17 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
     if allowlist.is_empty() {
         warn!("Telegram connector started with an empty allowlist; all chats will be rejected");
     }
+    for chat_id in telegram_config
+        .allowed_chat_ids
+        .iter()
+        .copied()
+        .filter(|chat_id| *chat_id < 0)
+    {
+        warn!(
+            chat_id,
+            "Telegram allowlist includes a group or supergroup chat; every member of that chat can drive and approve turns"
+        );
+    }
 
     let core_config = build_core_config(
         &telegram_config,
@@ -86,6 +99,19 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
     )
     .await?;
     let sandbox_policy = core_config.legacy_sandbox_policy();
+    if matches!(
+        core_config.permissions.approval_policy.value(),
+        AskForApproval::Never
+    ) {
+        warn!(
+            "Telegram connector approval_policy resolves to never; remote turns can run without interactive approval prompts"
+        );
+    }
+    if matches!(sandbox_policy, SandboxPolicy::DangerFullAccess) {
+        warn!(
+            "Telegram connector sandbox resolves to danger-full-access; filesystem sandboxing is disabled for remote turns"
+        );
+    }
     sandbox_preflight::warn_if_sandbox_may_fail(&sandbox_policy);
     let state_db = codex_core::init_state_db(&core_config).await;
     let runtime_paths = ExecServerRuntimePaths::from_optional_paths(

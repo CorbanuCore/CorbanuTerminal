@@ -3,6 +3,7 @@ use std::time::Duration;
 use pretty_assertions::assert_eq;
 
 use codex_telegram::error::PollingBackoff;
+use codex_telegram::error::TelegramError;
 use codex_telegram::error::is_http_409_conflict;
 
 #[test]
@@ -30,6 +31,20 @@ fn backoff_doubles_and_caps() {
         backoff.record_failure().expect("reset"),
         Duration::from_secs(1)
     );
+}
+
+#[test]
+fn backoff_cap_uses_failure_cap_error() {
+    let mut backoff = PollingBackoff::new(Duration::from_secs(1), Duration::from_secs(4), 2);
+
+    assert_eq!(
+        backoff.record_failure().expect("first failure below cap"),
+        Duration::from_secs(1)
+    );
+    assert!(matches!(
+        backoff.record_failure(),
+        Err(TelegramError::PollingFailureCapExceeded)
+    ));
 }
 
 #[test]
