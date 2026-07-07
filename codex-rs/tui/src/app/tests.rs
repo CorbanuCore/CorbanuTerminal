@@ -40,6 +40,7 @@ use codex_app_server_protocol::AdditionalNetworkPermissions;
 use codex_app_server_protocol::AdditionalPermissionProfile;
 use codex_app_server_protocol::AgentMessageDeltaNotification;
 use codex_app_server_protocol::AskForApproval;
+use codex_app_server_protocol::CodexErrorInfo as AppServerCodexErrorInfo;
 use codex_app_server_protocol::CommandExecutionRequestApprovalParams;
 use codex_app_server_protocol::ConfigWarningNotification;
 use codex_app_server_protocol::FileChangeRequestApprovalParams;
@@ -1978,19 +1979,102 @@ async fn nazgul_can_be_bound_to_a_codex_agent_pane() {
 }
 
 /// Drains app events looking for a `SubmitSpawnAgentTask` for `thread_id`. Returns its task text.
-fn drain_spawn_agent_task_for(
+fn drain_spawn_agent_tasks_for(
     rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
     thread_id: ThreadId,
-) -> Option<String> {
-    let mut matched = None;
+) -> Vec<String> {
+    let mut matched = Vec::new();
     while let Ok(event) = rx.try_recv() {
         if let AppEvent::SubmitSpawnAgentTask { thread_id: t, task } = event
             && t == thread_id
         {
-            matched = Some(task);
+            matched.push(task);
         }
     }
     matched
+}
+
+/// Drains app events looking for a `SubmitSpawnAgentTask` for `thread_id`. Returns its task text.
+fn drain_spawn_agent_task_for(
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
+    thread_id: ThreadId,
+) -> Option<String> {
+    drain_spawn_agent_tasks_for(rx, thread_id).pop()
+}
+
+fn register_native_dispatch_pair(app: &mut App) -> (ThreadId, ThreadId) {
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000451").expect("valid thread id");
+    let orc_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000452").expect("valid thread id");
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        orc_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(orc_thread_id, troll_thread_id);
+    (troll_thread_id, orc_thread_id)
+}
+
+fn register_native_dispatch_source(app: &mut App, thread_id: ThreadId, name: &str) -> ThreadId {
+    app.upsert_agent_picker_thread(
+        thread_id,
+        Some(name.to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    thread_id
+}
+
+fn assert_dispatch_ack_report(app: &App, source_node_id: &str, seq: u64, status: &str) {
+    let reports = app
+        .spawn_parent_reports_by_node
+        .get(source_node_id)
+        .unwrap_or_else(|| panic!("missing reports for {source_node_id}"));
+    assert!(
+        reports.iter().any(|report| {
+            report.contains(&format!("dispatch_ack; #{seq}"))
+                && report.contains(&format!("status={status}"))
+        }),
+        "missing dispatch ack #{seq} status={status}; reports={reports:?}"
+    );
+}
+
+fn collab_receiver_state_notification(
+    receiver_thread_id: ThreadId,
+    status: codex_app_server_protocol::CollabAgentStatus,
+    message: Option<&str>,
+) -> ServerNotification {
+    ServerNotification::ItemCompleted(codex_app_server_protocol::ItemCompletedNotification {
+        thread_id: ThreadId::new().to_string(),
+        turn_id: "turn-collab-status".to_string(),
+        completed_at_ms: 0,
+        item: ThreadItem::CollabAgentToolCall {
+            id: "collab-status".to_string(),
+            tool: codex_app_server_protocol::CollabAgentTool::Wait,
+            status: codex_app_server_protocol::CollabAgentToolCallStatus::Completed,
+            sender_thread_id: ThreadId::new().to_string(),
+            receiver_thread_ids: vec![receiver_thread_id.to_string()],
+            prompt: None,
+            model: None,
+            reasoning_effort: None,
+            agents_states: HashMap::from([(
+                receiver_thread_id.to_string(),
+                codex_app_server_protocol::CollabAgentState {
+                    status,
+                    message: message.map(str::to_string),
+                },
+            )]),
+        },
+    })
 }
 
 #[tokio::test]
@@ -2442,6 +2526,773 @@ async fn duplicate_child_report_is_not_requeued() {
 }
 
 #[tokio::test]
+async fn failed_spawn_turn_report_includes_turn_error_reason() {
+    let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    let error = AppServerTurnError {
+        message: "context window exceeded while summarizing".to_string(),
+        codex_error_info: Some(AppServerCodexErrorInfo::ContextWindowExceeded),
+        additional_details: Some("remaining tokens below provider floor".to_string()),
+    };
+
+    app.update_spawn_status_for_thread_notification(&turn_completed_with_error(
+        orc_thread_id,
+        "turn-error-report",
+        TurnStatus::Failed,
+        error,
+    ));
+
+    let parent_node_id = crate::spawn_orchestration::thread_node_id(troll_thread_id);
+    let reports = app
+        .spawn_parent_reports_by_node
+        .get(&parent_node_id)
+        .expect("parent report");
+    assert!(reports.iter().any(|report| {
+        report.contains("status=error")
+            && report.contains("turn_error=context window exceeded while summarizing")
+            && report.contains("ContextWindowExceeded")
+            && report.contains("remaining tokens below provider floor")
+    }));
+}
+
+#[tokio::test]
+async fn spawn_roster_line_includes_context_left() {
+    let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+
+    app.update_spawn_status_for_thread_notification(&token_usage_notification_with_total(
+        orc_thread_id,
+        "turn-context",
+        90_000,
+        Some(100_000),
+    ));
+
+    let context = app
+        .spawn_context_for_thread(troll_thread_id)
+        .expect("Troll should receive spawn context");
+    assert!(
+        context.contains("context_left=11%"),
+        "got context: {context}"
+    );
+}
+
+#[tokio::test]
+async fn low_context_warning_is_one_shot_until_context_recovers() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    app.spawn_operator_input_seen = true;
+    let parent_node_id = crate::spawn_orchestration::thread_node_id(troll_thread_id);
+
+    app.update_spawn_status_for_thread_notification(&token_usage_notification_with_total(
+        orc_thread_id,
+        "turn-low-1",
+        90_000,
+        Some(100_000),
+    ));
+    app.update_spawn_status_for_thread_notification(&token_usage_notification_with_total(
+        orc_thread_id,
+        "turn-low-2",
+        90_500,
+        Some(100_000),
+    ));
+
+    let reports = app
+        .spawn_parent_reports_by_node
+        .get(&parent_node_id)
+        .expect("parent report");
+    assert_eq!(
+        reports
+            .iter()
+            .filter(|report| report.contains("low context"))
+            .count(),
+        1
+    );
+    assert_eq!(
+        drain_spawn_agent_tasks_for(&mut rx, troll_thread_id).len(),
+        1
+    );
+
+    app.update_spawn_status_for_thread_notification(&token_usage_notification_with_total(
+        orc_thread_id,
+        "turn-recovered",
+        30_000,
+        Some(100_000),
+    ));
+    app.update_spawn_status_for_thread_notification(&token_usage_notification_with_total(
+        orc_thread_id,
+        "turn-low-3",
+        92_000,
+        Some(100_000),
+    ));
+
+    let reports = app
+        .spawn_parent_reports_by_node
+        .get(&parent_node_id)
+        .expect("parent report");
+    assert_eq!(
+        reports
+            .iter()
+            .filter(|report| report.contains("low context"))
+            .count(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn spawn_roster_lines_carry_dispatch_and_report_seq() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    let source_node_id = crate::spawn_orchestration::thread_node_id(troll_thread_id);
+
+    app.dispatch_spawn_task_blocks(
+        &source_node_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "sequence this work".to_string(),
+            seq: Some(120),
+        }],
+    );
+    assert_eq!(drain_spawn_agent_tasks_for(&mut rx, orc_thread_id).len(), 1);
+
+    app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+        orc_thread_id,
+        "turn-report-seq",
+        TurnStatus::Completed,
+        "sequence proof done",
+    ));
+
+    let context = app
+        .spawn_context_for_thread(troll_thread_id)
+        .expect("Troll should receive spawn context");
+    assert!(context.contains("last_dispatch_seq=120"), "got: {context}");
+    assert!(context.contains("last_report_seq=121"), "got: {context}");
+    assert!(context.contains("as_of="), "got: {context}");
+
+    let reports = app
+        .spawn_parent_reports_by_node
+        .get(&source_node_id)
+        .expect("parent reports");
+    assert!(reports.iter().any(|report| {
+        report.contains("child_report; seq=121; as_of=") && report.contains("sequence proof done")
+    }));
+}
+
+#[tokio::test]
+async fn spawn_roster_lines_surface_pending_queue_depths() {
+    let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
+    let nazgul_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000450").expect("valid thread id");
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    app.upsert_agent_picker_thread(
+        nazgul_thread_id,
+        Some("Khamul".to_string()),
+        Some("nazgul".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(troll_thread_id, nazgul_thread_id);
+    app.agent_navigation.set_running(orc_thread_id, true);
+
+    app.dispatch_spawn_task_blocks(
+        &crate::spawn_orchestration::thread_node_id(troll_thread_id),
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "queued seq task".to_string(),
+            seq: Some(122),
+        }],
+    );
+    app.spawn_pending_reports_by_thread
+        .entry(troll_thread_id)
+        .or_default()
+        .push_back("queued report".to_string());
+
+    let context = app
+        .spawn_context_for_thread(nazgul_thread_id)
+        .expect("Nazgul should receive spawn context");
+    assert!(context.contains("pending_reports=1"), "got: {context}");
+    assert!(context.contains("pending_dispatches=1"), "got: {context}");
+}
+
+#[tokio::test]
+async fn dispatch_to_running_native_child_queues_until_turn_completed() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    app.agent_navigation.set_running(orc_thread_id, true);
+
+    app.dispatch_spawn_task_blocks(
+        &crate::spawn_orchestration::thread_node_id(troll_thread_id),
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "write the proof file".to_string(),
+            seq: None,
+        }],
+    );
+
+    assert!(
+        drain_spawn_agent_tasks_for(&mut rx, orc_thread_id).is_empty(),
+        "running target should not receive an immediate spawn task event"
+    );
+    assert_eq!(
+        app.spawn_pending_dispatches_by_thread
+            .get(&orc_thread_id)
+            .map_or(0, std::collections::VecDeque::len),
+        1
+    );
+
+    app.update_spawn_status_for_thread_notification(&turn_completed_notification(
+        orc_thread_id,
+        "turn-queued-dispatch",
+        TurnStatus::Completed,
+    ));
+
+    let tasks = drain_spawn_agent_tasks_for(&mut rx, orc_thread_id);
+    assert_eq!(tasks.len(), 1);
+    assert!(tasks[0].contains("Assigned by"));
+    assert!(tasks[0].contains("write the proof file"));
+    assert!(
+        app.spawn_pending_dispatches_by_thread
+            .get(&orc_thread_id)
+            .is_none_or(std::collections::VecDeque::is_empty)
+    );
+}
+
+#[tokio::test]
+async fn multiple_native_dispatches_to_busy_child_flush_as_one_ordered_turn() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    app.agent_navigation.set_running(orc_thread_id, true);
+
+    app.dispatch_spawn_task_blocks(
+        &crate::spawn_orchestration::thread_node_id(troll_thread_id),
+        vec![
+            crate::spawn_orchestration::SpawnTaskDispatch {
+                target: orc_thread_id.to_string(),
+                task: "first queued task".to_string(),
+                seq: None,
+            },
+            crate::spawn_orchestration::SpawnTaskDispatch {
+                target: orc_thread_id.to_string(),
+                task: "second queued task".to_string(),
+                seq: None,
+            },
+        ],
+    );
+
+    assert_eq!(
+        app.spawn_pending_dispatches_by_thread
+            .get(&orc_thread_id)
+            .map_or(0, std::collections::VecDeque::len),
+        2
+    );
+    assert!(app.flush_pending_dispatches_for_thread(orc_thread_id));
+
+    let tasks = drain_spawn_agent_tasks_for(&mut rx, orc_thread_id);
+    assert_eq!(tasks.len(), 1);
+    let first_index = tasks[0]
+        .find("first queued task")
+        .expect("combined task contains first dispatch");
+    let second_index = tasks[0]
+        .find("second queued task")
+        .expect("combined task contains second dispatch");
+    assert!(first_index < second_index);
+    assert!(tasks[0].contains("Queued dispatch 1"));
+    assert!(tasks[0].contains("Queued dispatch 2"));
+}
+
+#[tokio::test]
+async fn combined_native_dispatch_flush_records_delivered_acks_for_all_senders() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    let second_source_thread_id = register_native_dispatch_source(
+        &mut app,
+        ThreadId::from_string("00000000-0000-0000-0000-000000000453").expect("valid thread id"),
+        "Ugluk",
+    );
+    app.agent_navigation.set_running(orc_thread_id, true);
+    let first_source_node_id = crate::spawn_orchestration::thread_node_id(troll_thread_id);
+    let second_source_node_id = crate::spawn_orchestration::thread_node_id(second_source_thread_id);
+    let target_node_id = crate::spawn_orchestration::thread_node_id(orc_thread_id);
+
+    app.dispatch_spawn_task_blocks(
+        &first_source_node_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "first combined native task".to_string(),
+            seq: Some(81),
+        }],
+    );
+    app.dispatch_spawn_task_blocks(
+        &second_source_node_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "second combined native task".to_string(),
+            seq: Some(82),
+        }],
+    );
+
+    assert!(app.flush_pending_dispatches_for_thread(orc_thread_id));
+    let target_tasks = drain_spawn_agent_tasks_for(&mut rx, orc_thread_id);
+    assert_eq!(target_tasks.len(), 1);
+    assert!(target_tasks[0].contains("Queued dispatch 1"));
+    assert!(target_tasks[0].contains("Queued dispatch 2"));
+
+    let submitted_task = target_tasks[0].trim().to_string();
+    app.record_spawn_dispatch_delivered_for_task(&target_node_id, &submitted_task);
+
+    assert_dispatch_ack_report(&app, &first_source_node_id, 81, "delivered");
+    assert_dispatch_ack_report(&app, &second_source_node_id, 82, "delivered");
+    assert!(
+        app.spawn_dispatch_acks_by_target_task.is_empty(),
+        "combined delivery should drain registered ack keys"
+    );
+}
+
+#[tokio::test]
+async fn combined_native_dispatch_flush_records_failed_acks_for_all_senders() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    let second_source_thread_id = register_native_dispatch_source(
+        &mut app,
+        ThreadId::from_string("00000000-0000-0000-0000-000000000454").expect("valid thread id"),
+        "Mauhur",
+    );
+    app.agent_navigation.set_running(orc_thread_id, true);
+    let first_source_node_id = crate::spawn_orchestration::thread_node_id(troll_thread_id);
+    let second_source_node_id = crate::spawn_orchestration::thread_node_id(second_source_thread_id);
+    let target_node_id = crate::spawn_orchestration::thread_node_id(orc_thread_id);
+
+    app.dispatch_spawn_task_blocks(
+        &first_source_node_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "first failing combined native task".to_string(),
+            seq: Some(83),
+        }],
+    );
+    app.dispatch_spawn_task_blocks(
+        &second_source_node_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "second failing combined native task".to_string(),
+            seq: Some(84),
+        }],
+    );
+
+    assert!(app.flush_pending_dispatches_for_thread(orc_thread_id));
+    let target_tasks = drain_spawn_agent_tasks_for(&mut rx, orc_thread_id);
+    assert_eq!(target_tasks.len(), 1);
+
+    let submitted_task = target_tasks[0].trim().to_string();
+    app.record_spawn_dispatch_failed_for_task(
+        &target_node_id,
+        &submitted_task,
+        "turn_start failed in regression test",
+    );
+
+    assert_dispatch_ack_report(&app, &first_source_node_id, 83, "failed");
+    assert_dispatch_ack_report(&app, &second_source_node_id, 84, "failed");
+    assert!(
+        app.spawn_dispatch_acks_by_target_task.is_empty(),
+        "combined failure should drain registered ack keys"
+    );
+}
+
+#[tokio::test]
+async fn native_dispatch_crossing_turn_completion_delivers_once_in_either_order() {
+    for dispatch_first in [true, false] {
+        let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+        let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+        app.agent_navigation.set_running(orc_thread_id, true);
+
+        if dispatch_first {
+            app.dispatch_spawn_task_blocks(
+                &crate::spawn_orchestration::thread_node_id(troll_thread_id),
+                vec![crate::spawn_orchestration::SpawnTaskDispatch {
+                    target: orc_thread_id.to_string(),
+                    task: "crossing task".to_string(),
+                    seq: None,
+                }],
+            );
+        }
+
+        app.update_spawn_status_for_thread_notification(&turn_completed_notification(
+            orc_thread_id,
+            "turn-crossing",
+            TurnStatus::Completed,
+        ));
+
+        if !dispatch_first {
+            app.dispatch_spawn_task_blocks(
+                &crate::spawn_orchestration::thread_node_id(troll_thread_id),
+                vec![crate::spawn_orchestration::SpawnTaskDispatch {
+                    target: orc_thread_id.to_string(),
+                    task: "crossing task".to_string(),
+                    seq: None,
+                }],
+            );
+        }
+
+        let tasks = drain_spawn_agent_tasks_for(&mut rx, orc_thread_id);
+        assert_eq!(tasks.len(), 1, "dispatch_first={dispatch_first}");
+        assert!(
+            tasks[0].contains("crossing task"),
+            "dispatch_first={dispatch_first}: {tasks:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn collab_receiver_idle_flushes_queued_native_dispatch_without_turn_notification() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    let source_node_id = crate::spawn_orchestration::thread_node_id(troll_thread_id);
+
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+        collab_receiver_state_notification(
+            orc_thread_id,
+            codex_app_server_protocol::CollabAgentStatus::Running,
+            None,
+        ),
+    ));
+    assert!(
+        app.agent_navigation
+            .get(&orc_thread_id)
+            .is_some_and(|entry| entry.is_running)
+    );
+
+    app.dispatch_spawn_task_blocks(
+        &source_node_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "flush on collab idle".to_string(),
+            seq: Some(88),
+        }],
+    );
+    assert!(drain_spawn_agent_tasks_for(&mut rx, orc_thread_id).is_empty());
+    assert_eq!(
+        app.spawn_pending_dispatches_by_thread
+            .get(&orc_thread_id)
+            .map_or(0, std::collections::VecDeque::len),
+        1
+    );
+
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+        collab_receiver_state_notification(
+            orc_thread_id,
+            codex_app_server_protocol::CollabAgentStatus::Completed,
+            Some("collab receiver is idle"),
+        ),
+    ));
+
+    let target_tasks = drain_spawn_agent_tasks_for(&mut rx, orc_thread_id);
+    assert_eq!(target_tasks.len(), 1);
+    assert!(target_tasks[0].contains("flush on collab idle"));
+    assert!(
+        app.spawn_pending_dispatches_by_thread
+            .get(&orc_thread_id)
+            .is_none_or(std::collections::VecDeque::is_empty)
+    );
+}
+
+#[tokio::test]
+async fn queued_native_dispatch_fails_and_is_removed_from_persistence_when_target_closes() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    app.primary_thread_id = Some(troll_thread_id);
+    app.agent_navigation.set_running(orc_thread_id, true);
+    let source_node_id = crate::spawn_orchestration::thread_node_id(troll_thread_id);
+
+    app.dispatch_spawn_task_blocks(
+        &source_node_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "fail because target closes".to_string(),
+            seq: Some(89),
+        }],
+    );
+    while rx.try_recv().is_ok() {}
+    assert_eq!(
+        app.spawn_pending_dispatches_by_thread
+            .get(&orc_thread_id)
+            .map_or(0, std::collections::VecDeque::len),
+        1
+    );
+
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+        thread_closed_notification(orc_thread_id),
+    ));
+
+    assert_dispatch_ack_report(&app, &source_node_id, 89, "failed");
+    assert!(
+        app.spawn_pending_dispatches_by_thread
+            .get(&orc_thread_id)
+            .is_none_or(std::collections::VecDeque::is_empty)
+    );
+    let layout_path = app
+        .config
+        .codex_home
+        .as_ref()
+        .join("panes")
+        .join("pane-layout.json");
+    let layout: crate::claude_panes::PaneLayoutState = serde_json::from_str(
+        &std::fs::read_to_string(&layout_path).expect("pane layout should be persisted"),
+    )
+    .expect("pane layout should deserialize");
+    assert!(
+        !layout
+            .spawn_pending_dispatches_by_thread
+            .contains_key(&orc_thread_id.to_string()),
+        "closed target queue must not persist in {layout_path:?}"
+    );
+}
+
+#[tokio::test]
+async fn same_idle_transition_dispatch_flush_preserves_report_queue_framing() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    app.spawn_operator_input_seen = true;
+    app.agent_navigation.set_running(troll_thread_id, true);
+    let source_node_id = crate::spawn_orchestration::thread_node_id(orc_thread_id);
+    app.spawn_pending_reports_by_thread
+        .entry(troll_thread_id)
+        .or_default()
+        .push_back("child_report; seq=201; result=queued report".to_string());
+
+    app.dispatch_spawn_task_blocks(
+        &source_node_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: troll_thread_id.to_string(),
+            task: "queued command takes priority".to_string(),
+            seq: Some(92),
+        }],
+    );
+    while rx.try_recv().is_ok() {}
+
+    app.update_spawn_status_for_thread_notification(&turn_completed_notification(
+        troll_thread_id,
+        "turn-dispatch-plus-report",
+        TurnStatus::Completed,
+    ));
+
+    let dispatch_tasks = drain_spawn_agent_tasks_for(&mut rx, troll_thread_id);
+    assert_eq!(dispatch_tasks.len(), 1);
+    assert!(dispatch_tasks[0].contains("queued command takes priority"));
+    assert_eq!(
+        app.spawn_pending_reports_by_thread
+            .get(&troll_thread_id)
+            .map_or(0, std::collections::VecDeque::len),
+        1,
+        "report should remain queued while dispatch turn takes priority"
+    );
+
+    app.update_spawn_status_for_thread_notification(&turn_completed_notification(
+        troll_thread_id,
+        "turn-report-after-dispatch",
+        TurnStatus::Completed,
+    ));
+
+    let report_tasks = drain_spawn_agent_tasks_for(&mut rx, troll_thread_id);
+    assert_eq!(report_tasks.len(), 1);
+    assert!(report_tasks[0].contains("A child pane has reported back"));
+    assert!(report_tasks[0].contains("queued report"));
+    assert!(!report_tasks[0].contains("Multiple spawn dispatches were queued"));
+}
+
+#[tokio::test]
+async fn busy_native_dispatch_records_queued_and_delivered_acks_for_sender() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    app.agent_navigation.set_running(orc_thread_id, true);
+    let source_node_id = crate::spawn_orchestration::thread_node_id(troll_thread_id);
+    let target_node_id = crate::spawn_orchestration::thread_node_id(orc_thread_id);
+
+    app.dispatch_spawn_task_blocks(
+        &source_node_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "write the ack proof".to_string(),
+            seq: Some(77),
+        }],
+    );
+
+    let sender_reports = app
+        .spawn_parent_reports_by_node
+        .get(&source_node_id)
+        .expect("sender reports");
+    assert!(sender_reports.iter().any(|report| {
+        report.contains("dispatch_ack; #77")
+            && report.contains("status=queued_busy")
+            && report.contains("will deliver when idle")
+    }));
+    let queued_ack_turns = drain_spawn_agent_tasks_for(&mut rx, troll_thread_id);
+    assert!(
+        queued_ack_turns.is_empty(),
+        "queued_busy acks are roster-only and must not start a sender turn"
+    );
+
+    app.update_spawn_status_for_thread_notification(&turn_completed_notification(
+        orc_thread_id,
+        "turn-queued-dispatch-ack",
+        TurnStatus::Completed,
+    ));
+    let target_tasks = drain_spawn_agent_tasks_for(&mut rx, orc_thread_id);
+    assert_eq!(target_tasks.len(), 1);
+    app.record_spawn_dispatch_delivered_for_task(&target_node_id, &target_tasks[0]);
+
+    let sender_reports = app
+        .spawn_parent_reports_by_node
+        .get(&source_node_id)
+        .expect("sender reports");
+    assert!(sender_reports.iter().any(|report| {
+        report.contains("dispatch_ack; #77") && report.contains("status=delivered")
+    }));
+    assert!(
+        drain_spawn_agent_tasks_for(&mut rx, troll_thread_id).is_empty(),
+        "delivered acks are roster-only and must not start another sender turn"
+    );
+}
+
+#[tokio::test]
+async fn failed_dispatch_records_sender_visible_ack_without_fake_pane_cell() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, _orc_thread_id) = register_native_dispatch_pair(&mut app);
+    app.spawn_operator_input_seen = true;
+    let source_node_id = crate::spawn_orchestration::thread_node_id(troll_thread_id);
+
+    app.dispatch_spawn_task_blocks(
+        &source_node_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: "Missing Orc".to_string(),
+            task: "handle the missing target".to_string(),
+            seq: Some(78),
+        }],
+    );
+
+    let sender_reports = app
+        .spawn_parent_reports_by_node
+        .get(&source_node_id)
+        .expect("sender reports");
+    assert!(sender_reports.iter().any(|report| {
+        report.contains("dispatch_ack; #78") && report.contains("status=failed")
+    }));
+    let failure_ack_turns = drain_spawn_agent_tasks_for(&mut rx, troll_thread_id);
+    assert_eq!(failure_ack_turns.len(), 1);
+    assert!(failure_ack_turns[0].contains("status=failed"));
+    assert!(
+        !app.claude_pane_transcript_cells
+            .contains_key(&source_node_id),
+        "native sender errors must not be written as fake Claude-pane transcript cells"
+    );
+}
+
+#[tokio::test]
+async fn duplicate_host_dispatch_seq_is_suppressed_once() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    let source_node_id = crate::spawn_orchestration::thread_node_id(troll_thread_id);
+
+    app.dispatch_spawn_task_blocks(
+        &source_node_id,
+        vec![
+            crate::spawn_orchestration::SpawnTaskDispatch {
+                target: orc_thread_id.to_string(),
+                task: "same host dispatch".to_string(),
+                seq: Some(79),
+            },
+            crate::spawn_orchestration::SpawnTaskDispatch {
+                target: orc_thread_id.to_string(),
+                task: "same host dispatch".to_string(),
+                seq: Some(79),
+            },
+        ],
+    );
+
+    let target_tasks = drain_spawn_agent_tasks_for(&mut rx, orc_thread_id);
+    assert_eq!(target_tasks.len(), 1);
+    assert!(target_tasks[0].contains("dispatch #79"));
+    assert_eq!(
+        target_tasks[0].matches("same host dispatch").count(),
+        1,
+        "duplicate seq should not submit duplicate task bodies"
+    );
+}
+
+#[tokio::test]
+async fn processed_dispatch_seq_persists_and_suppresses_reissue_after_restore() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    app.primary_thread_id = Some(troll_thread_id);
+    let source_node_id = crate::spawn_orchestration::thread_node_id(troll_thread_id);
+
+    app.dispatch_spawn_task_blocks(
+        &source_node_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "persisted seq dispatch".to_string(),
+            seq: Some(91),
+        }],
+    );
+    assert_eq!(drain_spawn_agent_tasks_for(&mut rx, orc_thread_id).len(), 1);
+
+    let layout_path = app
+        .config
+        .codex_home
+        .as_ref()
+        .join("panes")
+        .join("pane-layout.json");
+    let layout: crate::claude_panes::PaneLayoutState = serde_json::from_str(
+        &std::fs::read_to_string(&layout_path).expect("pane layout should be persisted"),
+    )
+    .expect("pane layout should deserialize");
+    assert!(
+        layout.spawn_processed_dispatch_seq_ids.contains(&91),
+        "processed dispatch seq should persist in {layout_path:?}"
+    );
+
+    let (mut restored_app, mut restored_rx, _restored_op_rx) = make_test_app_with_channels().await;
+    register_native_dispatch_pair(&mut restored_app);
+    restored_app.spawn_next_dispatch_seq = layout.spawn_next_dispatch_seq.max(1);
+    restored_app.spawn_processed_dispatch_seq_ids =
+        crate::spawn_orchestration::bounded_spawn_processed_dispatch_seq_ids(
+            layout.spawn_processed_dispatch_seq_ids.iter().copied(),
+            restored_app.spawn_next_dispatch_seq,
+        );
+
+    restored_app.dispatch_spawn_task_blocks(
+        &source_node_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "persisted seq dispatch".to_string(),
+            seq: Some(91),
+        }],
+    );
+    assert!(
+        drain_spawn_agent_tasks_for(&mut restored_rx, orc_thread_id).is_empty(),
+        "restored processed seq should suppress a duplicate dispatch"
+    );
+
+    restored_app.spawn_next_dispatch_seq = 1000;
+    restored_app.spawn_processed_dispatch_seq_ids.insert(1);
+    restored_app.dispatch_spawn_task_blocks(
+        &source_node_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "new high seq dispatch".to_string(),
+            seq: Some(1000),
+        }],
+    );
+    assert!(
+        restored_app
+            .spawn_processed_dispatch_seq_ids
+            .contains(&1000)
+    );
+    assert!(
+        !restored_app.spawn_processed_dispatch_seq_ids.contains(&1),
+        "seq far below the retention window should be evicted"
+    );
+}
+
+#[tokio::test]
 async fn troll_spawn_task_submission_names_existing_orc_panes() {
     let mut app = make_test_app().await;
     let main_thread_id =
@@ -2795,6 +3646,36 @@ async fn native_orc_completion_is_reported_to_parent_troll_context() {
     assert!(context.contains("Recent child reports delivered to this pane:"));
     assert!(context.contains("Snaga [orc]; status=completed; has_new_report=true"));
     assert!(context.contains("result=Found two latency issues and no blockers."));
+}
+
+#[tokio::test]
+async fn text_only_acknowledge_spawn_turn_reports_done() {
+    let mut app = make_test_app().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+
+    app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+        orc_thread_id,
+        "turn-text-only-ack",
+        TurnStatus::Completed,
+        "Acknowledged. Standing by.",
+    ));
+
+    assert_eq!(
+        app.spawn_status_by_thread
+            .get(&orc_thread_id)
+            .map(|state| &state.status),
+        Some(&codex_app_server_protocol::CollabAgentStatus::Completed)
+    );
+    let parent_node_id = crate::spawn_orchestration::thread_node_id(troll_thread_id);
+    let reports = app
+        .spawn_parent_reports_by_node
+        .get(&parent_node_id)
+        .expect("parent report");
+    assert!(reports.iter().any(|report| {
+        report.contains("child_report;")
+            && report.contains("status=completed")
+            && report.contains("result=Acknowledged. Standing by.")
+    }));
 }
 
 #[tokio::test]
@@ -3345,7 +4226,7 @@ async fn orchestrate_stop_marker_pauses_before_fire() {
         "attach {} stop-aware --mode auto --holder none --max 3",
         pane_id
     ));
-    app.note_whip_target_idle(&target_node_id, Some("done\nWHIP_DONE"));
+    app.note_whip_target_idle_with_fire_control(&target_node_id, Some("done\nWHIP_DONE"), true);
 
     assert!(drain_claude_pane_task_events(&mut app_event_rx).is_empty());
     assert_eq!(
@@ -3378,8 +4259,8 @@ async fn orchestrate_empty_output_loop_pauses_whip() {
         "attach {} loop-aware --mode auto --holder none --max 3 --cooldown 1s",
         pane_id
     ));
-    app.note_whip_target_idle(&target_node_id, Some(""));
-    app.note_whip_target_idle(&target_node_id, Some("   "));
+    app.note_whip_target_idle_with_fire_control(&target_node_id, Some(""), true);
+    app.note_whip_target_idle_with_fire_control(&target_node_id, Some("   "), true);
 
     let submitted_tasks = drain_claude_pane_task_events(&mut app_event_rx);
     assert_eq!(submitted_tasks.len(), 1);
@@ -3420,9 +4301,13 @@ async fn orchestrate_review_holder_ignored_twice_pauses_whip() {
         target_pane_id, holder_pane_id
     ));
     app.handle_orchestrate_command("fire whip-1".to_string());
-    app.note_whip_target_idle(&holder_node_id, Some("no dispatch"));
+    app.note_whip_target_idle_with_fire_control(&holder_node_id, Some("no dispatch"), true);
     app.handle_orchestrate_command("fire whip-1".to_string());
-    app.note_whip_target_idle(&holder_node_id, Some("still no dispatch"));
+    app.note_whip_target_idle_with_fire_control(
+        &holder_node_id,
+        Some("still no dispatch"),
+        true,
+    );
 
     let submitted_tasks = drain_claude_pane_task_events(&mut app_event_rx);
     assert_eq!(
@@ -3436,6 +4321,33 @@ async fn orchestrate_review_holder_ignored_twice_pauses_whip() {
         app.orchestrate_whips.get("whip-1").map(|whip| whip.state),
         Some(crate::orchestrate::WhipState::Paused)
     );
+}
+
+fn successful_claude_turn_output(
+    app: &App,
+    name: &str,
+    text: &str,
+) -> crate::claude_panes::ClaudePaneTurnOutput {
+    crate::claude_panes::ClaudePaneTurnOutput {
+        text: text.to_string(),
+        status: crate::claude_panes::ClaudePaneTurnStatus::Success,
+        session_id: Some(format!("{name}-session")),
+        usage_summary: None,
+        usage_status: crate::claude_panes::ClaudePaneUsageStatus::Missing,
+        artifact_path: app.config.cwd.join(format!("{name}.jsonl")).to_path_buf(),
+        audit_path: app
+            .config
+            .cwd
+            .join(format!("{name}.audit.json"))
+            .to_path_buf(),
+        duration_ms: 1,
+        terminal_reason: None,
+        error_summary: None,
+        tool_names: Vec::new(),
+        tool_events: Vec::new(),
+        reasoning_events: Vec::new(),
+        command_mode: crate::claude_panes::ClaudeCommandMode::NewSession,
+    }
 }
 
 #[tokio::test]
@@ -3475,6 +4387,207 @@ async fn child_report_auto_does_not_start_turn_on_running_claude_pane_parent() {
         submitted_tasks
             .iter()
             .all(|(pane_id, _)| pane_id != &troll_pane_id)
+    );
+}
+
+#[tokio::test]
+async fn dispatch_to_running_claude_pane_queues_and_flushes_on_finish() {
+    let (mut app, mut app_event_rx, troll_pane_id, orc_pane_id) =
+        make_child_report_auto_claude_pane_app().await;
+    let _prepared = app
+        .claude_panes
+        .prepare_turn(
+            &orc_pane_id,
+            "already running".to_string(),
+            app.config.codex_home.as_ref(),
+        )
+        .expect("prepare running Orc pane");
+
+    app.dispatch_spawn_task_blocks(
+        &troll_pane_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_pane_id.clone(),
+            task: "polish the landing page".to_string(),
+            seq: None,
+        }],
+    );
+
+    assert!(
+        drain_claude_pane_task_events(&mut app_event_rx)
+            .iter()
+            .all(|(pane_id, _)| pane_id != &orc_pane_id)
+    );
+    assert_eq!(
+        app.spawn_pending_dispatches_by_pane
+            .get(&orc_pane_id)
+            .map_or(0, std::collections::VecDeque::len),
+        1
+    );
+
+    app.on_claude_pane_turn_finished(
+        orc_pane_id.clone(),
+        Ok(successful_claude_turn_output(
+            &app,
+            "queued-dispatch",
+            "finished earlier task",
+        )),
+    );
+
+    let submitted_tasks = drain_claude_pane_task_events(&mut app_event_rx);
+    let orc_tasks = submitted_tasks
+        .iter()
+        .filter(|(pane_id, _)| pane_id == &orc_pane_id)
+        .collect::<Vec<_>>();
+    assert_eq!(orc_tasks.len(), 1);
+    assert!(orc_tasks[0].1.contains("polish the landing page"));
+    assert!(
+        app.spawn_pending_dispatches_by_pane
+            .get(&orc_pane_id)
+            .is_none_or(std::collections::VecDeque::is_empty)
+    );
+}
+
+#[tokio::test]
+async fn combined_claude_pane_dispatch_flush_records_acks_for_all_senders() {
+    let (mut app, mut app_event_rx, troll_pane_id, orc_pane_id) =
+        make_child_report_auto_claude_pane_app().await;
+    let second_source_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Troll),
+            Some("Ugluk".to_string()),
+        )
+        .expect("create second Claude source pane");
+    while app_event_rx.try_recv().is_ok() {}
+
+    let _prepared = app
+        .claude_panes
+        .prepare_turn(
+            &orc_pane_id,
+            "already running".to_string(),
+            app.config.codex_home.as_ref(),
+        )
+        .expect("prepare running Orc pane");
+    let target_node_id = crate::spawn_orchestration::pane_node_id(&orc_pane_id);
+
+    app.dispatch_spawn_task_blocks(
+        &troll_pane_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_pane_id.clone(),
+            task: "first combined Claude task".to_string(),
+            seq: Some(85),
+        }],
+    );
+    app.dispatch_spawn_task_blocks(
+        &second_source_pane_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_pane_id.clone(),
+            task: "second combined Claude task".to_string(),
+            seq: Some(86),
+        }],
+    );
+
+    assert!(app.flush_pending_dispatches_for_claude_pane(&orc_pane_id));
+    let submitted_tasks = drain_claude_pane_task_events(&mut app_event_rx);
+    let orc_tasks = submitted_tasks
+        .iter()
+        .filter(|(pane_id, _)| pane_id == &orc_pane_id)
+        .collect::<Vec<_>>();
+    assert_eq!(orc_tasks.len(), 1);
+    assert!(orc_tasks[0].1.contains("Queued dispatch 1"));
+    assert!(orc_tasks[0].1.contains("Queued dispatch 2"));
+
+    let submitted_task = orc_tasks[0].1.trim().to_string();
+    app.record_spawn_dispatch_delivered_for_task(&target_node_id, &submitted_task);
+    assert_dispatch_ack_report(&app, &troll_pane_id, 85, "delivered");
+    assert_dispatch_ack_report(&app, &second_source_pane_id, 86, "delivered");
+    assert!(
+        app.spawn_dispatch_acks_by_target_task.is_empty(),
+        "combined Claude delivery should drain registered ack keys"
+    );
+
+    app.register_spawn_dispatch_acks_for_task(
+        &target_node_id,
+        &format!("{submitted_task}\n"),
+        vec![crate::spawn_orchestration::SpawnDispatchAck {
+            seq: 87,
+            source_node_id: troll_pane_id.clone(),
+            target_node_id: target_node_id.clone(),
+            target_title: app.user_pane_title(&orc_pane_id),
+        }],
+    );
+    app.record_spawn_dispatch_failed_for_task(
+        &target_node_id,
+        &submitted_task,
+        "Claude prepare_turn failed in regression test",
+    );
+    assert_dispatch_ack_report(&app, &troll_pane_id, 87, "failed");
+    assert!(
+        app.spawn_dispatch_acks_by_target_task.is_empty(),
+        "combined Claude failure should drain registered ack keys"
+    );
+}
+
+#[tokio::test]
+async fn queued_claude_pane_dispatch_fails_and_is_removed_from_persistence_when_target_removed() {
+    let (mut app, mut app_event_rx, troll_pane_id, orc_pane_id) =
+        make_child_report_auto_claude_pane_app().await;
+    app.primary_thread_id = Some(
+        ThreadId::from_string("00000000-0000-0000-0000-000000000455").expect("valid thread id"),
+    );
+    let _prepared = app
+        .claude_panes
+        .prepare_turn(
+            &orc_pane_id,
+            "already running".to_string(),
+            app.config.codex_home.as_ref(),
+        )
+        .expect("prepare running Orc pane");
+    while app_event_rx.try_recv().is_ok() {}
+
+    app.dispatch_spawn_task_blocks(
+        &troll_pane_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_pane_id.clone(),
+            task: "fail because Claude target was removed".to_string(),
+            seq: Some(90),
+        }],
+    );
+    assert_eq!(
+        app.spawn_pending_dispatches_by_pane
+            .get(&orc_pane_id)
+            .map_or(0, std::collections::VecDeque::len),
+        1
+    );
+
+    assert!(
+        app.fail_pending_dispatches_for_claude_pane(&orc_pane_id, "target closed before delivery")
+    );
+
+    assert_dispatch_ack_report(&app, &troll_pane_id, 90, "failed");
+    assert!(
+        app.spawn_pending_dispatches_by_pane
+            .get(&orc_pane_id)
+            .is_none_or(std::collections::VecDeque::is_empty)
+    );
+    let layout_path = app
+        .config
+        .codex_home
+        .as_ref()
+        .join("panes")
+        .join("pane-layout.json");
+    let layout: crate::claude_panes::PaneLayoutState = serde_json::from_str(
+        &std::fs::read_to_string(&layout_path).expect("pane layout should be persisted"),
+    )
+    .expect("pane layout should deserialize");
+    assert!(
+        !layout
+            .spawn_pending_dispatches_by_pane
+            .contains_key(&orc_pane_id),
+        "removed Claude target queue must not persist in {layout_path:?}"
     );
 }
 
@@ -4798,6 +5911,7 @@ async fn claude_orc_has_routing_thread_row_and_dispatches_by_thread_id() {
         vec![crate::spawn_orchestration::SpawnTaskDispatch {
             target: orc_thread_id.to_string(),
             task: "write the proof file".to_string(),
+            seq: None,
         }],
     );
 
@@ -4893,6 +6007,121 @@ fn spawn_app_path_creates_troll_with_two_named_orcs() -> Result<()> {
             "spawn status must not expose a built-in demo action"
         );
 
+        Ok(())
+    })
+}
+
+#[test]
+fn scripted_standard_crew_dispatch_crossing_smoke() -> Result<()> {
+    const WORKER_THREADS: usize = 1;
+    const TEST_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(WORKER_THREADS)
+        .thread_stack_size(TEST_STACK_SIZE_BYTES)
+        .enable_all()
+        .build()?;
+
+    runtime.block_on(async {
+        let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+        std::fs::write(
+            app.config.codex_home.join("provider_auth.json"),
+            format!(
+                r#"{{"api_keys":{{"{ZAI_API_KEY_ENV_VAR}":"test-key","{VERCEL_API_KEY_ENV_VAR}":"test-key"}}}}"#
+            ),
+        )?;
+        app.chat_widget.update_account_state(
+            None, None, /*has_chatgpt_account*/ true, /*has_codex_backend_auth*/ true,
+        );
+
+        let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(
+            app.chat_widget.config_ref(),
+        ))
+        .await?;
+        let main = app_server
+            .start_thread(app.chat_widget.config_ref())
+            .await?;
+        let main_thread_id = main.session.thread_id;
+        app.primary_thread_id = Some(main_thread_id);
+        app.active_thread_id = Some(main_thread_id);
+        app.primary_session_configured = Some(main.session.clone());
+
+        let (_nazgul_thread_id, troll_thread_id) =
+            app.create_spawn_standard_crew(&mut app_server).await?;
+        let orcs = app
+            .agent_navigation
+            .ordered_threads()
+            .into_iter()
+            .filter(|(thread_id, entry)| {
+                app.spawn_parent_by_thread.get(thread_id) == Some(&troll_thread_id)
+                    && entry.agent_role.as_deref() == Some("orc")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(orcs.len(), 2, "standard crew should create two Orcs");
+        let snaga_thread_id = orcs
+            .iter()
+            .find_map(|(thread_id, entry)| {
+                (entry.agent_nickname.as_deref() == Some("Snaga")).then_some(*thread_id)
+            })
+            .expect("standard crew should include Snaga");
+
+        app.agent_navigation.set_running(snaga_thread_id, true);
+        app.dispatch_spawn_task_blocks(
+            &crate::spawn_orchestration::thread_node_id(troll_thread_id),
+            vec![crate::spawn_orchestration::SpawnTaskDispatch {
+                target: "Snaga".to_string(),
+                task: "A6 scripted smoke: pick this up after the current report finishes."
+                    .to_string(),
+                seq: Some(606),
+            }],
+        );
+
+        assert!(
+            drain_spawn_agent_tasks_for(&mut rx, snaga_thread_id).is_empty(),
+            "busy Snaga must not receive an immediate task"
+        );
+        assert_eq!(
+            app.spawn_pending_dispatches_by_thread
+                .get(&snaga_thread_id)
+                .map_or(0, std::collections::VecDeque::len),
+            1,
+            "busy Snaga should have one queued dispatch"
+        );
+
+        app.update_spawn_status_for_thread_notification(&turn_completed_notification(
+            snaga_thread_id,
+            "a6-current-report-finishes",
+            TurnStatus::Completed,
+        ));
+
+        let picked_up = drain_spawn_agent_tasks_for(&mut rx, snaga_thread_id);
+        assert_eq!(picked_up.len(), 1, "queued dispatch must be delivered once");
+        assert!(
+            picked_up[0].contains("A6 scripted smoke"),
+            "delivered task should preserve the original dispatch text: {picked_up:?}"
+        );
+        assert!(
+            picked_up[0].contains("Assigned by Burzum [troll] to Snaga [orc]"),
+            "delivered task should preserve standard-crew provenance: {picked_up:?}"
+        );
+        assert!(
+            app.spawn_pending_dispatches_by_thread
+                .get(&snaga_thread_id)
+                .is_none_or(std::collections::VecDeque::is_empty),
+            "Snaga queue should be drained after pickup"
+        );
+
+        app.update_spawn_status_for_thread_notification(&turn_completed_notification(
+            snaga_thread_id,
+            "a6-after-pickup",
+            TurnStatus::Completed,
+        ));
+        assert!(
+            drain_spawn_agent_tasks_for(&mut rx, snaga_thread_id).is_empty(),
+            "completed pickup must not re-deliver without a reissue"
+        );
+
+        app_server.shutdown().await?;
         Ok(())
     })
 }
@@ -7940,10 +9169,20 @@ async fn make_test_app() -> App {
         spawn_status_by_thread: HashMap::new(),
         spawn_parent_reports_by_node: HashMap::new(),
         spawn_pending_reports_by_thread: HashMap::new(),
+        spawn_pending_dispatches_by_thread: HashMap::new(),
+        spawn_pending_dispatches_by_pane: HashMap::new(),
+        spawn_dispatch_acks_by_target_task: HashMap::new(),
+        spawn_next_dispatch_seq: 1,
+        spawn_processed_dispatch_seq_ids: HashSet::new(),
         spawn_processed_dispatches: HashSet::new(),
         spawn_auto_loop_state_by_node: HashMap::new(),
         spawn_operator_input_seen: false,
         spawn_quarantine_notified_by_node: HashSet::new(),
+        spawn_context_left_by_thread: HashMap::new(),
+        spawn_low_context_warned_by_thread: HashSet::new(),
+        spawn_last_report_seq_by_node: HashMap::new(),
+        spawn_last_dispatch_seq_by_node: HashMap::new(),
+        spawn_last_event_at_by_node: HashMap::new(),
         spawn_nazgul_pane_id: None,
         orchestrate_whips: Box::new(HashMap::new()),
         orchestrate_next_whip_seq: 0,
@@ -8020,10 +9259,20 @@ async fn make_test_app_with_channels() -> (
             spawn_status_by_thread: HashMap::new(),
             spawn_parent_reports_by_node: HashMap::new(),
             spawn_pending_reports_by_thread: HashMap::new(),
+            spawn_pending_dispatches_by_thread: HashMap::new(),
+            spawn_pending_dispatches_by_pane: HashMap::new(),
+            spawn_dispatch_acks_by_target_task: HashMap::new(),
+            spawn_next_dispatch_seq: 1,
+            spawn_processed_dispatch_seq_ids: HashSet::new(),
             spawn_processed_dispatches: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
             spawn_operator_input_seen: false,
             spawn_quarantine_notified_by_node: HashSet::new(),
+            spawn_context_left_by_thread: HashMap::new(),
+            spawn_low_context_warned_by_thread: HashSet::new(),
+            spawn_last_report_seq_by_node: HashMap::new(),
+            spawn_last_dispatch_seq_by_node: HashMap::new(),
+            spawn_last_event_at_by_node: HashMap::new(),
             spawn_nazgul_pane_id: None,
             orchestrate_whips: Box::new(HashMap::new()),
             orchestrate_next_whip_seq: 0,
@@ -8538,6 +9787,23 @@ fn turn_completed_with_agent_message(
     })
 }
 
+fn turn_completed_with_error(
+    thread_id: ThreadId,
+    turn_id: &str,
+    status: TurnStatus,
+    error: AppServerTurnError,
+) -> ServerNotification {
+    ServerNotification::TurnCompleted(TurnCompletedNotification {
+        thread_id: thread_id.to_string(),
+        turn: Turn {
+            completed_at: Some(0),
+            duration_ms: Some(1),
+            error: Some(error),
+            ..test_turn(turn_id, status, Vec::new())
+        },
+    })
+}
+
 fn thread_closed_notification(thread_id: ThreadId) -> ServerNotification {
     ServerNotification::ThreadClosed(ThreadClosedNotification {
         thread_id: thread_id.to_string(),
@@ -8549,19 +9815,28 @@ fn token_usage_notification(
     turn_id: &str,
     model_context_window: Option<i64>,
 ) -> ServerNotification {
+    token_usage_notification_with_total(thread_id, turn_id, 10, model_context_window)
+}
+
+fn token_usage_notification_with_total(
+    thread_id: ThreadId,
+    turn_id: &str,
+    total_tokens: i64,
+    model_context_window: Option<i64>,
+) -> ServerNotification {
     ServerNotification::ThreadTokenUsageUpdated(ThreadTokenUsageUpdatedNotification {
         thread_id: thread_id.to_string(),
         turn_id: turn_id.to_string(),
         token_usage: ThreadTokenUsage {
             total: TokenUsageBreakdown {
-                total_tokens: 10,
+                total_tokens,
                 input_tokens: 4,
                 cached_input_tokens: 1,
                 output_tokens: 5,
                 reasoning_output_tokens: 0,
             },
             last: TokenUsageBreakdown {
-                total_tokens: 10,
+                total_tokens,
                 input_tokens: 4,
                 cached_input_tokens: 1,
                 output_tokens: 5,

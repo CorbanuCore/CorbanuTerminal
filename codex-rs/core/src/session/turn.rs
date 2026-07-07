@@ -131,6 +131,7 @@ use sha2::Digest;
 use sha2::Sha256;
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
+use tracing::debug;
 use tracing::error;
 use tracing::field;
 use tracing::info;
@@ -148,9 +149,11 @@ const MAX_SERVER_SIDE_MODEL_CONTINUATIONS: u64 = 5;
 
 fn trace_turn_timing(label: &str, start: Instant) {
     if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
-        eprintln!(
-            "[pfterminal-turn] {label} elapsed_ms={}",
-            start.elapsed().as_millis()
+        debug!(
+            target: "pfterminal_turn",
+            label,
+            elapsed_ms = start.elapsed().as_millis(),
+            "pfterminal turn timing"
         );
     }
 }
@@ -3084,9 +3087,7 @@ async fn try_run_sampling_request(
     } else {
         Some(turn_context.turn_timing_state.begin_tool_blocking())
     };
-    if let Err(err) = drain_in_flight(&mut in_flight, sess.clone(), turn_context.clone()).await {
-        return Err(err);
-    }
+    drain_in_flight(&mut in_flight, sess.clone(), turn_context.clone()).await?;
     drop(tool_blocking_timing_guard);
 
     if should_emit_token_count {

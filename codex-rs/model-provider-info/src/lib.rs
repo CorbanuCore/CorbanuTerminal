@@ -23,6 +23,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
+use std::num::NonZeroU64;
 use std::time::Duration;
 
 const DEFAULT_STREAM_IDLE_TIMEOUT_MS: u64 = 600_000;
@@ -36,6 +37,20 @@ pub const DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS: u64 = 15_000;
 const MAX_STREAM_MAX_RETRIES: u64 = 100;
 /// Hard cap for user-configured `request_max_retries`.
 const MAX_REQUEST_MAX_RETRIES: u64 = 100;
+
+fn provider_auth_timeout_ms() -> NonZeroU64 {
+    match NonZeroU64::new(5_000) {
+        Some(timeout_ms) => timeout_ms,
+        None => panic!("provider auth timeout must be non-zero"),
+    }
+}
+
+fn root_absolute_path() -> AbsolutePathBuf {
+    match AbsolutePathBuf::from_absolute_path_checked("/") {
+        Ok(path) => path,
+        Err(err) => panic!("root path must be absolute: {err}"),
+    }
+}
 
 const OPENAI_PROVIDER_NAME: &str = "OpenAI";
 pub const OPENAI_PROVIDER_ID: &str = "openai";
@@ -693,11 +708,9 @@ impl ModelProviderInfo {
             auth: Some(ModelProviderAuthInfo {
                 command: "pfterminal".to_string(),
                 args: vec!["internal-claude-oauth-token".to_string()],
-                timeout_ms: std::num::NonZeroU64::new(5_000)
-                    .expect("provider auth timeout must be non-zero"),
+                timeout_ms: provider_auth_timeout_ms(),
                 refresh_interval_ms: 60_000,
-                cwd: AbsolutePathBuf::from_absolute_path_checked("/")
-                    .expect("root path must be absolute"),
+                cwd: root_absolute_path(),
             }),
             aws: None,
             wire_api: WireApi::Anthropic,

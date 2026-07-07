@@ -190,6 +190,7 @@ impl App {
     /// Closing a thread is not the same as removing it: users can still inspect finished agent
     /// transcripts, and the stable next/previous traversal order should not collapse around them.
     pub(super) fn mark_agent_picker_thread_closed(&mut self, thread_id: ThreadId) {
+        self.fail_pending_dispatches_for_thread(thread_id, "target closed before delivery");
         self.agent_navigation.mark_closed(thread_id);
         self.sync_active_agent_label();
     }

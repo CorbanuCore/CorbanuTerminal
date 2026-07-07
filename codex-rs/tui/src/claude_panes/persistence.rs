@@ -386,7 +386,7 @@ pub(crate) fn latest_result_message_from_artifacts(artifact_dir: &Path) -> Optio
             turn_index_from_artifact_name(&name).map(|turn_index| (turn_index, path))
         })
         .collect();
-    artifacts.sort_by(|left, right| right.0.cmp(&left.0));
+    artifacts.sort_by_key(|artifact| std::cmp::Reverse(artifact.0));
     artifacts
         .iter()
         .find_map(|(_, path)| latest_result_message_from_artifact(path))
@@ -405,7 +405,7 @@ pub(crate) fn latest_session_id_from_artifacts(artifact_dir: &Path) -> Option<St
             turn_index_from_artifact_name(&name).map(|turn_index| (turn_index, path))
         })
         .collect();
-    artifacts.sort_by(|left, right| right.0.cmp(&left.0));
+    artifacts.sort_by_key(|artifact| std::cmp::Reverse(artifact.0));
     artifacts
         .iter()
         .find_map(|(_, path)| latest_session_id_from_artifact(path))

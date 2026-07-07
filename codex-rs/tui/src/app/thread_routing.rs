@@ -6,6 +6,7 @@
 
 use super::*;
 use crate::session_resume::read_session_model;
+use std::fmt::Write as _;
 
 impl App {
     pub(super) fn note_thread_interrupt_failure(
@@ -1057,18 +1058,22 @@ impl App {
                     status,
                 )
             {
+                let is_running = matches!(
+                    status.status,
+                    codex_app_server_protocol::CollabAgentStatus::PendingInit
+                        | codex_app_server_protocol::CollabAgentStatus::Running
+                );
                 self.spawn_status_by_thread
                     .insert(thread_id, status.clone());
-                self.agent_navigation.set_running(
-                    thread_id,
-                    matches!(
-                        status.status,
-                        codex_app_server_protocol::CollabAgentStatus::PendingInit
-                            | codex_app_server_protocol::CollabAgentStatus::Running
-                    ),
-                );
+                self.agent_navigation.set_running(thread_id, is_running);
                 self.agent_navigation
                     .set_last_result_message(thread_id, status.message.clone());
+                if !is_running && self.is_spawn_orchestration_thread(thread_id) {
+                    let flushed_dispatch = self.flush_pending_dispatches_for_thread(thread_id);
+                    if !flushed_dispatch {
+                        self.flush_pending_reports_for_thread(thread_id);
+                    }
+                }
             }
 
             if self.agent_navigation.get(&thread_id).is_some() {
@@ -1582,6 +1587,32 @@ impl App {
         &mut self,
         notification: &ServerNotification,
     ) {
+        if let ServerNotification::ThreadClosed(notification) = notification {
+            let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
+                return;
+            };
+            if !self.is_spawn_orchestration_thread(thread_id) {
+                return;
+            }
+            self.spawn_status_by_thread.insert(
+                thread_id,
+                codex_app_server_protocol::CollabAgentState {
+                    status: codex_app_server_protocol::CollabAgentStatus::Shutdown,
+                    message: Some("thread closed".to_string()),
+                },
+            );
+            self.agent_navigation.mark_closed(thread_id);
+            self.record_spawn_child_report_for_thread(
+                thread_id,
+                codex_app_server_protocol::CollabAgentStatus::Shutdown,
+                Some("thread closed".to_string()),
+            );
+            self.fail_pending_dispatches_for_thread(thread_id, "target closed before delivery");
+            self.flush_pending_reports_for_thread(thread_id);
+            self.persist_pane_state();
+            return;
+        }
+
         let (thread_id, status, message) = match notification {
             ServerNotification::TurnStarted(notification) => {
                 let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
@@ -1647,6 +1678,14 @@ impl App {
                 return;
             }
             // Deliberately NOT AgentMessageDelta: spawn task blocks must never dispatch from a
+            ServerNotification::ThreadTokenUsageUpdated(notification) => {
+                let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
+                    return;
+                };
+                self.update_spawn_context_pressure_for_thread(thread_id, &notification.token_usage);
+                return;
+            }
+            // Deliberately NOT AgentMessageDelta: spawn task blocks must never dispatch from a
             // streaming turn. Dispatch happens only from completed assistant-message items or from
             // TurnCompleted with a clean Completed status, so an interrupted or failed turn can
             // never fire a truncated pfterminal_send_task block.
@@ -1677,19 +1716,70 @@ impl App {
         }
         if !is_running {
             self.record_spawn_child_report_for_thread(thread_id, status, report_message);
+            // Commands queued for this target take priority over informational child reports.
+            let flushed_dispatch = self.flush_pending_dispatches_for_thread(thread_id);
             // This thread just went idle. If child reports arrived while it was mid-turn, flush them
             // now into a real processing turn so no report is silently dropped (the multi-turn race).
-            let flushed_reports = self.flush_pending_reports_for_thread(thread_id);
-            if !flushed_reports {
-                let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
-                let last_result = self
-                    .agent_navigation
-                    .get(&thread_id)
-                    .and_then(|entry| entry.last_result_message.as_deref())
-                    .map(str::to_string);
-                self.note_whip_target_idle(&node_key, last_result.as_deref());
-            }
+            let flushed_reports = if flushed_dispatch {
+                false
+            } else {
+                self.flush_pending_reports_for_thread(thread_id)
+            };
+            let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
+            let last_result = self
+                .agent_navigation
+                .get(&thread_id)
+                .and_then(|entry| entry.last_result_message.as_deref())
+                .map(str::to_string);
+            self.note_whip_target_idle_with_fire_control(
+                &node_key,
+                last_result.as_deref(),
+                !flushed_dispatch && !flushed_reports,
+            );
         }
+    }
+
+    fn update_spawn_context_pressure_for_thread(
+        &mut self,
+        thread_id: ThreadId,
+        token_usage: &codex_app_server_protocol::ThreadTokenUsage,
+    ) {
+        if !self.is_spawn_orchestration_thread(thread_id) {
+            return;
+        }
+        let Some(context_left) = context_left_percent_from_token_usage(token_usage) else {
+            return;
+        };
+        self.spawn_context_left_by_thread
+            .insert(thread_id, context_left);
+        const LOW_CONTEXT_WARNING_THRESHOLD: i64 = 15;
+        if context_left >= LOW_CONTEXT_WARNING_THRESHOLD {
+            self.spawn_low_context_warned_by_thread.remove(&thread_id);
+            return;
+        }
+        if !self.spawn_low_context_warned_by_thread.insert(thread_id) {
+            return;
+        }
+        let Some(parent_node_id) = self.logical_parent_node_for_thread(thread_id) else {
+            return;
+        };
+        let child_title = self
+            .agent_navigation
+            .get(&thread_id)
+            .map(|entry| {
+                format_agent_picker_item_name(
+                    entry.agent_nickname.as_deref(),
+                    entry.agent_role.as_deref(),
+                    self.primary_thread_id == Some(thread_id),
+                )
+            })
+            .unwrap_or_else(|| thread_id.to_string());
+        self.record_spawn_parent_report(
+            parent_node_id,
+            format!(
+                "warning; {child_title}; low context ({context_left}% left); consider journal/handoff"
+            ),
+        );
     }
 
     pub(super) fn handle_thread_event_replay(&mut self, event: ThreadBufferedEvent) {
@@ -1779,15 +1869,61 @@ impl App {
 }
 
 fn spawn_turn_result_message(turn: &codex_app_server_protocol::Turn) -> Option<String> {
-    let text = turn.items.iter().rev().find_map(|item| match item {
+    let agent_text = turn.items.iter().rev().find_map(|item| match item {
         codex_app_server_protocol::ThreadItem::AgentMessage { text, .. } => {
             let trimmed = text.trim();
             (!trimmed.is_empty()).then_some(trimmed)
         }
         _ => None,
-    })?;
+    });
 
-    Some(crate::spawn_orchestration::bounded_spawn_report_value(text))
+    let error_text = matches!(turn.status, TurnStatus::Failed | TurnStatus::Interrupted)
+        .then(|| turn.error.as_ref())
+        .flatten()
+        .map(format_turn_error_for_spawn_report);
+
+    let text = match (error_text, agent_text) {
+        (Some(error), Some(agent_text)) => format!("{error}; result={agent_text}"),
+        (Some(error), None) => error,
+        (None, Some(agent_text)) => agent_text.to_string(),
+        (None, None) => return None,
+    };
+
+    Some(crate::spawn_orchestration::bounded_spawn_report_value(
+        &text,
+    ))
+}
+
+fn format_turn_error_for_spawn_report(error: &AppServerTurnError) -> String {
+    let mut text = format!("turn_error={}", error.message.trim());
+    if let Some(info) = &error.codex_error_info {
+        let _ = write!(text, "; info={info:?}");
+    }
+    if let Some(details) = error
+        .additional_details
+        .as_deref()
+        .map(str::trim)
+        .filter(|details| !details.is_empty())
+    {
+        let _ = write!(text, "; details={details}");
+    }
+    text
+}
+
+fn context_left_percent_from_token_usage(
+    token_usage: &codex_app_server_protocol::ThreadTokenUsage,
+) -> Option<i64> {
+    let context_window = token_usage.model_context_window?;
+    Some(
+        TokenUsage {
+            total_tokens: token_usage.last.total_tokens,
+            input_tokens: token_usage.last.input_tokens,
+            cached_input_tokens: token_usage.last.cached_input_tokens,
+            output_tokens: token_usage.last.output_tokens,
+            reasoning_output_tokens: token_usage.last.reasoning_output_tokens,
+        }
+        .percent_of_context_window_remaining(context_window),
+    )
 }
 
 fn should_apply_collab_receiver_status(

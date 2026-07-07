@@ -550,10 +550,11 @@ impl App {
             .or_insert(0);
     }
 
-    pub(crate) fn note_whip_target_idle(
+    pub(crate) fn note_whip_target_idle_with_fire_control(
         &mut self,
         target_node_id: &str,
         last_output: Option<&str>,
+        allow_fire: bool,
     ) {
         let generation = self
             .orchestrate_idle_generation_by_target
@@ -564,7 +565,9 @@ impl App {
         self.pause_matching_whips_on_stop_marker(target_node_id, last_output);
         self.pause_spinning_whips_on_empty_output(target_node_id, last_output);
         self.note_whip_holder_idle(target_node_id);
-        self.evaluate_whips_for_target(target_node_id, generation, FireTrigger::Edge);
+        if allow_fire {
+            self.evaluate_whips_for_target(target_node_id, generation, FireTrigger::Edge);
+        }
     }
 
     pub(crate) fn note_whip_holder_dispatched(

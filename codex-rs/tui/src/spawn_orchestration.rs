@@ -31,8 +31,12 @@ use codex_protocol::protocol::ThreadSource as CoreThreadSource;
 use codex_state::DirectionalThreadSpawnEdgeStatus;
 use color_eyre::eyre::Result;
 use color_eyre::eyre::eyre;
+use serde::Deserialize;
+use serde::Deserializer;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::fmt::Write as _;
 use std::fs::OpenOptions;
 use std::io::Write as _;
@@ -52,6 +56,7 @@ const EXEC_WRAPPED_DISPATCH_CORRECTION_TASK: &str = "PFTerminal host correction:
 const SPAWN_PARENT_REPORT_LIMIT: usize = 12;
 const SPAWN_PROCESSED_DISPATCH_TURN_LIMIT: usize = 1024;
 const SPAWN_PROCESSED_DISPATCH_TURN_RETAIN: usize = SPAWN_PROCESSED_DISPATCH_TURN_LIMIT / 2;
+const SPAWN_PROCESSED_DISPATCH_SEQ_RETAIN: usize = 256;
 const SPAWN_REPORT_RESULT_MAX_CHARS: usize = 12_000;
 /// Loop breaker: maximum consecutive auto-triggered child-report processing turns that may each
 /// dispatch follow-up work before auto-processing pauses for that parent node. Without a ceiling,
@@ -79,12 +84,89 @@ pub(crate) struct SpawnAutoLoopState {
 pub(crate) struct SpawnTaskDispatch {
     pub(crate) target: String,
     pub(crate) task: String,
+    pub(crate) seq: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct SpawnDispatchAck {
+    pub(crate) seq: u64,
+    pub(crate) source_node_id: String,
+    pub(crate) target_node_id: String,
+    pub(crate) target_title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct PendingSpawnDispatch {
+    pub(crate) task: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) acks: Vec<SpawnDispatchAck>,
+}
+
+impl PendingSpawnDispatch {
+    pub(crate) fn new(task: String, acks: Vec<SpawnDispatchAck>) -> Self {
+        Self { task, acks }
+    }
+
+    fn legacy(task: String) -> Self {
+        Self {
+            task,
+            acks: Vec::new(),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PendingSpawnDispatch {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct PendingSpawnDispatchFields {
+            task: String,
+            #[serde(default)]
+            acks: Vec<SpawnDispatchAck>,
+        }
+
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum PendingSpawnDispatchRepr {
+            Full(PendingSpawnDispatchFields),
+            Legacy(String),
+        }
+
+        match PendingSpawnDispatchRepr::deserialize(deserializer)? {
+            PendingSpawnDispatchRepr::Full(fields) => Ok(Self {
+                task: fields.task,
+                acks: fields.acks,
+            }),
+            PendingSpawnDispatchRepr::Legacy(task) => Ok(Self::legacy(task)),
+        }
+    }
 }
 
 pub(crate) enum SpawnTaskTarget {
     Native(ThreadId),
     ClaudePane(String),
     UnavailableNative(ThreadId),
+}
+
+pub(crate) fn bounded_spawn_processed_dispatch_seq_ids(
+    seqs: impl IntoIterator<Item = u64>,
+    next_seq: u64,
+) -> HashSet<u64> {
+    let floor = next_seq
+        .max(1)
+        .saturating_sub(SPAWN_PROCESSED_DISPATCH_SEQ_RETAIN as u64);
+    let mut seqs = seqs
+        .into_iter()
+        .filter(|seq| *seq >= floor)
+        .collect::<Vec<_>>();
+    seqs.sort_unstable();
+    seqs.dedup();
+    if seqs.len() > SPAWN_PROCESSED_DISPATCH_SEQ_RETAIN {
+        seqs.drain(0..seqs.len() - SPAWN_PROCESSED_DISPATCH_SEQ_RETAIN);
+    }
+    seqs.into_iter().collect()
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1173,7 +1255,19 @@ impl App {
             .unwrap_or_else(|| self.user_pane_title(source_pane_id));
         let mut any_queued = false;
         for dispatch in dispatches {
+            if dispatch
+                .seq
+                .is_some_and(|seq| !self.mark_spawn_dispatch_seq_processed(seq))
+            {
+                continue;
+            }
             if dispatch.task.trim().is_empty() {
+                let ack = self.make_spawn_dispatch_ack(
+                    source_pane_id,
+                    dispatch.target.trim().to_string(),
+                    dispatch.target.trim().to_string(),
+                    dispatch.seq,
+                );
                 self.record_spawn_dispatch_error(
                     source_pane_id,
                     source_is_active,
@@ -1182,56 +1276,161 @@ impl App {
                         dispatch.target
                     ),
                 );
+                self.record_spawn_dispatch_acks(
+                    &[ack],
+                    "failed",
+                    "ignored empty task dispatch",
+                    true,
+                );
                 continue;
             }
             match self.resolve_spawn_task_target(&dispatch.target) {
                 Ok(SpawnTaskTarget::Native(thread_id)) => {
                     let label = self.thread_label(thread_id);
-                    let task = task_with_dispatch_provenance(&dispatch.task, &source_title, &label);
                     let target_node_id = thread_node_id(thread_id);
-                    self.note_whip_holder_dispatched(source_pane_id, &target_node_id);
-                    self.app_event_tx
-                        .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
-                    any_queued = true;
-                    self.record_spawn_dispatch_queued(
+                    let ack = self.make_spawn_dispatch_ack(
                         source_pane_id,
-                        source_is_active,
-                        &format!("Queued task for {label}."),
-                        &dispatch.task,
+                        target_node_id.clone(),
+                        label.clone(),
+                        dispatch.seq,
                     );
+                    let task = task_with_dispatch_provenance(
+                        &dispatch.task,
+                        &source_title,
+                        &label,
+                        ack.seq,
+                    );
+                    self.note_whip_holder_dispatched(source_pane_id, &target_node_id);
+                    if self.native_spawn_target_is_busy(thread_id) {
+                        let pending = PendingSpawnDispatch::new(task, vec![ack.clone()]);
+                        self.enqueue_pending_dispatch_for_thread(thread_id, pending);
+                        self.record_spawn_dispatch_acks(
+                            &[ack],
+                            "queued_busy",
+                            "target busy; will deliver when idle",
+                            false,
+                        );
+                        self.record_spawn_dispatch_queued(
+                            source_pane_id,
+                            source_is_active,
+                            &format!(
+                                "Queued task for {label} (target busy; will deliver when idle)."
+                            ),
+                            &dispatch.task,
+                        );
+                    } else {
+                        self.register_spawn_dispatch_acks_for_task(
+                            &target_node_id,
+                            &task,
+                            vec![ack],
+                        );
+                        self.app_event_tx
+                            .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
+                        self.record_spawn_dispatch_queued(
+                            source_pane_id,
+                            source_is_active,
+                            &format!("Queued task for {label}."),
+                            &dispatch.task,
+                        );
+                    }
+                    any_queued = true;
                 }
                 Ok(SpawnTaskTarget::UnavailableNative(thread_id)) => {
+                    let label = self.thread_label(thread_id);
+                    let ack = self.make_spawn_dispatch_ack(
+                        source_pane_id,
+                        thread_node_id(thread_id),
+                        label,
+                        dispatch.seq,
+                    );
+                    let message = self.unavailable_native_spawn_target_error(thread_id);
                     self.record_spawn_dispatch_error(
                         source_pane_id,
                         source_is_active,
-                        self.unavailable_native_spawn_target_error(thread_id),
+                        message.clone(),
                     );
+                    self.record_spawn_dispatch_acks(&[ack], "failed", message, true);
                 }
                 Ok(SpawnTaskTarget::ClaudePane(pane_id)) => {
                     if pane_id == source_pane_id {
+                        let title = self.user_pane_title(&pane_id);
+                        let ack = self.make_spawn_dispatch_ack(
+                            source_pane_id,
+                            pane_node_id(&pane_id),
+                            title,
+                            dispatch.seq,
+                        );
                         self.record_spawn_dispatch_error(
                             source_pane_id,
                             source_is_active,
                             "Claude pane cannot dispatch a task to itself.".to_string(),
                         );
+                        self.record_spawn_dispatch_acks(
+                            &[ack],
+                            "failed",
+                            "Claude pane cannot dispatch a task to itself",
+                            true,
+                        );
                         continue;
                     }
                     let title = self.user_pane_title(&pane_id);
-                    let task = task_with_dispatch_provenance(&dispatch.task, &source_title, &title);
                     let target_node_id = pane_node_id(&pane_id);
-                    self.note_whip_holder_dispatched(source_pane_id, &target_node_id);
-                    self.app_event_tx
-                        .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task });
-                    any_queued = true;
-                    self.record_spawn_dispatch_queued(
+                    let ack = self.make_spawn_dispatch_ack(
                         source_pane_id,
-                        source_is_active,
-                        &format!("Queued task for {title}."),
-                        &dispatch.task,
+                        target_node_id.clone(),
+                        title.clone(),
+                        dispatch.seq,
                     );
+                    let task = task_with_dispatch_provenance(
+                        &dispatch.task,
+                        &source_title,
+                        &title,
+                        ack.seq,
+                    );
+                    self.note_whip_holder_dispatched(source_pane_id, &target_node_id);
+                    if self.claude_panes.claude_pane_is_running(&pane_id) {
+                        let pending = PendingSpawnDispatch::new(task, vec![ack.clone()]);
+                        self.enqueue_pending_dispatch_for_claude_pane(pane_id, pending);
+                        self.record_spawn_dispatch_acks(
+                            &[ack],
+                            "queued_busy",
+                            "target busy; will deliver when idle",
+                            false,
+                        );
+                        self.record_spawn_dispatch_queued(
+                            source_pane_id,
+                            source_is_active,
+                            &format!(
+                                "Queued task for {title} (target busy; will deliver when idle)."
+                            ),
+                            &dispatch.task,
+                        );
+                    } else {
+                        self.register_spawn_dispatch_acks_for_task(
+                            &target_node_id,
+                            &task,
+                            vec![ack],
+                        );
+                        self.app_event_tx
+                            .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task });
+                        self.record_spawn_dispatch_queued(
+                            source_pane_id,
+                            source_is_active,
+                            &format!("Queued task for {title}."),
+                            &dispatch.task,
+                        );
+                    }
+                    any_queued = true;
                 }
                 Err(err) => {
-                    self.record_spawn_dispatch_error(source_pane_id, source_is_active, err);
+                    let ack = self.make_spawn_dispatch_ack(
+                        source_pane_id,
+                        dispatch.target.trim().to_string(),
+                        dispatch.target.trim().to_string(),
+                        dispatch.seq,
+                    );
+                    self.record_spawn_dispatch_error(source_pane_id, source_is_active, err.clone());
+                    self.record_spawn_dispatch_acks(&[ack], "failed", err, true);
                 }
             }
         }
@@ -1318,6 +1517,7 @@ impl App {
         let correction_dispatch = SpawnTaskDispatch {
             target: EXEC_WRAPPED_DISPATCH_CORRECTION_TARGET.to_string(),
             task: EXEC_WRAPPED_DISPATCH_CORRECTION_TASK.to_string(),
+            seq: None,
         };
         if !self.mark_spawn_task_dispatch_processed(source_thread_id, turn_id, &correction_dispatch)
         {
@@ -1524,10 +1724,14 @@ impl App {
             entry.agent_role.as_deref(),
             self.primary_thread_id == Some(thread_id),
         );
+        let child_node_id = thread_node_id(thread_id);
+        let (seq, as_of) = self.reserve_spawn_report_seq(&child_node_id);
         let report = spawn_child_report(
             &child_title,
             collab_status_label(&status),
             result.as_deref(),
+            seq,
+            &as_of,
         );
         self.record_spawn_parent_report(parent_node_id, report);
     }
@@ -1550,17 +1754,32 @@ impl App {
             return;
         };
         let child_title = self.user_pane_title(pane_id);
-        let report = spawn_child_report(&child_title, status, result);
+        let child_node_id = pane_node_id(pane_id);
+        let (seq, as_of) = self.reserve_spawn_report_seq(&child_node_id);
+        let report = spawn_child_report(&child_title, status, result, seq, &as_of);
         self.record_spawn_parent_report(parent_node_id, report);
     }
 
-    fn record_spawn_parent_report(&mut self, parent_node_id: String, report: String) {
+    pub(crate) fn record_spawn_parent_report(&mut self, parent_node_id: String, report: String) {
+        self.record_spawn_parent_report_with_notify(parent_node_id, report, true);
+    }
+
+    fn record_spawn_parent_report_with_notify(
+        &mut self,
+        parent_node_id: String,
+        report: String,
+        notify: bool,
+    ) {
         let inserted = {
             let reports = self
                 .spawn_parent_reports_by_node
                 .entry(parent_node_id.clone())
                 .or_default();
-            if reports.back() == Some(&report) {
+            let dedup_key = spawn_report_dedup_key(&report);
+            if reports
+                .back()
+                .is_some_and(|previous| spawn_report_dedup_key(previous) == dedup_key)
+            {
                 false
             } else {
                 reports.push_back(report.clone());
@@ -1570,7 +1789,7 @@ impl App {
                 true
             }
         };
-        if inserted {
+        if inserted && notify {
             self.notify_spawn_parent_report(&parent_node_id, &report);
         }
     }
@@ -1678,7 +1897,11 @@ impl App {
             .or_default();
         // Deduplicate against the most recent queued report so a repeated identical result does not
         // spawn redundant turns.
-        if queue.back() == Some(&report.to_string()) {
+        let dedup_key = spawn_report_dedup_key(report);
+        if queue
+            .back()
+            .is_some_and(|previous| spawn_report_dedup_key(previous) == dedup_key)
+        {
             return;
         }
         queue.push_back(report.to_string());
@@ -1699,6 +1922,326 @@ impl App {
         };
         self.enqueue_pending_report(parent_thread_id, report);
         true
+    }
+
+    pub(crate) fn native_spawn_target_is_busy(&self, thread_id: ThreadId) -> bool {
+        let navigation_busy = self
+            .agent_navigation
+            .get(&thread_id)
+            .is_some_and(|entry| entry.is_running);
+        let status_busy = self
+            .spawn_status_by_thread
+            .get(&thread_id)
+            .is_some_and(|state| {
+                matches!(
+                    state.status,
+                    codex_app_server_protocol::CollabAgentStatus::PendingInit
+                        | codex_app_server_protocol::CollabAgentStatus::Running
+                )
+            });
+        navigation_busy || status_busy
+    }
+
+    pub(crate) fn enqueue_pending_dispatch_for_thread(
+        &mut self,
+        target_thread_id: ThreadId,
+        dispatch: PendingSpawnDispatch,
+    ) {
+        let queue = self
+            .spawn_pending_dispatches_by_thread
+            .entry(target_thread_id)
+            .or_default();
+        if queue
+            .back()
+            .is_some_and(|queued| queued.task == dispatch.task)
+        {
+            return;
+        }
+        queue.push_back(dispatch);
+        tracing::info!(
+            thread_id = %target_thread_id,
+            queue_len = queue.len(),
+            "queued spawn dispatch for busy native target; will flush on target idle"
+        );
+        self.persist_pane_state();
+    }
+
+    pub(crate) fn enqueue_pending_dispatch_for_claude_pane(
+        &mut self,
+        pane_id: String,
+        dispatch: PendingSpawnDispatch,
+    ) {
+        let queue = self
+            .spawn_pending_dispatches_by_pane
+            .entry(pane_id.clone())
+            .or_default();
+        if queue
+            .back()
+            .is_some_and(|queued| queued.task == dispatch.task)
+        {
+            return;
+        }
+        queue.push_back(dispatch);
+        tracing::info!(
+            pane_id = %pane_id,
+            queue_len = queue.len(),
+            "queued spawn dispatch for busy Claude pane; will flush on pane idle"
+        );
+        self.persist_pane_state();
+    }
+
+    pub(crate) fn flush_pending_dispatches_for_thread(
+        &mut self,
+        target_thread_id: ThreadId,
+    ) -> bool {
+        let Some(queue) = self
+            .spawn_pending_dispatches_by_thread
+            .remove(&target_thread_id)
+        else {
+            return false;
+        };
+        if queue.is_empty() {
+            return false;
+        }
+        let dispatch = combined_queued_dispatch_task(queue.into_iter().collect());
+        self.register_spawn_dispatch_acks_for_task(
+            &thread_node_id(target_thread_id),
+            &dispatch.task,
+            dispatch.acks.clone(),
+        );
+        self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+            thread_id: target_thread_id,
+            task: dispatch.task,
+        });
+        self.persist_pane_state();
+        true
+    }
+
+    pub(crate) fn flush_pending_dispatches_for_claude_pane(&mut self, pane_id: &str) -> bool {
+        if !self
+            .claude_panes
+            .panes()
+            .iter()
+            .any(|pane| pane.id == pane_id)
+        {
+            return self
+                .fail_pending_dispatches_for_claude_pane(pane_id, "target closed before delivery");
+        }
+        let Some(queue) = self.spawn_pending_dispatches_by_pane.remove(pane_id) else {
+            return false;
+        };
+        if queue.is_empty() {
+            return false;
+        }
+        let dispatch = combined_queued_dispatch_task(queue.into_iter().collect());
+        self.register_spawn_dispatch_acks_for_task(
+            &pane_node_id(pane_id),
+            &dispatch.task,
+            dispatch.acks.clone(),
+        );
+        self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
+            pane_id: pane_id.to_string(),
+            task: dispatch.task,
+        });
+        self.persist_pane_state();
+        true
+    }
+
+    pub(crate) fn fail_pending_dispatches_for_thread(
+        &mut self,
+        target_thread_id: ThreadId,
+        detail: impl AsRef<str>,
+    ) -> bool {
+        let Some(queue) = self
+            .spawn_pending_dispatches_by_thread
+            .remove(&target_thread_id)
+        else {
+            return false;
+        };
+        let acks = queue
+            .into_iter()
+            .flat_map(|dispatch| dispatch.acks)
+            .collect::<Vec<_>>();
+        self.record_spawn_dispatch_acks(&acks, "failed", detail.as_ref(), true);
+        self.persist_pane_state();
+        true
+    }
+
+    pub(crate) fn fail_pending_dispatches_for_claude_pane(
+        &mut self,
+        pane_id: &str,
+        detail: impl AsRef<str>,
+    ) -> bool {
+        let Some(queue) = self.spawn_pending_dispatches_by_pane.remove(pane_id) else {
+            return false;
+        };
+        let acks = queue
+            .into_iter()
+            .flat_map(|dispatch| dispatch.acks)
+            .collect::<Vec<_>>();
+        self.record_spawn_dispatch_acks(&acks, "failed", detail.as_ref(), true);
+        self.persist_pane_state();
+        true
+    }
+
+    pub(crate) fn pending_dispatch_from_registered_task(
+        &mut self,
+        target_node_id: &str,
+        task: String,
+    ) -> PendingSpawnDispatch {
+        let acks = self.take_spawn_dispatch_acks_for_task(target_node_id, &task);
+        PendingSpawnDispatch::new(task, acks)
+    }
+
+    pub(crate) fn register_spawn_dispatch_acks_for_task(
+        &mut self,
+        target_node_id: &str,
+        task: &str,
+        acks: Vec<SpawnDispatchAck>,
+    ) {
+        if acks.is_empty() {
+            return;
+        }
+        self.spawn_dispatch_acks_by_target_task
+            .entry((
+                target_node_id.to_string(),
+                spawn_dispatch_task_ack_key(task),
+            ))
+            .or_default()
+            .extend(acks);
+    }
+
+    fn take_spawn_dispatch_acks_for_task(
+        &mut self,
+        target_node_id: &str,
+        task: &str,
+    ) -> Vec<SpawnDispatchAck> {
+        self.spawn_dispatch_acks_by_target_task
+            .remove(&(
+                target_node_id.to_string(),
+                spawn_dispatch_task_ack_key(task),
+            ))
+            .map(|queue| queue.into_iter().collect())
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn record_spawn_dispatch_delivered_for_task(
+        &mut self,
+        target_node_id: &str,
+        task: &str,
+    ) {
+        let acks = self.take_spawn_dispatch_acks_for_task(target_node_id, task);
+        self.record_spawn_dispatch_acks(&acks, "delivered", "target turn started", false);
+    }
+
+    pub(crate) fn record_spawn_dispatch_failed_for_task(
+        &mut self,
+        target_node_id: &str,
+        task: &str,
+        detail: impl AsRef<str>,
+    ) {
+        let acks = self.take_spawn_dispatch_acks_for_task(target_node_id, task);
+        self.record_spawn_dispatch_acks(&acks, "failed", detail, true);
+    }
+
+    pub(crate) fn record_spawn_dispatch_acks(
+        &mut self,
+        acks: &[SpawnDispatchAck],
+        status: &str,
+        detail: impl AsRef<str>,
+        notify: bool,
+    ) {
+        let detail = detail.as_ref();
+        for ack in acks {
+            self.record_spawn_dispatch_ack(ack, status, detail, notify);
+        }
+    }
+
+    fn record_spawn_dispatch_ack(
+        &mut self,
+        ack: &SpawnDispatchAck,
+        status: &str,
+        detail: &str,
+        notify: bool,
+    ) {
+        let report = format!(
+            "dispatch_ack; #{}; target={}; status={}; detail={}",
+            ack.seq,
+            compact_spawn_context_value(&ack.target_title),
+            status,
+            compact_spawn_context_value(detail)
+        );
+        self.record_spawn_parent_report_with_notify(ack.source_node_id.clone(), report, notify);
+    }
+
+    fn make_spawn_dispatch_ack(
+        &mut self,
+        source_node_id: &str,
+        target_node_id: String,
+        target_title: String,
+        seq: Option<u64>,
+    ) -> SpawnDispatchAck {
+        let seq = self.reserve_spawn_dispatch_seq(seq);
+        self.record_spawn_node_dispatch_seq(&target_node_id, seq);
+        SpawnDispatchAck {
+            seq,
+            source_node_id: source_node_id.to_string(),
+            target_node_id,
+            target_title,
+        }
+    }
+
+    fn reserve_spawn_dispatch_seq(&mut self, seq: Option<u64>) -> u64 {
+        let next_seq = self.spawn_next_dispatch_seq.max(1);
+        let reserved = seq.unwrap_or(next_seq);
+        self.spawn_next_dispatch_seq = next_seq.max(reserved.saturating_add(1));
+        self.evict_spawn_processed_dispatch_seq_ids();
+        self.persist_pane_state();
+        reserved
+    }
+
+    fn mark_spawn_dispatch_seq_processed(&mut self, seq: u64) -> bool {
+        let inserted = self.spawn_processed_dispatch_seq_ids.insert(seq);
+        if inserted {
+            self.evict_spawn_processed_dispatch_seq_ids();
+            self.persist_pane_state();
+        }
+        inserted
+    }
+
+    fn evict_spawn_processed_dispatch_seq_ids(&mut self) {
+        self.spawn_processed_dispatch_seq_ids = bounded_spawn_processed_dispatch_seq_ids(
+            self.spawn_processed_dispatch_seq_ids.iter().copied(),
+            self.spawn_next_dispatch_seq,
+        );
+    }
+
+    pub(crate) fn recent_spawn_processed_dispatch_seq_ids(&self) -> Vec<u64> {
+        let mut seqs = bounded_spawn_processed_dispatch_seq_ids(
+            self.spawn_processed_dispatch_seq_ids.iter().copied(),
+            self.spawn_next_dispatch_seq,
+        )
+        .into_iter()
+        .collect::<Vec<_>>();
+        seqs.sort_unstable();
+        seqs
+    }
+
+    fn reserve_spawn_report_seq(&mut self, node_id: &str) -> (u64, String) {
+        let seq = self.reserve_spawn_dispatch_seq(None);
+        let as_of = Utc::now().to_rfc3339();
+        self.spawn_last_report_seq_by_node
+            .insert(node_id.to_string(), seq);
+        self.spawn_last_event_at_by_node
+            .insert(node_id.to_string(), as_of.clone());
+        (seq, as_of)
+    }
+
+    fn record_spawn_node_dispatch_seq(&mut self, node_id: &str, seq: u64) {
+        self.spawn_last_dispatch_seq_by_node
+            .insert(node_id.to_string(), seq);
+        self.spawn_last_event_at_by_node
+            .insert(node_id.to_string(), Utc::now().to_rfc3339());
     }
 
     /// Drain pending child reports for a native Codex parent thread that has just gone idle, turning
@@ -1801,6 +2344,14 @@ impl App {
     ) {
         if source_is_active {
             self.chat_widget.add_error_message(message);
+        } else if node_id_thread(source_pane_id).is_some()
+            || source_pane_id == pane_node_id(CODEX_MAIN_PANE_ID)
+        {
+            tracing::warn!(
+                source_node_id = source_pane_id,
+                message = %message,
+                "spawn dispatch failed for inactive native sender; sender-visible ack recorded separately"
+            );
         } else {
             self.append_inactive_claude_pane_transcript_cell(
                 source_pane_id,
@@ -3175,7 +3726,7 @@ impl App {
         (native, claude)
     }
 
-    fn logical_parent_node_for_thread(&self, thread_id: ThreadId) -> Option<String> {
+    pub(crate) fn logical_parent_node_for_thread(&self, thread_id: ThreadId) -> Option<String> {
         let thread_node = thread_node_id(thread_id);
         let role = self
             .agent_navigation
@@ -3904,11 +4455,18 @@ impl App {
             self.primary_thread_id == Some(thread_id),
         );
         let status = spawn_entry_status(self, thread_id, entry);
-        let child_node_id = thread_node_id(thread_id);
-        let has_new_report = self.child_has_new_report(&child_node_id, &name);
+        let node_id = thread_node_id(thread_id);
+        let has_new_report = self.child_has_new_report(&node_id, &name);
+        let context_left = self
+            .spawn_context_left_by_thread
+            .get(&thread_id)
+            .map(|percent| format!("; context_left={percent}%"))
+            .unwrap_or_default();
+        let sequence = self.spawn_node_sequence_suffix(&node_id);
+        let pending = self.spawn_native_pending_suffix(thread_id);
         let _ = writeln!(
             context,
-            "{prefix}{name}; status={status}; has_new_report={has_new_report}; thread={thread_id}"
+            "{prefix}{name}; status={status}; has_new_report={has_new_report}; thread={thread_id}{context_left}{sequence}{pending}"
         );
         if let Some(task) = entry
             .last_task_message
@@ -3934,6 +4492,53 @@ impl App {
         }
     }
 
+    fn spawn_node_sequence_suffix(&self, node_id: &str) -> String {
+        let mut suffix = String::new();
+        if let Some(seq) = self.spawn_last_report_seq_by_node.get(node_id) {
+            let _ = write!(suffix, "; last_report_seq={seq}");
+        }
+        if let Some(seq) = self.spawn_last_dispatch_seq_by_node.get(node_id) {
+            let _ = write!(suffix, "; last_dispatch_seq={seq}");
+        }
+        if let Some(as_of) = self.spawn_last_event_at_by_node.get(node_id) {
+            let _ = write!(suffix, "; as_of={as_of}");
+        }
+        suffix
+    }
+
+    fn spawn_native_pending_suffix(&self, thread_id: ThreadId) -> String {
+        let mut suffix = String::new();
+        if let Some(count) = self
+            .spawn_pending_reports_by_thread
+            .get(&thread_id)
+            .map(VecDeque::len)
+            .filter(|count| *count > 0)
+        {
+            let _ = write!(suffix, "; pending_reports={count}");
+        }
+        if let Some(count) = self
+            .spawn_pending_dispatches_by_thread
+            .get(&thread_id)
+            .map(VecDeque::len)
+            .filter(|count| *count > 0)
+        {
+            let _ = write!(suffix, "; pending_dispatches={count}");
+        }
+        suffix
+    }
+
+    fn spawn_claude_pane_pending_suffix(&self, pane_id: &str) -> String {
+        let Some(count) = self
+            .spawn_pending_dispatches_by_pane
+            .get(pane_id)
+            .map(VecDeque::len)
+            .filter(|count| *count > 0)
+        else {
+            return String::new();
+        };
+        format!("; pending_dispatches={count}")
+    }
+
     fn write_spawn_context_claude_pane(
         &self,
         context: &mut String,
@@ -3945,28 +4550,34 @@ impl App {
             crate::claude_panes::ClaudePaneStatus::Idle => "idle",
             crate::claude_panes::ClaudePaneStatus::Running => "running",
         };
-        let child_node_id = pane_node_id(&pane.id);
-        let has_new_report = self.child_has_new_report(&child_node_id, &pane.title);
+        let node_id = pane_node_id(&pane.id);
+        let has_new_report = self.child_has_new_report(&node_id, &pane.title);
+        let sequence = self.spawn_node_sequence_suffix(&node_id);
+        let pending = self.spawn_claude_pane_pending_suffix(&pane.id);
         if let Some(thread_id) = pane.spawn_thread_id {
             let _ = writeln!(
                 context,
-                "{prefix}{}; role={}; harness=Claude Code; status={}; has_new_report={}; thread={}; pane={}",
+                "{prefix}{}; role={}; harness=Claude Code; status={}; has_new_report={}; thread={}; pane={}{}{}",
                 pane.title,
                 role.label(),
                 status,
                 has_new_report,
                 thread_id,
-                pane.id
+                pane.id,
+                sequence,
+                pending
             );
         } else {
             let _ = writeln!(
                 context,
-                "{prefix}{}; role={}; harness=Claude Code; status={}; has_new_report={}; pane={}",
+                "{prefix}{}; role={}; harness=Claude Code; status={}; has_new_report={}; pane={}{}{}",
                 pane.title,
                 role.label(),
                 status,
                 has_new_report,
-                pane.id
+                pane.id,
+                sequence,
+                pending
             );
         }
         if let Some(task) = pane.latest_task_message.as_deref() {
@@ -4001,11 +4612,10 @@ impl App {
         let Some(reports) = self.spawn_parent_reports_by_node.get(&parent_node_id) else {
             return false;
         };
-        reports.iter().rev().any(|report| {
-            report
-                .strip_prefix(child_title)
-                .is_some_and(|rest| rest.starts_with(';'))
-        })
+        reports
+            .iter()
+            .rev()
+            .any(|report| spawn_report_matches_child(report, child_title))
     }
 
     fn write_spawn_parent_reports(&self, context: &mut String, parent_node_id: &str) {
@@ -4049,6 +4659,14 @@ fn write_spawn_dispatch_contract(context: &mut String) {
     let _ = writeln!(
         context,
         "PFTerminal will route that task to the target pane. Do not claim you sent a task unless you emit a dispatch block."
+    );
+    let _ = writeln!(
+        context,
+        "If the target pane is busy, PFTerminal queues the dispatch and delivers it as a fresh turn when the target goes idle; do not assume immediate pickup."
+    );
+    let _ = writeln!(
+        context,
+        "Dispatches, child reports, and roster updates carry host seq numbers and timestamps; compare seq numbers rather than transcript arrival order when auditing freshness."
     );
     let _ = writeln!(
         context,
@@ -4480,10 +5098,44 @@ fn is_nazgul_dispatch_target(target: &str) -> bool {
     target.eq_ignore_ascii_case("nazgul") || target.eq_ignore_ascii_case("root")
 }
 
-fn task_with_dispatch_provenance(task: &str, source_title: &str, target_title: &str) -> String {
+fn task_with_dispatch_provenance(
+    task: &str,
+    source_title: &str,
+    target_title: &str,
+    seq: u64,
+) -> String {
+    let utc = Utc::now().to_rfc3339();
     format!(
-        "Assigned by {source_title} to {target_title} through PFTerminal /spawn dispatch.\n\n{task}"
+        "Assigned by {source_title} to {target_title} through PFTerminal /spawn dispatch \
+         (dispatch #{seq}, {utc}). Execute once; ignore duplicates of this dispatch id.\n\n{task}"
     )
+}
+
+fn combined_queued_dispatch_task(
+    mut dispatches: Vec<PendingSpawnDispatch>,
+) -> PendingSpawnDispatch {
+    if dispatches.len() == 1 {
+        return dispatches.remove(0);
+    }
+    let mut combined = String::from(
+        "Multiple spawn dispatches were queued while you were busy. Execute each task below in \
+         order, do not skip any task, and treat every section as assigned work.\n\n",
+    );
+    let mut acks = Vec::new();
+    for (index, dispatch) in dispatches.into_iter().enumerate() {
+        let _ = writeln!(
+            combined,
+            "## Queued dispatch {}\n{}\n",
+            index + 1,
+            dispatch.task
+        );
+        acks.extend(dispatch.acks);
+    }
+    PendingSpawnDispatch::new(combined, acks)
+}
+
+fn spawn_dispatch_task_ack_key(task: &str) -> String {
+    task.trim().to_string()
 }
 
 fn claude_spawn_rollout_path(pane: &crate::claude_panes::ClaudePane) -> std::path::PathBuf {
@@ -4692,6 +5344,7 @@ fn extract_xmlish_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTaskDis
             dispatches.push(SpawnTaskDispatch {
                 target: target.trim().to_string(),
                 task: content.to_string(),
+                seq: None,
             });
         }
 
@@ -4730,7 +5383,11 @@ fn fenced_dispatch_from_parts(header: &str, content: &str) -> Option<SpawnTaskDi
 
     let target = target?.trim().to_string();
     let task = task_lines.join("\n").trim().to_string();
-    (!target.is_empty() && !task.is_empty()).then_some(SpawnTaskDispatch { target, task })
+    (!target.is_empty() && !task.is_empty()).then_some(SpawnTaskDispatch {
+        target,
+        task,
+        seq: None,
+    })
 }
 
 fn yamlish_field_value(line: &str, field: &str) -> Option<String> {
@@ -4926,8 +5583,15 @@ fn collab_status_label(status: &codex_app_server_protocol::CollabAgentStatus) ->
     }
 }
 
-fn spawn_child_report(child_title: &str, status: &str, result: Option<&str>) -> String {
-    let mut report = format!("{child_title}; status={status}");
+fn spawn_child_report(
+    child_title: &str,
+    status: &str,
+    result: Option<&str>,
+    seq: u64,
+    as_of: &str,
+) -> String {
+    let mut report =
+        format!("child_report; seq={seq}; as_of={as_of}; child={child_title}; status={status}");
     if let Some(result) = result.filter(|result| !result.trim().is_empty()) {
         let _ = write!(report, "; result={}", bounded_spawn_report_value(result));
     }
@@ -4935,6 +5599,41 @@ fn spawn_child_report(child_title: &str, status: &str, result: Option<&str>) -> 
 }
 
 const CHILD_REPORT_PROCESSING_PROMPT_PREFIX: &str = "A child pane has reported back. Review the child report below and act on it immediately — triage, dispatch follow-up work, or acknowledge. Do not wait for Sauron to prompt you.\n\n";
+
+fn spawn_report_dedup_key(report: &str) -> &str {
+    let Some(rest) = report.strip_prefix("child_report; ") else {
+        return report;
+    };
+    let mut parts = rest.splitn(3, "; ");
+    let Some(seq) = parts.next() else {
+        return report;
+    };
+    let Some(as_of) = parts.next() else {
+        return report;
+    };
+    let Some(stable_report) = parts.next() else {
+        return report;
+    };
+    if seq.starts_with("seq=") && as_of.starts_with("as_of=") {
+        stable_report
+    } else {
+        report
+    }
+}
+
+fn spawn_report_matches_child(report: &str, child_title: &str) -> bool {
+    if report
+        .strip_prefix(child_title)
+        .is_some_and(|rest| rest.starts_with(';'))
+    {
+        return true;
+    }
+
+    report
+        .split("; ")
+        .find_map(|part| part.strip_prefix("child="))
+        .is_some_and(|child| child == child_title)
+}
 
 /// The prompt that turns a delivered child report into a real parent processing turn, so a manager
 /// treats a direct report like a user query (triage, dispatch follow-up work, or acknowledge) rather

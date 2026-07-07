@@ -38,6 +38,7 @@ use core_test_support::responses::mount_sse_once_match;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
+use core_test_support::skip_if_sandbox;
 use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::local_selections;
 use core_test_support::test_codex::test_codex;
@@ -1850,6 +1851,12 @@ async fn approval_matrix_covers_group(group: ScenarioGroup) -> Result<()> {
 
 async fn run_scenario_group(group: ScenarioGroup) -> Result<()> {
     skip_if_no_network!(Ok(()));
+    if matches!(
+        group,
+        ScenarioGroup::ReadOnly | ScenarioGroup::WorkspaceWrite
+    ) {
+        skip_if_sandbox!(Ok(()));
+    }
 
     let scenarios = scenarios()
         .into_iter()
@@ -3247,6 +3254,7 @@ allow_local_binding = true
 #[tokio::test(flavor = "current_thread")]
 async fn network_approval_retry_keeps_deny_read_sandbox_for_escalated_command() -> Result<()> {
     skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
 
     let server = start_mock_server().await;
     let home = Arc::new(TempDir::new()?);

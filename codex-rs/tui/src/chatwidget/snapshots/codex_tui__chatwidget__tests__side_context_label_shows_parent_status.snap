@@ -1,10 +1,9 @@
 ---
 source: tui/src/chatwidget/tests/side.rs
-assertion_line: 422
 expression: terminal.backend()
 ---
 "                                                                                "
 "                                                                                "
 "› Check recently modified functions for compatibility                           "
 "                                                                                "
-"  zai-org/GLM-5.2… Side from main thread · main needs input · Ctrl+C to return  "
+"  z-ai/glm-5.2 st… Side from main thread · main needs input · Ctrl+C to return  "

@@ -223,7 +223,8 @@ name = "archivist"
 description = "Role metadata"
 nickname_candidates = ["Hypatia"]
 developer_instructions = "Stay focused"
-model = "role-model"
+model = "gpt-5.5"
+model_provider = "openai"
 "#,
     )
     .await;
@@ -240,15 +241,22 @@ model = "role-model"
         .await
         .expect("custom role should apply");
 
-    assert_eq!(config.model.as_deref(), Some("role-model"));
+    assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
+    assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
 }
 
 #[tokio::test]
 async fn apply_role_preserves_unspecified_keys() {
-    let (home, mut config) = test_config_with_cli_overrides(vec![(
-        "model".to_string(),
-        TomlValue::String("base-model".to_string()),
-    )])
+    let (home, mut config) = test_config_with_cli_overrides(vec![
+        (
+            "model".to_string(),
+            TomlValue::String("gpt-5.5".to_string()),
+        ),
+        (
+            "model_provider".to_string(),
+            TomlValue::String(OPENAI_PROVIDER_ID.to_string()),
+        ),
+    ])
     .await;
     config.codex_linux_sandbox_exe = Some(PathBuf::from("/tmp/codex-linux-sandbox"));
     config.main_execve_wrapper_exe = Some(PathBuf::from("/tmp/codex-execve-wrapper"));
@@ -271,7 +279,8 @@ async fn apply_role_preserves_unspecified_keys() {
         .await
         .expect("custom role should apply");
 
-    assert_eq!(config.model.as_deref(), Some("base-model"));
+    assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
+    assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
     assert_eq!(config.model_reasoning_effort, Some(ReasoningEffort::High));
     assert_eq!(
         config.codex_linux_sandbox_exe,
@@ -427,7 +436,7 @@ async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() 
     let role_path = write_role_config(
         &home,
         "model-role.toml",
-        "developer_instructions = \"Stay focused\"\nmodel = \"role-model\"",
+        "developer_instructions = \"Stay focused\"\nmodel = \"gpt-5.5\"\nmodel_provider = \"openai\"",
     )
     .await;
     config.agent_roles.insert(
@@ -443,7 +452,8 @@ async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() 
         .await
         .expect("custom role should apply");
 
-    assert_eq!(config.model.as_deref(), Some("role-model"));
+    assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
+    assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
     assert_eq!(session_flags_layer_count(&config), before_layers + 1);
 }
 

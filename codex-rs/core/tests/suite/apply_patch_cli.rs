@@ -49,6 +49,7 @@ use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_remote;
+use core_test_support::skip_if_sandbox;
 use core_test_support::skip_if_wine_exec;
 use core_test_support::test_codex::TestCodexBuilder;
 use core_test_support::test_codex::TestCodexHarness;
@@ -71,7 +72,7 @@ pub async fn apply_patch_harness() -> Result<TestCodexHarness> {
 async fn apply_patch_harness_with(
     configure: impl FnOnce(TestCodexBuilder) -> TestCodexBuilder,
 ) -> Result<TestCodexHarness> {
-    let builder = configure(test_codex());
+    let builder = configure(test_codex().with_model("gpt-5.4"));
     // Box harness construction so apply_patch_cli tests do not inline the
     // full test-thread startup path into each test future.
     Box::pin(TestCodexHarness::with_remote_env_builder(builder)).await
@@ -817,6 +818,7 @@ async fn apply_patch_cli_preserves_existing_hard_link_outside_workspace() -> Res
         Ok(()),
         "link setup needs local filesystem hard link creation"
     );
+    skip_if_sandbox!(Ok(()));
 
     let test_root = tempfile::tempdir_in(std::env::current_dir()?)?;
     let work_dir = AbsolutePathBuf::try_from(test_root.path().join("work"))?;
@@ -913,6 +915,7 @@ async fn apply_patch_cli_rejects_move_path_traversal_outside_workspace() -> Resu
     // TODO(anp): Remove after apply-patch fixtures use target-native paths.
     skip_if_wine_exec!(Ok(()), "asserts POSIX workspace traversal behavior");
     skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
 
     let harness = apply_patch_harness().await?;
 

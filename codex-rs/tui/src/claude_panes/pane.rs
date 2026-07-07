@@ -157,6 +157,16 @@ pub(crate) struct PaneLayoutState {
     pub(crate) orchestrate_whips: BTreeMap<String, crate::orchestrate::Whip>,
     #[serde(default)]
     pub(crate) orchestrate_next_whip_seq: u64,
+    #[serde(default)]
+    pub(crate) spawn_pending_dispatches_by_thread:
+        BTreeMap<String, Vec<crate::spawn_orchestration::PendingSpawnDispatch>>,
+    #[serde(default)]
+    pub(crate) spawn_pending_dispatches_by_pane:
+        BTreeMap<String, Vec<crate::spawn_orchestration::PendingSpawnDispatch>>,
+    #[serde(default)]
+    pub(crate) spawn_next_dispatch_seq: u64,
+    #[serde(default)]
+    pub(crate) spawn_processed_dispatch_seq_ids: Vec<u64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
