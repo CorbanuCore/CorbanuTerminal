@@ -3945,6 +3945,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-tasknode-client"
+version = "0.1.9"
+dependencies = [
+ "codex-keyring-store",
+ "codex-vault",
+ "pretty_assertions",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "urlencoding",
+ "wiremock",
+]
+
+[[package]]
 name = "codex-terminal-detection"
 version = "0.1.9"
 dependencies = [
