@@ -626,12 +626,12 @@ fn is_sandbox_startup_failure(sandbox: SandboxType, output: &ExecToolCallOutput)
     if sandbox != SandboxType::LinuxSeccomp {
         return false;
     }
+    if !output.stdout.text.trim().is_empty() {
+        return false;
+    }
 
-    let text = format!(
-        "{}\n{}\n{}",
-        output.stderr.text, output.stdout.text, output.aggregated_output.text
-    )
-    .to_ascii_lowercase();
+    let text =
+        format!("{}\n{}", output.stderr.text, output.aggregated_output.text).to_ascii_lowercase();
 
     const STARTUP_FAILURE_MARKERS: &[&str] = &[
         "bubblewrap is unavailable",
@@ -643,9 +643,6 @@ fn is_sandbox_startup_failure(sandbox: SandboxType, output: &ExecToolCallOutput)
         "setting up uid map: permission denied",
         "creating new namespace failed",
         "cannot create user namespace",
-        "sandbox failed to start",
-        "sandbox fails to start",
-        "failed to start sandbox",
     ];
 
     STARTUP_FAILURE_MARKERS
@@ -659,10 +656,15 @@ mod tests {
     use codex_protocol::exec_output::StreamOutput;
 
     fn denied_output(text: &str) -> ExecToolCallOutput {
+        output_with_streams("", text)
+    }
+
+    fn output_with_streams(stdout: &str, stderr: &str) -> ExecToolCallOutput {
         ExecToolCallOutput {
             exit_code: 1,
-            stderr: StreamOutput::new(text.to_string()),
-            aggregated_output: StreamOutput::new(text.to_string()),
+            stdout: StreamOutput::new(stdout.to_string()),
+            stderr: StreamOutput::new(stderr.to_string()),
+            aggregated_output: StreamOutput::new(format!("{stdout}\n{stderr}")),
             ..Default::default()
         }
     }
@@ -677,9 +679,16 @@ mod tests {
             SandboxType::LinuxSeccomp,
             &denied_output("bubblewrap is unavailable: no system bwrap was found"),
         ));
-        assert!(is_sandbox_startup_failure(
+        assert!(!is_sandbox_startup_failure(
             SandboxType::LinuxSeccomp,
             &denied_output("sandbox fails to start"),
+        ));
+        assert!(!is_sandbox_startup_failure(
+            SandboxType::LinuxSeccomp,
+            &output_with_streams(
+                "command ran before failing",
+                "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted",
+            ),
         ));
         assert!(!is_sandbox_startup_failure(
             SandboxType::LinuxSeccomp,

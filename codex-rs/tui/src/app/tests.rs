@@ -4467,6 +4467,53 @@ async fn orchestrate_agent_block_cannot_replace_user_held_whip() {
 }
 
 #[tokio::test]
+async fn orchestrate_agent_block_cannot_replace_user_holderless_whip() {
+    let (mut app, _app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "first", "# whip: first\nFirst mandate.");
+    write_test_whip(&app, "second", "# whip: second\nSecond mandate.");
+    let agent_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Troll),
+            Some("Gorbag".to_string()),
+        )
+        .expect("create agent pane");
+    let target_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Orc),
+            Some("Krimp".to_string()),
+        )
+        .expect("create target pane");
+
+    app.handle_orchestrate_command(format!(
+        "attach {target_pane_id} first --mode auto --holder none --max 5"
+    ));
+    let agent_node_id = crate::spawn_orchestration::pane_node_id(&agent_pane_id);
+    app.dispatch_orchestrate_blocks_from_text(
+        &agent_node_id,
+        &format!(
+            "```pfterminal-orchestrate\naction: attach\ntarget: {target_pane_id}\nwhip: second\nmode: auto\n```"
+        ),
+    );
+
+    let active_whips: Vec<_> = app
+        .orchestrate_whips
+        .values()
+        .filter(|whip| whip.state != crate::orchestrate::WhipState::Detached)
+        .collect();
+    assert_eq!(active_whips.len(), 1);
+    assert_eq!(active_whips[0].instructions, "first");
+    assert_eq!(active_whips[0].holder, None);
+}
+
+#[tokio::test]
 async fn orchestrate_agent_unlimited_attach_is_rejected() {
     let (mut app, _app_event_rx, _op_rx) = make_test_app_with_channels().await;
     write_test_whip(&app, "forever", "# whip: forever\nDo not run forever.");

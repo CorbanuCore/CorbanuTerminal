@@ -1091,16 +1091,20 @@ impl App {
                 for whip in self.orchestrate_whips.values().filter(|whip| {
                     whip.target == target_node_id && whip.state != WhipState::Detached
                 }) {
-                    if whip
-                        .holder
-                        .as_deref()
-                        .is_some_and(|holder| holder != agent_node)
-                    {
-                        return Err(format!(
-                            "Agent `{agent_node}` cannot replace whip {} held by `{}`.",
-                            whip.id,
-                            whip.holder.as_deref().unwrap_or_default()
-                        ));
+                    match whip.holder.as_deref() {
+                        Some(holder) if holder == agent_node => {}
+                        Some(holder) => {
+                            return Err(format!(
+                                "Agent `{agent_node}` cannot replace whip {} held by `{holder}`.",
+                                whip.id
+                            ));
+                        }
+                        None => {
+                            return Err(format!(
+                                "Agent `{agent_node}` cannot replace user-owned holderless whip {}.",
+                                whip.id
+                            ));
+                        }
                     }
                 }
                 Ok(())
