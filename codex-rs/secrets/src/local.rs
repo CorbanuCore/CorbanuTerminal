@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::error::Error as StdError;
+use std::fmt;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -54,6 +56,25 @@ pub enum LocalSecretsNamespace {
     /// OAuth credentials for external MCP servers.
     McpOAuth,
 }
+
+#[derive(Debug)]
+struct MissingLocalSecretsPassphrase {
+    secrets_path: PathBuf,
+    account: String,
+}
+
+impl fmt::Display for MissingLocalSecretsPassphrase {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "encrypted secrets file {} exists but no keyring passphrase was found for {}",
+            self.secrets_path.display(),
+            self.account
+        )
+    }
+}
+
+impl StdError for MissingLocalSecretsPassphrase {}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 struct SecretsFile {
@@ -237,6 +258,27 @@ impl LocalSecretsBackend {
         match loaded {
             Some(existing) => Ok(SecretString::from(existing)),
             None => {
+                let secrets_dir = self.secrets_dir();
+                for filename in [
+                    LOCAL_SECRETS_FILENAME,
+                    CODEX_AUTH_SECRETS_FILENAME,
+                    MCP_OAUTH_SECRETS_FILENAME,
+                ] {
+                    let path = secrets_dir.join(filename);
+                    if path.try_exists().with_context(|| {
+                        format!(
+                            "failed to check whether secrets file exists at {}",
+                            path.display()
+                        )
+                    })? {
+                        return Err(MissingLocalSecretsPassphrase {
+                            secrets_path: path,
+                            account,
+                        }
+                        .into());
+                    }
+                }
+
                 // Generate a high-entropy key and persist it in the OS keyring.
                 // This keeps secrets out of plaintext config while remaining
                 // fully local/offline for the MVP.
@@ -733,6 +775,42 @@ mod tests {
                 .contains("failed to load secrets key from keyring"),
             "unexpected error: {error:#}"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn existing_secrets_file_without_passphrase_errors_without_regenerating() -> Result<()> {
+        let codex_home = tempfile::tempdir().expect("tempdir");
+        let keyring = Arc::new(MockKeyringStore::default());
+        let backend = LocalSecretsBackend::new(codex_home.path().to_path_buf(), keyring);
+        let scope = SecretScope::Global;
+        let name = SecretName::new("TEST_SECRET")?;
+        backend.set(&scope, &name, "secret-value")?;
+
+        let secrets_path = codex_home
+            .path()
+            .join("secrets")
+            .join(LOCAL_SECRETS_FILENAME);
+        assert!(secrets_path.exists(), "encrypted secrets file should exist");
+
+        let missing_keyring = Arc::new(MockKeyringStore::default());
+        let backend_without_passphrase =
+            LocalSecretsBackend::new(codex_home.path().to_path_buf(), missing_keyring.clone());
+
+        let error = backend_without_passphrase
+            .get(&scope, &name)
+            .expect_err("must not generate a new passphrase for an existing secrets file");
+        assert!(
+            error
+                .downcast_ref::<MissingLocalSecretsPassphrase>()
+                .is_some(),
+            "unexpected error: {error:#}"
+        );
+        assert!(
+            !missing_keyring.contains(&compute_keyring_account(codex_home.path())),
+            "missing keyring must not receive a regenerated passphrase"
+        );
+
         Ok(())
     }
 
