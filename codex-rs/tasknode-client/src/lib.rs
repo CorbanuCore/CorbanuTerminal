@@ -266,6 +266,14 @@ impl TaskNodeClient {
         &self.origin
     }
 
+    pub fn bearer_token(&self) -> Option<&str> {
+        self.token.as_deref()
+    }
+
+    pub fn url_for_path(&self, path: &str) -> String {
+        self.url(path)
+    }
+
     pub fn start_github_link(&self) -> Result<TerminalAuthStartResponse, TaskNodeClientError> {
         self.post_json("/api/auth/terminal/start/github", &serde_json::json!({}))
     }

@@ -2,19 +2,27 @@ use anyhow::Context;
 use clap::Args;
 use clap::Parser;
 use clap::Subcommand;
+use codex_tasknode_client::TaskNodeClient;
+use codex_tasknode_client::TaskNodeClientError;
+use codex_tasknode_client::TaskNodeLocalError;
+use codex_tasknode_client::TaskNodeLocalSession;
+use codex_tasknode_client::TaskNodeRawResponse as TaskNodeResponse;
+use codex_tasknode_client::resolve_origin;
+use codex_tasknode_client::tasknode_parse_sse_block;
+use codex_tasknode_client::tasknode_sse_drain_blocks;
+use codex_tasknode_client::tasknode_sse_drain_remainder;
 use codex_core::config::ConfigBuilder;
 use codex_utils_cli::CliConfigOverrides;
-use serde::Deserialize;
 use serde_json::Map;
 use serde_json::Value;
 use serde_json::json;
+use std::future::Ready;
+use std::future::ready;
+use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
-
-const TASKNODE_SESSION_LABEL: &str = "tasknode/session";
-const DEFAULT_TASKNODE_ORIGIN: &str = "https://tasknode.postfiat.org";
 
 #[derive(Debug, Parser)]
 pub(crate) struct TaskNodeCli {
@@ -349,7 +357,7 @@ pub(crate) async fn run(command: TaskNodeCli) -> anyhow::Result<()> {
 
 async fn run_inner(command: TaskNodeCli) -> anyhow::Result<i32> {
     let _json_flag = command.json;
-    let client = TaskNodeClient::from_cli(command.config_overrides, command.origin).await?;
+    let client = tasknode_client_from_cli(command.config_overrides, command.origin).await?;
 
     match command.command {
         TaskNodeCommand::Status => {
@@ -603,154 +611,53 @@ async fn task_evidence(
         .await
 }
 
-#[derive(Debug, Clone)]
-struct TaskNodeClient {
-    origin: String,
-    token: String,
+async fn tasknode_client_from_cli(
+    config_overrides: CliConfigOverrides,
+    origin_override: Option<String>,
+) -> anyhow::Result<TaskNodeClient> {
+    let cli_kv_overrides = config_overrides
+        .parse_overrides()
+        .map_err(anyhow::Error::msg)?;
+    let config = ConfigBuilder::default()
+        .cli_overrides(cli_kv_overrides)
+        .build()
+        .await?;
+    let session = load_tasknode_session(config.codex_home.as_path())?;
+    let token = session.terminal_token.clone().ok_or_else(|| {
+        anyhow::anyhow!("Task Node session is missing a terminal token. Run /tasknode link.")
+    })?;
+    let origin = resolve_origin(origin_override, Some(&session.origin));
+    Ok(TaskNodeClient::new_with_origin(origin, token))
 }
 
-impl TaskNodeClient {
-    async fn from_cli(
-        config_overrides: CliConfigOverrides,
-        origin_override: Option<String>,
-    ) -> anyhow::Result<Self> {
-        let cli_kv_overrides = config_overrides
-            .parse_overrides()
-            .map_err(anyhow::Error::msg)?;
-        let config = ConfigBuilder::default()
-            .cli_overrides(cli_kv_overrides)
-            .build()
-            .await?;
-        let session = load_tasknode_session(config.codex_home.as_path())?;
-        let token = session.terminal_token.clone().ok_or_else(|| {
-            anyhow::anyhow!("Task Node session is missing a terminal token. Run /tasknode link.")
-        })?;
-        Ok(Self {
-            origin: resolve_origin(origin_override, session.origin.as_deref()),
-            token,
-        })
-    }
-
-    async fn get(&self, path: &str) -> anyhow::Result<TaskNodeResponse> {
-        let url = self.url(path);
-        let response = normal_http_client()?
-            .get(url)
-            .bearer_auth(&self.token)
-            .send()
-            .await
-            .map_err(reqwest_error)?;
-        parse_response(response).await
-    }
-
-    async fn post(&self, path: &str, body: &Value) -> anyhow::Result<TaskNodeResponse> {
-        let url = self.url(path);
-        let response = normal_http_client()?
-            .post(url)
-            .bearer_auth(&self.token)
-            .json(body)
-            .send()
-            .await
-            .map_err(reqwest_error)?;
-        parse_response(response).await
-    }
-
-    async fn post_sse_jsonl(&self, path: &str, body: &Value) -> anyhow::Result<i32> {
-        let url = self.url(path);
-        let mut response = streaming_http_client()?
-            .post(url)
-            .bearer_auth(&self.token)
-            .json(body)
-            .send()
-            .await
-            .map_err(reqwest_error)?;
-        let status = response.status().as_u16();
-        let content_type = response
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .unwrap_or("")
-            .to_string();
-        if !(200..300).contains(&status) || !content_type.contains("text/event-stream") {
-            return emit_response(parse_response(response).await?);
-        }
-
-        let mut stdout = std::io::stdout();
-        let mut buffer = String::new();
-        let mut saw_done = false;
-        let mut exit_code = 0;
-        while let Some(chunk) = response
-            .chunk()
-            .await
-            .context("failed reading Task Node chat stream")?
-        {
-            buffer.push_str(&String::from_utf8_lossy(&chunk));
-            for block in tasknode_sse_drain_blocks(&mut buffer) {
-                if let Some((event, data)) = tasknode_parse_sse_block(&block)? {
-                    if event == "done" {
-                        saw_done = true;
-                    } else if event == "error" {
-                        exit_code = 1;
-                    }
-                    writeln!(
-                        stdout,
-                        "{}",
-                        serde_json::to_string(&json!({ "event": event, "data": data }))?
-                    )?;
-                    stdout.flush()?;
-                }
-            }
-        }
-        for block in tasknode_sse_drain_remainder(&mut buffer) {
-            if let Some((event, data)) = tasknode_parse_sse_block(&block)? {
-                if event == "done" {
-                    saw_done = true;
-                } else if event == "error" {
-                    exit_code = 1;
-                }
-                writeln!(
-                    stdout,
-                    "{}",
-                    serde_json::to_string(&json!({ "event": event, "data": data }))?
-                )?;
-            }
-        }
-        stdout.flush()?;
-        if !saw_done && exit_code == 0 {
-            print_json(&json!({
-                "ok": false,
-                "error": "tasknode_stream_incomplete",
-                "message": "Task Node chat stream ended without a done event.",
-            }))?;
-            return Ok(1);
-        }
-        Ok(exit_code)
-    }
-
-    fn url(&self, path: &str) -> String {
-        format!("{}{}", self.origin.trim_end_matches('/'), path)
-    }
+trait TaskNodeCliClientExt {
+    fn get(&self, path: &str) -> Ready<anyhow::Result<TaskNodeResponse>>;
+    fn post(&self, path: &str, body: &Value) -> Ready<anyhow::Result<TaskNodeResponse>>;
+    fn post_sse_jsonl(&self, path: &str, body: &Value) -> Ready<anyhow::Result<i32>>;
 }
 
-#[derive(Debug)]
-struct TaskNodeResponse {
-    status: u16,
-    body: Value,
-}
+impl TaskNodeCliClientExt for TaskNodeClient {
+    fn get(&self, path: &str) -> Ready<anyhow::Result<TaskNodeResponse>> {
+        ready(self.get_raw_json(path).map_err(tasknode_client_error))
+    }
 
-#[derive(Debug, Deserialize)]
-struct TaskNodeLocalSession {
-    origin: Option<String>,
-    terminal_token: Option<String>,
-    pending_verification_url: Option<String>,
+    fn post(&self, path: &str, body: &Value) -> Ready<anyhow::Result<TaskNodeResponse>> {
+        ready(self.post_raw_json(path, body).map_err(tasknode_client_error))
+    }
+
+    fn post_sse_jsonl(&self, path: &str, body: &Value) -> Ready<anyhow::Result<i32>> {
+        ready(tasknode_post_sse_jsonl(self, path, body))
+    }
 }
 
 fn load_tasknode_session(codex_home: &std::path::Path) -> anyhow::Result<TaskNodeLocalSession> {
-    let vault = codex_vault::Vault::new(codex_home.to_path_buf());
-    let secret = vault
-        .reveal(TASKNODE_SESSION_LABEL)
-        .map_err(|err| anyhow::anyhow!("Task Node is not linked. Run /tasknode link. ({err})"))?;
-    let session: TaskNodeLocalSession =
-        serde_json::from_str(&secret).context("invalid local Task Node session")?;
+    let session = TaskNodeLocalSession::load(codex_home).map_err(|err| match err {
+        TaskNodeLocalError::NotFound => anyhow::anyhow!("Task Node is not linked. Run /tasknode link."),
+        TaskNodeLocalError::VaultUnavailable(err) => {
+            anyhow::anyhow!("Task Node is not linked. Run /tasknode link. ({err})")
+        }
+        TaskNodeLocalError::Corrupt(err) => anyhow::anyhow!("invalid local Task Node session: {err}"),
+    })?;
     if session.terminal_token.is_none() {
         if let Some(url) = session
             .pending_verification_url
@@ -764,35 +671,90 @@ fn load_tasknode_session(codex_home: &std::path::Path) -> anyhow::Result<TaskNod
     Ok(session)
 }
 
-fn resolve_origin(origin_override: Option<String>, saved_origin: Option<&str>) -> String {
-    origin_override
-        .or_else(|| std::env::var("PFT_TASKNODE_ORIGIN").ok())
-        .or_else(|| std::env::var("TASKNODE_ORIGIN").ok())
-        .or_else(|| saved_origin.map(ToString::to_string))
-        .unwrap_or_else(|| DEFAULT_TASKNODE_ORIGIN.to_string())
-        .trim_end_matches('/')
-        .to_string()
-}
-
-fn normal_http_client() -> anyhow::Result<reqwest::Client> {
-    reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .timeout(std::time::Duration::from_secs(45))
-        .build()
-        .map_err(reqwest_error)
-}
-
-fn streaming_http_client() -> anyhow::Result<reqwest::Client> {
-    reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .timeout(std::time::Duration::from_secs(300))
-        .build()
-        .map_err(reqwest_error)
-}
-
-async fn parse_response(response: reqwest::Response) -> anyhow::Result<TaskNodeResponse> {
+fn tasknode_post_sse_jsonl(
+    client: &TaskNodeClient,
+    path: &str,
+    body: &Value,
+) -> anyhow::Result<i32> {
+    let mut request = streaming_http_client()?
+        .post(client.url_for_path(path))
+        .json(body);
+    if let Some(token) = client.bearer_token() {
+        request = request.bearer_auth(token);
+    }
+    let mut response = request.send().map_err(reqwest_error)?;
     let status = response.status().as_u16();
-    let text = response.text().await.map_err(reqwest_error)?;
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    if !(200..300).contains(&status) || !content_type.contains("text/event-stream") {
+        return emit_response(parse_blocking_response(response)?);
+    }
+
+    let mut stdout = std::io::stdout();
+    let mut buffer = String::new();
+    let mut saw_done = false;
+    let mut exit_code = 0;
+    let mut chunk = [0u8; 8192];
+    loop {
+        let read = response
+            .read(&mut chunk)
+            .context("failed reading Task Node chat stream")?;
+        if read == 0 {
+            break;
+        }
+        buffer.push_str(&String::from_utf8_lossy(&chunk[..read]));
+        for block in tasknode_sse_drain_blocks(&mut buffer) {
+            if let Some((event, data)) = tasknode_parse_sse_block(&block).map_err(tasknode_client_error)? {
+                if event == "done" {
+                    saw_done = true;
+                } else if event == "error" {
+                    exit_code = 1;
+                }
+                writeln!(
+                    stdout,
+                    "{}",
+                    serde_json::to_string(&json!({ "event": event, "data": data }))?
+                )?;
+                stdout.flush()?;
+            }
+        }
+    }
+    for block in tasknode_sse_drain_remainder(&mut buffer) {
+        if let Some((event, data)) = tasknode_parse_sse_block(&block).map_err(tasknode_client_error)? {
+            if event == "done" {
+                saw_done = true;
+            } else if event == "error" {
+                exit_code = 1;
+            }
+            writeln!(
+                stdout,
+                "{}",
+                serde_json::to_string(&json!({ "event": event, "data": data }))?
+            )?;
+        }
+    }
+    stdout.flush()?;
+    if !saw_done && exit_code == 0 {
+        print_json(&json!({
+            "ok": false,
+            "error": "tasknode_stream_incomplete",
+            "message": "Task Node chat stream ended without a done event.",
+        }))?;
+        return Ok(1);
+    }
+    Ok(exit_code)
+}
+
+fn parse_blocking_response(mut response: reqwest::blocking::Response) -> anyhow::Result<TaskNodeResponse> {
+    let status = response.status().as_u16();
+    let mut text = String::new();
+    response
+        .read_to_string(&mut text)
+        .context("failed reading Task Node response")?;
     let body = serde_json::from_str::<Value>(&text).unwrap_or_else(|_| {
         json!({
             "ok": false,
@@ -802,6 +764,18 @@ async fn parse_response(response: reqwest::Response) -> anyhow::Result<TaskNodeR
         })
     });
     Ok(TaskNodeResponse { status, body })
+}
+
+fn tasknode_client_error(err: TaskNodeClientError) -> anyhow::Error {
+    anyhow::anyhow!(err.to_string())
+}
+
+fn streaming_http_client() -> anyhow::Result<reqwest::blocking::Client> {
+    reqwest::blocking::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(reqwest_error)
 }
 
 fn emit_response(response: TaskNodeResponse) -> anyhow::Result<i32> {
@@ -951,59 +925,6 @@ fn infer_artifact_type(value: &str) -> &'static str {
     } else {
         "text"
     }
-}
-
-fn tasknode_sse_separator(buffer: &str) -> Option<(usize, usize)> {
-    match (buffer.find("\n\n"), buffer.find("\r\n\r\n")) {
-        (Some(lf), Some(crlf)) if crlf < lf => Some((crlf, 4)),
-        (Some(lf), _) => Some((lf, 2)),
-        (None, Some(crlf)) => Some((crlf, 4)),
-        (None, None) => None,
-    }
-}
-
-fn tasknode_sse_drain_blocks(buffer: &mut String) -> Vec<String> {
-    let mut blocks = Vec::new();
-    while let Some((index, separator_len)) = tasknode_sse_separator(buffer) {
-        let drained: String = buffer.drain(..index + separator_len).collect();
-        blocks.push(drained[..index].to_string());
-    }
-    blocks
-}
-
-fn tasknode_sse_drain_remainder(buffer: &mut String) -> Vec<String> {
-    let remainder = std::mem::take(buffer);
-    if remainder.trim().is_empty() {
-        Vec::new()
-    } else {
-        vec![remainder]
-    }
-}
-
-fn tasknode_parse_sse_block(block: &str) -> anyhow::Result<Option<(String, Value)>> {
-    let normalized = block.replace("\r\n", "\n");
-    let mut event = "message".to_string();
-    let mut data = Vec::new();
-    for line in normalized.lines() {
-        if line.is_empty() || line.starts_with(':') {
-            continue;
-        }
-        if let Some(rest) = line.strip_prefix("event:") {
-            event = rest.trim().to_string();
-        } else if let Some(rest) = line.strip_prefix("data:") {
-            data.push(rest.trim_start().to_string());
-        }
-    }
-    if data.is_empty() {
-        return Ok(None);
-    }
-    let data = data.join("\n");
-    if data.trim() == "[DONE]" {
-        return Ok(None);
-    }
-    let value = serde_json::from_str(&data)
-        .with_context(|| format!("invalid Task Node chat stream event: {data}"))?;
-    Ok(Some((event, value)))
 }
 
 fn reqwest_error(err: reqwest::Error) -> anyhow::Error {
