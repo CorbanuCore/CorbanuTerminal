@@ -15,6 +15,44 @@ use crate::approvals::PendingApprovalKind;
 use crate::session::SessionStore;
 
 #[tokio::test]
+async fn old_format_state_file_without_chat_settings_still_loads() {
+    let codex_home = unique_temp_dir("codex-telegram-session-old-format");
+    let telegram_dir = codex_home.join("telegram");
+    fs::create_dir_all(&telegram_dir).expect("create telegram state dir");
+    fs::write(
+        telegram_dir.join("state.json"),
+        r#"{
+  "chats": {
+    "10": {
+      "thread_id": "thread-old",
+      "last_delivered_item_id": "item-old"
+    }
+  }
+}
+"#,
+    )
+    .expect("write old state");
+
+    let sessions = SessionStore::load(&codex_home)
+        .await
+        .expect("load old-format state");
+
+    assert_eq!(
+        sessions.thread_id(ChatId(10)).await,
+        Some("thread-old".to_string())
+    );
+    assert_eq!(
+        sessions.last_delivered_item_id("thread-old").await,
+        Some("item-old".to_string())
+    );
+    assert_eq!(sessions.model(ChatId(10)).await, None);
+    assert_eq!(sessions.model_provider(ChatId(10)).await, None);
+    assert_eq!(sessions.approval_policy(ChatId(10)).await, None);
+
+    fs::remove_dir_all(codex_home).expect("remove codex home");
+}
+
+#[tokio::test]
 async fn pending_approval_can_only_be_taken_by_owner_chat() {
     let codex_home = unique_temp_dir("codex-telegram-session");
     fs::create_dir_all(&codex_home).expect("create codex home");

@@ -166,10 +166,28 @@ when any allowlisted chat ID is negative.
 The connector stores recovered thread IDs and delivered item markers in
 `$CODEX_HOME/telegram/state.json` so a restarted poller can resume the same
 app-server threads without replaying the full transcript after lag recovery.
+Per-chat model and approval-policy overrides are stored in the same file.
 
 Telegram messages use HTML parse mode, split outbound text at Telegram's
 4096-character raw-text limit, and surface sensitive operations through inline
 approval buttons rather than auto-approving them.
+
+The Telegram command surface is:
+
+- `/new` starts a fresh app-server thread.
+- `/cancel` or `/stop` interrupts the active turn.
+- `/status` shows the active thread and turn.
+- `/model` shows the chat's active model/provider and the available model list.
+- `/model <alias-or-slug>` saves the model for the chat and updates the current
+  thread with `thread/settings/update` so subsequent turns keep the same
+  history. Built-in aliases include `fable`, `opus`, `gpt`, and `gpt-5.5`.
+- `/approvals` shows the chat's active approval policy.
+- `/approvals <untrusted|on-failure|on-request|never>` saves the approval
+  policy for the chat and updates the current thread with
+  `thread/settings/update`.
+- `/compact` starts compaction for the active thread.
+- `/diff` shows the git diff from `default_cwd` to the remote branch.
+- `/skills` lists discovered skill names.
 
 `default_cwd` is the workspace used for Telegram-created turns. Set it to the
 directory where the agent should work, not to the PFTerminal source tree or all

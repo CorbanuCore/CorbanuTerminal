@@ -8,6 +8,7 @@ use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 use anyhow::Context;
+use codex_app_server_protocol::AskForApproval;
 use codex_app_server_protocol::RequestId;
 use serde::Deserialize;
 use serde::Serialize;
@@ -29,6 +30,9 @@ struct PendingApprovalState {
 pub struct ChatSession {
     pub thread_id: Option<String>,
     pub thread_loaded: bool,
+    pub model: Option<String>,
+    pub model_provider: Option<String>,
+    pub approval_policy: Option<AskForApproval>,
     pub turn_id: Option<String>,
     pub streaming_item_id: Option<String>,
     pub streaming_text: StreamingText,
@@ -60,7 +64,14 @@ struct PersistedState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PersistedChat {
-    thread_id: String,
+    #[serde(default)]
+    thread_id: Option<String>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    model_provider: Option<String>,
+    #[serde(default)]
+    approval_policy: Option<AskForApproval>,
     #[serde(default)]
     last_delivered_item_id: Option<String>,
 }
@@ -92,8 +103,11 @@ impl SessionStore {
                             sessions.insert(
                                 chat_id,
                                 ChatSession {
-                                    thread_id: Some(chat.thread_id),
+                                    thread_id: chat.thread_id,
                                     thread_loaded: false,
+                                    model: chat.model,
+                                    model_provider: chat.model_provider,
+                                    approval_policy: chat.approval_policy,
                                     delivered_item_ids,
                                     last_delivered_item_id: chat.last_delivered_item_id,
                                     ..Default::default()
@@ -154,6 +168,30 @@ impl SessionStore {
             .and_then(|session| session.thread_id.clone())
     }
 
+    pub async fn model(&self, chat_id: ChatId) -> Option<String> {
+        self.inner
+            .lock()
+            .await
+            .get(&chat_id)
+            .and_then(|session| session.model.clone())
+    }
+
+    pub async fn model_provider(&self, chat_id: ChatId) -> Option<String> {
+        self.inner
+            .lock()
+            .await
+            .get(&chat_id)
+            .and_then(|session| session.model_provider.clone())
+    }
+
+    pub async fn approval_policy(&self, chat_id: ChatId) -> Option<AskForApproval> {
+        self.inner
+            .lock()
+            .await
+            .get(&chat_id)
+            .and_then(|session| session.approval_policy)
+    }
+
     pub async fn thread_loaded(&self, chat_id: ChatId) -> bool {
         self.inner
             .lock()
@@ -183,6 +221,33 @@ impl SessionStore {
             session.pending_approvals.clear();
             session.delivered_item_ids.clear();
             session.last_delivered_item_id = None;
+        }
+        self.persist().await
+    }
+
+    pub async fn set_model(
+        &self,
+        chat_id: ChatId,
+        model: String,
+        model_provider: String,
+    ) -> anyhow::Result<()> {
+        {
+            let mut sessions = self.inner.lock().await;
+            let session = sessions.entry(chat_id).or_default();
+            session.model = Some(model);
+            session.model_provider = Some(model_provider);
+        }
+        self.persist().await
+    }
+
+    pub async fn set_approval_policy(
+        &self,
+        chat_id: ChatId,
+        approval_policy: AskForApproval,
+    ) -> anyhow::Result<()> {
+        {
+            let mut sessions = self.inner.lock().await;
+            sessions.entry(chat_id).or_default().approval_policy = Some(approval_policy);
         }
         self.persist().await
     }
@@ -426,16 +491,18 @@ impl SessionStore {
             PersistedState {
                 chats: sessions
                     .iter()
-                    .filter_map(|(chat_id, session)| {
-                        session.thread_id.as_ref().map(|thread_id| {
-                            (
-                                chat_id.0.to_string(),
-                                PersistedChat {
-                                    thread_id: thread_id.clone(),
-                                    last_delivered_item_id: session.last_delivered_item_id.clone(),
-                                },
-                            )
-                        })
+                    .filter(|(_, session)| session.should_persist())
+                    .map(|(chat_id, session)| {
+                        (
+                            chat_id.0.to_string(),
+                            PersistedChat {
+                                thread_id: session.thread_id.clone(),
+                                model: session.model.clone(),
+                                model_provider: session.model_provider.clone(),
+                                approval_policy: session.approval_policy,
+                                last_delivered_item_id: session.last_delivered_item_id.clone(),
+                            },
+                        )
                     })
                     .collect(),
             }
@@ -457,4 +524,14 @@ async fn rename_corrupt_state(state_path: &Path) -> anyhow::Result<()> {
     let aside_path = state_path.with_extension(format!("json.corrupt.{suffix}"));
     tokio::fs::rename(state_path, aside_path).await?;
     Ok(())
+}
+
+impl ChatSession {
+    fn should_persist(&self) -> bool {
+        self.thread_id.is_some()
+            || self.model.is_some()
+            || self.model_provider.is_some()
+            || self.approval_policy.is_some()
+            || self.last_delivered_item_id.is_some()
+    }
 }

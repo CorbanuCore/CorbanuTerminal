@@ -5,6 +5,7 @@ mod bridge;
 pub mod commands;
 pub mod config;
 pub mod error;
+mod model_selection;
 mod polling;
 pub mod render;
 mod sandbox_preflight;

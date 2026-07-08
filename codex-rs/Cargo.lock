@@ -3980,6 +3980,7 @@ dependencies = [
  "codex-config",
  "codex-core",
  "codex-feedback",
+ "codex-model-provider-info",
  "codex-protocol",
  "codex-vault",
  "futures",

@@ -8,15 +8,43 @@ use codex_telegram::commands::parse_incoming;
 fn known_commands_parse() {
     assert_eq!(
         parse_incoming("/new", Some("pfterminal_bot")),
-        IncomingCommand::Known(Command::New)
+        known(Command::New, "")
     );
     assert_eq!(
         parse_incoming("/cancel@pfterminal_bot", Some("pfterminal_bot")),
-        IncomingCommand::Known(Command::Cancel)
+        known(Command::Cancel, "")
     );
     assert_eq!(
         parse_incoming("/status now", Some("pfterminal_bot")),
-        IncomingCommand::Known(Command::Status)
+        known(Command::Status, "now")
+    );
+    assert_eq!(
+        parse_incoming("/stop", Some("pfterminal_bot")),
+        known(Command::Stop, "")
+    );
+    assert_eq!(
+        parse_incoming("/model", Some("pfterminal_bot")),
+        known(Command::Model, "")
+    );
+    assert_eq!(
+        parse_incoming("/model fable", Some("pfterminal_bot")),
+        known(Command::Model, "fable")
+    );
+    assert_eq!(
+        parse_incoming("/approvals on-request", Some("pfterminal_bot")),
+        known(Command::Approvals, "on-request")
+    );
+    assert_eq!(
+        parse_incoming("/compact", Some("pfterminal_bot")),
+        known(Command::Compact, "")
+    );
+    assert_eq!(
+        parse_incoming("/diff", Some("pfterminal_bot")),
+        known(Command::Diff, "")
+    );
+    assert_eq!(
+        parse_incoming("/skills", Some("pfterminal_bot")),
+        known(Command::Skills, "")
     );
 }
 
@@ -24,11 +52,15 @@ fn known_commands_parse() {
 fn matching_bot_mentions_are_stripped() {
     assert_eq!(
         parse_incoming("/new@pfterminal_bot", Some("pfterminal_bot")),
-        IncomingCommand::Known(Command::New)
+        known(Command::New, "")
     );
     assert_eq!(
         parse_incoming("/new@PFTerminal_Bot", Some("pfterminal_bot")),
-        IncomingCommand::Known(Command::New)
+        known(Command::New, "")
+    );
+    assert_eq!(
+        parse_incoming("/model@pfterminal_bot opus", Some("pfterminal_bot")),
+        known(Command::Model, "opus")
     );
 }
 
@@ -62,4 +94,11 @@ fn regular_text_passes_to_agent_unchanged() {
         parse_incoming("zoz@example.com sent this", Some("pfterminal_bot")),
         IncomingCommand::AgentInput("zoz@example.com sent this".to_string())
     );
+}
+
+fn known(command: Command, args: &str) -> IncomingCommand {
+    IncomingCommand::Known {
+        command,
+        args: args.to_string(),
+    }
 }

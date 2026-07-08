@@ -43,6 +43,7 @@ use crate::approvals::ApprovalCallback;
 use crate::render::render_html_chunks;
 use crate::session::SessionStore;
 
+mod commands;
 mod notifications;
 mod server_requests;
 
@@ -74,6 +75,23 @@ enum BridgeCommand {
         chat_id: ChatId,
     },
     Cancel {
+        chat_id: ChatId,
+    },
+    Model {
+        chat_id: ChatId,
+        args: String,
+    },
+    Approvals {
+        chat_id: ChatId,
+        args: String,
+    },
+    Compact {
+        chat_id: ChatId,
+    },
+    Diff {
+        chat_id: ChatId,
+    },
+    Skills {
         chat_id: ChatId,
     },
     Status {
@@ -138,6 +156,46 @@ impl BridgeHandle {
     pub async fn cancel(&self, chat_id: ChatId) -> anyhow::Result<()> {
         self.command_tx
             .send(BridgeCommand::Cancel { chat_id })
+            .await
+            .context("telegram bridge task stopped")
+    }
+
+    #[instrument(skip(self, args))]
+    pub async fn model(&self, chat_id: ChatId, args: String) -> anyhow::Result<()> {
+        self.command_tx
+            .send(BridgeCommand::Model { chat_id, args })
+            .await
+            .context("telegram bridge task stopped")
+    }
+
+    #[instrument(skip(self, args))]
+    pub async fn approvals(&self, chat_id: ChatId, args: String) -> anyhow::Result<()> {
+        self.command_tx
+            .send(BridgeCommand::Approvals { chat_id, args })
+            .await
+            .context("telegram bridge task stopped")
+    }
+
+    #[instrument(skip(self))]
+    pub async fn compact(&self, chat_id: ChatId) -> anyhow::Result<()> {
+        self.command_tx
+            .send(BridgeCommand::Compact { chat_id })
+            .await
+            .context("telegram bridge task stopped")
+    }
+
+    #[instrument(skip(self))]
+    pub async fn diff(&self, chat_id: ChatId) -> anyhow::Result<()> {
+        self.command_tx
+            .send(BridgeCommand::Diff { chat_id })
+            .await
+            .context("telegram bridge task stopped")
+    }
+
+    #[instrument(skip(self))]
+    pub async fn skills(&self, chat_id: ChatId) -> anyhow::Result<()> {
+        self.command_tx
+            .send(BridgeCommand::Skills { chat_id })
             .await
             .context("telegram bridge task stopped")
     }
@@ -254,6 +312,13 @@ impl BridgeRuntime {
                     .await
             }
             BridgeCommand::Cancel { chat_id } => self.cancel_turn(chat_id).await,
+            BridgeCommand::Model { chat_id, args } => self.handle_model(chat_id, args).await,
+            BridgeCommand::Approvals { chat_id, args } => {
+                self.handle_approvals(chat_id, args).await
+            }
+            BridgeCommand::Compact { chat_id } => self.compact_thread(chat_id).await,
+            BridgeCommand::Diff { chat_id } => self.send_diff(chat_id).await,
+            BridgeCommand::Skills { chat_id } => self.list_skills(chat_id).await,
             BridgeCommand::Status {
                 chat_id,
                 response_tx,
@@ -302,6 +367,7 @@ impl BridgeRuntime {
         }
 
         let thread_id = self.ensure_thread(chat_id).await?;
+        let approval_policy = self.active_approval_policy(chat_id).await;
         let request_id = self.request_ids.next();
         let response: TurnStartResponse = self
             .request_typed(
@@ -322,9 +388,7 @@ impl BridgeRuntime {
                         environments: None,
                         cwd: Some(self.config.cwd.to_path_buf()),
                         runtime_workspace_roots: None,
-                        approval_policy: Some(
-                            self.config.permissions.approval_policy.value().into(),
-                        ),
+                        approval_policy: Some(approval_policy),
                         approvals_reviewer: None,
                         sandbox_policy: None,
                         permissions: None,
@@ -381,12 +445,10 @@ impl BridgeRuntime {
 
     async fn start_new_thread(&mut self, chat_id: ChatId) -> anyhow::Result<String> {
         let request_id = self.request_ids.next();
+        let params = self.thread_start_params(chat_id).await;
         let response: ThreadStartResponse = self
             .request_typed(
-                ClientRequest::ThreadStart {
-                    request_id,
-                    params: self.thread_start_params(),
-                },
+                ClientRequest::ThreadStart { request_id, params },
                 "thread/start",
             )
             .await?;
@@ -397,19 +459,19 @@ impl BridgeRuntime {
 
     async fn resume_thread(&mut self, chat_id: ChatId, thread_id: String) -> anyhow::Result<()> {
         let request_id = self.request_ids.next();
+        let (model, model_provider) = self.active_model_settings(chat_id).await;
+        let approval_policy = self.active_approval_policy(chat_id).await;
         let _: ThreadResumeResponse = self
             .request_typed(
                 ClientRequest::ThreadResume {
                     request_id,
                     params: ThreadResumeParams {
                         thread_id,
-                        model: self.config.model.clone(),
-                        model_provider: Some(self.config.model_provider_id.clone()),
+                        model,
+                        model_provider: Some(model_provider),
                         cwd: Some(self.config.cwd.to_string_lossy().to_string()),
                         runtime_workspace_roots: Some(self.config.workspace_roots.clone()),
-                        approval_policy: Some(
-                            self.config.permissions.approval_policy.value().into(),
-                        ),
+                        approval_policy: Some(approval_policy),
                         ..ThreadResumeParams::default()
                     },
                 },
@@ -420,13 +482,15 @@ impl BridgeRuntime {
         Ok(())
     }
 
-    fn thread_start_params(&self) -> ThreadStartParams {
+    async fn thread_start_params(&self, chat_id: ChatId) -> ThreadStartParams {
+        let (model, model_provider) = self.active_model_settings(chat_id).await;
+        let approval_policy = self.active_approval_policy(chat_id).await;
         ThreadStartParams {
-            model: self.config.model.clone(),
-            model_provider: Some(self.config.model_provider_id.clone()),
+            model,
+            model_provider: Some(model_provider),
             cwd: Some(self.config.cwd.to_string_lossy().to_string()),
             runtime_workspace_roots: Some(self.config.workspace_roots.clone()),
-            approval_policy: Some(self.config.permissions.approval_policy.value().into()),
+            approval_policy: Some(approval_policy),
             approvals_reviewer: None,
             sandbox: None,
             permissions: None,
@@ -513,7 +577,12 @@ impl BridgeCommand {
         match self {
             Self::UserText { chat_id, .. }
             | Self::NewThread { chat_id }
-            | Self::Cancel { chat_id } => Some(*chat_id),
+            | Self::Cancel { chat_id }
+            | Self::Model { chat_id, .. }
+            | Self::Approvals { chat_id, .. }
+            | Self::Compact { chat_id }
+            | Self::Diff { chat_id }
+            | Self::Skills { chat_id } => Some(*chat_id),
             Self::Status { .. } | Self::Approval { .. } | Self::Shutdown => None,
         }
     }

@@ -89,24 +89,66 @@ async fn handle_message(
     };
 
     match parse_incoming(text, Some(&bot_username.0)) {
-        IncomingCommand::Known(Command::Start | Command::Help) => {
+        IncomingCommand::Known {
+            command: Command::Start | Command::Help,
+            ..
+        } => {
             bot.send_message(chat_id, help_text())
                 .parse_mode(ParseMode::Html)
                 .await
                 .context("send Telegram help")?;
         }
-        IncomingCommand::Known(Command::New) => {
+        IncomingCommand::Known {
+            command: Command::New,
+            ..
+        } => {
             bridge.new_thread(chat_id).await?;
         }
-        IncomingCommand::Known(Command::Cancel) => {
+        IncomingCommand::Known {
+            command: Command::Cancel | Command::Stop,
+            ..
+        } => {
             bridge.cancel(chat_id).await?;
         }
-        IncomingCommand::Known(Command::Status) => {
+        IncomingCommand::Known {
+            command: Command::Status,
+            ..
+        } => {
             let status = bridge.status_text(chat_id).await?;
             bot.send_message(chat_id, status)
                 .parse_mode(ParseMode::Html)
                 .await
                 .context("send Telegram status")?;
+        }
+        IncomingCommand::Known {
+            command: Command::Model,
+            args,
+        } => {
+            bridge.model(chat_id, args).await?;
+        }
+        IncomingCommand::Known {
+            command: Command::Approvals,
+            args,
+        } => {
+            bridge.approvals(chat_id, args).await?;
+        }
+        IncomingCommand::Known {
+            command: Command::Compact,
+            ..
+        } => {
+            bridge.compact(chat_id).await?;
+        }
+        IncomingCommand::Known {
+            command: Command::Diff,
+            ..
+        } => {
+            bridge.diff(chat_id).await?;
+        }
+        IncomingCommand::Known {
+            command: Command::Skills,
+            ..
+        } => {
+            bridge.skills(chat_id).await?;
         }
         IncomingCommand::AgentInput(input) => {
             bridge.send_user_text(chat_id, input).await?;
