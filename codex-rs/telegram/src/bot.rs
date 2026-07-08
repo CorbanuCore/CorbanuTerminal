@@ -20,6 +20,30 @@ use crate::commands::parse_incoming;
 type HandlerResult = anyhow::Result<()>;
 const CALLBACK_ANSWER_TEXT_LIMIT: usize = 200;
 
+/// What an inbound Telegram message contributes as turn input.
+///
+/// The connector is text-only inbound today. A plain text message is used as-is.
+/// Media (photo/document) with a caption contributes the caption — but the
+/// attachment itself cannot be read yet, so we prefix a note so the agent does
+/// not answer as if it saw the image. Media with no caption is unsupported.
+#[derive(Debug, PartialEq, Eq)]
+enum MessageInput {
+    Text(String),
+    Unsupported,
+}
+
+fn resolve_message_input(text: Option<&str>, caption: Option<&str>) -> MessageInput {
+    if let Some(text) = text {
+        return MessageInput::Text(text.to_string());
+    }
+    if let Some(caption) = caption.map(str::trim).filter(|caption| !caption.is_empty()) {
+        return MessageInput::Text(format!(
+            "[the user attached an image or file; the connector cannot read attachments yet, only this caption text follows]\n{caption}"
+        ));
+    }
+    MessageInput::Unsupported
+}
+
 #[derive(Clone, Debug)]
 struct BotUsername(String);
 
@@ -81,14 +105,20 @@ async fn handle_message(
         return Ok(());
     }
 
-    let Some(text) = message.text() else {
-        bot.send_message(chat_id, "Send text messages to start PFTerminal turns.")
+    let text = match resolve_message_input(message.text(), message.caption()) {
+        MessageInput::Text(text) => text,
+        MessageInput::Unsupported => {
+            bot.send_message(
+                chat_id,
+                "I can only read text right now — images, screenshots, and files aren't supported yet. Send a link or paste the text and I'll act on it.",
+            )
             .await
             .context("send Telegram unsupported message notice")?;
-        return Ok(());
+            return Ok(());
+        }
     };
 
-    match parse_incoming(text, Some(&bot_username.0)) {
+    match parse_incoming(&text, Some(&bot_username.0)) {
         IncomingCommand::Known {
             command: Command::Start | Command::Help,
             ..
@@ -207,4 +237,50 @@ fn callback_answer_text(text: &str) -> String {
         .collect::<String>();
     truncated.push_str("...");
     truncated
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MessageInput;
+    use super::resolve_message_input;
+
+    #[test]
+    fn plain_text_is_used_verbatim() {
+        assert_eq!(
+            resolve_message_input(Some("hello there"), None),
+            MessageInput::Text("hello there".to_string())
+        );
+    }
+
+    #[test]
+    fn caption_on_media_is_accepted_but_flags_the_dropped_attachment() {
+        let MessageInput::Text(text) =
+            resolve_message_input(None, Some("posted: https://discord.com/channels/1/2/3"))
+        else {
+            panic!("a caption must produce text input");
+        };
+        // The caption reaches the agent...
+        assert!(text.contains("https://discord.com/channels/1/2/3"));
+        // ...but the agent is told an attachment it cannot see was dropped, so it
+        // never answers as if it saw the image.
+        assert!(text.contains("cannot read attachments"));
+    }
+
+    #[test]
+    fn bare_media_without_caption_is_unsupported() {
+        assert_eq!(resolve_message_input(None, None), MessageInput::Unsupported);
+        // A whitespace-only caption is not real input.
+        assert_eq!(
+            resolve_message_input(None, Some("   ")),
+            MessageInput::Unsupported
+        );
+    }
+
+    #[test]
+    fn text_wins_over_caption_when_both_present() {
+        assert_eq!(
+            resolve_message_input(Some("real text"), Some("caption")),
+            MessageInput::Text("real text".to_string())
+        );
+    }
 }
