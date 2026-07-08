@@ -2,6 +2,7 @@ use anyhow::Context;
 use clap::Args;
 use clap::Parser;
 use clap::Subcommand;
+use codex_core::config::ConfigBuilder;
 use codex_tasknode_client::TaskNodeClient;
 use codex_tasknode_client::TaskNodeClientError;
 use codex_tasknode_client::TaskNodeLocalError;
@@ -11,18 +12,22 @@ use codex_tasknode_client::resolve_origin;
 use codex_tasknode_client::tasknode_parse_sse_block;
 use codex_tasknode_client::tasknode_sse_drain_blocks;
 use codex_tasknode_client::tasknode_sse_drain_remainder;
-use codex_core::config::ConfigBuilder;
 use codex_utils_cli::CliConfigOverrides;
 use serde_json::Map;
 use serde_json::Value;
 use serde_json::json;
 use std::future::Ready;
 use std::future::ready;
+use std::io::IsTerminal;
 use std::io::Read;
 use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
+use std::time::Duration;
+use std::time::Instant;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
+use thiserror::Error;
 
 #[derive(Debug, Parser)]
 pub(crate) struct TaskNodeCli {
@@ -43,6 +48,9 @@ pub(crate) struct TaskNodeCli {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum TaskNodeCommand {
+    /// Link this terminal session to Task Node through GitHub.
+    Link(LinkArgs),
+
     /// Show linked account, wallet, server flags, and task counts.
     Status,
 
@@ -72,6 +80,29 @@ pub(crate) enum TaskNodeCommand {
 
     /// Respond to verification requests.
     Verification(VerificationCli),
+}
+
+#[derive(Debug, Clone, Args)]
+pub(crate) struct LinkArgs {
+    /// Poll an existing pending link request until it completes or times out.
+    #[arg(long, default_value_t = false)]
+    poll: bool,
+
+    /// Print local Task Node link state without contacting Task Node.
+    #[arg(long, default_value_t = false)]
+    status: bool,
+
+    /// Replace an existing linked or pending session with a new link request.
+    #[arg(long, default_value_t = false)]
+    relink: bool,
+
+    /// Maximum seconds to wait with --poll.
+    #[arg(long, default_value_t = 300)]
+    timeout: u64,
+
+    /// Do not open the verification URL in a browser.
+    #[arg(long, default_value_t = false)]
+    no_browser: bool,
 }
 
 #[derive(Debug, Args)]
@@ -357,9 +388,29 @@ pub(crate) async fn run(command: TaskNodeCli) -> anyhow::Result<()> {
 
 async fn run_inner(command: TaskNodeCli) -> anyhow::Result<i32> {
     let _json_flag = command.json;
-    let client = tasknode_client_from_cli(command.config_overrides, command.origin).await?;
+    let TaskNodeCli {
+        config_overrides,
+        origin,
+        json: _,
+        command,
+    } = command;
 
-    match command.command {
+    if let TaskNodeCommand::Link(args) = command {
+        return run_link_command(config_overrides, origin, args).await;
+    }
+
+    let client = match tasknode_client_from_cli(config_overrides, origin).await {
+        Ok(client) => client,
+        Err(err) => {
+            if let Some(session_err) = err.downcast_ref::<TaskNodeCommandSessionError>() {
+                return emit_session_error(session_err);
+            }
+            return Err(err);
+        }
+    };
+
+    match command {
+        TaskNodeCommand::Link(_) => unreachable!("link command is handled before client loading"),
         TaskNodeCommand::Status => {
             emit_response(client.get("/api/terminal/tasknode/status").await?)
         }
@@ -611,10 +662,383 @@ async fn task_evidence(
         .await
 }
 
+async fn run_link_command(
+    config_overrides: CliConfigOverrides,
+    origin_override: Option<String>,
+    args: LinkArgs,
+) -> anyhow::Result<i32> {
+    let codex_home = codex_home_from_overrides(config_overrides).await?;
+    run_link_command_for_codex_home(codex_home.as_path(), origin_override, args)
+}
+
+fn run_link_command_for_codex_home(
+    codex_home: &Path,
+    origin_override: Option<String>,
+    args: LinkArgs,
+) -> anyhow::Result<i32> {
+    match link_action(&args)? {
+        TaskNodeLinkAction::Status => emit_link_status(codex_home),
+        TaskNodeLinkAction::Poll => poll_link_command(codex_home, origin_override, args.timeout),
+        TaskNodeLinkAction::Start => start_link_command(codex_home, origin_override, args),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TaskNodeLinkAction {
+    Start,
+    Poll,
+    Status,
+}
+
+fn link_action(args: &LinkArgs) -> anyhow::Result<TaskNodeLinkAction> {
+    if args.poll && args.status {
+        anyhow::bail!("Use only one of --poll or --status.");
+    }
+    if args.relink && (args.poll || args.status) {
+        anyhow::bail!("Use --relink only when starting a new Task Node link.");
+    }
+    if args.poll {
+        Ok(TaskNodeLinkAction::Poll)
+    } else if args.status {
+        Ok(TaskNodeLinkAction::Status)
+    } else {
+        Ok(TaskNodeLinkAction::Start)
+    }
+}
+
+fn emit_link_status(codex_home: &Path) -> anyhow::Result<i32> {
+    match TaskNodeLocalSession::load_optional(codex_home) {
+        Ok(session) => {
+            print_json(&link_state_json(session.as_ref(), true))?;
+            Ok(0)
+        }
+        Err(err) => emit_tasknode_local_error(err),
+    }
+}
+
+fn start_link_command(
+    codex_home: &Path,
+    origin_override: Option<String>,
+    args: LinkArgs,
+) -> anyhow::Result<i32> {
+    let existing = match TaskNodeLocalSession::load_optional(codex_home) {
+        Ok(session) => session,
+        Err(err) => return emit_tasknode_local_error(err),
+    };
+    if let Some(session) = &existing {
+        if session.terminal_token.is_some() && !args.relink {
+            print_json(&json!({
+                "ok": false,
+                "error": "tasknode_already_linked",
+                "state": "linked",
+                "message": "Task Node is already linked. Use --relink to replace the local session.",
+                "githubUsername": session.github_username.clone(),
+                "expiresAt": session.expires_at.clone(),
+                "origin": session.origin.clone(),
+            }))?;
+            return Ok(1);
+        }
+        if session.pending_request_id.is_some() && !args.relink {
+            print_json(&link_state_json(Some(session), true))?;
+            return Ok(0);
+        }
+    }
+
+    let origin = resolve_origin(
+        origin_override,
+        existing.as_ref().map(|session| session.origin.as_str()),
+    );
+    let started =
+        match TaskNodeClient::new_without_token_for_origin(origin.clone()).start_github_link() {
+            Ok(started) => started,
+            Err(err) => {
+                print_json(&json!({
+                    "ok": false,
+                    "error": "tasknode_link_start_failed",
+                    "message": err.to_string(),
+                    "origin": origin,
+                }))?;
+                return Ok(1);
+            }
+        };
+    let session = TaskNodeLocalSession {
+        origin: origin.clone(),
+        account_id: None,
+        github_username: None,
+        terminal_token: None,
+        expires_at: None,
+        pending_request_id: Some(started.request_id.clone()),
+        pending_poll_token: Some(started.poll_token),
+        pending_verification_url: Some(started.verification_url.clone()),
+    };
+    if let Err(err) = session.save(codex_home) {
+        return emit_tasknode_local_error(err);
+    }
+
+    let mut browser_opened = false;
+    let mut browser_error = None;
+    if should_open_browser(args.no_browser) {
+        match webbrowser::open(&started.verification_url) {
+            Ok(()) => browser_opened = true,
+            Err(err) => browser_error = Some(err.to_string()),
+        }
+    }
+
+    let mut body = json!({
+        "ok": true,
+        "state": "pending",
+        "verificationUrl": started.verification_url,
+        "requestId": started.request_id,
+        "origin": origin,
+        "browserOpened": browser_opened,
+    });
+    if let Some(err) = browser_error {
+        body["browserError"] = Value::String(err);
+    }
+    print_json(&body)?;
+    Ok(0)
+}
+
+fn poll_link_command(
+    codex_home: &Path,
+    origin_override: Option<String>,
+    timeout_secs: u64,
+) -> anyhow::Result<i32> {
+    let mut session = match TaskNodeLocalSession::load_optional(codex_home) {
+        Ok(Some(session)) => session,
+        Ok(None) => {
+            print_json(&json!({
+                "ok": false,
+                "error": "tasknode_unlinked",
+                "state": "unlinked",
+                "message": "Task Node is not linked. Run `pfterminal tasknode link`.",
+            }))?;
+            return Ok(1);
+        }
+        Err(err) => return emit_tasknode_local_error(err),
+    };
+    if session.terminal_token.is_some() {
+        print_json(&link_state_json(Some(&session), true))?;
+        return Ok(0);
+    }
+    let Some(request_id) = session.pending_request_id.clone() else {
+        print_json(&json!({
+            "ok": false,
+            "error": "tasknode_no_pending_link",
+            "state": "unlinked",
+            "message": "No pending Task Node link request is stored. Run `pfterminal tasknode link`.",
+        }))?;
+        return Ok(1);
+    };
+    let Some(poll_token) = session.pending_poll_token.clone() else {
+        print_json(&json!({
+            "ok": false,
+            "error": "tasknode_no_pending_link",
+            "state": "unlinked",
+            "message": "The stored Task Node link request is missing poll state. Run `pfterminal tasknode link --relink`.",
+        }))?;
+        return Ok(1);
+    };
+
+    let origin = resolve_origin(origin_override, Some(&session.origin));
+    let client = TaskNodeClient::new_without_token_for_origin(origin.clone());
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+    let mut backoff = Duration::from_secs(1);
+    loop {
+        match client.poll_session(&request_id, &poll_token) {
+            Ok(poll) => {
+                session.origin = origin;
+                session.apply_terminal_session(poll);
+                if let Err(err) = session.save(codex_home) {
+                    return emit_tasknode_local_error(err);
+                }
+                print_json(&link_state_json(Some(&session), true))?;
+                return Ok(0);
+            }
+            Err(TaskNodeClientError::Pending) => {
+                let now = Instant::now();
+                if now >= deadline {
+                    print_json(&json!({
+                        "ok": false,
+                        "error": "tasknode_link_timeout",
+                        "state": "pending",
+                        "message": "Task Node link is still pending.",
+                        "verificationUrl": session.pending_verification_url.clone(),
+                        "requestId": request_id,
+                        "origin": session.origin.clone(),
+                    }))?;
+                    return Ok(1);
+                }
+                let remaining = deadline.saturating_duration_since(now);
+                std::thread::sleep(backoff.min(remaining));
+                backoff = (backoff * 2).min(Duration::from_secs(5));
+            }
+            Err(TaskNodeClientError::Rejected(message)) => {
+                print_json(&json!({
+                    "ok": false,
+                    "error": "tasknode_link_rejected",
+                    "state": "pending",
+                    "message": message,
+                    "verificationUrl": session.pending_verification_url.clone(),
+                    "requestId": request_id,
+                    "origin": session.origin.clone(),
+                }))?;
+                return Ok(1);
+            }
+            Err(TaskNodeClientError::Http(message)) => {
+                print_json(&json!({
+                    "ok": false,
+                    "error": "tasknode_link_poll_failed",
+                    "state": "pending",
+                    "message": message,
+                    "verificationUrl": session.pending_verification_url.clone(),
+                    "requestId": request_id,
+                    "origin": session.origin.clone(),
+                }))?;
+                return Ok(1);
+            }
+        }
+    }
+}
+
+fn should_open_browser(no_browser: bool) -> bool {
+    !no_browser && std::io::stdout().is_terminal()
+}
+
+fn link_state_json(session: Option<&TaskNodeLocalSession>, ok: bool) -> Value {
+    match session {
+        Some(session) if session.terminal_token.is_some() => json!({
+            "ok": ok,
+            "state": "linked",
+            "githubUsername": session.github_username.clone(),
+            "expiresAt": session.expires_at.clone(),
+            "origin": session.origin.clone(),
+        }),
+        Some(session) if session.pending_request_id.is_some() => json!({
+            "ok": ok,
+            "state": "pending",
+            "verificationUrl": session.pending_verification_url.clone(),
+            "requestId": session.pending_request_id.clone(),
+            "origin": session.origin.clone(),
+        }),
+        _ => json!({
+            "ok": ok,
+            "state": "unlinked",
+        }),
+    }
+}
+
+fn emit_tasknode_local_error(err: TaskNodeLocalError) -> anyhow::Result<i32> {
+    match err {
+        TaskNodeLocalError::NotFound => {
+            print_json(&json!({
+                "ok": false,
+                "error": "tasknode_unlinked",
+                "state": "unlinked",
+                "message": "Task Node is not linked. Run `pfterminal tasknode link`.",
+            }))?;
+        }
+        TaskNodeLocalError::VaultUnavailable(detail) => {
+            print_json(&json!({
+                "ok": false,
+                "error": "tasknode_vault_unavailable",
+                "state": "vault-unavailable",
+                "message": "Task Node credential vault is unavailable.",
+                "detail": detail,
+            }))?;
+        }
+        TaskNodeLocalError::Corrupt(detail) => {
+            print_json(&json!({
+                "ok": false,
+                "error": "tasknode_session_corrupt",
+                "state": "corrupt",
+                "message": "Task Node local session is corrupt.",
+                "detail": detail,
+            }))?;
+        }
+    }
+    Ok(1)
+}
+
+fn emit_session_error(err: &TaskNodeCommandSessionError) -> anyhow::Result<i32> {
+    match err {
+        TaskNodeCommandSessionError::Unlinked => {
+            print_json(&json!({
+                "ok": false,
+                "error": "tasknode_unlinked",
+                "state": "unlinked",
+                "message": "Task Node is not linked. Run `pfterminal tasknode link`.",
+            }))?;
+        }
+        TaskNodeCommandSessionError::Pending { verification_url } => {
+            print_json(&json!({
+                "ok": false,
+                "error": "tasknode_link_pending",
+                "state": "pending",
+                "message": "Task Node link is pending. Finish GitHub auth, then run `pfterminal tasknode link --poll`.",
+                "verificationUrl": verification_url,
+            }))?;
+        }
+        TaskNodeCommandSessionError::VaultUnavailable { detail } => {
+            print_json(&json!({
+                "ok": false,
+                "error": "tasknode_vault_unavailable",
+                "state": "vault-unavailable",
+                "message": "Task Node credential vault is unavailable.",
+                "detail": detail,
+            }))?;
+        }
+        TaskNodeCommandSessionError::Corrupt { detail } => {
+            print_json(&json!({
+                "ok": false,
+                "error": "tasknode_session_corrupt",
+                "state": "corrupt",
+                "message": "Task Node local session is corrupt.",
+                "detail": detail,
+            }))?;
+        }
+        TaskNodeCommandSessionError::MissingToken => {
+            print_json(&json!({
+                "ok": false,
+                "error": "tasknode_missing_terminal_token",
+                "state": "unlinked",
+                "message": "Task Node session is missing a terminal token. Run `pfterminal tasknode link --relink`.",
+            }))?;
+        }
+    }
+    Ok(1)
+}
+
+#[derive(Debug, Error)]
+enum TaskNodeCommandSessionError {
+    #[error("Task Node is not linked")]
+    Unlinked,
+    #[error("Task Node link is pending")]
+    Pending { verification_url: String },
+    #[error("Task Node credential vault is unavailable: {detail}")]
+    VaultUnavailable { detail: String },
+    #[error("invalid local Task Node session: {detail}")]
+    Corrupt { detail: String },
+    #[error("Task Node session is missing a terminal token")]
+    MissingToken,
+}
+
 async fn tasknode_client_from_cli(
     config_overrides: CliConfigOverrides,
     origin_override: Option<String>,
 ) -> anyhow::Result<TaskNodeClient> {
+    let codex_home = codex_home_from_overrides(config_overrides).await?;
+    let session = load_tasknode_session(codex_home.as_path()).map_err(anyhow::Error::new)?;
+    let token = session.terminal_token.clone().ok_or_else(|| {
+        anyhow::anyhow!("Task Node session is missing a terminal token. Run /tasknode link.")
+    })?;
+    let origin = resolve_origin(origin_override, Some(&session.origin));
+    Ok(TaskNodeClient::new_with_origin(origin, token))
+}
+
+async fn codex_home_from_overrides(
+    config_overrides: CliConfigOverrides,
+) -> anyhow::Result<PathBuf> {
     let cli_kv_overrides = config_overrides
         .parse_overrides()
         .map_err(anyhow::Error::msg)?;
@@ -622,12 +1046,7 @@ async fn tasknode_client_from_cli(
         .cli_overrides(cli_kv_overrides)
         .build()
         .await?;
-    let session = load_tasknode_session(config.codex_home.as_path())?;
-    let token = session.terminal_token.clone().ok_or_else(|| {
-        anyhow::anyhow!("Task Node session is missing a terminal token. Run /tasknode link.")
-    })?;
-    let origin = resolve_origin(origin_override, Some(&session.origin));
-    Ok(TaskNodeClient::new_with_origin(origin, token))
+    Ok(config.codex_home.to_path_buf())
 }
 
 trait TaskNodeCliClientExt {
@@ -642,7 +1061,10 @@ impl TaskNodeCliClientExt for TaskNodeClient {
     }
 
     fn post(&self, path: &str, body: &Value) -> Ready<anyhow::Result<TaskNodeResponse>> {
-        ready(self.post_raw_json(path, body).map_err(tasknode_client_error))
+        ready(
+            self.post_raw_json(path, body)
+                .map_err(tasknode_client_error),
+        )
     }
 
     fn post_sse_jsonl(&self, path: &str, body: &Value) -> Ready<anyhow::Result<i32>> {
@@ -650,13 +1072,15 @@ impl TaskNodeCliClientExt for TaskNodeClient {
     }
 }
 
-fn load_tasknode_session(codex_home: &std::path::Path) -> anyhow::Result<TaskNodeLocalSession> {
+fn load_tasknode_session(
+    codex_home: &std::path::Path,
+) -> Result<TaskNodeLocalSession, TaskNodeCommandSessionError> {
     let session = TaskNodeLocalSession::load(codex_home).map_err(|err| match err {
-        TaskNodeLocalError::NotFound => anyhow::anyhow!("Task Node is not linked. Run /tasknode link."),
-        TaskNodeLocalError::VaultUnavailable(err) => {
-            anyhow::anyhow!("Task Node is not linked. Run /tasknode link. ({err})")
+        TaskNodeLocalError::NotFound => TaskNodeCommandSessionError::Unlinked,
+        TaskNodeLocalError::VaultUnavailable(detail) => {
+            TaskNodeCommandSessionError::VaultUnavailable { detail }
         }
-        TaskNodeLocalError::Corrupt(err) => anyhow::anyhow!("invalid local Task Node session: {err}"),
+        TaskNodeLocalError::Corrupt(detail) => TaskNodeCommandSessionError::Corrupt { detail },
     })?;
     if session.terminal_token.is_none() {
         if let Some(url) = session
@@ -664,9 +1088,11 @@ fn load_tasknode_session(codex_home: &std::path::Path) -> anyhow::Result<TaskNod
             .as_deref()
             .filter(|value| !value.trim().is_empty())
         {
-            anyhow::bail!("Task Node link is pending. Finish GitHub auth: {url}");
+            return Err(TaskNodeCommandSessionError::Pending {
+                verification_url: url.to_string(),
+            });
         }
-        anyhow::bail!("Task Node session is missing a terminal token. Run /tasknode link.");
+        return Err(TaskNodeCommandSessionError::MissingToken);
     }
     Ok(session)
 }
@@ -708,7 +1134,9 @@ fn tasknode_post_sse_jsonl(
         }
         buffer.push_str(&String::from_utf8_lossy(&chunk[..read]));
         for block in tasknode_sse_drain_blocks(&mut buffer) {
-            if let Some((event, data)) = tasknode_parse_sse_block(&block).map_err(tasknode_client_error)? {
+            if let Some((event, data)) =
+                tasknode_parse_sse_block(&block).map_err(tasknode_client_error)?
+            {
                 if event == "done" {
                     saw_done = true;
                 } else if event == "error" {
@@ -724,7 +1152,9 @@ fn tasknode_post_sse_jsonl(
         }
     }
     for block in tasknode_sse_drain_remainder(&mut buffer) {
-        if let Some((event, data)) = tasknode_parse_sse_block(&block).map_err(tasknode_client_error)? {
+        if let Some((event, data)) =
+            tasknode_parse_sse_block(&block).map_err(tasknode_client_error)?
+        {
             if event == "done" {
                 saw_done = true;
             } else if event == "error" {
@@ -749,7 +1179,9 @@ fn tasknode_post_sse_jsonl(
     Ok(exit_code)
 }
 
-fn parse_blocking_response(mut response: reqwest::blocking::Response) -> anyhow::Result<TaskNodeResponse> {
+fn parse_blocking_response(
+    mut response: reqwest::blocking::Response,
+) -> anyhow::Result<TaskNodeResponse> {
     let status = response.status().as_u16();
     let mut text = String::new();
     response
@@ -944,6 +1376,10 @@ fn reqwest_error(err: reqwest::Error) -> anyhow::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use wiremock::Mock;
+    use wiremock::ResponseTemplate;
+    use wiremock::matchers::method;
+    use wiremock::matchers::path;
 
     #[test]
     fn infers_evidence_items_from_summary_urls_and_artifacts() {
@@ -999,5 +1435,116 @@ mod tests {
             parsed.1.get("message").and_then(Value::as_str),
             Some("failed")
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn link_poll_timeout_leaves_pending_session_intact() -> anyhow::Result<()> {
+        let server = wiremock::MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/auth/terminal/session"))
+            .respond_with(ResponseTemplate::new(202))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let codex_home = tempfile::tempdir()?;
+        let pending = pending_session(&server.uri());
+        pending.save(codex_home.path())?;
+
+        let exit_code = run_link_command_for_codex_home(
+            codex_home.path(),
+            Some(server.uri()),
+            link_args(
+                /*poll*/ true, /*status*/ false, /*relink*/ false,
+                /*timeout*/ 0,
+            ),
+        )?;
+
+        assert_eq!(exit_code, 1);
+        let loaded = TaskNodeLocalSession::load(codex_home.path())?;
+        assert_eq!(loaded, pending);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn link_poll_rejected_exits_nonzero_and_keeps_pending_session() -> anyhow::Result<()> {
+        let server = wiremock::MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/auth/terminal/session"))
+            .respond_with(ResponseTemplate::new(410).set_body_json(json!({
+                "message": "link request expired",
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let codex_home = tempfile::tempdir()?;
+        let pending = pending_session(&server.uri());
+        pending.save(codex_home.path())?;
+
+        let exit_code = run_link_command_for_codex_home(
+            codex_home.path(),
+            Some(server.uri()),
+            link_args(
+                /*poll*/ true, /*status*/ false, /*relink*/ false,
+                /*timeout*/ 30,
+            ),
+        )?;
+
+        assert_eq!(exit_code, 1);
+        let loaded = TaskNodeLocalSession::load(codex_home.path())?;
+        assert_eq!(loaded, pending);
+        Ok(())
+    }
+
+    #[test]
+    fn link_refuses_to_overwrite_linked_session_without_relink() -> anyhow::Result<()> {
+        let codex_home = tempfile::tempdir()?;
+        let linked = TaskNodeLocalSession {
+            origin: "https://tasknode.example".to_string(),
+            account_id: Some("acct-1".to_string()),
+            github_username: Some("octocat".to_string()),
+            terminal_token: Some("terminal-secret".to_string()),
+            expires_at: Some("2026-07-08T12:00:00Z".to_string()),
+            pending_request_id: None,
+            pending_poll_token: None,
+            pending_verification_url: None,
+        };
+        linked.save(codex_home.path())?;
+
+        let exit_code = run_link_command_for_codex_home(
+            codex_home.path(),
+            None,
+            link_args(
+                /*poll*/ false, /*status*/ false, /*relink*/ false,
+                /*timeout*/ 300,
+            ),
+        )?;
+
+        assert_eq!(exit_code, 1);
+        let loaded = TaskNodeLocalSession::load(codex_home.path())?;
+        assert_eq!(loaded, linked);
+        Ok(())
+    }
+
+    fn pending_session(origin: &str) -> TaskNodeLocalSession {
+        TaskNodeLocalSession {
+            origin: origin.to_string(),
+            account_id: None,
+            github_username: None,
+            terminal_token: None,
+            expires_at: None,
+            pending_request_id: Some("req-123".to_string()),
+            pending_poll_token: Some("poll-secret".to_string()),
+            pending_verification_url: Some("https://verify.example/link".to_string()),
+        }
+    }
+
+    fn link_args(poll: bool, status: bool, relink: bool, timeout: u64) -> LinkArgs {
+        LinkArgs {
+            poll,
+            status,
+            relink,
+            timeout,
+            no_browser: true,
+        }
     }
 }
