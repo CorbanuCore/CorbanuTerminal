@@ -7,10 +7,206 @@ use super::resize_reflow::trailing_run_start;
 use super::*;
 use crate::config_update::format_config_error;
 use crate::external_agent_config_migration_flow::ExternalAgentConfigMigrationFlowOutcome;
+use chrono::Utc;
 #[cfg(target_os = "windows")]
 use codex_config::types::WindowsSandboxModeToml;
+use std::collections::HashSet;
 
 const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
+const RESERVED_PANE_DISPLAY_NAMES: &[&str] = &["Codex - Main", "me", "none", "root", "nazgul"];
+
+impl App {
+    fn normalize_pane_display_name(&self, name: &str) -> Result<String> {
+        let normalized = name.split_whitespace().collect::<Vec<_>>().join(" ");
+        if normalized.is_empty() {
+            color_eyre::eyre::bail!("Pane name cannot be empty.");
+        }
+        if RESERVED_PANE_DISPLAY_NAMES
+            .iter()
+            .any(|reserved| reserved.eq_ignore_ascii_case(&normalized))
+        {
+            color_eyre::eyre::bail!("`{normalized}` is reserved; choose a different pane name.");
+        }
+        Ok(normalized)
+    }
+
+    fn occupied_pane_name_keys(&self, exclude_node_id: Option<&str>) -> HashSet<String> {
+        let mut occupied = HashSet::new();
+        let mut insert = |value: &str| {
+            let folded = value.trim().to_ascii_lowercase();
+            if !folded.is_empty() {
+                occupied.insert(folded);
+            }
+        };
+
+        for (thread_id, entry) in self.agent_navigation.ordered_threads() {
+            let node_id = crate::spawn_orchestration::thread_node_id(thread_id);
+            if exclude_node_id == Some(node_id.as_str()) {
+                continue;
+            }
+            let label = self.thread_label(thread_id);
+            insert(&label);
+            if let Some(nickname) = entry.agent_nickname.as_deref() {
+                insert(nickname);
+                if Some(thread_id) != self.primary_thread_id
+                    && entry
+                        .agent_role
+                        .as_deref()
+                        .map(|role| role == "default")
+                        .unwrap_or(true)
+                {
+                    insert(&format!("Codex - {nickname}"));
+                }
+            }
+        }
+        for pane in self.claude_panes.panes() {
+            let node_id = crate::spawn_orchestration::pane_node_id(&pane.id);
+            if exclude_node_id == Some(node_id.as_str()) {
+                continue;
+            }
+            insert(&pane.title);
+        }
+        occupied
+    }
+
+    fn unique_pane_display_name(
+        &self,
+        requested: &str,
+        exclude_node_id: Option<&str>,
+    ) -> Result<String> {
+        let base = self.normalize_pane_display_name(requested)?;
+        let occupied = self.occupied_pane_name_keys(exclude_node_id);
+        let mut candidate = base.clone();
+        for suffix in 2..1000 {
+            if !occupied.contains(&candidate.to_ascii_lowercase()) {
+                return Ok(candidate);
+            }
+            candidate = format!("{base} ({suffix})");
+        }
+        color_eyre::eyre::bail!("Could not find an unused pane name for `{base}`.");
+    }
+
+    fn unique_native_pane_nickname(
+        &self,
+        requested: &str,
+        exclude_thread_id: Option<ThreadId>,
+    ) -> Result<String> {
+        let mut base = self.normalize_pane_display_name(requested)?;
+        if let Some(stripped) = base.strip_prefix("Codex - ") {
+            base = self.normalize_pane_display_name(stripped)?;
+        }
+        let exclude_node_id = exclude_thread_id.map(crate::spawn_orchestration::thread_node_id);
+        let occupied = self.occupied_pane_name_keys(exclude_node_id.as_deref());
+        let mut candidate = base.clone();
+        for suffix in 2..1000 {
+            let candidate_key = candidate.to_ascii_lowercase();
+            let display_key = format!("codex - {}", candidate.to_ascii_lowercase());
+            if !occupied.contains(&candidate_key) && !occupied.contains(&display_key) {
+                return Ok(candidate);
+            }
+            candidate = format!("{base} ({suffix})");
+        }
+        color_eyre::eyre::bail!("Could not find an unused pane name for `{base}`.");
+    }
+
+    async fn rename_current_pane_display_name(
+        &mut self,
+        app_server: &mut AppServerSession,
+        name: String,
+    ) {
+        if let Some(pane_id) = self
+            .claude_panes
+            .active_claude_pane_id()
+            .map(ToString::to_string)
+        {
+            self.rename_claude_pane_display_name(pane_id, name);
+            return;
+        }
+
+        let Some(thread_id) = self.current_displayed_thread_id() else {
+            self.chat_widget
+                .add_error_message("No active Codex pane to rename.".to_string());
+            return;
+        };
+        self.rename_codex_pane_display_name(app_server, thread_id, name)
+            .await;
+    }
+
+    fn rename_claude_pane_display_name(&mut self, pane_id: String, name: String) {
+        let exclude = crate::spawn_orchestration::pane_node_id(&pane_id);
+        let title = match self.unique_pane_display_name(&name, Some(exclude.as_str())) {
+            Ok(title) => title,
+            Err(err) => {
+                self.chat_widget.add_error_message(err.to_string());
+                return;
+            }
+        };
+        match self.claude_panes.rename_pane(&pane_id, title.clone()) {
+            Ok(()) => {
+                self.sync_active_agent_label();
+                self.persist_pane_state();
+                self.chat_widget
+                    .add_info_message(format!("Renamed pane to {title}."), None);
+            }
+            Err(err) => self
+                .chat_widget
+                .add_error_message(format!("Failed to rename pane: {err}")),
+        }
+    }
+
+    async fn rename_codex_pane_display_name(
+        &mut self,
+        app_server: &mut AppServerSession,
+        thread_id: ThreadId,
+        name: String,
+    ) {
+        let nickname = match self.unique_native_pane_nickname(&name, Some(thread_id)) {
+            Ok(nickname) => nickname,
+            Err(err) => {
+                self.chat_widget.add_error_message(err.to_string());
+                return;
+            }
+        };
+        let backend_name = nickname.clone();
+        if let Err(err) = app_server.thread_set_name(thread_id, backend_name).await {
+            self.chat_widget
+                .add_error_message(format!("Failed to rename thread: {err}"));
+            return;
+        }
+        self.agent_navigation
+            .set_agent_nickname(thread_id, Some(nickname.clone()));
+        self.persist_existing_thread_agent_nickname(thread_id, Some(nickname.clone()))
+            .await;
+        self.sync_active_agent_label();
+        self.persist_pane_state();
+        self.chat_widget
+            .add_info_message(format!("Renamed pane to {nickname}."), None);
+    }
+
+    async fn persist_existing_thread_agent_nickname(
+        &self,
+        thread_id: ThreadId,
+        agent_nickname: Option<String>,
+    ) {
+        let Some(state_db) = self.state_db.as_ref() else {
+            return;
+        };
+        let Ok(Some(mut metadata)) = state_db.get_thread(thread_id).await else {
+            return;
+        };
+        let now = Utc::now();
+        metadata.updated_at = now;
+        metadata.recency_at = now;
+        metadata.agent_nickname = agent_nickname;
+        if let Err(err) = state_db.upsert_thread(&metadata).await {
+            tracing::warn!(
+                thread_id = %thread_id,
+                error = %err,
+                "failed to persist renamed pane nickname"
+            );
+        }
+    }
+}
 
 impl App {
     pub(super) async fn handle_event(
@@ -2608,6 +2804,68 @@ impl App {
             AppEvent::HandleOrchestrateCommand { args } => {
                 self.handle_orchestrate_command(args);
             }
+            AppEvent::OpenOrchestrateTargetPicker => {
+                self.open_orchestrate_target_picker();
+            }
+            AppEvent::OpenOrchestrateDurationPicker { target } => {
+                self.open_orchestrate_duration_picker(target);
+            }
+            AppEvent::OpenOrchestrateWhipPicker {
+                target,
+                duration_arg,
+                duration_label,
+            } => {
+                self.open_orchestrate_whip_picker(target, duration_arg, duration_label);
+            }
+            AppEvent::OpenOrchestrateWriteWhipPrompt {
+                target,
+                duration_arg,
+                duration_label,
+            } => {
+                self.open_orchestrate_write_whip_prompt(target, duration_arg, duration_label);
+            }
+            AppEvent::OpenOrchestrateSaveWhipPrompt {
+                target,
+                duration_arg,
+                duration_label,
+                instructions,
+            } => {
+                self.open_orchestrate_save_whip_prompt(
+                    target,
+                    duration_arg,
+                    duration_label,
+                    instructions,
+                );
+            }
+            AppEvent::SaveOrchestrateWhipAndConfirm {
+                target,
+                duration_arg,
+                duration_label,
+                requested_name,
+                instructions,
+            } => {
+                self.save_orchestrate_whip_and_open_confirm(
+                    target,
+                    duration_arg,
+                    duration_label,
+                    requested_name,
+                    instructions,
+                );
+            }
+            AppEvent::OpenOrchestrateConfirm {
+                target,
+                duration_arg,
+                duration_label,
+                whip_name,
+            } => {
+                self.open_orchestrate_confirm(target, duration_arg, duration_label, whip_name);
+            }
+            AppEvent::OpenOrchestrateWhipDetails { whip_id } => {
+                self.open_orchestrate_whip_details(whip_id);
+            }
+            AppEvent::OpenOrchestrateExtendDurationPicker { whip_id } => {
+                self.open_orchestrate_extend_duration_picker(whip_id);
+            }
             AppEvent::WhipSweepTick => {
                 self.sweep_orchestrate_whips();
             }
@@ -2623,6 +2881,7 @@ impl App {
                 model,
                 provider,
                 effort,
+                display_name,
             } => {
                 let Some(parent_thread_id) = self.primary_thread_id.or(self.active_thread_id)
                 else {
@@ -2638,7 +2897,15 @@ impl App {
                         return Ok(AppRunControl::Continue);
                     }
                 };
-                let nickname = self.next_codex_pane_nickname();
+                let requested_name =
+                    display_name.unwrap_or_else(|| self.next_codex_pane_nickname());
+                let nickname = match self.unique_native_pane_nickname(&requested_name, None) {
+                    Ok(nickname) => nickname,
+                    Err(err) => {
+                        self.chat_widget.add_error_message(err.to_string());
+                        return Ok(AppRunControl::Continue);
+                    }
+                };
                 match app_server
                     .spawn_agent_thread(
                         &spawn_config,
@@ -2673,8 +2940,50 @@ impl App {
                     }
                 }
             }
-            AppEvent::CreateClaudePane { profile } => {
-                self.create_claude_pane(tui, profile).await;
+            AppEvent::OpenCodexPaneNamePrompt {
+                model,
+                provider,
+                effort,
+            } => {
+                self.open_codex_pane_name_prompt(model, provider, effort);
+            }
+            AppEvent::OpenClaudePaneNamePrompt { profile } => {
+                self.open_claude_pane_name_prompt(profile);
+            }
+            AppEvent::CreateClaudePane {
+                profile,
+                display_name,
+            } => {
+                let display_name = match display_name {
+                    Some(display_name) => {
+                        match self.unique_pane_display_name(&display_name, None) {
+                            Ok(name) => Some(name),
+                            Err(err) => {
+                                self.chat_widget.add_error_message(err.to_string());
+                                return Ok(AppRunControl::Continue);
+                            }
+                        }
+                    }
+                    None => None,
+                };
+                self.create_claude_pane(tui, profile, display_name).await;
+            }
+            AppEvent::RenameCurrentPane { name } => {
+                self.rename_current_pane_display_name(app_server, name)
+                    .await;
+            }
+            AppEvent::OpenRenameCodexPanePrompt { thread_id } => {
+                self.open_rename_codex_pane_prompt(thread_id);
+            }
+            AppEvent::OpenRenameClaudePanePrompt { pane_id } => {
+                self.open_rename_claude_pane_prompt(pane_id);
+            }
+            AppEvent::RenameCodexPane { thread_id, name } => {
+                self.rename_codex_pane_display_name(app_server, thread_id, name)
+                    .await;
+            }
+            AppEvent::RenameClaudePane { pane_id, name } => {
+                self.rename_claude_pane_display_name(pane_id, name);
             }
             AppEvent::CreateSpawnClaudePane {
                 role,

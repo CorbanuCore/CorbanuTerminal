@@ -761,12 +761,6 @@ impl App {
                 app_server.thread_compact_start(thread_id).await?;
                 Ok(true)
             }
-            AppCommand::SetThreadName { name } => {
-                app_server
-                    .thread_set_name(thread_id, name.to_string())
-                    .await?;
-                Ok(true)
-            }
             AppCommand::ThreadRollback { num_turns } => {
                 let response = match app_server.thread_rollback(thread_id, *num_turns).await {
                     Ok(response) => response,

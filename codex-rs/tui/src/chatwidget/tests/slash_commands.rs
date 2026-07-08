@@ -462,7 +462,7 @@ async fn queued_bare_rename_drains_next_input_after_name_update() {
     complete_turn_with_message(&mut chat, "turn-1", Some("done"));
 
     assert_eq!(chat.input_queue.queued_user_messages.len(), 1);
-    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("Name thread"));
+    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("Name pane"));
     assert_matches!(op_rx.try_recv(), Err(TryRecvError::Empty));
 
     chat.handle_paste("Queued rename".to_string());
@@ -472,9 +472,9 @@ async fn queued_bare_rename_drains_next_input_after_name_update() {
     assert!(
         events.iter().any(|event| matches!(
             event,
-            AppEvent::CodexOp(Op::SetThreadName { name }) if name == "Queued rename"
+            AppEvent::RenameCurrentPane { name } if name == "Queued rename"
         )),
-        "expected rename prompt to submit thread name; events: {events:?}"
+        "expected rename prompt to submit pane name; events: {events:?}"
     );
 
     chat.handle_server_notification(
@@ -517,9 +517,9 @@ async fn queued_inline_rename_does_not_drain_again_before_turn_started() {
     assert!(
         events.iter().any(|event| matches!(
             event,
-            AppEvent::CodexOp(Op::SetThreadName { name }) if name == "Queued rename"
+            AppEvent::RenameCurrentPane { name } if name == "Queued rename"
         )),
-        "expected queued /rename to submit thread name; events: {events:?}"
+        "expected queued /rename to submit pane name; events: {events:?}"
     );
 
     match next_submit_op(&mut op_rx) {
@@ -1185,7 +1185,7 @@ async fn slash_rename_prefills_existing_thread_name() {
 
     assert_matches!(
         rx.try_recv(),
-        Ok(AppEvent::CodexOp(Op::SetThreadName { name })) if name == "Current project title"
+        Ok(AppEvent::RenameCurrentPane { name }) if name == "Current project title"
     );
 }
 
@@ -1196,7 +1196,7 @@ async fn slash_rename_without_existing_thread_name_starts_empty() {
     chat.dispatch_command(SlashCommand::Rename);
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
-    assert!(popup.contains("Name thread"));
+    assert!(popup.contains("Name pane"));
     assert!(popup.contains("Type a name and press Enter"));
 
     chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));

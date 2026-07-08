@@ -230,6 +230,54 @@ pub(crate) enum AppEvent {
     HandleOrchestrateCommand {
         args: String,
     },
+    /// Start the guided `/orchestrate attach` flow.
+    OpenOrchestrateTargetPicker,
+    /// Choose how long a guided whip should stay armed.
+    OpenOrchestrateDurationPicker {
+        target: String,
+    },
+    /// Choose the instruction document for a guided whip.
+    OpenOrchestrateWhipPicker {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+    },
+    /// Compose a new global whip instruction document from the guided flow.
+    OpenOrchestrateWriteWhipPrompt {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+    },
+    /// Prompt for the slug to save a composed global whip instruction document.
+    OpenOrchestrateSaveWhipPrompt {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        instructions: String,
+    },
+    /// Save a composed global whip and continue to guided confirm.
+    SaveOrchestrateWhipAndConfirm {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        requested_name: String,
+        instructions: String,
+    },
+    /// Confirm the guided whip attach command.
+    OpenOrchestrateConfirm {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        whip_name: String,
+    },
+    /// Show actions/details for one whip row.
+    OpenOrchestrateWhipDetails {
+        whip_id: String,
+    },
+    /// Open a duration picker for extending one whip.
+    OpenOrchestrateExtendDurationPicker {
+        whip_id: String,
+    },
     /// Periodic native whip sweep; intentionally low priority and no-op when no whips are armed.
     WhipSweepTick,
     /// Switch the active user pane.
@@ -243,12 +291,46 @@ pub(crate) enum AppEvent {
         model: String,
         provider: Option<String>,
         effort: Option<ReasoningEffort>,
+        display_name: Option<String>,
+    },
+    /// Prompt for the display name of a native Codex pane before creation.
+    OpenCodexPaneNamePrompt {
+        model: String,
+        provider: Option<String>,
+        effort: Option<ReasoningEffort>,
     },
     /// Open the Claude Code provider picker.
     OpenClaudePaneProfilePicker,
     /// Create and switch to a Claude Code headless pane.
     CreateClaudePane {
         profile: crate::claude_panes::ClaudeProviderProfileKind,
+        display_name: Option<String>,
+    },
+    /// Prompt for the display name of a Claude Code pane before creation.
+    OpenClaudePaneNamePrompt {
+        profile: crate::claude_panes::ClaudeProviderProfileKind,
+    },
+    /// Rename the currently visible pane display name.
+    RenameCurrentPane {
+        name: String,
+    },
+    /// Open a rename prompt for a native Codex pane row.
+    OpenRenameCodexPanePrompt {
+        thread_id: codex_protocol::ThreadId,
+    },
+    /// Open a rename prompt for a Claude Code pane row.
+    OpenRenameClaudePanePrompt {
+        pane_id: String,
+    },
+    /// Rename a specific native Codex pane row.
+    RenameCodexPane {
+        thread_id: codex_protocol::ThreadId,
+        name: String,
+    },
+    /// Rename a specific Claude Code pane row.
+    RenameClaudePane {
+        pane_id: String,
+        name: String,
     },
     /// Create and switch to a Claude Code headless pane for a spawn role.
     CreateSpawnClaudePane {

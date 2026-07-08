@@ -66,8 +66,8 @@ impl AppEventSender {
         self.send(AppEvent::CodexOp(AppCommand::compact()));
     }
 
-    pub(crate) fn set_thread_name(&self, name: String) {
-        self.send(AppEvent::CodexOp(AppCommand::set_thread_name(name)));
+    pub(crate) fn rename_current_pane(&self, name: String) {
+        self.send(AppEvent::RenameCurrentPane { name });
     }
 
     pub(crate) fn review(&self, target: ReviewTarget) {

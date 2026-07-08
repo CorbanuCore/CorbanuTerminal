@@ -880,7 +880,7 @@ impl ChatWidget {
                     self.add_error_message("Thread name cannot be empty.".to_string());
                     return;
                 };
-                self.app_event_tx.set_thread_name(name);
+                self.app_event_tx.rename_current_pane(name);
             }
             SlashCommand::Plan if !trimmed.is_empty() => {
                 if !self.apply_plan_slash_command() {

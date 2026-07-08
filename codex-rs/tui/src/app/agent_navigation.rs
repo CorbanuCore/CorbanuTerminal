@@ -176,6 +176,18 @@ impl AgentNavigationState {
         }
     }
 
+    pub(crate) fn set_agent_nickname(
+        &mut self,
+        thread_id: ThreadId,
+        agent_nickname: Option<String>,
+    ) -> bool {
+        let Some(entry) = self.threads.get_mut(&thread_id) else {
+            return false;
+        };
+        entry.agent_nickname = agent_nickname;
+        true
+    }
+
     /// Marks a thread as closed without removing it from the traversal cache.
     ///
     /// Closed threads stay in the picker and in spawn order so users can still review them and so

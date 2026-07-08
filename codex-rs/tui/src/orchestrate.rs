@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
@@ -10,12 +11,22 @@ use chrono::NaiveTime;
 use chrono::Timelike;
 use chrono::Utc;
 use codex_protocol::ThreadId;
+use crossterm::event::KeyCode;
+use ratatui::text::Line;
 use serde::Deserialize;
 use serde::Serialize;
 
 use crate::app::App;
 use crate::app_event::AppEvent;
+use crate::bottom_pane::SelectionItem;
+use crate::bottom_pane::SelectionShortcutAction;
+use crate::bottom_pane::SelectionViewParams;
+use crate::bottom_pane::custom_prompt_view::CustomPromptSubmitMode;
+use crate::bottom_pane::custom_prompt_view::CustomPromptView;
+use crate::bottom_pane::popup_consts::standard_popup_hint_line;
 use crate::claude_panes::CODEX_MAIN_PANE_ID;
+use crate::claude_panes::ClaudePaneStatus;
+use crate::key_hint;
 use crate::spawn_orchestration::SpawnTaskTarget;
 use crate::spawn_orchestration::node_id_pane;
 use crate::spawn_orchestration::node_id_thread;
@@ -28,6 +39,10 @@ const DEFAULT_EXPIRY_SECONDS: i64 = 4 * 60 * 60;
 const DEFAULT_MAX_FIRES: u32 = 20;
 const DEFAULT_COOLDOWN_S: u64 = 60;
 const DEFAULT_STOP_MARKER: &str = "WHIP_DONE";
+const BUILTIN_KEEP_GOING_WHIP: &str = "keep-going";
+const BUILTIN_KEEP_GOING_PATH: &str = "built-in:keep-going";
+const BUILTIN_KEEP_GOING_INSTRUCTION: &str =
+    "Continue the assigned work. If finished, report done and emit WHIP_DONE.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -209,6 +224,21 @@ struct WhipDocDefaults {
     max_fires: Option<u32>,
     cooldown_s: Option<u64>,
     stop_marker: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WhipInstructionEntry {
+    name: String,
+    description: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OrchestrateTargetEntry {
+    target: String,
+    node_id: String,
+    name: String,
+    description: String,
+    is_current: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -487,6 +517,66 @@ pub(crate) fn resolve_whip_instruction_path(
     Ok(global_path.exists().then_some(global_path))
 }
 
+fn normalize_whip_name(name: &str) -> &str {
+    name.trim()
+        .strip_suffix(".md")
+        .unwrap_or_else(|| name.trim())
+}
+
+fn is_builtin_keep_going_name(name: &str) -> bool {
+    normalize_whip_name(name) == BUILTIN_KEEP_GOING_WHIP
+}
+
+fn scan_whip_instruction_dir(
+    dir: &Path,
+    source: &str,
+    seen: &mut HashSet<String>,
+    entries: &mut Vec<WhipInstructionEntry>,
+) {
+    let Ok(read_dir) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in read_dir.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        let Some(name) = file_name.strip_suffix(".md") else {
+            continue;
+        };
+        if validate_whip_name(name).is_err() || !seen.insert(name.to_string()) {
+            continue;
+        }
+        entries.push(WhipInstructionEntry {
+            name: name.to_string(),
+            description: format!("{source}: {}", path.display()),
+        });
+    }
+}
+
+fn available_whip_instruction_entries(codex_home: &Path, cwd: &Path) -> Vec<WhipInstructionEntry> {
+    let mut seen = HashSet::new();
+    let mut entries = Vec::new();
+    scan_whip_instruction_dir(
+        &cwd.join(".pfterminal").join("whips"),
+        "project",
+        &mut seen,
+        &mut entries,
+    );
+    scan_whip_instruction_dir(&codex_home.join("whips"), "global", &mut seen, &mut entries);
+    if seen.insert(BUILTIN_KEEP_GOING_WHIP.to_string()) {
+        entries.push(WhipInstructionEntry {
+            name: BUILTIN_KEEP_GOING_WHIP.to_string(),
+            description: "built-in: continue work until WHIP_DONE".to_string(),
+        });
+    }
+    entries.sort_by(|left, right| left.name.cmp(&right.name));
+    entries
+}
+
 fn validate_whip_name(name: &str) -> Result<(), String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
@@ -505,8 +595,16 @@ fn read_whip_instruction(
     cwd: &Path,
     name: &str,
 ) -> Result<(PathBuf, String), String> {
-    let path = resolve_whip_instruction_path(codex_home, cwd, name)?
-        .ok_or_else(|| format!("No whip instruction file found for `{name}`."))?;
+    let path = match resolve_whip_instruction_path(codex_home, cwd, name)? {
+        Some(path) => path,
+        None if is_builtin_keep_going_name(name) => {
+            return Ok((
+                PathBuf::from(BUILTIN_KEEP_GOING_PATH),
+                BUILTIN_KEEP_GOING_INSTRUCTION.to_string(),
+            ));
+        }
+        None => return Err(format!("No whip instruction file found for `{name}`.")),
+    };
     let contents = fs::read_to_string(&path)
         .map_err(|err| format!("Failed to read whip `{}`: {err}", path.display()))?;
     if contents.trim().is_empty() {
@@ -516,6 +614,22 @@ fn read_whip_instruction(
         ));
     }
     Ok((path, contents))
+}
+
+fn orchestrate_guided_attach_args(target: &str, duration_arg: &str, whip_name: &str) -> String {
+    format!(
+        "attach {target} {whip_name} --mode review --for {duration_arg} --max {DEFAULT_MAX_FIRES} --cooldown {DEFAULT_COOLDOWN_S}s --holder me"
+    )
+}
+
+fn truncate_for_orchestrate_display(value: &str, max_chars: usize) -> String {
+    let mut chars = value.chars();
+    let truncated: String = chars.by_ref().take(max_chars).collect();
+    if chars.next().is_some() {
+        format!("{truncated}...")
+    } else {
+        truncated
+    }
 }
 
 pub(crate) fn whip_suffix_for_target(
@@ -542,12 +656,717 @@ pub(crate) fn whip_suffix_for_target(
     )
 }
 
+fn orchestrate_shortcut_command(key: char, args: String) -> SelectionShortcutAction {
+    SelectionShortcutAction {
+        key: key_hint::plain(KeyCode::Char(key)),
+        action: Box::new(move |tx| {
+            tx.send(AppEvent::HandleOrchestrateCommand { args: args.clone() });
+        }),
+        dismiss_on_select: true,
+    }
+}
+
+fn orchestrate_shortcut_extend(key: char, whip_id: String) -> SelectionShortcutAction {
+    SelectionShortcutAction {
+        key: key_hint::plain(KeyCode::Char(key)),
+        action: Box::new(move |tx| {
+            tx.send(AppEvent::OpenOrchestrateExtendDurationPicker {
+                whip_id: whip_id.clone(),
+            });
+        }),
+        dismiss_on_select: true,
+    }
+}
+
+fn orchestrate_command_item(name: &str, description: &str, args: String) -> SelectionItem {
+    SelectionItem {
+        name: name.to_string(),
+        description: Some(description.to_string()),
+        actions: vec![Box::new(move |tx| {
+            tx.send(AppEvent::HandleOrchestrateCommand { args: args.clone() });
+        })],
+        dismiss_on_select: true,
+        ..Default::default()
+    }
+}
+
+fn suggested_whip_name(instructions: &str) -> String {
+    let mut slug = String::new();
+    for ch in instructions
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or("custom whip")
+        .chars()
+    {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+        } else if (ch.is_whitespace() || ch == '-' || ch == '_') && !slug.ends_with('-') {
+            slug.push('-');
+        }
+        if slug.len() >= 32 {
+            break;
+        }
+    }
+    let slug = slug.trim_matches('-');
+    if slug.is_empty() {
+        "custom-whip".to_string()
+    } else {
+        slug.to_string()
+    }
+}
+
+fn save_global_whip_instruction(
+    codex_home: &Path,
+    requested_name: &str,
+    instructions: &str,
+) -> Result<String, String> {
+    validate_whip_name(requested_name)?;
+    let base = normalize_whip_name(requested_name).to_string();
+    let dir = codex_home.join("whips");
+    fs::create_dir_all(&dir)
+        .map_err(|err| format!("Failed to create `{}`: {err}", dir.display()))?;
+    for suffix in 1..1000 {
+        let candidate = if suffix == 1 {
+            base.clone()
+        } else {
+            format!("{base}-{suffix}")
+        };
+        validate_whip_name(&candidate)?;
+        let path = dir.join(format!("{candidate}.md"));
+        if path.exists() || is_builtin_keep_going_name(&candidate) {
+            continue;
+        }
+        let mut body = instructions.trim().to_string();
+        body.push('\n');
+        fs::write(&path, body)
+            .map_err(|err| format!("Failed to write whip `{}`: {err}", path.display()))?;
+        return Ok(candidate);
+    }
+    Err(format!("Could not find an unused whip name for `{base}`."))
+}
+
 impl App {
     pub(crate) fn handle_orchestrate_command(&mut self, args: String) {
+        let trimmed = args.trim();
+        if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("status") {
+            self.open_orchestrate_status_view();
+            return;
+        }
+        if trimmed.eq_ignore_ascii_case("attach") {
+            self.open_orchestrate_target_picker();
+            return;
+        }
         match parse_orchestrate_command(&args) {
             Ok(command) => self.apply_orchestrate_command(command, CommandOrigin::User),
             Err(err) => self.chat_widget.add_error_message(err),
         }
+    }
+
+    pub(crate) fn open_orchestrate_status_view(&mut self) {
+        let now = Utc::now();
+        let mut whips: Vec<_> = self.orchestrate_whips.values().collect();
+        whips.sort_by(|left, right| left.id.cmp(&right.id));
+
+        let mut items = Vec::new();
+        items.push(SelectionItem {
+            name: "+ Attach whip".to_string(),
+            description: Some("Pick target, duration, and instruction set.".to_string()),
+            display_shortcut: Some(key_hint::plain(KeyCode::Char('n'))),
+            actions: vec![Box::new(|tx| {
+                tx.send(AppEvent::OpenOrchestrateTargetPicker);
+            })],
+            dismiss_on_select: true,
+            ..Default::default()
+        });
+
+        if whips.is_empty() {
+            items.push(SelectionItem {
+                name: "No whips attached".to_string(),
+                description: Some("Use the first row to attach one.".to_string()),
+                is_disabled: true,
+                ..Default::default()
+            });
+        } else {
+            for whip in whips {
+                let whip_id = whip.id.clone();
+                let pause_resume_args = if whip.state == WhipState::Paused {
+                    format!("resume {whip_id}")
+                } else {
+                    format!("pause {whip_id}")
+                };
+                let expiry = match whip.expires_at {
+                    Some(expires_at) if expires_at <= now => "expired".to_string(),
+                    Some(expires_at) => format!("expires {}", expires_at.format("%H:%MZ")),
+                    None => "unlimited".to_string(),
+                };
+                let holder = whip
+                    .holder
+                    .as_deref()
+                    .and_then(|node_id| self.spawn_node_title(node_id))
+                    .unwrap_or_else(|| "none".to_string());
+                let target = self
+                    .spawn_node_title(&whip.target)
+                    .unwrap_or_else(|| whip.target.clone());
+                items.push(SelectionItem {
+                    name: format!("{}: {}", whip.id, target),
+                    description: Some(format!(
+                        "{}; holder {}; {}; {}/{} fires; {}; {}",
+                        whip.state.label(),
+                        holder,
+                        whip.mode.label(),
+                        whip.fires,
+                        whip.max_fires,
+                        expiry,
+                        whip.instructions
+                    )),
+                    search_value: Some(format!(
+                        "{} {} {} {}",
+                        whip.id, target, holder, whip.instructions
+                    )),
+                    is_current: whip.state == WhipState::Armed,
+                    actions: vec![Box::new({
+                        let whip_id = whip_id.clone();
+                        move |tx| {
+                            tx.send(AppEvent::OpenOrchestrateWhipDetails {
+                                whip_id: whip_id.clone(),
+                            });
+                        }
+                    })],
+                    selected_shortcuts: vec![
+                        orchestrate_shortcut_command('d', format!("detach {whip_id}")),
+                        orchestrate_shortcut_command('p', pause_resume_args),
+                        orchestrate_shortcut_extend('e', whip_id.clone()),
+                        orchestrate_shortcut_command('f', format!("fire {whip_id}")),
+                        orchestrate_shortcut_command('t', format!("test {whip_id}")),
+                    ],
+                    dismiss_on_select: false,
+                    ..Default::default()
+                });
+            }
+        }
+
+        self.chat_widget.show_selection_view(SelectionViewParams {
+            view_id: Some("orchestrate-status"),
+            title: Some("Orchestrate".to_string()),
+            subtitle: Some("Whips attach follow-up instructions to idle panes.".to_string()),
+            footer_hint: Some(Line::from(
+                "Enter details · d detach · p pause/resume · e extend · f fire · t test · n new whip",
+            )),
+            items,
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn open_orchestrate_target_picker(&mut self) {
+        let holder_node = self.current_holder_node().ok();
+        let entries = self.orchestrate_target_entries();
+        let mut items = Vec::new();
+        for entry in entries {
+            let target = entry.target.clone();
+            let disabled_reason = if holder_node.as_deref() == Some(entry.node_id.as_str()) {
+                Some("Current pane cannot hold a review whip for itself.".to_string())
+            } else {
+                None
+            };
+            items.push(SelectionItem {
+                name: entry.name.clone(),
+                description: Some(entry.description.clone()),
+                is_current: entry.is_current,
+                disabled_reason,
+                actions: vec![Box::new(move |tx| {
+                    tx.send(AppEvent::OpenOrchestrateDurationPicker {
+                        target: target.clone(),
+                    });
+                })],
+                dismiss_on_select: true,
+                search_value: Some(format!(
+                    "{} {} {}",
+                    entry.name, entry.description, entry.target
+                )),
+                ..Default::default()
+            });
+        }
+        if items.is_empty() {
+            items.push(SelectionItem {
+                name: "No target panes available".to_string(),
+                description: Some("Create a Codex or Claude pane first.".to_string()),
+                is_disabled: true,
+                ..Default::default()
+            });
+        }
+
+        self.chat_widget.show_selection_view(SelectionViewParams {
+            view_id: Some("orchestrate-target"),
+            title: Some("Attach Whip - Target".to_string()),
+            subtitle: Some("Choose the pane that should be checked when it goes idle.".to_string()),
+            footer_hint: Some(standard_popup_hint_line()),
+            items,
+            is_searchable: true,
+            search_placeholder: Some("Search panes".to_string()),
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn open_orchestrate_duration_picker(&mut self, target: String) {
+        let choices = [
+            ("15 minutes", "15m", "Short follow-up check."),
+            ("1 hour", "1h", "Default short watchdog window."),
+            ("4 hours", "4h", "Matches the CLI default."),
+            ("8 hours", "8h", "Long-running local work."),
+            (
+                "Unlimited",
+                "unlimited",
+                "Stays armed until detached or exhausted.",
+            ),
+        ];
+        let items = choices
+            .into_iter()
+            .map(|(label, duration_arg, description)| {
+                let target = target.clone();
+                let duration_arg = duration_arg.to_string();
+                let duration_label = label.to_string();
+                SelectionItem {
+                    name: label.to_string(),
+                    description: Some(description.to_string()),
+                    is_default: duration_arg == "1h",
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::OpenOrchestrateWhipPicker {
+                            target: target.clone(),
+                            duration_arg: duration_arg.clone(),
+                            duration_label: duration_label.clone(),
+                        });
+                    })],
+                    dismiss_on_select: true,
+                    ..Default::default()
+                }
+            })
+            .collect();
+
+        self.chat_widget.show_selection_view(SelectionViewParams {
+            view_id: Some("orchestrate-duration"),
+            title: Some("Attach Whip - Duration".to_string()),
+            subtitle: Some(format!(
+                "Target: {}",
+                self.orchestrate_target_label(&target)
+            )),
+            footer_hint: Some(standard_popup_hint_line()),
+            items,
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn open_orchestrate_whip_picker(
+        &mut self,
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+    ) {
+        let entries =
+            available_whip_instruction_entries(self.config.codex_home.as_ref(), &self.config.cwd);
+        let mut items: Vec<SelectionItem> = entries
+            .into_iter()
+            .map(|entry| {
+                let target = target.clone();
+                let duration_arg = duration_arg.clone();
+                let duration_label = duration_label.clone();
+                let whip_name = entry.name.clone();
+                SelectionItem {
+                    name: entry.name,
+                    description: Some(entry.description),
+                    is_default: whip_name == BUILTIN_KEEP_GOING_WHIP,
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::OpenOrchestrateConfirm {
+                            target: target.clone(),
+                            duration_arg: duration_arg.clone(),
+                            duration_label: duration_label.clone(),
+                            whip_name: whip_name.clone(),
+                        });
+                    })],
+                    dismiss_on_select: true,
+                    ..Default::default()
+                }
+            })
+            .collect();
+        items.push(SelectionItem {
+            name: "Write new...".to_string(),
+            description: Some("Type standing instructions now and save them globally.".to_string()),
+            actions: vec![Box::new({
+                let target = target.clone();
+                let duration_arg = duration_arg.clone();
+                let duration_label = duration_label.clone();
+                move |tx| {
+                    tx.send(AppEvent::OpenOrchestrateWriteWhipPrompt {
+                        target: target.clone(),
+                        duration_arg: duration_arg.clone(),
+                        duration_label: duration_label.clone(),
+                    });
+                }
+            })],
+            dismiss_on_select: true,
+            ..Default::default()
+        });
+
+        self.chat_widget.show_selection_view(SelectionViewParams {
+            view_id: Some("orchestrate-whip"),
+            title: Some("Attach Whip - Instructions".to_string()),
+            subtitle: Some(format!(
+                "{} for {}",
+                self.orchestrate_target_label(&target),
+                duration_label
+            )),
+            footer_hint: Some(standard_popup_hint_line()),
+            items,
+            is_searchable: true,
+            search_placeholder: Some("Search whips".to_string()),
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn open_orchestrate_confirm(
+        &mut self,
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        whip_name: String,
+    ) {
+        let target_label = self.orchestrate_target_label(&target);
+        let replacement =
+            self.resolve_orchestrate_target_node(&target)
+                .ok()
+                .and_then(|target_node| {
+                    self.orchestrate_whips
+                        .values()
+                        .find(|whip| {
+                            whip.target == target_node && whip.state != WhipState::Detached
+                        })
+                        .map(|whip| whip.id.clone())
+                });
+        let attach_label = if let Some(id) = replacement.as_deref() {
+            format!("Attach and replace {id}")
+        } else {
+            "Attach whip".to_string()
+        };
+        let mut items = vec![SelectionItem {
+            name: attach_label,
+            description: Some(format!(
+                "{} -> {}; review mode; max {}; cooldown {}s",
+                whip_name, target_label, DEFAULT_MAX_FIRES, DEFAULT_COOLDOWN_S
+            )),
+            actions: vec![Box::new({
+                let args = orchestrate_guided_attach_args(&target, &duration_arg, &whip_name);
+                move |tx| {
+                    tx.send(AppEvent::HandleOrchestrateCommand { args: args.clone() });
+                }
+            })],
+            dismiss_on_select: true,
+            ..Default::default()
+        }];
+        items.push(SelectionItem {
+            name: "Cancel".to_string(),
+            description: Some("Leave whips unchanged.".to_string()),
+            actions: Vec::new(),
+            dismiss_on_select: true,
+            ..Default::default()
+        });
+
+        self.chat_widget.show_selection_view(SelectionViewParams {
+            view_id: Some("orchestrate-confirm"),
+            title: Some("Attach Whip - Confirm".to_string()),
+            subtitle: Some(format!(
+                "{} on {} for {}",
+                whip_name, target_label, duration_label
+            )),
+            footer_hint: Some(standard_popup_hint_line()),
+            items,
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn open_orchestrate_write_whip_prompt(
+        &mut self,
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+    ) {
+        let tx = self.app_event_tx.clone();
+        let template = "Continue the assigned work.\n\nIf the target is genuinely finished, report done and emit WHIP_DONE.".to_string();
+        let view = CustomPromptView::new(
+            "Write Whip Instructions".to_string(),
+            "Standing instructions for follow-up turns".to_string(),
+            template,
+            Some(format!(
+                "{} for {}",
+                self.orchestrate_target_label(&target),
+                duration_label
+            )),
+            Box::new(move |instructions: String| {
+                tx.send(AppEvent::OpenOrchestrateSaveWhipPrompt {
+                    target: target.clone(),
+                    duration_arg: duration_arg.clone(),
+                    duration_label: duration_label.clone(),
+                    instructions,
+                });
+            }),
+        )
+        .with_submit_mode(CustomPromptSubmitMode::CtrlD);
+        self.chat_widget.show_custom_prompt_view(view);
+    }
+
+    pub(crate) fn open_orchestrate_save_whip_prompt(
+        &mut self,
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        instructions: String,
+    ) {
+        let tx = self.app_event_tx.clone();
+        let suggested_name = suggested_whip_name(&instructions);
+        let view = CustomPromptView::new(
+            "Save Whip As".to_string(),
+            "Basename, for example keep-going".to_string(),
+            suggested_name,
+            Some("Saved under ~/.pfterminal/whips".to_string()),
+            Box::new(move |requested_name: String| {
+                tx.send(AppEvent::SaveOrchestrateWhipAndConfirm {
+                    target: target.clone(),
+                    duration_arg: duration_arg.clone(),
+                    duration_label: duration_label.clone(),
+                    requested_name,
+                    instructions: instructions.clone(),
+                });
+            }),
+        );
+        self.chat_widget.show_custom_prompt_view(view);
+    }
+
+    pub(crate) fn save_orchestrate_whip_and_open_confirm(
+        &mut self,
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        requested_name: String,
+        instructions: String,
+    ) {
+        match save_global_whip_instruction(
+            self.config.codex_home.as_ref(),
+            &requested_name,
+            &instructions,
+        ) {
+            Ok(whip_name) => {
+                self.chat_widget.add_info_message(
+                    format!("Saved whip `{whip_name}`."),
+                    Some("Saved globally under ~/.pfterminal/whips.".to_string()),
+                );
+                self.open_orchestrate_confirm(target, duration_arg, duration_label, whip_name);
+            }
+            Err(err) => self.chat_widget.add_error_message(err),
+        }
+    }
+
+    pub(crate) fn open_orchestrate_extend_duration_picker(&mut self, whip_id: String) {
+        let choices = [
+            ("15 minutes", "15m", "Add a short follow-up window."),
+            ("1 hour", "1h", "Add one working window."),
+            ("4 hours", "4h", "Add the default budget window."),
+            ("8 hours", "8h", "Add an overnight window."),
+        ];
+        let items = choices
+            .into_iter()
+            .map(|(label, duration_arg, description)| {
+                let args = format!("extend {whip_id} {duration_arg}");
+                SelectionItem {
+                    name: label.to_string(),
+                    description: Some(description.to_string()),
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::HandleOrchestrateCommand { args: args.clone() });
+                    })],
+                    dismiss_on_select: true,
+                    ..Default::default()
+                }
+            })
+            .collect();
+
+        self.chat_widget.show_selection_view(SelectionViewParams {
+            view_id: Some("orchestrate-extend"),
+            title: Some("Extend Whip".to_string()),
+            subtitle: Some(whip_id),
+            footer_hint: Some(standard_popup_hint_line()),
+            items,
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn open_orchestrate_whip_details(&mut self, whip_id: String) {
+        let Some(whip) = self.orchestrate_whips.get(&whip_id).cloned() else {
+            self.chat_widget
+                .add_error_message(format!("No whip found for `{whip_id}`."));
+            return;
+        };
+        let target = self.node_label(&whip.target);
+        let holder = whip
+            .holder
+            .as_deref()
+            .map(|holder| self.node_label(holder))
+            .unwrap_or_else(|| "none".to_string());
+        let expiry = match whip.expires_at {
+            Some(expires_at) if expires_at <= Utc::now() => "expired".to_string(),
+            Some(expires_at) => format!("expires {}", expires_at.format("%H:%MZ")),
+            None => "unlimited".to_string(),
+        };
+        let pause_resume = if whip.state == WhipState::Paused {
+            ("Resume", format!("resume {whip_id}"))
+        } else {
+            ("Pause", format!("pause {whip_id}"))
+        };
+        let items = vec![
+            SelectionItem {
+                name: pause_resume.0.to_string(),
+                description: Some(format!("{} whip {}.", pause_resume.0, whip_id)),
+                actions: vec![Box::new({
+                    let args = pause_resume.1;
+                    move |tx| tx.send(AppEvent::HandleOrchestrateCommand { args: args.clone() })
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "Extend...".to_string(),
+                description: Some("Add time to the current expiry.".to_string()),
+                actions: vec![Box::new({
+                    let whip_id = whip_id.clone();
+                    move |tx| {
+                        tx.send(AppEvent::OpenOrchestrateExtendDurationPicker {
+                            whip_id: whip_id.clone(),
+                        });
+                    }
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            orchestrate_command_item(
+                "Fire now",
+                "Send the whip turn immediately.",
+                format!("fire {whip_id}"),
+            ),
+            orchestrate_command_item(
+                "Test",
+                "Preview the task this whip would send.",
+                format!("test {whip_id}"),
+            ),
+            orchestrate_command_item("Detach", "Detach this whip.", format!("detach {whip_id}")),
+            SelectionItem {
+                name: "Attach new whip".to_string(),
+                description: Some("Start the guided attach flow.".to_string()),
+                display_shortcut: Some(key_hint::plain(KeyCode::Char('n'))),
+                actions: vec![Box::new(|tx| {
+                    tx.send(AppEvent::OpenOrchestrateTargetPicker)
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+        ];
+
+        self.chat_widget.show_selection_view(SelectionViewParams {
+            view_id: Some("orchestrate-details"),
+            title: Some(format!("Whip {whip_id}")),
+            subtitle: Some(format!(
+                "{holder} -> {target}; {}; {}/{} fires; {}; {}",
+                whip.mode.label(),
+                whip.fires,
+                whip.max_fires,
+                expiry,
+                whip.instructions
+            )),
+            footer_hint: Some(standard_popup_hint_line()),
+            items,
+            ..Default::default()
+        });
+    }
+
+    fn orchestrate_target_entries(&self) -> Vec<OrchestrateTargetEntry> {
+        let mut entries = Vec::new();
+        for (thread_id, entry) in self.agent_navigation.ordered_threads() {
+            let node_id = thread_node_id(thread_id);
+            let name = self.thread_label(thread_id);
+            let status = if entry.is_closed {
+                "done"
+            } else if entry.is_running {
+                "running"
+            } else {
+                "idle"
+            };
+            let mut description = format!("Codex; {status}; {}", thread_id);
+            if let Some(task) = entry.last_task_message.as_deref() {
+                description.push_str(&format!(
+                    "; task: {}",
+                    truncate_for_orchestrate_display(task, 90)
+                ));
+            }
+            if let Some(result) = entry.last_result_message.as_deref() {
+                description.push_str(&format!(
+                    "; result: {}",
+                    truncate_for_orchestrate_display(result, 90)
+                ));
+            }
+            entries.push(OrchestrateTargetEntry {
+                target: thread_id.to_string(),
+                node_id,
+                name,
+                description,
+                is_current: self.claude_panes.active_user_pane_id() == CODEX_MAIN_PANE_ID
+                    && self.active_thread_id == Some(thread_id),
+            });
+        }
+
+        for pane in self.claude_panes.panes() {
+            let status = match pane.status {
+                ClaudePaneStatus::Idle => "idle",
+                ClaudePaneStatus::Running => "running",
+            };
+            let mut description = format!(
+                "Claude Code {}; {status}; {}",
+                pane.profile.status_model_label(),
+                pane.id
+            );
+            if let Some(turn_status) = pane.latest_turn_status {
+                description.push_str(&format!("; latest: {}", turn_status.label()));
+            }
+            if let Some(usage) = pane.latest_usage_summary.as_deref() {
+                description.push_str(&format!(
+                    "; usage: {}",
+                    truncate_for_orchestrate_display(usage, 80)
+                ));
+            }
+            if let Some(task) = pane.latest_task_message.as_deref() {
+                description.push_str(&format!(
+                    "; task: {}",
+                    truncate_for_orchestrate_display(task, 90)
+                ));
+            }
+            if let Some(result) = pane.latest_result_message.as_deref() {
+                description.push_str(&format!(
+                    "; result: {}",
+                    truncate_for_orchestrate_display(result, 90)
+                ));
+            }
+            entries.push(OrchestrateTargetEntry {
+                target: pane.id.clone(),
+                node_id: pane_node_id(&pane.id),
+                name: pane.title.clone(),
+                description,
+                is_current: self.claude_panes.active_user_pane_id() == pane.id,
+            });
+        }
+
+        entries.sort_by(|left, right| left.name.cmp(&right.name));
+        entries
+    }
+
+    fn orchestrate_target_label(&self, target: &str) -> String {
+        self.resolve_orchestrate_target_node(target)
+            .ok()
+            .and_then(|node_id| self.spawn_node_title(&node_id))
+            .unwrap_or_else(|| target.to_string())
     }
 
     pub(crate) fn dispatch_orchestrate_blocks_from_text(
@@ -1503,5 +2322,95 @@ mod tests {
         assert_eq!(defaults.max_fires, Some(3));
         assert_eq!(defaults.cooldown_s, Some(120));
         assert_eq!(defaults.stop_marker.as_deref(), Some("DONE"));
+    }
+
+    #[test]
+    fn guided_attach_args_parse_to_attach_command() {
+        let args = orchestrate_guided_attach_args("claude-123", "1h", BUILTIN_KEEP_GOING_WHIP);
+        let parsed = parse_orchestrate_command(&args).expect("parse");
+
+        assert_eq!(
+            parsed,
+            OrchestrateCommand::Attach {
+                target: "claude-123".to_string(),
+                whip_name: BUILTIN_KEEP_GOING_WHIP.to_string(),
+                mode: Some(WhipMode::Review),
+                expiry: Some(ExpiryArg::Duration(DurationArg { seconds: 3600 })),
+                max_fires: Some(DEFAULT_MAX_FIRES),
+                cooldown_s: Some(DEFAULT_COOLDOWN_S),
+                holder: Some(HolderArg::Me),
+            }
+        );
+    }
+
+    #[test]
+    fn builtin_keep_going_is_available_without_file() {
+        let codex_home = tempfile::tempdir().expect("codex home");
+        let cwd = tempfile::tempdir().expect("cwd");
+
+        let (path, contents) =
+            read_whip_instruction(codex_home.path(), cwd.path(), BUILTIN_KEEP_GOING_WHIP)
+                .expect("builtin whip");
+
+        assert_eq!(path, PathBuf::from(BUILTIN_KEEP_GOING_PATH));
+        assert_eq!(contents, BUILTIN_KEEP_GOING_INSTRUCTION);
+    }
+
+    #[test]
+    fn global_keep_going_file_overrides_builtin() {
+        let codex_home = tempfile::tempdir().expect("codex home");
+        let cwd = tempfile::tempdir().expect("cwd");
+        let global_whips = codex_home.path().join("whips");
+        fs::create_dir_all(&global_whips).expect("global whips dir");
+        let global_path = global_whips.join("keep-going.md");
+        fs::write(&global_path, "global override").expect("write global whip");
+
+        let (path, contents) =
+            read_whip_instruction(codex_home.path(), cwd.path(), BUILTIN_KEEP_GOING_WHIP)
+                .expect("global whip");
+
+        assert_eq!(path, global_path);
+        assert_eq!(contents, "global override");
+    }
+
+    #[test]
+    fn project_keep_going_file_overrides_global_file() {
+        let codex_home = tempfile::tempdir().expect("codex home");
+        let cwd = tempfile::tempdir().expect("cwd");
+        let global_whips = codex_home.path().join("whips");
+        fs::create_dir_all(&global_whips).expect("global whips dir");
+        fs::write(global_whips.join("keep-going.md"), "global override")
+            .expect("write global whip");
+        let project_whips = cwd.path().join(".pfterminal").join("whips");
+        fs::create_dir_all(&project_whips).expect("project whips dir");
+        let project_path = project_whips.join("keep-going.md");
+        fs::write(&project_path, "project override").expect("write project whip");
+
+        let (path, contents) =
+            read_whip_instruction(codex_home.path(), cwd.path(), "keep-going.md")
+                .expect("project whip");
+
+        assert_eq!(path, project_path);
+        assert_eq!(contents, "project override");
+    }
+
+    #[test]
+    fn available_whip_entries_include_builtin_once() {
+        let codex_home = tempfile::tempdir().expect("codex home");
+        let cwd = tempfile::tempdir().expect("cwd");
+        let entries = available_whip_instruction_entries(codex_home.path(), cwd.path());
+
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.name == BUILTIN_KEEP_GOING_WHIP)
+                .count(),
+            1
+        );
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry.description.starts_with("built-in:"))
+        );
     }
 }

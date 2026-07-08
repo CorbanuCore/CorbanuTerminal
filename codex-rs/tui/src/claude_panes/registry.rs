@@ -116,6 +116,17 @@ impl ClaudePaneRegistry {
             .is_some_and(|pane| pane.status == ClaudePaneStatus::Running)
     }
 
+    pub(crate) fn rename_pane(&mut self, pane_id: &str, title: String) -> Result<()> {
+        let pane = self
+            .panes
+            .iter_mut()
+            .find(|pane| pane.id == pane_id)
+            .ok_or_else(|| anyhow!("Claude pane `{pane_id}` does not exist"))?;
+        pane.title = title;
+        persist_claude_pane_metadata(pane)?;
+        Ok(())
+    }
+
     pub(crate) fn live_status_for_pane(&self, pane_id: &str) -> Option<ClaudePaneLiveStatus> {
         self.panes
             .iter()

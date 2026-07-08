@@ -112,6 +112,12 @@ pub(crate) struct SelectionToggle {
     pub action: Box<SelectionToggleAction>,
 }
 
+pub(crate) struct SelectionShortcutAction {
+    pub key: KeyBinding,
+    pub action: SelectionAction,
+    pub dismiss_on_select: bool,
+}
+
 /// Callback invoked whenever the highlighted item changes (arrow keys, search
 /// filter, number-key jump).  Receives the *actual* index into the unfiltered
 /// `items` list and the event sender.  Used by the theme picker for live preview.
@@ -141,6 +147,7 @@ pub(crate) struct SelectionItem {
     pub is_default: bool,
     pub is_disabled: bool,
     pub actions: Vec<SelectionAction>,
+    pub selected_shortcuts: Vec<SelectionShortcutAction>,
     pub dismiss_on_select: bool,
     pub dismiss_parent_on_child_accept: bool,
     pub search_value: Option<String>,
@@ -659,6 +666,35 @@ impl ListSelectionView {
         (toggle.action)(toggle.is_on, &app_event_tx);
     }
 
+    fn run_selected_shortcut(&mut self, key_event: KeyEvent) -> bool {
+        let Some(actual_idx) = self.selected_actual_idx() else {
+            return false;
+        };
+        let app_event_tx = self.app_event_tx.clone();
+        let (matched, should_dismiss) = {
+            let Some(item) = self.active_items().get(actual_idx) else {
+                return false;
+            };
+            if !Self::item_is_enabled(item) {
+                return false;
+            }
+            let mut matched = false;
+            let mut should_dismiss = false;
+            for shortcut in &item.selected_shortcuts {
+                if shortcut.key.is_press(key_event) {
+                    matched = true;
+                    should_dismiss |= shortcut.dismiss_on_select;
+                    (shortcut.action)(&app_event_tx);
+                }
+            }
+            (matched, should_dismiss)
+        };
+        if should_dismiss {
+            self.completion = Some(ViewCompletion::Accepted);
+        }
+        matched
+    }
+
     fn move_up(&mut self) {
         let before = self.selected_actual_idx();
         let len = self.visible_len();
@@ -952,6 +988,7 @@ impl BottomPaneView for ListSelectionView {
             {
                 self.switch_tab(/*step*/ 1)
             }
+            _ if allow_plain_char_navigation && self.run_selected_shortcut(key_event) => {}
             KeyEvent {
                 code: KeyCode::Backspace,
                 ..
@@ -1725,6 +1762,43 @@ mod tests {
         assert_eq!(view.search_query, "feature/paste-support");
         assert_eq!(view.filtered_indices, vec![1]);
         assert_eq!(view.selected_actual_idx(), Some(1));
+    }
+
+    #[test]
+    fn searchable_plain_key_filters_instead_of_selected_shortcut() {
+        let (tx_raw, mut rx) = unbounded_channel::<AppEvent>();
+        let tx = AppEventSender::new(tx_raw);
+        let mut view = new_view(
+            SelectionViewParams {
+                items: vec![
+                    SelectionItem {
+                        name: "Research".to_string(),
+                        search_value: Some("research".to_string()),
+                        selected_shortcuts: vec![SelectionShortcutAction {
+                            key: crate::key_hint::plain(KeyCode::Char('r')),
+                            action: Box::new(|tx| tx.send(AppEvent::OpenPanePicker)),
+                            dismiss_on_select: true,
+                        }],
+                        ..Default::default()
+                    },
+                    SelectionItem {
+                        name: "Alpha".to_string(),
+                        search_value: Some("alpha".to_string()),
+                        ..Default::default()
+                    },
+                ],
+                is_searchable: true,
+                ..Default::default()
+            },
+            tx,
+        );
+
+        view.handle_key_event(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+
+        assert_eq!(view.search_query, "r");
+        assert_eq!(view.filtered_indices, vec![0]);
+        assert!(!view.is_complete());
+        assert!(rx.try_recv().is_err());
     }
 
     #[test]

@@ -10,12 +10,17 @@ use crate::app_command::AppCommand;
 use crate::app_event::AppEvent;
 use crate::app_server_session::AppServerSession;
 use crate::bottom_pane::SelectionItem;
+use crate::bottom_pane::SelectionShortcutAction;
 use crate::bottom_pane::SelectionViewParams;
+use crate::bottom_pane::custom_prompt_view::CustomPromptView;
 use crate::bottom_pane::popup_consts::standard_popup_hint_line;
 use crate::chatwidget::ChatWidget;
+use crate::key_hint;
 use crate::spawn_orchestration::SpawnRole;
+use crate::spawn_orchestration::thread_node_id;
 use crate::tui;
 use codex_protocol::ThreadId;
+use crossterm::event::KeyCode;
 
 use super::command_plan::claude_pane_title;
 use super::command_plan::compose_claude_pane_prompt;
@@ -50,7 +55,7 @@ impl App {
         self.chat_widget.show_selection_view(SelectionViewParams {
             title: Some("Panes".to_string()),
             subtitle: Some("Switch user panes or create Codex/Claude panes.".to_string()),
-            footer_hint: Some(standard_popup_hint_line()),
+            footer_hint: Some("Enter select | F2 rename | type to search".into()),
             items,
             is_searchable: true,
             search_placeholder: Some("Search panes".to_string()),
@@ -116,7 +121,7 @@ impl App {
                     profile_config.title, profile_config.description
                 )),
                 actions: vec![Box::new(move |tx| {
-                    tx.send(AppEvent::CreateClaudePane { profile: kind });
+                    tx.send(AppEvent::OpenClaudePaneNamePrompt { profile: kind });
                 })],
                 dismiss_on_select: true,
                 ..Default::default()
@@ -132,6 +137,24 @@ impl App {
             search_placeholder: Some("Search Claude providers".to_string()),
             ..Default::default()
         });
+    }
+
+    pub(crate) fn open_claude_pane_name_prompt(&mut self, profile: ClaudeProviderProfileKind) {
+        let tx = self.app_event_tx.clone();
+        let initial_name = profile.profile().title.to_string();
+        let view = CustomPromptView::new(
+            "Name Claude pane".to_string(),
+            "Pane display name".to_string(),
+            initial_name,
+            Some(profile.status_model_label().to_string()),
+            Box::new(move |name: String| {
+                tx.send(AppEvent::CreateClaudePane {
+                    profile,
+                    display_name: Some(name.trim().to_string()),
+                });
+            }),
+        );
+        self.chat_widget.show_custom_prompt_view(view);
     }
 
     pub(crate) fn open_codex_pane_model_picker(&mut self) {
@@ -179,6 +202,87 @@ impl App {
             search_placeholder: Some("Search models".to_string()),
             ..Default::default()
         });
+    }
+
+    pub(crate) fn open_codex_pane_name_prompt(
+        &mut self,
+        model: String,
+        provider: Option<String>,
+        effort: Option<codex_protocol::openai_models::ReasoningEffort>,
+    ) {
+        let tx = self.app_event_tx.clone();
+        let initial_name = self.next_codex_pane_nickname();
+        let view = CustomPromptView::new(
+            "Name Codex pane".to_string(),
+            "Pane display name".to_string(),
+            initial_name,
+            Some(format!("Model: {model}")),
+            Box::new(move |name: String| {
+                tx.send(AppEvent::CreateCodexPane {
+                    model: model.clone(),
+                    provider: provider.clone(),
+                    effort: effort.clone(),
+                    display_name: Some(name.trim().to_string()),
+                });
+            }),
+        );
+        self.chat_widget.show_custom_prompt_view(view);
+    }
+
+    pub(crate) fn open_rename_codex_pane_prompt(&mut self, thread_id: ThreadId) {
+        let tx = self.app_event_tx.clone();
+        let initial_name = self
+            .agent_navigation
+            .get(&thread_id)
+            .and_then(|entry| entry.agent_nickname.clone())
+            .unwrap_or_else(|| {
+                if self.primary_thread_id == Some(thread_id) {
+                    "Main".to_string()
+                } else {
+                    short_thread_id(thread_id)
+                }
+            });
+        let view = CustomPromptView::new(
+            "Rename Codex pane".to_string(),
+            "Pane display name".to_string(),
+            initial_name,
+            None,
+            Box::new(move |name: String| {
+                tx.send(AppEvent::RenameCodexPane {
+                    thread_id,
+                    name: name.trim().to_string(),
+                });
+            }),
+        );
+        self.chat_widget.show_custom_prompt_view(view);
+    }
+
+    pub(crate) fn open_rename_claude_pane_prompt(&mut self, pane_id: String) {
+        let Some(initial_name) = self
+            .claude_panes
+            .panes()
+            .iter()
+            .find(|pane| pane.id == pane_id)
+            .map(|pane| pane.title.clone())
+        else {
+            self.chat_widget
+                .add_error_message(format!("No Claude pane found for `{pane_id}`."));
+            return;
+        };
+        let tx = self.app_event_tx.clone();
+        let view = CustomPromptView::new(
+            "Rename Claude pane".to_string(),
+            "Pane display name".to_string(),
+            initial_name,
+            None,
+            Box::new(move |name: String| {
+                tx.send(AppEvent::RenameClaudePane {
+                    pane_id: pane_id.clone(),
+                    name: name.trim().to_string(),
+                });
+            }),
+        );
+        self.chat_widget.show_custom_prompt_view(view);
     }
 
     pub(crate) fn save_active_claude_pane_transcript(&mut self) {
@@ -375,6 +479,7 @@ impl App {
         &mut self,
         tui: &mut tui::Tui,
         profile: ClaudeProviderProfileKind,
+        display_name: Option<String>,
     ) {
         self.save_active_claude_pane_transcript();
         match self.claude_panes.create_pane(
@@ -391,6 +496,12 @@ impl App {
                     self.chat_widget.add_error_message(format!(
                         "Failed to initialize Claude pane display: {err}"
                     ));
+                }
+                if let Some(display_name) = display_name
+                    && let Err(err) = self.claude_panes.rename_pane(&id, display_name)
+                {
+                    self.chat_widget
+                        .add_error_message(format!("Failed to rename Claude pane: {err}"));
                 }
                 let title = profile.profile().title;
                 self.sync_active_agent_label();
@@ -790,9 +901,20 @@ impl App {
     fn user_pane_items(&self) -> Vec<SelectionItem> {
         let mut items = Vec::new();
         let is_current = self.claude_panes.active_user_pane_id() == CODEX_MAIN_PANE_ID;
+        let main_name = self
+            .primary_thread_id
+            .and_then(|thread_id| self.agent_navigation.get(&thread_id))
+            .and_then(|entry| entry.agent_nickname.as_deref())
+            .filter(|nickname| !nickname.trim().is_empty())
+            .map(|nickname| format!("Codex - {nickname}"))
+            .unwrap_or_else(|| "Codex - Main".to_string());
+        let main_rename_shortcuts = self
+            .primary_thread_id
+            .map(|thread_id| vec![rename_codex_pane_shortcut(thread_id)])
+            .unwrap_or_default();
         items.push(SelectionItem {
-            name: "Codex - Main".to_string(),
-            description: Some("Current PFTerminal/Codex session".to_string()),
+            name: main_name.clone(),
+            description: Some(self.codex_main_pane_description()),
             is_current,
             actions: vec![Box::new(|tx| {
                 tx.send(AppEvent::SelectUserPane {
@@ -800,15 +922,21 @@ impl App {
                 });
             })],
             dismiss_on_select: true,
+            selected_shortcuts: main_rename_shortcuts,
+            search_value: Some(main_name),
             ..Default::default()
         });
         items.extend(self.codex_user_pane_items());
         for pane in self.claude_panes.panes() {
             let pane_id = pane.id.clone();
-            let mut description = match pane.status {
-                ClaudePaneStatus::Idle => "idle".to_string(),
-                ClaudePaneStatus::Running => "running".to_string(),
-            };
+            let pane_id_for_action = pane_id.clone();
+            let node_id = crate::spawn_orchestration::pane_node_id(&pane.id);
+            let mut description = format!(
+                "{}; {}",
+                pane.profile.profile().provider_model,
+                claude_pane_status_label(pane.status.clone())
+            );
+            description.push_str(&self.whip_status_suffix_for_target(&node_id));
             if let Some(status) = pane.latest_turn_status {
                 description.push_str(&format!("; latest status: {}", status.label()));
             }
@@ -837,10 +965,11 @@ impl App {
                 is_current: self.claude_panes.active_user_pane_id() == pane.id,
                 actions: vec![Box::new(move |tx| {
                     tx.send(AppEvent::SelectUserPane {
-                        pane_id: pane_id.clone(),
+                        pane_id: pane_id_for_action.clone(),
                     });
                 })],
                 dismiss_on_select: true,
+                selected_shortcuts: vec![rename_claude_pane_shortcut(pane_id)],
                 search_value: Some(format!("{} {}", pane.title, pane.id)),
                 ..Default::default()
             });
@@ -868,25 +997,7 @@ impl App {
                     .filter(|nickname| !nickname.trim().is_empty())
                     .map(|nickname| format!("Codex - {nickname}"))
                     .unwrap_or_else(|| format!("Codex - {}", short_thread_id(thread_id)));
-                let mut description = if entry.is_closed {
-                    "done".to_string()
-                } else if entry.is_running {
-                    "running".to_string()
-                } else {
-                    "idle".to_string()
-                };
-                if let Some(task) = entry.last_task_message.as_deref() {
-                    description.push_str(&format!(
-                        "; latest task: {}",
-                        truncate_for_display(task, 80)
-                    ));
-                }
-                if let Some(result) = entry.last_result_message.as_deref() {
-                    description.push_str(&format!(
-                        "; latest result: {}",
-                        truncate_for_display(result, 80)
-                    ));
-                }
+                let description = self.codex_pane_description(thread_id, entry);
                 SelectionItem {
                     name: name.clone(),
                     name_prefix_spans: crate::multi_agents::agent_picker_status_dot_spans(
@@ -899,11 +1010,55 @@ impl App {
                         tx.send(AppEvent::SelectAgentThread(thread_id));
                     })],
                     dismiss_on_select: true,
+                    selected_shortcuts: vec![rename_codex_pane_shortcut(thread_id)],
                     search_value: Some(format!("{name} {thread_id}")),
                     ..Default::default()
                 }
             })
             .collect()
+    }
+
+    fn codex_main_pane_description(&self) -> String {
+        let mut description = format!("{}; {}", self.chat_widget.current_model(), {
+            let Some(thread_id) = self.primary_thread_id else {
+                return format!("{}; loading", self.chat_widget.current_model());
+            };
+            native_thread_status_label(self.agent_navigation.get(&thread_id))
+        });
+        if let Some(thread_id) = self.primary_thread_id {
+            append_context_left(
+                &mut description,
+                self.spawn_context_left_by_thread.get(&thread_id),
+            );
+            description.push_str(&self.whip_status_suffix_for_target(&thread_node_id(thread_id)));
+        }
+        description
+    }
+
+    fn codex_pane_description(
+        &self,
+        thread_id: ThreadId,
+        entry: &crate::multi_agents::AgentPickerThreadEntry,
+    ) -> String {
+        let mut description = format!("model unknown; {}", native_thread_status_label(Some(entry)));
+        append_context_left(
+            &mut description,
+            self.spawn_context_left_by_thread.get(&thread_id),
+        );
+        description.push_str(&self.whip_status_suffix_for_target(&thread_node_id(thread_id)));
+        if let Some(task) = entry.last_task_message.as_deref() {
+            description.push_str(&format!(
+                "; latest task: {}",
+                truncate_for_display(task, 80)
+            ));
+        }
+        if let Some(result) = entry.last_result_message.as_deref() {
+            description.push_str(&format!(
+                "; latest result: {}",
+                truncate_for_display(result, 80)
+            ));
+        }
+        description
     }
 
     pub(crate) fn next_codex_pane_nickname(&self) -> String {
@@ -935,7 +1090,7 @@ fn codex_pane_model_item(
         name: model.clone(),
         description,
         actions: vec![Box::new(move |tx| {
-            tx.send(AppEvent::CreateCodexPane {
+            tx.send(AppEvent::OpenCodexPaneNamePrompt {
                 model: model.clone(),
                 provider: provider.clone(),
                 effort: effort.clone(),
@@ -977,10 +1132,56 @@ fn short_thread_id(thread_id: codex_protocol::ThreadId) -> String {
     thread_id.to_string().chars().take(8).collect()
 }
 
+fn claude_pane_status_label(status: ClaudePaneStatus) -> &'static str {
+    match status {
+        ClaudePaneStatus::Idle => "idle",
+        ClaudePaneStatus::Running => "running",
+    }
+}
+
+fn native_thread_status_label(
+    entry: Option<&crate::multi_agents::AgentPickerThreadEntry>,
+) -> &'static str {
+    match entry {
+        Some(entry) if entry.is_closed => "done",
+        Some(entry) if entry.is_running => "running",
+        Some(_) => "idle",
+        None => "unknown",
+    }
+}
+
+fn append_context_left(description: &mut String, context_left: Option<&i64>) {
+    if let Some(context_left) = context_left {
+        description.push_str(&format!("; ctx {context_left}%"));
+    }
+}
+
 fn section_item(name: &str) -> SelectionItem {
     SelectionItem {
         name: name.to_string(),
         is_disabled: true,
         ..Default::default()
+    }
+}
+
+fn rename_codex_pane_shortcut(thread_id: ThreadId) -> SelectionShortcutAction {
+    SelectionShortcutAction {
+        key: key_hint::plain(KeyCode::F(2)),
+        action: Box::new(move |tx| {
+            tx.send(AppEvent::OpenRenameCodexPanePrompt { thread_id });
+        }),
+        dismiss_on_select: true,
+    }
+}
+
+fn rename_claude_pane_shortcut(pane_id: String) -> SelectionShortcutAction {
+    SelectionShortcutAction {
+        key: key_hint::plain(KeyCode::F(2)),
+        action: Box::new(move |tx| {
+            tx.send(AppEvent::OpenRenameClaudePanePrompt {
+                pane_id: pane_id.clone(),
+            });
+        }),
+        dismiss_on_select: true,
     }
 }

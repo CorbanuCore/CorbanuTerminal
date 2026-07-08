@@ -3307,14 +3307,27 @@ impl App {
         agent_nickname: Option<String>,
         started: crate::app_server_session::AppServerStartedThread,
     ) {
+        let session_model = started.session.model.clone();
+        let session_model_provider = started.session.model_provider_id.clone();
+        let rollout_path = started.session.rollout_path.clone();
         self.upsert_agent_picker_thread(
             thread_id,
-            agent_nickname,
+            agent_nickname.clone(),
             /*agent_role*/ None,
             /*is_closed*/ false,
         );
         let channel = self.ensure_thread_channel(thread_id);
         channel.set_session(started.session, started.turns).await;
+        self.persist_spawn_thread_state_metadata(SpawnThreadStateMetadata {
+            thread_id,
+            parent_thread_id: None,
+            agent_role: "default",
+            agent_nickname,
+            model: session_model,
+            model_provider: session_model_provider,
+            rollout_path,
+        })
+        .await;
     }
 
     pub(crate) fn spawn_tree_items(&self, show_task_actions: bool) -> Vec<SelectionItem> {
