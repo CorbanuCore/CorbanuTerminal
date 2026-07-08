@@ -43,7 +43,7 @@ That's it. The session persists in the vault and every other command now works.
 | `--poll` | Poll a pending link to completion. Re-runnable; a timeout leaves the pending session intact. |
 | `--status` | Report `linked` / `pending` / `unlinked`. Always exits 0. |
 | `--relink` | Discard an existing session and start over. Required to overwrite a valid session. |
-| `--timeout <secs>` | Bound `--poll` (default 300). Exits non-zero on timeout. |
+| `--timeout <secs>` | Bound `--poll` (default 300). Exits non-zero on timeout. `--timeout 0` polls exactly once and returns immediately — the non-blocking check to use from an automation/chat harness. |
 | `--no-browser` | Never open a browser. Implied automatically when stdout is not a TTY. |
 | `--json` | Accepted for scripts; this helper always emits JSON. |
 
@@ -60,6 +60,27 @@ Failures are distinguishable rather than collapsed into "not linked":
 (keep waiting — re-run `--poll`), `tasknode_link_rejected` (definitive: the request
 was denied or expired server-side, start over), or `tasknode_link_poll_failed`.
 A `tasknode_session_corrupt` means the stored session could not be parsed.
+
+### From a chat/automation harness (non-blocking)
+
+A chat connector runs one turn at a time, so a long foreground `--poll` is a trap:
+it pins that turn for the whole timeout and every further message gets "a turn is
+already running" until it returns. The link never actually needs a blocking poll.
+The correct, turn-safe recipe:
+
+1. `tasknode link` (or `link --no-browser`). It returns `state:"pending"` with a
+   `verificationUrl` and a `nextStep`. **Relay the `verificationUrl` to the user** —
+   that is the step a human must do, and swallowing it is the usual reason a link
+   appears to "hang."
+2. The user authorizes the URL with GitHub (a phone works).
+3. Confirm with `tasknode link --poll --timeout 0`. That polls exactly once and
+   returns immediately: `state:"linked"` when done, or `tasknode_link_timeout`
+   (still pending) which you simply try again on the next turn. Never block the turn.
+
+Every `pending` response carries `nextStep` restating this in-band, so a driver
+that has only the JSON in front of it still knows to surface the URL and poll
+without blocking. Re-running `link` while pending is idempotent — it re-emits the
+same `verificationUrl` and does not start a second request or a background poll.
 
 ## Sharing a session with a service
 

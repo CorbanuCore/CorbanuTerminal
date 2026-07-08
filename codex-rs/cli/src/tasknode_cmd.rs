@@ -716,6 +716,14 @@ fn emit_link_status(codex_home: &Path) -> anyhow::Result<i32> {
     }
 }
 
+/// Guidance attached to every `pending` link response. An automated driver (a
+/// chat harness, a script) sees the `verificationUrl` but has no way to know it
+/// must (a) surface that URL to a human and (b) poll *without* blocking. Left
+/// implicit, the common failure is to swallow the URL and fire a long foreground
+/// `--poll`, which pins the single turn a chat connector allows and makes the
+/// whole assistant look hung. State the recipe in-band so it cannot be missed.
+const LINK_PENDING_NEXT_STEP: &str = "Show `verificationUrl` to the user; they authorize it with GitHub in any browser (a phone works). Then confirm with `pfterminal tasknode link --poll --timeout 0`, which checks once and returns immediately — safe to repeat from a chat turn. Do NOT run a long foreground `--poll` inside a chat turn: it blocks the turn until the link completes or times out.";
+
 fn start_link_command(
     codex_home: &Path,
     origin_override: Option<String>,
@@ -791,6 +799,8 @@ fn start_link_command(
         "requestId": started.request_id,
         "origin": origin,
         "browserOpened": browser_opened,
+        "message": "Task Node link started; authorization is pending.",
+        "nextStep": LINK_PENDING_NEXT_STEP,
     });
     if let Some(err) = browser_error {
         body["browserError"] = Value::String(err);
@@ -866,6 +876,7 @@ fn poll_link_command(
                         "verificationUrl": session.pending_verification_url.clone(),
                         "requestId": request_id,
                         "origin": session.origin.clone(),
+                        "nextStep": LINK_PENDING_NEXT_STEP,
                     }))?;
                     return Ok(1);
                 }
@@ -920,6 +931,7 @@ fn link_state_json(session: Option<&TaskNodeLocalSession>, ok: bool) -> Value {
             "verificationUrl": session.pending_verification_url.clone(),
             "requestId": session.pending_request_id.clone(),
             "origin": session.origin.clone(),
+            "nextStep": LINK_PENDING_NEXT_STEP,
         }),
         _ => json!({
             "ok": ok,
@@ -1434,6 +1446,38 @@ mod tests {
         assert_eq!(
             parsed.1.get("message").and_then(Value::as_str),
             Some("failed")
+        );
+    }
+
+    #[test]
+    fn pending_link_state_carries_non_blocking_next_step() {
+        let session = TaskNodeLocalSession {
+            origin: "https://tasknode.example".to_string(),
+            account_id: None,
+            github_username: None,
+            terminal_token: None,
+            expires_at: None,
+            pending_request_id: Some("req-1".to_string()),
+            pending_poll_token: Some("poll-1".to_string()),
+            pending_verification_url: Some("https://tasknode.example/auth/req-1".to_string()),
+        };
+
+        let body = link_state_json(Some(&session), true);
+
+        assert_eq!(body.get("state").and_then(Value::as_str), Some("pending"));
+        let next = body
+            .get("nextStep")
+            .and_then(Value::as_str)
+            .expect("pending state must carry nextStep guidance");
+        // The two failures this guidance exists to prevent: swallowing the URL,
+        // and blocking the turn with a long foreground poll.
+        assert!(
+            next.contains("verificationUrl"),
+            "nextStep must tell the driver to surface the URL: {next}"
+        );
+        assert!(
+            next.contains("--timeout 0"),
+            "nextStep must steer to the non-blocking single-shot poll: {next}"
         );
     }
 
