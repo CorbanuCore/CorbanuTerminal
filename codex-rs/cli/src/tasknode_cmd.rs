@@ -564,15 +564,56 @@ async fn run_requests_command(client: &TaskNodeClient, cli: RequestsCli) -> anyh
 
 async fn run_tasks_command(client: &TaskNodeClient, cli: TasksCli) -> anyhow::Result<i32> {
     match cli.action {
-        TasksCommand::List(args) => emit_response(
-            client
+        TasksCommand::List(args) => {
+            let response = client
                 .get(&format!(
                     "/api/terminal/tasknode/tasks?tab={}",
                     urlencoding::encode(&args.tab)
                 ))
-                .await?,
-        ),
+                .await?;
+            if let Some(error) = unknown_tab_error(&args.tab, &response) {
+                print_json(&error)?;
+                return Ok(1);
+            }
+            emit_response(response)
+        }
     }
+}
+
+/// The server answers *any* `tab` value with `{"ok":true,"tasks":[]}`, so a typo is
+/// indistinguishable from "you have no tasks" — which an agent reads as a clean,
+/// authoritative empty result and acts on. Reject a tab the server did not report in
+/// `counts`, but only when it also returned nothing, so a genuinely new server-side
+/// tab keeps working without a client release.
+fn unknown_tab_error(tab: &str, response: &TaskNodeResponse) -> Option<Value> {
+    if !response_is_ok(response) {
+        return None;
+    }
+    let counts = response.body.get("counts")?.as_object()?;
+    if counts.contains_key(tab) {
+        return None;
+    }
+    let returned_nothing = response
+        .body
+        .get("tasks")
+        .and_then(Value::as_array)
+        .is_some_and(|tasks| tasks.is_empty());
+    if !returned_nothing {
+        return None;
+    }
+    let known: Vec<&str> = counts.keys().map(String::as_str).collect();
+    Some(json!({
+        "ok": false,
+        "error": "tasknode_unknown_tab",
+        "tab": tab,
+        "knownTabs": known,
+        "message": format!(
+            "Unknown tab `{tab}`: the server reported no such tab and returned no tasks. \
+             An empty result here means the tab name is wrong, not that you have no tasks. \
+             Valid tabs: {}.",
+            known.join(", ")
+        ),
+    }))
 }
 
 async fn run_task_command(client: &TaskNodeClient, cli: TaskCli) -> anyhow::Result<i32> {
@@ -712,7 +753,7 @@ fn emit_link_status(codex_home: &Path) -> anyhow::Result<i32> {
             print_json(&link_state_json(session.as_ref(), true))?;
             Ok(0)
         }
-        Err(err) => emit_tasknode_local_error(err),
+        Err(err) => emit_tasknode_local_error(Some(codex_home), err),
     }
 }
 
@@ -731,7 +772,7 @@ fn start_link_command(
 ) -> anyhow::Result<i32> {
     let existing = match TaskNodeLocalSession::load_optional(codex_home) {
         Ok(session) => session,
-        Err(err) => return emit_tasknode_local_error(err),
+        Err(err) => return emit_tasknode_local_error(Some(codex_home), err),
     };
     if let Some(session) = &existing {
         if session.terminal_token.is_some() && !args.relink {
@@ -780,7 +821,7 @@ fn start_link_command(
         pending_verification_url: Some(started.verification_url.clone()),
     };
     if let Err(err) = session.save(codex_home) {
-        return emit_tasknode_local_error(err);
+        return emit_tasknode_local_error(Some(codex_home), err);
     }
 
     let mut browser_opened = false;
@@ -817,15 +858,10 @@ fn poll_link_command(
     let mut session = match TaskNodeLocalSession::load_optional(codex_home) {
         Ok(Some(session)) => session,
         Ok(None) => {
-            print_json(&json!({
-                "ok": false,
-                "error": "tasknode_unlinked",
-                "state": "unlinked",
-                "message": "Task Node is not linked. Run `pfterminal tasknode link`.",
-            }))?;
+            print_json(&unlinked_json(Some(codex_home)))?;
             return Ok(1);
         }
-        Err(err) => return emit_tasknode_local_error(err),
+        Err(err) => return emit_tasknode_local_error(Some(codex_home), err),
     };
     if session.terminal_token.is_some() {
         print_json(&link_state_json(Some(&session), true))?;
@@ -860,7 +896,7 @@ fn poll_link_command(
                 session.origin = origin;
                 session.apply_terminal_session(poll);
                 if let Err(err) = session.save(codex_home) {
-                    return emit_tasknode_local_error(err);
+                    return emit_tasknode_local_error(Some(codex_home), err);
                 }
                 print_json(&link_state_json(Some(&session), true))?;
                 return Ok(0);
@@ -940,15 +976,40 @@ fn link_state_json(session: Option<&TaskNodeLocalSession>, ok: bool) -> Value {
     }
 }
 
-fn emit_tasknode_local_error(err: TaskNodeLocalError) -> anyhow::Result<i32> {
+/// The session is keyed to `CODEX_HOME`, so "not linked" is ambiguous: it can mean
+/// *never linked*, or *linked, but you are looking in a different home*. The second
+/// case is easy to hit — a service (the Telegram connector) sets `CODEX_HOME`
+/// explicitly while an interactive shell falls back to the default — and the naive
+/// advice ("run `tasknode link`") makes it worse by minting a second session the
+/// service cannot see. Always name the directory that was actually searched.
+fn unlinked_json(codex_home: Option<&Path>) -> Value {
+    let home = match codex_home {
+        Some(path) => path.display().to_string(),
+        None => codex_core::config::find_codex_home()
+            .map(|path| path.as_path().display().to_string())
+            .unwrap_or_else(|_| "<unresolved>".to_string()),
+    };
+    json!({
+        "ok": false,
+        "error": "tasknode_unlinked",
+        "state": "unlinked",
+        "codexHome": home,
+        "message": format!(
+            "Task Node is not linked under CODEX_HOME={home}. If a service linked with a \
+             different CODEX_HOME, export that same value instead of re-linking — a second \
+             link creates a session the service cannot see. Otherwise run \
+             `pfterminal tasknode link`."
+        ),
+    })
+}
+
+fn emit_tasknode_local_error(
+    codex_home: Option<&Path>,
+    err: TaskNodeLocalError,
+) -> anyhow::Result<i32> {
     match err {
         TaskNodeLocalError::NotFound => {
-            print_json(&json!({
-                "ok": false,
-                "error": "tasknode_unlinked",
-                "state": "unlinked",
-                "message": "Task Node is not linked. Run `pfterminal tasknode link`.",
-            }))?;
+            print_json(&unlinked_json(codex_home))?;
         }
         TaskNodeLocalError::VaultUnavailable(detail) => {
             print_json(&json!({
@@ -975,12 +1036,7 @@ fn emit_tasknode_local_error(err: TaskNodeLocalError) -> anyhow::Result<i32> {
 fn emit_session_error(err: &TaskNodeCommandSessionError) -> anyhow::Result<i32> {
     match err {
         TaskNodeCommandSessionError::Unlinked => {
-            print_json(&json!({
-                "ok": false,
-                "error": "tasknode_unlinked",
-                "state": "unlinked",
-                "message": "Task Node is not linked. Run `pfterminal tasknode link`.",
-            }))?;
+            print_json(&unlinked_json(None))?;
         }
         TaskNodeCommandSessionError::Pending { verification_url } => {
             print_json(&json!({
@@ -1447,6 +1503,71 @@ mod tests {
             parsed.1.get("message").and_then(Value::as_str),
             Some("failed")
         );
+    }
+
+    fn tasks_response(tab: &str, tasks: Value) -> TaskNodeResponse {
+        TaskNodeResponse {
+            status: 200,
+            body: json!({
+                "ok": true,
+                "tab": tab,
+                "tasks": tasks,
+                "counts": {"outstanding": 0, "verification": 0, "refused": 14, "rewarded": 36},
+            }),
+        }
+    }
+
+    #[test]
+    fn unlinked_message_names_the_codex_home_it_searched() {
+        let body = unlinked_json(Some(Path::new("/home/ubuntu/.codex")));
+
+        assert_eq!(
+            body.get("codexHome").and_then(Value::as_str),
+            Some("/home/ubuntu/.codex")
+        );
+        let message = body
+            .get("message")
+            .and_then(Value::as_str)
+            .expect("message present");
+        // The dangerous advice is a bare "run link": it mints a second session in a
+        // different home. The message must surface the home and the export path first.
+        assert!(message.contains("/home/ubuntu/.codex"), "{message}");
+        assert!(message.contains("CODEX_HOME"), "{message}");
+    }
+
+    #[test]
+    fn unknown_tab_is_rejected_instead_of_looking_empty() {
+        let response = tasks_response("zzznotatab", json!([]));
+
+        let error = unknown_tab_error("zzznotatab", &response).expect("typo'd tab rejected");
+
+        assert_eq!(
+            error.get("error").and_then(Value::as_str),
+            Some("tasknode_unknown_tab")
+        );
+        let known = error
+            .get("knownTabs")
+            .and_then(Value::as_array)
+            .expect("knownTabs present");
+        assert!(known.iter().any(|tab| tab == "rewarded"));
+    }
+
+    #[test]
+    fn known_tab_with_zero_tasks_is_not_an_error() {
+        // `outstanding: 0` is a real, empty tab. Rejecting it would be worse than
+        // the bug we are fixing.
+        let response = tasks_response("outstanding", json!([]));
+
+        assert!(unknown_tab_error("outstanding", &response).is_none());
+    }
+
+    #[test]
+    fn unlisted_tab_that_returns_tasks_still_passes_through() {
+        // A tab the server adds later will not appear in `counts`; if it returns
+        // tasks, the client must not veto it.
+        let response = tasks_response("archived", json!([{"id": "task_1"}]));
+
+        assert!(unknown_tab_error("archived", &response).is_none());
     }
 
     #[test]

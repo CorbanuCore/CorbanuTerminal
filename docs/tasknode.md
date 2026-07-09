@@ -50,10 +50,20 @@ That's it. The session persists in the vault and every other command now works.
 Failures are distinguishable rather than collapsed into "not linked":
 
 ```json
-{"ok":false,"error":"tasknode_unlinked","state":"unlinked","message":"..."}
+{"ok":false,"error":"tasknode_unlinked","state":"unlinked","codexHome":"...","message":"..."}
 {"ok":false,"error":"tasknode_link_pending","state":"pending","verificationUrl":"..."}
 {"ok":false,"error":"tasknode_vault_unavailable","message":"..."}
+{"ok":false,"error":"tasknode_unknown_tab","tab":"...","knownTabs":["outstanding","..."]}
 ```
+
+`tasknode_unlinked` reports the `codexHome` it searched. Read it before re-linking:
+"not linked" usually means *this shell resolved a different `CODEX_HOME` than the
+process that linked* — see [Sharing a session with a service](#sharing-a-session-with-a-service).
+Running `link` in that state creates a **second** session the service cannot see.
+
+`tasks list` rejects a `--tab` the server does not know instead of returning an empty
+list. The Task Node API answers any tab string with `{"ok":true,"tasks":[]}`, so a
+typo would otherwise be indistinguishable from "you have no tasks".
 
 `link` additionally reports `tasknode_already_linked` (use `--relink`),
 `tasknode_no_pending_link`, and, from `--poll`, one of `tasknode_link_timeout`
@@ -81,6 +91,23 @@ Every `pending` response carries `nextStep` restating this in-band, so a driver
 that has only the JSON in front of it still knows to surface the URL and poll
 without blocking. Re-running `link` while pending is idempotent — it re-emits the
 same `verificationUrl` and does not start a second request or a background poll.
+
+## No events, no listener
+
+Every command here is a **pull**. Task Node exposes no websocket, no SSE, and no
+long-poll, and this CLI has no `watch` verb. Nothing observes a reward landing, a
+verification request arriving, or a task being refused unless something asks.
+
+Two consequences for an agent driving this CLI:
+
+1. A status you printed is only true at the moment you printed it. A task can move
+   to `Rewarded` milliseconds after your last call.
+2. **Never promise to surface a future Task Node event** ("I'll flag it when the
+   reward lands"). You have no mechanism to do so. Say the task is submitted and
+   that the state must be polled.
+
+Poll `tasknode status` (cheap; carries `counts` for every tab) and diff it if you
+need change detection.
 
 ## Sharing a session with a service
 
