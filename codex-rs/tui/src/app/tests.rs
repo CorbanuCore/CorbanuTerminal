@@ -4342,6 +4342,37 @@ async fn orchestrate_detach_removes_whip_and_idle_generation() {
 }
 
 #[tokio::test]
+async fn orchestrate_restored_whip_waits_for_fresh_idle_edge() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "resume-safe", "# whip: resume-safe\nContinue the work.");
+    let pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Orc),
+            Some("Krimp".to_string()),
+        )
+        .expect("create pane");
+    let target_node_id = crate::spawn_orchestration::pane_node_id(&pane_id);
+
+    app.handle_orchestrate_command(format!(
+        "attach {pane_id} resume-safe --mode auto --holder none --max 3 --cooldown 1s"
+    ));
+    app.orchestrate_whips
+        .get_mut("whip-1")
+        .expect("whip")
+        .last_idle_generation_fired = Some(0);
+
+    app.sweep_orchestrate_whips();
+    assert!(drain_claude_pane_task_events(&mut app_event_rx).is_empty());
+
+    app.note_whip_target_idle_with_fire_control(&target_node_id, Some("completed"), true);
+    assert_eq!(drain_claude_pane_task_events(&mut app_event_rx).len(), 1);
+}
+
+#[tokio::test]
 async fn orchestrate_rejects_pathy_whip_names() {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
 

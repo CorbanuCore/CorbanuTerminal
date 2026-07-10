@@ -1302,7 +1302,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     .iter()
                     .any(|pane| pane.id == *pane_id)
             });
-        let restored_orchestrate_whips: HashMap<_, _> = restored_pane_layout
+        let mut restored_orchestrate_whips: HashMap<_, _> = restored_pane_layout
             .as_ref()
             .map(|layout| {
                 layout
@@ -1313,6 +1313,9 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     .collect()
             })
             .unwrap_or_default();
+        for whip in restored_orchestrate_whips.values_mut() {
+            whip.last_idle_generation_fired = Some(0);
+        }
         let restored_orchestrate_next_whip_seq = restored_pane_layout
             .as_ref()
             .map(|layout| layout.orchestrate_next_whip_seq)
