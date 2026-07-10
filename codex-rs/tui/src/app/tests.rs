@@ -4316,7 +4316,7 @@ async fn orchestrate_review_holder_ignored_twice_pauses_whip() {
 }
 
 #[tokio::test]
-async fn orchestrate_detached_expired_whip_stays_detached() {
+async fn orchestrate_detach_removes_whip_and_idle_generation() {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
     write_test_whip(&app, "keep-going", "# whip: keep-going\nContinue the work.");
     let pane_id = app
@@ -4334,18 +4334,11 @@ async fn orchestrate_detached_expired_whip_stays_detached() {
         "attach {pane_id} keep-going --mode auto --holder none --max 3"
     ));
     app.handle_orchestrate_command("detach whip-1".to_string());
-    app.orchestrate_whips
-        .get_mut("whip-1")
-        .expect("whip")
-        .expires_at = Some(chrono::Utc::now() - chrono::Duration::minutes(1));
-
     app.sweep_orchestrate_whips();
 
     assert!(drain_claude_pane_task_events(&mut app_event_rx).is_empty());
-    assert_eq!(
-        app.orchestrate_whips.get("whip-1").map(|whip| whip.state),
-        Some(crate::orchestrate::WhipState::Detached)
-    );
+    assert!(app.orchestrate_whips.is_empty());
+    assert!(app.orchestrate_idle_generation_by_target.is_empty());
 }
 
 #[tokio::test]

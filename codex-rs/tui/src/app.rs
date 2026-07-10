@@ -1308,6 +1308,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
                 layout
                     .orchestrate_whips
                     .iter()
+                    .filter(|(_, whip)| whip.state != crate::orchestrate::WhipState::Detached)
                     .map(|(key, value)| (key.clone(), value.clone()))
                     .collect()
             })

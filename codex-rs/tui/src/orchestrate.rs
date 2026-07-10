@@ -1601,9 +1601,7 @@ impl App {
             .map(|whip| whip.id.clone())
             .collect();
         for id in replaced {
-            if let Some(whip) = self.orchestrate_whips.get_mut(&id) {
-                whip.state = WhipState::Detached;
-            }
+            self.orchestrate_whips.remove(&id);
         }
         let id = self.next_whip_id();
         let whip = Whip::new(
@@ -1633,11 +1631,24 @@ impl App {
                 .add_error_message(format!("No whip found for `{id_or_target}`."));
             return;
         };
+        let removed_target = if state == WhipState::Detached {
+            self.orchestrate_whips.remove(&id).map(|whip| whip.target)
+        } else {
+            None
+        };
         if let Some(whip) = self.orchestrate_whips.get_mut(&id) {
             whip.state = state;
             if state == WhipState::Armed {
                 whip.expiry_notified = false;
             }
+        }
+        if let Some(target) = removed_target
+            && !self
+                .orchestrate_whips
+                .values()
+                .any(|whip| whip.target == target)
+        {
+            self.orchestrate_idle_generation_by_target.remove(&target);
         }
         self.persist_pane_state();
         self.chat_widget

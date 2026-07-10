@@ -352,6 +352,7 @@ impl App {
             orchestrate_whips: self
                 .orchestrate_whips
                 .iter()
+                .filter(|(_, whip)| whip.state != crate::orchestrate::WhipState::Detached)
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect(),
             orchestrate_next_whip_seq: self.orchestrate_next_whip_seq,
