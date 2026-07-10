@@ -602,6 +602,34 @@ fn test_built_in_model_providers_include_openrouter() {
 }
 
 #[test]
+fn openrouter_preserves_nonempty_model_slugs() {
+    for provider in [OPENROUTER_PROVIDER_ID, OPENROUTER_ANTHROPIC_PROVIDER_ID] {
+        for model in [
+            "minimax/minimax-m3",
+            "google/gemini-3.5-flash",
+            "x-ai/grok-4.5",
+            "deepseek/deepseek-v4-pro",
+            "tencent/hy3:free",
+            "vendor/future-model",
+        ] {
+            assert_eq!(
+                resolve_model_for_provider(Some(model.to_string()), provider).as_deref(),
+                Some(model),
+                "expected {provider} to preserve {model}"
+            );
+        }
+        assert_eq!(
+            resolve_model_for_provider(Some("  ".to_string()), provider).as_deref(),
+            Some(OPENROUTER_DEFAULT_MODEL)
+        );
+        assert_eq!(
+            resolve_model_for_provider(None, provider).as_deref(),
+            Some(OPENROUTER_DEFAULT_MODEL)
+        );
+    }
+}
+
+#[test]
 fn direct_zai_retries_transient_provider_rate_limits() {
     let providers = built_in_model_providers(/*openai_base_url*/ None);
     let zai = providers

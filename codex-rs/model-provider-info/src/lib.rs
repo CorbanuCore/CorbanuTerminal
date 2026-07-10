@@ -224,7 +224,7 @@ pub fn resolve_model_for_provider(
             _ => Some(CLAUDE_PLAN_MODEL.to_string()),
         },
         OPENROUTER_PROVIDER_ID | OPENROUTER_ANTHROPIC_PROVIDER_ID => match model {
-            Some(model) if model.trim().starts_with("z-ai/") => Some(model),
+            Some(model) if !model.trim().is_empty() => Some(model),
             _ => Some(OPENROUTER_DEFAULT_MODEL.to_string()),
         },
         BASETEN_PROVIDER_ID | BASETEN_ANTHROPIC_PROVIDER_ID => match model {

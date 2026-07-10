@@ -433,6 +433,153 @@
       "supports_search_tool": false
     },
     {
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": "freeform",
+      "web_search_tool_type": "text",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "supports_image_detail_original": false,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_parallel_tool_calls": false,
+      "context_window": 500000,
+      "max_context_window": 500000,
+      "auto_compact_token_limit": null,
+      "default_reasoning_summary": "none",
+      "slug": "x-ai/grok-4.5",
+      "display_name": "OpenRouter Grok 4.5",
+      "description": "OpenRouter: Grok 4.5 - $2.00/M input, $6.00/M output.",
+      "default_reasoning_level": "high",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Low. Faster reasoning for straightforward work."
+        },
+        {
+          "effort": "medium",
+          "description": "Medium. Balanced reasoning for everyday coding tasks."
+        },
+        {
+          "effort": "high",
+          "description": "High. Grok 4.5's default reasoning level for complex work."
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "availability_nux": null,
+      "upgrade": null,
+      "priority": 6,
+      "base_instructions": "You are a world class coding agent. You write world class, concise quality code. Act efficiently, inspect code before changing it, keep edits scoped and verify your work when practical. You speak in an extremely concise, easy to understand way and only narrate when needed. You do things as fast as possible while still doing them correctly.\n\nWhen searching, use rg or rg --files first. Never run recursive grep over a repo root; if rg is unavailable, restrict grep to source directories and exclude .git, target, node_modules, dist, build, .next, and vendor.\n\nNever print or commit secret values anywhere: not in chat, logs, source, or files. PFTerminal has an encrypted credential vault holding many classes of secrets (API keys, tokens, wallet and seed material, deployment keys, and more); the user manages it via /vault. From the command line you may fetch only whitelisted provider API keys, at use time with command substitution so the value never appears in the transcript: API_KEY=\"$(pfterminal vault auth-helper provider/<name>_api_key)\" your-command (names: zai, anthropic, ambient, baseten, openrouter, ai_gateway). Keys given as a file path get the same treatment: KEY=\"$(cat /path/to/keyfile)\" your-command. Scan your diff for key material before committing.",
+      "model_messages": null,
+      "experimental_supported_tools": [],
+      "service_tiers": [],
+      "additional_speed_tiers": [],
+      "supports_reasoning_summaries": false,
+      "supports_search_tool": false
+    },
+    {
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": "freeform",
+      "web_search_tool_type": "text",
+      "input_modalities": [
+        "text"
+      ],
+      "supports_image_detail_original": false,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_parallel_tool_calls": false,
+      "context_window": 1048576,
+      "max_context_window": 1048576,
+      "auto_compact_token_limit": null,
+      "default_reasoning_summary": "none",
+      "slug": "deepseek/deepseek-v4-pro",
+      "display_name": "OpenRouter DeepSeek V4 Pro",
+      "description": "OpenRouter: DeepSeek V4 Pro - $0.435/M input, $0.87/M output.",
+      "default_reasoning_level": "high",
+      "supported_reasoning_levels": [
+        {
+          "effort": "high",
+          "description": "High. Deep reasoning for complex coding and long-horizon tasks."
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high. Maximum DeepSeek V4 Pro reasoning."
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "availability_nux": null,
+      "upgrade": null,
+      "priority": 7,
+      "base_instructions": "You are a world class coding agent. You write world class, concise quality code. Act efficiently, inspect code before changing it, keep edits scoped and verify your work when practical. You speak in an extremely concise, easy to understand way and only narrate when needed. You do things as fast as possible while still doing them correctly.\n\nWhen searching, use rg or rg --files first. Never run recursive grep over a repo root; if rg is unavailable, restrict grep to source directories and exclude .git, target, node_modules, dist, build, .next, and vendor.\n\nNever print or commit secret values anywhere: not in chat, logs, source, or files. PFTerminal has an encrypted credential vault holding many classes of secrets (API keys, tokens, wallet and seed material, deployment keys, and more); the user manages it via /vault. From the command line you may fetch only whitelisted provider API keys, at use time with command substitution so the value never appears in the transcript: API_KEY=\"$(pfterminal vault auth-helper provider/<name>_api_key)\" your-command (names: zai, anthropic, ambient, baseten, openrouter, ai_gateway). Keys given as a file path get the same treatment: KEY=\"$(cat /path/to/keyfile)\" your-command. Scan your diff for key material before committing.",
+      "model_messages": null,
+      "experimental_supported_tools": [],
+      "service_tiers": [],
+      "additional_speed_tiers": [],
+      "supports_reasoning_summaries": false,
+      "supports_search_tool": false
+    },
+    {
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": "freeform",
+      "web_search_tool_type": "text",
+      "input_modalities": [
+        "text"
+      ],
+      "supports_image_detail_original": false,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_parallel_tool_calls": false,
+      "context_window": 262144,
+      "max_context_window": 262144,
+      "auto_compact_token_limit": null,
+      "default_reasoning_summary": "none",
+      "slug": "tencent/hy3:free",
+      "display_name": "OpenRouter Tencent Hy3 Free",
+      "description": "OpenRouter: Tencent Hy3 Free - $0/M input, $0/M output.",
+      "default_reasoning_level": "none",
+      "supported_reasoning_levels": [
+        {
+          "effort": "none",
+          "description": "None. Direct responses without chain-of-thought reasoning."
+        },
+        {
+          "effort": "low",
+          "description": "Low. Light reasoning for coding and multi-step tasks."
+        },
+        {
+          "effort": "high",
+          "description": "High. Deep reasoning for complex tasks."
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "availability_nux": null,
+      "upgrade": null,
+      "priority": 8,
+      "base_instructions": "You are a world class coding agent. You write world class, concise quality code. Act efficiently, inspect code before changing it, keep edits scoped and verify your work when practical. You speak in an extremely concise, easy to understand way and only narrate when needed. You do things as fast as possible while still doing them correctly.\n\nWhen searching, use rg or rg --files first. Never run recursive grep over a repo root; if rg is unavailable, restrict grep to source directories and exclude .git, target, node_modules, dist, build, .next, and vendor.\n\nNever print or commit secret values anywhere: not in chat, logs, source, or files. PFTerminal has an encrypted credential vault holding many classes of secrets (API keys, tokens, wallet and seed material, deployment keys, and more); the user manages it via /vault. From the command line you may fetch only whitelisted provider API keys, at use time with command substitution so the value never appears in the transcript: API_KEY=\"$(pfterminal vault auth-helper provider/<name>_api_key)\" your-command (names: zai, anthropic, ambient, baseten, openrouter, ai_gateway). Keys given as a file path get the same treatment: KEY=\"$(cat /path/to/keyfile)\" your-command. Scan your diff for key material before committing.",
+      "model_messages": null,
+      "experimental_supported_tools": [],
+      "service_tiers": [],
+      "additional_speed_tiers": [],
+      "supports_reasoning_summaries": false,
+      "supports_search_tool": false
+    },
+    {
       "prefer_websockets": true,
       "support_verbosity": true,
       "default_verbosity": "low",

@@ -359,11 +359,18 @@ impl OpenAiModelsManager {
     /// Replace the cached remote models and rebuild the derived presets list.
     async fn apply_remote_models(&self, models: Vec<ModelInfo>) {
         let mut existing_models = load_remote_models_from_file().unwrap_or_default();
-        for model in models.into_iter().map(sanitize_model_for_runtime) {
+        for mut model in models.into_iter().map(sanitize_model_for_runtime) {
             if let Some(existing_index) = existing_models
                 .iter()
                 .position(|existing| existing.slug == model.slug)
             {
+                let bundled = &existing_models[existing_index];
+                if model.supported_reasoning_levels.is_empty()
+                    && !bundled.supported_reasoning_levels.is_empty()
+                {
+                    model.default_reasoning_level = bundled.default_reasoning_level.clone();
+                    model.supported_reasoning_levels = bundled.supported_reasoning_levels.clone();
+                }
                 existing_models[existing_index] = model;
             } else {
                 existing_models.push(model);

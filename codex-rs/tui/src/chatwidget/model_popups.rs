@@ -36,6 +36,9 @@ use codex_protocol::openai_models::default_input_modalities;
 const OPENROUTER_MINIMAX_M3_MODEL: &str = "minimax/minimax-m3";
 const OPENROUTER_OWL_ALPHA_MODEL: &str = "openrouter/owl-alpha";
 const OPENROUTER_GEMINI_3_5_FLASH_MODEL: &str = "google/gemini-3.5-flash";
+const OPENROUTER_GROK_4_5_MODEL: &str = "x-ai/grok-4.5";
+const OPENROUTER_DEEPSEEK_V4_PRO_MODEL: &str = "deepseek/deepseek-v4-pro";
+const OPENROUTER_TENCENT_HY3_FREE_MODEL: &str = "tencent/hy3:free";
 const OPENAI_GPT_5_5_MODEL: &str = "gpt-5.5";
 const OPENAI_GPT_5_6_SOL_MODEL: &str = "gpt-5.6-sol";
 const OPENAI_GPT_5_6_TERRA_MODEL: &str = "gpt-5.6-terra";
@@ -297,6 +300,9 @@ impl ChatWidget {
                 | OPENROUTER_MINIMAX_M3_MODEL
                 | OPENROUTER_OWL_ALPHA_MODEL
                 | OPENROUTER_GEMINI_3_5_FLASH_MODEL
+                | OPENROUTER_GROK_4_5_MODEL
+                | OPENROUTER_DEEPSEEK_V4_PRO_MODEL
+                | OPENROUTER_TENCENT_HY3_FREE_MODEL
         )
     }
 
@@ -920,6 +926,17 @@ mod tests {
             ChatWidget::model_provider_for_selection(OPENROUTER_OWL_ALPHA_MODEL).as_deref(),
             Some(OPENROUTER_PROVIDER_ID)
         );
+        for model in [
+            OPENROUTER_GROK_4_5_MODEL,
+            OPENROUTER_DEEPSEEK_V4_PRO_MODEL,
+            OPENROUTER_TENCENT_HY3_FREE_MODEL,
+        ] {
+            assert_eq!(
+                ChatWidget::model_provider_for_selection(model).as_deref(),
+                Some(OPENROUTER_PROVIDER_ID),
+                "expected {model} to route through OpenRouter"
+            );
+        }
         assert_eq!(
             ChatWidget::model_provider_for_selection(VERCEL_DEFAULT_MODEL).as_deref(),
             Some(VERCEL_PROVIDER_ID)

@@ -637,6 +637,40 @@ async fn chatgpt_catalog_shows_server_advertised_gpt_5_6_models() {
 }
 
 #[tokio::test]
+async fn remote_catalog_preserves_bundled_reasoning_when_remote_omits_it() {
+    let mut remote_model = crate::bundled_models_response()
+        .expect("bundled models should parse")
+        .models
+        .into_iter()
+        .find(|model| model.slug == "deepseek/deepseek-v4-pro")
+        .expect("bundled catalog should include DeepSeek V4 Pro");
+    remote_model.display_name = "Remote DeepSeek V4 Pro".to_string();
+    remote_model.default_reasoning_level = None;
+    remote_model.supported_reasoning_levels.clear();
+
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(vec![vec![remote_model]]);
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+
+    let available = manager.list_models(RefreshStrategy::Online).await;
+    let deepseek = available
+        .iter()
+        .find(|model| model.model == "deepseek/deepseek-v4-pro")
+        .expect("remote DeepSeek model should remain available");
+
+    assert_eq!(deepseek.display_name, "Remote DeepSeek V4 Pro");
+    assert_eq!(deepseek.default_reasoning_effort, ReasoningEffort::High);
+    assert_eq!(
+        deepseek
+            .supported_reasoning_efforts
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![ReasoningEffort::High, ReasoningEffort::XHigh]
+    );
+}
+
+#[tokio::test]
 async fn refresh_available_models_merges_hidden_only_chatgpt_remote_with_bundled_catalog() {
     let hidden_remote = remote_model_with_visibility(
         "chatgpt-hidden-only",
@@ -1272,6 +1306,9 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
         "minimax/minimax-m3",
         "openrouter/owl-alpha",
         "google/gemini-3.5-flash",
+        "x-ai/grok-4.5",
+        "deepseek/deepseek-v4-pro",
+        "tencent/hy3:free",
         "claude-opus-4-8-plan",
         "claude-fable-5-plan",
         "claude-opus-4-8",
@@ -1335,6 +1372,67 @@ fn bundled_models_json_contains_openrouter_models() {
             .unwrap_or_default()
             .contains("$0/M input, $0/M output")
     );
+
+    let openrouter_model = |slug: &str| {
+        response
+            .models
+            .iter()
+            .find(|model| model.slug == slug)
+            .unwrap_or_else(|| panic!("bundled models.json should include {slug}"))
+    };
+
+    let grok = openrouter_model("x-ai/grok-4.5");
+    assert_eq!(grok.display_name, "OpenRouter Grok 4.5");
+    assert_eq!(grok.context_window, Some(500_000));
+    assert_eq!(grok.default_reasoning_level, Some(ReasoningEffort::High));
+    assert_eq!(
+        grok.supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            ReasoningEffort::Low,
+            ReasoningEffort::Medium,
+            ReasoningEffort::High,
+        ]
+    );
+
+    let deepseek = openrouter_model("deepseek/deepseek-v4-pro");
+    assert_eq!(deepseek.display_name, "OpenRouter DeepSeek V4 Pro");
+    assert_eq!(deepseek.context_window, Some(1_048_576));
+    assert_eq!(
+        deepseek.default_reasoning_level,
+        Some(ReasoningEffort::High)
+    );
+    assert_eq!(
+        deepseek
+            .supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![ReasoningEffort::High, ReasoningEffort::XHigh]
+    );
+
+    let hy3 = openrouter_model("tencent/hy3:free");
+    assert_eq!(hy3.display_name, "OpenRouter Tencent Hy3 Free");
+    assert_eq!(hy3.context_window, Some(262_144));
+    assert_eq!(hy3.default_reasoning_level, Some(ReasoningEffort::None));
+    assert_eq!(
+        hy3.supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            ReasoningEffort::None,
+            ReasoningEffort::Low,
+            ReasoningEffort::High,
+        ]
+    );
+    for model in [grok, deepseek, hy3] {
+        assert_eq!(model.visibility, ModelVisibility::List);
+        assert!(!model.supports_parallel_tool_calls);
+        assert_standard_base(&model.base_instructions);
+    }
 
     let claude_opus = response
         .models
