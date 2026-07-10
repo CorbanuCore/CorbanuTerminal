@@ -1289,7 +1289,14 @@ fn vercel_fast_command_plan_uses_count_tokens_passthrough_bridge() {
 
     assert_eq!(bridge.kind, ClaudeBridgeKind::AnthropicPassthrough);
     assert_eq!(bridge.upstream_base_url, "https://ai-gateway.vercel.sh");
-    assert_eq!(bridge.upstream_api_key, "vercel-test-key");
+    assert!(bridge.upstream_api_key.is_none());
+    assert_eq!(
+        bridge
+            .deferred_vault_secret
+            .as_ref()
+            .map(|secret| secret.label.as_str()),
+        Some("provider/ai_gateway_api_key")
+    );
     assert_eq!(
         plan.env.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
         Some("pfterminal-local-bridge")
@@ -1337,7 +1344,14 @@ fn ambient_kimi_profile_uses_ambient_bridge_model() {
 
     assert_eq!(bridge.kind, ClaudeBridgeKind::AmbientChat);
     assert_eq!(bridge.upstream_model, AMBIENT_KIMI_K2_7_CODE_MODEL);
-    assert_eq!(bridge.upstream_api_key, "ambient-test-key");
+    assert!(bridge.upstream_api_key.is_none());
+    assert_eq!(
+        bridge
+            .deferred_vault_secret
+            .as_ref()
+            .map(|secret| secret.label.as_str()),
+        Some("provider/ambient_api_key")
+    );
     assert_eq!(
         settings.pointer("/env/ANTHROPIC_DEFAULT_OPUS_MODEL"),
         Some(&json!(AMBIENT_KIMI_K2_7_CODE_MODEL))
@@ -1369,6 +1383,24 @@ fn ambient_glm_profile_uses_native_ambient_model_slug() {
 
     assert_eq!(plan.provider_model, AMBIENT_DEFAULT_MODEL);
     assert_eq!(bridge.upstream_model, AMBIENT_DEFAULT_MODEL);
+}
+
+#[test]
+fn bridge_command_plan_defers_vault_reveal() {
+    let (dir, pane) = pane(ClaudeProviderProfileKind::AmbientGlm52);
+
+    let plan = build_claude_command_plan(&pane, "hello".to_string(), dir.path())
+        .expect("planning must not read the vault");
+    let bridge = plan.bridge.expect("bridge plan");
+
+    assert!(bridge.upstream_api_key.is_none());
+    assert_eq!(
+        bridge
+            .deferred_vault_secret
+            .as_ref()
+            .map(|secret| secret.label.as_str()),
+        Some("provider/ambient_api_key")
+    );
 }
 
 #[cfg(unix)]
@@ -1404,7 +1436,8 @@ fn bridge_redaction_plan(
             listener,
             bind_addr,
             upstream_base_url: "https://example.invalid".to_string(),
-            upstream_api_key: secret.to_string(),
+            upstream_api_key: Some(secret.to_string()),
+            deferred_vault_secret: None,
             upstream_model: "test-model".to_string(),
         }),
     }

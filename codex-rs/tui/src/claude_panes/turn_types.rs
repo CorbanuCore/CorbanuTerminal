@@ -186,8 +186,15 @@ pub(crate) struct ClaudeBridgePlan {
     pub(crate) listener: StdTcpListener,
     pub(crate) bind_addr: SocketAddr,
     pub(crate) upstream_base_url: String,
-    pub(crate) upstream_api_key: String,
+    pub(crate) upstream_api_key: Option<String>,
+    pub(crate) deferred_vault_secret: Option<DeferredVaultSecret>,
     pub(crate) upstream_model: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct DeferredVaultSecret {
+    pub(crate) codex_home: PathBuf,
+    pub(crate) label: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

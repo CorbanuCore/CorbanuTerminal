@@ -749,9 +749,24 @@ impl ChatWidget {
                     self.open_vault_credential_add();
                     return;
                 }
-                let lines =
-                    crate::vault_command::handle_vault_command(&self.config.codex_home, trimmed);
-                self.add_plain_history_lines(lines);
+                let codex_home = self.config.codex_home.clone();
+                let args = trimmed.to_string();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let task = tokio::task::spawn_blocking(move || {
+                        crate::vault_command::handle_vault_command(&codex_home, &args)
+                    });
+                    let lines = match tokio::time::timeout(std::time::Duration::from_secs(10), task)
+                        .await
+                    {
+                        Ok(Ok(lines)) => lines,
+                        Ok(Err(err)) => vec![Line::from(format!("Vault task failed: {err}"))],
+                        Err(_) => vec![Line::from("Vault operation timed out.")],
+                    };
+                    tx.send(AppEvent::InsertHistoryCell(Box::new(
+                        PlainHistoryCell::new(lines),
+                    )));
+                });
             }
             SlashCommand::Spawn => {
                 let mut parts = trimmed.splitn(2, ' ');

@@ -1198,6 +1198,19 @@ pub(crate) enum AppEvent {
         label: String,
     },
 
+    VaultMenuCredentialsReady {
+        result: Result<Vec<codex_vault::VaultCredentialMeta>, String>,
+    },
+
+    VaultCredentialsReady {
+        result: Result<Vec<codex_vault::VaultCredentialMeta>, String>,
+    },
+
+    VaultCopySecretFinished {
+        label: String,
+        result: Result<Option<crate::clipboard_copy::ClipboardLease>, String>,
+    },
+
     /// Open the confirmation prompt before enabling full access mode.
     OpenFullAccessConfirmation {
         preset: ApprovalPreset,

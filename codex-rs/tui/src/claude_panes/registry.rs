@@ -18,7 +18,6 @@ use codex_protocol::ThreadId;
 
 use super::command_plan::build_claude_command_plan;
 use super::command_plan::claude_pane_title;
-use super::command_plan::ensure_vault_label_exists;
 use super::pane::ClaudePane;
 use super::pane::ClaudePaneLiveStatus;
 use super::pane::ClaudePaneLiveTurn;
@@ -165,10 +164,6 @@ impl ClaudePaneRegistry {
         spawn_role: Option<SpawnRole>,
         spawn_nickname: Option<String>,
     ) -> Result<String> {
-        let profile_config = profile.profile();
-        if let Some(label) = profile_config.vault_label {
-            ensure_vault_label_exists(codex_home, label)?;
-        }
         self.push_pane(profile, cwd, codex_home, spawn_role, spawn_nickname)
     }
 

@@ -1328,6 +1328,16 @@ impl App {
             AppEvent::OpenVaultCopySecret { label } => {
                 self.chat_widget.copy_vault_secret_to_clipboard(label);
             }
+            AppEvent::VaultMenuCredentialsReady { result } => {
+                self.chat_widget.on_vault_menu_credentials_ready(result);
+            }
+            AppEvent::VaultCredentialsReady { result } => {
+                self.chat_widget.on_vault_credentials_ready(result);
+            }
+            AppEvent::VaultCopySecretFinished { label, result } => {
+                self.chat_widget
+                    .on_vault_copy_secret_finished(label, result);
+            }
             AppEvent::OpenTaskNodeMenu => {
                 self.chat_widget.open_tasknode_menu();
             }

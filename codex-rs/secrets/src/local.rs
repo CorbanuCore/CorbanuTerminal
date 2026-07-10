@@ -1,10 +1,13 @@
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::OnceLock;
+use std::sync::Weak;
 use std::sync::atomic::Ordering;
 use std::sync::atomic::compiler_fence;
 use std::time::SystemTime;
@@ -46,7 +49,7 @@ const LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR: u8 = 16;
 const LOCAL_SECRETS_MAX_SCRYPT_WORK_FACTOR: u8 = 20;
 
 /// Selects the local encrypted file used by a `LocalSecretsBackend`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum LocalSecretsNamespace {
     /// General managed secrets stored in `local.age`.
     #[default]
@@ -84,7 +87,12 @@ impl LocalSecretsBackend {
     pub(crate) fn new_with_default_keyring(codex_home: PathBuf) -> Self {
         let keyring_store: Arc<dyn KeyringStore> =
             Arc::new(LocalFallbackKeyringStore::new(codex_home.clone()));
-        Self::new(codex_home, keyring_store)
+        Self {
+            cached_file: shared_default_cache(&codex_home, LocalSecretsNamespace::ManagedSecrets),
+            codex_home,
+            keyring_store,
+            namespace: LocalSecretsNamespace::ManagedSecrets,
+        }
     }
 
     pub fn new(codex_home: PathBuf, keyring_store: Arc<dyn KeyringStore>) -> Self {
@@ -260,6 +268,27 @@ impl LocalSecretsBackend {
             }
         }
     }
+}
+
+type SharedSecretsCache =
+    Mutex<HashMap<(PathBuf, LocalSecretsNamespace), Weak<Mutex<Option<SecretsFile>>>>>;
+
+fn shared_default_cache(
+    codex_home: &Path,
+    namespace: LocalSecretsNamespace,
+) -> Arc<Mutex<Option<SecretsFile>>> {
+    static CACHES: OnceLock<SharedSecretsCache> = OnceLock::new();
+    let caches = CACHES.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut caches = caches
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let key = (codex_home.to_path_buf(), namespace);
+    if let Some(cache) = caches.get(&key).and_then(Weak::upgrade) {
+        return cache;
+    }
+    let cache = Arc::new(Mutex::new(None));
+    caches.insert(key, Arc::downgrade(&cache));
+    cache
 }
 
 #[derive(Debug)]
@@ -696,6 +725,15 @@ fn parse_canonical_key(canonical_key: &str) -> Option<SecretListEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_backends_share_decrypted_file_cache() {
+        let codex_home = tempfile::tempdir().expect("temp dir");
+        let first = LocalSecretsBackend::new_with_default_keyring(codex_home.path().to_path_buf());
+        let second = LocalSecretsBackend::new_with_default_keyring(codex_home.path().to_path_buf());
+
+        assert!(Arc::ptr_eq(&first.cached_file, &second.cached_file));
+    }
     use codex_keyring_store::tests::MockKeyringStore;
     use keyring::Error as KeyringError;
     use pretty_assertions::assert_eq;

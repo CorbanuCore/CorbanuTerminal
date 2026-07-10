@@ -33,7 +33,10 @@ pub(crate) const AMBIENT_BRIDGE_UPSTREAM_MAX_ATTEMPTS: usize = 3;
 pub(crate) async fn run_claude_bridge(plan: ClaudeBridgePlan) -> Result<()> {
     let listener = TcpListener::from_std(plan.listener)
         .context("failed to create async Claude bridge listener")?;
-    let api_key = Arc::new(plan.upstream_api_key);
+    let api_key = Arc::new(
+        plan.upstream_api_key
+            .context("Claude bridge provider credential was not resolved")?,
+    );
     let upstream_base_url = Arc::new(plan.upstream_base_url);
     let upstream_model = Arc::new(plan.upstream_model);
     let kind = plan.kind;

@@ -5,38 +5,35 @@ use super::*;
 const VAULT_MENU_VIEW_ID: &str = "vault-menu";
 const VAULT_CREDENTIALS_VIEW_ID: &str = "vault-credentials";
 const VAULT_CREDENTIAL_ACTIONS_VIEW_ID: &str = "vault-credential-actions";
+const VAULT_OPERATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 impl ChatWidget {
     pub(crate) fn open_vault_menu(&mut self) {
         let codex_home = self.config.codex_home.as_path().to_path_buf();
-        let credential_result = sorted_vault_credentials(&codex_home);
-        let credential_count = credential_result.as_ref().ok().map(Vec::len);
-
         self.show_selection_view(SelectionViewParams {
             view_id: Some(VAULT_MENU_VIEW_ID),
             footer_hint: Some(standard_popup_hint_line()),
             is_searchable: true,
             search_placeholder: Some("Search vault actions".to_string()),
-            items: vault_action_items(codex_home, credential_result),
-            header: vault_header(credential_count),
+            items: vault_action_items(codex_home.clone(), None),
+            header: vault_header(None),
             ..Default::default()
         });
+        self.load_vault_credentials(codex_home, true);
     }
 
     pub(crate) fn open_vault_credentials_list(&mut self) {
         let codex_home = self.config.codex_home.as_path().to_path_buf();
-        let credential_result = sorted_vault_credentials(&codex_home);
-        let credential_count = credential_result.as_ref().ok().map(Vec::len);
-
         self.show_selection_view(SelectionViewParams {
             view_id: Some(VAULT_CREDENTIALS_VIEW_ID),
             footer_hint: Some(standard_popup_hint_line()),
             is_searchable: true,
             search_placeholder: Some("Search credentials".to_string()),
-            items: vault_credential_items(credential_result),
-            header: vault_credentials_header(credential_count),
+            items: vault_credential_items(None),
+            header: vault_credentials_header(None),
             ..Default::default()
         });
+        self.load_vault_credentials(codex_home, false);
     }
 
     pub(crate) fn open_vault_credential_actions(&mut self, label: String) {
@@ -60,34 +57,106 @@ impl ChatWidget {
     }
 
     pub(crate) fn copy_vault_secret_to_clipboard(&mut self, label: String) {
-        self.copy_vault_secret_to_clipboard_with(label, crate::clipboard_copy::copy_to_clipboard);
+        let codex_home = self.config.codex_home.as_path().to_path_buf();
+        let tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let task = tokio::task::spawn_blocking({
+                let label = label.clone();
+                move || {
+                    let vault = codex_vault::Vault::new(codex_home);
+                    let secret = vault.reveal(&label).map_err(|err| {
+                        format!("Failed to read vault credential {label:?}: {err}")
+                    })?;
+                    crate::clipboard_copy::copy_to_clipboard(&secret)
+                }
+            });
+            let result = match tokio::time::timeout(VAULT_OPERATION_TIMEOUT, task).await {
+                Ok(Ok(result)) => result,
+                Ok(Err(err)) => Err(format!("Vault copy task failed: {err}")),
+                Err(_) => Err("Vault copy timed out.".to_string()),
+            };
+            tx.send(AppEvent::VaultCopySecretFinished { label, result });
+        });
     }
 
-    fn copy_vault_secret_to_clipboard_with(
+    pub(crate) fn on_vault_copy_secret_finished(
         &mut self,
         label: String,
-        copy_fn: impl FnOnce(&str) -> Result<Option<crate::clipboard_copy::ClipboardLease>, String>,
+        result: Result<Option<crate::clipboard_copy::ClipboardLease>, String>,
     ) {
-        let vault = codex_vault::Vault::new(self.config.codex_home.as_path().to_path_buf());
-        match vault.reveal(&label) {
-            Ok(secret) => match copy_fn(&secret) {
-                Ok(lease) => {
-                    self.clipboard_lease = lease;
-                    self.add_info_message(
-                        format!("Copied vault credential {label:?} to clipboard."),
-                        /*hint*/ None,
-                    );
-                }
-                Err(err) => {
-                    self.add_error_message(format!(
-                        "Failed to copy vault credential {label:?}: {err}"
-                    ));
-                }
-            },
-            Err(err) => {
-                self.add_error_message(format!("Failed to read vault credential {label:?}: {err}"));
+        match result {
+            Ok(lease) => {
+                self.clipboard_lease = lease;
+                self.add_info_message(
+                    format!("Copied vault credential {label:?} to clipboard."),
+                    None,
+                );
             }
+            Err(err) => self.add_error_message(err),
         }
+    }
+
+    fn load_vault_credentials(&self, codex_home: PathBuf, menu: bool) {
+        let tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let task = tokio::task::spawn_blocking(move || {
+                sorted_vault_credentials(&codex_home).map_err(|err| err.to_string())
+            });
+            let result = match tokio::time::timeout(VAULT_OPERATION_TIMEOUT, task).await {
+                Ok(Ok(result)) => result,
+                Ok(Err(err)) => Err(format!("Vault list task failed: {err}")),
+                Err(_) => Err("Vault status unavailable: operation timed out.".to_string()),
+            };
+            if menu {
+                tx.send(AppEvent::VaultMenuCredentialsReady { result });
+            } else {
+                tx.send(AppEvent::VaultCredentialsReady { result });
+            }
+        });
+    }
+
+    pub(crate) fn on_vault_menu_credentials_ready(
+        &mut self,
+        result: Result<Vec<codex_vault::VaultCredentialMeta>, String>,
+    ) {
+        let selected = self
+            .bottom_pane
+            .selected_index_for_active_view(VAULT_MENU_VIEW_ID);
+        let count = result.as_ref().ok().map(Vec::len);
+        let mut params = SelectionViewParams {
+            view_id: Some(VAULT_MENU_VIEW_ID),
+            footer_hint: Some(standard_popup_hint_line()),
+            is_searchable: true,
+            search_placeholder: Some("Search vault actions".to_string()),
+            items: vault_action_items(self.config.codex_home.as_path().to_path_buf(), Some(result)),
+            header: vault_header(count),
+            ..Default::default()
+        };
+        params.initial_selected_idx = selected;
+        self.bottom_pane
+            .replace_selection_view_if_present(VAULT_MENU_VIEW_ID, params);
+    }
+
+    pub(crate) fn on_vault_credentials_ready(
+        &mut self,
+        result: Result<Vec<codex_vault::VaultCredentialMeta>, String>,
+    ) {
+        let selected = self
+            .bottom_pane
+            .selected_index_for_active_view(VAULT_CREDENTIALS_VIEW_ID);
+        let count = result.as_ref().ok().map(Vec::len);
+        let mut params = SelectionViewParams {
+            view_id: Some(VAULT_CREDENTIALS_VIEW_ID),
+            footer_hint: Some(standard_popup_hint_line()),
+            is_searchable: true,
+            search_placeholder: Some("Search credentials".to_string()),
+            items: vault_credential_items(Some(result)),
+            header: vault_credentials_header(count),
+            ..Default::default()
+        };
+        params.initial_selected_idx = selected;
+        self.bottom_pane
+            .replace_selection_view_if_present(VAULT_CREDENTIALS_VIEW_ID, params);
     }
 }
 
@@ -123,12 +192,13 @@ fn vault_credentials_header(credential_count: Option<usize>) -> Box<dyn Renderab
 
 fn vault_action_items(
     codex_home: PathBuf,
-    credential_result: Result<Vec<codex_vault::VaultCredentialMeta>, codex_vault::VaultError>,
+    credential_result: Option<Result<Vec<codex_vault::VaultCredentialMeta>, String>>,
 ) -> Vec<SelectionItem> {
     let view_description = match credential_result {
-        Ok(credentials) if credentials.is_empty() => "No credentials stored yet".to_string(),
-        Ok(credentials) => format!("View {} stored credential(s)", credentials.len()),
-        Err(err) => format!("Credential list unavailable: {err}"),
+        None => "Loading stored credentials...".to_string(),
+        Some(Ok(credentials)) if credentials.is_empty() => "No credentials stored yet".to_string(),
+        Some(Ok(credentials)) => format!("View {} stored credential(s)", credentials.len()),
+        Some(Err(err)) => format!("Credential list unavailable: {err}"),
     };
     vec![
         SelectionItem {
@@ -159,20 +229,26 @@ fn vault_action_items(
 }
 
 fn vault_credential_items(
-    credential_result: Result<Vec<codex_vault::VaultCredentialMeta>, codex_vault::VaultError>,
+    credential_result: Option<Result<Vec<codex_vault::VaultCredentialMeta>, String>>,
 ) -> Vec<SelectionItem> {
     match credential_result {
-        Ok(credentials) if credentials.is_empty() => vec![SelectionItem {
+        None => vec![SelectionItem {
+            name: "Loading credentials...".to_string(),
+            is_disabled: true,
+            dismiss_on_select: false,
+            ..Default::default()
+        }],
+        Some(Ok(credentials)) if credentials.is_empty() => vec![SelectionItem {
             name: "No credentials stored".to_string(),
             description: Some("Use Add credential from the vault menu.".to_string()),
             is_disabled: true,
             dismiss_on_select: false,
             ..Default::default()
         }],
-        Ok(credentials) => credentials.into_iter().map(vault_credential_item).collect(),
-        Err(err) => vec![SelectionItem {
+        Some(Ok(credentials)) => credentials.into_iter().map(vault_credential_item).collect(),
+        Some(Err(err)) => vec![SelectionItem {
             name: "Credential list unavailable".to_string(),
-            description: Some(err.to_string()),
+            description: Some(err),
             is_disabled: true,
             dismiss_on_select: false,
             ..Default::default()
@@ -254,10 +330,19 @@ fn vault_history_item(
         name: name.into(),
         description: Some(description.into()),
         actions: vec![Box::new(move |tx| {
-            let lines = crate::vault_command::handle_vault_command(&codex_home, &args);
-            tx.send(AppEvent::InsertHistoryCell(Box::new(
-                PlainHistoryCell::new(lines),
-            )));
+            let tx = tx.clone();
+            let codex_home = codex_home.clone();
+            let args = args.clone();
+            tokio::spawn(async move {
+                let lines = tokio::task::spawn_blocking(move || {
+                    crate::vault_command::handle_vault_command(&codex_home, &args)
+                })
+                .await
+                .unwrap_or_else(|err| vec![Line::from(format!("Vault task failed: {err}"))]);
+                tx.send(AppEvent::InsertHistoryCell(Box::new(
+                    PlainHistoryCell::new(lines),
+                )));
+            });
         })],
         dismiss_on_select: true,
         ..Default::default()
@@ -280,7 +365,7 @@ mod tests {
     fn top_level_vault_actions_do_not_include_per_credential_actions() {
         let items = vault_action_items(
             PathBuf::from("/tmp/codex-home"),
-            Ok(vec![VaultCredentialMeta {
+            Some(Ok(vec![VaultCredentialMeta {
                 label: "provider/ambient_api_key".to_string(),
                 credential_type: CredentialType::ApiKey,
                 provider: Some("AMBIENT_API_KEY".to_string()),
@@ -289,7 +374,7 @@ mod tests {
                 created_at: 1,
                 updated_at: 1,
                 storage_backend: StorageBackend::EncryptedSecrets,
-            }]),
+            }])),
         );
         let names = items
             .iter()
@@ -306,7 +391,7 @@ mod tests {
 
     #[test]
     fn credential_tab_shows_one_row_per_credential() {
-        let items = vault_credential_items(Ok(vec![VaultCredentialMeta {
+        let items = vault_credential_items(Some(Ok(vec![VaultCredentialMeta {
             label: "provider/ambient_api_key".to_string(),
             credential_type: CredentialType::ApiKey,
             provider: Some("AMBIENT_API_KEY".to_string()),
@@ -315,7 +400,7 @@ mod tests {
             created_at: 1,
             updated_at: 1,
             storage_backend: StorageBackend::EncryptedSecrets,
-        }]));
+        }])));
 
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].name, "Provider: Ambient API Key");
