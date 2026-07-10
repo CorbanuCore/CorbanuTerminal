@@ -1888,6 +1888,7 @@ async fn thread_resume_token_usage_replay_can_belong_to_interrupted_turn() -> Re
                 info: Some(TokenUsageInfo {
                     total_token_usage: TokenUsage {
                         input_tokens: 180,
+                        cache_creation_input_tokens: 0,
                         cached_input_tokens: 40,
                         output_tokens: 50,
                         reasoning_output_tokens: 15,
@@ -1895,6 +1896,7 @@ async fn thread_resume_token_usage_replay_can_belong_to_interrupted_turn() -> Re
                     },
                     last_token_usage: TokenUsage {
                         input_tokens: 90,
+                        cache_creation_input_tokens: 0,
                         cached_input_tokens: 30,
                         output_tokens: 40,
                         reasoning_output_tokens: 12,

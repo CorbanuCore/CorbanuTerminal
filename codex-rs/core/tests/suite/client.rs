@@ -2978,6 +2978,7 @@ async fn token_count_includes_rate_limits_snapshot() {
             "info": {
                 "total_token_usage": {
                     "input_tokens": 123,
+                    "cache_creation_input_tokens": 0,
                     "cached_input_tokens": 0,
                     "output_tokens": 0,
                     "reasoning_output_tokens": 0,
@@ -2985,13 +2986,14 @@ async fn token_count_includes_rate_limits_snapshot() {
                 },
                 "last_token_usage": {
                     "input_tokens": 123,
+                    "cache_creation_input_tokens": 0,
                     "cached_input_tokens": 0,
                     "output_tokens": 0,
                     "reasoning_output_tokens": 0,
                     "total_tokens": 123
                 },
-                // Default model is gpt-5.4 in tests → 95% usable context window
-                "model_context_window": 258400
+                // Default model context window in tests → 95% usable context window
+                "model_context_window": 192614
             },
             "rate_limits": {
                 "limit_id": "codex",

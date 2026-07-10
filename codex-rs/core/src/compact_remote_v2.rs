@@ -833,6 +833,7 @@ mod tests {
                 response_id: "resp-compact".to_string(),
                 token_usage: Some(TokenUsage {
                     input_tokens: 123_456,
+                    cache_creation_input_tokens: 0,
                     cached_input_tokens: 7_890,
                     output_tokens: 42,
                     reasoning_output_tokens: 5,
@@ -851,6 +852,7 @@ mod tests {
             output.token_usage,
             Some(TokenUsage {
                 input_tokens: 123_456,
+                cache_creation_input_tokens: 0,
                 cached_input_tokens: 7_890,
                 output_tokens: 42,
                 reasoning_output_tokens: 5,

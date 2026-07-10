@@ -467,6 +467,8 @@ pub struct ChatCompletionsRequest {
     pub stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream_options: Option<ChatStreamOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<ChatUsageOptions>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -494,6 +496,11 @@ pub struct ChatCompletionsRequest {
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct ChatStreamOptions {
     pub include_usage: bool,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+pub struct ChatUsageOptions {
+    pub include: bool,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
@@ -812,6 +819,7 @@ mod tests {
             reasoning: Some(json!({ "effort": "medium" })),
             provider: None,
             plugins: None,
+            usage: None,
         };
 
         let serialized = serde_json::to_string(&request).expect("serialize request");
@@ -842,11 +850,37 @@ mod tests {
                 "require_parameters": true,
             })),
             plugins: None,
+            usage: None,
         };
 
         let body = serde_json::to_value(&request).expect("serialize request");
         assert_eq!(body["provider"]["sort"], "throughput");
         assert_eq!(body["provider"]["require_parameters"], true);
+    }
+
+    #[test]
+    fn chat_completions_request_serializes_usage_include_when_set() {
+        let request = ChatCompletionsRequest {
+            model: "z-ai/glm-5.2".to_string(),
+            messages: Vec::new(),
+            stream: true,
+            stream_options: None,
+            tools: Vec::new(),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            prompt_cache_key: None,
+            response_format: None,
+            emit_usage: None,
+            enable_thinking: None,
+            reasoning_effort: None,
+            reasoning: None,
+            provider: None,
+            plugins: None,
+            usage: Some(ChatUsageOptions { include: true }),
+        };
+
+        let body = serde_json::to_value(&request).expect("serialize request");
+        assert_eq!(body["usage"]["include"], true);
     }
 
     #[test]

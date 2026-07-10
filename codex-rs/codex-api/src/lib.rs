@@ -33,6 +33,7 @@ pub use crate::common::ChatMessageContent;
 pub use crate::common::ChatStreamOptions;
 pub use crate::common::ChatToolCall;
 pub use crate::common::ChatToolFunction;
+pub use crate::common::ChatUsageOptions;
 pub use crate::common::CompactionInput;
 pub use crate::common::MemorySummarizeInput;
 pub use crate::common::MemorySummarizeOutput;

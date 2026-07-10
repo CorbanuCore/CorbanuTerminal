@@ -33,7 +33,9 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::fs::OpenOptions;
 use std::io::IsTerminal;
+use std::io::Write;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicU64;
@@ -58,6 +60,27 @@ const DEFAULT_ACTIONABLE_SILENCE_TIMEOUT: Duration = Duration::from_secs(180);
 const SERIALIZED_TOOL_TEXT_PROBE_CHARS: usize = 96;
 const CALL_METRICS_TAG: &str = "pfterminal_call_metrics";
 static CHAT_CALL_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+fn maybe_dump_chat_usage_frame(data: &str) {
+    let Ok(path) = std::env::var("PFTERMINAL_DUMP_CHAT_USAGE") else {
+        return;
+    };
+    let Ok(value) = serde_json::from_str::<Value>(data) else {
+        return;
+    };
+    let Some(usage) = value.get("usage").filter(|usage| usage.is_object()) else {
+        return;
+    };
+    let frame = serde_json::json!({
+        "source": "chat.usage",
+        "usage": usage,
+    });
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path)
+        && serde_json::to_writer(&mut file, &frame).is_ok()
+    {
+        let _ = file.write_all(b"\n");
+    }
+}
 
 pub struct ChatCompletionsClient<T: HttpTransport> {
     session: EndpointSession<T>,
@@ -263,6 +286,8 @@ struct ChatUsage {
     prompt_tokens_details: Option<ChatPromptTokensDetails>,
     #[serde(default)]
     completion_tokens_details: Option<ChatCompletionTokensDetails>,
+    #[serde(default)]
+    cost: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -281,6 +306,7 @@ impl From<ChatUsage> for TokenUsage {
     fn from(value: ChatUsage) -> Self {
         Self {
             input_tokens: value.prompt_tokens,
+            cache_creation_input_tokens: 0,
             cached_input_tokens: value
                 .prompt_tokens_details
                 .map(|details| details.cached_tokens)
@@ -426,6 +452,7 @@ struct ChatCallMetricsInner {
     x_request_id: Option<String>,
     generation_id: Option<String>,
     provider: Option<String>,
+    reported_cost_usd: Option<f64>,
     emitted: bool,
 }
 
@@ -434,7 +461,7 @@ struct ChatCallRetryLinkage {
     same_turn_attempt_index: u64,
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, PartialEq)]
 struct ChatCallMetricsRecord {
     tag: &'static str,
     call_index: u64,
@@ -450,6 +477,7 @@ struct ChatCallMetricsRecord {
     x_request_id: Option<String>,
     generation_id: Option<String>,
     provider: Option<String>,
+    reported_cost_usd: Option<f64>,
     finish_reason: String,
     retry_linkage: ChatCallRetryLinkage,
 }
@@ -520,6 +548,14 @@ impl ChatCallMetrics {
         }
     }
 
+    fn record_reported_cost_usd(&self, cost: Option<f64>) {
+        let Some(cost) = cost else {
+            return;
+        };
+        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        inner.reported_cost_usd = Some(cost);
+    }
+
     fn record_actionable_event(&self) {
         let elapsed_ms = self.elapsed_ms();
         let mut inner = self.inner.lock().expect("metrics mutex poisoned");
@@ -552,6 +588,7 @@ impl ChatCallMetrics {
                 x_request_id: inner.x_request_id.clone(),
                 generation_id: inner.generation_id.clone(),
                 provider: inner.provider.clone(),
+                reported_cost_usd: inner.reported_cost_usd,
                 finish_reason,
                 retry_linkage: ChatCallRetryLinkage {
                     same_turn_attempt_index: self.attempt_number,
@@ -1115,6 +1152,7 @@ async fn process_chat_sse(
             }
             return;
         }
+        maybe_dump_chat_usage_frame(&sse.data);
 
         if let Ok(error) = serde_json::from_str::<ChatErrorEnvelope>(&sse.data) {
             let mut message = error
@@ -1147,6 +1185,7 @@ async fn process_chat_sse(
         if let Some(metrics) = metrics.as_ref() {
             metrics.record_generation_id(chunk.id.as_deref());
             metrics.record_provider(chunk.provider.as_deref());
+            metrics.record_reported_cost_usd(chunk.usage.as_ref().and_then(|usage| usage.cost));
             if chunk_has_actionable_event(&chunk) {
                 metrics.record_actionable_event();
             }
@@ -1295,10 +1334,18 @@ mod tests {
     use codex_client::TransportError;
     use futures::TryStreamExt;
     use pretty_assertions::assert_eq;
+    use serde_json::json;
     use tokio_test::io::Builder as IoBuilder;
     use tokio_util::io::ReaderStream;
 
     async fn collect_events(chunks: &[&[u8]]) -> Vec<Result<ResponseEvent, ApiError>> {
+        collect_events_with_metrics(chunks, None).await
+    }
+
+    async fn collect_events_with_metrics(
+        chunks: &[&[u8]],
+        metrics: Option<ChatCallMetrics>,
+    ) -> Vec<Result<ResponseEvent, ApiError>> {
         let mut builder = IoBuilder::new();
         for chunk in chunks {
             builder.read(chunk);
@@ -1315,7 +1362,7 @@ mod tests {
             DEFAULT_ACTIONABLE_SILENCE_TIMEOUT,
             /*telemetry*/ None,
             Some("req_123".to_string()),
-            /*metrics*/ None,
+            metrics,
         )
         .await;
 
@@ -1324,6 +1371,30 @@ mod tests {
             events.push(event);
         }
         events
+    }
+
+    #[test]
+    fn openai_chat_usage_sets_cache_creation_to_zero() {
+        let usage: ChatUsage = serde_json::from_value(json!({
+            "prompt_tokens": 10,
+            "completion_tokens": 4,
+            "total_tokens": 14,
+            "prompt_tokens_details": {
+                "cached_tokens": 6
+            },
+            "completion_tokens_details": {
+                "reasoning_tokens": 2
+            }
+        }))
+        .expect("usage should parse");
+
+        let token_usage = TokenUsage::from(usage);
+        assert_eq!(token_usage.input_tokens, 10);
+        assert_eq!(token_usage.cache_creation_input_tokens, 0);
+        assert_eq!(token_usage.cached_input_tokens, 6);
+        assert_eq!(token_usage.output_tokens, 4);
+        assert_eq!(token_usage.reasoning_output_tokens, 2);
+        assert_eq!(token_usage.total_tokens, 14);
     }
 
     fn content_event(id: &str, content: &str) -> Vec<u8> {
@@ -1387,6 +1458,7 @@ mod tests {
                 response_id,
                 token_usage: Some(TokenUsage {
                     input_tokens: 3,
+                    cache_creation_input_tokens: 0,
                     cached_input_tokens: 1,
                     output_tokens: 2,
                     reasoning_output_tokens: 0,
@@ -1396,6 +1468,56 @@ mod tests {
             }) if response_id == "chatcmpl-1"
         );
         assert_eq!(events.len(), 6);
+    }
+
+    #[tokio::test]
+    async fn records_openrouter_reported_cost_from_final_usage_chunk() {
+        let metrics = ChatCallMetrics::new(0, None);
+        let events = collect_events_with_metrics(
+            &[
+                br#"data: {"id":"gen_123","provider":"OpenRouter","choices":[],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5,"cost":0.0042}}"#,
+                b"\n\n",
+                b"data: [DONE]\n\n",
+            ],
+            Some(metrics.clone()),
+        )
+        .await;
+
+        assert_matches!(
+            &events[0],
+            Ok(ResponseEvent::Completed {
+                token_usage: Some(TokenUsage {
+                    input_tokens: 3,
+                    cache_creation_input_tokens: 0,
+                    cached_input_tokens: 0,
+                    output_tokens: 2,
+                    reasoning_output_tokens: 0,
+                    total_tokens: 5,
+                }),
+                ..
+            })
+        );
+        let inner = metrics.inner.lock().expect("metrics mutex poisoned");
+        assert_eq!(inner.generation_id.as_deref(), Some("gen_123"));
+        assert_eq!(inner.provider.as_deref(), Some("OpenRouter"));
+        assert_eq!(inner.reported_cost_usd, Some(0.0042));
+    }
+
+    #[tokio::test]
+    async fn leaves_reported_cost_empty_when_usage_cost_absent() {
+        let metrics = ChatCallMetrics::new(0, None);
+        let _events = collect_events_with_metrics(
+            &[
+                br#"data: {"id":"gen_124","choices":[],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}"#,
+                b"\n\n",
+                b"data: [DONE]\n\n",
+            ],
+            Some(metrics.clone()),
+        )
+        .await;
+
+        let inner = metrics.inner.lock().expect("metrics mutex poisoned");
+        assert_eq!(inner.reported_cost_usd, None);
     }
 
     #[tokio::test]
@@ -1809,6 +1931,7 @@ mod tests {
             x_request_id: Some("req_123".to_string()),
             generation_id: Some("gen_456".to_string()),
             provider: Some("StreamLake".to_string()),
+            reported_cost_usd: Some(0.0042),
             finish_reason: "ok".to_string(),
             retry_linkage: ChatCallRetryLinkage {
                 same_turn_attempt_index: 2,
@@ -1830,6 +1953,7 @@ mod tests {
         assert_eq!(value["parsed_event_count"], 4);
         assert_eq!(value["x_request_id"], "req_123");
         assert_eq!(value["generation_id"], "gen_456");
+        assert_eq!(value["reported_cost_usd"], 0.0042);
         assert_eq!(value["finish_reason"], "ok");
         assert_eq!(value["retry_linkage"]["same_turn_attempt_index"], 2);
     }

@@ -347,6 +347,7 @@ mod tests {
             reviewed_action_truncated: true,
             token_usage: Some(TokenUsage {
                 input_tokens: 10,
+                cache_creation_input_tokens: 0,
                 cached_input_tokens: 4,
                 output_tokens: 3,
                 reasoning_output_tokens: 2,

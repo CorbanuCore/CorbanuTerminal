@@ -185,6 +185,8 @@ pub struct InferenceCall {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenUsage {
     pub input_tokens: u64,
+    #[serde(default)]
+    pub cache_creation_input_tokens: u64,
     pub cached_input_tokens: u64,
     pub output_tokens: u64,
     pub reasoning_output_tokens: u64,

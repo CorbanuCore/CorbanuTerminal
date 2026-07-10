@@ -366,6 +366,7 @@ fn total_token_usage_includes_all_items_after_last_model_generated_item() {
     history.update_token_info(
         &TokenUsage {
             total_tokens: 100,
+            cache_creation_input_tokens: 0,
             ..Default::default()
         },
         /*model_context_window*/ None,

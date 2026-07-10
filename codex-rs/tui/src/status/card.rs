@@ -66,6 +66,8 @@ struct StatusContextWindowData {
 pub(crate) struct StatusTokenUsageData {
     total: i64,
     input: i64,
+    #[allow(dead_code)]
+    cache_creation_input: i64,
     output: i64,
     context_window: Option<StatusContextWindowData>,
 }
@@ -337,6 +339,7 @@ impl StatusHistoryCell {
         let token_usage = StatusTokenUsageData {
             total: total_usage.blended_total(),
             input: total_usage.non_cached_input(),
+            cache_creation_input: total_usage.cache_creation_input(),
             output: total_usage.output_tokens,
             context_window,
         };

@@ -76,6 +76,7 @@ fn explicit_shell_command_budget_ignores_non_command_numbers() {
 fn token_usage(input_tokens: i64, cached_input_tokens: i64) -> TokenUsage {
     TokenUsage {
         input_tokens,
+        cache_creation_input_tokens: 0,
         cached_input_tokens,
         output_tokens: 0,
         reasoning_output_tokens: 0,

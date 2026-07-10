@@ -80,6 +80,7 @@ async fn context_indicator_shows_used_tokens_when_window_unknown() {
     let total_tokens = 106_000;
     let token_usage = TokenUsage {
         total_tokens,
+        cache_creation_input_tokens: 0,
         ..TokenUsage::default()
     };
     let token_info = TokenUsageInfo {
@@ -2161,12 +2162,14 @@ async fn status_line_tps_updates_from_completed_turn_average() {
             output_tokens: 30,
             reasoning_output_tokens: 10,
             total_tokens: 40,
+            cache_creation_input_tokens: 0,
             ..TokenUsage::default()
         },
         last_token_usage: TokenUsage {
             output_tokens: 30,
             reasoning_output_tokens: 10,
             total_tokens: 40,
+            cache_creation_input_tokens: 0,
             ..TokenUsage::default()
         },
         model_context_window: Some(128_000),
@@ -2215,12 +2218,14 @@ async fn status_line_tps_updates_when_usage_arrives_after_completion() {
             output_tokens: 30,
             reasoning_output_tokens: 10,
             total_tokens: 40,
+            cache_creation_input_tokens: 0,
             ..TokenUsage::default()
         },
         last_token_usage: TokenUsage {
             output_tokens: 30,
             reasoning_output_tokens: 10,
             total_tokens: 40,
+            cache_creation_input_tokens: 0,
             ..TokenUsage::default()
         },
         model_context_window: Some(128_000),

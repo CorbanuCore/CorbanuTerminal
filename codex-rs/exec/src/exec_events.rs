@@ -61,6 +61,9 @@ pub struct TurnFailedEvent {
 pub struct Usage {
     /// The number of input tokens used during the turn.
     pub input_tokens: i64,
+    /// The number of cache-write input tokens used during the turn.
+    #[serde(default)]
+    pub cache_creation_input_tokens: i64,
     /// The number of cached input tokens used during the turn.
     pub cached_input_tokens: i64,
     /// The number of output tokens used during the turn.

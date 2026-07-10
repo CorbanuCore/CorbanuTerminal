@@ -29,6 +29,8 @@ use http::Method;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -39,6 +41,42 @@ use tracing::instrument;
 use tracing::trace;
 
 const REQUEST_ID_HEADER: &str = "x-request-id";
+
+fn maybe_dump_anthropic_usage_frame(data: &str) {
+    let Ok(path) = std::env::var("PFTERMINAL_DUMP_ANTHROPIC_USAGE") else {
+        return;
+    };
+    let Ok(value) = serde_json::from_str::<Value>(data) else {
+        return;
+    };
+    let mut frames = Vec::new();
+    if let Some(usage) = value
+        .get("message")
+        .and_then(|message| message.get("usage"))
+        .filter(|usage| usage.is_object())
+    {
+        frames.push(serde_json::json!({
+            "source": "anthropic.message.usage",
+            "usage": usage,
+        }));
+    }
+    if let Some(usage) = value.get("usage").filter(|usage| usage.is_object()) {
+        frames.push(serde_json::json!({
+            "source": "anthropic.usage",
+            "usage": usage,
+        }));
+    }
+    if frames.is_empty() {
+        return;
+    }
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        for frame in frames {
+            if serde_json::to_writer(&mut file, &frame).is_ok() {
+                let _ = file.write_all(b"\n");
+            }
+        }
+    }
+}
 
 pub struct AnthropicMessagesClient<T: HttpTransport> {
     session: EndpointSession<T>,
@@ -194,6 +232,13 @@ struct AnthropicUsage {
     output_tokens: Option<i64>,
     cache_creation_input_tokens: Option<i64>,
     cache_read_input_tokens: Option<i64>,
+    output_tokens_details: Option<AnthropicOutputTokensDetails>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+struct AnthropicOutputTokensDetails {
+    thinking_tokens: Option<i64>,
+    reasoning_tokens: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -209,11 +254,21 @@ impl From<AnthropicUsage> for TokenUsage {
         let cache_read = usage.cache_read_input_tokens.unwrap_or(0);
         let input_tokens = non_cached + cache_creation + cache_read;
         let output_tokens = usage.output_tokens.unwrap_or(0);
+        let reasoning_output_tokens = usage
+            .output_tokens_details
+            .map(|details| {
+                details
+                    .thinking_tokens
+                    .unwrap_or(0)
+                    .max(details.reasoning_tokens.unwrap_or(0))
+            })
+            .unwrap_or(0);
         Self {
             input_tokens,
+            cache_creation_input_tokens: cache_creation,
             cached_input_tokens: cache_read,
             output_tokens,
-            reasoning_output_tokens: 0,
+            reasoning_output_tokens,
             total_tokens: input_tokens + output_tokens,
         }
     }
@@ -363,7 +418,7 @@ impl AnthropicStreamState {
             self.last_server_model = Some(model);
         }
         if let Some(usage) = message.usage {
-            self.token_usage = Some(usage.into());
+            self.merge_token_usage(usage.into());
         }
         true
     }
@@ -544,7 +599,7 @@ impl AnthropicStreamState {
 
     fn on_message_delta(&mut self, event: AnthropicStreamEvent) {
         if let Some(usage) = event.usage {
-            self.token_usage = Some(usage.into());
+            self.merge_token_usage(usage.into());
         }
         if let Some(delta) = event.delta {
             self.end_turn = match delta.stop_reason.as_deref() {
@@ -555,6 +610,13 @@ impl AnthropicStreamState {
                 None => self.end_turn,
             };
         }
+    }
+
+    fn merge_token_usage(&mut self, usage: TokenUsage) {
+        self.token_usage = Some(match self.token_usage.take() {
+            Some(existing) => merge_anthropic_token_usage(existing, usage),
+            None => usage,
+        });
     }
 
     async fn emit_text_delta(
@@ -887,6 +949,34 @@ impl AnthropicStreamState {
     }
 }
 
+fn merge_anthropic_token_usage(existing: TokenUsage, next: TokenUsage) -> TokenUsage {
+    let existing_non_cached = (existing.input_tokens
+        - existing.cache_creation_input_tokens
+        - existing.cached_input_tokens)
+        .max(0);
+    let next_non_cached =
+        (next.input_tokens - next.cache_creation_input_tokens - next.cached_input_tokens).max(0);
+    let non_cached_input = existing_non_cached.max(next_non_cached);
+    let cache_creation_input_tokens = existing
+        .cache_creation_input_tokens
+        .max(next.cache_creation_input_tokens);
+    let cached_input_tokens = existing.cached_input_tokens.max(next.cached_input_tokens);
+    let output_tokens = existing.output_tokens.max(next.output_tokens);
+    let reasoning_output_tokens = existing
+        .reasoning_output_tokens
+        .max(next.reasoning_output_tokens);
+    let input_tokens = non_cached_input + cache_creation_input_tokens + cached_input_tokens;
+
+    TokenUsage {
+        input_tokens,
+        cache_creation_input_tokens,
+        cached_input_tokens,
+        output_tokens,
+        reasoning_output_tokens,
+        total_tokens: input_tokens + output_tokens,
+    }
+}
+
 fn json_array() -> Value {
     Value::Array(Vec::new())
 }
@@ -992,6 +1082,7 @@ async fn process_anthropic_sse(
         };
 
         trace!("Anthropic messages SSE event: {}", &sse.data);
+        maybe_dump_anthropic_usage_frame(&sse.data);
 
         let event = match serde_json::from_str::<AnthropicStreamEvent>(&sse.data) {
             Ok(event) => event,
@@ -1019,6 +1110,7 @@ mod tests {
     use codex_client::TransportError;
     use futures::TryStreamExt;
     use pretty_assertions::assert_eq;
+    use serde_json::json;
     use tokio_test::io::Builder as IoBuilder;
     use tokio_util::io::ReaderStream;
 
@@ -1046,6 +1138,48 @@ mod tests {
             events.push(event);
         }
         events
+    }
+
+    #[test]
+    fn anthropic_usage_preserves_all_input_buckets() {
+        let usage: AnthropicUsage = serde_json::from_value(json!({
+            "input_tokens": 11,
+            "cache_creation_input_tokens": 13,
+            "cache_read_input_tokens": 17,
+            "output_tokens": 19
+        }))
+        .expect("usage should parse");
+
+        let token_usage = TokenUsage::from(usage);
+        assert_eq!(token_usage.input_tokens, 41);
+        assert_eq!(token_usage.cache_creation_input_tokens, 13);
+        assert_eq!(token_usage.cached_input_tokens, 17);
+        assert_eq!(token_usage.output_tokens, 19);
+        assert_eq!(token_usage.reasoning_output_tokens, 0);
+        assert_eq!(token_usage.total_tokens, 60);
+    }
+
+    #[test]
+    fn anthropic_usage_maps_fable_thinking_tokens() {
+        let usage: AnthropicUsage = serde_json::from_value(json!({
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 75,
+            "cache_read_input_tokens": 137191,
+            "output_tokens": 30,
+            "output_tokens_details": {
+                "thinking_tokens": 9
+            }
+        }))
+        .expect("usage should parse");
+
+        let token_usage = TokenUsage::from(usage);
+
+        assert_eq!(token_usage.input_tokens, 137268);
+        assert_eq!(token_usage.cache_creation_input_tokens, 75);
+        assert_eq!(token_usage.cached_input_tokens, 137191);
+        assert_eq!(token_usage.output_tokens, 30);
+        assert_eq!(token_usage.reasoning_output_tokens, 9);
+        assert_eq!(token_usage.total_tokens, 137298);
     }
 
     #[tokio::test]
@@ -1090,11 +1224,12 @@ data: {"type":"message_stop"}
             Ok(ResponseEvent::Completed {
                 response_id,
                 token_usage: Some(TokenUsage {
-                    input_tokens: 21,
+                    input_tokens: 26,
+                    cache_creation_input_tokens: 5,
                     cached_input_tokens: 12,
                     output_tokens: 2,
                     reasoning_output_tokens: 0,
-                    total_tokens: 23,
+                    total_tokens: 28,
                 }),
                 end_turn: Some(true),
             }) if response_id == "msg_1"
