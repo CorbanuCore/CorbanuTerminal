@@ -181,6 +181,18 @@ The Telegram command surface is:
 - `/model <alias-or-slug>` saves the model for the chat and updates the current
   thread with `thread/settings/update` so subsequent turns keep the same
   history. Built-in aliases include `fable`, `opus`, `gpt`, and `gpt-5.5`.
+
+  **`/model` selects a model, not a provider.** `model/list` does not report which
+  provider serves each model, so the chat keeps the provider it already had except
+  for the few model families whose provider is unambiguous from the slug (the
+  Claude plan models, `gpt-…`, `glm-…`, `zai/…`). When the provider does not
+  change, the reply says `Provider unchanged: <id>` rather than implying a switch.
+  To change provider, set `model_provider` in `config.toml` and restart.
+
+  Two selections are refused up front rather than failing at turn time: a model
+  that is neither in the catalog nor a known alias, and a model whose provider has
+  no reachable API key (checked against both the environment and the stored
+  provider keys).
 - `/approvals` shows the chat's active approval policy.
 - `/approvals <untrusted|on-failure|on-request|never>` saves the approval
   policy for the chat and updates the current thread with

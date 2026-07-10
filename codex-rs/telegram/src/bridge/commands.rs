@@ -19,6 +19,7 @@ use super::BridgeRuntime;
 use crate::model_selection::CatalogModel;
 use crate::model_selection::available_models;
 use crate::model_selection::known_model_source;
+use crate::model_selection::missing_provider_credential;
 use crate::model_selection::provider_for_model;
 use crate::model_selection::resolve_model;
 
@@ -40,16 +41,64 @@ impl BridgeRuntime {
 
         let (old_model, old_provider) = self.active_model_settings(chat_id).await;
         let resolution = resolve_model(arg, &catalog);
-        let new_provider = provider_for_model(&resolution.model, &old_provider);
+
+        // Reject at selection time. `model/list` is the only catalog we have, so a model
+        // that is neither in it nor a known alias would be forwarded verbatim and fail at
+        // turn time with a remote "Unknown model" — long after the user was told the
+        // switch succeeded.
+        if known_model_source(&resolution.model, &catalog).is_none() {
+            self.send_text(
+                chat_id,
+                &format!(
+                    "Unknown model: {}\n\nIt is not in this provider's catalog and not a known \
+                     alias, so a turn would fail at run time. Send /model with no argument to \
+                     list what the active provider serves.",
+                    resolution.model
+                ),
+            )
+            .await?;
+            return Ok(());
+        }
+
+        let choice = provider_for_model(&resolution.model, &old_provider);
+
+        // Reject at selection time when the provider that would serve this model has no
+        // usable credential. Otherwise every subsequent turn dies on a missing env var and
+        // the failure surfaces nowhere near the `/model` that caused it.
+        if let Some(missing) = missing_provider_credential(
+            &choice.provider,
+            &self.config.model_providers,
+            &self.config,
+        ) {
+            let remediation = missing.instructions.clone().unwrap_or_else(|| {
+                format!(
+                    "Set {} for the {} provider.",
+                    missing.env_key, missing.provider
+                )
+            });
+            self.send_text(
+                chat_id,
+                &format!(
+                    "Not switching to {}.\n\nIt would run on provider {}, which needs {}. No key \
+                     was found in the environment or the stored provider keys, so every turn \
+                     would fail.\n\n{remediation}\n\nNote: /model selects a model, not a \
+                     provider. Set model_provider in config.toml to change provider.",
+                    resolution.model, choice.provider, missing.env_key
+                ),
+            )
+            .await?;
+            return Ok(());
+        }
+
         self.sessions
-            .set_model(chat_id, resolution.model.clone(), new_provider.clone())
+            .set_model(chat_id, resolution.model.clone(), choice.provider.clone())
             .await?;
         let applied_to_thread = self
             .apply_thread_settings_update_if_thread_loaded(
                 chat_id,
                 ThreadSettingsUpdateParams {
                     model: Some(resolution.model.clone()),
-                    model_provider: Some(new_provider.clone()),
+                    model_provider: Some(choice.provider.clone()),
                     ..ThreadSettingsUpdateParams::default()
                 },
             )
@@ -60,14 +109,20 @@ impl BridgeRuntime {
         } else {
             "Saved for the next thread."
         };
-        self.send_text(
-            chat_id,
-            &format!(
-                "Model changed: {old_model} ({old_provider}) -> {} ({new_provider}).\n{suffix}",
-                resolution.model
-            ),
-        )
-        .await
+        // Only claim a provider change when one actually happened.
+        let headline = if choice.changed {
+            format!(
+                "Model changed: {old_model} ({old_provider}) -> {} ({}).",
+                resolution.model, choice.provider
+            )
+        } else {
+            format!(
+                "Model changed: {old_model} -> {}.\nProvider unchanged: {}.",
+                resolution.model, choice.provider
+            )
+        };
+        self.send_text(chat_id, &format!("{headline}\n{suffix}"))
+            .await
     }
 
     pub(super) async fn handle_approvals(
@@ -215,7 +270,7 @@ impl BridgeRuntime {
             .unwrap_or_else(|| self.config.model_provider_id.clone());
         let provider = model
             .as_deref()
-            .map(|model| provider_for_model(model, &provider))
+            .map(|model| provider_for_model(model, &provider).provider)
             .unwrap_or(provider);
         (model, provider)
     }

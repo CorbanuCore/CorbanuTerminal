@@ -1,6 +1,11 @@
+use std::collections::HashMap;
+
+use codex_core::config::Config;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::corrected_catalog_provider;
+use tracing::warn;
 
 const GPT_5_5_MODEL: &str = "gpt-5.5";
 
@@ -91,10 +96,115 @@ pub(crate) fn resolve_model(input: &str, catalog: &[CatalogModel]) -> ModelResol
     }
 }
 
-pub(crate) fn provider_for_model(model: &str, current_provider: &str) -> String {
-    corrected_catalog_provider(model, current_provider)
-        .unwrap_or(current_provider)
-        .to_string()
+/// The provider a `/model` switch will actually run on, and whether that differs
+/// from the provider the chat was already using.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProviderChoice {
+    pub provider: String,
+    pub changed: bool,
+}
+
+/// Resolve the provider for `model`.
+///
+/// `corrected_catalog_provider` repairs *impossible* (model, provider) pairs; it
+/// returns `None` for every model outside the families it knows. `model/list` does
+/// not carry a provider, so when it returns `None` there is nothing to route by and
+/// the chat keeps the provider it already had. That is a real limitation, not a
+/// routing decision — callers must report `changed: false` rather than print a
+/// provider next to the new model and imply a switch happened.
+pub(crate) fn provider_for_model(model: &str, current_provider: &str) -> ProviderChoice {
+    match corrected_catalog_provider(model, current_provider) {
+        Some(provider) => ProviderChoice {
+            provider: provider.to_string(),
+            changed: provider != current_provider,
+        },
+        None => ProviderChoice {
+            provider: current_provider.to_string(),
+            changed: false,
+        },
+    }
+}
+
+/// A credential a provider requires from the environment but does not have.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MissingProviderCredential {
+    pub provider: String,
+    pub env_key: String,
+    pub instructions: Option<String>,
+}
+
+/// `Some` only when the provider is *certain* to fail auth: it declares an `env_key`,
+/// has no other way to authenticate, and no key is reachable from either the process
+/// environment or the stored provider-key vault.
+///
+/// Providers that authenticate by subscription login (`requires_openai_auth`), a token
+/// command (`auth`), a static bearer, or AWS SigV4 are never reported — they hold no
+/// env var and a missing one proves nothing about them.
+pub(crate) fn missing_provider_credential(
+    provider_id: &str,
+    providers: &HashMap<String, ModelProviderInfo>,
+    config: &Config,
+) -> Option<MissingProviderCredential> {
+    missing_provider_credential_with(provider_id, providers, |env_key| {
+        provider_credential_present(config, env_key)
+    })
+}
+
+/// Testable core of [`missing_provider_credential`]; `credential_present` stands in for
+/// the environment and the vault so tests never touch global state or the filesystem.
+pub(crate) fn missing_provider_credential_with(
+    provider_id: &str,
+    providers: &HashMap<String, ModelProviderInfo>,
+    credential_present: impl Fn(&str) -> bool,
+) -> Option<MissingProviderCredential> {
+    let info = providers.get(provider_id)?;
+    if info.requires_openai_auth
+        || info.auth.is_some()
+        || info.experimental_bearer_token.is_some()
+        || info.aws.is_some()
+    {
+        return None;
+    }
+
+    let env_key = info.env_key.as_ref()?;
+    if credential_present(env_key) {
+        return None;
+    }
+
+    Some(MissingProviderCredential {
+        provider: provider_id.to_string(),
+        env_key: env_key.clone(),
+        instructions: info.env_key_instructions.clone(),
+    })
+}
+
+/// A provider key may live in the process environment *or* in the stored provider-key
+/// vault (`/providers` writes it there), so an unset env var alone does not mean the
+/// provider cannot authenticate. Mirrors what the model provider itself checks.
+///
+/// Fails open: if the store cannot be read we assume a key exists rather than block a
+/// switch on an unrelated storage fault.
+fn provider_credential_present(config: &Config, env_key: &str) -> bool {
+    let from_env = std::env::var(env_key)
+        .ok()
+        .is_some_and(|value| !value.trim().is_empty());
+    if from_env {
+        return true;
+    }
+
+    match codex_login::auth::provider_api_key_from_auth_storage(
+        &config.codex_home,
+        env_key,
+        config.cli_auth_credentials_store_mode,
+        config.auth_keyring_backend_kind(),
+    ) {
+        Ok(Some(key)) => !key.trim().is_empty(),
+        Ok(None) => false,
+        Err(err) => {
+            warn!("could not read stored provider key for {env_key}: {err}");
+            true
+        }
+    }
 }
 
 pub(crate) fn available_models(catalog: &[CatalogModel]) -> Vec<AvailableModel> {
