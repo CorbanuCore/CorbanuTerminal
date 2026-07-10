@@ -7,6 +7,7 @@ use codex_login::CodexAuth;
 use codex_mcp::ToolInfo;
 use codex_model_provider::create_model_provider;
 use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
+use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
@@ -289,6 +290,15 @@ fn use_zai_provider(turn: &mut TurnContext) {
     let provider_info = ModelProviderInfo::create_zai_provider();
     update_config(turn, |config| {
         config.model_provider_id = ZAI_PROVIDER_ID.to_string();
+        config.model_provider = provider_info.clone();
+    });
+    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+}
+
+fn use_meta_provider(turn: &mut TurnContext) {
+    let provider_info = ModelProviderInfo::create_meta_provider();
+    update_config(turn, |config| {
+        config.model_provider_id = META_PROVIDER_ID.to_string();
         config.model_provider = provider_info.clone();
     });
     turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
@@ -688,6 +698,30 @@ async fn zai_provider_uses_structured_edit_tools_instead_of_apply_patch() {
     plan.assert_registered_contains(&["structured_edit", "structured_write"]);
     plan.assert_visible_lacks(&["apply_patch"]);
     plan.assert_registered_lacks(&["apply_patch"]);
+}
+
+#[tokio::test]
+async fn meta_provider_uses_function_edit_tools_instead_of_custom_apply_patch() {
+    let plan = probe(|turn| {
+        turn.permission_profile = PermissionProfile::workspace_write();
+        use_meta_provider(turn);
+        turn.model_info.slug = "muse-spark-1.1".to_string();
+        turn.model_info.apply_patch_tool_type = None;
+    })
+    .await;
+
+    plan.assert_visible_contains(&["structured_edit", "structured_write"]);
+    plan.assert_registered_contains(&["structured_edit", "structured_write"]);
+    plan.assert_visible_lacks(&["apply_patch"]);
+    plan.assert_registered_lacks(&["apply_patch"]);
+    assert!(matches!(
+        plan.visible_spec("structured_edit"),
+        ToolSpec::Function(_)
+    ));
+    assert!(matches!(
+        plan.visible_spec("structured_write"),
+        ToolSpec::Function(_)
+    ));
 }
 
 #[tokio::test]

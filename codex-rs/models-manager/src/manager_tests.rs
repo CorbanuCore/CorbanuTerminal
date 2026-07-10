@@ -1435,6 +1435,16 @@ fn bundled_models_json_contains_openrouter_models() {
         assert_standard_base(&model.base_instructions);
     }
 
+    let meta = response
+        .models
+        .iter()
+        .find(|model| model.slug == "muse-spark-1.1")
+        .expect("bundled models.json should include Meta Muse Spark 1.1");
+    assert_eq!(meta.context_window, Some(1_048_576));
+    assert!(meta.apply_patch_tool_type.is_none());
+    assert!(meta.supports_parallel_tool_calls);
+    assert_standard_base(&meta.base_instructions);
+
     let claude_opus = response
         .models
         .iter()

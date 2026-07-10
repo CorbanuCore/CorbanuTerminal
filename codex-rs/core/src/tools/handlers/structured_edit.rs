@@ -62,6 +62,9 @@ fn model_edit_profile_tag(turn_context: &TurnContext) -> &'static str {
     if provider.is_ambient() {
         return "ambient";
     }
+    if provider.is_meta() {
+        return "meta";
+    }
 
     let slug = turn_context.model_info.slug.to_ascii_lowercase();
     if slug.contains("glm") {
@@ -82,7 +85,7 @@ pub(crate) fn structured_edit_protocol_enabled(turn_context: &TurnContext) -> bo
     }
 
     let provider = turn_context.provider.info();
-    if provider.is_zai() || provider.is_ambient() {
+    if provider.is_zai() || provider.is_ambient() || provider.is_meta() {
         return true;
     }
 

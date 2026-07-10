@@ -1098,6 +1098,10 @@ impl ModelProviderInfo {
         self.name == OPENROUTER_PROVIDER_NAME
     }
 
+    pub fn is_meta(&self) -> bool {
+        self.name == META_PROVIDER_NAME
+    }
+
     pub fn is_baseten(&self) -> bool {
         self.name == BASETEN_PROVIDER_NAME
     }

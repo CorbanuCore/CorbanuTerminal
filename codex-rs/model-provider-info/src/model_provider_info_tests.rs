@@ -611,6 +611,7 @@ fn test_built_in_model_providers_include_meta() {
     assert_eq!(meta.base_url.as_deref(), Some(META_BASE_URL));
     assert_eq!(meta.env_key.as_deref(), Some(META_API_KEY_ENV_VAR));
     assert_eq!(meta.wire_api, WireApi::Responses);
+    assert!(meta.is_meta());
     assert!(!meta.requires_openai_auth);
     assert!(!meta.supports_websockets);
     assert_eq!(
