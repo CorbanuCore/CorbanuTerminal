@@ -4275,7 +4275,11 @@ async fn orchestrate_empty_output_loop_pauses_whip() {
 #[tokio::test]
 async fn orchestrate_failed_turn_loop_pauses_and_success_resets_streak() {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
-    write_test_whip(&app, "failure-aware", "# whip: failure-aware\nContinue the work.");
+    write_test_whip(
+        &app,
+        "failure-aware",
+        "# whip: failure-aware\nContinue the work.",
+    );
     let pane_id = app
         .claude_panes
         .create_pane_with_role(
@@ -4291,9 +4295,19 @@ async fn orchestrate_failed_turn_loop_pauses_and_success_resets_streak() {
     app.handle_orchestrate_command(format!(
         "attach {pane_id} failure-aware --mode auto --holder none --max 5 --cooldown 1s"
     ));
-    app.note_whip_target_idle_with_fire_control(&target_node_id, Some("provider error"), true, false);
+    app.note_whip_target_idle_with_fire_control(
+        &target_node_id,
+        Some("provider error"),
+        true,
+        false,
+    );
     app.note_whip_target_idle_with_fire_control(&target_node_id, Some("recovered"), true, true);
-    app.note_whip_target_idle_with_fire_control(&target_node_id, Some("provider error"), true, false);
+    app.note_whip_target_idle_with_fire_control(
+        &target_node_id,
+        Some("provider error"),
+        true,
+        false,
+    );
     assert_eq!(
         app.orchestrate_whips
             .get("whip-1")
@@ -4301,7 +4315,12 @@ async fn orchestrate_failed_turn_loop_pauses_and_success_resets_streak() {
         Some(1)
     );
 
-    app.note_whip_target_idle_with_fire_control(&target_node_id, Some("provider error"), true, false);
+    app.note_whip_target_idle_with_fire_control(
+        &target_node_id,
+        Some("provider error"),
+        true,
+        false,
+    );
     let whip = app.orchestrate_whips.get("whip-1").expect("whip");
     assert_eq!(whip.state, crate::orchestrate::WhipState::Paused);
     assert!(whip.fires <= 2);
@@ -4338,12 +4357,7 @@ async fn orchestrate_review_holder_ignored_twice_pauses_whip() {
         "attach {target_pane_id} review-loop --mode review --holder {holder_pane_id} --max 5"
     ));
     app.handle_orchestrate_command("fire whip-1".to_string());
-    app.note_whip_target_idle_with_fire_control(
-        &holder_node_id,
-        Some("no dispatch"),
-        true,
-        true,
-    );
+    app.note_whip_target_idle_with_fire_control(&holder_node_id, Some("no dispatch"), true, true);
     app.handle_orchestrate_command("fire whip-1".to_string());
     app.note_whip_target_idle_with_fire_control(
         &holder_node_id,
@@ -4395,7 +4409,11 @@ async fn orchestrate_detach_removes_whip_and_idle_generation() {
 #[tokio::test]
 async fn orchestrate_restored_whip_waits_for_fresh_idle_edge() {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
-    write_test_whip(&app, "resume-safe", "# whip: resume-safe\nContinue the work.");
+    write_test_whip(
+        &app,
+        "resume-safe",
+        "# whip: resume-safe\nContinue the work.",
+    );
     let pane_id = app
         .claude_panes
         .create_pane_with_role(
@@ -4465,12 +4483,7 @@ async fn orchestrate_fire_suppression_still_counts_ignored_review() {
         "attach {target_pane_id} review-loop --mode review --holder {holder_pane_id} --max 5"
     ));
     app.handle_orchestrate_command("fire whip-1".to_string());
-    app.note_whip_target_idle_with_fire_control(
-        &holder_node_id,
-        Some("no dispatch"),
-        false,
-        true,
-    );
+    app.note_whip_target_idle_with_fire_control(&holder_node_id, Some("no dispatch"), false, true);
 
     let submitted_tasks = drain_claude_pane_task_events(&mut app_event_rx);
     assert_eq!(

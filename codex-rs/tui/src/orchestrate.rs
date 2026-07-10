@@ -1873,11 +1873,7 @@ impl App {
         }
     }
 
-    fn pause_spinning_whips_on_failed_turn(
-        &mut self,
-        target_node_id: &str,
-        turn_succeeded: bool,
-    ) {
+    fn pause_spinning_whips_on_failed_turn(&mut self, target_node_id: &str, turn_succeeded: bool) {
         let mut paused = Vec::new();
         for whip in self
             .orchestrate_whips
