@@ -104,6 +104,53 @@ fn test_model_client(session_source: SessionSource) -> ModelClient {
     )
 }
 
+#[test]
+fn meta_repairs_missing_response_item_ids_before_request() {
+    let client = ModelClient::new(
+        /*auth_manager*/ None,
+        ThreadId::new(),
+        ModelProviderInfo::create_meta_provider(),
+        SessionSource::Cli,
+        /*model_verbosity*/ None,
+        /*enable_request_compression*/ false,
+        /*include_timing_metrics*/ false,
+        /*beta_features_header*/ None,
+        /*item_ids_enabled*/ false,
+        /*attestation_provider*/ None,
+    );
+    let mut input = vec![
+        ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText {
+                text: "legacy history".to_string(),
+            }],
+            phase: None,
+            metadata: None,
+        },
+        ResponseItem::FunctionCall {
+            id: Some("fc_server".to_string()),
+            name: "exec_command".to_string(),
+            namespace: None,
+            arguments: r#"{"cmd":"true"}"#.to_string(),
+            call_id: "call_1".to_string(),
+            metadata: None,
+        },
+        ResponseItem::FunctionCallOutput {
+            id: None,
+            call_id: "call_1".to_string(),
+            output: FunctionCallOutputPayload::from_text(String::new()),
+            metadata: None,
+        },
+    ];
+
+    client.prepare_response_items_for_request(&mut input, /*store*/ false);
+
+    assert!(input[0].id().is_some_and(|id| id.starts_with("msg_")));
+    assert_eq!(input[1].id(), Some("fc_server"));
+    assert!(input[2].id().is_some_and(|id| id.starts_with("fco_")));
+}
+
 fn test_responses_metadata_for_client(
     client: &ModelClient,
     turn_id: Option<&str>,

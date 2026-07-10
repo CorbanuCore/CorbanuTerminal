@@ -1425,6 +1425,12 @@ impl ModelClient {
     }
 
     fn prepare_response_items_for_request(&self, input: &mut [ResponseItem], store: bool) {
+        if self.state.provider.info().is_meta() {
+            for item in input {
+                item.assign_id_if_missing();
+            }
+            return;
+        }
         if self.state.item_ids_enabled || store {
             return;
         }

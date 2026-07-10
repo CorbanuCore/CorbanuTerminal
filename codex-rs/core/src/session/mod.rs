@@ -1599,7 +1599,8 @@ impl Session {
             config.features.enabled(Feature::EnableRequestCompression),
             config.features.enabled(Feature::RuntimeMetrics),
             Self::build_model_client_beta_features_header(config),
-            /*item_ids_enabled*/ config.features.enabled(Feature::ItemIds),
+            /*item_ids_enabled*/
+            config.features.enabled(Feature::ItemIds) || configuration.provider.is_meta(),
             self.services.attestation_provider.clone(),
         )
         .with_prompt_cache_key_override(
@@ -2814,7 +2815,9 @@ impl Session {
         {
             prepare_response_items(items.to_mut());
         }
-        if turn_context.config.features.enabled(Feature::ItemIds) {
+        if turn_context.config.features.enabled(Feature::ItemIds)
+            || turn_context.provider.info().is_meta()
+        {
             Self::assign_missing_response_item_ids(items)
         } else {
             items
@@ -2827,27 +2830,7 @@ impl Session {
         }
         let mut items = items;
         for item in items.to_mut() {
-            if item.id().is_some() {
-                continue;
-            }
-            let prefix = match item {
-                ResponseItem::Message { .. } => "msg",
-                ResponseItem::Reasoning { .. } => "rs",
-                ResponseItem::LocalShellCall { .. } => "lsh",
-                ResponseItem::FunctionCall { .. } => "fc",
-                ResponseItem::ToolSearchCall { .. } => "tsc",
-                ResponseItem::FunctionCallOutput { .. } => "fco",
-                ResponseItem::CustomToolCall { .. } => "ctc",
-                ResponseItem::CustomToolCallOutput { .. } => "ctco",
-                ResponseItem::ToolSearchOutput { .. } => "tso",
-                ResponseItem::WebSearchCall { .. } => "ws",
-                ResponseItem::ImageGenerationCall { .. } => "ig",
-                ResponseItem::Compaction { .. } | ResponseItem::ContextCompaction { .. } => "cmp",
-                ResponseItem::AgentMessage { .. }
-                | ResponseItem::CompactionTrigger { .. }
-                | ResponseItem::Other => continue,
-            };
-            item.set_id(Some(format!("{prefix}_{}", Uuid::now_v7())));
+            item.assign_id_if_missing();
         }
         items
     }
@@ -2999,7 +2982,9 @@ impl Session {
         reference_context_item: Option<TurnContextItem>,
         compacted_item: CompactedItem,
     ) {
-        let items = if turn_context.config.features.enabled(Feature::ItemIds) {
+        let items = if turn_context.config.features.enabled(Feature::ItemIds)
+            || turn_context.provider.info().is_meta()
+        {
             Self::assign_missing_response_item_ids(Cow::Owned(items)).into_owned()
         } else {
             items

@@ -302,6 +302,66 @@ async fn response_item_ids_persist_across_resume_and_preserve_server_ids() -> an
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn meta_responses_assigns_ids_across_tool_continuations() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let response_mock = mount_sse_sequence(
+        &server,
+        vec![
+            sse(vec![
+                ev_response_created("resp-1"),
+                ev_function_call(
+                    "call-meta-id",
+                    "exec_command",
+                    r#"{"cmd":"printf meta-id-test"}"#,
+                ),
+                ev_completed("resp-1"),
+            ]),
+            sse(vec![
+                ev_response_created("resp-2"),
+                ev_assistant_message("msg-meta-answer", "done"),
+                ev_completed("resp-2"),
+            ]),
+        ],
+    )
+    .await;
+    let mut provider = built_in_model_providers(/*openai_base_url*/ None)["meta"].clone();
+    provider.base_url = Some(format!("{}/v1", server.uri()));
+    provider.env_key = None;
+    let test = test_codex()
+        .with_config(move |config| {
+            config.model_provider_id = "meta".to_string();
+            config.model_provider = provider;
+        })
+        .build(&server)
+        .await?;
+
+    test.submit_turn("run one command").await?;
+
+    let requests = response_mock.requests();
+    assert_eq!(requests.len(), 2);
+    let continuation_body = requests[1].body_json();
+    let continuation_input = continuation_body["input"]
+        .as_array()
+        .expect("continuation request should include input items");
+    for kind in ["message", "function_call", "function_call_output"] {
+        let item = continuation_input
+            .iter()
+            .find(|item| item.get("type").and_then(serde_json::Value::as_str) == Some(kind))
+            .unwrap_or_else(|| {
+                panic!("continuation should include {kind}: {continuation_input:?}")
+            });
+        assert!(
+            item.get("id")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|id| !id.is_empty()),
+            "Meta requires an ID on replayed {kind}: {item}"
+        );
+    }
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn response_item_ids_are_sent_for_all_remote_v2_compaction_requests() -> anyhow::Result<()> {
     let server = MockServer::start().await;
     let response_mock = mount_sse_sequence(

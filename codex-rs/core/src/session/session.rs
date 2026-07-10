@@ -1064,7 +1064,8 @@ impl Session {
                     config.features.enabled(Feature::EnableRequestCompression),
                     config.features.enabled(Feature::RuntimeMetrics),
                     Self::build_model_client_beta_features_header(config.as_ref()),
-                    /*item_ids_enabled*/ config.features.enabled(Feature::ItemIds),
+                    /*item_ids_enabled*/ config.features.enabled(Feature::ItemIds)
+                        || session_configuration.provider.is_meta(),
                     attestation_provider,
                 )
                 .with_prompt_cache_key_override(
