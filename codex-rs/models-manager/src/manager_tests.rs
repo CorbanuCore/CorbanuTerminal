@@ -1309,6 +1309,7 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
         "x-ai/grok-4.5",
         "deepseek/deepseek-v4-pro",
         "tencent/hy3:free",
+        "muse-spark-1.1",
         "claude-opus-4-8-plan",
         "claude-fable-5-plan",
         "claude-opus-4-8",

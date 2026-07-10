@@ -57,10 +57,12 @@ impl OpenAiModelsEndpoint {
     }
 
     async fn uses_codex_backend(&self) -> bool {
-        self.auth()
-            .await
-            .as_ref()
-            .is_some_and(CodexAuth::uses_codex_backend)
+        self.provider_info.requires_openai_auth
+            && self
+                .auth()
+                .await
+                .as_ref()
+                .is_some_and(CodexAuth::uses_codex_backend)
     }
 
     async fn list_models(
@@ -253,5 +255,29 @@ mod tests {
         );
 
         assert!(!endpoint.has_command_auth());
+    }
+
+    #[tokio::test]
+    async fn third_party_provider_does_not_refresh_with_cached_chatgpt_auth() {
+        let auth_manager =
+            AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+        let endpoint = OpenAiModelsEndpoint::new(
+            ModelProviderInfo::create_meta_provider(),
+            Some(auth_manager),
+        );
+
+        assert!(!endpoint.uses_codex_backend().await);
+    }
+
+    #[tokio::test]
+    async fn openai_provider_refreshes_with_cached_chatgpt_auth() {
+        let auth_manager =
+            AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+        let endpoint = OpenAiModelsEndpoint::new(
+            ModelProviderInfo::create_openai_provider(/*base_url*/ None),
+            Some(auth_manager),
+        );
+
+        assert!(endpoint.uses_codex_backend().await);
     }
 }

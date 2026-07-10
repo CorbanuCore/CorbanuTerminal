@@ -57,6 +57,7 @@ pub(crate) fn allowed_provider_vault_label(label: &str) -> bool {
             | "provider/ambient_api_key"
             | "provider/baseten_api_key"
             | "provider/openrouter_api_key"
+            | "provider/model_api_key"
             | "provider/ai_gateway_api_key"
     )
 }

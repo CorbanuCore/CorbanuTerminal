@@ -212,6 +212,7 @@ fn credential_display_name(label: &str, provider: Option<&str>) -> String {
         "AMBIENT_API_KEY" => "Provider: Ambient API Key".to_string(),
         "ZAI_API_KEY" => "Provider: Z.AI API Key".to_string(),
         "OPENROUTER_API_KEY" => "Provider: OpenRouter API Key".to_string(),
+        "MODEL_API_KEY" => "Provider: Meta API Key".to_string(),
         "BASETEN_API_KEY" => "Provider: Baseten API Key".to_string(),
         "AI_GATEWAY_API_KEY" => "Provider: Vercel API Key".to_string(),
         _ if label.starts_with("provider/") => format!("Provider: {key_id}"),
@@ -339,6 +340,10 @@ mod tests {
         assert_eq!(
             credential_display_name("provider/openrouter_api_key", None),
             "Provider: OpenRouter API Key"
+        );
+        assert_eq!(
+            credential_display_name("provider/model_api_key", None),
+            "Provider: Meta API Key"
         );
         assert_eq!(
             credential_display_name("provider/baseten_api_key", None),

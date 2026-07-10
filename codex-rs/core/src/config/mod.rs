@@ -81,6 +81,7 @@ use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
 use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
+use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OLLAMA_CHAT_PROVIDER_REMOVED_ERROR;
 use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
@@ -3565,6 +3566,7 @@ impl Config {
 
         let ambient_provider_selected = model_provider_id == AMBIENT_PROVIDER_ID;
         let anthropic_provider_selected = model_provider_id == ANTHROPIC_PROVIDER_ID;
+        let meta_provider_selected = model_provider_id == META_PROVIDER_ID;
         let baseten_provider_selected =
             matches!(model_provider_id.as_str(), BASETEN_PROVIDER_ID | BASETEN_ANTHROPIC_PROVIDER_ID);
         let openrouter_provider_selected = matches!(
@@ -3583,6 +3585,7 @@ impl Config {
             .or_else(|| {
                 (ambient_provider_selected
                     || anthropic_provider_selected
+                    || meta_provider_selected
                     || baseten_provider_selected
                     || openrouter_provider_selected
                     || vercel_provider_selected

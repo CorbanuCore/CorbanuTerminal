@@ -9,6 +9,8 @@ use codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR;
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_API_KEY_ENV_VAR;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
+use codex_model_provider_info::META_API_KEY_ENV_VAR;
+use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_API_KEY_ENV_VAR;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_API_KEY_ENV_VAR;
@@ -52,6 +54,11 @@ const PROVIDER_CREDENTIAL_OPTIONS: &[ProviderCredentialOption] = &[
         provider_id: OPENROUTER_PROVIDER_ID,
         provider_name: "OpenRouter",
         env_key: OPENROUTER_API_KEY_ENV_VAR,
+    },
+    ProviderCredentialOption::ProviderApiKey {
+        provider_id: META_PROVIDER_ID,
+        provider_name: "Meta",
+        env_key: META_API_KEY_ENV_VAR,
     },
     ProviderCredentialOption::ProviderApiKey {
         provider_id: BASETEN_PROVIDER_ID,
@@ -231,6 +238,7 @@ fn provider_credential_display_name(provider_name: &str, env_key: &str) -> Strin
         "AMBIENT_API_KEY" => "API Key",
         "ZAI_API_KEY" => "API Key",
         "OPENROUTER_API_KEY" => "API Key",
+        "MODEL_API_KEY" => "API Key",
         "BASETEN_API_KEY" => "API Key",
         "AI_GATEWAY_API_KEY" => "API Key",
         _ => env_key,
@@ -394,6 +402,7 @@ mod tests {
                 "Provider: Ambient API Key",
                 "Provider: Z.AI API Key",
                 "Provider: OpenRouter API Key",
+                "Provider: Meta API Key",
                 "Provider: Baseten API Key",
                 "Provider: Vercel API Key",
             ]

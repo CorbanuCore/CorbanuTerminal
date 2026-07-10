@@ -18,6 +18,8 @@ use codex_model_provider_info::BASETEN_PROVIDER_ID;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+use codex_model_provider_info::META_DEFAULT_MODEL;
+use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
@@ -51,7 +53,7 @@ struct ModelPickerProviderGroup {
     subtitle: &'static str,
 }
 
-const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 8] = [
+const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 9] = [
     ModelPickerProviderGroup {
         id: "openai",
         label: "OpenAI",
@@ -76,6 +78,11 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 8] = [
         id: "anthropic",
         label: "Anthropic",
         subtitle: "Anthropic API key",
+    },
+    ModelPickerProviderGroup {
+        id: "meta",
+        label: "Meta",
+        subtitle: "Meta Model API key",
     },
     ModelPickerProviderGroup {
         id: "vercel",
@@ -271,6 +278,9 @@ impl ChatWidget {
         }
         if trimmed == OPENROUTER_DEFAULT_MODEL {
             return Some(OPENROUTER_ANTHROPIC_PROVIDER_ID.to_string());
+        }
+        if trimmed == META_DEFAULT_MODEL {
+            return Some(META_PROVIDER_ID.to_string());
         }
         if Self::is_openrouter_model(trimmed) {
             return Some(OPENROUTER_PROVIDER_ID.to_string());
@@ -474,6 +484,7 @@ impl ChatWidget {
                 | BASETEN_PROVIDER_ID
                 | OPENROUTER_PROVIDER_ID
                 | OPENROUTER_ANTHROPIC_PROVIDER_ID
+                | META_PROVIDER_ID
                 | VERCEL_PROVIDER_ID
                 | VERCEL_ANTHROPIC_FAST_PROVIDER_ID,
             ) => true,
@@ -498,6 +509,7 @@ impl ChatWidget {
             Some(ZAI_PROVIDER_ID) => "zai",
             Some(CLAUDE_PLAN_PROVIDER_ID) => "claude-plan",
             Some(ANTHROPIC_PROVIDER_ID) => "anthropic",
+            Some(META_PROVIDER_ID) => "meta",
             Some(VERCEL_PROVIDER_ID | VERCEL_ANTHROPIC_FAST_PROVIDER_ID) => "vercel",
             Some(BASETEN_PROVIDER_ID) => "baseten",
             Some(OPENROUTER_PROVIDER_ID | OPENROUTER_ANTHROPIC_PROVIDER_ID) => "openrouter",
@@ -895,6 +907,10 @@ mod tests {
     #[test]
     fn model_provider_for_selection_maps_cross_provider_models() {
         assert_eq!(
+            ChatWidget::model_provider_for_selection(META_DEFAULT_MODEL).as_deref(),
+            Some(META_PROVIDER_ID)
+        );
+        assert_eq!(
             ChatWidget::model_provider_for_selection(AMBIENT_DEFAULT_MODEL).as_deref(),
             Some(AMBIENT_PROVIDER_ID)
         );
@@ -991,6 +1007,7 @@ mod tests {
         assert_eq!(group_label(ZAI_PROVIDER_ID), Some("Z.AI"));
         assert_eq!(group_label(CLAUDE_PLAN_PROVIDER_ID), Some("Claude Plan"));
         assert_eq!(group_label(ANTHROPIC_PROVIDER_ID), Some("Anthropic"));
+        assert_eq!(group_label(META_PROVIDER_ID), Some("Meta"));
         assert_eq!(group_label(BASETEN_PROVIDER_ID), Some("Baseten"));
         assert_eq!(group_label(VERCEL_PROVIDER_ID), Some("Vercel"));
         assert_eq!(

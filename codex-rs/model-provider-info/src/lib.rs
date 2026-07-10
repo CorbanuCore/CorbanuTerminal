@@ -95,6 +95,11 @@ const OPENROUTER_ANTHROPIC_PROVIDER_NAME: &str = "OpenRouter Anthropic";
 pub const OPENROUTER_ANTHROPIC_PROVIDER_ID: &str = "openrouter-anthropic";
 pub const OPENROUTER_DEFAULT_MODEL: &str = "z-ai/glm-5.2";
 pub const OPENROUTER_API_KEY_ENV_VAR: &str = "OPENROUTER_API_KEY";
+const META_PROVIDER_NAME: &str = "Meta";
+pub const META_PROVIDER_ID: &str = "meta";
+pub const META_BASE_URL: &str = "https://api.meta.ai/v1";
+pub const META_DEFAULT_MODEL: &str = "muse-spark-1.1";
+pub const META_API_KEY_ENV_VAR: &str = "MODEL_API_KEY";
 const BASETEN_PROVIDER_NAME: &str = "Baseten";
 pub const BASETEN_PROVIDER_ID: &str = "baseten";
 pub const BASETEN_BASE_URL: &str = "https://inference.baseten.co/v1";
@@ -115,7 +120,7 @@ pub const VERCEL_API_KEY_ENV_VAR: &str = "AI_GATEWAY_API_KEY";
 
 /// Built-in catalog providers eligible for impossible-pair correction. User-defined providers
 /// (e.g. a private Azure deployment) are never second-guessed.
-const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 14] = [
+const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 15] = [
     OPENAI_PROVIDER_ID,
     ANTHROPIC_PROVIDER_ID,
     CLAUDE_PLAN_PROVIDER_ID,
@@ -124,6 +129,7 @@ const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 14] = [
     ZAI_ANTHROPIC_PROVIDER_ID,
     OPENROUTER_PROVIDER_ID,
     OPENROUTER_ANTHROPIC_PROVIDER_ID,
+    META_PROVIDER_ID,
     BASETEN_PROVIDER_ID,
     BASETEN_ANTHROPIC_PROVIDER_ID,
     VERCEL_PROVIDER_ID,
@@ -227,6 +233,10 @@ pub fn resolve_model_for_provider(
             Some(model) if !model.trim().is_empty() => Some(model),
             _ => Some(OPENROUTER_DEFAULT_MODEL.to_string()),
         },
+        META_PROVIDER_ID => match model {
+            Some(model) if model.trim() == META_DEFAULT_MODEL => Some(model),
+            _ => Some(META_DEFAULT_MODEL.to_string()),
+        },
         BASETEN_PROVIDER_ID | BASETEN_ANTHROPIC_PROVIDER_ID => match model {
             Some(model) if model.trim() == BASETEN_DEFAULT_MODEL => Some(model),
             _ => Some(BASETEN_DEFAULT_MODEL.to_string()),
@@ -269,6 +279,7 @@ fn provider_api_key_vault_instructions() -> String {
         "  Provider: Ambient API Key     Store AMBIENT_API_KEY in the vault",
         "  Provider: Z.AI API Key        Store ZAI_API_KEY in the vault",
         "  Provider: OpenRouter API Key  Store OPENROUTER_API_KEY in the vault",
+        "  Provider: Meta API Key        Store MODEL_API_KEY in the vault",
         "  Provider: Baseten API Key     Store BASETEN_API_KEY in the vault",
         "  Provider: Vercel API Key      Store AI_GATEWAY_API_KEY in the vault",
     ]
@@ -863,6 +874,32 @@ impl ModelProviderInfo {
         }
     }
 
+    pub fn create_meta_provider() -> ModelProviderInfo {
+        ModelProviderInfo {
+            name: META_PROVIDER_NAME.into(),
+            base_url: Some(META_BASE_URL.into()),
+            env_key: Some(META_API_KEY_ENV_VAR.into()),
+            env_key_instructions: Some(provider_api_key_vault_instructions()),
+            experimental_bearer_token: None,
+            auth: None,
+            aws: None,
+            wire_api: WireApi::Responses,
+            query_params: None,
+            http_headers: None,
+            env_http_headers: None,
+            chat_completions_provider: None,
+            request_max_retries: None,
+            stream_max_retries: None,
+            stream_idle_timeout_ms: None,
+            stream_actionable_timeout_ms: None,
+            stream_long_failure_retry_threshold_ms: None,
+            stream_long_failure_max_retries: None,
+            websocket_connect_timeout_ms: None,
+            requires_openai_auth: false,
+            supports_websockets: false,
+        }
+    }
+
     pub fn create_baseten_provider() -> ModelProviderInfo {
         ModelProviderInfo {
             name: BASETEN_PROVIDER_NAME.into(),
@@ -1101,6 +1138,7 @@ pub fn built_in_model_providers(
     let zai_anthropic_provider = P::create_zai_anthropic_provider();
     let openrouter_provider = P::create_openrouter_provider();
     let openrouter_anthropic_provider = P::create_openrouter_anthropic_provider();
+    let meta_provider = P::create_meta_provider();
     let baseten_provider = P::create_baseten_provider();
     let baseten_anthropic_provider = P::create_baseten_anthropic_provider();
     let vercel_provider = P::create_vercel_provider();
@@ -1122,6 +1160,7 @@ pub fn built_in_model_providers(
             OPENROUTER_ANTHROPIC_PROVIDER_ID,
             openrouter_anthropic_provider,
         ),
+        (META_PROVIDER_ID, meta_provider),
         (BASETEN_PROVIDER_ID, baseten_provider),
         (BASETEN_ANTHROPIC_PROVIDER_ID, baseten_anthropic_provider),
         (VERCEL_PROVIDER_ID, vercel_provider),
