@@ -195,14 +195,9 @@ fn provider_credential_item(option: &ProviderCredentialOption) -> SelectionItem 
         },
         ProviderCredentialOption::ClaudeCodePlan => SelectionItem {
             name: "Provider: Claude Code Plan".to_string(),
-            description: Some("Uses Claude Code OAuth/subscription auth".to_string()),
+            description: Some("Sign in with Claude subscription".to_string()),
             actions: vec![Box::new(|tx| {
-                tx.send(AppEvent::InsertHistoryCell(Box::new(
-                    history_cell::new_info_event(
-                        "Claude Code plan auth is managed by Claude Code. Run `claude auth` or `claude /login`, then choose a `-plan` Claude model from /model, such as `claude-opus-4-8-plan` or `claude-fable-5-plan`, to use Claude through the Codex harness.".to_string(),
-                        /*hint*/ None,
-                    ),
-                )));
+                tx.send(AppEvent::OpenClaudeCodePlanLogin);
             })],
             dismiss_on_select: true,
             ..Default::default()
@@ -413,7 +408,7 @@ mod tests {
         );
         assert_eq!(
             rows[1].description.as_deref(),
-            Some("Uses Claude Code OAuth/subscription auth")
+            Some("Sign in with Claude subscription")
         );
         assert_eq!(
             rows[2].description.as_deref(),
@@ -438,7 +433,10 @@ mod tests {
         ));
 
         (rows[1].actions[0])(&sender);
-        assert!(matches!(rx.try_recv(), Ok(AppEvent::InsertHistoryCell(_))));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::OpenClaudeCodePlanLogin)
+        ));
 
         (rows[2].actions[0])(&sender);
         assert!(matches!(

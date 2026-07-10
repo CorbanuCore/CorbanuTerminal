@@ -1252,6 +1252,26 @@ impl App {
                     }
                 });
             }
+            AppEvent::OpenClaudeCodePlanLogin => {
+                let input_tx =
+                    crate::chatwidget::claude_code_login::start(self.app_event_tx.clone());
+                self.chat_widget
+                    .open_claude_code_plan_login_pending(input_tx);
+            }
+            AppEvent::ClaudeCodePlanLoginReady {
+                verification_url,
+                input_tx,
+            } => {
+                self.chat_widget
+                    .open_claude_code_plan_login_ready(verification_url, input_tx);
+            }
+            AppEvent::OpenClaudeCodePlanLoginCodeEntry { input_tx } => {
+                self.chat_widget
+                    .open_claude_code_plan_login_code_entry(input_tx);
+            }
+            AppEvent::ClaudeCodePlanLoginFinished { result } => {
+                self.chat_widget.on_claude_code_plan_login_finished(result);
+            }
             AppEvent::CodexAccountDeviceLoginReady {
                 login_id,
                 verification_url,

@@ -1133,6 +1133,29 @@ pub(crate) enum AppEvent {
     /// Start OpenAI Codex account device-code login from the Providers screen.
     OpenCodexAccountDeviceLogin,
 
+    /// Start Claude Code's subscription OAuth flow from the Providers screen.
+    OpenClaudeCodePlanLogin,
+
+    /// Claude Code opened a browser login URL and is waiting for its authorization code.
+    ClaudeCodePlanLoginReady {
+        verification_url: String,
+        input_tx: tokio::sync::mpsc::UnboundedSender<
+            crate::chatwidget::claude_code_login::ClaudeCodeLoginInput,
+        >,
+    },
+
+    /// Open masked entry for the Claude Code OAuth authorization code.
+    OpenClaudeCodePlanLoginCodeEntry {
+        input_tx: tokio::sync::mpsc::UnboundedSender<
+            crate::chatwidget::claude_code_login::ClaudeCodeLoginInput,
+        >,
+    },
+
+    /// Claude Code's login subprocess completed or failed.
+    ClaudeCodePlanLoginFinished {
+        result: Option<Result<String, String>>,
+    },
+
     /// Device-code login data returned by account/login/start.
     CodexAccountDeviceLoginReady {
         login_id: String,

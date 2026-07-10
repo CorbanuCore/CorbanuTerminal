@@ -421,6 +421,7 @@ use self::tps::TpsEstimator;
 mod turn_lifecycle;
 mod turn_runtime;
 use self::turn_lifecycle::TurnLifecycleState;
+pub(crate) mod claude_code_login;
 mod provider_credentials;
 mod tasknode_menu;
 mod usage;

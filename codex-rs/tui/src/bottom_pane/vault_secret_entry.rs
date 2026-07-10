@@ -36,6 +36,7 @@ use super::textarea::TextAreaState;
 
 /// Callback invoked with the validated label and raw secret on final submit.
 pub(crate) type VaultSecretSubmitted = Box<dyn FnOnce(String, String) + Send + Sync>;
+pub(crate) type VaultSecretCancelled = Box<dyn FnOnce() + Send + Sync>;
 
 const MASK_CHAR: char = '•';
 const DEFAULT_TITLE: &str = "Add vault credential";
@@ -57,7 +58,9 @@ pub(crate) struct VaultSecretEntryView {
     label: String,
     label_prompt: String,
     secret_prompt: String,
+    fixed_status: Option<String>,
     on_submit: VaultSecretSubmitted,
+    on_cancel: Option<VaultSecretCancelled>,
     textarea: TextArea,
     textarea_state: RefCell<TextAreaState>,
     paste_burst: PasteBurst,
@@ -75,7 +78,9 @@ impl VaultSecretEntryView {
             label: String::new(),
             label_prompt: LABEL_PROMPT.to_string(),
             secret_prompt: SECRET_PROMPT.to_string(),
+            fixed_status: None,
             on_submit,
+            on_cancel: None,
             textarea: TextArea::new(),
             textarea_state: RefCell::new(TextAreaState::default()),
             paste_burst: PasteBurst::default(),
@@ -97,7 +102,35 @@ impl VaultSecretEntryView {
             label,
             label_prompt: LABEL_PROMPT.to_string(),
             secret_prompt,
+            fixed_status: Some("API key — masked".to_string()),
             on_submit,
+            on_cancel: None,
+            textarea: TextArea::new(),
+            textarea_state: RefCell::new(TextAreaState::default()),
+            paste_burst: PasteBurst::default(),
+            completion: None,
+        }
+    }
+
+    /// Build a one-field masked entry with a cancellation callback.
+    pub(crate) fn new_fixed_secret_with_cancel(
+        label: String,
+        title: String,
+        status: String,
+        secret_prompt: String,
+        on_submit: VaultSecretSubmitted,
+        on_cancel: VaultSecretCancelled,
+    ) -> Self {
+        Self {
+            field: Field::Secret,
+            fixed_label: true,
+            title,
+            label,
+            label_prompt: LABEL_PROMPT.to_string(),
+            secret_prompt,
+            fixed_status: Some(status),
+            on_submit,
+            on_cancel: Some(on_cancel),
             textarea: TextArea::new(),
             textarea_state: RefCell::new(TextAreaState::default()),
             paste_burst: PasteBurst::default(),
@@ -110,7 +143,7 @@ impl VaultSecretEntryView {
             KeyEvent {
                 code: KeyCode::Esc, ..
             } => {
-                self.completion = Some(ViewCompletion::Cancelled);
+                self.cancel();
             }
             KeyEvent {
                 code: KeyCode::Enter,
@@ -156,10 +189,21 @@ impl VaultSecretEntryView {
                 }
                 let label = std::mem::take(&mut self.label);
                 let on_submit = std::mem::replace(&mut self.on_submit, Box::new(|_, _| {}));
+                self.on_cancel = None;
                 on_submit(label, raw);
                 self.completion = Some(ViewCompletion::Accepted);
             }
         }
+    }
+
+    fn cancel(&mut self) {
+        if self.completion.is_some() {
+            return;
+        }
+        if let Some(on_cancel) = self.on_cancel.take() {
+            on_cancel();
+        }
+        self.completion = Some(ViewCompletion::Cancelled);
     }
 
     fn reset_textarea(&mut self) {
@@ -187,7 +231,7 @@ impl super::bottom_pane_view::BottomPaneView for VaultSecretEntryView {
     }
 
     fn on_ctrl_c(&mut self) -> CancellationEvent {
-        self.completion = Some(ViewCompletion::Cancelled);
+        self.cancel();
         CancellationEvent::Handled
     }
 
@@ -235,7 +279,10 @@ impl Renderable for VaultSecretEntryView {
         let status_y = area.y.saturating_add(1);
         let status = match self.field {
             Field::Label => "1/2 — label",
-            Field::Secret if self.fixed_label => "API key — masked",
+            Field::Secret if self.fixed_label => self
+                .fixed_status
+                .as_deref()
+                .unwrap_or("Secret value — masked"),
             Field::Secret => "2/2 — secret (masked)",
         };
         Paragraph::new(Line::from(vec![gutter(), Span::from(status).cyan()])).render(
