@@ -1709,6 +1709,15 @@ impl App {
                 .set_last_result_message(thread_id, message);
         }
         if !is_running {
+            if matches!(
+                status,
+                codex_app_server_protocol::CollabAgentStatus::Shutdown
+                    | codex_app_server_protocol::CollabAgentStatus::NotFound
+            ) {
+                self.note_assignment_node_gone(&crate::spawn_orchestration::thread_node_id(
+                    thread_id,
+                ));
+            }
             let turn_succeeded = matches!(
                 status,
                 codex_app_server_protocol::CollabAgentStatus::Completed

@@ -78,6 +78,7 @@ pub(super) async fn make_test_app() -> App {
         spawn_nazgul_pane_id: None,
         orchestrate_whips: Box::new(HashMap::new()),
         orchestrate_next_whip_seq: 0,
+        orchestrate_now_override: None,
         orchestrate_idle_generation_by_target: Box::new(HashMap::new()),
         side_threads: HashMap::new(),
         claude_panes: crate::claude_panes::ClaudePaneRegistry::new(),

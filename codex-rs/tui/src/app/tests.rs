@@ -4328,6 +4328,149 @@ async fn orchestrate_failed_turn_loop_pauses_and_success_resets_streak() {
 }
 
 #[tokio::test]
+async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(
+        &app,
+        "overnight",
+        "# assignment: overnight\nShip the flagship.",
+    );
+    let manager_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Troll),
+            Some("Manager".to_string()),
+        )
+        .expect("create manager");
+    let worker_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Orc),
+            Some("Worker".to_string()),
+        )
+        .expect("create worker");
+    let manager_node = crate::spawn_orchestration::pane_node_id(&manager_pane_id);
+    let worker_node = crate::spawn_orchestration::pane_node_id(&worker_pane_id);
+    let started = chrono::DateTime::parse_from_rfc3339("2026-07-10T20:00:00Z")
+        .expect("timestamp")
+        .with_timezone(&chrono::Utc);
+    app.orchestrate_now_override = Some(started);
+
+    app.handle_orchestrate_command(format!(
+        "attach {worker_pane_id} overnight --mode review --holder {manager_pane_id} --for 8h --cooldown 900s"
+    ));
+    assert!(matches!(
+        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Drafting,
+            ..
+        })
+    ));
+    assert_eq!(drain_claude_pane_task_events(&mut app_event_rx).len(), 1);
+    app.sweep_orchestrate_whips();
+    assert!(drain_claude_pane_task_events(&mut app_event_rx).is_empty());
+
+    app.note_whip_holder_dispatched(&manager_node, &worker_node);
+    assert!(matches!(
+        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Executing,
+            execution_started_utc: Some(value),
+            ..
+        }) if *value == started
+    ));
+    assert_eq!(
+        app.orchestrate_whips
+            .get("whip-1")
+            .and_then(|whip| whip.expires_at),
+        Some(started + chrono::Duration::hours(8))
+    );
+    for cycle in 1..=24 {
+        app.orchestrate_now_override = Some(started + chrono::Duration::seconds(901 * cycle));
+        app.sweep_orchestrate_whips();
+    }
+    assert_eq!(drain_claude_pane_task_events(&mut app_event_rx).len(), 24);
+    let assignment = app.orchestrate_whips.get("whip-1").expect("assignment");
+    assert_eq!(assignment.state, crate::orchestrate::WhipState::Armed);
+    assert_eq!(assignment.fires, 24);
+
+    app.note_whip_target_idle_with_fire_control(
+        &manager_node,
+        Some("temporary provider failure"),
+        false,
+        false,
+    );
+    app.note_whip_target_idle_with_fire_control(
+        &manager_node,
+        Some("temporary provider failure"),
+        false,
+        false,
+    );
+    assert_eq!(
+        app.orchestrate_whips
+            .get("whip-1")
+            .map(crate::orchestrate::assignment_effective_cadence_s),
+        Some(3600)
+    );
+    app.note_whip_target_idle_with_fire_control(&manager_node, Some("recovered"), false, true);
+    assert_eq!(
+        app.orchestrate_whips
+            .get("whip-1")
+            .map(crate::orchestrate::assignment_effective_cadence_s),
+        Some(900)
+    );
+
+    app.note_whip_target_idle_with_fire_control(
+        &worker_node,
+        Some("ASSIGNMENT_BLOCKED: worker said it\nWHIP_DONE"),
+        false,
+        true,
+    );
+    assert!(matches!(
+        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Executing,
+            ..
+        })
+    ));
+    app.note_whip_target_idle_with_fire_control(
+        &manager_node,
+        Some("ASSIGNMENT_BLOCKED: waiting for production credentials"),
+        false,
+        true,
+    );
+    assert!(matches!(
+        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Blocked { .. },
+            ..
+        })
+    ));
+    app.note_assignment_user_turn(&manager_node);
+    assert!(matches!(
+        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Executing,
+            ..
+        })
+    ));
+    app.note_whip_target_idle_with_fire_control(&manager_node, Some("WHIP_DONE"), false, true);
+    assert!(matches!(
+        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Done,
+            ..
+        })
+    ));
+}
+
+#[tokio::test]
 async fn orchestrate_review_holder_ignored_twice_pauses_whip() {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
     write_test_whip(&app, "review-loop", "# whip: review-loop\nReview target.");
@@ -4356,6 +4499,11 @@ async fn orchestrate_review_holder_ignored_twice_pauses_whip() {
     app.handle_orchestrate_command(format!(
         "attach {target_pane_id} review-loop --mode review --holder {holder_pane_id} --max 5"
     ));
+    app.orchestrate_whips
+        .get_mut("whip-1")
+        .expect("legacy review whip")
+        .kind = crate::orchestrate::WhipKind::LegacyNudge;
+    let _ = drain_claude_pane_task_events(&mut app_event_rx);
     app.handle_orchestrate_command("fire whip-1".to_string());
     app.note_whip_target_idle_with_fire_control(&holder_node_id, Some("no dispatch"), true, true);
     app.handle_orchestrate_command("fire whip-1".to_string());
@@ -4482,6 +4630,11 @@ async fn orchestrate_fire_suppression_still_counts_ignored_review() {
     app.handle_orchestrate_command(format!(
         "attach {target_pane_id} review-loop --mode review --holder {holder_pane_id} --max 5"
     ));
+    app.orchestrate_whips
+        .get_mut("whip-1")
+        .expect("legacy review whip")
+        .kind = crate::orchestrate::WhipKind::LegacyNudge;
+    let _ = drain_claude_pane_task_events(&mut app_event_rx);
     app.handle_orchestrate_command("fire whip-1".to_string());
     app.note_whip_target_idle_with_fire_control(&holder_node_id, Some("no dispatch"), false, true);
 
@@ -9547,6 +9700,7 @@ async fn make_test_app() -> App {
         spawn_nazgul_pane_id: None,
         orchestrate_whips: Box::new(HashMap::new()),
         orchestrate_next_whip_seq: 0,
+        orchestrate_now_override: None,
         orchestrate_idle_generation_by_target: Box::new(HashMap::new()),
         side_threads: HashMap::new(),
         claude_panes: crate::claude_panes::ClaudePaneRegistry::new(),
@@ -9637,6 +9791,7 @@ async fn make_test_app_with_channels() -> (
             spawn_nazgul_pane_id: None,
             orchestrate_whips: Box::new(HashMap::new()),
             orchestrate_next_whip_seq: 0,
+            orchestrate_now_override: None,
             orchestrate_idle_generation_by_target: Box::new(HashMap::new()),
             side_threads: HashMap::new(),
             claude_panes: crate::claude_panes::ClaudePaneRegistry::new(),

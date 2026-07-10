@@ -616,6 +616,7 @@ impl App {
         if self.chat_widget.try_dispatch_slash_input(&prompt) {
             return true;
         }
+        self.note_assignment_user_turn(&crate::spawn_orchestration::pane_node_id(&pane_id));
         let prompt_context = self.claude_pane_prompt_context(&pane_id);
         let prompt = compose_claude_pane_prompt(prompt, prompt_context.as_deref());
         let prepared =

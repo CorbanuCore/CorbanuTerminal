@@ -447,6 +447,7 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
             target: "pane:orc".to_string(),
             instructions: "keep-going".to_string(),
             mode: crate::orchestrate::WhipMode::Review,
+            kind: crate::orchestrate::WhipKind::LegacyNudge,
             expires_at: None,
             max_fires: 20,
             cooldown_s: 60,

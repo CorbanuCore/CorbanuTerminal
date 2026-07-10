@@ -263,12 +263,26 @@ pub(crate) enum AppEvent {
         requested_name: String,
         instructions: String,
     },
+    /// Choose the conversational Manager for a guided assignment.
+    OpenOrchestrateManagerPicker {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        whip_name: String,
+    },
+    /// Create a native Codex Manager pane and attach the guided assignment to it.
+    CreateOrchestrateManager {
+        target: String,
+        duration_arg: String,
+        whip_name: String,
+    },
     /// Confirm the guided whip attach command.
     OpenOrchestrateConfirm {
         target: String,
         duration_arg: String,
         duration_label: String,
         whip_name: String,
+        manager_node_id: String,
     },
     /// Show actions/details for one whip row.
     OpenOrchestrateWhipDetails {

@@ -788,6 +788,8 @@ pub(crate) struct App {
     #[allow(clippy::box_collection)]
     pub(crate) orchestrate_whips: Box<HashMap<String, crate::orchestrate::Whip>>,
     pub(crate) orchestrate_next_whip_seq: u64,
+    #[cfg(test)]
+    pub(crate) orchestrate_now_override: Option<chrono::DateTime<chrono::Utc>>,
     #[allow(clippy::box_collection)]
     pub(crate) orchestrate_idle_generation_by_target: Box<HashMap<String, u64>>,
     side_threads: HashMap<ThreadId, SideThreadState>,
@@ -1314,7 +1316,18 @@ See the PFTerminal keymap documentation for supported actions and examples."
             })
             .unwrap_or_default();
         for whip in restored_orchestrate_whips.values_mut() {
-            whip.last_idle_generation_fired = Some(0);
+            if matches!(
+                whip.kind,
+                crate::orchestrate::WhipKind::Assignment {
+                    phase: crate::orchestrate::AssignmentPhase::Executing,
+                    ..
+                }
+            ) {
+                whip.last_fire_utc = Some(chrono::Utc::now());
+                whip.last_idle_generation_fired = None;
+            } else {
+                whip.last_idle_generation_fired = Some(0);
+            }
         }
         let restored_orchestrate_next_whip_seq = restored_pane_layout
             .as_ref()
@@ -1428,6 +1441,8 @@ See the PFTerminal keymap documentation for supported actions and examples."
             spawn_nazgul_pane_id: restored_spawn_nazgul_pane_id,
             orchestrate_whips: Box::new(restored_orchestrate_whips),
             orchestrate_next_whip_seq: restored_orchestrate_next_whip_seq,
+            #[cfg(test)]
+            orchestrate_now_override: None,
             orchestrate_idle_generation_by_target: Box::new(
                 restored_orchestrate_idle_generation_by_target,
             ),
@@ -1461,6 +1476,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     .await;
             }
         }
+        app.audit_restored_assignments();
         let initial_session_ms = initial_session_started_at.elapsed().as_millis();
 
         // On startup, if a managed filesystem sandbox is active, warn about

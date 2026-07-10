@@ -2895,8 +2895,91 @@ impl App {
                 duration_arg,
                 duration_label,
                 whip_name,
+                manager_node_id,
             } => {
-                self.open_orchestrate_confirm(target, duration_arg, duration_label, whip_name);
+                self.open_orchestrate_confirm(
+                    target,
+                    duration_arg,
+                    duration_label,
+                    whip_name,
+                    manager_node_id,
+                );
+            }
+            AppEvent::OpenOrchestrateManagerPicker {
+                target,
+                duration_arg,
+                duration_label,
+                whip_name,
+            } => {
+                self.open_orchestrate_manager_picker(
+                    target,
+                    duration_arg,
+                    duration_label,
+                    whip_name,
+                );
+            }
+            AppEvent::CreateOrchestrateManager {
+                target,
+                duration_arg,
+                whip_name,
+            } => {
+                let Some(parent_thread_id) = self.primary_thread_id.or(self.active_thread_id)
+                else {
+                    self.chat_widget.add_error_message(
+                        "Cannot create a Manager before Codex Main has started.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
+                let spawn_config = match self.native_spawn_agent_config() {
+                    Ok(config) => config,
+                    Err(err) => {
+                        self.chat_widget.add_error_message(err.to_string());
+                        return Ok(AppRunControl::Continue);
+                    }
+                };
+                let model = self.native_spawn_default_model();
+                let provider = crate::chatwidget::ChatWidget::model_provider_for_selection(&model);
+                let nickname = match self.unique_native_pane_nickname("Manager", None) {
+                    Ok(nickname) => nickname,
+                    Err(err) => {
+                        self.chat_widget.add_error_message(err.to_string());
+                        return Ok(AppRunControl::Continue);
+                    }
+                };
+                match app_server
+                    .spawn_agent_thread(
+                        &spawn_config,
+                        parent_thread_id,
+                        "default".to_string(),
+                        Some(nickname.clone()),
+                        model,
+                        provider,
+                        None,
+                        None,
+                    )
+                    .await
+                {
+                    Ok(started) => {
+                        let thread_id = started.session.thread_id;
+                        self.register_codex_user_pane(thread_id, Some(nickname.clone()), started)
+                            .await;
+                        let manager_node_id = crate::spawn_orchestration::thread_node_id(thread_id);
+                        let args = crate::orchestrate::orchestrate_guided_attach_args(
+                            &target,
+                            &duration_arg,
+                            &whip_name,
+                            &manager_node_id,
+                        );
+                        self.handle_orchestrate_command(args);
+                        self.chat_widget.add_info_message(
+                            format!("Created Manager {nickname}."),
+                            Some("The assignment brief was sent to the new pane.".to_string()),
+                        );
+                    }
+                    Err(err) => self
+                        .chat_widget
+                        .add_error_message(format!("Failed to create Manager: {err}")),
+                }
             }
             AppEvent::OpenOrchestrateWhipDetails { whip_id } => {
                 self.open_orchestrate_whip_details(whip_id);
@@ -3159,6 +3242,11 @@ impl App {
                 text,
                 collaboration_mode,
             } => {
+                if let Some(thread_id) = self.active_thread_id {
+                    self.note_assignment_user_turn(&crate::spawn_orchestration::thread_node_id(
+                        thread_id,
+                    ));
+                }
                 self.chat_widget
                     .submit_user_message_with_mode(text, collaboration_mode);
             }
