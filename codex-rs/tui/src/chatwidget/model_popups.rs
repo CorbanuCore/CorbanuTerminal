@@ -40,8 +40,56 @@ const OPENAI_GPT_5_5_MODEL: &str = "gpt-5.5";
 const OPENAI_GPT_5_6_SOL_MODEL: &str = "gpt-5.6-sol";
 const OPENAI_GPT_5_6_TERRA_MODEL: &str = "gpt-5.6-terra";
 const OPENAI_GPT_5_6_LUNA_MODEL: &str = "gpt-5.6-luna";
-const MODEL_PICKER_CODING_TAB_ID: &str = "coding-plans";
-const MODEL_PICKER_API_KEY_TAB_ID: &str = "api-key-models";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ModelPickerProviderGroup {
+    id: &'static str,
+    label: &'static str,
+    subtitle: &'static str,
+}
+
+const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 8] = [
+    ModelPickerProviderGroup {
+        id: "openai",
+        label: "OpenAI",
+        subtitle: "OpenAI Codex plan",
+    },
+    ModelPickerProviderGroup {
+        id: "ambient",
+        label: "Ambient",
+        subtitle: "Ambient coding plan",
+    },
+    ModelPickerProviderGroup {
+        id: "zai",
+        label: "Z.AI",
+        subtitle: "Z.AI coding plan",
+    },
+    ModelPickerProviderGroup {
+        id: "claude-plan",
+        label: "Claude Plan",
+        subtitle: "Claude Code plan",
+    },
+    ModelPickerProviderGroup {
+        id: "anthropic",
+        label: "Anthropic",
+        subtitle: "Anthropic API key",
+    },
+    ModelPickerProviderGroup {
+        id: "vercel",
+        label: "Vercel",
+        subtitle: "Vercel AI Gateway API key",
+    },
+    ModelPickerProviderGroup {
+        id: "baseten",
+        label: "Baseten",
+        subtitle: "Baseten API key",
+    },
+    ModelPickerProviderGroup {
+        id: "openrouter",
+        label: "OpenRouter",
+        subtitle: "OpenRouter API key",
+    },
+];
 
 impl ChatWidget {
     /// Open a popup to choose a quick auto model. Selecting "All models"
@@ -279,65 +327,58 @@ impl ChatWidget {
             return;
         }
 
-        let mut coding_plan_items: Vec<SelectionItem> = Vec::new();
-        let mut pay_per_api_call_items: Vec<SelectionItem> = Vec::new();
+        let mut provider_items = MODEL_PICKER_PROVIDER_GROUPS
+            .into_iter()
+            .map(|group| (group, Vec::new()))
+            .collect::<Vec<(ModelPickerProviderGroup, Vec<SelectionItem>)>>();
         for preset in presets.into_iter() {
             let provider = Self::model_provider_for_selection(&preset.model);
-            let item = self.model_picker_item(preset);
-            match provider.as_deref() {
-                Some(AMBIENT_PROVIDER_ID | CLAUDE_PLAN_PROVIDER_ID | ZAI_PROVIDER_ID) => {
-                    coding_plan_items.push(item)
-                }
-                Some(OPENAI_PROVIDER_ID) => coding_plan_items.push(item),
-                Some(
-                    ANTHROPIC_PROVIDER_ID
-                    | BASETEN_PROVIDER_ID
-                    | OPENROUTER_PROVIDER_ID
-                    | OPENROUTER_ANTHROPIC_PROVIDER_ID
-                    | VERCEL_PROVIDER_ID
-                    | VERCEL_ANTHROPIC_FAST_PROVIDER_ID,
-                ) => pay_per_api_call_items.push(item),
-                _ => {}
-            }
-        }
-        let (items, tabs, initial_tab_id, footer_hint) = if !coding_plan_items.is_empty()
-            && !pay_per_api_call_items.is_empty()
-        {
-            let current_provider = Self::model_provider_for_selection(self.current_model());
-            let initial_tab_id = if Self::is_api_key_model_provider(current_provider.as_deref()) {
-                MODEL_PICKER_API_KEY_TAB_ID
-            } else {
-                MODEL_PICKER_CODING_TAB_ID
+            let Some(group) = Self::model_picker_provider_group(provider.as_deref()) else {
+                continue;
             };
+            let Some((_, items)) = provider_items
+                .iter_mut()
+                .find(|(candidate, _)| candidate.id == group.id)
+            else {
+                continue;
+            };
+            items.push(self.model_picker_item(preset));
+        }
+        for (_, items) in &mut provider_items {
+            items.sort_by_key(|item| !item.is_default);
+        }
+        provider_items.retain(|(_, items)| !items.is_empty());
+
+        let (items, tabs, initial_tab_id, footer_hint) = if provider_items.len() > 1 {
+            let current_provider = Self::model_provider_for_selection(self.current_model());
+            let current_group = Self::model_picker_provider_group(current_provider.as_deref());
+            let initial_tab_id = current_group
+                .filter(|group| {
+                    provider_items
+                        .iter()
+                        .any(|(candidate, _)| candidate.id == group.id)
+                })
+                .map(|group| group.id.to_string());
+            let tabs = provider_items
+                .into_iter()
+                .map(|(group, items)| SelectionTab {
+                    id: group.id.to_string(),
+                    label: group.label.to_string(),
+                    header: self.model_menu_header("Select Model and Effort", group.subtitle),
+                    items,
+                })
+                .collect();
             (
                 Vec::new(),
-                vec![
-                    SelectionTab {
-                        id: MODEL_PICKER_CODING_TAB_ID.to_string(),
-                        label: "Coding Plans".to_string(),
-                        header: self.model_menu_header(
-                            "Select Model and Effort",
-                            "OpenAI Codex, Ambient, and Z.AI plan-backed models",
-                        ),
-                        items: coding_plan_items,
-                    },
-                    SelectionTab {
-                        id: MODEL_PICKER_API_KEY_TAB_ID.to_string(),
-                        label: "API Key Models".to_string(),
-                        header: self.model_menu_header(
-                            "Select Model and Effort",
-                            "Anthropic, OpenRouter, Baseten, and Vercel API-key models",
-                        ),
-                        items: pay_per_api_call_items,
-                    },
-                ],
-                Some(initial_tab_id.to_string()),
+                tabs,
+                initial_tab_id,
                 Some(Self::model_picker_tabbed_footer_hint_line()),
             )
         } else {
-            let mut items = Vec::new();
-            items.append(&mut coding_plan_items);
-            items.append(&mut pay_per_api_call_items);
+            let items = provider_items
+                .pop()
+                .map(|(_, items)| items)
+                .unwrap_or_default();
             (items, Vec::new(), None, Some(standard_popup_hint_line()))
         };
 
@@ -408,7 +449,7 @@ impl ChatWidget {
     }
 
     fn model_picker_tabbed_footer_hint_line() -> Line<'static> {
-        Line::from("Use Left/Right to switch groups. Press Enter to confirm or Esc to go back")
+        Line::from("Use Left/Right to switch providers. Press Enter to confirm or Esc to go back")
     }
 
     pub(crate) fn show_in_pfterminal_model_picker(preset: &ModelPreset) -> bool {
@@ -444,18 +485,21 @@ impl ChatWidget {
         )
     }
 
-    fn is_api_key_model_provider(provider: Option<&str>) -> bool {
-        matches!(
-            provider,
-            Some(
-                ANTHROPIC_PROVIDER_ID
-                    | BASETEN_PROVIDER_ID
-                    | OPENROUTER_PROVIDER_ID
-                    | OPENROUTER_ANTHROPIC_PROVIDER_ID
-                    | VERCEL_PROVIDER_ID
-                    | VERCEL_ANTHROPIC_FAST_PROVIDER_ID
-            )
-        )
+    fn model_picker_provider_group(provider: Option<&str>) -> Option<ModelPickerProviderGroup> {
+        let group_id = match provider {
+            Some(OPENAI_PROVIDER_ID) => "openai",
+            Some(AMBIENT_PROVIDER_ID) => "ambient",
+            Some(ZAI_PROVIDER_ID) => "zai",
+            Some(CLAUDE_PLAN_PROVIDER_ID) => "claude-plan",
+            Some(ANTHROPIC_PROVIDER_ID) => "anthropic",
+            Some(VERCEL_PROVIDER_ID | VERCEL_ANTHROPIC_FAST_PROVIDER_ID) => "vercel",
+            Some(BASETEN_PROVIDER_ID) => "baseten",
+            Some(OPENROUTER_PROVIDER_ID | OPENROUTER_ANTHROPIC_PROVIDER_ID) => "openrouter",
+            _ => return None,
+        };
+        MODEL_PICKER_PROVIDER_GROUPS
+            .into_iter()
+            .find(|group| group.id == group_id)
     }
 
     fn model_selection_actions(
@@ -917,6 +961,31 @@ mod tests {
             ),
             "Standard"
         );
+    }
+
+    #[test]
+    fn model_picker_groups_models_by_user_facing_provider() {
+        let group_label = |provider| {
+            ChatWidget::model_picker_provider_group(Some(provider)).map(|group| group.label)
+        };
+
+        assert_eq!(group_label(OPENAI_PROVIDER_ID), Some("OpenAI"));
+        assert_eq!(group_label(AMBIENT_PROVIDER_ID), Some("Ambient"));
+        assert_eq!(group_label(ZAI_PROVIDER_ID), Some("Z.AI"));
+        assert_eq!(group_label(CLAUDE_PLAN_PROVIDER_ID), Some("Claude Plan"));
+        assert_eq!(group_label(ANTHROPIC_PROVIDER_ID), Some("Anthropic"));
+        assert_eq!(group_label(BASETEN_PROVIDER_ID), Some("Baseten"));
+        assert_eq!(group_label(VERCEL_PROVIDER_ID), Some("Vercel"));
+        assert_eq!(
+            group_label(VERCEL_ANTHROPIC_FAST_PROVIDER_ID),
+            Some("Vercel")
+        );
+        assert_eq!(group_label(OPENROUTER_PROVIDER_ID), Some("OpenRouter"));
+        assert_eq!(
+            group_label(OPENROUTER_ANTHROPIC_PROVIDER_ID),
+            Some("OpenRouter")
+        );
+        assert_eq!(group_label(AMAZON_BEDROCK_PROVIDER_ID), None);
     }
 
     #[test]

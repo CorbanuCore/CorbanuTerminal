@@ -2578,6 +2578,24 @@ async fn model_selection_popup_snapshot() {
 }
 
 #[tokio::test]
+async fn model_selection_popup_openai_provider_snapshot() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some(AMBIENT_DEFAULT_MODEL)).await;
+    chat.thread_id = Some(ThreadId::new());
+    let mut presets = chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    for preset in &mut presets {
+        preset.is_default = preset.model == "gpt-5.6-sol";
+    }
+    chat.open_all_models_popup(presets);
+    chat.handle_key_event(KeyEvent::from(KeyCode::Left));
+
+    let popup = render_bottom_popup(&chat, /*width*/ 80);
+    assert_chatwidget_snapshot!("model_selection_popup_openai_provider", popup);
+}
+
+#[tokio::test]
 async fn gpt_5_6_model_selection_popup_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.6-sol")).await;
     chat.thread_id = Some(ThreadId::new());
@@ -2661,15 +2679,19 @@ async fn model_picker_hides_show_in_picker_false_models_from_cache() {
 }
 
 fn move_model_picker_selection_to(chat: &mut ChatWidget, model: &str) {
-    for _ in 0..20 {
-        let popup = render_bottom_popup_with_height(chat, /*width*/ 140, /*height*/ 40);
-        if popup
-            .lines()
-            .any(|line| line.contains('›') && line.contains(model))
-        {
-            return;
+    for _ in 0..16 {
+        for _ in 0..20 {
+            let popup =
+                render_bottom_popup_with_height(chat, /*width*/ 140, /*height*/ 40);
+            if popup
+                .lines()
+                .any(|line| line.contains('›') && line.contains(model))
+            {
+                return;
+            }
+            chat.handle_key_event(KeyEvent::from(KeyCode::Down));
         }
-        chat.handle_key_event(KeyEvent::from(KeyCode::Down));
+        chat.handle_key_event(KeyEvent::from(KeyCode::Right));
     }
 
     let popup = render_bottom_popup_with_height(chat, /*width*/ 140, /*height*/ 40);
@@ -2700,8 +2722,8 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         "expected Ambient GLM slug in /model picker description:\n{popup}"
     );
     assert!(
-        popup.contains("Coding Plans"),
-        "expected Coding Plans section in /model picker:\n{popup}"
+        popup.contains("[Ambient]") && popup.contains("OpenAI") && popup.contains("OpenRouter"),
+        "expected provider tabs in /model picker:\n{popup}"
     );
     assert!(
         popup.contains("Ambient's default GLM 5.2 coding model."),
@@ -2716,32 +2738,30 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         "expected Ambient Kimi description in /model picker:\n{popup}"
     );
     assert!(
-        popup.contains("Z.AI GLM 5.2"),
-        "expected Z.AI GLM display name in /model picker:\n{popup}"
+        !popup.contains(&format!("Model: {ZAI_DEFAULT_MODEL}."))
+            && !popup.contains(&format!("Model: {CLAUDE_PLAN_MODEL}.")),
+        "expected the Ambient tab to contain only Ambient models:\n{popup}"
+    );
+
+    let (mut claude_plan_chat, _claude_plan_rx, _claude_plan_op_rx) =
+        make_chatwidget_manual(Some(CLAUDE_PLAN_MODEL)).await;
+    claude_plan_chat.thread_id = Some(ThreadId::new());
+    let presets = claude_plan_chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    claude_plan_chat.open_all_models_popup(presets);
+    let claude_plan_popup =
+        render_bottom_popup_with_height(&claude_plan_chat, /*width*/ 140, /*height*/ 28);
+    assert!(
+        claude_plan_popup.contains("[Claude Plan]")
+            && claude_plan_popup.contains(CLAUDE_PLAN_MODEL)
+            && claude_plan_popup.contains(CLAUDE_FABLE_5_PLAN_MODEL),
+        "expected Claude Code models in the Claude Plan tab:\n{claude_plan_popup}"
     );
     assert!(
-        popup.contains(ZAI_DEFAULT_MODEL),
-        "expected direct Z.AI GLM slug in /model picker description:\n{popup}"
-    );
-    assert!(
-        popup.contains(CLAUDE_PLAN_MODEL),
-        "expected Claude Plan to appear as a Codex-native /model option:\n{popup}"
-    );
-    assert!(
-        popup.contains(CLAUDE_FABLE_5_PLAN_MODEL),
-        "expected Claude Fable Plan to appear as a Codex-native /model option:\n{popup}"
-    );
-    assert!(
-        popup.contains("Claude Opus 4.8 through Claude Code subscription auth"),
-        "expected Claude Plan row to explain subscription auth:\n{popup}"
-    );
-    assert!(
-        popup.contains("Claude Fable 5 through Claude Code subscription auth"),
-        "expected Claude Fable Plan row to explain subscription auth:\n{popup}"
-    );
-    assert!(
-        popup.contains("API Key Models"),
-        "expected API Key Models tab in /model picker:\n{popup}"
+        claude_plan_popup.contains("through Claude Code subscription auth"),
+        "expected Claude Plan rows to explain subscription auth:\n{claude_plan_popup}"
     );
     let (mut anthropic_chat, _anthropic_rx, _anthropic_op_rx) =
         make_chatwidget_manual(Some(ANTHROPIC_DEFAULT_MODEL)).await;
@@ -2755,8 +2775,8 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         render_bottom_popup_with_height(&anthropic_chat, /*width*/ 140, /*height*/ 28);
 
     assert!(
-        anthropic_popup.contains("[API Key Models]"),
-        "expected Anthropic current model to open API Key Models tab:\n{anthropic_popup}"
+        anthropic_popup.contains("[Anthropic]"),
+        "expected Anthropic current model to open the Anthropic tab:\n{anthropic_popup}"
     );
     assert!(
         anthropic_popup.contains(ANTHROPIC_DEFAULT_MODEL),
@@ -2767,12 +2787,8 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         "expected Claude Fable API-key model in /model picker:\n{anthropic_popup}"
     );
     assert!(
-        anthropic_popup.contains("openrouter/owl-alpha"),
-        "expected OpenRouter Owl Alpha in API Key Models tab:\n{anthropic_popup}"
-    );
-    assert!(
-        anthropic_popup.contains("OpenRouter: Owl Alpha - $0/M input, $0/M output."),
-        "expected OpenRouter Owl Alpha price description in API Key Models tab:\n{anthropic_popup}"
+        !anthropic_popup.contains("openrouter/owl-alpha"),
+        "expected the Anthropic tab to exclude OpenRouter models:\n{anthropic_popup}"
     );
     let (mut baseten_chat, _baseten_rx, _baseten_op_rx) =
         make_chatwidget_manual(Some(BASETEN_DEFAULT_MODEL)).await;
@@ -2856,16 +2872,32 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         "expected MiniMax M3 price description in /model picker:\n{minimax_popup}"
     );
     assert!(
-        popup.contains("gpt-5.5"),
-        "expected GPT-5.5 in /model picker:\n{popup}"
+        minimax_popup.contains("openrouter/owl-alpha")
+            && minimax_popup.contains("OpenRouter: Owl Alpha - $0/M input, $0/M output."),
+        "expected OpenRouter models to share the OpenRouter tab:\n{minimax_popup}"
+    );
+
+    let (mut openai_chat, _openai_rx, _openai_op_rx) =
+        make_chatwidget_manual(Some("gpt-5.6-sol")).await;
+    openai_chat.thread_id = Some(ThreadId::new());
+    let presets = openai_chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    openai_chat.open_all_models_popup(presets);
+    let openai_popup =
+        render_bottom_popup_with_height(&openai_chat, /*width*/ 140, /*height*/ 28);
+    assert!(
+        openai_popup.contains("[OpenAI]") && openai_popup.contains("gpt-5.5"),
+        "expected GPT-5.5 in the OpenAI tab:\n{openai_popup}"
     );
     assert!(
-        !popup.contains("gpt-5.4"),
-        "expected older OpenAI models to be hidden from /model picker:\n{popup}"
+        !openai_popup.contains("gpt-5.4"),
+        "expected older OpenAI models to be hidden from /model picker:\n{openai_popup}"
     );
     assert!(
-        !popup.contains("codex-auto-review"),
-        "expected hidden OpenAI/Codex models to be hidden from /model picker:\n{popup}"
+        !openai_popup.contains("codex-auto-review"),
+        "expected hidden OpenAI/Codex models to be hidden from /model picker:\n{openai_popup}"
     );
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
