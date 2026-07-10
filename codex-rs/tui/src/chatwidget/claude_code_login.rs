@@ -47,19 +47,16 @@ pub(crate) enum ClaudeCodePlanStatus {
     Error,
 }
 
-pub(crate) fn refresh_status(app_event_tx: AppEventSender) {
-    tokio::spawn(async move {
-        let status = read_status(Path::new("claude"))
-            .await
-            .unwrap_or_else(|err| {
-                if err.kind() == std::io::ErrorKind::NotFound {
-                    ClaudeCodePlanStatus::Unavailable
-                } else {
-                    ClaudeCodePlanStatus::Error
-                }
-            });
-        app_event_tx.send(AppEvent::ClaudeCodePlanStatusReady { status });
-    });
+pub(crate) async fn current_status() -> ClaudeCodePlanStatus {
+    read_status(Path::new("claude"))
+        .await
+        .unwrap_or_else(|err| {
+            if err.kind() == std::io::ErrorKind::NotFound {
+                ClaudeCodePlanStatus::Unavailable
+            } else {
+                ClaudeCodePlanStatus::Error
+            }
+        })
 }
 
 pub(crate) fn start(app_event_tx: AppEventSender) -> mpsc::UnboundedSender<ClaudeCodeLoginInput> {

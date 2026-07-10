@@ -1156,9 +1156,13 @@ pub(crate) enum AppEvent {
         result: Option<Result<String, String>>,
     },
 
-    /// Latest account status reported by Claude Code for the Providers screen.
-    ClaudeCodePlanStatusReady {
-        status: crate::chatwidget::claude_code_login::ClaudeCodePlanStatus,
+    /// Latest provider credential statuses loaded away from the TUI event thread.
+    ProviderCredentialStatusesReady {
+        claude_status: crate::chatwidget::claude_code_login::ClaudeCodePlanStatus,
+        api_key_statuses: Vec<(
+            String,
+            crate::chatwidget::provider_credentials::ProviderApiKeyStatus,
+        )>,
     },
 
     /// Device-code login data returned by account/login/start.

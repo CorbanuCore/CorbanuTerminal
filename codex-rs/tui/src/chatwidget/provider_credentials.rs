@@ -19,9 +19,21 @@ use codex_model_provider_info::VERCEL_API_KEY_ENV_VAR;
 use codex_model_provider_info::VERCEL_PROVIDER_ID;
 use codex_model_provider_info::ZAI_API_KEY_ENV_VAR;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
+use std::path::Path;
+use std::time::Duration;
 
 const PROVIDER_CREDENTIALS_VIEW_ID: &str = "provider-credentials";
 const CODEX_ACCOUNT_DEVICE_LOGIN_VIEW_ID: &str = "codex-account-device-login";
+const PROVIDER_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProviderApiKeyStatus {
+    Checking,
+    AvailableFromEnvironment,
+    Stored,
+    NotConfigured,
+    Unavailable,
+}
 
 #[derive(Debug, Clone, Copy)]
 enum ProviderCredentialOption {
@@ -76,20 +88,52 @@ const PROVIDER_CREDENTIAL_OPTIONS: &[ProviderCredentialOption] = &[
 
 impl ChatWidget {
     pub(crate) fn open_provider_credentials_menu(&mut self) {
-        let params = self.provider_credentials_params(&ClaudeCodePlanStatus::Checking);
+        let params = self.provider_credentials_params(&ClaudeCodePlanStatus::Checking, &[]);
         self.show_selection_view(params);
-        crate::chatwidget::claude_code_login::refresh_status(self.app_event_tx.clone());
+        self.refresh_provider_credentials_status_in_background();
     }
 
-    pub(crate) fn refresh_provider_credentials_status(&mut self, status: ClaudeCodePlanStatus) {
-        let params = self.provider_credentials_params(&status);
+    pub(crate) fn refresh_provider_credentials_status(
+        &mut self,
+        claude_status: ClaudeCodePlanStatus,
+        api_key_statuses: Vec<(String, ProviderApiKeyStatus)>,
+    ) {
+        let selected_index = self
+            .bottom_pane
+            .selected_index_for_active_view(PROVIDER_CREDENTIALS_VIEW_ID);
+        let mut params = self.provider_credentials_params(&claude_status, &api_key_statuses);
+        params.initial_selected_idx = selected_index;
         self.bottom_pane
             .replace_selection_view_if_present(PROVIDER_CREDENTIALS_VIEW_ID, params);
+    }
+
+    fn refresh_provider_credentials_status_in_background(&self) {
+        let codex_home = self.config.codex_home.clone();
+        let app_event_tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let claude_status = crate::chatwidget::claude_code_login::current_status();
+            let api_key_statuses = tokio::task::spawn_blocking(move || {
+                provider_api_key_statuses(codex_home.as_path())
+            });
+            let (claude_status, api_key_statuses) = tokio::join!(
+                claude_status,
+                tokio::time::timeout(PROVIDER_STATUS_TIMEOUT, api_key_statuses)
+            );
+            let api_key_statuses = match api_key_statuses {
+                Ok(Ok(statuses)) => statuses,
+                Ok(Err(_)) | Err(_) => provider_api_key_unavailable_statuses(),
+            };
+            app_event_tx.send(AppEvent::ProviderCredentialStatusesReady {
+                claude_status,
+                api_key_statuses,
+            });
+        });
     }
 
     fn provider_credentials_params(
         &self,
         claude_status: &ClaudeCodePlanStatus,
+        api_key_statuses: &[(String, ProviderApiKeyStatus)],
     ) -> SelectionViewParams {
         let mut header = ColumnRenderable::new();
         header.push(Line::from("Providers".bold()));
@@ -105,7 +149,7 @@ impl ChatWidget {
             items: provider_credential_items(
                 &self.codex_account_status_description(),
                 &claude_status_description(claude_status),
-                |env_key| self.provider_api_key_status_description(env_key),
+                |env_key| provider_api_key_status_description(env_key, api_key_statuses),
             ),
             header: Box::new(header),
             ..Default::default()
@@ -119,25 +163,6 @@ impl ChatWidget {
             }
             _ if self.has_codex_backend_auth() => "Signed in".to_string(),
             _ => "Not signed in".to_string(),
-        }
-    }
-
-    fn provider_api_key_status_description(&self, env_key: &str) -> String {
-        if std::env::var(env_key)
-            .ok()
-            .is_some_and(|value| !value.trim().is_empty())
-        {
-            return "Available from environment".to_string();
-        }
-        match codex_login::auth::provider_api_key_from_auth_storage(
-            &self.config.codex_home,
-            env_key,
-            self.config.cli_auth_credentials_store_mode,
-            self.config.auth_keyring_backend_kind(),
-        ) {
-            Ok(Some(value)) if !value.trim().is_empty() => "Stored in vault".to_string(),
-            Ok(_) => "Not configured".to_string(),
-            Err(_) => "Status unavailable".to_string(),
         }
     }
 
@@ -236,6 +261,67 @@ fn provider_credential_items(
             provider_credential_item(option, codex_account_status, claude_status, &api_key_status)
         })
         .collect()
+}
+
+fn provider_api_key_statuses(codex_home: &Path) -> Vec<(String, ProviderApiKeyStatus)> {
+    let stored_labels = match codex_vault::Vault::new(codex_home.to_path_buf()).list() {
+        Ok(credentials) => credentials
+            .into_iter()
+            .map(|credential| credential.label)
+            .collect::<std::collections::HashSet<_>>(),
+        Err(_) => return provider_api_key_unavailable_statuses(),
+    };
+    PROVIDER_CREDENTIAL_OPTIONS
+        .iter()
+        .filter_map(|option| {
+            let ProviderCredentialOption::ProviderApiKey { env_key, .. } = option else {
+                return None;
+            };
+            let status = if std::env::var(env_key)
+                .ok()
+                .is_some_and(|value| !value.trim().is_empty())
+            {
+                ProviderApiKeyStatus::AvailableFromEnvironment
+            } else if stored_labels.contains(&provider_vault_label(env_key)) {
+                ProviderApiKeyStatus::Stored
+            } else {
+                ProviderApiKeyStatus::NotConfigured
+            };
+            Some((env_key.to_string(), status))
+        })
+        .collect()
+}
+
+fn provider_api_key_unavailable_statuses() -> Vec<(String, ProviderApiKeyStatus)> {
+    PROVIDER_CREDENTIAL_OPTIONS
+        .iter()
+        .filter_map(|option| match option {
+            ProviderCredentialOption::ProviderApiKey { env_key, .. } => {
+                Some((env_key.to_string(), ProviderApiKeyStatus::Unavailable))
+            }
+            ProviderCredentialOption::CodexAccount | ProviderCredentialOption::ClaudeCodePlan => {
+                None
+            }
+        })
+        .collect()
+}
+
+fn provider_api_key_status_description(
+    env_key: &str,
+    statuses: &[(String, ProviderApiKeyStatus)],
+) -> String {
+    match statuses
+        .iter()
+        .find(|(status_env_key, _)| status_env_key == env_key)
+        .map(|(_, status)| *status)
+        .unwrap_or(ProviderApiKeyStatus::Checking)
+    {
+        ProviderApiKeyStatus::Checking => "Checking...".to_string(),
+        ProviderApiKeyStatus::AvailableFromEnvironment => "Available from environment".to_string(),
+        ProviderApiKeyStatus::Stored => "Stored in vault".to_string(),
+        ProviderApiKeyStatus::NotConfigured => "Not configured".to_string(),
+        ProviderApiKeyStatus::Unavailable => "Status unavailable".to_string(),
+    }
 }
 
 fn provider_credential_item(
