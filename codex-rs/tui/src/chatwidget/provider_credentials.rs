@@ -111,7 +111,9 @@ impl ChatWidget {
         let codex_home = self.config.codex_home.clone();
         let app_event_tx = self.app_event_tx.clone();
         tokio::spawn(async move {
-            let claude_status = crate::chatwidget::claude_code_login::current_status();
+            let claude_status = crate::chatwidget::claude_code_login::current_status_with_timeout(
+                PROVIDER_STATUS_TIMEOUT,
+            );
             let api_key_statuses = tokio::task::spawn_blocking(move || {
                 provider_api_key_statuses(codex_home.as_path())
             });

@@ -138,3 +138,25 @@ exit 2
         }) if message.contains("login complete")
     ));
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn claude_status_timeout_resolves_to_error() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_claude = temp_dir.path().join("claude");
+    std::fs::write(&fake_claude, "#!/bin/sh\nsleep 30\n").expect("write fake claude");
+    let mut permissions = std::fs::metadata(&fake_claude)
+        .expect("fake claude metadata")
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&fake_claude, permissions).expect("make fake claude executable");
+
+    let status = tokio::time::timeout(
+        Duration::from_secs(1),
+        status_with_timeout(&fake_claude, Duration::from_millis(25)),
+    )
+    .await
+    .expect("status check must remain bounded");
+
+    assert_eq!(status, ClaudeCodePlanStatus::Error);
+}

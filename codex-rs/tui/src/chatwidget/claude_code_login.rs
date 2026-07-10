@@ -47,16 +47,18 @@ pub(crate) enum ClaudeCodePlanStatus {
     Error,
 }
 
-pub(crate) async fn current_status() -> ClaudeCodePlanStatus {
-    read_status(Path::new("claude"))
-        .await
-        .unwrap_or_else(|err| {
-            if err.kind() == std::io::ErrorKind::NotFound {
-                ClaudeCodePlanStatus::Unavailable
-            } else {
-                ClaudeCodePlanStatus::Error
-            }
-        })
+pub(crate) async fn current_status_with_timeout(timeout: Duration) -> ClaudeCodePlanStatus {
+    status_with_timeout(Path::new("claude"), timeout).await
+}
+
+async fn status_with_timeout(executable: &Path, timeout: Duration) -> ClaudeCodePlanStatus {
+    match tokio::time::timeout(timeout, read_status(executable)).await {
+        Ok(Ok(status)) => status,
+        Ok(Err(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+            ClaudeCodePlanStatus::Unavailable
+        }
+        Ok(Err(_)) | Err(_) => ClaudeCodePlanStatus::Error,
+    }
 }
 
 pub(crate) fn start(app_event_tx: AppEventSender) -> mpsc::UnboundedSender<ClaudeCodeLoginInput> {
@@ -227,10 +229,9 @@ async fn verify_login(executable: &Path) -> Result<String, String> {
 }
 
 async fn read_status(executable: &Path) -> std::io::Result<ClaudeCodePlanStatus> {
-    let output = Command::new(executable)
-        .args(["auth", "status", "--json"])
-        .output()
-        .await?;
+    let mut command = Command::new(executable);
+    command.kill_on_drop(true);
+    let output = command.args(["auth", "status", "--json"]).output().await?;
     if !output.status.success() {
         return Ok(ClaudeCodePlanStatus::SignedOut);
     }
