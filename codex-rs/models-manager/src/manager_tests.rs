@@ -524,7 +524,7 @@ async fn refresh_available_models_preserves_bundled_catalog_for_empty_chatgpt_re
 }
 
 #[tokio::test]
-async fn chatgpt_catalog_hides_gpt_5_6_models_omitted_by_the_account() {
+async fn chatgpt_catalog_keeps_verified_gpt_5_6_models_when_remote_omits_them() {
     let codex_home = tempdir().expect("temp dir");
     let endpoint = TestModelsEndpoint::new(vec![Vec::new()]);
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
@@ -538,10 +538,43 @@ async fn chatgpt_catalog_hides_gpt_5_6_models_omitted_by_the_account() {
 
     for slug in ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] {
         assert!(
-            picker_visibility.contains(&(slug, false)),
-            "{slug} should be plan-gated"
+            picker_visibility.contains(&(slug, true)),
+            "{slug} should remain available unless the server explicitly hides it"
         );
     }
+
+    assert!(
+        available
+            .iter()
+            .any(|model| model.model == "gpt-5.6-sol" && model.is_default),
+        "Sol should be the default visible preset"
+    );
+}
+
+#[tokio::test]
+async fn chatgpt_catalog_honors_explicit_remote_hiding_for_gpt_5_6_models() {
+    let mut remote_models = crate::bundled_models_response()
+        .expect("bundled models should parse")
+        .models
+        .into_iter()
+        .filter(|model| model.slug.starts_with("gpt-5.6-"))
+        .collect::<Vec<_>>();
+    for model in &mut remote_models {
+        model.visibility = ModelVisibility::Hide;
+    }
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(vec![remote_models]);
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+
+    let available = manager.list_models(RefreshStrategy::Online).await;
+
+    assert!(
+        available
+            .iter()
+            .filter(|model| model.model.starts_with("gpt-5.6-"))
+            .all(|model| !model.show_in_picker),
+        "an explicit hidden response must override bundled visibility"
+    );
 }
 
 #[tokio::test]
@@ -1121,7 +1154,7 @@ fn bundled_models_json_contains_gpt_5_6_family_metadata() {
                     ReasoningEffort::Custom("max".to_string()),
                     ReasoningEffort::Custom("ultra".to_string()),
                 ],
-                ModelVisibility::Hide,
+                ModelVisibility::List,
             ),
             (
                 "gpt-5.6-terra",
@@ -1135,7 +1168,7 @@ fn bundled_models_json_contains_gpt_5_6_family_metadata() {
                     ReasoningEffort::Custom("max".to_string()),
                     ReasoningEffort::Custom("ultra".to_string()),
                 ],
-                ModelVisibility::Hide,
+                ModelVisibility::List,
             ),
             (
                 "gpt-5.6-luna",
@@ -1148,7 +1181,7 @@ fn bundled_models_json_contains_gpt_5_6_family_metadata() {
                     ReasoningEffort::XHigh,
                     ReasoningEffort::Custom("max".to_string()),
                 ],
-                ModelVisibility::Hide,
+                ModelVisibility::List,
             ),
         ]
     );

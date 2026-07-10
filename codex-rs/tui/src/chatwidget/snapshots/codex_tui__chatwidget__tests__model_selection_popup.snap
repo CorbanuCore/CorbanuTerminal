@@ -22,5 +22,9 @@ expression: popup
   6. Claude Fable 5 Plan        Model: claude-fable-5-plan. Claude Fable 5
                                 through Claude Code subscription auth in the
                                 Codex harness.
+  7. GPT-5.6-Sol                Model: gpt-5.6-sol. Latest frontier agentic
+                                coding model.
+  8. GPT-5.6-Terra              Model: gpt-5.6-terra. Balanced agentic coding
+                                model for everyday work.
 
   Use Left/Right to switch groups. Press Enter to confirm or Esc to go back

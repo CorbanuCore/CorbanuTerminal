@@ -729,7 +729,7 @@
         }
       ],
       "shell_type": "shell_command",
-      "visibility": "hide",
+      "visibility": "list",
       "supported_in_api": true,
       "priority": 1,
       "additional_speed_tiers": [
@@ -802,7 +802,7 @@
         }
       ],
       "shell_type": "shell_command",
-      "visibility": "hide",
+      "visibility": "list",
       "supported_in_api": true,
       "priority": 2,
       "additional_speed_tiers": [
@@ -871,7 +871,7 @@
         }
       ],
       "shell_type": "shell_command",
-      "visibility": "hide",
+      "visibility": "list",
       "supported_in_api": true,
       "priority": 3,
       "additional_speed_tiers": [
