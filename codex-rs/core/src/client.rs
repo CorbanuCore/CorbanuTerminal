@@ -1468,6 +1468,16 @@ impl ModelClient {
         })
     }
 
+    fn unauthorized_recovery(&self) -> Option<UnauthorizedRecovery> {
+        if self.state.provider.info().env_key.is_some() {
+            return None;
+        }
+        self.state
+            .provider
+            .auth_manager()
+            .map(|manager| manager.unauthorized_recovery())
+    }
+
     /// Opens a websocket connection using the same header and telemetry wiring as normal turns.
     ///
     /// Both startup prewarm and in-turn `needs_new` reconnects call this path so handshake
@@ -1767,10 +1777,7 @@ impl ModelClientSession {
         responses_metadata: &CodexResponsesMetadata,
         inference_trace: &InferenceTraceContext,
     ) -> Result<ResponseStream> {
-        let auth_manager = self.client.state.provider.auth_manager();
-        let mut auth_recovery = auth_manager
-            .as_ref()
-            .map(AuthManager::unauthorized_recovery);
+        let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
         loop {
             let provider_request_started_at = Instant::now();
@@ -2157,10 +2164,7 @@ impl ModelClientSession {
         inference_trace: &InferenceTraceContext,
         same_turn_attempt_index: u64,
     ) -> Result<ResponseStream> {
-        let auth_manager = self.client.state.provider.auth_manager();
-        let mut auth_recovery = auth_manager
-            .as_ref()
-            .map(AuthManager::unauthorized_recovery);
+        let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
         loop {
             let provider_request_started_at = Instant::now();
@@ -2288,10 +2292,7 @@ impl ModelClientSession {
         responses_metadata: &CodexResponsesMetadata,
         inference_trace: &InferenceTraceContext,
     ) -> Result<ResponseStream> {
-        let auth_manager = self.client.state.provider.auth_manager();
-        let mut auth_recovery = auth_manager
-            .as_ref()
-            .map(AuthManager::unauthorized_recovery);
+        let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
         let mut server_state_retry_used = false;
         loop {
@@ -2480,11 +2481,7 @@ impl ModelClientSession {
         request_trace: Option<W3cTraceContext>,
         inference_trace: &InferenceTraceContext,
     ) -> Result<WebsocketStreamOutcome> {
-        let auth_manager = self.client.state.provider.auth_manager();
-
-        let mut auth_recovery = auth_manager
-            .as_ref()
-            .map(AuthManager::unauthorized_recovery);
+        let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
         loop {
             let client_setup = self.client.current_client_setup().await?;

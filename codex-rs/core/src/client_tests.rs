@@ -151,6 +151,39 @@ fn meta_repairs_missing_response_item_ids_before_request() {
     assert!(input[2].id().is_some_and(|id| id.starts_with("fco_")));
 }
 
+#[test]
+fn provider_api_keys_do_not_fall_back_to_chatgpt_unauthorized_recovery() {
+    let auth_manager =
+        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let openrouter = ModelClient::new(
+        Some(Arc::clone(&auth_manager)),
+        ThreadId::new(),
+        ModelProviderInfo::create_openrouter_provider(),
+        SessionSource::Cli,
+        /*model_verbosity*/ None,
+        /*enable_request_compression*/ false,
+        /*include_timing_metrics*/ false,
+        /*beta_features_header*/ None,
+        /*item_ids_enabled*/ false,
+        /*attestation_provider*/ None,
+    );
+    assert!(openrouter.unauthorized_recovery().is_none());
+
+    let openai = ModelClient::new(
+        Some(auth_manager),
+        ThreadId::new(),
+        ModelProviderInfo::create_openai_provider(/*base_url*/ None),
+        SessionSource::Cli,
+        /*model_verbosity*/ None,
+        /*enable_request_compression*/ false,
+        /*include_timing_metrics*/ false,
+        /*beta_features_header*/ None,
+        /*item_ids_enabled*/ false,
+        /*attestation_provider*/ None,
+    );
+    assert!(openai.unauthorized_recovery().is_some());
+}
+
 fn test_responses_metadata_for_client(
     client: &ModelClient,
     turn_id: Option<&str>,
