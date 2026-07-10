@@ -14,7 +14,6 @@ use crate::bottom_pane::SelectionShortcutAction;
 use crate::bottom_pane::SelectionViewParams;
 use crate::bottom_pane::custom_prompt_view::CustomPromptView;
 use crate::bottom_pane::popup_consts::standard_popup_hint_line;
-use crate::chatwidget::ChatWidget;
 use crate::key_hint;
 use crate::spawn_orchestration::SpawnRole;
 use crate::spawn_orchestration::thread_node_id;
@@ -158,50 +157,16 @@ impl App {
     }
 
     pub(crate) fn open_codex_pane_model_picker(&mut self) {
-        let current_model = self.chat_widget.current_model().to_string();
-        let current_effort = self.chat_widget.current_reasoning_effort();
-        let mut items = Vec::new();
-        items.push(section_item("Current Model"));
-        items.push(codex_pane_model_item(
-            current_model.clone(),
-            ChatWidget::model_provider_for_selection(&current_model),
-            current_effort,
-            Some("Create a native Codex pane using the current model and reasoning.".to_string()),
-        ));
-
+        let default_model = self.native_spawn_default_model();
         let presets = self
             .chat_widget
             .model_catalog()
             .try_list_models()
             .unwrap_or_default();
-        let mut added_other_section = false;
-        for preset in presets
-            .into_iter()
-            .filter(ChatWidget::show_in_pfterminal_model_picker)
-            .filter(|preset| preset.model != current_model)
-        {
-            if !added_other_section {
-                items.push(section_item("Other Models"));
-                added_other_section = true;
-            }
-            let description = (!preset.description.is_empty()).then_some(preset.description);
-            items.push(codex_pane_model_item(
-                preset.model.clone(),
-                ChatWidget::model_provider_for_selection(&preset.model),
-                Some(preset.default_reasoning_effort),
-                description,
-            ));
-        }
-
-        self.chat_widget.show_selection_view(SelectionViewParams {
-            title: Some("New Codex Pane".to_string()),
-            subtitle: Some("Choose the model for the native Codex pane.".to_string()),
-            footer_hint: Some(standard_popup_hint_line()),
-            items,
-            is_searchable: true,
-            search_placeholder: Some("Search models".to_string()),
-            ..Default::default()
-        });
+        self.chat_widget.open_all_models_popup_for_purpose(
+            presets,
+            crate::chatwidget::ModelSelectionPurpose::CodexPane { default_model },
+        );
     }
 
     pub(crate) fn open_codex_pane_name_prompt(
@@ -1081,27 +1046,6 @@ impl App {
             })
             .count();
         format!("Codex {}", count + 1)
-    }
-}
-
-fn codex_pane_model_item(
-    model: String,
-    provider: Option<String>,
-    effort: Option<codex_protocol::openai_models::ReasoningEffort>,
-    description: Option<String>,
-) -> SelectionItem {
-    SelectionItem {
-        name: model.clone(),
-        description,
-        actions: vec![Box::new(move |tx| {
-            tx.send(AppEvent::OpenCodexPaneNamePrompt {
-                model: model.clone(),
-                provider: provider.clone(),
-                effort: effort.clone(),
-            });
-        })],
-        dismiss_on_select: true,
-        ..Default::default()
     }
 }
 

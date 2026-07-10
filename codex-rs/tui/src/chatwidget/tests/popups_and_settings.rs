@@ -2630,6 +2630,42 @@ async fn spawn_model_selection_popup_snapshot() {
 }
 
 #[tokio::test]
+async fn codex_pane_model_picker_uses_provider_tabs_and_opens_name_prompt() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some(AMBIENT_DEFAULT_MODEL)).await;
+    let original_model = chat.current_model().to_string();
+    let presets = chat.model_catalog.try_list_models().expect("model catalog");
+    chat.open_all_models_popup_for_purpose(
+        presets,
+        ModelSelectionPurpose::CodexPane {
+            default_model: "gpt-5.6-sol".to_string(),
+        },
+    );
+
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 30);
+    assert!(popup.contains("New Codex pane - OpenAI Codex plan"));
+    assert!(popup.contains("GPT-5.6-Sol (current)"));
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    let (preset, purpose) = match rx.try_recv() {
+        Ok(AppEvent::OpenReasoningPopup { model, purpose }) => (model, purpose),
+        other => panic!("expected pane reasoning popup event, got {other:?}"),
+    };
+    assert_matches!(purpose, ModelSelectionPurpose::CodexPane { .. });
+    chat.open_reasoning_popup_for_purpose(preset, purpose);
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::OpenCodexPaneNamePrompt {
+            model,
+            provider: Some(provider),
+            effort: Some(_),
+        }) if model == "gpt-5.6-sol" && provider == "openai"
+    );
+    assert_eq!(chat.current_model(), original_model);
+}
+
+#[tokio::test]
 async fn spawn_effort_popup_snapshot_and_create_path_leave_session_unchanged() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some(AMBIENT_DEFAULT_MODEL)).await;
     chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);

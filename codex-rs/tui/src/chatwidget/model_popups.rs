@@ -51,6 +51,9 @@ const OPENAI_GPT_5_6_LUNA_MODEL: &str = "gpt-5.6-luna";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ModelSelectionPurpose {
     Session,
+    CodexPane {
+        default_model: String,
+    },
     SpawnAgent {
         role: SpawnRole,
         parent_node_id: Option<String>,
@@ -62,6 +65,7 @@ impl ModelSelectionPurpose {
     fn selected_model<'a>(&'a self, session_model: &'a str) -> &'a str {
         match self {
             Self::Session => session_model,
+            Self::CodexPane { default_model } => default_model,
             Self::SpawnAgent { default_model, .. } => default_model,
         }
     }
@@ -69,6 +73,7 @@ impl ModelSelectionPurpose {
     fn provider_subtitle(&self, provider_subtitle: &str) -> String {
         match self {
             Self::Session => provider_subtitle.to_string(),
+            Self::CodexPane { .. } => format!("New Codex pane - {provider_subtitle}"),
             Self::SpawnAgent { role, .. } => {
                 format!("Codex {} pane - {provider_subtitle}", role.label())
             }
@@ -731,6 +736,7 @@ impl ChatWidget {
                 Some(spawn_reasoning_effort_for_role(*role, &preset))
             }
             ModelSelectionPurpose::Session => None,
+            ModelSelectionPurpose::CodexPane { .. } => None,
         };
         let model_label = Self::model_display_label_for_preset(&preset);
         let default_effort = preset.default_reasoning_effort;
@@ -786,6 +792,13 @@ impl ChatWidget {
                         self.apply_model_and_effort(selected_model, selected_effort);
                     }
                 }
+                ModelSelectionPurpose::CodexPane { .. } => {
+                    self.app_event_tx.send(AppEvent::OpenCodexPaneNamePrompt {
+                        provider: Self::model_provider_for_selection(&selected_model),
+                        model: selected_model,
+                        effort: selected_effort,
+                    });
+                }
                 ModelSelectionPurpose::SpawnAgent {
                     role,
                     parent_node_id,
@@ -810,6 +823,7 @@ impl ChatWidget {
         let is_current_model = self.current_model() == preset.model.as_str();
         let highlight_choice = match &purpose {
             ModelSelectionPurpose::SpawnAgent { .. } => spawn_default_effort,
+            ModelSelectionPurpose::CodexPane { .. } => default_choice.clone(),
             ModelSelectionPurpose::Session if is_current_model => {
                 if in_plan_mode {
                     self.config
@@ -880,6 +894,13 @@ impl ChatWidget {
                         tx.send(AppEvent::PersistModelSelection {
                             model: model_for_action.clone(),
                             provider: provider_for_action,
+                            effort: choice_effort.clone(),
+                        });
+                    }
+                    ModelSelectionPurpose::CodexPane { .. } => {
+                        tx.send(AppEvent::OpenCodexPaneNamePrompt {
+                            provider: Self::model_provider_for_selection(&model_for_action),
+                            model: model_for_action.clone(),
                             effort: choice_effort.clone(),
                         });
                     }
