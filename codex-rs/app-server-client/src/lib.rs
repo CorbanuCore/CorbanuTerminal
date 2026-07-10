@@ -1526,7 +1526,7 @@ mod tests {
         let (event_tx, mut event_rx) = mpsc::unbounded_channel();
         let mut coalesced_events = PendingCoalescedEvents::default();
 
-        for chunk in ["hel", "lo"] {
+        for chunk in ["he", "llo"] {
             let result = forward_in_process_event(
                 &event_tx,
                 &mut coalesced_events,
