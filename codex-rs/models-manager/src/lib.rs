@@ -15,7 +15,7 @@ pub use config::ModelsManagerConfig;
 /// It is separate from PFTerminal's package version because OpenAI gates some
 /// model metadata by upstream Codex client compatibility, not fork release
 /// numbering.
-pub const OPENAI_CODEX_COMPAT_VERSION: &str = "0.124.0";
+pub const OPENAI_CODEX_COMPAT_VERSION: &str = "0.144.1";
 
 /// Load the bundled model catalog shipped with `codex-models-manager`.
 pub fn bundled_models_response()

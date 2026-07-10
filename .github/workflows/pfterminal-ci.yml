@@ -64,7 +64,6 @@ jobs:
             --target x86_64-unknown-linux-gnu \
             --variant pfterminal \
             --entrypoint-bin codex-rs/target/dev-small/pfterminal \
-            --extra-bin codex=codex-rs/target/dev-small/codex \
             --cargo-profile dev-small \
             --package-dir "${RUNNER_TEMP}/pfterminal-package-x86_64-unknown-linux-gnu" \
             --archive-output "dist/pfterminal-package-x86_64-unknown-linux-gnu.tar.gz" \
@@ -74,7 +73,7 @@ jobs:
           mkdir -p "$package_dir"
           tar -xzf "dist/pfterminal-package-x86_64-unknown-linux-gnu.tar.gz" -C "$package_dir"
           "$package_dir/bin/pfterminal" --version
-          test -x "$package_dir/bin/codex"
+          ! find "$package_dir" -type f -o -type l | grep -E '/codex([^/-]*)(\.exe)?$'
           test -x "$package_dir/codex-path/rg"
 
       - name: Upload package smoke artifact

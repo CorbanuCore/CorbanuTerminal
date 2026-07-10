@@ -245,7 +245,7 @@ impl App {
             SelectionItem {
                 name: "Create standard crew: Nazgul + Troll + 2 Orcs".to_string(),
                 description: Some(
-                    "Create persistent named panes (Nazgul GLM 5.2 Z.AI xhigh, Troll Z.AI Vercel Fast, 2x Codex gpt-5.5 xhigh). No task is started."
+                    "Create persistent named panes (Nazgul GLM 5.2 Z.AI xhigh, Troll Z.AI Vercel Fast, 2x Codex gpt-5.6-sol xhigh). No task is started."
                         .to_string(),
                 ),
                 actions: vec![Box::new(|tx| {
@@ -2472,10 +2472,10 @@ impl App {
     /// Standard crew model/effort mapping (all Codex-native):
     ///   Nazgul: glm-5.2 (Z.AI) @ xhigh
     ///   Troll:  zai/glm-5.2-fast (Vercel) @ default
-    ///   Orc 1/2: gpt-5.5 (OpenAI) @ xhigh
+    ///   Orc 1/2: gpt-5.6-sol (OpenAI) @ xhigh
     pub(crate) const STANDARD_NAZGUL_MODEL: &'static str = ZAI_DEFAULT_MODEL;
     pub(crate) const STANDARD_TROLL_MODEL: &'static str = VERCEL_GLM_5_2_FAST_MODEL;
-    pub(crate) const STANDARD_ORC_MODEL: &'static str = "gpt-5.5";
+    pub(crate) const STANDARD_ORC_MODEL: &'static str = "gpt-5.6-sol";
 
     pub(crate) fn ensure_standard_crew_providers_ready(&self) -> Result<()> {
         // Preflight every provider before creating the root Nazgul. Without this, a missing Troll
@@ -2559,7 +2559,7 @@ impl App {
         )
         .await;
 
-        // Two Orcs — gpt-5.5 (OpenAI) @ xhigh under the Troll.
+        // Two Orcs — gpt-5.6-sol (OpenAI) @ xhigh under the Troll.
         for _ in 0..2 {
             let orc_nickname = self.next_spawn_agent_nickname(SpawnRole::Orc);
             let orc = app_server

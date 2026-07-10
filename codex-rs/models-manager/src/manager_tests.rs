@@ -524,6 +524,86 @@ async fn refresh_available_models_preserves_bundled_catalog_for_empty_chatgpt_re
 }
 
 #[tokio::test]
+async fn chatgpt_catalog_hides_gpt_5_6_models_omitted_by_the_account() {
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(vec![Vec::new()]);
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+
+    let available = manager.list_models(RefreshStrategy::Online).await;
+    let picker_visibility = available
+        .iter()
+        .filter(|model| model.model.starts_with("gpt-5.6-"))
+        .map(|model| (model.model.as_str(), model.show_in_picker))
+        .collect::<Vec<_>>();
+
+    for slug in ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] {
+        assert!(
+            picker_visibility.contains(&(slug, false)),
+            "{slug} should be plan-gated"
+        );
+    }
+}
+
+#[tokio::test]
+async fn chatgpt_catalog_shows_server_advertised_gpt_5_6_models() {
+    let mut remote_models = crate::bundled_models_response()
+        .expect("bundled models should parse")
+        .models
+        .into_iter()
+        .filter(|model| model.slug.starts_with("gpt-5.6-"))
+        .collect::<Vec<_>>();
+    for model in &mut remote_models {
+        model.visibility = ModelVisibility::List;
+        model.description = Some(format!("Server metadata for {}", model.slug));
+    }
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(vec![remote_models]);
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+
+    let available = manager.list_models(RefreshStrategy::Online).await;
+    assert!(
+        available
+            .iter()
+            .any(|model| model.model == "gpt-5.6-sol" && model.is_default)
+    );
+    assert!(
+        available
+            .iter()
+            .filter(|model| model.model.starts_with("gpt-5.6-"))
+            .flat_map(|model| &model.supported_reasoning_efforts)
+            .all(|level| {
+                !matches!(&level.effort, ReasoningEffort::Custom(value) if value == "ultra")
+            })
+    );
+    let advertised = available
+        .into_iter()
+        .filter(|model| model.model.starts_with("gpt-5.6-"))
+        .map(|model| (model.model, model.description, model.show_in_picker))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        advertised,
+        vec![
+            (
+                "gpt-5.6-sol".to_string(),
+                "Server metadata for gpt-5.6-sol".to_string(),
+                true,
+            ),
+            (
+                "gpt-5.6-terra".to_string(),
+                "Server metadata for gpt-5.6-terra".to_string(),
+                true,
+            ),
+            (
+                "gpt-5.6-luna".to_string(),
+                "Server metadata for gpt-5.6-luna".to_string(),
+                true,
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn refresh_available_models_merges_hidden_only_chatgpt_remote_with_bundled_catalog() {
     let hidden_remote = remote_model_with_visibility(
         "chatgpt-hidden-only",
@@ -1000,6 +1080,77 @@ fn bundled_models_json_roundtrips() {
     assert!(
         !response.models.is_empty(),
         "bundled models.json should contain at least one model"
+    );
+}
+
+#[test]
+fn bundled_models_json_contains_gpt_5_6_family_metadata() {
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+    let actual = response
+        .models
+        .iter()
+        .filter(|model| model.slug.starts_with("gpt-5.6-"))
+        .map(|model| {
+            (
+                model.slug.as_str(),
+                model.context_window,
+                model.default_reasoning_level.clone(),
+                model
+                    .supported_reasoning_levels
+                    .iter()
+                    .map(|level| level.effort.clone())
+                    .collect::<Vec<_>>(),
+                model.visibility,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        actual,
+        vec![
+            (
+                "gpt-5.6-sol",
+                Some(372_000),
+                Some(ReasoningEffort::Low),
+                vec![
+                    ReasoningEffort::Low,
+                    ReasoningEffort::Medium,
+                    ReasoningEffort::High,
+                    ReasoningEffort::XHigh,
+                    ReasoningEffort::Custom("max".to_string()),
+                    ReasoningEffort::Custom("ultra".to_string()),
+                ],
+                ModelVisibility::Hide,
+            ),
+            (
+                "gpt-5.6-terra",
+                Some(372_000),
+                Some(ReasoningEffort::Medium),
+                vec![
+                    ReasoningEffort::Low,
+                    ReasoningEffort::Medium,
+                    ReasoningEffort::High,
+                    ReasoningEffort::XHigh,
+                    ReasoningEffort::Custom("max".to_string()),
+                    ReasoningEffort::Custom("ultra".to_string()),
+                ],
+                ModelVisibility::Hide,
+            ),
+            (
+                "gpt-5.6-luna",
+                Some(372_000),
+                Some(ReasoningEffort::Medium),
+                vec![
+                    ReasoningEffort::Low,
+                    ReasoningEffort::Medium,
+                    ReasoningEffort::High,
+                    ReasoningEffort::XHigh,
+                    ReasoningEffort::Custom("max".to_string()),
+                ],
+                ModelVisibility::Hide,
+            ),
+        ]
     );
 }
 

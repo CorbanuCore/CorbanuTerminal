@@ -2578,6 +2578,27 @@ async fn model_selection_popup_snapshot() {
 }
 
 #[tokio::test]
+async fn gpt_5_6_model_selection_popup_snapshot() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.6-sol")).await;
+    chat.thread_id = Some(ThreadId::new());
+    let mut presets = chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    presets.retain(|preset| preset.model == "gpt-5.5" || preset.model.starts_with("gpt-5.6-"));
+    for preset in &mut presets {
+        if preset.model.starts_with("gpt-5.6-") {
+            preset.show_in_picker = true;
+        }
+        preset.is_default = preset.model == "gpt-5.6-sol";
+    }
+    chat.open_all_models_popup(presets);
+
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 96, /*height*/ 30);
+    assert_chatwidget_snapshot!("gpt_5_6_model_selection_popup", popup);
+}
+
+#[tokio::test]
 async fn personality_selection_popup_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.3-codex")).await;
     chat.thread_id = Some(ThreadId::new());
@@ -2622,9 +2643,10 @@ async fn model_picker_hides_show_in_picker_false_models_from_cache() {
         input_modalities: default_input_modalities(),
     };
 
+    let hidden_model = "hidden-test-model";
     chat.open_model_popup_with_presets(vec![
         preset(AMBIENT_DEFAULT_MODEL, true),
-        preset(ZAI_DEFAULT_MODEL, false),
+        preset(hidden_model, false),
     ]);
     let popup = render_bottom_popup(&chat, /*width*/ 80);
     assert_chatwidget_snapshot!("model_picker_filters_hidden_models", popup);
@@ -2633,9 +2655,25 @@ async fn model_picker_hides_show_in_picker_false_models_from_cache() {
         "expected visible model to appear in picker:\n{popup}"
     );
     assert!(
-        !popup.contains(ZAI_DEFAULT_MODEL),
+        !popup.contains(hidden_model),
         "expected hidden model to be excluded from picker:\n{popup}"
     );
+}
+
+fn move_model_picker_selection_to(chat: &mut ChatWidget, model: &str) {
+    for _ in 0..20 {
+        let popup = render_bottom_popup_with_height(chat, /*width*/ 140, /*height*/ 40);
+        if popup
+            .lines()
+            .any(|line| line.contains('›') && line.contains(model))
+        {
+            return;
+        }
+        chat.handle_key_event(KeyEvent::from(KeyCode::Down));
+    }
+
+    let popup = render_bottom_popup_with_height(chat, /*width*/ 140, /*height*/ 40);
+    panic!("could not select model {model:?} in picker:\n{popup}");
 }
 
 #[tokio::test]
@@ -2867,9 +2905,8 @@ async fn model_picker_dismisses_after_selecting_openrouter_model_without_effort_
         .expect("model catalog should load");
     chat.open_all_models_popup(presets);
 
-    for _ in 0..7 {
-        chat.handle_key_event(KeyEvent::from(KeyCode::Down));
-    }
+    chat.handle_key_event(KeyEvent::from(KeyCode::Right));
+    move_model_picker_selection_to(&mut chat, "minimax/minimax-m3");
     let before = render_bottom_popup(&chat, /*width*/ 100);
     assert!(
         before.contains("minimax/minimax-m3"),
@@ -2913,9 +2950,8 @@ async fn model_picker_opens_openrouter_reasoning_options_for_gemini() {
         .expect("model catalog should load");
     chat.open_all_models_popup(presets);
 
-    for _ in 0..10 {
-        chat.handle_key_event(KeyEvent::from(KeyCode::Down));
-    }
+    chat.handle_key_event(KeyEvent::from(KeyCode::Right));
+    move_model_picker_selection_to(&mut chat, "google/gemini-3.5-flash");
     let before = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 32);
     assert!(
         before.contains("google/gemini-3.5-flash"),

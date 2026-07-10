@@ -8,6 +8,7 @@ use codex_protocol::error::Result as CoreResult;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ModelsResponse;
+use codex_protocol::openai_models::ReasoningEffort;
 use std::fmt;
 use std::future::Future;
 use std::path::PathBuf;
@@ -122,6 +123,15 @@ pub trait ModelsManager: fmt::Debug + Send + Sync {
         presets = ModelPreset::filter_by_auth(presets, uses_codex_backend);
 
         ModelPreset::mark_default_by_picker_visibility(&mut presets);
+        if let Some(sol_index) = presets
+            .iter()
+            .position(|preset| preset.model == "gpt-5.6-sol" && preset.show_in_picker)
+        {
+            for preset in &mut presets {
+                preset.is_default = false;
+            }
+            presets[sol_index].is_default = true;
+        }
 
         presets
     }
@@ -349,7 +359,7 @@ impl OpenAiModelsManager {
     /// Replace the cached remote models and rebuild the derived presets list.
     async fn apply_remote_models(&self, models: Vec<ModelInfo>) {
         let mut existing_models = load_remote_models_from_file().unwrap_or_default();
-        for model in models {
+        for model in models.into_iter().map(sanitize_model_for_runtime) {
             if let Some(existing_index) = existing_models
                 .iter()
                 .position(|existing| existing.slug == model.slug)
@@ -423,7 +433,20 @@ impl ModelsManager for StaticModelsManager {
 }
 
 fn load_remote_models_from_file() -> Result<Vec<ModelInfo>, std::io::Error> {
-    Ok(crate::bundled_models_response()?.models)
+    Ok(crate::bundled_models_response()?
+        .models
+        .into_iter()
+        .map(sanitize_model_for_runtime)
+        .collect())
+}
+
+fn sanitize_model_for_runtime(mut model: ModelInfo) -> ModelInfo {
+    if model.slug.starts_with("gpt-5.6-") {
+        model.supported_reasoning_levels.retain(
+            |level| !matches!(&level.effort, ReasoningEffort::Custom(value) if value == "ultra"),
+        );
+    }
+    model
 }
 
 fn default_model_from_available(available: Vec<ModelPreset>) -> String {

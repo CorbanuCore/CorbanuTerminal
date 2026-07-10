@@ -6404,7 +6404,7 @@ async fn standard_crew_quick_start_uses_the_expected_role_picker_label() {
     // the standard crew constants resolve to the intended models/providers.
     assert_eq!(App::STANDARD_NAZGUL_MODEL, "glm-5.2");
     assert_eq!(App::STANDARD_TROLL_MODEL, "zai/glm-5.2-fast");
-    assert_eq!(App::STANDARD_ORC_MODEL, "gpt-5.5");
+    assert_eq!(App::STANDARD_ORC_MODEL, "gpt-5.6-sol");
     // Provider resolution for each crew model.
     assert_eq!(
         crate::chatwidget::ChatWidget::model_provider_for_selection("glm-5.2").as_deref(),
@@ -6415,7 +6415,7 @@ async fn standard_crew_quick_start_uses_the_expected_role_picker_label() {
         Some("vercel-anthropic-fast")
     );
     assert_eq!(
-        crate::chatwidget::ChatWidget::model_provider_for_selection("gpt-5.5").as_deref(),
+        crate::chatwidget::ChatWidget::model_provider_for_selection("gpt-5.6-sol").as_deref(),
         Some("openai")
     );
 }

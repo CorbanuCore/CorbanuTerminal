@@ -37,6 +37,9 @@ const OPENROUTER_MINIMAX_M3_MODEL: &str = "minimax/minimax-m3";
 const OPENROUTER_OWL_ALPHA_MODEL: &str = "openrouter/owl-alpha";
 const OPENROUTER_GEMINI_3_5_FLASH_MODEL: &str = "google/gemini-3.5-flash";
 const OPENAI_GPT_5_5_MODEL: &str = "gpt-5.5";
+const OPENAI_GPT_5_6_SOL_MODEL: &str = "gpt-5.6-sol";
+const OPENAI_GPT_5_6_TERRA_MODEL: &str = "gpt-5.6-terra";
+const OPENAI_GPT_5_6_LUNA_MODEL: &str = "gpt-5.6-luna";
 const MODEL_PICKER_CODING_TAB_ID: &str = "coding-plans";
 const MODEL_PICKER_API_KEY_TAB_ID: &str = "api-key-models";
 
@@ -432,7 +435,13 @@ impl ChatWidget {
     }
 
     fn is_openai_coding_plan_model(model: &str) -> bool {
-        model.trim() == OPENAI_GPT_5_5_MODEL
+        matches!(
+            model.trim(),
+            OPENAI_GPT_5_5_MODEL
+                | OPENAI_GPT_5_6_SOL_MODEL
+                | OPENAI_GPT_5_6_TERRA_MODEL
+                | OPENAI_GPT_5_6_LUNA_MODEL
+        )
     }
 
     fn is_api_key_model_provider(provider: Option<&str>) -> bool {
@@ -939,7 +948,7 @@ mod tests {
     }
 
     #[test]
-    fn pfterminal_picker_allows_only_gpt_5_5_for_openai() {
+    fn pfterminal_picker_allows_curated_openai_plan_models() {
         assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
             AMBIENT_KIMI_K2_7_CODE_MODEL,
             true
@@ -959,6 +968,11 @@ mod tests {
         assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
             "gpt-5.5", true
         )));
+        for model in ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] {
+            assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
+                model, true
+            )));
+        }
         assert!(!ChatWidget::show_in_pfterminal_model_picker(&preset(
             "gpt-5.4", true
         )));
