@@ -823,9 +823,6 @@ fn chat_replay_preserves_user_and_tool_result_images() {
             id: None,
             call_id: "call_image".to_string(),
             output: FunctionCallOutputPayload::from_content_items(vec![
-                codex_protocol::models::FunctionCallOutputContentItem::InputText {
-                    text: "loaded".to_string(),
-                },
                 codex_protocol::models::FunctionCallOutputContentItem::InputImage {
                     image_url: "https://example.com/tool.webp".to_string(),
                     detail: Some(codex_protocol::models::ImageDetail::Low),
@@ -849,6 +846,7 @@ fn chat_replay_preserves_user_and_tool_result_images() {
         }))
     );
     assert_eq!(body.pointer("/2/role"), Some(&json!("tool")));
+    assert_eq!(body.pointer("/2/content"), Some(&json!("(image attached)")));
     assert_eq!(body.pointer("/3/role"), Some(&json!("user")));
     assert_eq!(
         body.pointer("/3/content/0"),
@@ -859,6 +857,114 @@ fn chat_replay_preserves_user_and_tool_result_images() {
                 "detail": "low"
             }
         }))
+    );
+    assert_eq!(
+        serde_json::to_string(&body)
+            .expect("serialize chat messages")
+            .matches("https://example.com/tool.webp")
+            .count(),
+        1,
+        "the image URL must not also be embedded in the tool text"
+    );
+}
+
+#[test]
+fn chat_replay_keeps_parallel_tool_results_contiguous_before_images() {
+    let image_url = "data:image/png;base64,cGFyYWxsZWw=";
+    let items = vec![
+        ResponseItem::FunctionCall {
+            id: None,
+            name: "view_image".to_string(),
+            namespace: None,
+            arguments: r#"{"path":"image.png"}"#.to_string(),
+            call_id: "call_image".to_string(),
+            metadata: None,
+        },
+        ResponseItem::FunctionCall {
+            id: None,
+            name: "exec_command".to_string(),
+            namespace: None,
+            arguments: r#"{"cmd":"pwd"}"#.to_string(),
+            call_id: "call_shell".to_string(),
+            metadata: None,
+        },
+        ResponseItem::FunctionCallOutput {
+            id: None,
+            call_id: "call_image".to_string(),
+            output: FunctionCallOutputPayload::from_content_items(vec![
+                codex_protocol::models::FunctionCallOutputContentItem::InputImage {
+                    image_url: image_url.to_string(),
+                    detail: Some(codex_protocol::models::ImageDetail::High),
+                },
+            ]),
+            metadata: None,
+        },
+        ResponseItem::FunctionCallOutput {
+            id: None,
+            call_id: "call_shell".to_string(),
+            output: FunctionCallOutputPayload::from_text("/workspace".to_string()),
+            metadata: None,
+        },
+    ];
+    let mut messages = Vec::<codex_api::ChatMessage>::new();
+    let mut skipped = std::collections::HashSet::new();
+
+    super::append_chat_messages_for_response_items(items, &mut messages, &mut skipped);
+
+    let body = serde_json::to_value(messages).expect("serialize chat messages");
+    assert_eq!(
+        body,
+        json!([
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "call_image",
+                        "type": "function",
+                        "function": {
+                            "name": "view_image",
+                            "arguments": "{\"path\":\"image.png\"}"
+                        }
+                    },
+                    {
+                        "id": "call_shell",
+                        "type": "function",
+                        "function": {
+                            "name": "exec_command",
+                            "arguments": "{\"cmd\":\"pwd\"}"
+                        }
+                    }
+                ]
+            },
+            {
+                "role": "tool",
+                "content": "(image attached)",
+                "tool_call_id": "call_image"
+            },
+            {
+                "role": "tool",
+                "content": "/workspace",
+                "tool_call_id": "call_shell"
+            },
+            {
+                "role": "user",
+                "content": [{
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_url,
+                        "detail": "high"
+                    }
+                }]
+            }
+        ])
+    );
+    assert_eq!(
+        serde_json::to_string(&body)
+            .expect("serialize chat messages")
+            .matches(image_url)
+            .count(),
+        1,
+        "the image bytes must occur exactly once in a parallel tool result batch"
     );
 }
 

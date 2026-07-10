@@ -1220,9 +1220,7 @@ impl ModelClient {
 
         let input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
         let mut skipped_tool_call_ids = HashSet::new();
-        for item in input {
-            append_chat_messages_for_response_item(item, &mut messages, &mut skipped_tool_call_ids);
-        }
+        append_chat_messages_for_response_items(input, &mut messages, &mut skipped_tool_call_ids);
 
         // GLM chat streams proper tool calls when OpenAI's `strict` function
         // flag is omitted. Keep the JSON schema, but drop that
@@ -2898,10 +2896,46 @@ fn mark_chat_message_cache_control(message: &mut ChatMessage) -> bool {
     true
 }
 
+#[cfg(test)]
 fn append_chat_messages_for_response_item(
     item: ResponseItem,
     messages: &mut Vec<ChatMessage>,
     skipped_tool_call_ids: &mut HashSet<String>,
+) {
+    append_chat_messages_for_response_items(std::iter::once(item), messages, skipped_tool_call_ids);
+}
+
+fn append_chat_messages_for_response_items(
+    items: impl IntoIterator<Item = ResponseItem>,
+    messages: &mut Vec<ChatMessage>,
+    skipped_tool_call_ids: &mut HashSet<String>,
+) {
+    let mut pending_tool_result_images = Vec::new();
+
+    for item in items {
+        if !matches!(
+            &item,
+            ResponseItem::FunctionCallOutput { .. } | ResponseItem::CustomToolCallOutput { .. }
+        ) {
+            flush_chat_tool_result_images(messages, &mut pending_tool_result_images);
+        }
+
+        append_chat_message_for_response_item(
+            item,
+            messages,
+            skipped_tool_call_ids,
+            &mut pending_tool_result_images,
+        );
+    }
+
+    flush_chat_tool_result_images(messages, &mut pending_tool_result_images);
+}
+
+fn append_chat_message_for_response_item(
+    item: ResponseItem,
+    messages: &mut Vec<ChatMessage>,
+    skipped_tool_call_ids: &mut HashSet<String>,
+    pending_tool_result_images: &mut Vec<ChatContentPart>,
 ) {
     match item {
         ResponseItem::Message { role, content, .. } => {
@@ -2936,16 +2970,26 @@ fn append_chat_messages_for_response_item(
                 skipped_tool_call_ids.insert(call_id);
                 return;
             }
-            messages.push(ChatMessage {
-                role: "assistant".to_string(),
-                content: None,
-                tool_call_id: None,
-                tool_calls: vec![ChatToolCall {
-                    id: call_id,
-                    kind: "function".to_string(),
-                    function: ChatToolFunction { name, arguments },
-                }],
-            });
+            let tool_call = ChatToolCall {
+                id: call_id,
+                kind: "function".to_string(),
+                function: ChatToolFunction { name, arguments },
+            };
+            if let Some(message) = messages.last_mut().filter(|message| {
+                message.role == "assistant"
+                    && message.content.is_none()
+                    && message.tool_call_id.is_none()
+                    && !message.tool_calls.is_empty()
+            }) {
+                message.tool_calls.push(tool_call);
+            } else {
+                messages.push(ChatMessage {
+                    role: "assistant".to_string(),
+                    content: None,
+                    tool_call_id: None,
+                    tool_calls: vec![tool_call],
+                });
+            }
         }
         ResponseItem::FunctionCallOutput {
             call_id, output, ..
@@ -2960,23 +3004,22 @@ fn append_chat_messages_for_response_item(
                 );
                 return;
             }
+            let image_parts = chat_tool_result_image_parts(&output);
+            let output_text = output.body.to_text().filter(|text| !text.trim().is_empty());
+            let output_text = output_text.unwrap_or_else(|| {
+                if image_parts.is_empty() {
+                    "(tool output omitted)".to_string()
+                } else {
+                    "(image attached)".to_string()
+                }
+            });
             messages.push(ChatMessage {
                 role: "tool".to_string(),
-                content: Some(ChatMessageContent::text(
-                    output.body.to_text().unwrap_or_else(|| output.to_string()),
-                )),
+                content: Some(ChatMessageContent::text(output_text)),
                 tool_call_id: Some(call_id),
                 tool_calls: Vec::new(),
             });
-            let image_parts = chat_tool_result_image_parts(&output);
-            if !image_parts.is_empty() {
-                messages.push(ChatMessage {
-                    role: "user".to_string(),
-                    content: Some(ChatMessageContent::Parts(image_parts)),
-                    tool_call_id: None,
-                    tool_calls: Vec::new(),
-                });
-            }
+            pending_tool_result_images.extend(image_parts);
         }
         ResponseItem::Reasoning { .. }
         | ResponseItem::LocalShellCall { .. }
@@ -2989,6 +3032,24 @@ fn append_chat_messages_for_response_item(
         | ResponseItem::ContextCompaction { .. }
         | ResponseItem::Other => {}
     }
+}
+
+fn flush_chat_tool_result_images(
+    messages: &mut Vec<ChatMessage>,
+    pending_tool_result_images: &mut Vec<ChatContentPart>,
+) {
+    if pending_tool_result_images.is_empty() {
+        return;
+    }
+
+    messages.push(ChatMessage {
+        role: "user".to_string(),
+        content: Some(ChatMessageContent::Parts(std::mem::take(
+            pending_tool_result_images,
+        ))),
+        tool_call_id: None,
+        tool_calls: Vec::new(),
+    });
 }
 
 fn chat_image_detail(detail: Option<codex_protocol::models::ImageDetail>) -> Option<String> {
