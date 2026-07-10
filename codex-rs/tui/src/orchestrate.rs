@@ -115,6 +115,8 @@ pub(crate) struct Whip {
     #[serde(default)]
     pub(crate) empty_output_fires: u32,
     #[serde(default)]
+    pub(crate) consecutive_failed_turns: u32,
+    #[serde(default)]
     pub(crate) pending_review_fire: Option<u32>,
     #[serde(default)]
     pub(crate) ignored_review_fires: u32,
@@ -151,6 +153,7 @@ impl Whip {
             state: WhipState::Armed,
             last_idle_generation_fired: None,
             empty_output_fires: 0,
+            consecutive_failed_turns: 0,
             pending_review_fire: None,
             ignored_review_fires: 0,
             expiry_notified: false,
@@ -1399,6 +1402,7 @@ impl App {
         target_node_id: &str,
         last_output: Option<&str>,
         allow_fire: bool,
+        turn_succeeded: bool,
     ) {
         let generation = self
             .orchestrate_idle_generation_by_target
@@ -1408,6 +1412,7 @@ impl App {
         let generation = *generation;
         self.pause_matching_whips_on_stop_marker(target_node_id, last_output);
         self.pause_spinning_whips_on_empty_output(target_node_id, last_output);
+        self.pause_spinning_whips_on_failed_turn(target_node_id, turn_succeeded);
         self.note_whip_holder_idle(target_node_id);
         if allow_fire {
             self.evaluate_whips_for_target(target_node_id, generation, FireTrigger::Edge);
@@ -1865,6 +1870,31 @@ impl App {
         }
         for id in paused {
             self.mark_whip_terminal(&id, WhipState::Paused, "empty output loop");
+        }
+    }
+
+    fn pause_spinning_whips_on_failed_turn(
+        &mut self,
+        target_node_id: &str,
+        turn_succeeded: bool,
+    ) {
+        let mut paused = Vec::new();
+        for whip in self
+            .orchestrate_whips
+            .values_mut()
+            .filter(|whip| whip.target == target_node_id && whip.state == WhipState::Armed)
+        {
+            if turn_succeeded {
+                whip.consecutive_failed_turns = 0;
+            } else {
+                whip.consecutive_failed_turns = whip.consecutive_failed_turns.saturating_add(1);
+            }
+            if whip.consecutive_failed_turns >= 2 {
+                paused.push(whip.id.clone());
+            }
+        }
+        for id in paused {
+            self.mark_whip_terminal(&id, WhipState::Paused, "two consecutive failed turns");
         }
     }
 

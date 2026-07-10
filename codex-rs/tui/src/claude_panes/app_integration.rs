@@ -820,6 +820,7 @@ impl App {
                     &source_node_id,
                     Some(&report_text),
                     !flushed_dispatch,
+                    output.status.is_success(),
                 );
                 if !output.text.trim().is_empty() {
                     if is_active && !active_text_streamed {
@@ -886,6 +887,7 @@ impl App {
                     &source_node_id,
                     Some(&error),
                     !flushed_dispatch,
+                    false,
                 );
                 if self.claude_panes.active_user_pane_id() == pane_id {
                     self.chat_widget.fail_external_pane_turn(error);

@@ -1709,6 +1709,10 @@ impl App {
                 .set_last_result_message(thread_id, message);
         }
         if !is_running {
+            let turn_succeeded = matches!(
+                status,
+                codex_app_server_protocol::CollabAgentStatus::Completed
+            );
             self.record_spawn_child_report_for_thread(thread_id, status, report_message);
             // Commands queued for this target take priority over informational child reports.
             let flushed_dispatch = self.flush_pending_dispatches_for_thread(thread_id);
@@ -1729,6 +1733,7 @@ impl App {
                 &node_key,
                 last_result.as_deref(),
                 !flushed_dispatch && !flushed_reports,
+                turn_succeeded,
             );
         }
     }
