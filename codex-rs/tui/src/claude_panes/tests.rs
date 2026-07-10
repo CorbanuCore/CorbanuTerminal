@@ -458,6 +458,7 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
             last_idle_generation_fired: Some(4),
             empty_output_fires: 0,
             consecutive_failed_turns: 0,
+            assignment_unreachable_since_utc: None,
             pending_review_fire: None,
             ignored_review_fires: 0,
             expiry_notified: false,

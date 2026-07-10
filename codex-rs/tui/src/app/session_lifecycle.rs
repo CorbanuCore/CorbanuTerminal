@@ -192,6 +192,7 @@ impl App {
     pub(super) fn mark_agent_picker_thread_closed(&mut self, thread_id: ThreadId) {
         self.fail_pending_dispatches_for_thread(thread_id, "target closed before delivery");
         self.agent_navigation.mark_closed(thread_id);
+        self.note_assignment_node_gone(&crate::spawn_orchestration::thread_node_id(thread_id));
         self.sync_active_agent_label();
     }
 

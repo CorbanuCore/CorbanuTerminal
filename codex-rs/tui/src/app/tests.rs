@@ -4373,6 +4373,19 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
         })
     ));
     assert_eq!(drain_claude_pane_task_events(&mut app_event_rx).len(), 1);
+    app.note_whip_target_idle_with_fire_control(
+        &manager_node,
+        Some("I will emit WHIP_DONE when complete and ASSIGNMENT_BLOCKED: <reason> if needed."),
+        false,
+        true,
+    );
+    assert!(matches!(
+        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Drafting,
+            ..
+        })
+    ));
     app.sweep_orchestrate_whips();
     assert!(drain_claude_pane_task_events(&mut app_event_rx).is_empty());
 
@@ -4418,6 +4431,19 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
             .map(crate::orchestrate::assignment_effective_cadence_s),
         Some(3600)
     );
+    let backed_off_now = started + chrono::Duration::hours(7);
+    app.orchestrate_now_override = Some(backed_off_now);
+    if let Some(whip) = app.orchestrate_whips.get_mut("whip-1") {
+        whip.last_fire_utc = Some(backed_off_now - chrono::Duration::seconds(3601));
+        if let crate::orchestrate::WhipKind::Assignment {
+            last_user_turn_utc, ..
+        } = &mut whip.kind
+        {
+            *last_user_turn_utc = Some(backed_off_now - chrono::Duration::minutes(20));
+        }
+    }
+    app.sweep_orchestrate_whips();
+    assert_eq!(drain_claude_pane_task_events(&mut app_event_rx).len(), 1);
     app.note_whip_target_idle_with_fire_control(&manager_node, Some("recovered"), false, true);
     assert_eq!(
         app.orchestrate_whips
@@ -4441,7 +4467,33 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     ));
     app.note_whip_target_idle_with_fire_control(
         &manager_node,
-        Some("ASSIGNMENT_BLOCKED: waiting for production credentials"),
+        Some("I may emit WHIP_DONE later and mention ASSIGNMENT_BLOCKED: in prose."),
+        false,
+        true,
+    );
+    assert!(matches!(
+        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Executing,
+            ..
+        })
+    ));
+    app.note_whip_target_idle_with_fire_control(
+        &manager_node,
+        Some("ASSIGNMENT_BLOCKED:\nprogress continues"),
+        false,
+        true,
+    );
+    assert!(matches!(
+        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Executing,
+            ..
+        })
+    ));
+    app.note_whip_target_idle_with_fire_control(
+        &manager_node,
+        Some("progress\nASSIGNMENT_BLOCKED: waiting for production credentials"),
         false,
         true,
     );
@@ -4468,6 +4520,83 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
             ..
         })
     ));
+}
+
+#[tokio::test]
+async fn assignment_unreachable_watchdog_pauses_after_four_cadences() {
+    let (mut app, _app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "watchdog", "Keep managing.");
+    let manager_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            None,
+            Some("Manager".to_string()),
+        )
+        .expect("create manager");
+    let worker_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            None,
+            Some("Worker".to_string()),
+        )
+        .expect("create worker");
+    let manager_node = crate::spawn_orchestration::pane_node_id(&manager_pane_id);
+    let worker_node = crate::spawn_orchestration::pane_node_id(&worker_pane_id);
+    let started = chrono::DateTime::parse_from_rfc3339("2026-07-10T20:00:00Z")
+        .expect("timestamp")
+        .with_timezone(&chrono::Utc);
+    app.orchestrate_now_override = Some(started);
+    app.handle_orchestrate_command(format!(
+        "attach {worker_pane_id} watchdog --mode review --holder {manager_pane_id} --for 8h --cooldown 900s"
+    ));
+    app.note_whip_holder_dispatched(&manager_node, &worker_node);
+    app.orchestrate_whips
+        .get_mut("whip-1")
+        .expect("assignment")
+        .target = "pane:missing-worker".to_string();
+
+    app.sweep_orchestrate_whips();
+    app.orchestrate_now_override = Some(started + chrono::Duration::seconds(3599));
+    app.sweep_orchestrate_whips();
+    assert_eq!(
+        app.orchestrate_whips.get("whip-1").map(|whip| whip.state),
+        Some(crate::orchestrate::WhipState::Armed)
+    );
+    app.orchestrate_now_override = Some(started + chrono::Duration::seconds(3600));
+    app.sweep_orchestrate_whips();
+    assert_eq!(
+        app.orchestrate_whips.get("whip-1").map(|whip| whip.state),
+        Some(crate::orchestrate::WhipState::Paused)
+    );
+}
+
+#[tokio::test]
+async fn assignment_rejects_codex_main_as_manager() {
+    let (mut app, _app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    app.primary_thread_id = Some(ThreadId::new());
+    write_test_whip(&app, "main-manager", "Keep managing.");
+    let worker_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            None,
+            Some("Worker".to_string()),
+        )
+        .expect("create worker");
+
+    app.handle_orchestrate_command(format!(
+        "attach {worker_pane_id} main-manager --mode review --holder codex-main --for 1h"
+    ));
+
+    assert!(app.orchestrate_whips.is_empty());
 }
 
 #[tokio::test]

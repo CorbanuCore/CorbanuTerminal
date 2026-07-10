@@ -9,6 +9,20 @@ use crate::session_resume::read_session_model;
 use std::fmt::Write as _;
 
 impl App {
+    pub(crate) fn native_thread_loaded_for_orchestrate(&self, thread_id: ThreadId) -> bool {
+        match self.agent_navigation.get(&thread_id) {
+            Some(entry) => !entry.is_closed,
+            None => self.thread_event_channels.contains_key(&thread_id),
+        }
+    }
+
+    pub(crate) fn native_thread_idle_for_orchestrate(&self, thread_id: ThreadId) -> bool {
+        self.thread_event_channels
+            .get(&thread_id)
+            .and_then(|channel| channel.store.try_lock().ok())
+            .is_some_and(|store| store.active_turn_id().is_none())
+    }
+
     pub(super) fn note_thread_interrupt_failure(
         &mut self,
         thread_id: ThreadId,
@@ -1585,6 +1599,7 @@ impl App {
             let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
                 return;
             };
+            self.note_assignment_node_gone(&crate::spawn_orchestration::thread_node_id(thread_id));
             if !self.is_spawn_orchestration_thread(thread_id) {
                 return;
             }

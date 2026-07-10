@@ -2970,11 +2970,21 @@ impl App {
                             &whip_name,
                             &manager_node_id,
                         );
-                        self.handle_orchestrate_command(args);
-                        self.chat_widget.add_info_message(
-                            format!("Created Manager {nickname}."),
-                            Some("The assignment brief was sent to the new pane.".to_string()),
-                        );
+                        match self.attach_guided_assignment(&args) {
+                            Ok(message) => {
+                                self.chat_widget.add_info_message(message, None);
+                                self.chat_widget.add_info_message(
+                                    format!("Created Manager {nickname}."),
+                                    Some(
+                                        "The assignment brief was sent to the new pane."
+                                            .to_string(),
+                                    ),
+                                );
+                            }
+                            Err(err) => self.chat_widget.add_error_message(format!(
+                                "Manager pane {nickname} created but not bound: {err}"
+                            )),
+                        }
                     }
                     Err(err) => self
                         .chat_widget

@@ -144,6 +144,8 @@ pub(crate) struct Whip {
     #[serde(default)]
     pub(crate) consecutive_failed_turns: u32,
     #[serde(default)]
+    pub(crate) assignment_unreachable_since_utc: Option<DateTime<Utc>>,
+    #[serde(default)]
     pub(crate) pending_review_fire: Option<u32>,
     #[serde(default)]
     pub(crate) ignored_review_fires: u32,
@@ -182,6 +184,7 @@ impl Whip {
             last_idle_generation_fired: None,
             empty_output_fires: 0,
             consecutive_failed_turns: 0,
+            assignment_unreachable_since_utc: None,
             pending_review_fire: None,
             ignored_review_fires: 0,
             expiry_notified: false,
@@ -625,6 +628,11 @@ fn validate_whip_name(name: &str) -> Result<(), String> {
             "Invalid whip name `{name}`; use a basename from the whips directory."
         ));
     }
+    if trimmed.eq_ignore_ascii_case(DRAFT_WITH_MANAGER_SPEC) {
+        return Err(format!(
+            "`{DRAFT_WITH_MANAGER_SPEC}` is reserved for guided drafting."
+        ));
+    }
     Ok(())
 }
 
@@ -828,6 +836,31 @@ impl App {
         }
     }
 
+    pub(crate) fn attach_guided_assignment(&mut self, args: &str) -> Result<String, String> {
+        let OrchestrateCommand::Attach {
+            target,
+            whip_name,
+            mode,
+            expiry,
+            max_fires,
+            cooldown_s,
+            holder,
+        } = parse_orchestrate_command(args)?
+        else {
+            return Err("Expected an assignment attach command.".to_string());
+        };
+        self.attach_whip(
+            target,
+            whip_name,
+            mode,
+            expiry,
+            max_fires,
+            cooldown_s,
+            holder,
+            CommandOrigin::User,
+        )
+    }
+
     pub(crate) fn open_orchestrate_status_view(&mut self) {
         let now = self.orchestrate_now();
         let mut whips: Vec<_> = self.orchestrate_whips.values().collect();
@@ -860,11 +893,7 @@ impl App {
                 } else {
                     format!("pause {whip_id}")
                 };
-                let expiry = match whip.expires_at {
-                    Some(expires_at) if expires_at <= now => "expired".to_string(),
-                    Some(expires_at) => format!("expires {}", expires_at.format("%H:%MZ")),
-                    None => "unlimited".to_string(),
-                };
+                let expiry = assignment_expiry_label(whip, now);
                 let holder = whip
                     .holder
                     .as_deref()
@@ -908,6 +937,23 @@ impl App {
                         ),
                     ),
                 };
+                let mut selected_shortcuts = vec![
+                    orchestrate_shortcut_command('d', format!("detach {whip_id}")),
+                    orchestrate_shortcut_command('p', pause_resume_args),
+                    orchestrate_shortcut_extend('e', whip_id.clone()),
+                ];
+                if !matches!(
+                    whip.kind,
+                    WhipKind::Assignment {
+                        phase: AssignmentPhase::Drafting,
+                        ..
+                    }
+                ) {
+                    selected_shortcuts
+                        .push(orchestrate_shortcut_command('f', format!("fire {whip_id}")));
+                    selected_shortcuts
+                        .push(orchestrate_shortcut_command('t', format!("test {whip_id}")));
+                }
                 items.push(SelectionItem {
                     name,
                     description: Some(description),
@@ -924,13 +970,7 @@ impl App {
                             });
                         }
                     })],
-                    selected_shortcuts: vec![
-                        orchestrate_shortcut_command('d', format!("detach {whip_id}")),
-                        orchestrate_shortcut_command('p', pause_resume_args),
-                        orchestrate_shortcut_extend('e', whip_id.clone()),
-                        orchestrate_shortcut_command('f', format!("fire {whip_id}")),
-                        orchestrate_shortcut_command('t', format!("test {whip_id}")),
-                    ],
+                    selected_shortcuts,
                     dismiss_on_select: false,
                     ..Default::default()
                 });
@@ -1169,6 +1209,12 @@ impl App {
             if worker_node_id.as_deref() == Some(entry.node_id.as_str()) {
                 continue;
             }
+            if self
+                .primary_thread_id
+                .is_some_and(|thread_id| entry.node_id == thread_node_id(thread_id))
+            {
+                continue;
+            }
             let manager_node_id = entry.node_id.clone();
             items.push(SelectionItem {
                 name: format!("Bind {}", entry.name),
@@ -1405,11 +1451,7 @@ impl App {
             .as_deref()
             .map(|holder| self.node_label(holder))
             .unwrap_or_else(|| "none".to_string());
-        let expiry = match whip.expires_at {
-            Some(expires_at) if expires_at <= self.orchestrate_now() => "expired".to_string(),
-            Some(expires_at) => format!("expires {}", expires_at.format("%H:%MZ")),
-            None => "unlimited".to_string(),
-        };
+        let expiry = assignment_expiry_label(&whip, self.orchestrate_now());
         let pause_resume = if whip.state == WhipState::Paused {
             ("Resume", format!("resume {whip_id}"))
         } else {
@@ -1441,27 +1483,6 @@ impl App {
                 dismiss_on_select: true,
                 ..Default::default()
             },
-            orchestrate_command_item(
-                "Mandate now",
-                "Ask the Manager to review progress immediately.",
-                format!("fire {whip_id}"),
-            ),
-            orchestrate_command_item(
-                "Test",
-                "Preview the next Manager mandate.",
-                format!("test {whip_id}"),
-            ),
-            orchestrate_command_item("End", "End this assignment.", format!("detach {whip_id}")),
-            SelectionItem {
-                name: "New assignment".to_string(),
-                description: Some("Open the guided setup flow.".to_string()),
-                display_shortcut: Some(key_hint::plain(KeyCode::Char('n'))),
-                actions: vec![Box::new(|tx| {
-                    tx.send(AppEvent::OpenOrchestrateTargetPicker)
-                })],
-                dismiss_on_select: true,
-                ..Default::default()
-            },
         ];
         if matches!(
             whip.kind,
@@ -1478,7 +1499,44 @@ impl App {
                     format!("start {whip_id}"),
                 ),
             );
+        } else if is_assignment {
+            items.push(orchestrate_command_item(
+                "Mandate now",
+                "Ask the Manager to review progress immediately.",
+                format!("fire {whip_id}"),
+            ));
+            items.push(orchestrate_command_item(
+                "Test",
+                "Preview the next Manager mandate.",
+                format!("test {whip_id}"),
+            ));
+        } else {
+            items.push(orchestrate_command_item(
+                "Fire now",
+                "Send the automation turn immediately.",
+                format!("fire {whip_id}"),
+            ));
+            items.push(orchestrate_command_item(
+                "Test",
+                "Preview the next automation turn.",
+                format!("test {whip_id}"),
+            ));
         }
+        items.push(orchestrate_command_item(
+            "End",
+            "End this assignment.",
+            format!("detach {whip_id}"),
+        ));
+        items.push(SelectionItem {
+            name: "New assignment".to_string(),
+            description: Some("Open the guided setup flow.".to_string()),
+            display_shortcut: Some(key_hint::plain(KeyCode::Char('n'))),
+            actions: vec![Box::new(|tx| {
+                tx.send(AppEvent::OpenOrchestrateTargetPicker)
+            })],
+            dismiss_on_select: true,
+            ..Default::default()
+        });
 
         let (title, subtitle) = if is_assignment {
             let phase = match &whip.kind {
@@ -1617,6 +1675,28 @@ impl App {
     }
 
     pub(crate) fn whip_status_suffix_for_target(&self, target_node_id: &str) -> String {
+        if let Some(assignment) = self.orchestrate_whips.values().find(|whip| {
+            whip.is_assignment()
+                && whip.state == WhipState::Armed
+                && (whip.target == target_node_id || whip.holder.as_deref() == Some(target_node_id))
+        }) {
+            let phase = match &assignment.kind {
+                WhipKind::Assignment { phase, .. } => assignment_phase_label(phase),
+                WhipKind::LegacyNudge => unreachable!(),
+            };
+            if assignment.target == target_node_id {
+                let manager = assignment
+                    .holder
+                    .as_deref()
+                    .map(|node| self.node_label(node))
+                    .unwrap_or_else(|| "missing Manager".to_string());
+                return format!("; managed-by {manager}; {phase}");
+            }
+            return format!(
+                "; managing {}; {phase}",
+                self.node_label(&assignment.target)
+            );
+        }
         whip_suffix_for_target(&self.orchestrate_whips, target_node_id)
     }
 
@@ -1819,6 +1899,7 @@ impl App {
         for id in ids {
             self.expire_whip_if_needed(&id, now);
         }
+        self.watch_assignment_reachability(now);
         let target_generations: Vec<(String, u64)> = self
             .orchestrate_whips
             .values()
@@ -1834,6 +1915,74 @@ impl App {
             .collect();
         for (target, generation) in target_generations {
             self.evaluate_whips_for_target(&target, generation, FireTrigger::Tick);
+        }
+    }
+
+    fn watch_assignment_reachability(&mut self, now: DateTime<Utc>) {
+        let ids: Vec<String> = self
+            .orchestrate_whips
+            .values()
+            .filter(|whip| {
+                whip.state == WhipState::Armed
+                    && matches!(
+                        whip.kind,
+                        WhipKind::Assignment {
+                            phase: AssignmentPhase::Executing,
+                            ..
+                        }
+                    )
+            })
+            .map(|whip| whip.id.clone())
+            .collect();
+        let mut pause = Vec::new();
+        let mut changed = false;
+        for id in ids {
+            let Some(snapshot) = self.orchestrate_whips.get(&id).cloned() else {
+                continue;
+            };
+            let manager = snapshot.holder.as_deref();
+            let worker_unreachable = self.fire_destination_for_node(&snapshot.target).is_err()
+                || !self.target_node_is_idle(&snapshot.target);
+            let manager_unreachable = manager.is_none_or(|node| {
+                self.fire_destination_for_node(node).is_err() || !self.target_node_is_idle(node)
+            });
+            let unreachable = worker_unreachable || manager_unreachable;
+            let since = if let Some(whip) = self.orchestrate_whips.get_mut(&id) {
+                if unreachable {
+                    if whip.assignment_unreachable_since_utc.is_none() {
+                        whip.assignment_unreachable_since_utc = Some(now);
+                        changed = true;
+                    }
+                    let since = whip.assignment_unreachable_since_utc.unwrap_or(now);
+                    Some(since)
+                } else {
+                    changed |= whip.assignment_unreachable_since_utc.take().is_some();
+                    None
+                }
+            } else {
+                None
+            };
+            if since.is_some_and(|since| {
+                now - since >= Duration::seconds((snapshot.cooldown_s.saturating_mul(4)) as i64)
+            }) {
+                let role = if worker_unreachable {
+                    "Worker"
+                } else {
+                    "Manager"
+                };
+                pause.push((id, role));
+            }
+        }
+        for (id, role) in pause {
+            if let Some(whip) = self.orchestrate_whips.get_mut(&id) {
+                whip.state = WhipState::Paused;
+            }
+            self.chat_widget
+                .add_info_message(format!("Assignment {id} paused: {role} unreachable."), None);
+            changed = true;
+        }
+        if changed {
+            self.persist_pane_state();
         }
     }
 
@@ -1965,6 +2114,15 @@ impl App {
             }),
             HolderArg::Target(value) => Some(self.resolve_orchestrate_target_node(&value)?),
         };
+        if resolved_mode == WhipMode::Review
+            && self.primary_thread_id.is_some_and(|thread_id| {
+                holder_node_id.as_deref() == Some(thread_node_id(thread_id).as_str())
+            })
+        {
+            return Err(
+                "Codex Main cannot be an assignment Manager; create a Manager pane.".to_string(),
+            );
+        }
         if resolved_mode == WhipMode::Review && holder_node_id.is_none() {
             return Err(
                 "Review-mode whips require a holder; use --holder me or --mode auto.".to_string(),
@@ -1972,6 +2130,9 @@ impl App {
         }
         if holder_node_id.as_deref() == Some(target_node_id.as_str()) {
             return Err("A whip holder cannot be the same pane as its target.".to_string());
+        }
+        if let Some(manager) = holder_node_id.as_deref() {
+            self.fire_destination_for_node(manager)?;
         }
         let resolved_expiry = expiry
             .map(|value| resolve_expiry_arg(value, self.orchestrate_now()))
@@ -2043,6 +2204,10 @@ impl App {
                 .add_error_message(format!("No whip found for `{id_or_target}`."));
             return;
         };
+        let is_assignment = self
+            .orchestrate_whips
+            .get(&id)
+            .is_some_and(Whip::is_assignment);
         let removed_target = if state == WhipState::Detached {
             self.orchestrate_whips.remove(&id).map(|whip| whip.target)
         } else {
@@ -2063,8 +2228,14 @@ impl App {
             self.orchestrate_idle_generation_by_target.remove(&target);
         }
         self.persist_pane_state();
+        let subject = if is_assignment { "Assignment" } else { "Whip" };
+        let action = if is_assignment && state == WhipState::Detached {
+            "ended"
+        } else {
+            action
+        };
         self.chat_widget
-            .add_info_message(format!("Whip {id} {action}."), None);
+            .add_info_message(format!("{subject} {id} {action}."), None);
     }
 
     fn start_assignment_by_ref(&mut self, id_or_target: &str) {
@@ -2135,11 +2306,15 @@ impl App {
         let destination = self.fire_destination_for_node(manager)?;
         let worker_label = self.node_label(&whip.target);
         let manager_label = self.node_label(manager);
-        let instruction = read_whip_instruction(
-            self.config.codex_home.as_ref(),
-            &self.config.cwd,
-            &whip.instructions,
-        );
+        let instruction = if whip.instructions == DRAFT_WITH_MANAGER_SPEC {
+            Err("drafted with Manager".to_string())
+        } else {
+            read_whip_instruction(
+                self.config.codex_home.as_ref(),
+                &self.config.cwd,
+                &whip.instructions,
+            )
+        };
         let task = assignment_birth_brief(
             &whip,
             &manager_label,
@@ -2231,7 +2406,7 @@ impl App {
                 last_user_turn_utc: Some(last_user_turn),
                 ..
             } = whip.kind
-                && now - last_user_turn < Duration::seconds(cadence_s as i64)
+                && now - last_user_turn < Duration::seconds(whip.cooldown_s as i64)
             {
                 return Err(format!(
                     "Assignment {id} is yielding to recent user activity."
@@ -2241,11 +2416,15 @@ impl App {
         if !self.target_node_is_idle(&whip.target) {
             return Err(format!("Whip target `{}` is not idle.", whip.target));
         }
-        let instruction = read_whip_instruction(
-            self.config.codex_home.as_ref(),
-            &self.config.cwd,
-            &whip.instructions,
-        );
+        let instruction = if whip.instructions == DRAFT_WITH_MANAGER_SPEC {
+            Err("drafted with Manager".to_string())
+        } else {
+            read_whip_instruction(
+                self.config.codex_home.as_ref(),
+                &self.config.cwd,
+                &whip.instructions,
+            )
+        };
         let destination_node = if is_assignment {
             let manager = whip
                 .holder
@@ -2395,12 +2574,19 @@ impl App {
                 whip.is_assignment()
                     && whip.holder.as_deref() == Some(manager_node_id.as_str())
                     && whip.state == WhipState::Armed
+                    && matches!(
+                        whip.kind,
+                        WhipKind::Assignment {
+                            phase: AssignmentPhase::Executing,
+                            ..
+                        }
+                    )
             })
             .map(|whip| whip.id.clone())
             .collect();
         for id in assignment_ids {
             let mut changed = false;
-            if output.contains(DEFAULT_STOP_MARKER) {
+            if assignment_done_marker(output) {
                 if let Some(whip) = self.orchestrate_whips.get_mut(&id)
                     && let WhipKind::Assignment { phase, .. } = &mut whip.kind
                 {
@@ -2658,11 +2844,13 @@ impl App {
         if whip.state == state && whip.expiry_notified {
             return;
         }
+        let is_assignment = whip.is_assignment();
         whip.state = state;
         whip.expiry_notified = true;
         self.persist_pane_state();
+        let subject = if is_assignment { "Assignment" } else { "Whip" };
         self.chat_widget
-            .add_info_message(format!("Whip {id} {}: {reason}.", state.label()), None);
+            .add_info_message(format!("{subject} {id} {}: {reason}.", state.label()), None);
     }
 
     fn resolve_orchestrate_target_node(&self, target: &str) -> Result<String, String> {
@@ -2681,7 +2869,10 @@ impl App {
 
     fn fire_destination_for_node(&self, node_id: &str) -> Result<FireDestination, String> {
         if let Some(thread_id) = node_id_thread(node_id) {
-            return Ok(FireDestination::Native(thread_id));
+            return self
+                .native_thread_loaded_for_orchestrate(thread_id)
+                .then_some(FireDestination::Native(thread_id))
+                .ok_or_else(|| format!("Native pane `{thread_id}` is not loaded."));
         }
         if let Some(pane_id) = node_id_pane(node_id) {
             if pane_id == CODEX_MAIN_PANE_ID {
@@ -2715,6 +2906,9 @@ impl App {
 
     fn target_node_is_idle(&self, node_id: &str) -> bool {
         if let Some(thread_id) = node_id_thread(node_id) {
+            if self.primary_thread_id == Some(thread_id) {
+                return self.native_thread_idle_for_orchestrate(thread_id);
+            }
             return self
                 .agent_navigation
                 .get(&thread_id)
@@ -2808,7 +3002,7 @@ fn assignment_mandate_task(
         .map(|text| format!("\n\nAssignment spec:\n{text}"))
         .unwrap_or_default();
     format!(
-        "Assignment {} mandate. Worker {worker_label} stopped at {}. Audit its latest result and act: dispatch the next concrete task with a pfterminal-send-task block, report ASSIGNMENT_BLOCKED: <reason> only for a genuinely user-owned decision, or emit WHIP_DONE only when complete. Spec source: {source}.{spec}",
+        "Assignment {} mandate. Worker {worker_label} stopped at {}. Audit its latest result and act: dispatch the next concrete task with a pfterminal-send-task block, report ASSIGNMENT_BLOCKED: <reason> only for a genuinely user-owned decision, or emit WHIP_DONE only when complete. When you emit either marker, place it alone on its own line. Spec source: {source}.{spec}",
         whip.id,
         now.to_rfc3339(),
     )
@@ -2843,7 +3037,7 @@ fn assignment_birth_brief(
             )
         });
     format!(
-        "You are Manager {manager_label} of Worker {worker_label}. You will ride it continuously until {duration} after execution starts.\n\nFirst iterate with the user to lock the spec. Your first pfterminal-send-task dispatch to Worker {worker_label} starts execution. When mandated, audit the Worker's latest output and dispatch the next concrete task. Answer user status questions from your context. Emit ASSIGNMENT_BLOCKED: <reason> only when a genuinely user-owned decision prevents progress, and emit WHIP_DONE only when the assignment is genuinely complete.\n\nAssume the user may be away for hours. Retry, work around, and conservatively re-scope problems autonomously. Keep a concise progress log in every response: what the Worker did, what you dispatched, and open risks. While executing, you are re-mandated every {} minutes when the Worker is stopped and the user is away. User messages always take priority.{inline}",
+        "You are Manager {manager_label} of Worker {worker_label}. You will ride it continuously until {duration} after execution starts.\n\nFirst iterate with the user to lock the spec. Your first pfterminal-send-task dispatch to Worker {worker_label} starts execution. When mandated, audit the Worker's latest output and dispatch the next concrete task. Answer user status questions from your context. Emit ASSIGNMENT_BLOCKED: <reason> only when a genuinely user-owned decision prevents progress, and emit WHIP_DONE only when the assignment is genuinely complete. When you emit either marker, place it alone on its own line.\n\nAssume the user may be away for hours. Retry, work around, and conservatively re-scope problems autonomously. Keep a concise progress log in every response: what the Worker did, what you dispatched, and open risks. While executing, you are re-mandated every {} minutes when the Worker is stopped and the user is away. User messages always take priority.{inline}",
         whip.cooldown_s / 60,
     )
 }
@@ -2860,10 +3054,16 @@ fn format_duration_seconds(seconds: i64) -> String {
 
 fn assignment_blocked_reason(output: &str) -> Option<String> {
     output.lines().find_map(|line| {
-        let (_, reason) = line.split_once("ASSIGNMENT_BLOCKED:")?;
+        let reason = line.trim().strip_prefix("ASSIGNMENT_BLOCKED:")?;
         let reason = reason.trim();
         (!reason.is_empty()).then(|| reason.to_string())
     })
+}
+
+fn assignment_done_marker(output: &str) -> bool {
+    output
+        .lines()
+        .any(|line| line.trim() == DEFAULT_STOP_MARKER)
 }
 
 fn assignment_phase_label(phase: &AssignmentPhase) -> String {
@@ -2872,6 +3072,24 @@ fn assignment_phase_label(phase: &AssignmentPhase) -> String {
         AssignmentPhase::Executing => "executing".to_string(),
         AssignmentPhase::Blocked { reason } => format!("blocked ({reason})"),
         AssignmentPhase::Done => "done".to_string(),
+    }
+}
+
+fn assignment_expiry_label(whip: &Whip, now: DateTime<Utc>) -> String {
+    if let WhipKind::Assignment {
+        phase: AssignmentPhase::Drafting,
+        execution_duration_s,
+        ..
+    } = &whip.kind
+    {
+        return execution_duration_s
+            .map(|seconds| format!("{} after start", format_duration_seconds(seconds)))
+            .unwrap_or_else(|| "unlimited".to_string());
+    }
+    match whip.expires_at {
+        Some(expires_at) if expires_at <= now => "expired".to_string(),
+        Some(expires_at) => format!("expires {}", expires_at.format("%H:%MZ")),
+        None => "unlimited".to_string(),
     }
 }
 
@@ -3082,6 +3300,49 @@ mod tests {
             Some("missing credentials".to_string())
         );
         assert_eq!(assignment_blocked_reason("ASSIGNMENT_BLOCKED:"), None);
+        assert_eq!(
+            assignment_blocked_reason("I will emit ASSIGNMENT_BLOCKED: missing credentials"),
+            None
+        );
+        assert!(!assignment_done_marker(
+            "I will emit WHIP_DONE when the work is complete."
+        ));
+        assert!(assignment_done_marker("progress\n  WHIP_DONE  \n"));
+    }
+
+    #[test]
+    fn drafting_expiry_label_uses_deferred_execution_budget() {
+        let now = Utc::now();
+        let mut whip = Whip::new(
+            "whip-1".to_string(),
+            Some("pane:manager".to_string()),
+            "pane:worker".to_string(),
+            "spec".to_string(),
+            ResolvedAttachOptions::default(),
+            now,
+        );
+        whip.kind = WhipKind::Assignment {
+            phase: AssignmentPhase::Drafting,
+            execution_started_utc: None,
+            last_user_turn_utc: Some(now),
+            failure_backoff_level: 0,
+            execution_duration_s: Some(8 * 60 * 60),
+        };
+        whip.expires_at = None;
+        assert_eq!(assignment_expiry_label(&whip, now), "8 hours after start");
+        if let WhipKind::Assignment {
+            execution_duration_s,
+            ..
+        } = &mut whip.kind
+        {
+            *execution_duration_s = None;
+        }
+        assert_eq!(assignment_expiry_label(&whip, now), "unlimited");
+    }
+
+    #[test]
+    fn draft_with_manager_name_is_reserved_for_guided_flow() {
+        assert!(validate_whip_name(DRAFT_WITH_MANAGER_SPEC).is_err());
     }
 
     #[test]
