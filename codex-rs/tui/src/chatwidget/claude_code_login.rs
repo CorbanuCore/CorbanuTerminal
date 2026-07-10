@@ -35,6 +35,33 @@ pub(crate) enum ClaudeCodeLoginInput {
     Cancel,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ClaudeCodePlanStatus {
+    Checking,
+    SignedIn {
+        email: Option<String>,
+        subscription: Option<String>,
+    },
+    SignedOut,
+    Unavailable,
+    Error,
+}
+
+pub(crate) fn refresh_status(app_event_tx: AppEventSender) {
+    tokio::spawn(async move {
+        let status = read_status(Path::new("claude"))
+            .await
+            .unwrap_or_else(|err| {
+                if err.kind() == std::io::ErrorKind::NotFound {
+                    ClaudeCodePlanStatus::Unavailable
+                } else {
+                    ClaudeCodePlanStatus::Error
+                }
+            });
+        app_event_tx.send(AppEvent::ClaudeCodePlanStatusReady { status });
+    });
+}
+
 pub(crate) fn start(app_event_tx: AppEventSender) -> mpsc::UnboundedSender<ClaudeCodeLoginInput> {
     start_with_executable(app_event_tx, Path::new("claude"))
 }
@@ -191,27 +218,46 @@ fn spawn_output_reader(
 }
 
 async fn verify_login(executable: &Path) -> Result<String, String> {
+    match read_status(executable).await {
+        Ok(ClaudeCodePlanStatus::SignedIn { .. }) => Ok(
+            "Claude Code plan login complete. Choose a Claude Plan model from /model.".to_string(),
+        ),
+        Ok(_) => {
+            Err("Claude Code is not signed in with a Claude subscription after login.".to_string())
+        }
+        Err(err) => Err(format!("Could not verify Claude Code login: {err}")),
+    }
+}
+
+async fn read_status(executable: &Path) -> std::io::Result<ClaudeCodePlanStatus> {
     let output = Command::new(executable)
         .args(["auth", "status", "--json"])
         .output()
-        .await
-        .map_err(|err| format!("Could not verify Claude Code login: {err}"))?;
+        .await?;
     if !output.status.success() {
-        return Err(format!(
-            "Claude Code login completed, but `claude auth status` failed ({}).",
-            output.status
-        ));
+        return Ok(ClaudeCodePlanStatus::SignedOut);
     }
-    let status: serde_json::Value = serde_json::from_slice(&output.stdout)
-        .map_err(|err| format!("Claude Code returned invalid authentication status: {err}"))?;
+    let status: serde_json::Value = serde_json::from_slice(&output.stdout).map_err(|err| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Claude Code returned invalid authentication status: {err}"),
+        )
+    })?;
     let logged_in = status.get("loggedIn").and_then(serde_json::Value::as_bool);
     let auth_method = status.get("authMethod").and_then(serde_json::Value::as_str);
     if logged_in != Some(true) || auth_method != Some("claude.ai") {
-        return Err(
-            "Claude Code is not signed in with a Claude subscription after login.".to_string(),
-        );
+        return Ok(ClaudeCodePlanStatus::SignedOut);
     }
-    Ok("Claude Code plan login complete. Choose a Claude Plan model from /model.".to_string())
+    Ok(ClaudeCodePlanStatus::SignedIn {
+        email: status
+            .get("email")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string),
+        subscription: status
+            .get("subscriptionType")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string),
+    })
 }
 
 fn extract_https_url(line: &str) -> Option<String> {

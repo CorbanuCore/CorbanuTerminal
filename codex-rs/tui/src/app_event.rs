@@ -1156,6 +1156,11 @@ pub(crate) enum AppEvent {
         result: Option<Result<String, String>>,
     },
 
+    /// Latest account status reported by Claude Code for the Providers screen.
+    ClaudeCodePlanStatusReady {
+        status: crate::chatwidget::claude_code_login::ClaudeCodePlanStatus,
+    },
+
     /// Device-code login data returned by account/login/start.
     CodexAccountDeviceLoginReady {
         login_id: String,

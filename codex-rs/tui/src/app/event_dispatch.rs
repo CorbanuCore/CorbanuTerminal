@@ -1272,6 +1272,9 @@ impl App {
             AppEvent::ClaudeCodePlanLoginFinished { result } => {
                 self.chat_widget.on_claude_code_plan_login_finished(result);
             }
+            AppEvent::ClaudeCodePlanStatusReady { status } => {
+                self.chat_widget.refresh_provider_credentials_status(status);
+            }
             AppEvent::CodexAccountDeviceLoginReady {
                 login_id,
                 verification_url,

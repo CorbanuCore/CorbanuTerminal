@@ -3,6 +3,8 @@
 use super::*;
 use crate::bottom_pane::BottomPaneView;
 use crate::bottom_pane::ViewCompletion;
+use crate::chatwidget::claude_code_login::ClaudeCodePlanStatus;
+use crate::status::StatusAccountDisplay;
 use codex_model_provider_info::AMBIENT_API_KEY_ENV_VAR;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR;
@@ -74,21 +76,69 @@ const PROVIDER_CREDENTIAL_OPTIONS: &[ProviderCredentialOption] = &[
 
 impl ChatWidget {
     pub(crate) fn open_provider_credentials_menu(&mut self) {
+        let params = self.provider_credentials_params(&ClaudeCodePlanStatus::Checking);
+        self.show_selection_view(params);
+        crate::chatwidget::claude_code_login::refresh_status(self.app_event_tx.clone());
+    }
+
+    pub(crate) fn refresh_provider_credentials_status(&mut self, status: ClaudeCodePlanStatus) {
+        let params = self.provider_credentials_params(&status);
+        self.bottom_pane
+            .replace_selection_view_if_present(PROVIDER_CREDENTIALS_VIEW_ID, params);
+    }
+
+    fn provider_credentials_params(
+        &self,
+        claude_status: &ClaudeCodePlanStatus,
+    ) -> SelectionViewParams {
         let mut header = ColumnRenderable::new();
         header.push(Line::from("Providers".bold()));
         header.push(Line::from(
-            "Add or replace provider credentials. API keys are stored in the vault.".dim(),
+            "Select a provider to sign in or replace credentials.".dim(),
         ));
 
-        self.show_selection_view(SelectionViewParams {
+        SelectionViewParams {
             view_id: Some(PROVIDER_CREDENTIALS_VIEW_ID),
             footer_hint: Some(standard_popup_hint_line()),
             is_searchable: true,
             search_placeholder: Some("Search providers".to_string()),
-            items: provider_credential_items(),
+            items: provider_credential_items(
+                &self.codex_account_status_description(),
+                &claude_status_description(claude_status),
+                |env_key| self.provider_api_key_status_description(env_key),
+            ),
             header: Box::new(header),
             ..Default::default()
-        });
+        }
+    }
+
+    fn codex_account_status_description(&self) -> String {
+        match self.status_account_display() {
+            Some(StatusAccountDisplay::ChatGpt { email, plan }) => {
+                signed_in_description(email.as_deref(), plan.as_deref())
+            }
+            _ if self.has_codex_backend_auth() => "Signed in".to_string(),
+            _ => "Not signed in".to_string(),
+        }
+    }
+
+    fn provider_api_key_status_description(&self, env_key: &str) -> String {
+        if std::env::var(env_key)
+            .ok()
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            return "Available from environment".to_string();
+        }
+        match codex_login::auth::provider_api_key_from_auth_storage(
+            &self.config.codex_home,
+            env_key,
+            self.config.cli_auth_credentials_store_mode,
+            self.config.auth_keyring_backend_kind(),
+        ) {
+            Ok(Some(value)) if !value.trim().is_empty() => "Stored in vault".to_string(),
+            Ok(_) => "Not configured".to_string(),
+            Err(_) => "Status unavailable".to_string(),
+        }
     }
 
     pub(crate) fn open_provider_api_key_add(
@@ -175,18 +225,29 @@ impl ChatWidget {
     }
 }
 
-fn provider_credential_items() -> Vec<SelectionItem> {
+fn provider_credential_items(
+    codex_account_status: &str,
+    claude_status: &str,
+    api_key_status: impl Fn(&str) -> String,
+) -> Vec<SelectionItem> {
     PROVIDER_CREDENTIAL_OPTIONS
         .iter()
-        .map(provider_credential_item)
+        .map(|option| {
+            provider_credential_item(option, codex_account_status, claude_status, &api_key_status)
+        })
         .collect()
 }
 
-fn provider_credential_item(option: &ProviderCredentialOption) -> SelectionItem {
+fn provider_credential_item(
+    option: &ProviderCredentialOption,
+    codex_account_status: &str,
+    claude_status: &str,
+    api_key_status: &impl Fn(&str) -> String,
+) -> SelectionItem {
     match option {
         ProviderCredentialOption::CodexAccount => SelectionItem {
             name: "Provider: OpenAI Codex Account".to_string(),
-            description: Some("Sign in with device code".to_string()),
+            description: Some(codex_account_status.to_string()),
             actions: vec![Box::new(|tx| {
                 tx.send(AppEvent::OpenCodexAccountDeviceLogin);
             })],
@@ -195,7 +256,7 @@ fn provider_credential_item(option: &ProviderCredentialOption) -> SelectionItem 
         },
         ProviderCredentialOption::ClaudeCodePlan => SelectionItem {
             name: "Provider: Claude Code Plan".to_string(),
-            description: Some("Sign in with Claude subscription".to_string()),
+            description: Some(claude_status.to_string()),
             actions: vec![Box::new(|tx| {
                 tx.send(AppEvent::OpenClaudeCodePlanLogin);
             })],
@@ -212,7 +273,7 @@ fn provider_credential_item(option: &ProviderCredentialOption) -> SelectionItem 
             let env_key = env_key.to_string();
             SelectionItem {
                 name: provider_credential_display_name(&provider_name, &env_key),
-                description: Some(format!("Store {env_key} in the vault")),
+                description: Some(api_key_status(&env_key)),
                 actions: vec![Box::new(move |tx| {
                     tx.send(AppEvent::OpenProviderApiKeyAdd {
                         provider_id: provider_id.clone(),
@@ -225,6 +286,35 @@ fn provider_credential_item(option: &ProviderCredentialOption) -> SelectionItem 
             }
         }
     }
+}
+
+fn claude_status_description(status: &ClaudeCodePlanStatus) -> String {
+    match status {
+        ClaudeCodePlanStatus::Checking => "Checking sign-in...".to_string(),
+        ClaudeCodePlanStatus::SignedIn {
+            email,
+            subscription,
+        } => signed_in_description(email.as_deref(), subscription.as_deref()),
+        ClaudeCodePlanStatus::SignedOut => "Not signed in".to_string(),
+        ClaudeCodePlanStatus::Unavailable => "Claude Code not installed".to_string(),
+        ClaudeCodePlanStatus::Error => "Status unavailable".to_string(),
+    }
+}
+
+fn signed_in_description(email: Option<&str>, plan: Option<&str>) -> String {
+    let mut parts = vec!["Signed in".to_string()];
+    if let Some(email) = email.filter(|email| !email.trim().is_empty()) {
+        parts.push(email.to_string());
+    }
+    if let Some(plan) = plan.filter(|plan| !plan.trim().is_empty()) {
+        let mut characters = plan.chars();
+        let display = characters
+            .next()
+            .map(|first| format!("{}{} plan", first.to_uppercase(), characters.as_str()))
+            .unwrap_or_default();
+        parts.push(display);
+    }
+    parts.join(" · ")
 }
 
 fn provider_credential_display_name(provider_name: &str, env_key: &str) -> String {
@@ -384,9 +474,17 @@ mod tests {
     use super::*;
     use crate::app_event_sender::AppEventSender;
 
+    fn test_provider_rows() -> Vec<SelectionItem> {
+        provider_credential_items(
+            "Not signed in",
+            "Signed in · user@example.com · Max plan",
+            |_| "Not configured".to_string(),
+        )
+    }
+
     #[test]
     fn recommended_provider_rows_are_human_readable() {
-        let rows = provider_credential_items();
+        let rows = test_provider_rows();
         let names: Vec<_> = rows.iter().map(|row| row.name.as_str()).collect();
         assert_eq!(
             names,
@@ -402,27 +500,18 @@ mod tests {
                 "Provider: Vercel API Key",
             ]
         );
-        assert_eq!(
-            rows[0].description.as_deref(),
-            Some("Sign in with device code")
-        );
+        assert_eq!(rows[0].description.as_deref(), Some("Not signed in"));
         assert_eq!(
             rows[1].description.as_deref(),
-            Some("Sign in with Claude subscription")
+            Some("Signed in · user@example.com · Max plan")
         );
-        assert_eq!(
-            rows[2].description.as_deref(),
-            Some("Store ANTHROPIC_API_KEY in the vault")
-        );
-        assert_eq!(
-            rows[3].description.as_deref(),
-            Some("Store AMBIENT_API_KEY in the vault")
-        );
+        assert_eq!(rows[2].description.as_deref(), Some("Not configured"));
+        assert_eq!(rows[3].description.as_deref(), Some("Not configured"));
     }
 
     #[test]
     fn provider_rows_dispatch_expected_events() {
-        let rows = provider_credential_items();
+        let rows = test_provider_rows();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
 
@@ -455,6 +544,43 @@ mod tests {
                     && provider_name == "Ambient"
                     && env_key == AMBIENT_API_KEY_ENV_VAR
         ));
+    }
+
+    #[test]
+    fn provider_status_descriptions_are_explicit() {
+        assert_eq!(
+            claude_status_description(&ClaudeCodePlanStatus::SignedIn {
+                email: Some("user@example.com".to_string()),
+                subscription: Some("max".to_string()),
+            }),
+            "Signed in · user@example.com · Max plan"
+        );
+        assert_eq!(
+            claude_status_description(&ClaudeCodePlanStatus::SignedOut),
+            "Not signed in"
+        );
+        assert_eq!(
+            claude_status_description(&ClaudeCodePlanStatus::Unavailable),
+            "Claude Code not installed"
+        );
+    }
+
+    #[test]
+    fn provider_status_rows_snapshot() {
+        let rows = test_provider_rows();
+        let rendered = rows
+            .iter()
+            .map(|row| {
+                format!(
+                    "{:<38} {}",
+                    row.name,
+                    row.description.as_deref().unwrap_or_default()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        insta::assert_snapshot!(rendered);
     }
 
     #[test]
