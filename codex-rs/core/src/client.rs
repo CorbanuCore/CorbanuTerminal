@@ -2876,11 +2876,13 @@ fn mark_chat_message_cache_control(message: &mut ChatMessage) -> bool {
     let marked_content = match content {
         ChatMessageContent::Text(text) => ChatMessageContent::cache_control_text(text),
         ChatMessageContent::Parts(mut parts) => {
-            if let Some(part) = parts
-                .iter_mut()
-                .rev()
-                .find(|part| part.kind == "text" && !part.text.trim().is_empty())
-            {
+            if let Some(part) = parts.iter_mut().rev().find(|part| {
+                part.kind == "text"
+                    && part
+                        .text
+                        .as_deref()
+                        .is_some_and(|text| !text.trim().is_empty())
+            }) {
                 part.cache_control = Some(ChatCacheControl::ephemeral());
             } else {
                 parts.push(ChatContentPart::cache_control_text("..."));
@@ -2900,10 +2902,10 @@ fn append_chat_messages_for_response_item(
 ) {
     match item {
         ResponseItem::Message { role, content, .. } => {
-            if let Some(content) = content_items_to_chat_text(&content) {
+            if let Some(content) = content_items_to_chat_content(&content) {
                 messages.push(ChatMessage {
                     role: normalize_chat_role(&role),
-                    content: Some(ChatMessageContent::text(content)),
+                    content: Some(content),
                     tool_call_id: None,
                     tool_calls: Vec::new(),
                 });
@@ -2963,6 +2965,15 @@ fn append_chat_messages_for_response_item(
                 tool_call_id: Some(call_id),
                 tool_calls: Vec::new(),
             });
+            let image_parts = chat_tool_result_image_parts(&output);
+            if !image_parts.is_empty() {
+                messages.push(ChatMessage {
+                    role: "user".to_string(),
+                    content: Some(ChatMessageContent::Parts(image_parts)),
+                    tool_call_id: None,
+                    tool_calls: Vec::new(),
+                });
+            }
         }
         ResponseItem::Reasoning { .. }
         | ResponseItem::LocalShellCall { .. }
@@ -2975,6 +2986,70 @@ fn append_chat_messages_for_response_item(
         | ResponseItem::ContextCompaction { .. }
         | ResponseItem::Other => {}
     }
+}
+
+fn chat_image_detail(detail: Option<codex_protocol::models::ImageDetail>) -> Option<String> {
+    detail.map(|detail| match detail {
+        codex_protocol::models::ImageDetail::Auto => "auto".to_string(),
+        codex_protocol::models::ImageDetail::Low => "low".to_string(),
+        codex_protocol::models::ImageDetail::High
+        | codex_protocol::models::ImageDetail::Original => "high".to_string(),
+    })
+}
+
+fn chat_image_part(
+    image_url: String,
+    detail: Option<codex_protocol::models::ImageDetail>,
+) -> ChatContentPart {
+    ChatContentPart::image_url(image_url, chat_image_detail(detail))
+}
+
+fn content_items_to_chat_content(content: &[ContentItem]) -> Option<ChatMessageContent> {
+    if !content
+        .iter()
+        .any(|item| matches!(item, ContentItem::InputImage { .. }))
+    {
+        return content_items_to_chat_text(content).map(ChatMessageContent::text);
+    }
+
+    let parts = content
+        .iter()
+        .filter_map(|item| match item {
+            ContentItem::InputText { text } | ContentItem::OutputText { text }
+                if !text.trim().is_empty() =>
+            {
+                Some(ChatContentPart::text(text.clone()))
+            }
+            ContentItem::InputImage { image_url, detail } => {
+                Some(chat_image_part(image_url.clone(), *detail))
+            }
+            ContentItem::InputText { .. } | ContentItem::OutputText { .. } => None,
+        })
+        .collect::<Vec<_>>();
+
+    (!parts.is_empty()).then_some(ChatMessageContent::Parts(parts))
+}
+
+fn chat_tool_result_image_parts(
+    output: &codex_protocol::models::FunctionCallOutputPayload,
+) -> Vec<ChatContentPart> {
+    let codex_protocol::models::FunctionCallOutputBody::ContentItems(items) = &output.body else {
+        return Vec::new();
+    };
+
+    items
+        .iter()
+        .filter_map(|item| match item {
+            codex_protocol::models::FunctionCallOutputContentItem::InputImage {
+                image_url,
+                detail,
+            } => Some(chat_image_part(image_url.clone(), *detail)),
+            codex_protocol::models::FunctionCallOutputContentItem::InputText { .. }
+            | codex_protocol::models::FunctionCallOutputContentItem::EncryptedContent { .. } => {
+                None
+            }
+        })
+        .collect()
 }
 
 fn content_items_to_chat_text(content: &[ContentItem]) -> Option<String> {
@@ -2995,6 +3070,58 @@ fn content_items_to_chat_text(content: &[ContentItem]) -> Option<String> {
     }
 }
 
+fn anthropic_image_block(image_url: &str) -> Value {
+    let source = if let Some((metadata, data)) = image_url
+        .strip_prefix("data:")
+        .and_then(|value| value.split_once(','))
+        && let Some(media_type) = metadata.strip_suffix(";base64")
+    {
+        json!({
+            "type": "base64",
+            "media_type": media_type,
+            "data": data,
+        })
+    } else {
+        json!({
+            "type": "url",
+            "url": image_url,
+        })
+    };
+
+    json!({
+        "type": "image",
+        "source": source,
+    })
+}
+
+fn anthropic_tool_result_content(
+    output: &codex_protocol::models::FunctionCallOutputPayload,
+) -> Value {
+    match &output.body {
+        codex_protocol::models::FunctionCallOutputBody::Text(text) => Value::String(text.clone()),
+        codex_protocol::models::FunctionCallOutputBody::ContentItems(items) => Value::Array(
+            items
+                .iter()
+                .filter_map(|item| match item {
+                    codex_protocol::models::FunctionCallOutputContentItem::InputText { text } => {
+                        Some(json!({
+                            "type": "text",
+                            "text": text,
+                        }))
+                    }
+                    codex_protocol::models::FunctionCallOutputContentItem::InputImage {
+                        image_url,
+                        ..
+                    } => Some(anthropic_image_block(image_url)),
+                    codex_protocol::models::FunctionCallOutputContentItem::EncryptedContent {
+                        ..
+                    } => None,
+                })
+                .collect(),
+        ),
+    }
+}
+
 fn normalize_chat_role(role: &str) -> String {
     match role {
         "assistant" | "system" | "tool" | "user" => role.to_string(),
@@ -3010,20 +3137,25 @@ fn append_anthropic_message_for_response_item(
 ) {
     match item {
         ResponseItem::Message { role, content, .. } => {
-            if let Some(text) = content_items_to_chat_text(&content) {
-                let role = if role == "assistant" {
-                    "assistant"
-                } else {
-                    "user"
+            let role = if role == "assistant" {
+                "assistant"
+            } else {
+                "user"
+            };
+            for item in content {
+                let block = match item {
+                    ContentItem::InputText { text } | ContentItem::OutputText { text }
+                        if !text.trim().is_empty() =>
+                    {
+                        json!({
+                            "type": "text",
+                            "text": text,
+                        })
+                    }
+                    ContentItem::InputImage { image_url, .. } => anthropic_image_block(&image_url),
+                    ContentItem::InputText { .. } | ContentItem::OutputText { .. } => continue,
                 };
-                push_anthropic_message(
-                    messages,
-                    role,
-                    json!({
-                        "type": "text",
-                        "text": text,
-                    }),
-                );
+                push_anthropic_message(messages, role, block);
             }
         }
         ResponseItem::AgentMessage { .. } => {}
@@ -3081,7 +3213,7 @@ fn append_anthropic_message_for_response_item(
                 json!({
                     "type": "tool_result",
                     "tool_use_id": call_id,
-                    "content": output.body.to_text().unwrap_or_else(|| output.to_string()),
+                    "content": anthropic_tool_result_content(&output),
                 }),
             );
         }

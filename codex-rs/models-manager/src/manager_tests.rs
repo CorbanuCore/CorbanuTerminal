@@ -10,6 +10,7 @@ use codex_login::ExternalAuth;
 use codex_login::ExternalAuthRefreshContext;
 use codex_login::ExternalAuthTokens;
 use codex_login::TokenData;
+use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::ReasoningEffort;
@@ -1148,6 +1149,44 @@ fn bundled_models_json_roundtrips() {
         !response.models.is_empty(),
         "bundled models.json should contain at least one model"
     );
+}
+
+#[test]
+fn bundled_models_json_tracks_verified_image_capabilities() {
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+
+    let supports_images = |slug: &str| {
+        response
+            .models
+            .iter()
+            .find(|model| model.slug == slug)
+            .unwrap_or_else(|| panic!("bundled models.json should include {slug}"))
+            .input_modalities
+            .contains(&InputModality::Image)
+    };
+
+    for slug in [
+        "moonshotai/kimi-k2.7-code",
+        "minimax/minimax-m3",
+        "google/gemini-3.5-flash",
+        "claude-opus-4-8-plan",
+        "claude-fable-5-plan",
+        "claude-opus-4-8",
+        "claude-fable-5",
+    ] {
+        assert!(supports_images(slug), "{slug} should accept image input");
+    }
+
+    for slug in [
+        "z-ai/glm-5.2",
+        "zai/glm-5.2",
+        "deepseek/deepseek-v4-pro",
+        "tencent/hy3:free",
+        "openrouter/owl-alpha",
+    ] {
+        assert!(!supports_images(slug), "{slug} should remain text-only");
+    }
 }
 
 #[test]

@@ -704,6 +704,85 @@ fn chat_replay_drops_anthropic_reasoning_blocks() {
 }
 
 #[test]
+fn chat_replay_preserves_user_and_tool_result_images() {
+    let mut messages = Vec::<codex_api::ChatMessage>::new();
+    let mut skipped = std::collections::HashSet::new();
+    super::append_chat_messages_for_response_item(
+        ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![
+                ContentItem::InputText {
+                    text: "describe image".to_string(),
+                },
+                ContentItem::InputImage {
+                    image_url: "data:image/png;base64,cG5n".to_string(),
+                    detail: Some(codex_protocol::models::ImageDetail::High),
+                },
+            ],
+            phase: None,
+            metadata: None,
+        },
+        &mut messages,
+        &mut skipped,
+    );
+    super::append_chat_messages_for_response_item(
+        ResponseItem::FunctionCall {
+            id: None,
+            name: "view_image".to_string(),
+            namespace: None,
+            arguments: r#"{"path":"image.png"}"#.to_string(),
+            call_id: "call_image".to_string(),
+            metadata: None,
+        },
+        &mut messages,
+        &mut skipped,
+    );
+    super::append_chat_messages_for_response_item(
+        ResponseItem::FunctionCallOutput {
+            id: None,
+            call_id: "call_image".to_string(),
+            output: FunctionCallOutputPayload::from_content_items(vec![
+                codex_protocol::models::FunctionCallOutputContentItem::InputText {
+                    text: "loaded".to_string(),
+                },
+                codex_protocol::models::FunctionCallOutputContentItem::InputImage {
+                    image_url: "https://example.com/tool.webp".to_string(),
+                    detail: Some(codex_protocol::models::ImageDetail::Low),
+                },
+            ]),
+            metadata: None,
+        },
+        &mut messages,
+        &mut skipped,
+    );
+
+    let body = serde_json::to_value(messages).expect("serialize chat messages");
+    assert_eq!(
+        body.pointer("/0/content/1"),
+        Some(&json!({
+            "type": "image_url",
+            "image_url": {
+                "url": "data:image/png;base64,cG5n",
+                "detail": "high"
+            }
+        }))
+    );
+    assert_eq!(body.pointer("/2/role"), Some(&json!("tool")));
+    assert_eq!(body.pointer("/3/role"), Some(&json!("user")));
+    assert_eq!(
+        body.pointer("/3/content/0"),
+        Some(&json!({
+            "type": "image_url",
+            "image_url": {
+                "url": "https://example.com/tool.webp",
+                "detail": "low"
+            }
+        }))
+    );
+}
+
+#[test]
 fn anthropic_replays_thinking_before_tool_use_in_same_assistant_turn() {
     let thinking_block = json!({
         "type": "thinking",
@@ -1563,6 +1642,109 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
         body.pointer("/system/0/cache_control/type"),
         Some(&json!("ephemeral")),
         "Claude Plan identity-only requests cache the identity block"
+    );
+}
+
+#[test]
+fn anthropic_messages_request_preserves_user_and_tool_result_images() {
+    let client = ModelClient::new(
+        /*auth_manager*/ None,
+        ThreadId::new(),
+        ModelProviderInfo::create_anthropic_provider(),
+        SessionSource::Cli,
+        /*model_verbosity*/ None,
+        /*enable_request_compression*/ false,
+        /*include_timing_metrics*/ false,
+        /*beta_features_header*/ None,
+        /*item_ids_enabled*/ false,
+        /*attestation_provider*/ None,
+    );
+    let prompt = super::Prompt {
+        base_instructions: BaseInstructions {
+            text: "system instructions".to_string(),
+        },
+        input: vec![
+            ResponseItem::Message {
+                id: None,
+                role: "user".to_string(),
+                content: vec![
+                    ContentItem::InputText {
+                        text: "describe these images".to_string(),
+                    },
+                    ContentItem::InputImage {
+                        image_url: "data:image/png;base64,cG5n".to_string(),
+                        detail: None,
+                    },
+                    ContentItem::InputImage {
+                        image_url: "https://example.com/image.webp".to_string(),
+                        detail: None,
+                    },
+                ],
+                phase: None,
+                metadata: None,
+            },
+            ResponseItem::FunctionCall {
+                id: None,
+                name: "view_image".to_string(),
+                namespace: None,
+                arguments: r#"{"path":"image.png"}"#.to_string(),
+                call_id: "toolu_image".to_string(),
+                metadata: None,
+            },
+            ResponseItem::FunctionCallOutput {
+                id: None,
+                call_id: "toolu_image".to_string(),
+                output: FunctionCallOutputPayload::from_content_items(vec![
+                    codex_protocol::models::FunctionCallOutputContentItem::InputText {
+                        text: "loaded image".to_string(),
+                    },
+                    codex_protocol::models::FunctionCallOutputContentItem::InputImage {
+                        image_url: "data:image/jpeg;base64,anBlZw==".to_string(),
+                        detail: None,
+                    },
+                ]),
+                metadata: None,
+            },
+        ],
+        ..Default::default()
+    };
+
+    let request = client
+        .build_anthropic_messages_request(&prompt, &test_anthropic_opus_model_info(), None)
+        .expect("Anthropic messages request");
+    let body = serde_json::to_value(request).expect("serialize request");
+
+    assert_eq!(
+        body.pointer("/messages/0/content/1"),
+        Some(&json!({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/png",
+                "data": "cG5n"
+            }
+        }))
+    );
+    assert_eq!(
+        body.pointer("/messages/0/content/2"),
+        Some(&json!({
+            "type": "image",
+            "source": {
+                "type": "url",
+                "url": "https://example.com/image.webp"
+            }
+        }))
+    );
+    assert_eq!(
+        body.pointer("/messages/2/content/0/content/1"),
+        Some(&json!({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/jpeg",
+                "data": "anBlZw=="
+            }
+        }))
     );
 }
 
