@@ -5,6 +5,8 @@
 
 use super::*;
 use crate::bottom_pane::SelectionTab;
+use crate::spawn_orchestration::SpawnRole;
+use crate::spawn_orchestration::spawn_reasoning_effort_for_role;
 use codex_model_provider_info::AMAZON_BEDROCK_GPT_5_4_MODEL_ID;
 use codex_model_provider_info::AMAZON_BEDROCK_GPT_5_5_MODEL_ID;
 use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
@@ -45,6 +47,34 @@ const OPENAI_GPT_5_5_MODEL: &str = "gpt-5.5";
 const OPENAI_GPT_5_6_SOL_MODEL: &str = "gpt-5.6-sol";
 const OPENAI_GPT_5_6_TERRA_MODEL: &str = "gpt-5.6-terra";
 const OPENAI_GPT_5_6_LUNA_MODEL: &str = "gpt-5.6-luna";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ModelSelectionPurpose {
+    Session,
+    SpawnAgent {
+        role: SpawnRole,
+        parent_node_id: Option<String>,
+        default_model: String,
+    },
+}
+
+impl ModelSelectionPurpose {
+    fn selected_model<'a>(&'a self, session_model: &'a str) -> &'a str {
+        match self {
+            Self::Session => session_model,
+            Self::SpawnAgent { default_model, .. } => default_model,
+        }
+    }
+
+    fn provider_subtitle(&self, provider_subtitle: &str) -> String {
+        match self {
+            Self::Session => provider_subtitle.to_string(),
+            Self::SpawnAgent { role, .. } => {
+                format!("Codex {} pane - {provider_subtitle}", role.label())
+            }
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ModelPickerProviderGroup {
@@ -330,6 +360,14 @@ impl ChatWidget {
     }
 
     pub(crate) fn open_all_models_popup(&mut self, presets: Vec<ModelPreset>) {
+        self.open_all_models_popup_for_purpose(presets, ModelSelectionPurpose::Session);
+    }
+
+    pub(crate) fn open_all_models_popup_for_purpose(
+        &mut self,
+        presets: Vec<ModelPreset>,
+        purpose: ModelSelectionPurpose,
+    ) {
         let presets: Vec<ModelPreset> = presets
             .into_iter()
             .filter(Self::show_in_pfterminal_model_picker)
@@ -358,7 +396,7 @@ impl ChatWidget {
             else {
                 continue;
             };
-            items.push(self.model_picker_item(preset));
+            items.push(self.model_picker_item(preset, purpose.clone()));
         }
         for (_, items) in &mut provider_items {
             items.sort_by_key(|item| !item.is_default);
@@ -366,7 +404,8 @@ impl ChatWidget {
         provider_items.retain(|(_, items)| !items.is_empty());
 
         let (items, tabs, initial_tab_id, footer_hint) = if provider_items.len() > 1 {
-            let current_provider = Self::model_provider_for_selection(self.current_model());
+            let selected_model = purpose.selected_model(self.current_model());
+            let current_provider = Self::model_provider_for_selection(selected_model);
             let current_group = Self::model_picker_provider_group(current_provider.as_deref());
             let initial_tab_id = current_group
                 .filter(|group| {
@@ -380,7 +419,10 @@ impl ChatWidget {
                 .map(|(group, items)| SelectionTab {
                     id: group.id.to_string(),
                     label: group.label.to_string(),
-                    header: self.model_menu_header("Select Model and Effort", group.subtitle),
+                    header: self.model_menu_header(
+                        "Select Model and Effort",
+                        &purpose.provider_subtitle(group.subtitle),
+                    ),
                     items,
                 })
                 .collect();
@@ -416,9 +458,13 @@ impl ChatWidget {
         });
     }
 
-    fn model_picker_item(&self, preset: ModelPreset) -> SelectionItem {
+    fn model_picker_item(
+        &self,
+        preset: ModelPreset,
+        purpose: ModelSelectionPurpose,
+    ) -> SelectionItem {
         let description = Self::model_description_for_preset(&preset);
-        let is_current = preset.model.as_str() == self.current_model();
+        let is_current = preset.model.as_str() == purpose.selected_model(self.current_model());
         let direct_select = preset.supported_reasoning_efforts.len() <= 1;
         let preset_for_action = preset.clone();
         let display_name = Self::model_display_label_for_preset(&preset);
@@ -427,6 +473,7 @@ impl ChatWidget {
             let preset_for_event = preset_for_action.clone();
             tx.send(AppEvent::OpenReasoningPopup {
                 model: preset_for_event,
+                purpose: purpose.clone(),
             });
         })];
         SelectionItem {
@@ -669,7 +716,22 @@ impl ChatWidget {
     }
 
     /// Open a popup to choose the reasoning effort (stage 2) for the given model.
+    #[cfg(test)]
     pub(crate) fn open_reasoning_popup(&mut self, preset: ModelPreset) {
+        self.open_reasoning_popup_for_purpose(preset, ModelSelectionPurpose::Session);
+    }
+
+    pub(crate) fn open_reasoning_popup_for_purpose(
+        &mut self,
+        preset: ModelPreset,
+        purpose: ModelSelectionPurpose,
+    ) {
+        let spawn_default_effort = match &purpose {
+            ModelSelectionPurpose::SpawnAgent { role, .. } => {
+                Some(spawn_reasoning_effort_for_role(*role, &preset))
+            }
+            ModelSelectionPurpose::Session => None,
+        };
         let model_label = Self::model_display_label_for_preset(&preset);
         let default_effort = preset.default_reasoning_effort;
         let supported = preset.supported_reasoning_efforts;
@@ -709,16 +771,33 @@ impl ChatWidget {
         if choices.len() == 1 {
             let selected_effort = choices.first().cloned();
             let selected_model = preset.model;
-            if self
-                .should_prompt_plan_mode_reasoning_scope(&selected_model, selected_effort.clone())
-            {
-                self.app_event_tx
-                    .send(AppEvent::OpenPlanReasoningScopePrompt {
-                        model: selected_model,
-                        effort: selected_effort,
-                    });
-            } else {
-                self.apply_model_and_effort(selected_model, selected_effort);
+            match purpose {
+                ModelSelectionPurpose::Session => {
+                    if self.should_prompt_plan_mode_reasoning_scope(
+                        &selected_model,
+                        selected_effort.clone(),
+                    ) {
+                        self.app_event_tx
+                            .send(AppEvent::OpenPlanReasoningScopePrompt {
+                                model: selected_model,
+                                effort: selected_effort,
+                            });
+                    } else {
+                        self.apply_model_and_effort(selected_model, selected_effort);
+                    }
+                }
+                ModelSelectionPurpose::SpawnAgent {
+                    role,
+                    parent_node_id,
+                    ..
+                } => self.app_event_tx.send(AppEvent::CreateSpawnAgent {
+                    role,
+                    parent_node_id,
+                    agent_nickname: None,
+                    provider: Self::model_provider_for_selection(&selected_model),
+                    model: selected_model,
+                    effort: selected_effort,
+                }),
             }
             return;
         }
@@ -729,17 +808,19 @@ impl ChatWidget {
 
         let model_slug = preset.model.to_string();
         let is_current_model = self.current_model() == preset.model.as_str();
-        let highlight_choice = if is_current_model {
-            if in_plan_mode {
-                self.config
-                    .plan_mode_reasoning_effort
-                    .clone()
-                    .or_else(|| self.effective_reasoning_effort())
-            } else {
-                self.effective_reasoning_effort()
+        let highlight_choice = match &purpose {
+            ModelSelectionPurpose::SpawnAgent { .. } => spawn_default_effort,
+            ModelSelectionPurpose::Session if is_current_model => {
+                if in_plan_mode {
+                    self.config
+                        .plan_mode_reasoning_effort
+                        .clone()
+                        .or_else(|| self.effective_reasoning_effort())
+                } else {
+                    self.effective_reasoning_effort()
+                }
             }
-        } else {
-            default_choice.clone()
+            ModelSelectionPurpose::Session => default_choice.clone(),
         };
         let selection_choice = highlight_choice.clone().or_else(|| default_choice.clone());
         let initial_selected_idx = choices
@@ -773,30 +854,48 @@ impl ChatWidget {
 
             let model_for_action = model_slug.clone();
             let choice_effort = Some(effort);
-            let provider_for_action = Self::model_provider_for_selection(&model_for_action);
-            let should_prompt_plan_mode_scope = self.should_prompt_plan_mode_reasoning_scope(
-                model_slug.as_str(),
-                choice_effort.clone(),
-            );
-            let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
-                if should_prompt_plan_mode_scope {
-                    tx.send(AppEvent::OpenPlanReasoningScopePrompt {
+            let should_prompt_plan_mode_scope = matches!(purpose, ModelSelectionPurpose::Session)
+                && self.should_prompt_plan_mode_reasoning_scope(
+                    model_slug.as_str(),
+                    choice_effort.clone(),
+                );
+            let purpose_for_action = purpose.clone();
+            let actions: Vec<SelectionAction> =
+                vec![Box::new(move |tx| match &purpose_for_action {
+                    ModelSelectionPurpose::Session => {
+                        if should_prompt_plan_mode_scope {
+                            tx.send(AppEvent::OpenPlanReasoningScopePrompt {
+                                model: model_for_action.clone(),
+                                effort: choice_effort.clone(),
+                            });
+                            return;
+                        }
+                        let provider_for_action =
+                            Self::model_provider_for_selection(&model_for_action);
+                        tx.send(AppEvent::UpdateModelSelection {
+                            model: model_for_action.clone(),
+                            provider: provider_for_action.clone(),
+                        });
+                        tx.send(AppEvent::UpdateReasoningEffort(choice_effort.clone()));
+                        tx.send(AppEvent::PersistModelSelection {
+                            model: model_for_action.clone(),
+                            provider: provider_for_action,
+                            effort: choice_effort.clone(),
+                        });
+                    }
+                    ModelSelectionPurpose::SpawnAgent {
+                        role,
+                        parent_node_id,
+                        ..
+                    } => tx.send(AppEvent::CreateSpawnAgent {
+                        role: *role,
+                        parent_node_id: parent_node_id.clone(),
+                        agent_nickname: None,
+                        provider: Self::model_provider_for_selection(&model_for_action),
                         model: model_for_action.clone(),
                         effort: choice_effort.clone(),
-                    });
-                } else {
-                    tx.send(AppEvent::UpdateModelSelection {
-                        model: model_for_action.clone(),
-                        provider: provider_for_action.clone(),
-                    });
-                    tx.send(AppEvent::UpdateReasoningEffort(choice_effort.clone()));
-                    tx.send(AppEvent::PersistModelSelection {
-                        model: model_for_action.clone(),
-                        provider: provider_for_action.clone(),
-                        effort: choice_effort.clone(),
-                    });
-                }
-            })];
+                    }),
+                })];
 
             items.push(SelectionItem {
                 name: effort_label,

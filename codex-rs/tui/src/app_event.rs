@@ -1103,6 +1103,7 @@ pub(crate) enum AppEvent {
     /// Open the reasoning selection popup after picking a model.
     OpenReasoningPopup {
         model: ModelPreset,
+        purpose: crate::chatwidget::ModelSelectionPurpose,
     },
 
     /// Open the Plan-mode reasoning scope prompt for the selected model/effort.

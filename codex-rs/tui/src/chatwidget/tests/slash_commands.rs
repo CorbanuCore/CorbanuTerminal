@@ -424,7 +424,9 @@ async fn queued_settings_selection_applies_before_next_input() {
     assert_matches!(op_rx.try_recv(), Err(TryRecvError::Empty));
     while let Ok(event) = rx.try_recv() {
         match event {
-            AppEvent::OpenReasoningPopup { model } => chat.open_reasoning_popup(model),
+            AppEvent::OpenReasoningPopup { model, purpose } => {
+                chat.open_reasoning_popup_for_purpose(model, purpose)
+            }
             AppEvent::UpdateModel(model) => chat.set_model(&model),
             AppEvent::UpdateModelSelection { model, .. } => chat.set_model(&model),
             AppEvent::UpdateReasoningEffort(effort) => chat.set_reasoning_effort(effort),

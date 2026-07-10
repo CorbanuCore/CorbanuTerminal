@@ -5,7 +5,6 @@ use crate::bottom_pane::SelectionItem;
 use crate::bottom_pane::SelectionViewParams;
 use crate::bottom_pane::custom_prompt_view::CustomPromptView;
 use crate::bottom_pane::popup_consts::standard_popup_hint_line;
-use crate::chatwidget::ChatWidget;
 use crate::claude_panes::CODEX_MAIN_PANE_ID;
 use crate::claude_panes::ClaudeProviderProfileKind;
 use crate::multi_agents::agent_picker_status_dot_spans;
@@ -1010,61 +1009,20 @@ impl App {
         role: SpawnRole,
         parent_node_id: Option<String>,
     ) {
-        let current_model = self.native_spawn_default_model();
+        let default_model = self.native_spawn_default_model();
         let presets = self
             .chat_widget
             .model_catalog()
             .try_list_models()
             .unwrap_or_default();
-        let current_effort = self.native_spawn_effort_for_model(role, &current_model);
-        let mut items = Vec::new();
-        items.push(section_item("Codex Native Agent"));
-        items.push(spawn_model_item(
-            role,
-            parent_node_id.clone(),
-            current_model.clone(),
-            ChatWidget::model_provider_for_selection(&current_model),
-            current_effort,
-            Some(format!(
-                "Create a Codex-native {} pane with the current model and role default reasoning.",
-                role.label()
-            )),
-            true,
-        ));
-
-        for preset in presets
-            .into_iter()
-            .filter(ChatWidget::show_in_pfterminal_model_picker)
-            .filter(|preset| preset.model != current_model)
-        {
-            if items.len() == 2 {
-                items.push(section_item("Other Codex Models"));
-            }
-            let description =
-                (!preset.description.is_empty()).then_some(preset.description.clone());
-            items.push(spawn_model_item(
+        self.chat_widget.open_all_models_popup_for_purpose(
+            presets,
+            crate::chatwidget::ModelSelectionPurpose::SpawnAgent {
                 role,
-                parent_node_id.clone(),
-                preset.model.clone(),
-                ChatWidget::model_provider_for_selection(&preset.model),
-                Some(spawn_reasoning_effort_for_role(role, &preset)),
-                description,
-                false,
-            ));
-        }
-
-        self.chat_widget.show_selection_view(SelectionViewParams {
-            title: Some(format!("Spawn Codex {}", role.label())),
-            subtitle: Some(format!(
-                "Choose the model for the Codex-native {} pane.",
-                role.label()
-            )),
-            footer_hint: Some(standard_popup_hint_line()),
-            items,
-            is_searchable: true,
-            search_placeholder: Some("Search models".to_string()),
-            ..Default::default()
-        });
+                parent_node_id,
+                default_model,
+            },
+        );
     }
 
     pub(crate) fn open_spawn_claude_profile_picker(
@@ -2449,24 +2407,6 @@ impl App {
             return model.to_string();
         }
         self.chat_widget.current_model().to_string()
-    }
-
-    pub(crate) fn native_spawn_effort_for_model(
-        &self,
-        role: SpawnRole,
-        model: &str,
-    ) -> Option<ReasoningEffort> {
-        self.chat_widget
-            .model_catalog()
-            .try_list_models()
-            .ok()
-            .and_then(|presets| {
-                presets
-                    .into_iter()
-                    .find(|preset| preset.model == model)
-                    .map(|preset| spawn_reasoning_effort_for_role(role, &preset))
-            })
-            .or_else(|| self.chat_widget.current_reasoning_effort())
     }
 
     /// Standard crew model/effort mapping (all Codex-native):
@@ -5440,40 +5380,10 @@ fn provider_display_name(provider_id: &str, provider_name: &str) -> String {
     }
 }
 
-fn spawn_model_item(
-    role: SpawnRole,
-    parent_node_id: Option<String>,
-    model: String,
-    provider: Option<String>,
-    effort: Option<codex_protocol::openai_models::ReasoningEffort>,
-    description: Option<String>,
-    is_current: bool,
-) -> SelectionItem {
-    let effort_label = effort
-        .as_ref()
-        .map(|effort| effort.as_str().to_string())
-        .unwrap_or_else(|| "default".to_string());
-    SelectionItem {
-        name: format!("Codex {}: {model} · {effort_label}", role.label()),
-        description,
-        search_value: Some(format!("codex {} {model} {effort_label}", role.label())),
-        is_current,
-        actions: vec![Box::new(move |tx| {
-            tx.send(AppEvent::CreateSpawnAgent {
-                role,
-                parent_node_id: parent_node_id.clone(),
-                agent_nickname: None,
-                model: model.clone(),
-                provider: provider.clone(),
-                effort: effort.clone(),
-            });
-        })],
-        dismiss_on_select: true,
-        ..Default::default()
-    }
-}
-
-fn spawn_reasoning_effort_for_role(_role: SpawnRole, preset: &ModelPreset) -> ReasoningEffort {
+pub(crate) fn spawn_reasoning_effort_for_role(
+    _role: SpawnRole,
+    preset: &ModelPreset,
+) -> ReasoningEffort {
     if preset
         .supported_reasoning_efforts
         .iter()

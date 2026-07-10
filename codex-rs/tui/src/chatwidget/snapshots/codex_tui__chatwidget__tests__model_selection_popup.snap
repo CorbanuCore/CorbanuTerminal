@@ -1,12 +1,12 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
-assertion_line: 2577
 expression: popup
 ---
   Select Model and Effort
   Ambient coding plan
 
-  OpenAI  [Ambient]  Z.AI  Claude Plan  Anthropic  Vercel  Baseten  OpenRouter
+  OpenAI  [Ambient]  Z.AI  Claude Plan  Anthropic  Meta  Vercel  Baseten
+  OpenRouter
 
 › 1. Ambient GLM 5.2 (current)  Model: z-ai/glm-5.2. Ambient's default GLM 5.2
                                 coding model.

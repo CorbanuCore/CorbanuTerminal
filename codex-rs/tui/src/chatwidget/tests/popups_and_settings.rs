@@ -1,6 +1,7 @@
 use super::*;
 use crate::app_event::ConnectorsSnapshot;
 use crate::chatwidget::connectors::ConnectorsCacheState;
+use crate::spawn_orchestration::SpawnRole;
 use codex_app_server_protocol::AppInfo;
 use codex_app_server_protocol::HookErrorInfo;
 use codex_app_server_protocol::HooksListEntry;
@@ -19,6 +20,7 @@ use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
+use codex_protocol::openai_models::ReasoningEffort;
 use pretty_assertions::assert_eq;
 
 #[tokio::test]
@@ -2595,6 +2597,201 @@ async fn model_selection_popup_openai_provider_snapshot() {
     assert_chatwidget_snapshot!("model_selection_popup_openai_provider", popup);
 }
 
+fn spawn_model_purpose(
+    role: SpawnRole,
+    parent_node_id: Option<&str>,
+    default_model: &str,
+) -> ModelSelectionPurpose {
+    ModelSelectionPurpose::SpawnAgent {
+        role,
+        parent_node_id: parent_node_id.map(str::to_string),
+        default_model: default_model.to_string(),
+    }
+}
+
+#[tokio::test]
+async fn spawn_model_selection_popup_snapshot() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some(AMBIENT_DEFAULT_MODEL)).await;
+    let presets = chat.model_catalog.try_list_models().expect("model catalog");
+    chat.open_all_models_popup_for_purpose(
+        presets,
+        spawn_model_purpose(SpawnRole::Nazgul, None, "gpt-5.6-sol"),
+    );
+
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 30);
+    assert_chatwidget_snapshot!("spawn_model_selection_popup", popup);
+    assert!(popup.contains("Codex Nazgul pane - OpenAI Codex plan"));
+    assert!(popup.contains("GPT-5.6-Sol (current)"));
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Right));
+    let switched = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 30);
+    assert!(switched.contains("Codex Nazgul pane - Ambient coding plan"));
+    assert!(switched.lines().any(|line| line.contains('›')));
+}
+
+#[tokio::test]
+async fn spawn_effort_popup_snapshot_and_create_path_leave_session_unchanged() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some(AMBIENT_DEFAULT_MODEL)).await;
+    chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
+    let plan_mask = collaboration_modes::mask_for_kind(chat.model_catalog.as_ref(), ModeKind::Plan)
+        .expect("plan collaboration mode");
+    chat.set_collaboration_mask(plan_mask);
+    chat.set_reasoning_effort(Some(ReasoningEffort::Medium));
+    while rx.try_recv().is_ok() {}
+    let original_model = chat.current_model().to_string();
+    let original_effort = chat.current_reasoning_effort();
+    let parent = "thread:11111111-1111-4111-8111-111111111111";
+    let presets = chat.model_catalog.try_list_models().expect("model catalog");
+    chat.open_all_models_popup_for_purpose(
+        presets,
+        spawn_model_purpose(SpawnRole::Orc, Some(parent), "gpt-5.6-sol"),
+    );
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    let (model, purpose) = loop {
+        match rx.try_recv().expect("reasoning event") {
+            AppEvent::OpenReasoningPopup { model, purpose } => break (model, purpose),
+            AppEvent::SettingsSelectionClosed => continue,
+            event => panic!("unexpected event: {event:?}"),
+        }
+    };
+    chat.open_reasoning_popup_for_purpose(model, purpose);
+    let popup = render_bottom_popup(&chat, /*width*/ 88);
+    assert_chatwidget_snapshot!("spawn_effort_selection_popup", popup);
+    assert!(
+        popup
+            .lines()
+            .any(|line| line.contains('›') && line.contains("Extra high"))
+    );
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    let created = loop {
+        match rx.try_recv().expect("create event") {
+            AppEvent::CreateSpawnAgent {
+                role,
+                parent_node_id,
+                model,
+                provider,
+                effort,
+                ..
+            } => break (role, parent_node_id, model, provider, effort),
+            AppEvent::SettingsSelectionClosed => continue,
+            event => panic!("spawn selection mutated session: {event:?}"),
+        }
+    };
+    assert_eq!(created.0, SpawnRole::Orc);
+    assert_eq!(created.1.as_deref(), Some(parent));
+    assert_eq!(created.2, "gpt-5.6-sol");
+    assert_eq!(created.3.as_deref(), Some("openai"));
+    assert_eq!(created.4, Some(ReasoningEffort::XHigh));
+    assert_eq!(chat.current_model(), original_model);
+    assert_eq!(chat.current_reasoning_effort(), original_effort);
+    assert!(chat.no_modal_or_popup_active());
+    assert!(rx.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn spawn_single_effort_model_creates_directly_for_troll() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some(AMBIENT_DEFAULT_MODEL)).await;
+    let preset = ModelPreset {
+        id: "single-effort".to_string(),
+        model: "gpt-5.6-sol".to_string(),
+        display_name: "Single Effort".to_string(),
+        description: "test".to_string(),
+        default_reasoning_effort: ReasoningEffort::High,
+        supported_reasoning_efforts: vec![ReasoningEffortPreset {
+            effort: ReasoningEffort::High,
+            description: "high".to_string(),
+        }],
+        supports_personality: false,
+        additional_speed_tiers: Vec::new(),
+        service_tiers: Vec::new(),
+        default_service_tier: None,
+        is_default: true,
+        upgrade: None,
+        show_in_picker: true,
+        availability_nux: None,
+        supported_in_api: true,
+        input_modalities: default_input_modalities(),
+    };
+    chat.open_all_models_popup_for_purpose(
+        vec![preset],
+        spawn_model_purpose(SpawnRole::Troll, Some("thread:parent"), "gpt-5.6-sol"),
+    );
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    let (model, purpose) = match rx.try_recv().expect("reasoning event") {
+        AppEvent::OpenReasoningPopup { model, purpose } => (model, purpose),
+        event => panic!("unexpected event: {event:?}"),
+    };
+    chat.open_reasoning_popup_for_purpose(model, purpose);
+
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::CreateSpawnAgent {
+            role: SpawnRole::Troll,
+            parent_node_id: Some(parent),
+            model,
+            effort: Some(ReasoningEffort::High),
+            ..
+        }) if parent == "thread:parent" && model == "gpt-5.6-sol"
+    );
+    assert!(chat.no_modal_or_popup_active());
+}
+
+#[tokio::test]
+async fn spawn_effort_escape_returns_to_tabs_without_creating_agent() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some(AMBIENT_DEFAULT_MODEL)).await;
+    let presets = chat.model_catalog.try_list_models().expect("model catalog");
+    chat.open_all_models_popup_for_purpose(
+        presets,
+        spawn_model_purpose(SpawnRole::Nazgul, None, "gpt-5.6-sol"),
+    );
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    let (model, purpose) = loop {
+        match rx.try_recv().expect("reasoning event") {
+            AppEvent::OpenReasoningPopup { model, purpose } => break (model, purpose),
+            AppEvent::SettingsSelectionClosed => continue,
+            event => panic!("unexpected event: {event:?}"),
+        }
+    };
+    chat.open_reasoning_popup_for_purpose(model, purpose);
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Esc));
+    assert!(render_bottom_popup(&chat, 100).contains("Select Model and Effort"));
+    chat.handle_key_event(KeyEvent::from(KeyCode::Esc));
+    assert!(chat.no_modal_or_popup_active());
+    while let Ok(event) = rx.try_recv() {
+        assert!(!matches!(event, AppEvent::CreateSpawnAgent { .. }));
+    }
+}
+
+#[tokio::test]
+async fn spawn_picker_only_shows_models_with_constructible_native_providers() {
+    let (chat, _rx, _op_rx) = make_chatwidget_manual(Some(AMBIENT_DEFAULT_MODEL)).await;
+    let presets = chat.model_catalog.try_list_models().expect("model catalog");
+    let mut shown_provider_groups = std::collections::BTreeSet::new();
+
+    for preset in presets
+        .iter()
+        .filter(|preset| ChatWidget::show_in_pfterminal_model_picker(preset))
+    {
+        let provider = ChatWidget::model_provider_for_selection(&preset.model)
+            .unwrap_or_else(|| panic!("shown spawn model has no provider: {}", preset.model));
+        assert!(
+            provider == chat.config.model_provider_id
+                || chat.config.model_providers.contains_key(&provider),
+            "shown spawn model {} resolves to unavailable provider {provider}",
+            preset.model
+        );
+        shown_provider_groups.insert(provider);
+    }
+
+    assert!(shown_provider_groups.contains("openai"));
+    assert!(shown_provider_groups.contains("claude-plan"));
+    assert!(shown_provider_groups.contains("openrouter"));
+    assert!(shown_provider_groups.len() >= 5);
+}
+
 #[tokio::test]
 async fn gpt_5_6_model_selection_popup_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.6-sol")).await;
@@ -2902,8 +3099,8 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
     while let Ok(event) = rx.try_recv() {
-        if let AppEvent::OpenReasoningPopup { model } = event {
-            chat.open_reasoning_popup(model);
+        if let AppEvent::OpenReasoningPopup { model, purpose } = event {
+            chat.open_reasoning_popup_for_purpose(model, purpose);
             break;
         }
     }
@@ -2949,10 +3146,10 @@ async fn model_picker_dismisses_after_selecting_openrouter_model_without_effort_
 
     let mut saw_open_reasoning_popup = false;
     while let Ok(event) = rx.try_recv() {
-        if let AppEvent::OpenReasoningPopup { model } = event {
+        if let AppEvent::OpenReasoningPopup { model, purpose } = event {
             assert_eq!(model.model, "minimax/minimax-m3");
             saw_open_reasoning_popup = true;
-            chat.open_reasoning_popup(model);
+            chat.open_reasoning_popup_for_purpose(model, purpose);
         }
     }
 
@@ -2994,10 +3191,10 @@ async fn model_picker_opens_openrouter_reasoning_options_for_gemini() {
 
     let mut saw_open_reasoning_popup = false;
     while let Ok(event) = rx.try_recv() {
-        if let AppEvent::OpenReasoningPopup { model } = event {
+        if let AppEvent::OpenReasoningPopup { model, purpose } = event {
             assert_eq!(model.model, "google/gemini-3.5-flash");
             saw_open_reasoning_popup = true;
-            chat.open_reasoning_popup(model);
+            chat.open_reasoning_popup_for_purpose(model, purpose);
         }
     }
 
