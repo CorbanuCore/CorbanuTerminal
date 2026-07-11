@@ -3085,13 +3085,21 @@ impl App {
             // Reattachment discovers the effective model from the resumed session. Seed the
             // picker entry first so attach_restored_native_spawn_thread can store that model;
             // upserting only after attachment silently discarded it on every cold resume.
+            let existing_entry = self.agent_navigation.get(&thread_id).cloned();
             self.upsert_agent_picker_thread(
                 thread_id,
-                saved_nickname.clone(),
-                saved_role.clone(),
-                /*is_closed*/ false,
+                existing_entry
+                    .as_ref()
+                    .and_then(|entry| entry.agent_nickname.clone())
+                    .or_else(|| saved_nickname.clone()),
+                existing_entry
+                    .as_ref()
+                    .and_then(|entry| entry.agent_role.clone())
+                    .or_else(|| saved_role.clone()),
+                existing_entry
+                    .as_ref()
+                    .is_some_and(|entry| entry.is_closed),
             );
-            let existing_entry = self.agent_navigation.get(&thread_id).cloned();
             match app_server
                 .thread_read(thread_id, /*include_turns*/ false)
                 .await

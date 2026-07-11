@@ -54,9 +54,10 @@ capture() {
 screen_contains() {
   local path=$1
   local expected=$2
-  local flattened
-  flattened=$(tr '\n' ' ' <"$path")
-  grep -Fq -- "$expected" <<<"$flattened"
+  local flattened normalized_expected
+  flattened=$(tr '\n' ' ' <"$path" | tr -s '[:space:]' ' ')
+  normalized_expected=$(printf '%s' "$expected" | tr -s '[:space:]' ' ')
+  grep -Fq -- "$normalized_expected" <<<"$flattened"
 }
 
 wait_screen() {
@@ -78,6 +79,22 @@ wait_screen() {
   if [[ "$capture_timeout" == true ]]; then
     capture "wait-timeout" >/dev/null
   fi
+  return 1
+}
+
+wait_screen_absent() {
+  local pattern=$1
+  local attempts=${2:-80}
+  local output
+  for ((attempt = 0; attempt < attempts; attempt++)); do
+    output=$(tmux capture-pane -p -t "$CURRENT_SESSION":0.0)
+    output=${output//$'\n'/ }
+    if ! grep -Fq -- "$pattern" <<<"$output"; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  capture "wait-absent-timeout" >/dev/null
   return 1
 }
 
@@ -218,11 +235,13 @@ switch_pane() {
     *) return 1 ;;
   esac
   select_down "$steps"
+  wait_screen_absent "Search panes and crew"
 }
 
 switch_main() {
   submit_slash_wait "/panes" "Panes"
   select_down 0
+  wait_screen_absent "Search panes and crew"
 }
 
 open_panes_capture() {
@@ -437,6 +456,7 @@ row_9() {
   tmux send-keys -t "$CURRENT_SESSION":0.0 Esc
   switch_pane "Worker"
   switch_pane "Manager"
+  switch_main
   assignment_id=$(jq -r '.orchestrate_whips | keys[0]' "$(layout_file)")
   submit "/orchestrate detach $assignment_id"
   wait_layout '.orchestrate_whips | length == 0'

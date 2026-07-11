@@ -39,6 +39,7 @@ const DEFAULT_EXPIRY_SECONDS: i64 = 4 * 60 * 60;
 const DEFAULT_MAX_FIRES: u32 = 20;
 const DEFAULT_COOLDOWN_S: u64 = 60;
 const DEFAULT_ASSIGNMENT_CADENCE_S: u64 = 15 * 60;
+const MIN_ASSIGNMENT_COMPLETION_INTERVAL_S: i64 = 3;
 pub(crate) const DRAFT_WITH_MANAGER_SPEC: &str = "draft-with-manager";
 const DEFAULT_STOP_MARKER: &str = "WHIP_DONE";
 const BUILTIN_KEEP_GOING_WHIP: &str = "keep-going";
@@ -1962,6 +1963,7 @@ impl App {
             if let WhipKind::Assignment {
                 phase,
                 execution_started_utc,
+                last_user_turn_utc,
                 execution_duration_s,
                 ..
             } = &mut whip.kind
@@ -1970,8 +1972,15 @@ impl App {
                     AssignmentPhase::Drafting | AssignmentPhase::Blocked { .. }
                 )
             {
+                let was_drafting = matches!(phase, AssignmentPhase::Drafting);
                 *phase = AssignmentPhase::Executing;
                 changed = true;
+                if was_drafting {
+                    // Creating the assignment is user activity, but once its Manager has accepted
+                    // the spec and dispatched the first Worker task it must not suppress the first
+                    // completion handoff. Later operator turns set this timestamp again.
+                    *last_user_turn_utc = None;
+                }
                 if execution_started_utc.is_none() {
                     *execution_started_utc = Some(now);
                     whip.expires_at =
@@ -2065,7 +2074,14 @@ impl App {
                 "Assignment {id} dispatch retry failed: Manager {manager_label} -> Worker {worker_label}: {cause}. Assignment paused."
             )
         };
-        self.chat_widget.add_error_message(message);
+        self.chat_widget.add_error_message(message.clone());
+        // The active UI can change between an automated dispatch and its failure. Persist the
+        // operational notice to the Manager as a report as well, so switching panes cannot hide
+        // the retry or pause reason from the operator or the Manager's next turn.
+        self.record_spawn_parent_report(
+            holder_node_id,
+            format!("assignment_dispatch_notice; {message}"),
+        );
         self.persist_pane_state();
     }
 
@@ -2743,30 +2759,46 @@ impl App {
             return Err(format!("Whip {id} is exhausted."));
         }
         if !matches!(trigger, FireTrigger::Manual | FireTrigger::Test) {
-            let is_assignment_completion =
-                is_assignment && matches!(trigger, FireTrigger::Completion);
+            let has_pending_completion = is_assignment
+                && whip
+                    .last_target_output
+                    .as_ref()
+                    .is_some_and(|output| !output.trim().is_empty())
+                && whip.last_idle_generation_fired != Some(idle_generation);
+            let is_assignment_completion = is_assignment
+                && (matches!(trigger, FireTrigger::Completion)
+                    || (matches!(trigger, FireTrigger::Tick) && has_pending_completion));
             if (!is_assignment || is_assignment_completion)
                 && whip.last_idle_generation_fired == Some(idle_generation)
             {
                 return Err(format!("Whip {id} already fired for this idle period."));
             }
-            if !is_assignment_completion {
+            if is_assignment_completion {
+                if let Some(last_fire) = whip.last_fire_utc
+                    && now - last_fire
+                        < Duration::seconds(MIN_ASSIGNMENT_COMPLETION_INTERVAL_S)
+                {
+                    return Err(format!(
+                        "Assignment {id} is rate-limiting completion handoffs."
+                    ));
+                }
+            } else {
                 let cadence_s = assignment_effective_cadence_s(&whip);
                 if let Some(last_fire) = whip.last_fire_utc
                     && now - last_fire < Duration::seconds(cadence_s as i64)
                 {
                     return Err(format!("Whip {id} is inside cooldown."));
                 }
-                if let WhipKind::Assignment {
-                    last_user_turn_utc: Some(last_user_turn),
-                    ..
-                } = whip.kind
-                    && now - last_user_turn < Duration::seconds(whip.cooldown_s as i64)
-                {
-                    return Err(format!(
-                        "Assignment {id} is yielding to recent user activity."
-                    ));
-                }
+            }
+            if let WhipKind::Assignment {
+                last_user_turn_utc: Some(last_user_turn),
+                ..
+            } = whip.kind
+                && now - last_user_turn < Duration::seconds(whip.cooldown_s as i64)
+            {
+                return Err(format!(
+                    "Assignment {id} is yielding to recent user activity."
+                ));
             }
         }
         if !self.target_node_is_idle(&whip.target) {

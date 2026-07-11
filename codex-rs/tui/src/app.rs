@@ -1333,7 +1333,10 @@ See the PFTerminal keymap documentation for supported actions and examples."
                 }
             ) {
                 whip.last_fire_utc = Some(chrono::Utc::now());
-                whip.last_idle_generation_fired = None;
+                // Generation zero represents the state restored from disk. Treat any saved
+                // Worker output as already observed so restart honors one full cadence; a fresh
+                // completion increments the generation and can still trigger immediately.
+                whip.last_idle_generation_fired = Some(0);
             } else {
                 whip.last_idle_generation_fired = Some(0);
             }

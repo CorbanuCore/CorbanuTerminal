@@ -1877,8 +1877,8 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
         .iter()
         .filter_map(|(_, entry)| entry.agent_nickname.as_deref())
         .collect::<Vec<_>>();
-    assert!(restored_names.contains(&"Snaga"));
-    assert!(restored_names.contains(&"Ghash"));
+    assert!(restored_names.contains(&"Snaga"), "{restored_names:?}");
+    assert!(restored_names.contains(&"Ghash"), "{restored_names:?}");
     for (thread_id, entry) in restored_orcs {
         assert!(!entry.is_closed);
         assert!(app.thread_has_loaded_session(thread_id));
@@ -4477,11 +4477,38 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
             .and_then(|whip| whip.expires_at),
         Some(started + chrono::Duration::hours(8))
     );
+    app.note_assignment_user_turn(&manager_node);
     app.note_whip_target_idle_with_fire_control(
         &worker_node,
         Some("WORKER_AUDIT_RESULT: baseline checkout is invalid"),
         false,
         true,
+    );
+    assert!(
+        drain_claude_pane_task_events(&mut app_event_rx).is_empty(),
+        "a Worker completion must not preempt recent user activity"
+    );
+    if let Some(whip) = app.orchestrate_whips.get_mut("assignment-1") {
+        whip.last_fire_utc = Some(started);
+        if let crate::orchestrate::WhipKind::Assignment {
+            last_user_turn_utc, ..
+        } = &mut whip.kind
+        {
+            *last_user_turn_utc = None;
+        }
+    }
+    app.orchestrate_now_override = Some(started + chrono::Duration::milliseconds(500));
+    app.sweep_orchestrate_whips();
+    assert!(
+        drain_claude_pane_task_events(&mut app_event_rx).is_empty(),
+        "completion handoffs must be rate limited"
+    );
+    app.orchestrate_now_override = Some(started + chrono::Duration::seconds(3));
+    app.sweep_orchestrate_whips();
+    assert_eq!(
+        drain_claude_pane_task_events(&mut app_event_rx).len(),
+        1,
+        "the pending completion must retry after the rate-limit window"
     );
     let assignment = app
         .orchestrate_whips
@@ -4497,7 +4524,11 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     assert!(mandate.contains("Worker's latest completed output:"));
     assert!(mandate.contains("WORKER_AUDIT_RESULT: baseline checkout is invalid"));
     for cycle in 1..=24 {
-        app.orchestrate_now_override = Some(started + chrono::Duration::seconds(901 * cycle));
+        app.orchestrate_now_override = Some(
+            started
+                + chrono::Duration::seconds(3)
+                + chrono::Duration::seconds(901 * cycle),
+        );
         app.sweep_orchestrate_whips();
     }
     assert_eq!(drain_claude_pane_task_events(&mut app_event_rx).len(), 24);
@@ -4506,7 +4537,7 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
         .get("assignment-1")
         .expect("assignment");
     assert_eq!(assignment.state, crate::orchestrate::WhipState::Armed);
-    assert_eq!(assignment.fires, 24);
+    assert_eq!(assignment.fires, 25); // one completion retry plus 24 watchdog cycles
 
     app.note_whip_target_idle_with_fire_control(
         &manager_node,
@@ -5025,7 +5056,8 @@ async fn assignment_restart_lifecycle_waits_one_cadence_then_continues() {
         .get_mut("assignment-1")
         .expect("assignment");
     assignment.last_fire_utc = Some(restarted);
-    assignment.last_idle_generation_fired = None;
+    assignment.last_idle_generation_fired = Some(0);
+    assignment.last_target_output = Some("saved Worker output".to_string());
     app.audit_restored_assignments();
 
     assert_eq!(
