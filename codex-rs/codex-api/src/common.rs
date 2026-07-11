@@ -846,10 +846,20 @@ mod tests {
             plugins: None,
         };
 
-        let serialized = serde_json::to_string(&request).expect("serialize request");
+        let serialized = serde_json::to_value(&request).expect("serialize request");
         assert_eq!(
             serialized,
-            r#"{"model":"z-ai/glm-5.2","messages":[{"role":"user","content":"hello"}],"stream":true,"stream_options":{"include_usage":true},"tools":[{"function":{"name":"noop"},"type":"function"}],"tool_choice":"auto","parallel_tool_calls":true,"prompt_cache_key":"cache-key","reasoning":{"effort":"medium"}}"#
+            json!({
+                "model": "z-ai/glm-5.2",
+                "messages": [{"role": "user", "content": "hello"}],
+                "stream": true,
+                "stream_options": {"include_usage": true},
+                "tools": [{"type": "function", "function": {"name": "noop"}}],
+                "tool_choice": "auto",
+                "parallel_tool_calls": true,
+                "prompt_cache_key": "cache-key",
+                "reasoning": {"effort": "medium"}
+            })
         );
     }
 

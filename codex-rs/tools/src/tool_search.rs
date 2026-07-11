@@ -70,6 +70,9 @@ impl ToolSearchInfo {
 fn combine_search_text(primary: String, fallback: String) -> String {
     let primary = primary.trim();
     let fallback = fallback.trim();
+    if primary == fallback {
+        return primary.to_string();
+    }
     match (primary.is_empty(), fallback.is_empty()) {
         (true, true) => String::new(),
         (true, false) => fallback.to_string(),
