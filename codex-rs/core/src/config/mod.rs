@@ -3415,9 +3415,11 @@ impl Config {
         // model (stale thread metadata, dropped spawn override, config default recorded next to
         // a role-derived model) would 400/404 at the remote with "Unknown model". Correct the
         // unambiguous cases; see corrected_catalog_provider for what qualifies.
-        let (model_provider_id, model_provider) = match model
-            .as_deref()
-            .and_then(|value| corrected_catalog_provider(value, &model_provider_id))
+        let corrected_provider = (!model_provider_was_explicit)
+            .then(|| model.as_deref())
+            .flatten()
+            .and_then(|value| corrected_catalog_provider(value, &model_provider_id));
+        let (model_provider_id, model_provider) = match corrected_provider
             .and_then(|corrected| {
                 model_providers
                     .get(corrected)

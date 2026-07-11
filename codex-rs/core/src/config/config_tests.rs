@@ -995,7 +995,7 @@ model = "gpt-5.5"
     .await?;
 
     assert_eq!(config.model_provider_id, OPENROUTER_ANTHROPIC_PROVIDER_ID);
-    assert_eq!(config.model.as_deref(), Some(OPENROUTER_DEFAULT_MODEL));
+    assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
     assert_eq!(config.model_provider.wire_api, WireApi::Anthropic);
     assert_eq!(config.forced_login_method, Some(ForcedLoginMethod::Api));
 

@@ -111,6 +111,9 @@ impl AgentRegistry {
             removed_key
                 .and_then(|key| active_agents.agent_tree.remove(key.as_str()))
                 .is_some_and(|metadata| {
+                    if let Some(nickname) = metadata.agent_nickname.as_ref() {
+                        active_agents.used_agent_nicknames.remove(nickname);
+                    }
                     !metadata.agent_path.as_ref().is_some_and(AgentPath::is_root)
                 })
         };

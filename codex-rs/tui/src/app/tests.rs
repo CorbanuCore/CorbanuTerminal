@@ -5230,6 +5230,7 @@ async fn assignment_worker_completion_wakes_manager_without_waiting_for_watchdog
         .get_mut("assignment-1")
         .expect("assignment")
         .last_fire_utc = Some(started);
+    app.orchestrate_now_override = Some(started + chrono::Duration::seconds(3));
 
     app.note_whip_target_idle_with_fire_control(
         &worker_node,
@@ -5268,6 +5269,7 @@ async fn assignment_worker_completion_wakes_manager_without_waiting_for_watchdog
         .find(|pane| pane.id == manager_pane_id)
         .expect("manager pane")
         .status = crate::claude_panes::ClaudePaneStatus::Idle;
+    app.orchestrate_now_override = Some(started + chrono::Duration::seconds(6));
     app.note_whip_target_idle_with_fire_control(
         &manager_node,
         Some("manager finished its prior audit"),
@@ -5285,6 +5287,7 @@ async fn assignment_worker_completion_wakes_manager_without_waiting_for_watchdog
         Some(2)
     );
 
+    app.orchestrate_now_override = Some(started + chrono::Duration::seconds(9));
     app.note_whip_target_idle_with_fire_control(&worker_node, None, true, false);
 
     let interrupted = drain_claude_pane_task_events(&mut app_event_rx);
