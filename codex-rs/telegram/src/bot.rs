@@ -16,16 +16,20 @@ use crate::commands::Command;
 use crate::commands::IncomingCommand;
 use crate::commands::help_text;
 use crate::commands::parse_incoming;
+use crate::media::FetchedImages;
+use crate::media::MediaStore;
+use crate::media::fetch_message_images;
 
 type HandlerResult = anyhow::Result<()>;
 const CALLBACK_ANSWER_TEXT_LIMIT: usize = 200;
 
 /// What an inbound Telegram message contributes as turn input.
 ///
-/// The connector is text-only inbound today. A plain text message is used as-is.
-/// Media (photo/document) with a caption contributes the caption — but the
-/// attachment itself cannot be read yet, so we prefix a note so the agent does
-/// not answer as if it saw the image. Media with no caption is unsupported.
+/// A plain text message is used as-is. Photos and image documents are fetched
+/// by the media layer before this classifier runs — this fallback only handles
+/// what that layer did not take: NON-IMAGE media (video, audio, pdf, …) with a
+/// caption contributes the caption prefixed with a note so the agent does not
+/// answer as if it saw the attachment; without a caption it is unsupported.
 #[derive(Debug, PartialEq, Eq)]
 enum MessageInput {
     Text(String),
@@ -38,7 +42,7 @@ fn resolve_message_input(text: Option<&str>, caption: Option<&str>) -> MessageIn
     }
     if let Some(caption) = caption.map(str::trim).filter(|caption| !caption.is_empty()) {
         return MessageInput::Text(format!(
-            "[the user attached an image or file; the connector cannot read attachments yet, only this caption text follows]\n{caption}"
+            "[the user attached a non-image file; the connector cannot read it, only this caption text follows]\n{caption}"
         ));
     }
     MessageInput::Unsupported
@@ -51,6 +55,7 @@ pub async fn run_bot(
     bot: Bot,
     bridge: BridgeHandle,
     allowlist: ChatAllowlist,
+    media: MediaStore,
     max_consecutive_polling_failures: u32,
 ) -> anyhow::Result<()> {
     bot.set_my_commands(Command::bot_commands())
@@ -73,7 +78,7 @@ pub async fn run_bot(
         crate::polling::listener_error_handler(listener.stop_token(), fatal_polling.clone());
 
     let mut dispatcher = Dispatcher::builder(bot, schema())
-        .dependencies(dptree::deps![bridge, allowlist, bot_username])
+        .dependencies(dptree::deps![bridge, allowlist, bot_username, media])
         .enable_ctrlc_handler()
         .build();
     dispatcher
@@ -99,10 +104,44 @@ async fn handle_message(
     bridge: BridgeHandle,
     allowlist: ChatAllowlist,
     bot_username: BotUsername,
+    media: MediaStore,
 ) -> HandlerResult {
     let chat_id = message.chat.id;
     if !allowlist.reject_if_unauthorized(chat_id) {
         return Ok(());
+    }
+
+    // Images first: a screenshot (with or without caption) becomes real turn
+    // input. A fetch *error* degrades to the caption-note path rather than
+    // dropping the message — the agent still learns an attachment existed.
+    match fetch_message_images(&bot, &media, &message).await {
+        Ok(FetchedImages::Images(paths)) => {
+            let caption = message
+                .caption()
+                .map(str::trim)
+                .filter(|c| !c.is_empty())
+                .unwrap_or("")
+                .to_string();
+            bridge.send_user_input(chat_id, caption, paths).await?;
+            return Ok(());
+        }
+        Ok(FetchedImages::Rejected(reason)) => {
+            bot.send_message(chat_id, reason)
+                .await
+                .context("send Telegram media-rejected notice")?;
+            return Ok(());
+        }
+        Ok(FetchedImages::None) => {}
+        Err(err) => {
+            warn!("inbound Telegram image fetch failed: {err:#}");
+            bot.send_message(
+                chat_id,
+                "I couldn't download that image from Telegram — try again, or upload it somewhere and send the link.",
+            )
+            .await
+            .context("send Telegram media-fetch-failed notice")?;
+            return Ok(());
+        }
     }
 
     let text = match resolve_message_input(message.text(), message.caption()) {
@@ -110,7 +149,7 @@ async fn handle_message(
         MessageInput::Unsupported => {
             bot.send_message(
                 chat_id,
-                "I can only read text right now — images, screenshots, and files aren't supported yet. Send a link or paste the text and I'll act on it.",
+                "I can read text, photos, and image files. This message had none of those — send a link or paste the text and I'll act on it.",
             )
             .await
             .context("send Telegram unsupported message notice")?;
@@ -253,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    fn caption_on_media_is_accepted_but_flags_the_dropped_attachment() {
+    fn caption_on_non_image_media_is_accepted_but_flags_the_dropped_attachment() {
         let MessageInput::Text(text) =
             resolve_message_input(None, Some("posted: https://discord.com/channels/1/2/3"))
         else {
@@ -261,9 +300,10 @@ mod tests {
         };
         // The caption reaches the agent...
         assert!(text.contains("https://discord.com/channels/1/2/3"));
-        // ...but the agent is told an attachment it cannot see was dropped, so it
-        // never answers as if it saw the image.
-        assert!(text.contains("cannot read attachments"));
+        // ...but the agent is told a non-image attachment it cannot see was
+        // dropped, so it never answers as if it saw the file. (Images never
+        // reach this path — the media layer fetches them first.)
+        assert!(text.contains("cannot read it"));
     }
 
     #[test]

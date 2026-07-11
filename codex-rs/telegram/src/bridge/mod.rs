@@ -70,6 +70,9 @@ enum BridgeCommand {
     UserText {
         chat_id: ChatId,
         text: String,
+        /// Local paths of already-downloaded inbound images; each becomes a
+        /// `UserInput::LocalImage` on the turn.
+        images: Vec<std::path::PathBuf>,
     },
     NewThread {
         chat_id: ChatId,
@@ -138,8 +141,22 @@ impl BridgeHandle {
 
     #[instrument(skip(self, text))]
     pub async fn send_user_text(&self, chat_id: ChatId, text: String) -> anyhow::Result<()> {
+        self.send_user_input(chat_id, text, Vec::new()).await
+    }
+
+    #[instrument(skip(self, text, images))]
+    pub async fn send_user_input(
+        &self,
+        chat_id: ChatId,
+        text: String,
+        images: Vec<std::path::PathBuf>,
+    ) -> anyhow::Result<()> {
         self.command_tx
-            .send(BridgeCommand::UserText { chat_id, text })
+            .send(BridgeCommand::UserText {
+                chat_id,
+                text,
+                images,
+            })
             .await
             .context("telegram bridge task stopped")
     }
@@ -305,7 +322,11 @@ impl BridgeRuntime {
 
     async fn handle_command(&mut self, command: BridgeCommand) -> anyhow::Result<()> {
         match command {
-            BridgeCommand::UserText { chat_id, text } => self.start_turn(chat_id, text).await,
+            BridgeCommand::UserText {
+                chat_id,
+                text,
+                images,
+            } => self.start_turn(chat_id, text, images).await,
             BridgeCommand::NewThread { chat_id } => {
                 let thread_id = self.start_new_thread(chat_id).await?;
                 self.send_text(chat_id, &format!("Started new thread {thread_id}."))
@@ -356,7 +377,12 @@ impl BridgeRuntime {
     }
 
     #[instrument(skip(self, text))]
-    async fn start_turn(&mut self, chat_id: ChatId, text: String) -> anyhow::Result<()> {
+    async fn start_turn(
+        &mut self,
+        chat_id: ChatId,
+        text: String,
+        images: Vec<std::path::PathBuf>,
+    ) -> anyhow::Result<()> {
         if self.sessions.turn_id(chat_id).await.is_some() {
             self.send_text(
                 chat_id,
@@ -376,13 +402,7 @@ impl BridgeRuntime {
                     params: TurnStartParams {
                         thread_id: thread_id.clone(),
                         client_user_message_id: None,
-                        input: vec![
-                            UserInput::Text {
-                                text,
-                                text_elements: Vec::new(),
-                            }
-                            .into(),
-                        ],
+                        input: turn_input(text, images),
                         responsesapi_client_metadata: None,
                         additional_context: None,
                         environments: None,
@@ -585,6 +605,55 @@ impl BridgeCommand {
             | Self::Skills { chat_id } => Some(*chat_id),
             Self::Status { .. } | Self::Approval { .. } | Self::Shutdown => None,
         }
+    }
+}
+
+/// Assemble turn input: images first (so the model reads the screenshot in the
+/// context of the caption that follows), then the text if there is any. An
+/// image-only message yields image items alone; text-only yields text alone.
+fn turn_input(
+    text: String,
+    images: Vec<std::path::PathBuf>,
+) -> Vec<codex_app_server_protocol::UserInput> {
+    let mut input: Vec<codex_app_server_protocol::UserInput> = images
+        .into_iter()
+        .map(|path| UserInput::LocalImage { path, detail: None }.into())
+        .collect();
+    if !text.is_empty() {
+        input.push(
+            UserInput::Text {
+                text,
+                text_elements: Vec::new(),
+            }
+            .into(),
+        );
+    }
+    input
+}
+
+#[cfg(test)]
+mod turn_input_tests {
+    use super::*;
+
+    #[test]
+    fn image_only_message_yields_only_image_items() {
+        let input = turn_input(String::new(), vec!["/tmp/a.jpg".into()]);
+        assert_eq!(input.len(), 1);
+    }
+
+    #[test]
+    fn caption_follows_images() {
+        let input = turn_input("look at this".into(), vec!["/tmp/a.jpg".into()]);
+        assert_eq!(input.len(), 2);
+        let json = serde_json::to_value(&input).expect("serialize");
+        assert!(json[0].to_string().contains("a.jpg"));
+        assert!(json[1].to_string().contains("look at this"));
+    }
+
+    #[test]
+    fn text_only_unchanged() {
+        let input = turn_input("hi".into(), Vec::new());
+        assert_eq!(input.len(), 1);
     }
 }
 

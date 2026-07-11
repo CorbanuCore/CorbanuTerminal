@@ -5,6 +5,7 @@ mod bridge;
 pub mod commands;
 pub mod config;
 pub mod error;
+pub mod media;
 mod model_selection;
 mod polling;
 pub mod render;
@@ -148,11 +149,13 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         .context("failed to initialize in-process app-server client")?;
     let sessions = SessionStore::load(&codex_home).await?;
     let bot = Bot::new(token);
+    let media = crate::media::MediaStore::new(&codex_home);
     let bridge = BridgeHandle::spawn(bot.clone(), client, Arc::new(core_config), sessions);
     let result = run_bot(
         bot,
         bridge.clone(),
         allowlist,
+        media,
         telegram_config.max_consecutive_polling_failures,
     )
     .await;
