@@ -2513,12 +2513,12 @@ async fn resume_thread_subagent_restores_stored_metadata_and_effective_multi_age
     child_thread
         .codex
         .session
-        .persist_rollout_items(&[RolloutItem::TurnContext(child_turn_context)])
+        .ensure_rollout_materialized()
         .await;
     child_thread
         .codex
         .session
-        .ensure_rollout_materialized()
+        .persist_rollout_items(&[RolloutItem::TurnContext(child_turn_context)])
         .await;
     child_thread
         .codex
