@@ -58,12 +58,16 @@ class State:
         except FileNotFoundError:
             return "normal"
 
-    def response_for(self, body: dict[str, object]) -> str:
+    def response_for(self, body: dict[str, object]) -> str | None:
         text = all_text(body)
         latest = latest_user_text(body)
         lower = latest.lower()
         target = durable_target(text)
         mode = self.mode()
+        if "qa_empty_manager" in lower:
+            return None
+        if "recovery: your previous turn completed successfully" in lower and target:
+            return dispatch(target, "QA_RECOVERED_AFTER_EMPTY_MANAGER_TURN")
         if "qa_restate_contract" in lower:
             return "I will use WHIP_DONE only later, and ASSIGNMENT_BLOCKED: only with a real reason."
         if "qa_emit_done" in lower:
@@ -72,10 +76,10 @@ class State:
             return "ASSIGNMENT_BLOCKED: waiting for QA approval"
         if "qa_bad_dispatch" in lower and target:
             return dispatch("Worker nickname that cannot resolve", "QA forced bad-target dispatch")
-        if "native pfterminal orchestrator assignment" in lower:
+        if "pfterminal-send-task" in lower:
             if "draft and save the spec with the user" in lower:
                 return "Draft prepared. Reply QA_APPROVE_DRAFT to approve and start execution."
-            if target:
+            if "spec below is locked" in lower and target:
                 return dispatch(target, "QA_WORK_CYCLE_1")
         if "qa_approve_draft" in lower and target:
             return dispatch(target, "QA_WORK_CYCLE_1")
@@ -118,17 +122,20 @@ def make_handler(state: State):
             response_text = state.response_for(body)
             response_id = f"resp-{request_index}"
             message_id = f"msg-{request_index}"
-            events = [
-                {"type": "response.created", "response": {"id": response_id}},
-                {
-                    "type": "response.output_item.done",
-                    "item": {
-                        "type": "message",
-                        "role": "assistant",
-                        "id": message_id,
-                        "content": [{"type": "output_text", "text": response_text}],
-                    },
-                },
+            events = [{"type": "response.created", "response": {"id": response_id}}]
+            if response_text is not None:
+                events.append(
+                    {
+                        "type": "response.output_item.done",
+                        "item": {
+                            "type": "message",
+                            "role": "assistant",
+                            "id": message_id,
+                            "content": [{"type": "output_text", "text": response_text}],
+                        },
+                    }
+                )
+            events.append(
                 {
                     "type": "response.completed",
                     "response": {
@@ -141,8 +148,8 @@ def make_handler(state: State):
                             "total_tokens": 0,
                         },
                     },
-                },
-            ]
+                }
+            )
             payload = "".join(
                 f"event: {event['type']}\ndata: {json.dumps(event, separators=(',', ':'))}\n\n"
                 for event in events

@@ -266,7 +266,9 @@ guided_draft_existing_manager() {
 }
 
 row_1() {
-  start_row 1
+  # A productive Worker completion is an event-driven handoff, not a watchdog tick.
+  # Keep the watchdog far in the future so two cycles prove that completion bypasses it.
+  start_row 1 900
   guided_prewritten_create_manager
   sleep 6
   local panes
@@ -654,11 +656,46 @@ row_15() {
   printf 'PASS\t15\tread-only polluted-layout recovery\n' >>"$RESULTS"
 }
 
+row_16() {
+  start_row 16 900
+  create_pane "Worker"
+  create_pane "Manager"
+  submit "/orchestrate attach"
+  wait_screen "New Assignment - Worker"
+  select_down 2
+  wait_screen "New Assignment - Duration"
+  select_down 3
+  wait_screen "New Assignment - Spec"
+  select_down 0
+  wait_screen "New Assignment - Manager"
+  select_down 1
+  wait_screen "Create assignment"
+  select_down 0
+  wait_layout '.orchestrate_whips | to_entries[0].value.kind.phase == "drafting"'
+  switch_pane "Manager"
+  submit_user "QA_EMPTY_MANAGER"
+  wait_layout '.orchestrate_whips | to_entries[0].value.empty_output_fires == 0 and to_entries[0].value.kind.phase == "executing" and to_entries[0].value.last_dispatch_result == "delivered"' 160 \
+    || fail 16 "empty Manager completion did not recover and dispatch"
+  local evidence panes
+  capture "empty-manager-recovered" >/dev/null
+  evidence=$LAST_CAPTURE_PATH
+  screen_contains "$evidence" "retrying once with the existing conversation context" \
+    || fail 16 "empty Manager recovery was not visible"
+  open_panes_capture "pane-model-labels" >/dev/null
+  panes=$LAST_CAPTURE_PATH
+  grep -Fq "qa-model;" "$panes" || fail 16 "native pane model was not displayed"
+  if grep -Fq "model unknown" "$panes"; then
+    fail 16 "native panes still displayed model unknown"
+  fi
+  snapshot_layout "final-layout"
+  printf 'PASS\t16\tempty Manager recovery and model metadata\n' >>"$RESULTS"
+}
+
 tmux new-session -d -s "$SERVER_SESSION" \
   "python3 '$ROOT/qa/orchestrate_mock_responses.py' --port '$PORT' --artifacts '$ARTIFACT_ROOT/server' --control '$CONTROL'"
 sleep 0.5
 
-read -r -a rows <<<"${PFTERMINAL_MATRIX_ROWS:-1 2 3 4 5 6 7 8 9 10 11 12 13 14 15}"
+read -r -a rows <<<"${PFTERMINAL_MATRIX_ROWS:-1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16}"
 for row in "${rows[@]}"; do
   "row_$row"
 done
