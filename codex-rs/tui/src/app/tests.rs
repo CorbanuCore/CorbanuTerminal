@@ -1978,6 +1978,57 @@ async fn nazgul_can_be_bound_to_a_codex_agent_pane() {
     );
 }
 
+#[tokio::test]
+async fn pane_picker_separates_user_panes_from_managed_spawn_crew() {
+    let mut app = make_test_app().await;
+    let manager_thread = ThreadId::new();
+    let worker_thread = ThreadId::new();
+    app.upsert_agent_picker_thread(
+        manager_thread,
+        Some("Codex manager".to_string()),
+        Some("default".to_string()),
+        false,
+    );
+    app.upsert_agent_picker_thread(
+        worker_thread,
+        Some("Codex worker".to_string()),
+        Some("default".to_string()),
+        false,
+    );
+    app.spawn_parent_by_thread
+        .insert(worker_thread, manager_thread);
+    let items = app.pane_picker_items();
+    let names = items
+        .iter()
+        .map(|item| item.name.as_str())
+        .collect::<Vec<_>>();
+    assert!(names.contains(&"Codex - Codex manager"));
+    assert!(names.contains(&"Codex - Codex worker"));
+
+    let user_index = names
+        .iter()
+        .position(|name| *name == "User Panes")
+        .expect("user panes section");
+    let create_index = names
+        .iter()
+        .position(|name| *name == "Create User Pane")
+        .expect("user pane creation section");
+    let crew_index = names
+        .iter()
+        .position(|name| *name == "Managed Crew (/spawn)")
+        .expect("managed crew section");
+
+    assert!(user_index < create_index);
+    assert!(create_index < crew_index);
+    assert!(
+        items
+            .iter()
+            .find(|item| item.name.starts_with("Nazgul:"))
+            .and_then(|item| item.description.as_deref())
+            .is_some_and(|description| description.contains("same user pane listed above"))
+    );
+}
+
 /// Drains app events looking for a `SubmitSpawnAgentTask` for `thread_id`. Returns its task text.
 fn drain_spawn_agent_tasks_for(
     rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
@@ -4366,13 +4417,39 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
         "attach {worker_pane_id} overnight --mode review --holder {manager_pane_id} --for 8h --cooldown 900s"
     ));
     assert!(matches!(
-        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
         Some(crate::orchestrate::WhipKind::Assignment {
             phase: crate::orchestrate::AssignmentPhase::Drafting,
             ..
         })
     ));
-    assert_eq!(drain_claude_pane_task_events(&mut app_event_rx).len(), 1);
+    let birth_tasks = drain_claude_pane_task_events(&mut app_event_rx);
+    assert_eq!(birth_tasks.len(), 1);
+    assert!(
+        birth_tasks[0]
+            .1
+            .contains("The assignment spec below is locked.")
+    );
+    assert!(
+        birth_tasks[0]
+            .1
+            .contains("Dispatch its first concrete task immediately")
+    );
+    assert!(birth_tasks[0].1.contains(&worker_node));
+    assert!(birth_tasks[0].1.contains("stop your turn"));
+    assert!(
+        birth_tasks[0]
+            .1
+            .contains("native PFTerminal orchestrator assignment, not a Task Node task")
+    );
+    assert!(
+        birth_tasks[0]
+            .1
+            .contains("Use only pfterminal-send-task blocks")
+    );
+    assert!(!birth_tasks[0].1.contains("First iterate with the user"));
     app.note_whip_target_idle_with_fire_control(
         &manager_node,
         Some("I will emit WHIP_DONE when complete and ASSIGNMENT_BLOCKED: <reason> if needed."),
@@ -4380,7 +4457,9 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
         true,
     );
     assert!(matches!(
-        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
         Some(crate::orchestrate::WhipKind::Assignment {
             phase: crate::orchestrate::AssignmentPhase::Drafting,
             ..
@@ -4391,7 +4470,7 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
 
     app.note_whip_holder_dispatched(&manager_node, &worker_node);
     assert!(matches!(
-        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        app.orchestrate_whips.get("assignment-1").map(|whip| &whip.kind),
         Some(crate::orchestrate::WhipKind::Assignment {
             phase: crate::orchestrate::AssignmentPhase::Executing,
             execution_started_utc: Some(value),
@@ -4400,16 +4479,38 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     ));
     assert_eq!(
         app.orchestrate_whips
-            .get("whip-1")
+            .get("assignment-1")
             .and_then(|whip| whip.expires_at),
         Some(started + chrono::Duration::hours(8))
     );
+    app.note_whip_target_idle_with_fire_control(
+        &worker_node,
+        Some("WORKER_AUDIT_RESULT: baseline checkout is invalid"),
+        false,
+        true,
+    );
+    let assignment = app
+        .orchestrate_whips
+        .get("assignment-1")
+        .expect("assignment");
+    let mandate = crate::orchestrate::assignment_mandate_task(
+        assignment,
+        "Worker",
+        Some("Run the audit."),
+        None,
+        started,
+    );
+    assert!(mandate.contains("Worker's latest completed output:"));
+    assert!(mandate.contains("WORKER_AUDIT_RESULT: baseline checkout is invalid"));
     for cycle in 1..=24 {
         app.orchestrate_now_override = Some(started + chrono::Duration::seconds(901 * cycle));
         app.sweep_orchestrate_whips();
     }
     assert_eq!(drain_claude_pane_task_events(&mut app_event_rx).len(), 24);
-    let assignment = app.orchestrate_whips.get("whip-1").expect("assignment");
+    let assignment = app
+        .orchestrate_whips
+        .get("assignment-1")
+        .expect("assignment");
     assert_eq!(assignment.state, crate::orchestrate::WhipState::Armed);
     assert_eq!(assignment.fires, 24);
 
@@ -4427,13 +4528,13 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     );
     assert_eq!(
         app.orchestrate_whips
-            .get("whip-1")
+            .get("assignment-1")
             .map(crate::orchestrate::assignment_effective_cadence_s),
         Some(3600)
     );
     let backed_off_now = started + chrono::Duration::hours(7);
     app.orchestrate_now_override = Some(backed_off_now);
-    if let Some(whip) = app.orchestrate_whips.get_mut("whip-1") {
+    if let Some(whip) = app.orchestrate_whips.get_mut("assignment-1") {
         whip.last_fire_utc = Some(backed_off_now - chrono::Duration::seconds(3601));
         if let crate::orchestrate::WhipKind::Assignment {
             last_user_turn_utc, ..
@@ -4447,7 +4548,7 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     app.note_whip_target_idle_with_fire_control(&manager_node, Some("recovered"), false, true);
     assert_eq!(
         app.orchestrate_whips
-            .get("whip-1")
+            .get("assignment-1")
             .map(crate::orchestrate::assignment_effective_cadence_s),
         Some(900)
     );
@@ -4459,7 +4560,9 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
         true,
     );
     assert!(matches!(
-        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
         Some(crate::orchestrate::WhipKind::Assignment {
             phase: crate::orchestrate::AssignmentPhase::Executing,
             ..
@@ -4472,7 +4575,9 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
         true,
     );
     assert!(matches!(
-        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
         Some(crate::orchestrate::WhipKind::Assignment {
             phase: crate::orchestrate::AssignmentPhase::Executing,
             ..
@@ -4485,7 +4590,9 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
         true,
     );
     assert!(matches!(
-        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
         Some(crate::orchestrate::WhipKind::Assignment {
             phase: crate::orchestrate::AssignmentPhase::Executing,
             ..
@@ -4498,7 +4605,9 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
         true,
     );
     assert!(matches!(
-        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
         Some(crate::orchestrate::WhipKind::Assignment {
             phase: crate::orchestrate::AssignmentPhase::Blocked { .. },
             ..
@@ -4506,7 +4615,9 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     ));
     app.note_assignment_user_turn(&manager_node);
     assert!(matches!(
-        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
         Some(crate::orchestrate::WhipKind::Assignment {
             phase: crate::orchestrate::AssignmentPhase::Executing,
             ..
@@ -4514,12 +4625,185 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     ));
     app.note_whip_target_idle_with_fire_control(&manager_node, Some("WHIP_DONE"), false, true);
     assert!(matches!(
-        app.orchestrate_whips.get("whip-1").map(|whip| &whip.kind),
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
         Some(crate::orchestrate::WhipKind::Assignment {
             phase: crate::orchestrate::AssignmentPhase::Done,
             ..
         })
     ));
+}
+
+#[tokio::test]
+async fn simple_assignment_manager_dispatches_without_spawn_role() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "simple-manager", "Run the recovery audit.");
+    let manager_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000461").expect("manager id");
+    let worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000462").expect("worker id");
+    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
+    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
+    let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
+    app.handle_orchestrate_command(format!(
+        "attach {worker_node} simple-manager --mode review --holder {manager_node} --for 1h"
+    ));
+    assert!(!app.is_spawn_orchestration_thread(manager_thread_id));
+    assert!(app.is_assignment_holder(&manager_node));
+
+    let dispatched = app.dispatch_native_spawn_task_blocks_from_text(
+        manager_thread_id,
+        "manager-turn-1",
+        &format!(
+            "```pfterminal-send-task\n{{\"target\":\"{worker_node}\",\"task\":\"Audit read-only state.\"}}\n```"
+        ),
+    );
+
+    assert!(dispatched);
+    assert_eq!(
+        drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id)
+            .as_deref()
+            .map(|task| task.contains("Audit read-only state.")),
+        Some(true)
+    );
+    assert!(matches!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Executing,
+            ..
+        })
+    ));
+}
+
+#[tokio::test]
+async fn assignment_bad_target_retries_durable_worker_once_then_pauses() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "durable-retry", "Run the recovery audit.");
+    let manager_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000471").expect("manager id");
+    let worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000472").expect("worker id");
+    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
+    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
+    let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
+    app.handle_orchestrate_command(format!(
+        "attach {worker_node} durable-retry --mode review --holder {manager_node} --for 1h"
+    ));
+    while app_event_rx.try_recv().is_ok() {}
+
+    assert!(app.dispatch_native_spawn_task_blocks_from_text(
+        manager_thread_id,
+        "manager-turn-bad-target",
+        "```pfterminal-send-task\n{\"target\":\"Worker nickname that does not resolve\",\"task\":\"Audit read-only state.\"}\n```",
+    ));
+
+    let retried_task = drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id)
+        .expect("one retry should target the durable Worker ID");
+    let assignment = app
+        .orchestrate_whips
+        .get("assignment-1")
+        .expect("assignment");
+    assert_eq!(assignment.state, crate::orchestrate::WhipState::Armed);
+    assert!(
+        assignment
+            .last_dispatch_result
+            .as_deref()
+            .is_some_and(|result| result.contains("retrying durable Worker ID"))
+    );
+
+    app.record_spawn_dispatch_failed_for_task(
+        &worker_node,
+        &retried_task,
+        "Worker closed before turn start",
+    );
+
+    let assignment = app
+        .orchestrate_whips
+        .get("assignment-1")
+        .expect("assignment");
+    assert_eq!(assignment.state, crate::orchestrate::WhipState::Paused);
+    assert!(
+        assignment
+            .last_dispatch_result
+            .as_deref()
+            .is_some_and(|result| result.contains("retry failed"))
+    );
+    assert!(drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id).is_none());
+}
+
+#[tokio::test]
+async fn assignment_creation_fails_visibly_when_layout_cannot_be_persisted() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(
+        &app,
+        "persistence-check",
+        "Verify durable assignment state.",
+    );
+    let manager_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000481").expect("manager id");
+    let worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000482").expect("worker id");
+    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
+    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    app.primary_thread_id = Some(ThreadId::new());
+
+    let panes_path = app.config.codex_home.join("panes");
+    if panes_path.exists() {
+        std::fs::remove_dir_all(&panes_path).expect("remove test panes directory");
+    }
+    std::fs::write(&panes_path, "path collision").expect("create persistence failure fixture");
+
+    app.handle_orchestrate_command(format!(
+        "attach {} persistence-check --mode review --holder {} --for 1h",
+        crate::spawn_orchestration::thread_node_id(worker_thread_id),
+        crate::spawn_orchestration::thread_node_id(manager_thread_id),
+    ));
+
+    assert!(app.orchestrate_whips.is_empty());
+    let mut rendered = String::new();
+    while let Ok(event) = app_event_rx.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            rendered.push_str(&lines_to_single_string(&cell.display_lines(/*width*/ 120)));
+        }
+    }
+    assert!(rendered.contains("Pane layout was not saved"), "{rendered}");
+    assert!(
+        rendered.contains("Assignment was not created because its state could not be saved"),
+        "{rendered}"
+    );
+}
+
+#[tokio::test]
+async fn orchestrate_fast_path_is_worker_then_manager_with_eight_hour_draft_defaults() {
+    let mut app = make_test_app().await;
+    let main_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000491").expect("main id");
+    let manager_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000492").expect("manager id");
+    let worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000493").expect("worker id");
+    app.primary_thread_id = Some(main_thread_id);
+    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
+    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+
+    app.open_orchestrate_fast_target_picker();
+    assert_app_snapshot!(
+        "orchestrate_fast_worker_picker",
+        render_bottom_popup(&app.chat_widget, /*width*/ 100)
+    );
+
+    app.open_orchestrate_fast_manager_picker(crate::spawn_orchestration::thread_node_id(
+        worker_thread_id,
+    ));
+    assert_app_snapshot!(
+        "orchestrate_fast_manager_picker",
+        render_bottom_popup(&app.chat_widget, /*width*/ 100)
+    );
 }
 
 #[tokio::test]
@@ -4557,7 +4841,7 @@ async fn assignment_unreachable_watchdog_pauses_after_four_cadences() {
     ));
     app.note_whip_holder_dispatched(&manager_node, &worker_node);
     app.orchestrate_whips
-        .get_mut("whip-1")
+        .get_mut("assignment-1")
         .expect("assignment")
         .target = "pane:missing-worker".to_string();
 
@@ -4565,15 +4849,76 @@ async fn assignment_unreachable_watchdog_pauses_after_four_cadences() {
     app.orchestrate_now_override = Some(started + chrono::Duration::seconds(3599));
     app.sweep_orchestrate_whips();
     assert_eq!(
-        app.orchestrate_whips.get("whip-1").map(|whip| whip.state),
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| whip.state),
         Some(crate::orchestrate::WhipState::Armed)
     );
     app.orchestrate_now_override = Some(started + chrono::Duration::seconds(3600));
     app.sweep_orchestrate_whips();
     assert_eq!(
-        app.orchestrate_whips.get("whip-1").map(|whip| whip.state),
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| whip.state),
         Some(crate::orchestrate::WhipState::Paused)
     );
+}
+
+#[tokio::test]
+async fn assignment_restart_lifecycle_waits_one_cadence_then_continues() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "restart-loop", "Continue the recovery work.");
+    let manager_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000501").expect("manager id");
+    let worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000502").expect("worker id");
+    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
+    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
+    let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
+    let started = chrono::DateTime::parse_from_rfc3339("2026-07-10T20:00:00Z")
+        .expect("timestamp")
+        .with_timezone(&chrono::Utc);
+    app.orchestrate_now_override = Some(started);
+    app.handle_orchestrate_command(format!(
+        "attach {worker_node} restart-loop --mode review --holder {manager_node} --for 8h --cooldown 60s"
+    ));
+    app.note_whip_holder_dispatched(&manager_node, &worker_node);
+    while app_event_rx.try_recv().is_ok() {}
+
+    let restarted = started + chrono::Duration::seconds(10);
+    app.orchestrate_now_override = Some(restarted);
+    let assignment = app
+        .orchestrate_whips
+        .get_mut("assignment-1")
+        .expect("assignment");
+    assignment.last_fire_utc = Some(restarted);
+    assignment.last_idle_generation_fired = None;
+    app.audit_restored_assignments();
+
+    assert_eq!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|assignment| assignment.state),
+        Some(crate::orchestrate::WhipState::Armed)
+    );
+    let mut restart_notice = String::new();
+    while let Ok(event) = app_event_rx.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            restart_notice.push_str(&lines_to_single_string(&cell.display_lines(/*width*/ 120)));
+        }
+    }
+    assert!(
+        restart_notice.contains("restored; the next Manager mandate waits one cadence"),
+        "{restart_notice}"
+    );
+
+    app.orchestrate_now_override = Some(restarted + chrono::Duration::seconds(59));
+    app.sweep_orchestrate_whips();
+    assert!(drain_spawn_agent_task_for(&mut app_event_rx, manager_thread_id).is_none());
+    app.orchestrate_now_override = Some(restarted + chrono::Duration::seconds(61));
+    app.sweep_orchestrate_whips();
+    assert!(drain_spawn_agent_task_for(&mut app_event_rx, manager_thread_id).is_some());
 }
 
 #[tokio::test]
@@ -4629,13 +4974,13 @@ async fn orchestrate_review_holder_ignored_twice_pauses_whip() {
         "attach {target_pane_id} review-loop --mode review --holder {holder_pane_id} --max 5"
     ));
     app.orchestrate_whips
-        .get_mut("whip-1")
+        .get_mut("assignment-1")
         .expect("legacy review whip")
         .kind = crate::orchestrate::WhipKind::LegacyNudge;
     let _ = drain_claude_pane_task_events(&mut app_event_rx);
-    app.handle_orchestrate_command("fire whip-1".to_string());
+    app.handle_orchestrate_command("fire assignment-1".to_string());
     app.note_whip_target_idle_with_fire_control(&holder_node_id, Some("no dispatch"), true, true);
-    app.handle_orchestrate_command("fire whip-1".to_string());
+    app.handle_orchestrate_command("fire assignment-1".to_string());
     app.note_whip_target_idle_with_fire_control(
         &holder_node_id,
         Some("still no dispatch"),
@@ -4652,7 +4997,9 @@ async fn orchestrate_review_holder_ignored_twice_pauses_whip() {
         2
     );
     assert_eq!(
-        app.orchestrate_whips.get("whip-1").map(|whip| whip.state),
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| whip.state),
         Some(crate::orchestrate::WhipState::Paused)
     );
 }
@@ -4760,11 +5107,11 @@ async fn orchestrate_fire_suppression_still_counts_ignored_review() {
         "attach {target_pane_id} review-loop --mode review --holder {holder_pane_id} --max 5"
     ));
     app.orchestrate_whips
-        .get_mut("whip-1")
+        .get_mut("assignment-1")
         .expect("legacy review whip")
         .kind = crate::orchestrate::WhipKind::LegacyNudge;
     let _ = drain_claude_pane_task_events(&mut app_event_rx);
-    app.handle_orchestrate_command("fire whip-1".to_string());
+    app.handle_orchestrate_command("fire assignment-1".to_string());
     app.note_whip_target_idle_with_fire_control(&holder_node_id, Some("no dispatch"), false, true);
 
     let submitted_tasks = drain_claude_pane_task_events(&mut app_event_rx);
@@ -4775,7 +5122,7 @@ async fn orchestrate_fire_suppression_still_counts_ignored_review() {
             .count(),
         1
     );
-    let whip = app.orchestrate_whips.get("whip-1").expect("whip");
+    let whip = app.orchestrate_whips.get("assignment-1").expect("whip");
     assert_eq!(whip.ignored_review_fires, 1);
     assert_eq!(whip.pending_review_fire, None);
     assert_eq!(whip.state, crate::orchestrate::WhipState::Armed);
@@ -4958,10 +5305,10 @@ async fn orchestrate_agent_can_pause_own_whip() {
     );
     app.dispatch_orchestrate_blocks_from_text(
         &agent_node_id,
-        "```pfterminal-orchestrate\naction: pause\nid: whip-1\n```",
+        "```pfterminal-orchestrate\naction: pause\nid: assignment-1\n```",
     );
 
-    let whip = app.orchestrate_whips.get("whip-1").expect("whip");
+    let whip = app.orchestrate_whips.get("assignment-1").expect("whip");
     assert_eq!(whip.holder.as_deref(), Some(agent_node_id.as_str()));
     assert_eq!(whip.state, crate::orchestrate::WhipState::Paused);
 }
@@ -5160,6 +5507,7 @@ async fn combined_claude_pane_dispatch_flush_records_acks_for_all_senders() {
             source_node_id: troll_pane_id.clone(),
             target_node_id: target_node_id.clone(),
             target_title: app.user_pane_title(&orc_pane_id),
+            attempt: 0,
         }],
     );
     app.record_spawn_dispatch_failed_for_task(
@@ -10717,6 +11065,45 @@ fn active_turn_not_steerable_turn_error_extracts_structured_server_error() {
     assert_eq!(
         active_turn_not_steerable_turn_error(&error),
         Some(turn_error)
+    );
+}
+
+#[test]
+fn turn_start_capacity_classifier_uses_structured_error_data() {
+    let error = TypedRequestError::Server {
+        method: "turn/start".to_string(),
+        source: JSONRPCErrorError {
+            code: -32603,
+            message: "wording may change".to_string(),
+            data: Some(serde_json::json!({
+                "turn_start_error": "execution_capacity",
+                "max_threads": 7,
+            })),
+        },
+    };
+    let report = color_eyre::eyre::eyre!(error).wrap_err("turn/start failed in TUI");
+
+    assert_eq!(
+        crate::app_server_session::turn_start_execution_capacity(&report),
+        Some(7)
+    );
+}
+
+#[test]
+fn turn_start_capacity_classifier_rejects_message_only_match() {
+    let error = TypedRequestError::Server {
+        method: "turn/start".to_string(),
+        source: JSONRPCErrorError {
+            code: -32603,
+            message: "execution_capacity max_threads=7".to_string(),
+            data: None,
+        },
+    };
+    let report = color_eyre::eyre::eyre!(error).wrap_err("turn/start failed in TUI");
+
+    assert_eq!(
+        crate::app_server_session::turn_start_execution_capacity(&report),
+        None
     );
 }
 

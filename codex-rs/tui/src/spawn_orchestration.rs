@@ -92,6 +92,8 @@ pub(crate) struct SpawnDispatchAck {
     pub(crate) source_node_id: String,
     pub(crate) target_node_id: String,
     pub(crate) target_title: String,
+    #[serde(default)]
+    pub(crate) attempt: u8,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -723,6 +725,21 @@ impl App {
                 *parent_thread_id = new_thread_id;
             }
         }
+        for whip in self.orchestrate_whips.values_mut() {
+            if whip.target == old_node_id {
+                whip.target = new_node_id.clone();
+            }
+            if whip.holder.as_deref() == Some(old_node_id.as_str()) {
+                whip.holder = Some(new_node_id.clone());
+            }
+        }
+        if let Some(generation) = self
+            .orchestrate_idle_generation_by_target
+            .remove(&old_node_id)
+        {
+            self.orchestrate_idle_generation_by_target
+                .insert(new_node_id, generation);
+        }
         self.agent_navigation.remove(old_thread_id);
         self.persist_pane_state();
     }
@@ -742,27 +759,8 @@ impl App {
         }
 
         for (old_thread_id, new_thread_id) in replacements {
-            let old_node_id = thread_node_id(old_thread_id);
-            let new_node_id = thread_node_id(new_thread_id);
-            if self.spawn_nazgul_pane_id.as_deref() == Some(old_node_id.as_str()) {
-                self.spawn_nazgul_pane_id = Some(new_node_id.clone());
-            }
-            self.spawn_parent_by_node.remove(&old_node_id);
-            for parent_node_id in self.spawn_parent_by_node.values_mut() {
-                if parent_node_id == &old_node_id {
-                    *parent_node_id = new_node_id.clone();
-                }
-            }
-            self.spawn_parent_by_thread.remove(&old_thread_id);
-            for parent_thread_id in self.spawn_parent_by_thread.values_mut() {
-                if *parent_thread_id == old_thread_id {
-                    *parent_thread_id = new_thread_id;
-                }
-            }
-            self.agent_navigation.remove(old_thread_id);
+            self.replace_saved_native_spawn_thread(old_thread_id, new_thread_id);
         }
-
-        self.persist_pane_state();
     }
 
     pub(crate) fn prune_duplicate_live_native_spawn_threads(&mut self) {
@@ -1212,10 +1210,15 @@ impl App {
             .spawn_node_title(source_pane_id)
             .unwrap_or_else(|| self.user_pane_title(source_pane_id));
         let mut any_queued = false;
-        for dispatch in dispatches {
-            if dispatch
-                .seq
-                .is_some_and(|seq| !self.mark_spawn_dispatch_seq_processed(seq))
+        let mut pending = dispatches
+            .into_iter()
+            .map(|dispatch| (dispatch, 0_u8))
+            .collect::<VecDeque<_>>();
+        while let Some((dispatch, attempt)) = pending.pop_front() {
+            if attempt == 0
+                && dispatch
+                    .seq
+                    .is_some_and(|seq| !self.mark_spawn_dispatch_seq_processed(seq))
             {
                 continue;
             }
@@ -1242,16 +1245,66 @@ impl App {
                 );
                 continue;
             }
-            match self.resolve_spawn_task_target(&dispatch.target) {
+            let resolved = self.resolve_spawn_task_target(&dispatch.target);
+            if let Some((_, durable_target)) =
+                self.assignment_dispatch_target_for_holder(source_pane_id)
+            {
+                let resolved_target = match &resolved {
+                    Ok(SpawnTaskTarget::Native(thread_id))
+                    | Ok(SpawnTaskTarget::UnavailableNative(thread_id)) => {
+                        Some(thread_node_id(*thread_id))
+                    }
+                    Ok(SpawnTaskTarget::ClaudePane(pane_id)) => Some(pane_node_id(pane_id)),
+                    Err(_) => None,
+                };
+                let failure = match &resolved {
+                    Ok(SpawnTaskTarget::UnavailableNative(thread_id)) => {
+                        Some(self.unavailable_native_spawn_target_error(*thread_id))
+                    }
+                    Err(err) => Some(err.clone()),
+                    Ok(_) if resolved_target.as_deref() != Some(durable_target.as_str()) => {
+                        Some(format!(
+                            "Manager selected `{}` instead of durable Worker ID `{durable_target}`",
+                            dispatch.target.trim()
+                        ))
+                    }
+                    Ok(_) => None,
+                };
+                if let Some(failure) = failure {
+                    let ack = self.make_spawn_dispatch_ack(
+                        source_pane_id,
+                        dispatch.target.trim().to_string(),
+                        dispatch.target.trim().to_string(),
+                        dispatch.seq,
+                    );
+                    self.record_spawn_dispatch_acks(&[ack], "failed", &failure, true);
+                    if attempt == 0 {
+                        self.note_assignment_dispatch_failure(source_pane_id, &failure, true);
+                        pending.push_front((
+                            SpawnTaskDispatch {
+                                target: durable_target,
+                                task: dispatch.task,
+                                seq: None,
+                            },
+                            1,
+                        ));
+                    } else {
+                        self.note_assignment_dispatch_failure(source_pane_id, &failure, false);
+                    }
+                    continue;
+                }
+            }
+            match resolved {
                 Ok(SpawnTaskTarget::Native(thread_id)) => {
                     let label = self.thread_label(thread_id);
                     let target_node_id = thread_node_id(thread_id);
-                    let ack = self.make_spawn_dispatch_ack(
+                    let mut ack = self.make_spawn_dispatch_ack(
                         source_pane_id,
                         target_node_id.clone(),
                         label.clone(),
                         dispatch.seq,
                     );
+                    ack.attempt = attempt;
                     let task = task_with_dispatch_provenance(
                         &dispatch.task,
                         &source_title,
@@ -1333,12 +1386,13 @@ impl App {
                     }
                     let title = self.user_pane_title(&pane_id);
                     let target_node_id = pane_node_id(&pane_id);
-                    let ack = self.make_spawn_dispatch_ack(
+                    let mut ack = self.make_spawn_dispatch_ack(
                         source_pane_id,
                         target_node_id.clone(),
                         title.clone(),
                         dispatch.seq,
                     );
+                    ack.attempt = attempt;
                     let task = task_with_dispatch_provenance(
                         &dispatch.task,
                         &source_title,
@@ -1439,7 +1493,10 @@ impl App {
         turn_id: &str,
         assistant_text: &str,
     ) -> bool {
-        if !self.is_spawn_orchestration_thread(source_thread_id) {
+        let source_node_id = thread_node_id(source_thread_id);
+        if !self.is_spawn_orchestration_thread(source_thread_id)
+            && !self.is_assignment_holder(&source_node_id)
+        {
             return false;
         }
         if assistant_text.trim().is_empty() {
@@ -1461,7 +1518,7 @@ impl App {
         let source_node_id = if self.is_codex_main_bound_spawn_root_thread(source_thread_id) {
             self.spawn_root_node_id()
         } else {
-            thread_node_id(source_thread_id)
+            source_node_id
         };
         self.dispatch_spawn_task_blocks(&source_node_id, pending_dispatches);
         true
@@ -2089,6 +2146,9 @@ impl App {
         task: &str,
     ) {
         let acks = self.take_spawn_dispatch_acks_for_task(target_node_id, task);
+        for ack in &acks {
+            self.note_assignment_dispatch_delivered(&ack.source_node_id);
+        }
         self.record_spawn_dispatch_acks(&acks, "delivered", "target turn started", false);
     }
 
@@ -2098,8 +2158,64 @@ impl App {
         task: &str,
         detail: impl AsRef<str>,
     ) {
+        let detail = detail.as_ref();
         let acks = self.take_spawn_dispatch_acks_for_task(target_node_id, task);
+        let mut retry_acks = Vec::new();
+        for ack in &acks {
+            let Some((_, durable_target)) =
+                self.assignment_dispatch_target_for_holder(&ack.source_node_id)
+            else {
+                continue;
+            };
+            if ack.attempt == 0 {
+                self.note_assignment_dispatch_failure(&ack.source_node_id, detail, true);
+                let mut retry_ack = ack.clone();
+                retry_ack.target_node_id = durable_target.clone();
+                retry_ack.target_title = self
+                    .spawn_node_title(&durable_target)
+                    .unwrap_or_else(|| durable_target.clone());
+                retry_ack.attempt = 1;
+                retry_acks.push(retry_ack);
+            } else {
+                self.note_assignment_dispatch_failure(&ack.source_node_id, detail, false);
+            }
+        }
         self.record_spawn_dispatch_acks(&acks, "failed", detail, true);
+        for retry_ack in retry_acks {
+            match self.resolve_spawn_task_target(&retry_ack.target_node_id) {
+                Ok(SpawnTaskTarget::Native(thread_id)) => {
+                    let target_node_id = retry_ack.target_node_id.clone();
+                    self.register_spawn_dispatch_acks_for_task(
+                        &target_node_id,
+                        task,
+                        vec![retry_ack],
+                    );
+                    self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+                        thread_id,
+                        task: task.to_string(),
+                    });
+                }
+                Ok(SpawnTaskTarget::ClaudePane(pane_id)) => {
+                    let target_node_id = retry_ack.target_node_id.clone();
+                    self.register_spawn_dispatch_acks_for_task(
+                        &target_node_id,
+                        task,
+                        vec![retry_ack],
+                    );
+                    self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
+                        pane_id,
+                        task: task.to_string(),
+                    });
+                }
+                Ok(SpawnTaskTarget::UnavailableNative(_)) | Err(_) => {
+                    self.note_assignment_dispatch_failure(
+                        &retry_ack.source_node_id,
+                        "durable Worker ID is unavailable",
+                        false,
+                    );
+                }
+            }
+        }
     }
 
     pub(crate) fn record_spawn_dispatch_acks(
@@ -2146,6 +2262,7 @@ impl App {
             source_node_id: source_node_id.to_string(),
             target_node_id,
             target_title,
+            attempt: 0,
         }
     }
 
@@ -2901,10 +3018,21 @@ impl App {
         let saved_metadata = self.saved_spawn_metadata_from_loaded_rollouts().await;
         self.recover_native_spawn_edges_from_saved_context(&saved_metadata)
             .await;
-        let thread_ids = native_spawn_thread_ids_from_saved_state(
+        let mut thread_ids = native_spawn_thread_ids_from_saved_state(
             self.spawn_nazgul_pane_id.as_deref(),
             &self.spawn_parent_by_node,
         );
+        let mut seen_thread_ids = thread_ids.iter().copied().collect::<HashSet<_>>();
+        for whip in self.orchestrate_whips.values() {
+            for node_id in std::iter::once(&whip.target).chain(whip.holder.iter()) {
+                if let Some(thread_id) = node_id_thread(node_id)
+                    && seen_thread_ids.insert(thread_id)
+                {
+                    thread_ids.push(thread_id);
+                }
+            }
+        }
+        thread_ids.sort_by_key(std::string::ToString::to_string);
         let saved_parent_edges = self.spawn_parent_by_node.clone();
         for (child_node_id, parent_node_id) in saved_parent_edges {
             if let (Some(child_thread_id), Some(parent_thread_id)) = (
@@ -2963,6 +3091,12 @@ impl App {
                     let is_closed = !self
                         .attach_restored_native_spawn_thread(app_server, thread_id)
                         .await;
+                    if is_closed {
+                        self.chat_widget.add_error_message(format!(
+                            "Failed to attach restored pane {}.",
+                            self.thread_label(thread_id)
+                        ));
+                    }
                     self.upsert_agent_picker_thread(
                         thread_id,
                         thread
@@ -2992,6 +3126,10 @@ impl App {
                         error = %err,
                         "failed to restore native spawn pane from saved layout"
                     );
+                    self.chat_widget.add_error_message(format!(
+                        "Failed to restore pane {}: {err}",
+                        self.thread_label(thread_id)
+                    ));
                     let is_closed = !self
                         .attach_restored_native_spawn_thread(app_server, thread_id)
                         .await;
@@ -3088,6 +3226,10 @@ impl App {
                     error = %err,
                     "failed to reattach restored native spawn pane"
                 );
+                self.chat_widget.add_error_message(format!(
+                    "Failed to attach restored pane {}: {err}",
+                    self.thread_label(thread_id)
+                ));
                 false
             }
         }
@@ -3301,7 +3443,9 @@ impl App {
         };
         items.push(SelectionItem {
             name: format!("Nazgul: {nazgul_title}"),
-            description: Some("Bound root pane; no worker thread.".to_string()),
+            description: Some(
+                "Root role binding; this is the same user pane listed above.".to_string(),
+            ),
             is_current,
             actions,
             dismiss_on_select: true,
@@ -3475,6 +3619,17 @@ impl App {
                 .values()
                 .any(|parent| *parent == thread_id)
             || self.nazgul_bound_thread_id() == Some(thread_id)
+            || self
+                .agent_navigation
+                .get(&thread_id)
+                .and_then(|entry| entry.agent_role.as_deref())
+                .is_some_and(|role| {
+                    role == NAZGUL_ROLE_NAME || role == TROLL_ROLE || role == ORC_ROLE
+                })
+    }
+
+    pub(crate) fn is_managed_spawn_crew_thread(&self, thread_id: ThreadId) -> bool {
+        self.nazgul_bound_thread_id() == Some(thread_id)
             || self
                 .agent_navigation
                 .get(&thread_id)
@@ -3820,6 +3975,18 @@ impl App {
             let Some(entry) = self.agent_navigation.get(&thread_id) else {
                 return Err(format!("No native spawn pane found for `{target}`."));
             };
+            if std::env::var("PFTERMINAL_ORCHESTRATE_QA").as_deref() == Ok("1")
+                && std::env::var("PFTERMINAL_ORCHESTRATE_QA_CONTROL")
+                    .ok()
+                    .and_then(|path| std::fs::read_to_string(path).ok())
+                    .is_some_and(|control| {
+                        control.lines().any(|line| {
+                            line.trim() == format!("unavailable={}", thread_node_id(thread_id))
+                        })
+                    })
+            {
+                return Ok(SpawnTaskTarget::UnavailableNative(thread_id));
+            }
             if self
                 .native_spawn_task_disabled_reason(thread_id, entry)
                 .is_some()
@@ -5308,6 +5475,17 @@ fn extract_xmlish_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTaskDis
 }
 
 fn fenced_dispatch_from_parts(header: &str, content: &str) -> Option<SpawnTaskDispatch> {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(content.trim()) {
+        let target = value.get("target")?.as_str()?.trim().to_string();
+        let task = value.get("task")?.as_str()?.trim().to_string();
+        let seq = value.get("seq").and_then(serde_json::Value::as_u64);
+        return (!target.is_empty() && !task.is_empty()).then_some(SpawnTaskDispatch {
+            target,
+            task,
+            seq,
+        });
+    }
+
     let mut target = yamlish_field_value(header, "target");
     let mut task_lines = Vec::new();
     let mut consumed_task_marker = false;
@@ -5840,6 +6018,24 @@ I queued the work."#;
         assert!(!visible.contains("pfterminal-send-task"));
         assert!(visible.contains("Please dispatch this."));
         assert!(visible.contains("I queued the work."));
+    }
+
+    #[test]
+    fn extracts_json_spawn_task_dispatch_block() {
+        let text = r#"```pfterminal-send-task
+{"target":"thread:019f4e57-45f3-7963-9d44-4fadceb26b37","task":"Audit read-only state.","seq":7}
+```"#;
+
+        let (visible, dispatches) = extract_spawn_task_dispatches(text);
+
+        assert!(visible.is_empty());
+        assert_eq!(dispatches.len(), 1);
+        assert_eq!(
+            dispatches[0].target,
+            "thread:019f4e57-45f3-7963-9d44-4fadceb26b37"
+        );
+        assert_eq!(dispatches[0].task, "Audit read-only state.");
+        assert_eq!(dispatches[0].seq, Some(7));
     }
 
     #[test]

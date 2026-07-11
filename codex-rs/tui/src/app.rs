@@ -356,7 +356,13 @@ fn spawn_tui_input_watchdog(
 
 fn spawn_whip_sweep_tick(app_event_tx: AppEventSender) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(WHIP_SWEEP_INTERVAL);
+        let interval_duration = if std::env::var("PFTERMINAL_ORCHESTRATE_QA").as_deref() == Ok("1")
+        {
+            Duration::from_millis(250)
+        } else {
+            WHIP_SWEEP_INTERVAL
+        };
+        let mut interval = tokio::time::interval(interval_duration);
         loop {
             interval.tick().await;
             app_event_tx.send(AppEvent::WhipSweepTick);
@@ -1335,7 +1341,12 @@ See the PFTerminal keymap documentation for supported actions and examples."
             .unwrap_or_else(|| {
                 restored_orchestrate_whips
                     .keys()
-                    .filter_map(|id| id.strip_prefix("whip-")?.parse::<u64>().ok())
+                    .filter_map(|id| {
+                        id.strip_prefix("whip-")
+                            .or_else(|| id.strip_prefix("assignment-"))?
+                            .parse::<u64>()
+                            .ok()
+                    })
                     .max()
                     .unwrap_or(0)
             });
@@ -1471,12 +1482,12 @@ See the PFTerminal keymap documentation for supported actions and examples."
                 .await?;
             app.restore_native_spawn_panes_from_saved_state(&mut app_server)
                 .await;
+            app.audit_restored_assignments();
             if should_prompt_for_paused_goal_after_startup_resume {
                 app.maybe_prompt_resume_paused_goal_after_resume(&mut app_server, thread_id)
                     .await;
             }
         }
-        app.audit_restored_assignments();
         let initial_session_ms = initial_session_started_at.elapsed().as_millis();
 
         // On startup, if a managed filesystem sandbox is active, warn about

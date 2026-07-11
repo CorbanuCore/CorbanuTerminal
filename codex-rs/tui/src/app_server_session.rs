@@ -145,6 +145,17 @@ pub(crate) const EXTERNAL_AGENT_CONFIG_IMPORT_IN_PROGRESS_MESSAGE: &str =
     "A previous Claude Code import is still running. Wait for it to finish before importing again.";
 const THREAD_SETTINGS_UPDATE_METHOD: &str = "thread/settings/update";
 
+pub(crate) fn turn_start_execution_capacity(error: &color_eyre::Report) -> Option<usize> {
+    let error = error.downcast_ref::<TypedRequestError>()?;
+    let TypedRequestError::Server { source, .. } = error else {
+        return None;
+    };
+    let data = source.data.as_ref()?;
+    (data.get("turn_start_error")?.as_str()? == "execution_capacity")
+        .then(|| data.get("max_threads")?.as_u64()?.try_into().ok())
+        .flatten()
+}
+
 fn bootstrap_request_error(context: &'static str, err: TypedRequestError) -> color_eyre::Report {
     color_eyre::eyre::eyre!("{context}: {err}")
 }

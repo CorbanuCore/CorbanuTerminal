@@ -189,7 +189,7 @@ impl App {
     ///
     /// Closing a thread is not the same as removing it: users can still inspect finished agent
     /// transcripts, and the stable next/previous traversal order should not collapse around them.
-    pub(super) fn mark_agent_picker_thread_closed(&mut self, thread_id: ThreadId) {
+    pub(crate) fn mark_agent_picker_thread_closed(&mut self, thread_id: ThreadId) {
         self.fail_pending_dispatches_for_thread(thread_id, "target closed before delivery");
         self.agent_navigation.mark_closed(thread_id);
         self.note_assignment_node_gone(&crate::spawn_orchestration::thread_node_id(thread_id));
@@ -541,6 +541,7 @@ impl App {
                     .await?;
                 self.restore_native_spawn_panes_from_saved_state(app_server)
                     .await;
+                self.audit_restored_assignments();
                 self.chat_widget.maybe_send_next_queued_input();
             }
             Err(err) => {
@@ -835,6 +836,7 @@ impl App {
                     Ok(()) => {
                         self.restore_pane_layout_for_thread(app_server, resumed_thread_id)
                             .await;
+                        self.audit_restored_assignments();
                         if let Some(summary) = summary {
                             let mut lines: Vec<Line<'static>> = Vec::new();
                             if let Some(usage_line) = summary.usage_line {

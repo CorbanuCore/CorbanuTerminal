@@ -43,23 +43,28 @@ impl App {
         self.restore_native_spawn_panes_from_saved_state(app_server)
             .await;
 
-        let mut items = Vec::new();
-        items.push(section_item("User Panes"));
-        items.extend(self.user_pane_items());
-        items.push(section_item("Agent Panes"));
-        items.extend(self.spawn_tree_items(/*show_task_actions*/ false));
-        items.push(section_item("New Pane"));
-        items.extend(new_pane_items());
+        let items = self.pane_picker_items();
 
         self.chat_widget.show_selection_view(SelectionViewParams {
             title: Some("Panes".to_string()),
-            subtitle: Some("Switch user panes or create Codex/Claude panes.".to_string()),
+            subtitle: Some("Switch user panes or inspect the managed /spawn crew.".to_string()),
             footer_hint: Some("Enter select | F2 rename | type to search".into()),
             items,
             is_searchable: true,
-            search_placeholder: Some("Search panes".to_string()),
+            search_placeholder: Some("Search panes and crew".to_string()),
             ..Default::default()
         });
+    }
+
+    pub(crate) fn pane_picker_items(&self) -> Vec<SelectionItem> {
+        let mut items = Vec::new();
+        items.push(section_item("User Panes"));
+        items.extend(self.user_pane_items());
+        items.push(section_item("Create User Pane"));
+        items.extend(new_pane_items());
+        items.push(section_item("Managed Crew (/spawn)"));
+        items.extend(self.spawn_tree_items(/*show_task_actions*/ false));
+        items
     }
 
     pub(crate) async fn restore_pane_layout_for_thread(
@@ -145,7 +150,7 @@ impl App {
             "Name Claude pane".to_string(),
             "Pane display name".to_string(),
             initial_name,
-            Some(profile.status_model_label().to_string()),
+            Some(profile.status_model_label()),
             Box::new(move |name: String| {
                 tx.send(AppEvent::CreateClaudePane {
                     profile,
@@ -158,6 +163,14 @@ impl App {
 
     pub(crate) fn open_codex_pane_model_picker(&mut self) {
         let default_model = self.native_spawn_default_model();
+        if std::env::var("PFTERMINAL_ORCHESTRATE_QA").as_deref() == Ok("1") {
+            self.open_codex_pane_name_prompt(
+                default_model,
+                Some(self.config.model_provider_id.clone()),
+                /*effort*/ None,
+            );
+            return;
+        }
         let presets = self
             .chat_widget
             .model_catalog()
@@ -290,13 +303,13 @@ impl App {
             .push(cell);
     }
 
-    pub(crate) fn persist_pane_state(&self) {
+    pub(crate) fn persist_pane_state(&mut self) -> bool {
         let codex_thread_id = self
             .primary_thread_id
             .or_else(|| self.chat_widget.thread_id())
             .map(|thread_id| thread_id.to_string());
         let Some(codex_thread_id) = codex_thread_id else {
-            return;
+            return true;
         };
         let layout = PaneLayoutState {
             version: PANE_LAYOUT_VERSION,
@@ -341,7 +354,12 @@ impl App {
         };
         if let Err(err) = persist_pane_layout(self.config.codex_home.as_ref(), &layout) {
             tracing::warn!(error = %err, "failed to persist pane layout");
+            self.chat_widget.add_error_message(format!(
+                "Pane layout was not saved; assignments cannot be restored after restart: {err}"
+            ));
+            return false;
         }
+        true
     }
 
     pub(crate) fn seed_restored_claude_pane_transcripts(&mut self) {
@@ -951,7 +969,7 @@ impl App {
             .ordered_threads()
             .into_iter()
             .filter(|(thread_id, _)| Some(*thread_id) != self.primary_thread_id)
-            .filter(|(thread_id, _)| !self.is_spawn_orchestration_thread(*thread_id))
+            .filter(|(thread_id, _)| !self.is_managed_spawn_crew_thread(*thread_id))
             .filter(|(_, entry)| {
                 entry
                     .agent_role
@@ -1036,7 +1054,7 @@ impl App {
             .ordered_threads()
             .into_iter()
             .filter(|(thread_id, _)| Some(*thread_id) != self.primary_thread_id)
-            .filter(|(thread_id, _)| !self.is_spawn_orchestration_thread(*thread_id))
+            .filter(|(thread_id, _)| !self.is_managed_spawn_crew_thread(*thread_id))
             .filter(|(_, entry)| {
                 entry
                     .agent_role

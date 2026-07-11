@@ -8,4 +8,4 @@ expression: normalized_backend_snapshot(terminal.backend())
 "                                                                                "
 "› Ask PFTerminal to do anything                                                 "
 "                                                                                "
-"  z-ai/glm-5.2 standard · /tmp/project · Post Fiat Terminal · TPS: -- tok/s     "
+"  Ambient GLM 5.2 standard · /tmp/project · Post Fiat Terminal · TPS: -- tok/s  "

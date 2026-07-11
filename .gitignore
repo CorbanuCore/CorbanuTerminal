@@ -69,6 +69,8 @@ apply_patch/
 
 # coverage
 coverage/
+qa/artifacts/
+ORCHESTRATE_RECOVERY_REPORT_*.md
 
 # personal files
 personal/

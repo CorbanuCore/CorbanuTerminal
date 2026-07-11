@@ -577,7 +577,7 @@ impl ChatWidget {
     pub(super) fn model_display_name(&self) -> String {
         let model = self.current_model();
         if model.is_empty() {
-            return DEFAULT_MODEL_DISPLAY_NAME.to_string();
+            DEFAULT_MODEL_DISPLAY_NAME.to_string()
         } else {
             self.model_catalog
                 .try_list_models()

@@ -219,6 +219,10 @@ pub(crate) enum AppEvent {
         thread_id: codex_protocol::ThreadId,
         task: String,
     },
+    /// Retry queued work after transient session-wide execution capacity clears.
+    RetryPendingSpawnAgentTask {
+        thread_id: codex_protocol::ThreadId,
+    },
     /// Start a normal turn in an existing Claude spawn pane.
     SubmitSpawnClaudePaneTask {
         pane_id: String,
@@ -232,6 +236,17 @@ pub(crate) enum AppEvent {
     },
     /// Start the guided `/orchestrate attach` flow.
     OpenOrchestrateTargetPicker,
+    /// Start the two-choice `/orchestrate` fast path.
+    OpenOrchestrateFastTargetPicker,
+    /// Choose a Manager for the two-choice `/orchestrate` fast path.
+    OpenOrchestrateFastManagerPicker {
+        target: String,
+    },
+    /// Bind an existing Manager using the fast-path defaults.
+    AttachOrchestrateFastManager {
+        target: String,
+        manager_node_id: String,
+    },
     /// Choose how long a guided whip should stay armed.
     OpenOrchestrateDurationPicker {
         target: String,

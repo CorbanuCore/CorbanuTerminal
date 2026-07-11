@@ -536,6 +536,13 @@ impl App {
                 if self.try_submit_active_claude_pane_op(&op) {
                     return Ok(AppRunControl::Continue);
                 }
+                if matches!(op, crate::app_command::AppCommand::UserTurn { .. })
+                    && let Some(thread_id) = self.active_thread_id
+                {
+                    self.note_assignment_user_turn(&crate::spawn_orchestration::thread_node_id(
+                        thread_id,
+                    ));
+                }
                 self.submit_active_thread_op(app_server, op).await?;
             }
             AppEvent::RestoreCancelledTurn(prompt) => {
@@ -2820,17 +2827,53 @@ impl App {
                         }
                     }
                     Err(err) => {
+                        if let Some(max_threads) =
+                            crate::app_server_session::turn_start_execution_capacity(&err)
+                        {
+                            let pending = self.pending_dispatch_from_registered_task(
+                                &original_target_node_id,
+                                task,
+                            );
+                            self.record_spawn_dispatch_acks(
+                                &pending.acks,
+                                "queued_capacity",
+                                format!(
+                                    "session execution capacity reached ({max_threads}); will retry"
+                                ),
+                                false,
+                            );
+                            self.enqueue_pending_dispatch_for_thread(thread_id, pending);
+                            let app_event_tx = self.app_event_tx.clone();
+                            tokio::spawn(async move {
+                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                                app_event_tx
+                                    .send(AppEvent::RetryPendingSpawnAgentTask { thread_id });
+                            });
+                            self.chat_widget.add_info_message(
+                                format!("Task queued for {label}."),
+                                Some(format!(
+                                    "The session is using all {max_threads} agent execution slots; PFTerminal will retry automatically."
+                                )),
+                            );
+                            return Ok(AppRunControl::Continue);
+                        }
                         let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                         self.abort_spawn_auto_processing_turn(&node_key);
                         self.requeue_spawn_report_processing_task(thread_id, &task);
+                        let detail = format!("{err:#}");
                         self.record_spawn_dispatch_failed_for_task(
                             &original_target_node_id,
                             &task,
-                            err.to_string(),
+                            detail.clone(),
                         );
                         self.chat_widget
-                            .add_error_message(format!("Failed to send task to {label}: {err}"));
+                            .add_error_message(format!("Failed to send task to {label}: {detail}"));
                     }
+                }
+            }
+            AppEvent::RetryPendingSpawnAgentTask { thread_id } => {
+                if !self.native_spawn_target_is_busy(thread_id) {
+                    self.flush_pending_dispatches_for_thread(thread_id);
                 }
             }
             AppEvent::SubmitSpawnClaudePaneTask { pane_id, task } => {
@@ -2844,6 +2887,27 @@ impl App {
             }
             AppEvent::OpenOrchestrateTargetPicker => {
                 self.open_orchestrate_target_picker();
+            }
+            AppEvent::OpenOrchestrateFastTargetPicker => {
+                self.open_orchestrate_fast_target_picker();
+            }
+            AppEvent::OpenOrchestrateFastManagerPicker { target } => {
+                self.open_orchestrate_fast_manager_picker(target);
+            }
+            AppEvent::AttachOrchestrateFastManager {
+                target,
+                manager_node_id,
+            } => {
+                let args = crate::orchestrate::orchestrate_guided_attach_args(
+                    &target,
+                    "8h",
+                    crate::orchestrate::DRAFT_WITH_MANAGER_SPEC,
+                    &manager_node_id,
+                );
+                match self.attach_guided_assignment(&args) {
+                    Ok(message) => self.chat_widget.add_info_message(message, None),
+                    Err(err) => self.chat_widget.add_error_message(err),
+                }
             }
             AppEvent::OpenOrchestrateDurationPicker { target } => {
                 self.open_orchestrate_duration_picker(target);

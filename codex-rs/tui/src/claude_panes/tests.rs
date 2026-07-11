@@ -462,6 +462,8 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
             pending_review_fire: None,
             ignored_review_fires: 0,
             expiry_notified: false,
+            last_target_output: None,
+            last_dispatch_result: None,
         },
     );
     let mut pending_native_dispatches = BTreeMap::new();

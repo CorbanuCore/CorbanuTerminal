@@ -48,6 +48,30 @@ fn map_additional_context(
         .collect()
 }
 
+fn turn_start_submission_error(err: &CodexErr) -> JSONRPCErrorError {
+    let mut error = internal_error(format!("failed to start turn: {err}"));
+    if let CodexErr::AgentLimitReached { max_threads } = err {
+        error.data = Some(serde_json::json!({
+            "turn_start_error": "execution_capacity",
+            "max_threads": max_threads,
+        }));
+    }
+    error
+}
+
+fn direct_input_to_v2_thread_spawn_is_blocked(
+    multi_agent_version: Option<MultiAgentVersion>,
+    session_source: &SessionSource,
+    app_server_client_name: Option<&str>,
+) -> bool {
+    multi_agent_version == Some(MultiAgentVersion::V2)
+        && matches!(
+            session_source,
+            SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
+        )
+        && app_server_client_name != Some("codex-tui")
+}
+
 struct ThreadSettingsBuildParams {
     method: &'static str,
     environments: Option<TurnEnvironmentSelections>,
@@ -262,13 +286,17 @@ impl TurnRequestProcessor {
         &self,
         request_id: &ConnectionRequestId,
         thread: &CodexThread,
+        app_server_client_name: Option<&str>,
     ) -> Result<(), JSONRPCErrorError> {
-        if thread.multi_agent_version() == Some(MultiAgentVersion::V2)
-            && matches!(
-                thread.config_snapshot().await.session_source,
-                SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
-            )
-        {
+        let session_source = thread.config_snapshot().await.session_source;
+        // PFTerminal creates persistent managed panes through thread/spawnAgent and owns their
+        // later turns. Their first turn establishes V2; without this exception every subsequent
+        // /spawn dispatch is rejected even though the same TUI owns the pane.
+        if direct_input_to_v2_thread_spawn_is_blocked(
+            thread.multi_agent_version(),
+            &session_source,
+            app_server_client_name,
+        ) {
             let error = invalid_request(DIRECT_INPUT_TO_MULTI_AGENT_V2_SUBAGENT_ERROR);
             self.track_error_response(request_id, &error, /*error_type*/ None);
             return Err(error);
@@ -397,8 +425,12 @@ impl TurnRequestProcessor {
                 .inspect_err(|error| {
                     self.track_error_response(&request_id, error, /*error_type*/ None);
                 })?;
-        self.ensure_direct_input_allowed(&request_id, thread.as_ref())
-            .await?;
+        self.ensure_direct_input_allowed(
+            &request_id,
+            thread.as_ref(),
+            app_server_client_name.as_deref(),
+        )
+        .await?;
         if let Err(error) = Self::validate_v2_input_limit(&params.input) {
             self.track_error_response(
                 &request_id,
@@ -480,7 +512,7 @@ impl TurnRequestProcessor {
             )
             .await
             .map_err(|err| {
-                let error = internal_error(format!("failed to start turn: {err}"));
+                let error = turn_start_submission_error(&err);
                 self.track_error_response(&request_id, &error, /*error_type*/ None);
                 error
             })?;
@@ -812,7 +844,7 @@ impl TurnRequestProcessor {
             .inspect_err(|error| {
                 self.track_error_response(request_id, error, /*error_type*/ None);
             })?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref())
+        self.ensure_direct_input_allowed(request_id, thread.as_ref(), None)
             .await?;
 
         if params.expected_turn_id.is_empty() {
@@ -1399,4 +1431,51 @@ fn xcode_26_4_mcp_elicitations_auto_deny(
     // TODO: Remove this compatibility hack once Xcode 26.4 ages out.
     client_name == Some("Xcode")
         && client_version.is_some_and(|version| version.starts_with("26.4"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn execution_capacity_turn_start_error_is_structured() {
+        let error = turn_start_submission_error(&CodexErr::AgentLimitReached { max_threads: 4 });
+
+        assert_eq!(
+            error.data,
+            Some(serde_json::json!({
+                "turn_start_error": "execution_capacity",
+                "max_threads": 4,
+            }))
+        );
+    }
+
+    #[test]
+    fn unrelated_turn_start_error_is_not_marked_as_capacity() {
+        let error = turn_start_submission_error(&CodexErr::InternalAgentDied);
+
+        assert_eq!(error.data, None);
+    }
+
+    #[test]
+    fn codex_tui_can_continue_its_persistent_v2_spawn_pane() {
+        let source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            parent_thread_id: ThreadId::new(),
+            depth: 1,
+            agent_path: None,
+            agent_nickname: Some("Burzum".to_string()),
+            agent_role: Some("troll".to_string()),
+        });
+
+        assert!(!direct_input_to_v2_thread_spawn_is_blocked(
+            Some(MultiAgentVersion::V2),
+            &source,
+            Some("codex-tui"),
+        ));
+        assert!(direct_input_to_v2_thread_spawn_is_blocked(
+            Some(MultiAgentVersion::V2),
+            &source,
+            Some("another-client"),
+        ));
+    }
 }
