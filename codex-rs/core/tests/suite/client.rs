@@ -495,6 +495,7 @@ impl ProviderAuthCommandFixture {
                 r#"#!/bin/sh
 first_line=$(sed -n '1p' tokens.txt)
 printf '%s\n' "$first_line"
+printf '%s\n' "${PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH:-0}" >> refresh-signals.txt
 tail -n +2 tokens.txt > tokens.next
 mv tokens.next tokens.txt
 "#,
@@ -521,6 +522,7 @@ set "first_line="
 if not defined first_line exit /b 1
 
 echo(%first_line%
+if defined PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH (echo %PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH%>>refresh-signals.txt) else (echo 0>>refresh-signals.txt)
 more +1 tokens.txt > tokens.next
 move /y tokens.next tokens.txt >nul
 "#,
@@ -553,6 +555,14 @@ move /y tokens.next tokens.txt >nul
             cwd: codex_utils_absolute_path::AbsolutePathBuf::try_from(self.tempdir.path())
                 .expect("tempdir should be absolute"),
         }
+    }
+
+    fn refresh_signals(&self) -> Vec<String> {
+        std::fs::read_to_string(self.tempdir.path().join("refresh-signals.txt"))
+            .unwrap_or_default()
+            .lines()
+            .map(ToString::to_string)
+            .collect()
     }
 }
 
@@ -1126,6 +1136,7 @@ async fn provider_auth_command_supplies_bearer_token() {
     let auth_fixture = ProviderAuthCommandFixture::new(&["command-token"]).unwrap();
 
     send_provider_auth_request(&server, auth_fixture.auth()).await;
+    assert_eq!(auth_fixture.refresh_signals(), ["0"]);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1158,6 +1169,7 @@ async fn provider_auth_command_refreshes_after_401() {
         .await;
 
     send_provider_auth_request(&server, auth_fixture.auth()).await;
+    assert_eq!(auth_fixture.refresh_signals(), ["0", "1"]);
 }
 
 /// Issues one streamed Responses request through a provider configured with command-backed auth.

@@ -42,12 +42,11 @@ use std::io::IsTerminal;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
 use supports_color::Stream;
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod app_cmd;
+mod claude_oauth;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod desktop_app;
 mod doctor;
@@ -2187,63 +2186,8 @@ async fn run_vault_command(command: VaultCommand) -> anyhow::Result<()> {
     }
 }
 
-#[derive(Debug, serde::Deserialize)]
-struct ClaudeCodeCredentials {
-    #[serde(rename = "claudeAiOauth")]
-    claude_ai_oauth: Option<ClaudeCodeOauthCredentials>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct ClaudeCodeOauthCredentials {
-    #[serde(rename = "accessToken")]
-    access_token: Option<String>,
-    #[serde(rename = "expiresAt")]
-    expires_at: Option<u64>,
-}
-
 async fn run_internal_claude_oauth_token() -> anyhow::Result<()> {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .ok_or_else(|| anyhow::anyhow!("HOME is not set; cannot read Claude Code credentials"))?;
-    let credentials_path = home.join(".claude").join(".credentials.json");
-    let contents = tokio::fs::read_to_string(&credentials_path)
-        .await
-        .map_err(|err| {
-            anyhow::anyhow!(
-                "Claude Code credentials not found at {} ({err}). Run `claude /login` with your Claude subscription.",
-                credentials_path.display()
-            )
-        })?;
-    let credentials: ClaudeCodeCredentials = serde_json::from_str(&contents).map_err(|err| {
-        anyhow::anyhow!(
-            "Claude Code credentials at {} are not valid JSON ({err}). Run `claude /login` again.",
-            credentials_path.display()
-        )
-    })?;
-    let oauth = credentials.claude_ai_oauth.ok_or_else(|| {
-        anyhow::anyhow!(
-            "Claude Code OAuth credentials are missing. Run `claude /login` and choose Claude account with subscription."
-        )
-    })?;
-    let access_token = oauth
-        .access_token
-        .filter(|token| !token.trim().is_empty())
-        .ok_or_else(|| {
-            anyhow::anyhow!("Claude Code OAuth access token is missing. Run `claude /login` again.")
-        })?;
-    let expires_at = oauth.expires_at.ok_or_else(|| {
-        anyhow::anyhow!("Claude Code OAuth token expiry is missing. Run `claude /login` again.")
-    })?;
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0);
-    if expires_at <= now_ms.saturating_add(60_000) {
-        anyhow::bail!(
-            "Claude Code OAuth token is expired or about to expire. Run `claude /login` to refresh your Claude subscription auth."
-        );
-    }
-
+    let access_token = claude_oauth::resolve_claude_oauth_access_token().await?;
     std::io::stdout().write_all(access_token.as_bytes())?;
     Ok(())
 }
