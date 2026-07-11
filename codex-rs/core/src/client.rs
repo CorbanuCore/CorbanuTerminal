@@ -1351,6 +1351,7 @@ impl ModelClient {
         let mut system = Vec::new();
         let instructions = prompt.base_instructions.text.trim();
         let is_claude_plan = is_claude_plan_model_slug(&model_info.slug);
+        let cache_control = anthropic_cache_control(is_claude_plan);
         if is_claude_plan {
             system.push(json!({
                 "type": "text",
@@ -1364,7 +1365,7 @@ impl ModelClient {
             });
             system.push(instruction_block);
         }
-        apply_anthropic_cache_control_to_last_system_block(&mut system);
+        apply_anthropic_cache_control_to_last_system_block(&mut system, &cache_control);
 
         let input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
         let mut messages = Vec::new();
@@ -1376,9 +1377,9 @@ impl ModelClient {
                 &mut skipped_tool_call_ids,
             );
         }
-        apply_anthropic_cache_control_to_last_user_messages(&mut messages);
+        apply_anthropic_cache_control_to_last_user_messages(&mut messages, &cache_control);
 
-        let tools = create_tools_json_for_anthropic_messages(&prompt.tools)?;
+        let tools = create_tools_json_for_anthropic_messages(&prompt.tools, &cache_control)?;
         let tool_choice = (!tools.is_empty()).then(|| json!({ "type": "auto" }));
         let upstream_model = anthropic_upstream_model(&model_info.slug);
         let (thinking, output_config) = anthropic_reasoning_for_model_and_effort(
@@ -3321,13 +3322,24 @@ fn push_anthropic_message(messages: &mut Vec<Value>, role: &str, block: Value) {
     }));
 }
 
-fn apply_anthropic_cache_control_to_last_user_messages(messages: &mut [Value]) {
+fn anthropic_cache_control(use_one_hour_ttl: bool) -> Value {
+    if use_one_hour_ttl {
+        json!({ "type": "ephemeral", "ttl": "1h" })
+    } else {
+        json!({ "type": "ephemeral" })
+    }
+}
+
+fn apply_anthropic_cache_control_to_last_user_messages(
+    messages: &mut [Value],
+    cache_control: &Value,
+) {
     let max_user_messages = ANTHROPIC_MESSAGES_MAX_CACHE_CONTROL_BLOCKS.saturating_sub(2);
     let mut marked_user_messages = 0usize;
     for index in (0..messages.len()).rev() {
         let is_user = messages[index].get("role").and_then(Value::as_str) == Some("user");
         if is_user && let Some(message) = messages.get_mut(index) {
-            mark_anthropic_message_cache_control(message);
+            mark_anthropic_message_cache_control(message, cache_control);
             marked_user_messages += 1;
             if marked_user_messages >= max_user_messages {
                 break;
@@ -3336,15 +3348,15 @@ fn apply_anthropic_cache_control_to_last_user_messages(messages: &mut [Value]) {
     }
 }
 
-fn apply_anthropic_cache_control_to_last_system_block(system: &mut [Value]) {
+fn apply_anthropic_cache_control_to_last_system_block(system: &mut [Value], cache_control: &Value) {
     if let Some(block) = system.last_mut()
         && let Some(object) = block.as_object_mut()
     {
-        object.insert("cache_control".to_string(), json!({ "type": "ephemeral" }));
+        object.insert("cache_control".to_string(), cache_control.clone());
     }
 }
 
-fn mark_anthropic_message_cache_control(message: &mut Value) {
+fn mark_anthropic_message_cache_control(message: &mut Value, cache_control: &Value) {
     let Some(content) = message.get_mut("content").and_then(Value::as_array_mut) else {
         return;
     };
@@ -3355,7 +3367,7 @@ fn mark_anthropic_message_cache_control(message: &mut Value) {
         )
     }) && let Some(object) = block.as_object_mut()
     {
-        object.insert("cache_control".to_string(), json!({ "type": "ephemeral" }));
+        object.insert("cache_control".to_string(), cache_control.clone());
     }
 }
 
@@ -3434,7 +3446,10 @@ fn anthropic_thinking_for_effort(effort: Option<&ReasoningEffortConfig>) -> Opti
     }
 }
 
-fn create_tools_json_for_anthropic_messages(tools: &[ToolSpec]) -> Result<Vec<Value>> {
+fn create_tools_json_for_anthropic_messages(
+    tools: &[ToolSpec],
+    cache_control: &Value,
+) -> Result<Vec<Value>> {
     let mut tools = tools
         .iter()
         .filter_map(tool_spec_to_anthropic_tool)
@@ -3444,11 +3459,11 @@ fn create_tools_json_for_anthropic_messages(tools: &[ToolSpec]) -> Result<Vec<Va
             tool.get("type").and_then(Value::as_str) != Some(ANTHROPIC_WEB_SEARCH_TOOL_TYPE),
         )
     });
-    mark_last_anthropic_tool_cache_control(&mut tools);
+    mark_last_anthropic_tool_cache_control(&mut tools, cache_control);
     Ok(tools)
 }
 
-fn mark_last_anthropic_tool_cache_control(tools: &mut [Value]) {
+fn mark_last_anthropic_tool_cache_control(tools: &mut [Value], cache_control: &Value) {
     if let Some(object) = tools
         .iter_mut()
         .rev()
@@ -3460,7 +3475,7 @@ fn mark_last_anthropic_tool_cache_control(tools: &mut [Value]) {
             )
         })
     {
-        object.insert("cache_control".to_string(), json!({ "type": "ephemeral" }));
+        object.insert("cache_control".to_string(), cache_control.clone());
     }
 }
 

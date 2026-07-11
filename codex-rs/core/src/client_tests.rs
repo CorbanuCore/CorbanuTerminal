@@ -1637,6 +1637,7 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
         body.pointer("/system/0/cache_control/type"),
         Some(&json!("ephemeral"))
     );
+    assert_eq!(body.pointer("/system/0/cache_control/ttl"), None);
     assert_eq!(
         body.pointer("/tools/0/cache_control/type"),
         None,
@@ -1749,6 +1750,19 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
         Some(&json!("ephemeral")),
         "Claude Plan caches the final system block while preserving the four-block limit"
     );
+    assert_eq!(
+        body.pointer("/system/1/cache_control/ttl"),
+        Some(&json!("1h")),
+        "Claude subscription sessions keep long-running agent prefixes warm"
+    );
+    assert_eq!(
+        body.pointer("/tools/1/cache_control/ttl"),
+        Some(&json!("1h"))
+    );
+    assert_eq!(
+        body.pointer("/messages/0/content/0/cache_control/ttl"),
+        Some(&json!("1h"))
+    );
     assert!(
         count_cache_control_markers(&body) <= 4,
         "Anthropic Messages rejects more than four cache_control blocks"
@@ -1806,6 +1820,10 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
         Some(&json!("ephemeral")),
         "Claude Fable Plan caches the final system block while preserving the four-block limit"
     );
+    assert_eq!(
+        body.pointer("/system/1/cache_control/ttl"),
+        Some(&json!("1h"))
+    );
     assert!(
         count_cache_control_markers(&body) <= 4,
         "Anthropic Messages rejects more than four cache_control blocks"
@@ -1828,6 +1846,10 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
         body.pointer("/system/0/cache_control/type"),
         Some(&json!("ephemeral")),
         "Claude Plan identity-only requests cache the identity block"
+    );
+    assert_eq!(
+        body.pointer("/system/0/cache_control/ttl"),
+        Some(&json!("1h"))
     );
 }
 
