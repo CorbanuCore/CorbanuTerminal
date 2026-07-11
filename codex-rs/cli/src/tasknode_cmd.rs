@@ -772,6 +772,10 @@ fn start_link_command(
 ) -> anyhow::Result<i32> {
     let existing = match TaskNodeLocalSession::load_optional(codex_home) {
         Ok(session) => session,
+        // A corrupt stored session must not dead-end `--relink`: replacing the
+        // bad credential is exactly what relink is for. Treat it as absent and
+        // proceed to a fresh link; without --relink, keep surfacing the error.
+        Err(TaskNodeLocalError::Corrupt(_)) if args.relink => None,
         Err(err) => return emit_tasknode_local_error(Some(codex_home), err),
     };
     if let Some(session) = &existing {
@@ -1043,7 +1047,8 @@ fn emit_session_error(err: &TaskNodeCommandSessionError) -> anyhow::Result<i32> 
                 "ok": false,
                 "error": "tasknode_link_pending",
                 "state": "pending",
-                "message": "Task Node link is pending. Finish GitHub auth, then run `pfterminal tasknode link --poll`.",
+                "message": "Task Node link is pending. Finish GitHub auth, then confirm with `pfterminal tasknode link --poll --timeout 0`.",
+                "nextStep": LINK_PENDING_NEXT_STEP,
                 "verificationUrl": verification_url,
             }))?;
         }

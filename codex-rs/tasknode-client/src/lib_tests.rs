@@ -173,6 +173,29 @@ fn session_round_trips_through_real_vault_with_mock_keyring() {
 }
 
 #[test]
+fn corrupt_stored_session_surfaces_corrupt_error() {
+    let codex_home = tempfile::tempdir().expect("tempdir");
+    let keyring = Arc::new(MockKeyringStore::default());
+    let vault = Vault::new_with_keyring_store(codex_home.path().to_path_buf(), keyring.clone());
+    vault
+        .add(AddCredential {
+            label: TASKNODE_SESSION_LABEL.to_string(),
+            credential_type: CredentialType::BearerToken,
+            provider: Some("tasknode".to_string()),
+            notes: None,
+            revocation_notes: None,
+            secret: "{not json".to_string(),
+        })
+        .expect("store corrupt secret");
+
+    let vault = Vault::new_with_keyring_store(codex_home.path().to_path_buf(), keyring);
+    assert!(matches!(
+        load_from_vault(&vault),
+        Err(TaskNodeLocalError::Corrupt(_))
+    ));
+}
+
+#[test]
 fn old_format_session_deserializes_and_resaves_all_fields() {
     let old = json!({
         "origin": "https://tasknode.example",
