@@ -4524,11 +4524,8 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     assert!(mandate.contains("Worker's latest completed output:"));
     assert!(mandate.contains("WORKER_AUDIT_RESULT: baseline checkout is invalid"));
     for cycle in 1..=24 {
-        app.orchestrate_now_override = Some(
-            started
-                + chrono::Duration::seconds(3)
-                + chrono::Duration::seconds(901 * cycle),
-        );
+        app.orchestrate_now_override =
+            Some(started + chrono::Duration::seconds(3) + chrono::Duration::seconds(901 * cycle));
         app.sweep_orchestrate_whips();
     }
     assert_eq!(drain_claude_pane_task_events(&mut app_event_rx).len(), 24);

@@ -2775,8 +2775,7 @@ impl App {
             }
             if is_assignment_completion {
                 if let Some(last_fire) = whip.last_fire_utc
-                    && now - last_fire
-                        < Duration::seconds(MIN_ASSIGNMENT_COMPLETION_INTERVAL_S)
+                    && now - last_fire < Duration::seconds(MIN_ASSIGNMENT_COMPLETION_INTERVAL_S)
                 {
                     return Err(format!(
                         "Assignment {id} is rate-limiting completion handoffs."

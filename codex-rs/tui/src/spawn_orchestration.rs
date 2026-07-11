@@ -3096,9 +3096,7 @@ impl App {
                     .as_ref()
                     .and_then(|entry| entry.agent_role.clone())
                     .or_else(|| saved_role.clone()),
-                existing_entry
-                    .as_ref()
-                    .is_some_and(|entry| entry.is_closed),
+                existing_entry.as_ref().is_some_and(|entry| entry.is_closed),
             );
             match app_server
                 .thread_read(thread_id, /*include_turns*/ false)
