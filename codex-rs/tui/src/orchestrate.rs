@@ -1888,7 +1888,31 @@ impl App {
             .or_insert(0);
         *generation = generation.saturating_add(1);
         let generation = *generation;
-        if let Some(output) = last_output.filter(|output| !output.trim().is_empty()) {
+        let is_assignment_worker = self.orchestrate_whips.values().any(|whip| {
+            whip.is_assignment()
+                && whip.state == WhipState::Armed
+                && whip.target == target_node_id
+                && matches!(
+                    whip.kind,
+                    WhipKind::Assignment {
+                        phase: AssignmentPhase::Executing,
+                        ..
+                    }
+                )
+        });
+        let completed_output = last_output
+            .filter(|output| !output.trim().is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                is_assignment_worker.then(|| {
+                    if turn_succeeded {
+                        "Worker turn completed successfully without visible output.".to_string()
+                    } else {
+                        "Worker turn ended unsuccessfully without visible output.".to_string()
+                    }
+                })
+            });
+        if let Some(output) = completed_output {
             let output = output.chars().take(12_000).collect::<String>();
             let mut changed = false;
             for whip in self.orchestrate_whips.values_mut().filter(|whip| {
@@ -1904,11 +1928,21 @@ impl App {
             }
         }
         self.pause_matching_whips_on_stop_marker(target_node_id, last_output);
+        self.recover_assignment_manager_on_empty_output(
+            target_node_id,
+            last_output,
+            turn_succeeded,
+        );
         self.pause_spinning_whips_on_empty_output(target_node_id, last_output);
         self.pause_spinning_whips_on_failed_turn(target_node_id, turn_succeeded);
         self.note_whip_holder_idle(target_node_id);
         if allow_fire {
-            self.evaluate_whips_for_target(target_node_id, generation, FireTrigger::Edge);
+            let trigger = if is_assignment_worker {
+                FireTrigger::Completion
+            } else {
+                FireTrigger::Edge
+            };
+            self.evaluate_whips_for_target(target_node_id, generation, trigger);
         }
     }
 
@@ -2709,24 +2743,30 @@ impl App {
             return Err(format!("Whip {id} is exhausted."));
         }
         if !matches!(trigger, FireTrigger::Manual | FireTrigger::Test) {
-            if !is_assignment && whip.last_idle_generation_fired == Some(idle_generation) {
+            let is_assignment_completion =
+                is_assignment && matches!(trigger, FireTrigger::Completion);
+            if (!is_assignment || is_assignment_completion)
+                && whip.last_idle_generation_fired == Some(idle_generation)
+            {
                 return Err(format!("Whip {id} already fired for this idle period."));
             }
-            let cadence_s = assignment_effective_cadence_s(&whip);
-            if let Some(last_fire) = whip.last_fire_utc
-                && now - last_fire < Duration::seconds(cadence_s as i64)
-            {
-                return Err(format!("Whip {id} is inside cooldown."));
-            }
-            if let WhipKind::Assignment {
-                last_user_turn_utc: Some(last_user_turn),
-                ..
-            } = whip.kind
-                && now - last_user_turn < Duration::seconds(whip.cooldown_s as i64)
-            {
-                return Err(format!(
-                    "Assignment {id} is yielding to recent user activity."
-                ));
+            if !is_assignment_completion {
+                let cadence_s = assignment_effective_cadence_s(&whip);
+                if let Some(last_fire) = whip.last_fire_utc
+                    && now - last_fire < Duration::seconds(cadence_s as i64)
+                {
+                    return Err(format!("Whip {id} is inside cooldown."));
+                }
+                if let WhipKind::Assignment {
+                    last_user_turn_utc: Some(last_user_turn),
+                    ..
+                } = whip.kind
+                    && now - last_user_turn < Duration::seconds(whip.cooldown_s as i64)
+                {
+                    return Err(format!(
+                        "Assignment {id} is yielding to recent user activity."
+                    ));
+                }
             }
         }
         if !self.target_node_is_idle(&whip.target) {
@@ -2803,9 +2843,7 @@ impl App {
             if !matches!(trigger, FireTrigger::Test) {
                 whip.fires = whip.fires.saturating_add(1);
                 whip.last_fire_utc = Some(now);
-                if !whip.is_assignment() {
-                    whip.last_idle_generation_fired = Some(plan.target_idle_generation);
-                }
+                whip.last_idle_generation_fired = Some(plan.target_idle_generation);
             }
             let exhausted = !whip.is_assignment() && whip.fires >= whip.max_fires;
             if exhausted && !matches!(trigger, FireTrigger::Test) {
@@ -2955,6 +2993,90 @@ impl App {
         }
     }
 
+    fn recover_assignment_manager_on_empty_output(
+        &mut self,
+        target_node_id: &str,
+        last_output: Option<&str>,
+        turn_succeeded: bool,
+    ) {
+        let node_id = normalize_orchestrate_node_id(target_node_id);
+        let has_visible_output = last_output.is_some_and(|output| !output.trim().is_empty());
+        let mut retry_ids = Vec::new();
+        let mut pause_ids = Vec::new();
+        let mut changed = false;
+
+        for whip in self.orchestrate_whips.values_mut().filter(|whip| {
+            whip.is_assignment()
+                && whip.state == WhipState::Armed
+                && whip.holder.as_deref() == Some(node_id.as_str())
+        }) {
+            if has_visible_output {
+                if whip.empty_output_fires != 0 {
+                    whip.empty_output_fires = 0;
+                    changed = true;
+                }
+                continue;
+            }
+            // Provider failures have their own bounded retry/backoff path. This guard handles the
+            // distinct failure mode where the provider reports success but emits no assistant item.
+            if !turn_succeeded {
+                continue;
+            }
+            whip.empty_output_fires = whip.empty_output_fires.saturating_add(1);
+            changed = true;
+            if whip.empty_output_fires == 1 {
+                retry_ids.push(whip.id.clone());
+            } else {
+                pause_ids.push(whip.id.clone());
+            }
+        }
+
+        if changed {
+            self.persist_pane_state();
+        }
+        for id in retry_ids {
+            let Some(whip) = self.orchestrate_whips.get(&id) else {
+                continue;
+            };
+            let Some(manager) = whip.holder.as_deref() else {
+                continue;
+            };
+            let task = format!(
+                "Assignment {id} recovery: your previous turn completed successfully but emitted no visible assistant response. Process the latest user message already present in this conversation. Continue drafting the assignment from the available context and dispatch the Worker when the specification is sufficiently concrete. Do not ask the user to repeat information they already supplied."
+            );
+            match self.fire_destination_for_node(manager) {
+                Ok(FireDestination::Native(thread_id)) => self
+                    .app_event_tx
+                    .send(AppEvent::SubmitSpawnAgentTask { thread_id, task }),
+                Ok(FireDestination::ClaudePane(pane_id)) => self
+                    .app_event_tx
+                    .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task }),
+                Err(err) => {
+                    pause_ids.push(id.clone());
+                    self.chat_widget.add_error_message(format!(
+                        "Assignment {id} could not retry its empty Manager turn: {err}"
+                    ));
+                    continue;
+                }
+            }
+            self.chat_widget.add_info_message(
+                format!(
+                    "Assignment {id} Manager returned no visible response; retrying once with the existing conversation context."
+                ),
+                None,
+            );
+        }
+        pause_ids.sort();
+        pause_ids.dedup();
+        for id in pause_ids {
+            self.mark_whip_terminal(
+                &id,
+                WhipState::Paused,
+                "Manager completed twice without visible output",
+            );
+        }
+    }
+
     fn pause_spinning_whips_on_failed_turn(&mut self, target_node_id: &str, turn_succeeded: bool) {
         let mut paused = Vec::new();
         let mut failing_assignments = Vec::new();
@@ -3039,6 +3161,41 @@ impl App {
         }
         for id in pause {
             self.mark_whip_terminal(&id, WhipState::Paused, "holder ignored two review fires");
+        }
+
+        // A Worker completion can arrive while its Manager is still handling an earlier
+        // mandate. Its idle generation remains unaudited until the Manager becomes idle.
+        let pending_reports: Vec<(String, u64)> = self
+            .orchestrate_whips
+            .values()
+            .filter(|whip| {
+                whip.is_assignment()
+                    && whip.state == WhipState::Armed
+                    && matches!(
+                        whip.kind,
+                        WhipKind::Assignment {
+                            phase: AssignmentPhase::Executing,
+                            ..
+                        }
+                    )
+                    && whip.holder.as_deref() == Some(holder_node_id.as_str())
+                    && whip
+                        .last_target_output
+                        .as_ref()
+                        .is_some_and(|output| !output.trim().is_empty())
+            })
+            .filter_map(|whip| {
+                let generation = self
+                    .orchestrate_idle_generation_by_target
+                    .get(&whip.target)
+                    .copied()
+                    .unwrap_or(0);
+                (generation > 0 && whip.last_idle_generation_fired != Some(generation))
+                    .then_some((whip.target.clone(), generation))
+            })
+            .collect();
+        for (target, generation) in pending_reports {
+            self.evaluate_whips_for_target(&target, generation, FireTrigger::Completion);
         }
     }
 
@@ -3303,6 +3460,7 @@ enum CommandOrigin<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FireTrigger {
     Edge,
+    Completion,
     Tick,
     Manual,
     Test,
@@ -3378,28 +3536,23 @@ fn assignment_birth_brief(
         .map(str::trim)
         .filter(|text| !text.is_empty())
         .map(|text| format!("\n\nInitial assignment spec ({source}):\n{text}"))
-        .unwrap_or_else(|| {
-            format!(
-                "\n\nSpec source: {source}. Draft and save the spec with the user before execution."
-            )
-        });
+        .unwrap_or_else(|| format!("\n\nSpec source: {source}."));
     let kickoff = if spec_is_locked {
         format!(
-            "The assignment spec below is locked. Dispatch its first concrete task immediately using the exact host target `{}`; do not prepend `Worker` or alter that target, and do not ask the user to restate or approve the spec. After emitting the pfterminal-send-task block, stop your turn and wait for the Worker's report; do not execute the Worker task yourself. Your first successful dispatch starts execution.",
+            "The spec below is locked. Send the first concrete Worker task now to `{}` without changing that target. Do not ask for approval or do the Worker's task yourself. After sending it, wait for the Worker result.",
             whip.target,
         )
     } else {
         format!(
-            "Iterate with the user to lock the spec before dispatching Worker {worker_label}. After approval, dispatch using the exact host target `{}`. Your first pfterminal-send-task dispatch starts execution.",
-            whip.target,
+            "Draft mode: ask the user for the assignment requirements. When they are concrete, send the first task to Worker {worker_label}."
         )
     };
     let dispatch_protocol = format!(
-        "To dispatch, emit this fenced block directly as assistant message text:\n```pfterminal-send-task\n{{\"target\":\"{}\",\"task\":\"<concrete task>\"}}\n```\n`pfterminal-send-task` is a host message protocol, not a shell command or executable. Never run it through exec, command -v, which, a terminal, or a tool call, and never search the filesystem for a dispatch bridge.",
+        "To send work, write this fenced assistant-text block; it is not a shell command or tool:\n```pfterminal-send-task\n{{\"target\":\"{}\",\"task\":\"<concrete task>\"}}\n```",
         whip.target,
     );
     format!(
-        "You are Manager {manager_label} of Worker {worker_label}. You will ride it continuously until {duration} after execution starts.\n\nThis is a native PFTerminal orchestrator assignment, not a Task Node task. Do not invoke Task Node skills, tools, ledgers, or workflows unless the assignment spec explicitly requires Task Node. Use only pfterminal-send-task blocks to dispatch this Worker.\n\n{dispatch_protocol}\n\n{kickoff} When mandated, audit the Worker's latest output and dispatch the next concrete task. Answer user status questions from your context. Emit ASSIGNMENT_BLOCKED: <reason> only for a genuinely user-owned decision, and emit WHIP_DONE only when the assignment is genuinely complete. When you emit either marker, place it alone on its own line.\n\nAssume the user may be away for hours. Retry, work around, and conservatively re-scope problems autonomously. Keep a concise progress log in every response: what the Worker did, what you dispatched, and open risks. While executing, you are re-mandated every {} minutes when the Worker is stopped and the user is away. User messages always take priority.{inline}",
+        "You are Manager {manager_label} for Worker {worker_label}. This assignment lasts until {duration} after execution starts.\n\n{dispatch_protocol}\n\n{kickoff} After each Worker result, audit it and send the next task until the assignment is complete. Keep progress concise. User messages take priority. Use WHIP_DONE alone only when complete, or ASSIGNMENT_BLOCKED: <reason> alone only for a decision only the user can make. If the Worker is idle, you will be prompted again after {} minutes.{inline}",
         whip.cooldown_s / 60,
     )
 }
@@ -3725,9 +3878,12 @@ mod tests {
 
         assert!(brief.contains("```pfterminal-send-task"));
         assert!(brief.contains("\"target\":\"thread:worker-123\""));
-        assert!(brief.contains("host message protocol, not a shell command or executable"));
-        assert!(brief.contains("Never run it through exec, command -v, which"));
-        assert!(brief.contains("not a Task Node task"));
+        assert!(brief.contains("not a shell command or tool"));
+        assert!(brief.contains("Draft mode: ask the user for the assignment requirements"));
+        assert!(
+            brief.len() < 1_500,
+            "birth brief should stay concise for provider reliability"
+        );
     }
 
     #[test]

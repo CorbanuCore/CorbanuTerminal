@@ -1022,12 +1022,13 @@ impl App {
         description
     }
 
-    fn codex_pane_description(
+    pub(crate) fn codex_pane_description(
         &self,
         thread_id: ThreadId,
         entry: &crate::multi_agents::AgentPickerThreadEntry,
     ) -> String {
-        let mut description = format!("model unknown; {}", native_thread_status_label(Some(entry)));
+        let model = entry.model.as_deref().unwrap_or("model unavailable");
+        let mut description = format!("{model}; {}", native_thread_status_label(Some(entry)));
         append_context_left(
             &mut description,
             self.spawn_context_left_by_thread.get(&thread_id),

@@ -1128,6 +1128,8 @@ impl App {
             notification.thread.agent_role.clone(),
             /*is_closed*/ false,
         );
+        self.agent_navigation
+            .set_model(thread_id, Some(session.model.clone()));
         Some(session)
     }
 
@@ -1622,7 +1624,8 @@ impl App {
             return;
         }
 
-        let (thread_id, status, message) = match notification {
+        let (thread_id, status, message, should_process_terminal_side_effects) = match notification
+        {
             ServerNotification::TurnStarted(notification) => {
                 let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
                     return;
@@ -1636,6 +1639,7 @@ impl App {
                     thread_id,
                     codex_app_server_protocol::CollabAgentStatus::Running,
                     None,
+                    true,
                 )
             }
             ServerNotification::TurnCompleted(notification) => {
@@ -1659,10 +1663,20 @@ impl App {
                     TurnStatus::Failed => codex_app_server_protocol::CollabAgentStatus::Errored,
                     TurnStatus::InProgress => codex_app_server_protocol::CollabAgentStatus::Running,
                 };
+                let terminal_key = (thread_id, notification.turn.id.clone());
+                let should_process_terminal_side_effects = self
+                    .spawn_processed_terminal_turns
+                    .insert(terminal_key.clone());
+                const PROCESSED_TERMINAL_TURN_LIMIT: usize = 4_096;
+                if self.spawn_processed_terminal_turns.len() > PROCESSED_TERMINAL_TURN_LIMIT {
+                    self.spawn_processed_terminal_turns.clear();
+                    self.spawn_processed_terminal_turns.insert(terminal_key);
+                }
                 (
                     thread_id,
                     status,
                     spawn_turn_result_message(&notification.turn),
+                    should_process_terminal_side_effects,
                 )
             }
             ServerNotification::ItemCompleted(notification) => {
@@ -1710,6 +1724,27 @@ impl App {
             codex_app_server_protocol::CollabAgentStatus::PendingInit
                 | codex_app_server_protocol::CollabAgentStatus::Running
         );
+        // Preserve what this turn actually emitted for orchestration decisions. The synthetic
+        // status text below is useful in the picker and child reports, but it must not make an
+        // empty Manager completion look like visible provider output.
+        let current_turn_message = message.clone();
+        let message = if !is_running && message.as_deref().is_none_or(|text| text.trim().is_empty())
+        {
+            match &status {
+                codex_app_server_protocol::CollabAgentStatus::Completed => {
+                    Some("Turn completed without visible output.".to_string())
+                }
+                codex_app_server_protocol::CollabAgentStatus::Interrupted => {
+                    Some("Turn interrupted without visible output.".to_string())
+                }
+                codex_app_server_protocol::CollabAgentStatus::Errored => {
+                    Some("Turn failed without visible output.".to_string())
+                }
+                _ => message,
+            }
+        } else {
+            message
+        };
         let report_message = message.clone();
         self.spawn_status_by_thread.insert(
             thread_id,
@@ -1748,17 +1783,14 @@ impl App {
                 self.flush_pending_reports_for_thread(thread_id)
             };
             let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
-            let last_result = self
-                .agent_navigation
-                .get(&thread_id)
-                .and_then(|entry| entry.last_result_message.as_deref())
-                .map(str::to_string);
-            self.note_whip_target_idle_with_fire_control(
-                &node_key,
-                last_result.as_deref(),
-                !flushed_dispatch && !flushed_reports,
-                turn_succeeded,
-            );
+            if should_process_terminal_side_effects {
+                self.note_whip_target_idle_with_fire_control(
+                    &node_key,
+                    current_turn_message.as_deref(),
+                    !flushed_dispatch && !flushed_reports,
+                    turn_succeeded,
+                );
+            }
         }
     }
 

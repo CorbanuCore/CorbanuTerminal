@@ -89,6 +89,7 @@ impl AgentNavigationState {
         }
         let (
             previous_agent_path,
+            previous_model,
             previous_last_task_message,
             previous_last_result_message,
             previous_is_running,
@@ -98,18 +99,20 @@ impl AgentNavigationState {
             .map(|entry| {
                 (
                     entry.agent_path.clone(),
+                    entry.model.clone(),
                     entry.last_task_message.clone(),
                     entry.last_result_message.clone(),
                     entry.is_running,
                 )
             })
-            .unwrap_or((None, None, None, false));
+            .unwrap_or((None, None, None, None, false));
         self.threads.insert(
             thread_id,
             AgentPickerThreadEntry {
                 agent_nickname,
                 agent_role,
                 agent_path: previous_agent_path,
+                model: previous_model,
                 last_task_message: previous_last_task_message,
                 last_result_message: previous_last_result_message,
                 is_running: previous_is_running && !is_closed,
@@ -129,6 +132,7 @@ impl AgentNavigationState {
                     agent_nickname: None,
                     agent_role: None,
                     agent_path: None,
+                    model: None,
                     last_task_message: None,
                     last_result_message: None,
                     is_running: false,
@@ -173,6 +177,14 @@ impl AgentNavigationState {
             && let Some(entry) = self.threads.get_mut(&thread_id)
         {
             entry.agent_path = Some(agent_path);
+        }
+    }
+
+    pub(crate) fn set_model(&mut self, thread_id: ThreadId, model: Option<String>) {
+        if let Some(model) = model.filter(|model| !model.trim().is_empty())
+            && let Some(entry) = self.threads.get_mut(&thread_id)
+        {
+            entry.model = Some(model);
         }
     }
 

@@ -38,6 +38,8 @@ pub(crate) struct AgentPickerThreadEntry {
     pub(crate) agent_role: Option<String>,
     /// Canonical v2 agent path, when the thread was observed through v2 activity.
     pub(crate) agent_path: Option<String>,
+    /// Model selected for this thread, cached for pane-picker status rendering.
+    pub(crate) model: Option<String>,
     /// Latest task sent to this agent, if one was observed locally.
     pub(crate) last_task_message: Option<String>,
     /// Latest final result or terminal error preview, if one was observed locally.

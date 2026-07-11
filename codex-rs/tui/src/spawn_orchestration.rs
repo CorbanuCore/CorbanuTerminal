@@ -2744,6 +2744,8 @@ impl App {
             /*is_closed*/ false,
         );
         let session_model = started.session.model.clone();
+        self.agent_navigation
+            .set_model(thread_id, Some(session_model.clone()));
         let session_model_provider = started.session.model_provider_id.clone();
         let channel = self.ensure_thread_channel(thread_id);
         channel.set_session(started.session, started.turns).await;
@@ -3080,6 +3082,15 @@ impl App {
                 continue;
             }
 
+            // Reattachment discovers the effective model from the resumed session. Seed the
+            // picker entry first so attach_restored_native_spawn_thread can store that model;
+            // upserting only after attachment silently discarded it on every cold resume.
+            self.upsert_agent_picker_thread(
+                thread_id,
+                saved_nickname.clone(),
+                saved_role.clone(),
+                /*is_closed*/ false,
+            );
             let existing_entry = self.agent_navigation.get(&thread_id).cloned();
             match app_server
                 .thread_read(thread_id, /*include_turns*/ false)
@@ -3216,8 +3227,10 @@ impl App {
             .await
         {
             Ok(started) => {
+                let model = started.session.model.clone();
                 let channel = self.ensure_thread_channel(thread_id);
                 channel.set_session(started.session, started.turns).await;
+                self.agent_navigation.set_model(thread_id, Some(model));
                 true
             }
             Err(err) => {
@@ -3398,6 +3411,8 @@ impl App {
             /*agent_role*/ None,
             /*is_closed*/ false,
         );
+        self.agent_navigation
+            .set_model(thread_id, Some(session_model.clone()));
         let channel = self.ensure_thread_channel(thread_id);
         channel.set_session(started.session, started.turns).await;
         self.persist_spawn_thread_state_metadata(SpawnThreadStateMetadata {
@@ -3610,6 +3625,9 @@ impl App {
 
     pub(crate) fn is_spawn_orchestration_thread(&self, thread_id: ThreadId) -> bool {
         if self.is_codex_main_bound_spawn_root_thread(thread_id) {
+            return true;
+        }
+        if self.is_assignment_holder(&thread_node_id(thread_id)) {
             return true;
         }
         self.spawn_status_by_thread.contains_key(&thread_id)

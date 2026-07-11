@@ -779,6 +779,9 @@ pub(crate) struct App {
     pub(crate) spawn_next_dispatch_seq: u64,
     pub(crate) spawn_processed_dispatch_seq_ids: HashSet<u64>,
     pub(crate) spawn_processed_dispatches: HashSet<(ThreadId, String, String, String)>,
+    /// Terminal turn notifications are observed both on receipt and during buffered replay. Keep
+    /// orchestration side effects idempotent across those two delivery paths.
+    pub(crate) spawn_processed_terminal_turns: HashSet<(ThreadId, String)>,
     /// Loop-breaker state for auto child-report processing turns, keyed by parent node id.
     pub(crate) spawn_auto_loop_state_by_node:
         HashMap<String, crate::spawn_orchestration::SpawnAutoLoopState>,
@@ -1441,6 +1444,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
             spawn_next_dispatch_seq: restored_spawn_next_dispatch_seq,
             spawn_processed_dispatch_seq_ids: restored_spawn_processed_dispatch_seq_ids,
             spawn_processed_dispatches: HashSet::new(),
+            spawn_processed_terminal_turns: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
             spawn_operator_input_seen: false,
             spawn_quarantine_notified_by_node: HashSet::new(),

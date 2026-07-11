@@ -1308,6 +1308,7 @@ async fn collab_receiver_notification_caches_thread_without_app_server_read() {
             agent_nickname: None,
             agent_role: None,
             agent_path: None,
+            model: None,
             last_task_message: None,
             last_result_message: None,
             is_running: false,
@@ -1850,6 +1851,12 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
     assert!(app.agent_navigation.get(&old_snaga_thread_id).is_none());
     assert!(app.agent_navigation.get(&old_ghash_thread_id).is_none());
     assert!(app.thread_has_loaded_session(troll_thread_id));
+    assert_eq!(
+        app.agent_navigation
+            .get(&troll_thread_id)
+            .and_then(|entry| entry.model.as_deref()),
+        Some(App::STANDARD_TROLL_MODEL)
+    );
     assert!(!app.spawn_parent_by_node.contains_key(&old_snaga_node_id));
     assert!(!app.spawn_parent_by_node.contains_key(&old_ghash_node_id));
 
@@ -4427,28 +4434,15 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     ));
     let birth_tasks = drain_claude_pane_task_events(&mut app_event_rx);
     assert_eq!(birth_tasks.len(), 1);
+    assert!(birth_tasks[0].1.contains("The spec below is locked."));
     assert!(
         birth_tasks[0]
             .1
-            .contains("The assignment spec below is locked.")
-    );
-    assert!(
-        birth_tasks[0]
-            .1
-            .contains("Dispatch its first concrete task immediately")
+            .contains("Send the first concrete Worker task now")
     );
     assert!(birth_tasks[0].1.contains(&worker_node));
-    assert!(birth_tasks[0].1.contains("stop your turn"));
-    assert!(
-        birth_tasks[0]
-            .1
-            .contains("native PFTerminal orchestrator assignment, not a Task Node task")
-    );
-    assert!(
-        birth_tasks[0]
-            .1
-            .contains("Use only pfterminal-send-task blocks")
-    );
+    assert!(birth_tasks[0].1.contains("wait for the Worker result"));
+    assert!(birth_tasks[0].1.contains("not a shell command or tool"));
     assert!(!birth_tasks[0].1.contains("First iterate with the user"));
     app.note_whip_target_idle_with_fire_control(
         &manager_node,
@@ -4650,7 +4644,7 @@ async fn simple_assignment_manager_dispatches_without_spawn_role() {
     app.handle_orchestrate_command(format!(
         "attach {worker_node} simple-manager --mode review --holder {manager_node} --for 1h"
     ));
-    assert!(!app.is_spawn_orchestration_thread(manager_thread_id));
+    assert!(app.is_spawn_orchestration_thread(manager_thread_id));
     assert!(app.is_assignment_holder(&manager_node));
 
     let dispatched = app.dispatch_native_spawn_task_blocks_from_text(
@@ -4677,6 +4671,144 @@ async fn simple_assignment_manager_dispatches_without_spawn_role() {
             ..
         })
     ));
+}
+
+#[tokio::test]
+async fn assignment_manager_empty_completion_retries_current_turn_once_then_pauses() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "empty-manager", "Draft and run the recovery audit.");
+    let manager_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000463").expect("manager id");
+    let worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000464").expect("worker id");
+    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
+    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
+    let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
+    app.handle_orchestrate_command(format!(
+        "attach {worker_node} empty-manager --mode review --holder {manager_node} --for 1h"
+    ));
+    while app_event_rx.try_recv().is_ok() {}
+
+    // This is the incident shape: the picker still has an older visible answer, but the current
+    // provider turn completes without an AgentMessage item.
+    app.agent_navigation.set_last_result_message(
+        manager_thread_id,
+        Some("Before I dispatch, give me the assignment spec.".to_string()),
+    );
+    app.update_spawn_status_for_thread_notification(&turn_completed_notification(
+        manager_thread_id,
+        "manager-empty-1",
+        TurnStatus::Completed,
+    ));
+    assert_eq!(
+        app.agent_navigation
+            .get(&manager_thread_id)
+            .and_then(|entry| entry.last_result_message.as_deref()),
+        Some("Turn completed without visible output."),
+        "the picker should describe the terminal state without hiding the empty provider result"
+    );
+
+    let retry = drain_spawn_agent_task_for(&mut app_event_rx, manager_thread_id)
+        .expect("first empty completion should retry the Manager");
+    assert!(retry.contains("previous turn completed successfully"));
+    assert!(retry.contains("latest user message already present"));
+    assert!(retry.contains("Do not ask the user to repeat"));
+    assert_eq!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| (whip.state, whip.empty_output_fires)),
+        Some((crate::orchestrate::WhipState::Armed, 1))
+    );
+
+    // The app observes the same completion once when received and again during buffered replay.
+    // Replaying that terminal notification must not consume the one allowed recovery retry.
+    app.update_spawn_status_for_thread_notification(&turn_completed_notification(
+        manager_thread_id,
+        "manager-empty-1",
+        TurnStatus::Completed,
+    ));
+    assert!(drain_spawn_agent_task_for(&mut app_event_rx, manager_thread_id).is_none());
+    assert_eq!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| (whip.state, whip.empty_output_fires)),
+        Some((crate::orchestrate::WhipState::Armed, 1))
+    );
+
+    app.update_spawn_status_for_thread_notification(&turn_completed_notification(
+        manager_thread_id,
+        "manager-empty-2",
+        TurnStatus::Completed,
+    ));
+    assert!(drain_spawn_agent_task_for(&mut app_event_rx, manager_thread_id).is_none());
+    assert_eq!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| whip.state),
+        Some(crate::orchestrate::WhipState::Paused)
+    );
+}
+
+#[tokio::test]
+async fn assignment_manager_visible_paraphrase_resets_empty_completion_guard() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "empty-reset", "Draft and run the recovery audit.");
+    let manager_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000465").expect("manager id");
+    let worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000466").expect("worker id");
+    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
+    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
+    let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
+    app.handle_orchestrate_command(format!(
+        "attach {worker_node} empty-reset --mode review --holder {manager_node} --for 1h"
+    ));
+    while app_event_rx.try_recv().is_ok() {}
+
+    app.note_whip_target_idle_with_fire_control(&manager_node, None, false, true);
+    let _ = drain_spawn_agent_task_for(&mut app_event_rx, manager_thread_id)
+        .expect("first empty completion should retry");
+    app.note_whip_target_idle_with_fire_control(
+        &manager_node,
+        Some("I have enough context; drafting the acceptance criteria now."),
+        false,
+        true,
+    );
+    assert_eq!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| whip.empty_output_fires),
+        Some(0)
+    );
+    app.note_whip_target_idle_with_fire_control(&manager_node, Some("   "), false, true);
+    assert!(drain_spawn_agent_task_for(&mut app_event_rx, manager_thread_id).is_some());
+    assert_eq!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| whip.state),
+        Some(crate::orchestrate::WhipState::Armed)
+    );
+}
+
+#[tokio::test]
+async fn codex_pane_description_uses_cached_model_instead_of_unknown() {
+    let mut app = make_test_app().await;
+    let thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000467").expect("thread id");
+    app.upsert_agent_picker_thread(thread_id, Some("Manager".to_string()), None, false);
+    app.agent_navigation
+        .set_model(thread_id, Some("claude-fable-5-plan".to_string()));
+    let entry = app.agent_navigation.get(&thread_id).expect("picker entry");
+
+    let description = app.codex_pane_description(thread_id, entry);
+
+    assert!(
+        description.starts_with("claude-fable-5-plan; idle"),
+        "{description}"
+    );
+    assert!(!description.contains("model unknown"), "{description}");
 }
 
 #[tokio::test]
@@ -5028,6 +5160,116 @@ async fn orchestrate_detach_removes_whip_and_idle_generation() {
     assert!(drain_claude_pane_task_events(&mut app_event_rx).is_empty());
     assert!(app.orchestrate_whips.is_empty());
     assert!(app.orchestrate_idle_generation_by_target.is_empty());
+}
+
+#[tokio::test]
+async fn assignment_worker_completion_wakes_manager_without_waiting_for_watchdog() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "completion-handoff", "Keep managing the Worker.");
+    let manager_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Troll),
+            Some("Manager".to_string()),
+        )
+        .expect("create manager");
+    let worker_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            Some(crate::spawn_orchestration::SpawnRole::Orc),
+            Some("Worker".to_string()),
+        )
+        .expect("create worker");
+    let manager_node = crate::spawn_orchestration::pane_node_id(&manager_pane_id);
+    let worker_node = crate::spawn_orchestration::pane_node_id(&worker_pane_id);
+    let started = chrono::DateTime::parse_from_rfc3339("2026-07-10T20:00:00Z")
+        .expect("timestamp")
+        .with_timezone(&chrono::Utc);
+    app.orchestrate_now_override = Some(started);
+    app.handle_orchestrate_command(format!(
+        "attach {worker_pane_id} completion-handoff --mode review --holder {manager_pane_id} --for 8h --cooldown 900s"
+    ));
+    app.note_whip_holder_dispatched(&manager_node, &worker_node);
+    while app_event_rx.try_recv().is_ok() {}
+    app.orchestrate_whips
+        .get_mut("assignment-1")
+        .expect("assignment")
+        .last_fire_utc = Some(started);
+
+    app.note_whip_target_idle_with_fire_control(
+        &worker_node,
+        Some("first completed result"),
+        true,
+        true,
+    );
+
+    let immediate = drain_claude_pane_task_events(&mut app_event_rx);
+    assert_eq!(immediate.len(), 1);
+    assert_eq!(immediate[0].0, manager_pane_id);
+    assert_eq!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .and_then(|whip| whip.last_idle_generation_fired),
+        Some(1)
+    );
+
+    app.claude_panes
+        .panes
+        .iter_mut()
+        .find(|pane| pane.id == manager_pane_id)
+        .expect("manager pane")
+        .status = crate::claude_panes::ClaudePaneStatus::Running;
+    app.note_whip_target_idle_with_fire_control(
+        &worker_node,
+        Some("second completed result"),
+        true,
+        true,
+    );
+    assert!(drain_claude_pane_task_events(&mut app_event_rx).is_empty());
+
+    app.claude_panes
+        .panes
+        .iter_mut()
+        .find(|pane| pane.id == manager_pane_id)
+        .expect("manager pane")
+        .status = crate::claude_panes::ClaudePaneStatus::Idle;
+    app.note_whip_target_idle_with_fire_control(
+        &manager_node,
+        Some("manager finished its prior audit"),
+        false,
+        true,
+    );
+
+    let pending = drain_claude_pane_task_events(&mut app_event_rx);
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].0, manager_pane_id);
+    assert_eq!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .and_then(|whip| whip.last_idle_generation_fired),
+        Some(2)
+    );
+
+    app.note_whip_target_idle_with_fire_control(&worker_node, None, true, false);
+
+    let interrupted = drain_claude_pane_task_events(&mut app_event_rx);
+    assert_eq!(interrupted.len(), 1);
+    assert_eq!(interrupted[0].0, manager_pane_id);
+    let assignment = app
+        .orchestrate_whips
+        .get("assignment-1")
+        .expect("assignment");
+    assert_eq!(assignment.last_idle_generation_fired, Some(3));
+    assert_eq!(
+        assignment.last_target_output.as_deref(),
+        Some("Worker turn ended unsuccessfully without visible output.")
+    );
 }
 
 #[tokio::test]
@@ -7290,6 +7532,7 @@ async fn open_agent_picker_keeps_missing_threads_for_replay() -> Result<()> {
             agent_nickname: None,
             agent_role: None,
             agent_path: None,
+            model: None,
             last_task_message: None,
             last_result_message: None,
             is_running: false,
@@ -7327,6 +7570,7 @@ async fn open_agent_picker_preserves_cached_metadata_for_replay_threads() -> Res
             agent_nickname: Some("Robie".to_string()),
             agent_role: Some("explorer".to_string()),
             agent_path: None,
+            model: None,
             last_task_message: None,
             last_result_message: None,
             is_running: false,
@@ -7372,6 +7616,7 @@ async fn open_agent_picker_clears_completed_path_backed_agent_running_state() ->
             agent_nickname: None,
             agent_role: None,
             agent_path: Some("/root/child".to_string()),
+            model: None,
             last_task_message: None,
             last_result_message: None,
             is_running: false,
@@ -7413,6 +7658,7 @@ async fn open_agent_picker_refreshes_replay_only_path_backed_liveness() -> Resul
             agent_nickname: None,
             agent_role: None,
             agent_path: Some("/root/child".to_string()),
+            model: None,
             last_task_message: None,
             last_result_message: None,
             is_running: false,
@@ -7471,6 +7717,7 @@ async fn open_agent_picker_marks_terminal_read_errors_closed() -> Result<()> {
             agent_nickname: Some("Robie".to_string()),
             agent_role: Some("explorer".to_string()),
             agent_path: None,
+            model: None,
             last_task_message: None,
             last_result_message: None,
             is_running: false,
@@ -7513,6 +7760,7 @@ fn open_agent_picker_marks_loaded_threads_open() -> Result<()> {
                 agent_nickname: None,
                 agent_role: None,
                 agent_path: None,
+                model: None,
                 last_task_message: None,
                 last_result_message: None,
                 is_running: false,
@@ -8995,6 +9243,7 @@ async fn inactive_thread_started_notification_initializes_replay_session() -> Re
             agent_nickname: Some("Robie".to_string()),
             agent_role: Some("explorer".to_string()),
             agent_path: None,
+            model: Some("gpt-agent".to_string()),
             last_task_message: None,
             last_result_message: None,
             is_running: false,
@@ -10166,6 +10415,7 @@ async fn make_test_app() -> App {
         spawn_next_dispatch_seq: 1,
         spawn_processed_dispatch_seq_ids: HashSet::new(),
         spawn_processed_dispatches: HashSet::new(),
+        spawn_processed_terminal_turns: HashSet::new(),
         spawn_auto_loop_state_by_node: HashMap::new(),
         spawn_operator_input_seen: false,
         spawn_quarantine_notified_by_node: HashSet::new(),
@@ -10257,6 +10507,7 @@ async fn make_test_app_with_channels() -> (
             spawn_next_dispatch_seq: 1,
             spawn_processed_dispatch_seq_ids: HashSet::new(),
             spawn_processed_dispatches: HashSet::new(),
+            spawn_processed_terminal_turns: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
             spawn_operator_input_seen: false,
             spawn_quarantine_notified_by_node: HashSet::new(),
