@@ -2348,6 +2348,7 @@ dependencies = [
  "codex-sandboxing",
  "codex-state",
  "codex-stdio-to-uds",
+ "codex-tasknode-client",
  "codex-terminal-detection",
  "codex-tui",
  "codex-utils-absolute-path",
@@ -2372,6 +2373,7 @@ dependencies = [
  "supports-color 3.0.2",
  "sys-locale",
  "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "toml 0.9.11+spec-1.1.0",
  "tracing",
@@ -2380,6 +2382,7 @@ dependencies = [
  "unicode-segmentation",
  "url",
  "urlencoding",
+ "webbrowser",
  "which 8.0.0",
  "windows-sys 0.52.0",
  "wiremock",
@@ -3945,6 +3948,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-tasknode-client"
+version = "0.1.9"
+dependencies = [
+ "codex-keyring-store",
+ "codex-vault",
+ "pretty_assertions",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "urlencoding",
+ "wiremock",
+]
+
+[[package]]
 name = "codex-terminal-detection"
 version = "0.1.9"
 dependencies = [
@@ -4056,6 +4076,7 @@ dependencies = [
  "codex-sandboxing",
  "codex-shell-command",
  "codex-state",
+ "codex-tasknode-client",
  "codex-terminal-detection",
  "codex-utils-absolute-path",
  "codex-utils-approval-presets",

@@ -1,18 +1,22 @@
 //! Task Node menu, terminal auth, and task actions.
 
 use super::*;
-use codex_vault::AddCredential;
-use codex_vault::CredentialType;
-use codex_vault::Vault;
-use codex_vault::VaultError;
+use codex_tasknode_client::TaskNodeClient;
+use codex_tasknode_client::TaskNodeClientError;
+use codex_tasknode_client::TaskNodeLocalError;
+use codex_tasknode_client::TaskNodeLocalSession;
+use codex_tasknode_client::delete_session;
+use codex_tasknode_client::resolve_origin;
+#[cfg(test)]
+use codex_tasknode_client::tasknode_parse_sse_block;
+#[cfg(test)]
+use codex_tasknode_client::tasknode_sse_drain_blocks;
 use ratatui::text::Span;
 use ratatui::widgets::Paragraph;
 use ratatui::widgets::Wrap;
 use serde::Deserialize;
-use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use std::io::Read;
 use uuid::Uuid;
 
 const TASKNODE_MENU_VIEW_ID: &str = "tasknode-menu";
@@ -21,7 +25,6 @@ const TASKNODE_TASK_ACTIONS_VIEW_ID: &str = "tasknode-task-actions";
 const TASKNODE_REQUESTS_VIEW_ID: &str = "tasknode-requests";
 const TASKNODE_CONTEXT_VIEW_ID: &str = "tasknode-context";
 const TASKNODE_CHAT_VIEW_ID: &str = "tasknode-chat";
-const TASKNODE_SESSION_LABEL: &str = "tasknode/session";
 const TASKNODE_MENU_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 
 #[derive(Debug, Clone, Default)]
@@ -45,7 +48,7 @@ impl TaskNodeMenuCountsCache {
 impl ChatWidget {
     pub(crate) fn open_tasknode_menu(&mut self) {
         let codex_home = self.config.codex_home.as_path().to_path_buf();
-        let state = TaskNodeLocalState::load(&codex_home);
+        let state = TaskNodeLocalSession::load_optional(&codex_home);
         let counts = self.tasknode_menu_counts.clone();
         let should_refresh_counts = state
             .as_ref()
@@ -908,13 +911,15 @@ impl ChatWidget {
 
     pub(crate) fn logout_tasknode(&mut self) {
         let codex_home = self.config.codex_home.as_path().to_path_buf();
-        let session = TaskNodeLocalState::load(&codex_home).ok().flatten();
+        let session = TaskNodeLocalSession::load_optional(&codex_home)
+            .ok()
+            .flatten();
         if let Some(token) = session.as_ref().and_then(|s| s.terminal_token.clone()) {
             let _ = TaskNodeClient::new(token).revoke();
         }
         self.tasknode_menu_counts = None;
         self.tasknode_menu_poll_generation = self.tasknode_menu_poll_generation.wrapping_add(1);
-        match Vault::new(codex_home).delete(TASKNODE_SESSION_LABEL) {
+        match delete_session(&codex_home) {
             Ok(_) => self.add_info_message("Task Node session removed.".to_string(), None),
             Err(err) => {
                 self.add_error_message(format!("Failed to remove Task Node session: {err}"))
@@ -970,7 +975,7 @@ impl ChatWidget {
 
     fn has_linked_tasknode_session(&self) -> bool {
         let codex_home = self.config.codex_home.as_path().to_path_buf();
-        TaskNodeLocalState::load(&codex_home)
+        TaskNodeLocalSession::load_optional(&codex_home)
             .ok()
             .flatten()
             .is_some_and(|session| session.terminal_token.is_some())
@@ -981,7 +986,7 @@ impl ChatWidget {
             return;
         }
         let codex_home = self.config.codex_home.as_path().to_path_buf();
-        let state = TaskNodeLocalState::load(&codex_home);
+        let state = TaskNodeLocalSession::load_optional(&codex_home);
         let counts = self.tasknode_menu_counts.clone();
         let params = tasknode_menu_params(state, counts.as_ref(), refresh_error.as_deref());
         let _ = self
@@ -1042,11 +1047,7 @@ impl ChatWidget {
 }
 
 fn tasknode_origin() -> String {
-    std::env::var("PFT_TASKNODE_ORIGIN")
-        .or_else(|_| std::env::var("TASKNODE_ORIGIN"))
-        .unwrap_or_else(|_| "https://tasknode.postfiat.org".to_string())
-        .trim_end_matches('/')
-        .to_string()
+    resolve_origin(None, None)
 }
 
 fn tasknode_link_hint(verification_url: &str) -> String {
@@ -1065,7 +1066,7 @@ fn tasknode_should_open_browser() -> bool {
 }
 
 fn tasknode_client_for_codex_home(codex_home: &std::path::Path) -> Result<TaskNodeClient, String> {
-    let session = ensure_tasknode_session(codex_home).map_err(|err| err.to_string())?;
+    let session = ensure_tasknode_session(codex_home)?;
     let token = session
         .terminal_token
         .ok_or_else(|| "Task Node session is missing a terminal token.".to_string())?;
@@ -2546,9 +2547,11 @@ fn tasknode_response_hint(value: &Value) -> Option<String> {
         })
 }
 
-fn ensure_tasknode_session(codex_home: &Path) -> Result<TaskNodeLocalSession, TaskNodeLocalError> {
-    let Some(mut session) = TaskNodeLocalState::load(codex_home)? else {
-        return Err(TaskNodeLocalError::NoSession);
+fn ensure_tasknode_session(codex_home: &Path) -> Result<TaskNodeLocalSession, String> {
+    let Some(mut session) =
+        TaskNodeLocalSession::load_optional(codex_home).map_err(tasknode_local_error_message)?
+    else {
+        return Err("Task Node is not linked. Run /tasknode link.".to_string());
     };
     if session.terminal_token.is_some() {
         return Ok(session);
@@ -2556,151 +2559,60 @@ fn ensure_tasknode_session(codex_home: &Path) -> Result<TaskNodeLocalSession, Ta
     let request_id = session
         .pending_request_id
         .clone()
-        .ok_or(TaskNodeLocalError::NoSession)?;
+        .ok_or_else(|| "Task Node is not linked. Run /tasknode link.".to_string())?;
     let poll_token = session
         .pending_poll_token
         .clone()
-        .ok_or(TaskNodeLocalError::NoSession)?;
+        .ok_or_else(|| "Task Node is not linked. Run /tasknode link.".to_string())?;
     match TaskNodeClient::new_without_token().poll_session(&request_id, &poll_token) {
         Ok(poll) => {
-            session.account_id = Some(poll.account_id);
-            session.github_username = poll.github_username;
-            session.terminal_token = Some(poll.terminal_token);
-            session.expires_at = poll.expires_at;
-            session.pending_request_id = None;
-            session.pending_poll_token = None;
-            session.pending_verification_url = None;
-            session.save(codex_home)?;
+            session.apply_terminal_session(poll);
+            session
+                .save(codex_home)
+                .map_err(tasknode_local_error_message)?;
             Ok(session)
         }
-        Err(TaskNodeClientError::Pending) => Err(TaskNodeLocalError::Pending {
-            verification_url: session.pending_verification_url.unwrap_or_default(),
-        }),
-        Err(err) => Err(TaskNodeLocalError::Client(err.to_string())),
+        Err(TaskNodeClientError::Pending) => Err(format!(
+            "Task Node link is pending. Finish GitHub auth: {}",
+            session.pending_verification_url.unwrap_or_default()
+        )),
+        Err(err) => Err(err.to_string()),
     }
 }
 
-#[derive(Debug)]
-enum TaskNodeLocalState {}
-
-impl TaskNodeLocalState {
-    fn load(codex_home: &Path) -> Result<Option<TaskNodeLocalSession>, TaskNodeLocalError> {
-        let vault = Vault::new(codex_home.to_path_buf());
-        match vault.reveal(TASKNODE_SESSION_LABEL) {
-            Ok(secret) => serde_json::from_str(&secret).map(Some).map_err(|err| {
-                TaskNodeLocalError::Client(format!("invalid local Task Node session: {err}"))
-            }),
-            Err(VaultError::NotFound { .. }) => Ok(None),
-            Err(err) => Err(TaskNodeLocalError::Vault(err.to_string())),
-        }
+fn tasknode_local_error_message(err: TaskNodeLocalError) -> String {
+    match err {
+        TaskNodeLocalError::NotFound => "Task Node is not linked. Run /tasknode link.".to_string(),
+        TaskNodeLocalError::VaultUnavailable(err) | TaskNodeLocalError::Corrupt(err) => err,
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct TaskNodeLocalSession {
-    origin: String,
-    account_id: Option<String>,
-    github_username: Option<String>,
-    terminal_token: Option<String>,
-    expires_at: Option<String>,
-    pending_request_id: Option<String>,
-    pending_poll_token: Option<String>,
-    pending_verification_url: Option<String>,
-}
-
-impl TaskNodeLocalSession {
-    fn save(&self, codex_home: &Path) -> Result<(), TaskNodeLocalError> {
-        let vault = Vault::new(codex_home.to_path_buf());
-        let secret = serde_json::to_string(self).map_err(|err| {
-            TaskNodeLocalError::Client(format!("serialize session failed: {err}"))
-        })?;
-        match vault.add(AddCredential {
-            label: TASKNODE_SESSION_LABEL.to_string(),
-            credential_type: CredentialType::BearerToken,
-            provider: Some("tasknode".to_string()),
-            notes: Some("Task Node terminal session; token is not printed to chat.".to_string()),
-            revocation_notes: Some(format!("{}/settings/accounts", self.origin)),
-            secret: secret.clone(),
-        }) {
-            Ok(()) => Ok(()),
-            Err(VaultError::CredentialExists { .. }) => vault
-                .update(
-                    TASKNODE_SESSION_LABEL,
-                    Some(secret),
-                    Some(Some("tasknode".to_string())),
-                    None,
-                    None,
-                )
-                .map(|_| ())
-                .map_err(|err| TaskNodeLocalError::Vault(err.to_string())),
-            Err(err) => Err(TaskNodeLocalError::Vault(err.to_string())),
-        }
-    }
-}
-
-#[derive(Debug)]
-enum TaskNodeLocalError {
-    NoSession,
-    Pending { verification_url: String },
-    Vault(String),
-    Client(String),
-}
-
-impl std::fmt::Display for TaskNodeLocalError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NoSession => write!(f, "Task Node is not linked. Run /tasknode link."),
-            Self::Pending { verification_url } => {
-                write!(
-                    f,
-                    "Task Node link is pending. Finish GitHub auth: {verification_url}"
-                )
-            }
-            Self::Vault(err) | Self::Client(err) => write!(f, "{err}"),
-        }
-    }
-}
-
-impl std::error::Error for TaskNodeLocalError {}
-
-struct TaskNodeClient {
-    origin: String,
-    token: Option<String>,
-}
-
-impl TaskNodeClient {
-    fn new(token: String) -> Self {
-        Self {
-            origin: tasknode_origin(),
-            token: Some(token),
-        }
-    }
-
-    fn new_without_token() -> Self {
-        Self {
-            origin: tasknode_origin(),
-            token: None,
-        }
-    }
-
-    fn start_github_link(&self) -> Result<TerminalAuthStartResponse, String> {
-        self.post_json("/api/auth/terminal/start/github", &serde_json::json!({}))
-            .map_err(|err| err.to_string())
-    }
-
-    fn poll_session(
+trait TaskNodeMenuClientExt {
+    fn status(&self) -> Result<Value, String>;
+    fn tasks(&self, tab: &str) -> Result<Value, String>;
+    fn task_detail(&self, task_id: &str) -> Result<Value, String>;
+    fn task_action(&self, task_id: &str, action: &str) -> Result<Value, String>;
+    fn submit_evidence(&self, task_id: &str, summary: &str) -> Result<Value, String>;
+    fn balance(&self) -> Result<Value, String>;
+    fn rewards(&self) -> Result<Value, String>;
+    fn task_requests(&self) -> Result<Value, String>;
+    fn request_task(&self, detail: &str) -> Result<Value, String>;
+    fn context(&self) -> Result<Value, String>;
+    fn save_context(&self, title: &str, body: &str, revision: u64) -> Result<Value, String>;
+    fn chat_conversations(&self) -> Result<Value, String>;
+    fn chat_history(&self, conversation_id: &str) -> Result<Value, String>;
+    fn stream_chat(
         &self,
-        request_id: &str,
-        poll_token: &str,
-    ) -> Result<TerminalSessionResponse, TaskNodeClientError> {
-        let path = format!(
-            "/api/auth/terminal/session?requestId={}&pollToken={}",
-            urlencoding::encode(request_id),
-            urlencoding::encode(poll_token)
-        );
-        self.get_json(&path)
-    }
+        conversation_id: &str,
+        message: &str,
+        stream_id: &str,
+        title: &str,
+        tx: AppEventSender,
+    ) -> Result<Value, String>;
+    fn revoke(&self) -> Result<Value, String>;
+}
 
+impl TaskNodeMenuClientExt for TaskNodeClient {
     fn status(&self) -> Result<Value, String> {
         self.get_json("/api/terminal/tasknode/status")
             .map_err(|err| err.to_string())
@@ -2851,250 +2763,6 @@ impl TaskNodeClient {
         self.post_json("/api/auth/terminal/revoke", &serde_json::json!({}))
             .map_err(|err| err.to_string())
     }
-
-    fn get_json<T: DeserializeOwned + Send + 'static>(
-        &self,
-        path: &str,
-    ) -> Result<T, TaskNodeClientError> {
-        let url = format!("{}{}", self.origin, path);
-        let token = self.token.clone();
-        tasknode_blocking_http(move || {
-            let http = tasknode_http_client()?;
-            let mut request = http.get(url);
-            if let Some(token) = &token {
-                request = request.bearer_auth(token);
-            }
-            parse_tasknode_response(request.send())
-        })
-    }
-
-    fn post_json<T: DeserializeOwned + Send + 'static>(
-        &self,
-        path: &str,
-        body: &Value,
-    ) -> Result<T, TaskNodeClientError> {
-        let url = format!("{}{}", self.origin, path);
-        let token = self.token.clone();
-        let body = body.clone();
-        tasknode_blocking_http(move || {
-            let http = tasknode_http_client()?;
-            let mut request = http.post(url).json(&body);
-            if let Some(token) = &token {
-                request = request.bearer_auth(token);
-            }
-            parse_tasknode_response(request.send())
-        })
-    }
-
-    fn post_sse(
-        &self,
-        path: &str,
-        body: &Value,
-        mut on_event: impl FnMut(&str, &Value, &mut String),
-    ) -> Result<Value, TaskNodeClientError> {
-        let url = format!("{}{}", self.origin, path);
-        let token = self.token.clone();
-        let body = body.clone();
-        let http = tasknode_streaming_http_client()?;
-        let mut request = http.post(url).json(&body);
-        if let Some(token) = &token {
-            request = request.bearer_auth(token);
-        }
-        let response = request
-            .send()
-            .map_err(|err| TaskNodeClientError::Http(tasknode_reqwest_error(err)))?;
-        let status = response.status().as_u16();
-        let content_type = response
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .unwrap_or("")
-            .to_string();
-        if !(200..300).contains(&status) || !content_type.contains("text/event-stream") {
-            return parse_tasknode_response::<Value>(Ok(response));
-        }
-
-        let mut buffer = String::new();
-        let mut accumulated = String::new();
-        let mut done: Option<Value> = None;
-        let mut response = response;
-        let mut chunk = [0u8; 8192];
-        loop {
-            let read = response
-                .read(&mut chunk)
-                .map_err(|err| TaskNodeClientError::Http(err.to_string()))?;
-            if read == 0 {
-                break;
-            }
-            buffer.push_str(&String::from_utf8_lossy(&chunk[..read]));
-            for block in tasknode_sse_drain_blocks(&mut buffer) {
-                let Some((event, value)) = tasknode_parse_sse_block(&block)? else {
-                    continue;
-                };
-                match event.as_str() {
-                    "delta" => on_event(&event, &value, &mut accumulated),
-                    "done" => done = Some(value),
-                    "error" => {
-                        return Err(TaskNodeClientError::Http(
-                            value
-                                .get("message")
-                                .or_else(|| value.get("error"))
-                                .and_then(Value::as_str)
-                                .unwrap_or("Task Node chat stream failed.")
-                                .to_string(),
-                        ));
-                    }
-                    _ => {}
-                }
-            }
-        }
-        for block in tasknode_sse_drain_remainder(&mut buffer) {
-            let Some((event, value)) = tasknode_parse_sse_block(&block)? else {
-                continue;
-            };
-            if event == "done" {
-                done = Some(value);
-            } else if event == "error" {
-                return Err(TaskNodeClientError::Http(
-                    value
-                        .get("message")
-                        .or_else(|| value.get("error"))
-                        .and_then(Value::as_str)
-                        .unwrap_or("Task Node chat stream failed.")
-                        .to_string(),
-                ));
-            }
-        }
-        done.ok_or_else(|| {
-            TaskNodeClientError::Http(
-                "Task Node chat stream ended without a final response.".to_string(),
-            )
-        })
-    }
-}
-
-fn tasknode_http_client() -> Result<reqwest::blocking::Client, TaskNodeClientError> {
-    reqwest::blocking::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|err| TaskNodeClientError::Http(tasknode_reqwest_error(err)))
-}
-
-fn tasknode_streaming_http_client() -> Result<reqwest::blocking::Client, TaskNodeClientError> {
-    reqwest::blocking::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .timeout(std::time::Duration::from_secs(300))
-        .build()
-        .map_err(|err| TaskNodeClientError::Http(tasknode_reqwest_error(err)))
-}
-
-fn tasknode_blocking_http<T: Send + 'static>(
-    request: impl FnOnce() -> Result<T, TaskNodeClientError> + Send + 'static,
-) -> Result<T, TaskNodeClientError> {
-    let handle = std::thread::Builder::new()
-        .name("tasknode-http".to_string())
-        .spawn(request)
-        .map_err(|err| TaskNodeClientError::Http(err.to_string()))?;
-    handle
-        .join()
-        .map_err(|_| TaskNodeClientError::Http("Task Node HTTP worker panicked".to_string()))?
-}
-
-fn parse_tasknode_response<T: DeserializeOwned>(
-    response: Result<reqwest::blocking::Response, reqwest::Error>,
-) -> Result<T, TaskNodeClientError> {
-    let response =
-        response.map_err(|err| TaskNodeClientError::Http(tasknode_reqwest_error(err)))?;
-    let status = response.status().as_u16();
-    let text = response
-        .text()
-        .map_err(|err| TaskNodeClientError::Http(tasknode_reqwest_error(err)))?;
-    if status == 202 {
-        return Err(TaskNodeClientError::Pending);
-    }
-    if !(200..300).contains(&status) {
-        let message = serde_json::from_str::<Value>(&text)
-            .ok()
-            .and_then(|value| {
-                value
-                    .get("message")
-                    .or_else(|| value.get("error"))
-                    .and_then(Value::as_str)
-                    .map(ToString::to_string)
-            })
-            .unwrap_or(text);
-        return Err(TaskNodeClientError::Http(message));
-    }
-    serde_json::from_str(&text).map_err(|err| TaskNodeClientError::Http(err.to_string()))
-}
-
-fn tasknode_sse_separator(buffer: &str) -> Option<(usize, usize)> {
-    match (buffer.find("\n\n"), buffer.find("\r\n\r\n")) {
-        (Some(lf), Some(crlf)) if crlf < lf => Some((crlf, 4)),
-        (Some(lf), _) => Some((lf, 2)),
-        (None, Some(crlf)) => Some((crlf, 4)),
-        (None, None) => None,
-    }
-}
-
-fn tasknode_sse_drain_blocks(buffer: &mut String) -> Vec<String> {
-    let mut blocks = Vec::new();
-    while let Some((index, separator_len)) = tasknode_sse_separator(buffer) {
-        let drained: String = buffer.drain(..index + separator_len).collect();
-        blocks.push(drained[..index].to_string());
-    }
-    blocks
-}
-
-fn tasknode_sse_drain_remainder(buffer: &mut String) -> Vec<String> {
-    let remainder = std::mem::take(buffer);
-    if remainder.trim().is_empty() {
-        Vec::new()
-    } else {
-        vec![remainder]
-    }
-}
-
-fn tasknode_parse_sse_block(block: &str) -> Result<Option<(String, Value)>, TaskNodeClientError> {
-    let normalized = block.replace("\r\n", "\n");
-    let mut event = "message".to_string();
-    let mut data = Vec::new();
-    for line in normalized.lines() {
-        if line.is_empty() || line.starts_with(':') {
-            continue;
-        }
-        if let Some(rest) = line.strip_prefix("event:") {
-            event = rest.trim().to_string();
-        } else if let Some(rest) = line.strip_prefix("data:") {
-            data.push(rest.trim_start().to_string());
-        }
-    }
-    if data.is_empty() {
-        return Ok(None);
-    }
-    let data = data.join("\n");
-    if data.trim() == "[DONE]" {
-        return Ok(None);
-    }
-    let value = serde_json::from_str(&data).map_err(|err| {
-        TaskNodeClientError::Http(format!("invalid Task Node chat stream event: {err}"))
-    })?;
-    Ok(Some((event, value)))
-}
-
-fn tasknode_reqwest_error(err: reqwest::Error) -> String {
-    let mut message = err.to_string();
-    let mut source = std::error::Error::source(&err);
-    while let Some(err) = source {
-        let part = err.to_string();
-        if !part.is_empty() && !message.contains(&part) {
-            message.push_str(": ");
-            message.push_str(&part);
-        }
-        source = std::error::Error::source(err);
-    }
-    message
 }
 
 fn evidence_items_from_summary(summary: &str) -> Vec<Value> {
@@ -3113,43 +2781,6 @@ fn evidence_items_from_summary(summary: &str) -> Vec<Value> {
             serde_json::json!({ "type": item_type, "url": url })
         })
         .collect()
-}
-
-#[derive(Debug)]
-enum TaskNodeClientError {
-    Pending,
-    Http(String),
-}
-
-impl std::fmt::Display for TaskNodeClientError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Pending => write!(f, "pending"),
-            Self::Http(err) => write!(f, "{err}"),
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct TerminalAuthStartResponse {
-    #[serde(rename = "requestId")]
-    request_id: String,
-    #[serde(rename = "pollToken")]
-    poll_token: String,
-    #[serde(rename = "verificationUrl")]
-    verification_url: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct TerminalSessionResponse {
-    #[serde(rename = "accountId")]
-    account_id: String,
-    #[serde(rename = "githubUsername")]
-    github_username: Option<String>,
-    #[serde(rename = "terminalToken")]
-    terminal_token: String,
-    #[serde(rename = "expiresAt")]
-    expires_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

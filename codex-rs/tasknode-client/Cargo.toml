@@ -1,0 +1,28 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "codex-tasknode-client"
+version.workspace = true
+
+[lib]
+doctest = false
+name = "codex_tasknode_client"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+codex-vault = { workspace = true }
+reqwest = { workspace = true, features = ["blocking", "json"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+urlencoding = { workspace = true }
+
+[dev-dependencies]
+codex-keyring-store = { workspace = true }
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+wiremock = { workspace = true }

@@ -59,6 +59,7 @@ codex-rollout-trace = { workspace = true }
 codex-sandboxing = { workspace = true }
 codex-state = { workspace = true }
 codex-stdio-to-uds = { workspace = true }
+codex-tasknode-client = { workspace = true }
 codex-terminal-detection = { workspace = true }
 codex-tui = { workspace = true }
 codex-utils-absolute-path = { workspace = true }
@@ -72,10 +73,11 @@ owo-colors = { workspace = true }
 regex-lite = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-reqwest = { workspace = true, features = ["json"] }
+reqwest = { workspace = true, features = ["blocking", "json"] }
 supports-color = { workspace = true }
 sys-locale = { workspace = true }
 tempfile = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true, features = [
     "io-std",
     "macros",
@@ -92,6 +94,7 @@ tracing-subscriber = { workspace = true }
 unicode-segmentation = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }
+webbrowser = { workspace = true }
 which = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
