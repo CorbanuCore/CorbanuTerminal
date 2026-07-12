@@ -2051,6 +2051,38 @@ impl App {
         true
     }
 
+    /// Delivers work that was queued before an active target entered `wait_agent`.
+    ///
+    /// A wait is an availability transition, not a busy state. The normal idle flush cannot own
+    /// this transition because the model turn remains active until steering wakes the wait.
+    pub(crate) fn steer_pending_dispatches_for_waiting_thread(
+        &mut self,
+        target_thread_id: ThreadId,
+    ) -> bool {
+        let Some(queue) = self
+            .spawn_pending_dispatches_by_thread
+            .remove(&target_thread_id)
+        else {
+            return false;
+        };
+        if queue.is_empty() {
+            return false;
+        }
+        let dispatch = combined_queued_dispatch_task(queue.into_iter().collect());
+        self.register_spawn_dispatch_acks_for_task(
+            &thread_node_id(target_thread_id),
+            &dispatch.task,
+            dispatch.acks.clone(),
+        );
+        self.app_event_tx
+            .send(AppEvent::SteerWaitingSpawnAgentTask {
+                thread_id: target_thread_id,
+                task: dispatch.task,
+            });
+        self.persist_pane_state();
+        true
+    }
+
     pub(crate) fn flush_pending_dispatches_for_claude_pane(&mut self, pane_id: &str) -> bool {
         if !self
             .claude_panes

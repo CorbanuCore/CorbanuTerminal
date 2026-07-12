@@ -1610,6 +1610,7 @@ impl App {
                 {
                     self.spawn_waiting_for_agents_by_thread
                         .insert(thread_id, (notification.turn_id.clone(), id.clone()));
+                    self.steer_pending_dispatches_for_waiting_thread(thread_id);
                 }
             }
             ServerNotification::ItemCompleted(notification) => {

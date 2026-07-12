@@ -2864,6 +2864,62 @@ async fn dispatch_to_native_child_waiting_for_agents_steers_instead_of_persistin
 }
 
 #[tokio::test]
+async fn queued_dispatch_flushes_immediately_when_native_child_begins_waiting() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    app.agent_navigation.set_running(orc_thread_id, true);
+
+    app.dispatch_spawn_task_blocks(
+        &crate::spawn_orchestration::thread_node_id(troll_thread_id),
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "continue the queued verification".to_string(),
+            seq: None,
+        }],
+    );
+    assert_eq!(
+        app.spawn_pending_dispatches_by_thread
+            .get(&orc_thread_id)
+            .map_or(0, std::collections::VecDeque::len),
+        1
+    );
+
+    app.update_spawn_status_for_thread_notification(&ServerNotification::ItemStarted(
+        codex_app_server_protocol::ItemStartedNotification {
+            thread_id: orc_thread_id.to_string(),
+            turn_id: "turn-waiting".to_string(),
+            started_at_ms: 0,
+            item: ThreadItem::CollabAgentToolCall {
+                id: "wait-call".to_string(),
+                tool: codex_app_server_protocol::CollabAgentTool::Wait,
+                status: codex_app_server_protocol::CollabAgentToolCallStatus::InProgress,
+                sender_thread_id: orc_thread_id.to_string(),
+                receiver_thread_ids: Vec::new(),
+                prompt: None,
+                model: None,
+                reasoning_effort: None,
+                agents_states: HashMap::new(),
+            },
+        },
+    ));
+
+    let event = rx
+        .try_recv()
+        .expect("queued work should wake a waiting pane immediately");
+    assert!(matches!(
+        event,
+        AppEvent::SteerWaitingSpawnAgentTask { thread_id, task }
+            if thread_id == orc_thread_id && task.contains("continue the queued verification")
+    ));
+    assert!(
+        app.spawn_pending_dispatches_by_thread
+            .get(&orc_thread_id)
+            .is_none_or(std::collections::VecDeque::is_empty),
+        "entering wait is an availability transition and must drain queued work"
+    );
+}
+
+#[tokio::test]
 async fn completed_agent_wait_restores_busy_dispatch_queue_behavior() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
