@@ -109,13 +109,23 @@ impl PendingSpawnDispatch {
         target_pane_id: &str,
         origin_id: Option<&str>,
     ) {
-        if self.dispatch_id.is_empty() {
-            self.dispatch_id = format!("dispatch-{seq:020}");
-        }
         if self.origin.origin_id.is_empty() {
             self.origin.origin_id = origin_id
                 .map(str::to_owned)
                 .unwrap_or_else(|| format!("host-seq-{seq:020}"));
+        }
+        if self.dispatch_id.is_empty() {
+            // Incoming host sequence numbers are source-local and may be older than the local
+            // allocator. Identity must therefore include the durable origin and pane tuple rather
+            // than treating `seq` as a process-global primary key.
+            let mut digest = Sha256::new();
+            digest.update(self.origin.origin_id.as_bytes());
+            digest.update([0]);
+            digest.update(source_pane_id.as_bytes());
+            digest.update([0]);
+            digest.update(target_pane_id.as_bytes());
+            let digest = format!("{:x}", digest.finalize());
+            self.dispatch_id = format!("dispatch-{}", &digest[..24]);
         }
         if self.source_pane_id.is_empty() {
             self.source_pane_id = source_pane_id.to_string();

@@ -1,5 +1,6 @@
 //! App-level orchestration tests for the TUI.
 
+mod dispatch_qualification;
 mod model_catalog;
 mod session_summary;
 mod startup;

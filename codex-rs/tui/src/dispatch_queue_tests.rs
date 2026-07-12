@@ -85,6 +85,23 @@ fn model_origin_uses_turn_and_ordinal_not_task_wording() {
 }
 
 #[test]
+fn dispatch_identity_is_origin_and_pane_scoped_not_sequence_global() {
+    let mut direct = PendingSpawnDispatch::new("direct".to_string(), Vec::new());
+    direct.assign_identity(4, "thread:source-a", "thread:target", None);
+
+    let mut model = PendingSpawnDispatch::new("model".to_string(), Vec::new());
+    model.origin.origin_id = "model:source-b:turn-9:0".to_string();
+    model.assign_identity(4, "thread:source-b", "thread:target", None);
+
+    let mut replay = PendingSpawnDispatch::new("different wording".to_string(), Vec::new());
+    replay.origin.origin_id = "model:source-b:turn-9:0".to_string();
+    replay.assign_identity(4, "thread:source-b", "thread:target", None);
+
+    assert_ne!(direct.dispatch_id, model.dispatch_id);
+    assert_eq!(model.dispatch_id, replay.dispatch_id);
+}
+
+#[test]
 fn delivery_identity_is_stable_and_order_sensitive() {
     let ordered = vec!["dispatch-1".to_string(), "dispatch-2".to_string()];
     let reversed = vec!["dispatch-2".to_string(), "dispatch-1".to_string()];
