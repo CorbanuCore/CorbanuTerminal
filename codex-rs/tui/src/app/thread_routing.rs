@@ -21,16 +21,31 @@ impl App {
         } else {
             format!("turn/start failed for {label}; retry limit reached, pane remains available")
         };
-        let notification = ServerNotification::Error(ErrorNotification {
-            error: AppServerTurnError {
-                message,
-                codex_error_info: None,
-                additional_details: Some(details.clone()),
-            },
-            will_retry,
-            thread_id: thread_id.to_string(),
-            turn_id: "turn-start-recovery".to_string(),
-        });
+        if self.active_thread_id == Some(thread_id) {
+            self.chat_widget
+                .add_error_message(format!("{message}. Cause: {details}"));
+            return;
+        }
+        let notification = if will_retry {
+            // A retryable Error notification is intentionally transient in ChatWidget and is
+            // cleared by the following turn/started event. Buffer a targeted warning instead so
+            // an inactive affected pane retains visible recovery evidence when selected.
+            ServerNotification::Warning(codex_app_server_protocol::WarningNotification {
+                thread_id: Some(thread_id.to_string()),
+                message: format!("ERROR — {message}. Cause: {details}"),
+            })
+        } else {
+            ServerNotification::Error(ErrorNotification {
+                error: AppServerTurnError {
+                    message,
+                    codex_error_info: None,
+                    additional_details: Some(details.clone()),
+                },
+                will_retry,
+                thread_id: thread_id.to_string(),
+                turn_id: "turn-start-recovery".to_string(),
+            })
+        };
         if let Err(error) = self
             .enqueue_thread_notification(thread_id, notification)
             .await

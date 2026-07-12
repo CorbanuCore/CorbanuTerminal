@@ -3171,6 +3171,30 @@ async fn turn_start_failure_is_buffered_in_only_the_affected_pane() {
 }
 
 #[tokio::test]
+async fn recovered_turn_start_failure_remains_visible_in_active_pane_history() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let thread_id = ThreadId::from_string("00000000-0000-0000-0000-000000000463")
+        .expect("valid active thread id");
+    app.active_thread_id = Some(thread_id);
+
+    app.surface_turn_start_failure(
+        thread_id,
+        "injected turn/start fault for qualification".to_string(),
+        /*will_retry*/ true,
+    )
+    .await;
+
+    let mut rendered = String::new();
+    while let Ok(event) = app_event_rx.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            rendered.push_str(&lines_to_single_string(&cell.display_lines(/*width*/ 100)));
+        }
+    }
+    assert!(rendered.contains("recovered after bounded retry"));
+    assert!(rendered.contains("injected turn/start fault for qualification"));
+}
+
+#[tokio::test]
 async fn native_dispatch_crossing_turn_completion_delivers_once_in_either_order() {
     for dispatch_first in [true, false] {
         let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
