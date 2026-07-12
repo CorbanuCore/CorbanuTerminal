@@ -1957,34 +1957,6 @@ impl App {
         };
         self.spawn_context_left_by_thread
             .insert(thread_id, context_left);
-        const LOW_CONTEXT_WARNING_THRESHOLD: i64 = 15;
-        if context_left >= LOW_CONTEXT_WARNING_THRESHOLD {
-            self.spawn_low_context_warned_by_thread.remove(&thread_id);
-            return;
-        }
-        if !self.spawn_low_context_warned_by_thread.insert(thread_id) {
-            return;
-        }
-        let Some(parent_node_id) = self.logical_parent_node_for_thread(thread_id) else {
-            return;
-        };
-        let child_title = self
-            .agent_navigation
-            .get(&thread_id)
-            .map(|entry| {
-                format_agent_picker_item_name(
-                    entry.agent_nickname.as_deref(),
-                    entry.agent_role.as_deref(),
-                    self.primary_thread_id == Some(thread_id),
-                )
-            })
-            .unwrap_or_else(|| thread_id.to_string());
-        self.record_spawn_parent_report(
-            parent_node_id,
-            format!(
-                "warning; {child_title}; low context ({context_left}% left); consider journal/handoff"
-            ),
-        );
     }
 
     pub(super) fn handle_thread_event_replay(&mut self, event: ThreadBufferedEvent) {

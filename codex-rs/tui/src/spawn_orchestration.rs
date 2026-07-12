@@ -4944,6 +4944,10 @@ fn write_spawn_product_contract(context: &mut String) {
     );
     let _ = writeln!(
         context,
+        "Roster context percentage is pressure telemetry, not a lifecycle or availability signal. PFTerminal/Codex compacts long-running pane history and the pane continues afterward; a low percentage alone must not trigger checkpoint, handoff, respawn, reassignment, interruption, or claims that work will be orphaned. Continue routing normally unless status, an explicit turn error, or Sauron says otherwise."
+    );
+    let _ = writeln!(
+        context,
         "Do not describe PFTerminal as a crypto/trading/Hyperliquid/GPU/staking/borrowing product unless Sauron explicitly asks for that legacy positioning."
     );
 }

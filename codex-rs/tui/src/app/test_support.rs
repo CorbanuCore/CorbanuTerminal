@@ -73,7 +73,6 @@ pub(super) async fn make_test_app() -> App {
         spawn_operator_input_seen: false,
         spawn_quarantine_notified_by_node: HashSet::new(),
         spawn_context_left_by_thread: HashMap::new(),
-        spawn_low_context_warned_by_thread: HashSet::new(),
         spawn_last_report_seq_by_node: HashMap::new(),
         spawn_last_dispatch_seq_by_node: HashMap::new(),
         spawn_last_event_at_by_node: HashMap::new(),

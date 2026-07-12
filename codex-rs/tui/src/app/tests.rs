@@ -2637,7 +2637,7 @@ async fn spawn_roster_line_includes_context_left() {
 }
 
 #[tokio::test]
-async fn low_context_warning_is_one_shot_until_context_recovers() {
+async fn low_context_telemetry_does_not_manufacture_a_lifecycle_warning() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
     app.spawn_operator_input_seen = true;
@@ -2649,53 +2649,21 @@ async fn low_context_warning_is_one_shot_until_context_recovers() {
         90_000,
         Some(100_000),
     ));
-    app.update_spawn_status_for_thread_notification(&token_usage_notification_with_total(
-        orc_thread_id,
-        "turn-low-2",
-        90_500,
-        Some(100_000),
-    ));
-
-    let reports = app
-        .spawn_parent_reports_by_node
-        .get(&parent_node_id)
-        .expect("parent report");
-    assert_eq!(
+    let reports = app.spawn_parent_reports_by_node.get(&parent_node_id);
+    assert!(reports.is_none_or(|reports| {
         reports
             .iter()
-            .filter(|report| report.contains("low context"))
-            .count(),
-        1
-    );
-    assert_eq!(
-        drain_spawn_agent_tasks_for(&mut rx, troll_thread_id).len(),
-        1
-    );
+            .all(|report| !report.contains("low context") && !report.contains("journal/handoff"))
+    }));
+    assert!(drain_spawn_agent_tasks_for(&mut rx, troll_thread_id).is_empty());
 
-    app.update_spawn_status_for_thread_notification(&token_usage_notification_with_total(
-        orc_thread_id,
-        "turn-recovered",
-        30_000,
-        Some(100_000),
-    ));
-    app.update_spawn_status_for_thread_notification(&token_usage_notification_with_total(
-        orc_thread_id,
-        "turn-low-3",
-        92_000,
-        Some(100_000),
-    ));
-
-    let reports = app
-        .spawn_parent_reports_by_node
-        .get(&parent_node_id)
-        .expect("parent report");
-    assert_eq!(
-        reports
-            .iter()
-            .filter(|report| report.contains("low context"))
-            .count(),
-        2
-    );
+    let context = app
+        .spawn_context_for_thread(troll_thread_id)
+        .expect("Troll should receive spawn context");
+    assert!(context.contains("context_left=11%"));
+    assert!(context.contains("context percentage is pressure telemetry"));
+    assert!(context.contains("low percentage alone must not trigger checkpoint"));
+    assert!(context.contains("handoff, respawn, reassignment, interruption"));
 }
 
 #[tokio::test]
@@ -10702,7 +10670,6 @@ async fn make_test_app() -> App {
         spawn_operator_input_seen: false,
         spawn_quarantine_notified_by_node: HashSet::new(),
         spawn_context_left_by_thread: HashMap::new(),
-        spawn_low_context_warned_by_thread: HashSet::new(),
         spawn_last_report_seq_by_node: HashMap::new(),
         spawn_last_dispatch_seq_by_node: HashMap::new(),
         spawn_last_event_at_by_node: HashMap::new(),
@@ -10795,7 +10762,6 @@ async fn make_test_app_with_channels() -> (
             spawn_operator_input_seen: false,
             spawn_quarantine_notified_by_node: HashSet::new(),
             spawn_context_left_by_thread: HashMap::new(),
-            spawn_low_context_warned_by_thread: HashSet::new(),
             spawn_last_report_seq_by_node: HashMap::new(),
             spawn_last_dispatch_seq_by_node: HashMap::new(),
             spawn_last_event_at_by_node: HashMap::new(),

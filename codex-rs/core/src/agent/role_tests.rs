@@ -744,6 +744,16 @@ fn nazgul_prompt_keeps_troll_as_middle_management_boundary() {
     assert!(NAZGUL_BASE.contains("delegate to Trolls, inspect, and verify"));
 }
 
+#[test]
+fn hierarchy_managers_treat_low_context_as_compaction_pressure_not_worker_death() {
+    for manager_base in [NAZGUL_BASE, TROLL_BASE] {
+        assert!(manager_base.contains("context percentage is pressure telemetry, not mortality"));
+        assert!(manager_base.contains("compacts long-running pane history"));
+        assert!(manager_base.contains("Never checkpoint, hand off, respawn, reassign, interrupt"));
+        assert!(manager_base.contains("solely because context is low"));
+    }
+}
+
 #[tokio::test]
 async fn no_role_config_keeps_model_default_base_instructions() {
     let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
