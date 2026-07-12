@@ -1312,7 +1312,21 @@ impl App {
                         ack.seq,
                     );
                     self.note_whip_holder_dispatched(source_pane_id, &target_node_id);
-                    if self.native_spawn_target_is_busy(thread_id) {
+                    if self.native_spawn_target_is_waiting_for_agents(thread_id) {
+                        self.register_spawn_dispatch_acks_for_task(
+                            &target_node_id,
+                            &task,
+                            vec![ack],
+                        );
+                        self.app_event_tx
+                            .send(AppEvent::SteerWaitingSpawnAgentTask { thread_id, task });
+                        self.record_spawn_dispatch_queued(
+                            source_pane_id,
+                            source_is_active,
+                            &format!("Sent task to {label}; interrupting its agent wait."),
+                            &dispatch.task,
+                        );
+                    } else if self.native_spawn_target_is_busy(thread_id) {
                         let pending = PendingSpawnDispatch::new(task, vec![ack.clone()]);
                         self.enqueue_pending_dispatch_for_thread(thread_id, pending);
                         self.record_spawn_dispatch_acks(
@@ -1955,6 +1969,11 @@ impl App {
                 )
             });
         navigation_busy || status_busy
+    }
+
+    pub(crate) fn native_spawn_target_is_waiting_for_agents(&self, thread_id: ThreadId) -> bool {
+        self.spawn_waiting_for_agents_by_thread
+            .contains_key(&thread_id)
     }
 
     pub(crate) fn enqueue_pending_dispatch_for_thread(

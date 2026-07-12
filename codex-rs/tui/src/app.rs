@@ -759,6 +759,9 @@ pub(crate) struct App {
     pub(crate) spawn_parent_by_node: HashMap<String, String>,
     pub(crate) spawn_status_by_thread:
         HashMap<ThreadId, codex_app_server_protocol::CollabAgentState>,
+    /// Active `wait_agent` call by native spawn thread, keyed to the exact turn and item so a
+    /// delayed completion from an older wait cannot clear a newer wait state.
+    pub(crate) spawn_waiting_for_agents_by_thread: HashMap<ThreadId, (String, String)>,
     pub(crate) spawn_parent_reports_by_node: HashMap<String, VecDeque<String>>,
     /// Child reports delivered to a native Codex parent thread that could not be turned into a
     /// parent turn immediately because the parent was mid-turn. These are flushed (each turned
@@ -1417,6 +1420,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
             spawn_parent_by_thread: HashMap::new(),
             spawn_parent_by_node: restored_spawn_parent_by_node,
             spawn_status_by_thread: HashMap::new(),
+            spawn_waiting_for_agents_by_thread: HashMap::new(),
             spawn_parent_reports_by_node: HashMap::new(),
             spawn_pending_reports_by_thread: HashMap::new(),
             spawn_pending_dispatches_by_thread: restored_pane_layout

@@ -2612,6 +2612,49 @@ impl App {
             AppEvent::OpenSpawnClaudePaneTaskPrompt { pane_id } => {
                 self.open_spawn_claude_pane_task_prompt(pane_id);
             }
+            AppEvent::SteerWaitingSpawnAgentTask { thread_id, task } => {
+                let task = task.trim().to_string();
+                let target_node_id = crate::spawn_orchestration::thread_node_id(thread_id);
+                let Some((turn_id, _)) = self
+                    .spawn_waiting_for_agents_by_thread
+                    .get(&thread_id)
+                    .cloned()
+                else {
+                    self.app_event_tx
+                        .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
+                    return Ok(AppRunControl::Continue);
+                };
+                let task_for_submission = self.spawn_agent_task_for_submission(thread_id, &task);
+                match app_server
+                    .turn_steer(
+                        thread_id,
+                        turn_id,
+                        vec![codex_app_server_protocol::UserInput::Text {
+                            text: task_for_submission,
+                            text_elements: Vec::new(),
+                        }],
+                    )
+                    .await
+                {
+                    Ok(_) => {
+                        self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
+                        self.record_spawn_dispatch_delivered_for_task(&target_node_id, &task);
+                        self.agent_navigation.set_last_task_message(
+                            thread_id,
+                            Some(task.chars().take(240).collect()),
+                        );
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            %thread_id,
+                            %error,
+                            "failed to steer agent wait; retrying through normal task submission"
+                        );
+                        self.app_event_tx
+                            .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
+                    }
+                }
+            }
             AppEvent::SubmitSpawnAgentTask { thread_id, task } => {
                 let task = task.trim().to_string();
                 let original_target_node_id = crate::spawn_orchestration::thread_node_id(thread_id);

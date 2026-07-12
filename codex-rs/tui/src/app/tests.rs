@@ -2815,6 +2815,116 @@ async fn dispatch_to_running_native_child_queues_until_turn_completed() {
 }
 
 #[tokio::test]
+async fn dispatch_to_native_child_waiting_for_agents_steers_instead_of_persisting() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    app.agent_navigation.set_running(orc_thread_id, true);
+    app.update_spawn_status_for_thread_notification(&ServerNotification::ItemStarted(
+        codex_app_server_protocol::ItemStartedNotification {
+            thread_id: orc_thread_id.to_string(),
+            turn_id: "turn-waiting".to_string(),
+            started_at_ms: 0,
+            item: ThreadItem::CollabAgentToolCall {
+                id: "wait-call".to_string(),
+                tool: codex_app_server_protocol::CollabAgentTool::Wait,
+                status: codex_app_server_protocol::CollabAgentToolCallStatus::InProgress,
+                sender_thread_id: orc_thread_id.to_string(),
+                receiver_thread_ids: Vec::new(),
+                prompt: None,
+                model: None,
+                reasoning_effort: None,
+                agents_states: HashMap::new(),
+            },
+        },
+    ));
+
+    app.dispatch_spawn_task_blocks(
+        &crate::spawn_orchestration::thread_node_id(troll_thread_id),
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "parallelize the independent audit".to_string(),
+            seq: None,
+        }],
+    );
+
+    let event = rx
+        .try_recv()
+        .expect("waiting target should be steered immediately");
+    assert!(matches!(
+        event,
+        AppEvent::SteerWaitingSpawnAgentTask { thread_id, task }
+            if thread_id == orc_thread_id && task.contains("parallelize the independent audit")
+    ));
+    assert!(
+        app.spawn_pending_dispatches_by_thread
+            .get(&orc_thread_id)
+            .is_none_or(std::collections::VecDeque::is_empty),
+        "agent waits must not persist incoming supervisory work until idle"
+    );
+}
+
+#[tokio::test]
+async fn completed_agent_wait_restores_busy_dispatch_queue_behavior() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    app.agent_navigation.set_running(orc_thread_id, true);
+    let wait_item = ThreadItem::CollabAgentToolCall {
+        id: "wait-call".to_string(),
+        tool: codex_app_server_protocol::CollabAgentTool::Wait,
+        status: codex_app_server_protocol::CollabAgentToolCallStatus::InProgress,
+        sender_thread_id: orc_thread_id.to_string(),
+        receiver_thread_ids: Vec::new(),
+        prompt: None,
+        model: None,
+        reasoning_effort: None,
+        agents_states: HashMap::new(),
+    };
+    app.update_spawn_status_for_thread_notification(&ServerNotification::ItemStarted(
+        codex_app_server_protocol::ItemStartedNotification {
+            thread_id: orc_thread_id.to_string(),
+            turn_id: "turn-waiting".to_string(),
+            started_at_ms: 0,
+            item: wait_item.clone(),
+        },
+    ));
+    app.update_spawn_status_for_thread_notification(&ServerNotification::ItemCompleted(
+        codex_app_server_protocol::ItemCompletedNotification {
+            thread_id: orc_thread_id.to_string(),
+            turn_id: "turn-waiting".to_string(),
+            completed_at_ms: 1,
+            item: ThreadItem::CollabAgentToolCall {
+                id: "wait-call".to_string(),
+                tool: codex_app_server_protocol::CollabAgentTool::Wait,
+                status: codex_app_server_protocol::CollabAgentToolCallStatus::Completed,
+                sender_thread_id: orc_thread_id.to_string(),
+                receiver_thread_ids: Vec::new(),
+                prompt: None,
+                model: None,
+                reasoning_effort: None,
+                agents_states: HashMap::new(),
+            },
+        },
+    ));
+
+    app.dispatch_spawn_task_blocks(
+        &crate::spawn_orchestration::thread_node_id(troll_thread_id),
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_thread_id.to_string(),
+            task: "do not interrupt active implementation".to_string(),
+            seq: None,
+        }],
+    );
+
+    assert!(rx.try_recv().is_err());
+    assert_eq!(
+        app.spawn_pending_dispatches_by_thread
+            .get(&orc_thread_id)
+            .map_or(0, std::collections::VecDeque::len),
+        1
+    );
+}
+
+#[tokio::test]
 async fn multiple_native_dispatches_to_busy_child_flush_as_one_ordered_turn() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
@@ -10439,6 +10549,7 @@ async fn make_test_app() -> App {
         spawn_parent_by_thread: HashMap::new(),
         spawn_parent_by_node: HashMap::new(),
         spawn_status_by_thread: HashMap::new(),
+        spawn_waiting_for_agents_by_thread: HashMap::new(),
         spawn_parent_reports_by_node: HashMap::new(),
         spawn_pending_reports_by_thread: HashMap::new(),
         spawn_pending_dispatches_by_thread: HashMap::new(),
@@ -10531,6 +10642,7 @@ async fn make_test_app_with_channels() -> (
             spawn_parent_by_thread: HashMap::new(),
             spawn_parent_by_node: HashMap::new(),
             spawn_status_by_thread: HashMap::new(),
+            spawn_waiting_for_agents_by_thread: HashMap::new(),
             spawn_parent_reports_by_node: HashMap::new(),
             spawn_pending_reports_by_thread: HashMap::new(),
             spawn_pending_dispatches_by_thread: HashMap::new(),

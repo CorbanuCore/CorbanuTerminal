@@ -219,6 +219,11 @@ pub(crate) enum AppEvent {
         thread_id: codex_protocol::ThreadId,
         task: String,
     },
+    /// Steer a running spawned-agent turn that is blocked in `wait_agent`.
+    SteerWaitingSpawnAgentTask {
+        thread_id: codex_protocol::ThreadId,
+        task: String,
+    },
     /// Retry queued work after transient session-wide execution capacity clears.
     RetryPendingSpawnAgentTask {
         thread_id: codex_protocol::ThreadId,

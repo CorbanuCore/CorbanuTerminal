@@ -1597,6 +1597,55 @@ impl App {
         &mut self,
         notification: &ServerNotification,
     ) {
+        match notification {
+            ServerNotification::ItemStarted(notification) => {
+                if let codex_app_server_protocol::ThreadItem::CollabAgentToolCall {
+                    id,
+                    tool: codex_app_server_protocol::CollabAgentTool::Wait,
+                    status: codex_app_server_protocol::CollabAgentToolCallStatus::InProgress,
+                    ..
+                } = &notification.item
+                    && let Ok(thread_id) = ThreadId::from_string(&notification.thread_id)
+                    && self.is_spawn_orchestration_thread(thread_id)
+                {
+                    self.spawn_waiting_for_agents_by_thread
+                        .insert(thread_id, (notification.turn_id.clone(), id.clone()));
+                }
+            }
+            ServerNotification::ItemCompleted(notification) => {
+                if let codex_app_server_protocol::ThreadItem::CollabAgentToolCall {
+                    id,
+                    tool: codex_app_server_protocol::CollabAgentTool::Wait,
+                    ..
+                } = &notification.item
+                    && let Ok(thread_id) = ThreadId::from_string(&notification.thread_id)
+                    && self
+                        .spawn_waiting_for_agents_by_thread
+                        .get(&thread_id)
+                        .is_some_and(|(turn_id, call_id)| {
+                            turn_id == &notification.turn_id && call_id == id
+                        })
+                {
+                    self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
+                }
+            }
+            ServerNotification::TurnStarted(notification) => {
+                if let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) {
+                    self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
+                }
+            }
+            ServerNotification::TurnCompleted(notification) => {
+                if let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) {
+                    self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
+                }
+            }
+            ServerNotification::ThreadClosed(notification) => {
+                if let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) {
+                    self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
+                }
+            }
+            _ => {}
+        }
         if let ServerNotification::ThreadClosed(notification) = notification {
             let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
                 return;
