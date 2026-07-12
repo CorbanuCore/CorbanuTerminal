@@ -79,6 +79,8 @@ async fn handle_interrupt_agent(
                 occurred_at_ms: now_unix_timestamp_ms(),
                 agent_thread_id: agent_id,
                 agent_path: receiver_agent_path,
+                agent_nickname: receiver_agent.agent_nickname,
+                agent_role: receiver_agent.agent_role,
                 task_preview: None,
                 kind: SubAgentActivityKind::Interrupted,
             }

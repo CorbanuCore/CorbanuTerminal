@@ -159,6 +159,9 @@ async fn handle_spawn_agent(
         .as_ref()
         .and_then(|snapshot| snapshot.session_source.get_nickname())
         .or(spawned_agent.metadata.agent_nickname);
+    let agent_role = agent_snapshot
+        .as_ref()
+        .and_then(|snapshot| snapshot.session_source.get_agent_role());
     session
         .send_event(
             &turn,
@@ -167,6 +170,8 @@ async fn handle_spawn_agent(
                 occurred_at_ms: now_unix_timestamp_ms(),
                 agent_thread_id: new_thread_id,
                 agent_path: new_agent_path.clone(),
+                agent_nickname: nickname.clone(),
+                agent_role,
                 task_preview: None,
                 kind: SubAgentActivityKind::Started,
             }

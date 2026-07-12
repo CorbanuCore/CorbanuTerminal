@@ -136,6 +136,8 @@ pub(crate) async fn handle_message_string_tool(
                 occurred_at_ms: now_unix_timestamp_ms(),
                 agent_thread_id: receiver_thread_id,
                 agent_path: receiver_agent_path.clone(),
+                agent_nickname: receiver_agent.agent_nickname.clone(),
+                agent_role: receiver_agent.agent_role.clone(),
                 task_preview,
                 kind: SubAgentActivityKind::Interacted,
             }

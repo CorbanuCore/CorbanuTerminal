@@ -1429,6 +1429,8 @@ async fn spawn_status_shows_orc_task_preview_from_troll_activity() {
         .record_sub_agent_activity(SubAgentActivityDisplay {
             thread_id: orc_thread_id,
             agent_path: "/root/troll_burzum/orc_snaga".to_string(),
+            agent_nickname: None,
+            agent_role: None,
             task_preview: Some("build the animated website shell".to_string()),
             is_running_hint: true,
         });
@@ -3559,6 +3561,8 @@ async fn troll_spawn_task_submission_names_existing_orc_panes() {
         .record_sub_agent_activity(SubAgentActivityDisplay {
             thread_id: snaga_thread_id,
             agent_path: "/root/troll_burzum/orc_snaga".to_string(),
+            agent_nickname: None,
+            agent_role: None,
             task_preview: None,
             is_running_hint: false,
         });
@@ -3566,6 +3570,8 @@ async fn troll_spawn_task_submission_names_existing_orc_panes() {
         .record_sub_agent_activity(SubAgentActivityDisplay {
             thread_id: ghash_thread_id,
             agent_path: "/root/troll_burzum/orc_ghash".to_string(),
+            agent_nickname: None,
+            agent_role: None,
             task_preview: None,
             is_running_hint: false,
         });
@@ -3642,6 +3648,8 @@ async fn spawn_status_preserves_orc_activity_when_name_arrives_later() {
         .record_sub_agent_activity(SubAgentActivityDisplay {
             thread_id: orc_thread_id,
             agent_path: "/root/troll_burzum/orc_snaga".to_string(),
+            agent_nickname: None,
+            agent_role: None,
             task_preview: Some("build the animated website shell".to_string()),
             is_running_hint: true,
         });
@@ -7802,6 +7810,8 @@ async fn open_agent_picker_clears_completed_path_backed_agent_running_state() ->
         .record_sub_agent_activity(SubAgentActivityDisplay {
             thread_id,
             agent_path: "/root/child".to_string(),
+            agent_nickname: None,
+            agent_role: None,
             task_preview: None,
             is_running_hint: true,
         });
@@ -7844,6 +7854,8 @@ async fn open_agent_picker_refreshes_replay_only_path_backed_liveness() -> Resul
         .record_sub_agent_activity(SubAgentActivityDisplay {
             thread_id,
             agent_path: "/root/child".to_string(),
+            agent_nickname: None,
+            agent_role: None,
             task_preview: None,
             is_running_hint: true,
         });

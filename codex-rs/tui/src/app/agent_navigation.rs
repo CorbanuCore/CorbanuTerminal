@@ -139,6 +139,12 @@ impl AgentNavigationState {
                     is_closed: false,
                 });
         entry.agent_path = Some(activity.agent_path);
+        if activity.agent_nickname.is_some() {
+            entry.agent_nickname = activity.agent_nickname;
+        }
+        if activity.agent_role.is_some() {
+            entry.agent_role = activity.agent_role;
+        }
         if let Some(task_preview) = activity.task_preview {
             entry.last_task_message = Some(task_preview);
         }
@@ -399,6 +405,8 @@ mod tests {
         state.record_sub_agent_activity(SubAgentActivityDisplay {
             thread_id,
             agent_path: "/root/troll_burzum/orc_snaga".to_string(),
+            agent_nickname: None,
+            agent_role: None,
             task_preview: Some("build the animated website shell".to_string()),
             is_running_hint: true,
         });
