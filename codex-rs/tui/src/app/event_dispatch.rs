@@ -2807,17 +2807,23 @@ impl App {
                 if self.native_spawn_target_is_busy(thread_id) {
                     let pending =
                         self.pending_dispatch_from_registered_task(&original_target_node_id, task);
-                    self.record_spawn_dispatch_acks(
-                        &pending.acks,
-                        "queued_busy",
-                        "target became busy before turn start; will deliver when idle",
-                        false,
-                    );
-                    self.enqueue_pending_dispatch_for_thread(thread_id, pending);
-                    self.chat_widget.add_info_message(
-                        format!("Task queued for {label}."),
-                        Some("The target pane is busy; PFTerminal will deliver it when the pane goes idle.".to_string()),
-                    );
+                    let pending_for_ack = pending.clone();
+                    if let Some((acks, notify)) =
+                        self.enqueue_pending_dispatch_for_thread(thread_id, pending)
+                    {
+                        self.record_duplicate_pending_dispatch(&label, &acks, notify);
+                    } else {
+                        self.record_spawn_dispatch_acks(
+                            &pending_for_ack.acks,
+                            "queued_busy",
+                            "target became busy before turn start; will deliver when idle",
+                            false,
+                        );
+                        self.chat_widget.add_info_message(
+                            format!("Task queued for {label}."),
+                            Some("The target pane is busy; PFTerminal will deliver it when the pane goes idle.".to_string()),
+                        );
+                    }
                     return Ok(AppRunControl::Continue);
                 }
                 // Inject the live spawn hierarchy as additional context so native spawn panes
@@ -2853,6 +2859,7 @@ impl App {
                     .await
                 {
                     Ok(outcome) => {
+                        self.clear_spawn_capacity_retry(thread_id, &task);
                         if !outcome.recovered_failures.is_empty() {
                             self.surface_turn_start_failure(
                                 thread_id,
@@ -2896,29 +2903,31 @@ impl App {
                                 &original_target_node_id,
                                 task,
                             );
-                            self.record_spawn_dispatch_acks(
-                                &pending.acks,
-                                "queued_capacity",
-                                format!(
-                                    "session execution capacity reached ({max_threads}); will retry"
-                                ),
-                                false,
-                            );
-                            self.enqueue_pending_dispatch_for_thread(thread_id, pending);
-                            let app_event_tx = self.app_event_tx.clone();
-                            tokio::spawn(async move {
-                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                                app_event_tx
-                                    .send(AppEvent::RetryPendingSpawnAgentTask { thread_id });
-                            });
-                            self.chat_widget.add_info_message(
-                                format!("Task queued for {label}."),
-                                Some(format!(
-                                    "The session is using all {max_threads} agent execution slots; PFTerminal will retry automatically."
-                                )),
-                            );
+                            let pending_for_notification = pending.clone();
+                            if let Some((acks, notify)) =
+                                self.enqueue_pending_dispatch_for_thread(thread_id, pending)
+                            {
+                                self.record_duplicate_pending_dispatch(&label, &acks, notify);
+                            } else {
+                                self.record_spawn_dispatch_acks(
+                                    &pending_for_notification.acks,
+                                    "queued_capacity",
+                                    format!(
+                                        "session execution capacity reached ({max_threads}); will retry"
+                                    ),
+                                    false,
+                                );
+                                self.note_spawn_capacity_pending(
+                                    thread_id,
+                                    &label,
+                                    max_threads,
+                                    &pending_for_notification,
+                                );
+                            }
+                            self.schedule_spawn_capacity_retry(thread_id);
                             return Ok(AppRunControl::Continue);
                         }
+                        self.clear_spawn_capacity_retry(thread_id, &task);
                         let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                         self.abort_spawn_auto_processing_turn(&node_key);
                         self.requeue_spawn_report_processing_task(thread_id, &task);
@@ -2945,8 +2954,10 @@ impl App {
                     }
                 }
             }
-            AppEvent::RetryPendingSpawnAgentTask { thread_id } => {
-                if !self.native_spawn_target_is_busy(thread_id) {
+            AppEvent::RetryPendingSpawnAgentTask { thread_id, attempt } => {
+                if self.accept_spawn_capacity_retry_timer(thread_id, attempt)
+                    && !self.native_spawn_target_is_busy(thread_id)
+                {
                     self.flush_pending_dispatches_for_thread(thread_id);
                 }
             }

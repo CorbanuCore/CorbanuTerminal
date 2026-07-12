@@ -1177,7 +1177,11 @@ impl App {
                 self.agent_navigation
                     .set_last_result_message(thread_id, status.message.clone());
                 if !is_running && self.is_spawn_orchestration_thread(thread_id) {
-                    let flushed_dispatch = self.flush_pending_dispatches_for_thread(thread_id);
+                    let flushed_dispatch = self
+                        .spawn_pending_dispatches_by_thread
+                        .get(&thread_id)
+                        .is_some_and(|queue| !queue.is_empty());
+                    self.flush_idle_pending_dispatches_after_slot_release();
                     if !flushed_dispatch {
                         self.flush_pending_reports_for_thread(thread_id);
                     }
@@ -1924,7 +1928,11 @@ impl App {
             );
             self.record_spawn_child_report_for_thread(thread_id, status, report_message);
             // Commands queued for this target take priority over informational child reports.
-            let flushed_dispatch = self.flush_pending_dispatches_for_thread(thread_id);
+            let flushed_dispatch = self
+                .spawn_pending_dispatches_by_thread
+                .get(&thread_id)
+                .is_some_and(|queue| !queue.is_empty());
+            self.flush_idle_pending_dispatches_after_slot_release();
             // This thread just went idle. If child reports arrived while it was mid-turn, flush them
             // now into a real processing turn so no report is silently dropped (the multi-turn race).
             let flushed_reports = if flushed_dispatch {

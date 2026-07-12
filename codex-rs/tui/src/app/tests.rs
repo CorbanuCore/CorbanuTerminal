@@ -3093,6 +3093,170 @@ async fn combined_native_dispatch_flush_records_failed_acks_for_all_senders() {
     );
 }
 
+#[tokio::test(start_paused = true)]
+async fn saturated_capacity_queue_notifies_once_backs_off_and_delivers_each_task_once() {
+    let (mut app, mut app_event_rx, mut op_rx) = make_test_app_with_channels().await;
+    let (_troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    let target_node_id = crate::spawn_orchestration::thread_node_id(orc_thread_id);
+    let label = app.thread_label(orc_thread_id);
+
+    for seq in 1..=3 {
+        let task = format!(
+            "Assigned by Angmar to {label} through PFTerminal /spawn dispatch (dispatch #{seq}).\n\ncapacity task {seq}"
+        );
+        let pending = crate::spawn_orchestration::PendingSpawnDispatch::new(
+            task,
+            vec![crate::spawn_orchestration::SpawnDispatchAck {
+                seq,
+                source_node_id: "thread:source".to_string(),
+                target_node_id: target_node_id.clone(),
+                target_title: label.clone(),
+                attempt: 0,
+            }],
+        );
+        assert!(
+            app.enqueue_pending_dispatch_for_thread(orc_thread_id, pending.clone())
+                .is_none()
+        );
+        app.note_spawn_capacity_pending(orc_thread_id, &label, 3, &pending);
+    }
+    app.schedule_spawn_capacity_retry(orc_thread_id);
+    assert_eq!(
+        app.spawn_capacity_retry_attempt_by_thread
+            .get(&orc_thread_id),
+        Some(&1)
+    );
+
+    let mut queued_rendered = Vec::new();
+    while let Ok(event) = app_event_rx.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            queued_rendered.push(lines_to_single_string(&cell.display_lines(/*width*/ 160)));
+        }
+    }
+    assert_eq!(
+        queued_rendered
+            .iter()
+            .filter(|line| line.contains("slots full; will deliver automatically"))
+            .count(),
+        3
+    );
+    assert!(
+        op_rx.try_recv().is_err(),
+        "render-only queue notices must not enter model context"
+    );
+
+    assert!(app.flush_idle_pending_dispatches_after_slot_release());
+    let first_attempt = drain_spawn_agent_task_for(&mut app_event_rx, orc_thread_id)
+        .expect("event-driven slot release should attempt one combined target turn");
+    for seq in 1..=3 {
+        assert_eq!(
+            first_attempt
+                .matches(&format!("capacity task {seq}"))
+                .count(),
+            1
+        );
+    }
+
+    let pending_retry =
+        app.pending_dispatch_from_registered_task(&target_node_id, first_attempt.clone());
+    assert!(
+        app.enqueue_pending_dispatch_for_thread(orc_thread_id, pending_retry.clone())
+            .is_none()
+    );
+    app.note_spawn_capacity_pending(orc_thread_id, &label, 3, &pending_retry);
+    app.schedule_spawn_capacity_retry(orc_thread_id);
+    assert_eq!(
+        app.spawn_capacity_retry_attempt_by_thread
+            .get(&orc_thread_id),
+        Some(&2)
+    );
+    assert!(
+        app_event_rx.try_recv().is_err(),
+        "capacity retry must not emit another queue notification"
+    );
+    assert!(!app.accept_spawn_capacity_retry_timer(orc_thread_id, 1));
+    assert!(app.accept_spawn_capacity_retry_timer(orc_thread_id, 2));
+
+    assert!(app.flush_idle_pending_dispatches_after_slot_release());
+    let delivered = drain_spawn_agent_task_for(&mut app_event_rx, orc_thread_id)
+        .expect("slot release should deliver the combined task");
+    assert_eq!(delivered, first_attempt);
+    app.record_spawn_dispatch_delivered_for_task(&target_node_id, &delivered);
+
+    let mut delivered_rendered = Vec::new();
+    while let Ok(event) = app_event_rx.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            delivered_rendered.push(lines_to_single_string(&cell.display_lines(/*width*/ 160)));
+        }
+    }
+    assert_eq!(
+        delivered_rendered
+            .iter()
+            .filter(|line| line.contains("Queued task delivered"))
+            .count(),
+        3
+    );
+    assert!(
+        op_rx.try_recv().is_err(),
+        "delivery notices must remain render-only"
+    );
+}
+
+#[tokio::test]
+async fn identical_pending_dispatch_is_suppressed_with_one_render_only_notice() {
+    let (mut app, mut app_event_rx, mut op_rx) = make_test_app_with_channels().await;
+    let (_troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    let target_node_id = crate::spawn_orchestration::thread_node_id(orc_thread_id);
+    let label = app.thread_label(orc_thread_id);
+    let pending = |seq| {
+        crate::spawn_orchestration::PendingSpawnDispatch::new(
+            format!("Assigned by Angmar to {label} (dispatch #{seq}).\n\nsame requested work"),
+            vec![crate::spawn_orchestration::SpawnDispatchAck {
+                seq,
+                source_node_id: "thread:source".to_string(),
+                target_node_id: target_node_id.clone(),
+                target_title: label.clone(),
+                attempt: 0,
+            }],
+        )
+    };
+
+    assert!(
+        app.enqueue_pending_dispatch_for_thread(orc_thread_id, pending(1))
+            .is_none()
+    );
+    for seq in [2, 3] {
+        let (acks, notify) = app
+            .enqueue_pending_dispatch_for_thread(orc_thread_id, pending(seq))
+            .expect("identical task should be suppressed");
+        app.record_duplicate_pending_dispatch(&label, &acks, notify);
+    }
+
+    assert_eq!(
+        app.spawn_pending_dispatches_by_thread
+            .get(&orc_thread_id)
+            .map_or(0, std::collections::VecDeque::len),
+        1
+    );
+    let mut rendered = Vec::new();
+    while let Ok(event) = app_event_rx.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            rendered.push(lines_to_single_string(&cell.display_lines(/*width*/ 160)));
+        }
+    }
+    assert_eq!(
+        rendered
+            .iter()
+            .filter(|line| line.contains("Duplicate task") && line.contains("suppressed"))
+            .count(),
+        1
+    );
+    assert!(
+        op_rx.try_recv().is_err(),
+        "duplicate notice must remain render-only"
+    );
+}
+
 #[tokio::test]
 async fn turn_start_failure_is_buffered_in_only_the_affected_pane() {
     let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
@@ -10661,6 +10825,10 @@ async fn make_test_app() -> App {
         spawn_pending_reports_by_thread: HashMap::new(),
         spawn_pending_dispatches_by_thread: HashMap::new(),
         spawn_pending_dispatches_by_pane: HashMap::new(),
+        spawn_capacity_retry_attempt_by_thread: HashMap::new(),
+        spawn_capacity_retry_scheduled_by_thread: HashSet::new(),
+        spawn_capacity_notified_dispatch_seqs: HashSet::new(),
+        spawn_capacity_notified_tasks: HashSet::new(),
         spawn_dispatch_acks_by_target_task: HashMap::new(),
         spawn_next_dispatch_seq: 1,
         spawn_processed_dispatch_seq_ids: HashSet::new(),
@@ -10753,6 +10921,10 @@ async fn make_test_app_with_channels() -> (
             spawn_pending_reports_by_thread: HashMap::new(),
             spawn_pending_dispatches_by_thread: HashMap::new(),
             spawn_pending_dispatches_by_pane: HashMap::new(),
+            spawn_capacity_retry_attempt_by_thread: HashMap::new(),
+            spawn_capacity_retry_scheduled_by_thread: HashSet::new(),
+            spawn_capacity_notified_dispatch_seqs: HashSet::new(),
+            spawn_capacity_notified_tasks: HashSet::new(),
             spawn_dispatch_acks_by_target_task: HashMap::new(),
             spawn_next_dispatch_seq: 1,
             spawn_processed_dispatch_seq_ids: HashSet::new(),

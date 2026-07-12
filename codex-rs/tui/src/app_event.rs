@@ -227,6 +227,7 @@ pub(crate) enum AppEvent {
     /// Retry queued work after transient session-wide execution capacity clears.
     RetryPendingSpawnAgentTask {
         thread_id: codex_protocol::ThreadId,
+        attempt: u32,
     },
     /// Start a normal turn in an existing Claude spawn pane.
     SubmitSpawnClaudePaneTask {

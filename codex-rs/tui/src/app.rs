@@ -778,6 +778,10 @@ pub(crate) struct App {
     /// Spawn tasks destined for Claude panes that arrived while the pane was already running.
     pub(crate) spawn_pending_dispatches_by_pane:
         HashMap<String, VecDeque<crate::spawn_orchestration::PendingSpawnDispatch>>,
+    pub(crate) spawn_capacity_retry_attempt_by_thread: HashMap<ThreadId, u32>,
+    pub(crate) spawn_capacity_retry_scheduled_by_thread: HashSet<ThreadId>,
+    pub(crate) spawn_capacity_notified_dispatch_seqs: HashSet<u64>,
+    pub(crate) spawn_capacity_notified_tasks: HashSet<(ThreadId, String)>,
     pub(crate) spawn_dispatch_acks_by_target_task:
         HashMap<(String, String), VecDeque<crate::spawn_orchestration::SpawnDispatchAck>>,
     pub(crate) spawn_next_dispatch_seq: u64,
@@ -1457,6 +1461,10 @@ See the PFTerminal keymap documentation for supported actions and examples."
                         .collect()
                 })
                 .unwrap_or_default(),
+            spawn_capacity_retry_attempt_by_thread: HashMap::new(),
+            spawn_capacity_retry_scheduled_by_thread: HashSet::new(),
+            spawn_capacity_notified_dispatch_seqs: HashSet::new(),
+            spawn_capacity_notified_tasks: HashSet::new(),
             spawn_dispatch_acks_by_target_task: HashMap::new(),
             spawn_next_dispatch_seq: restored_spawn_next_dispatch_seq,
             spawn_processed_dispatch_seq_ids: restored_spawn_processed_dispatch_seq_ids,

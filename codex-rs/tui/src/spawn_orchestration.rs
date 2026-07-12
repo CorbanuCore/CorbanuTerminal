@@ -140,6 +140,8 @@ pub(crate) struct PendingSpawnDispatch {
     pub(crate) created_at_ms: i64,
     #[serde(default)]
     pub(crate) status: DispatchLifecycleStatus,
+    #[serde(default)]
+    pub(crate) duplicate_suppressed_notified: bool,
 }
 
 impl PendingSpawnDispatch {
@@ -149,6 +151,7 @@ impl PendingSpawnDispatch {
             acks,
             created_at_ms: spawn_dispatch_now_ms(),
             status: DispatchLifecycleStatus::Created,
+            duplicate_suppressed_notified: false,
         }
     }
 
@@ -158,6 +161,7 @@ impl PendingSpawnDispatch {
             acks: Vec::new(),
             created_at_ms: spawn_dispatch_now_ms(),
             status: DispatchLifecycleStatus::Created,
+            duplicate_suppressed_notified: false,
         }
     }
 
@@ -195,6 +199,8 @@ impl<'de> Deserialize<'de> for PendingSpawnDispatch {
             created_at_ms: i64,
             #[serde(default)]
             status: DispatchLifecycleStatus,
+            #[serde(default)]
+            duplicate_suppressed_notified: bool,
         }
 
         #[derive(Deserialize)]
@@ -210,6 +216,7 @@ impl<'de> Deserialize<'de> for PendingSpawnDispatch {
                 acks: fields.acks,
                 created_at_ms: fields.created_at_ms,
                 status: fields.status,
+                duplicate_suppressed_notified: fields.duplicate_suppressed_notified,
             }),
             PendingSpawnDispatchRepr::Legacy(task) => Ok(Self::legacy(task)),
         }
@@ -1399,21 +1406,26 @@ impl App {
                         );
                     } else if self.native_spawn_target_is_busy(thread_id) {
                         let pending = PendingSpawnDispatch::new(task, vec![ack.clone()]);
-                        self.enqueue_pending_dispatch_for_thread(thread_id, pending);
-                        self.record_spawn_dispatch_acks(
-                            &[ack],
-                            "queued_busy",
-                            "target busy; will deliver when idle",
-                            false,
-                        );
-                        self.record_spawn_dispatch_queued(
-                            source_pane_id,
-                            source_is_active,
-                            &format!(
-                                "Queued task for {label} (target busy; will deliver when idle)."
-                            ),
-                            &dispatch.task,
-                        );
+                        if let Some((acks, notify)) =
+                            self.enqueue_pending_dispatch_for_thread(thread_id, pending)
+                        {
+                            self.record_duplicate_pending_dispatch(&label, &acks, notify);
+                        } else {
+                            self.record_spawn_dispatch_acks(
+                                &[ack],
+                                "queued_busy",
+                                "target busy; will deliver when idle",
+                                false,
+                            );
+                            self.record_spawn_dispatch_queued(
+                                source_pane_id,
+                                source_is_active,
+                                &format!(
+                                    "Queued task for {label} (target busy; will deliver when idle)."
+                                ),
+                                &dispatch.task,
+                            );
+                        }
                     } else {
                         self.register_spawn_dispatch_acks_for_task(
                             &target_node_id,
@@ -2051,16 +2063,20 @@ impl App {
         &mut self,
         target_thread_id: ThreadId,
         dispatch: PendingSpawnDispatch,
-    ) {
+    ) -> Option<(Vec<SpawnDispatchAck>, bool)> {
         let queue = self
             .spawn_pending_dispatches_by_thread
             .entry(target_thread_id)
             .or_default();
-        if queue
-            .back()
-            .is_some_and(|queued| queued.task == dispatch.task)
+        let identity = spawn_dispatch_task_identity(&dispatch.task);
+        if let Some(queued) = queue
+            .iter_mut()
+            .find(|queued| spawn_dispatch_task_identity(&queued.task) == identity)
         {
-            return;
+            let notify = !queued.duplicate_suppressed_notified;
+            queued.duplicate_suppressed_notified = true;
+            self.persist_pane_state();
+            return Some((dispatch.acks, notify));
         }
         queue.push_back(dispatch);
         tracing::info!(
@@ -2069,6 +2085,7 @@ impl App {
             "queued spawn dispatch for busy native target; will flush on target idle"
         );
         self.persist_pane_state();
+        None
     }
 
     pub(crate) fn enqueue_pending_dispatch_for_claude_pane(
@@ -2093,6 +2110,126 @@ impl App {
             "queued spawn dispatch for busy Claude pane; will flush on pane idle"
         );
         self.persist_pane_state();
+    }
+
+    pub(crate) fn record_duplicate_pending_dispatch(
+        &mut self,
+        label: &str,
+        acks: &[SpawnDispatchAck],
+        notify: bool,
+    ) {
+        self.record_spawn_dispatch_acks(
+            acks,
+            "duplicate_suppressed",
+            "an identical task is already pending for this target",
+            false,
+        );
+        if notify {
+            self.chat_widget.add_info_message(
+                format!("Duplicate task for {label} suppressed."),
+                Some(
+                    "An identical task is already pending; PFTerminal will deliver one copy."
+                        .to_string(),
+                ),
+            );
+        }
+    }
+
+    pub(crate) fn note_spawn_capacity_pending(
+        &mut self,
+        target_thread_id: ThreadId,
+        label: &str,
+        max_threads: usize,
+        pending: &PendingSpawnDispatch,
+    ) {
+        let should_notify = if pending.acks.is_empty() {
+            self.spawn_capacity_notified_tasks.insert((
+                target_thread_id,
+                spawn_dispatch_task_identity(&pending.task).to_string(),
+            ))
+        } else {
+            let mut notify = false;
+            for ack in &pending.acks {
+                notify |= self.spawn_capacity_notified_dispatch_seqs.insert(ack.seq);
+            }
+            notify
+        };
+        if should_notify {
+            self.chat_widget.add_info_message(
+                format!("Task queued for {label} (slots full; will deliver automatically)."),
+                Some(format!(
+                    "The session is using all {max_threads} agent execution slots. This task will be retried with backoff and on the next slot release."
+                )),
+            );
+        }
+    }
+
+    pub(crate) fn schedule_spawn_capacity_retry(&mut self, thread_id: ThreadId) {
+        if !self
+            .spawn_capacity_retry_scheduled_by_thread
+            .insert(thread_id)
+        {
+            return;
+        }
+        let attempt = self
+            .spawn_capacity_retry_attempt_by_thread
+            .entry(thread_id)
+            .and_modify(|attempt| *attempt = attempt.saturating_add(1))
+            .or_insert(1);
+        let attempt = *attempt;
+        let shift = attempt.saturating_sub(1).min(5);
+        let delay_ms = 500_u64.saturating_mul(1_u64 << shift).min(10_000);
+        let app_event_tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+            app_event_tx.send(AppEvent::RetryPendingSpawnAgentTask { thread_id, attempt });
+        });
+    }
+
+    pub(crate) fn accept_spawn_capacity_retry_timer(
+        &mut self,
+        thread_id: ThreadId,
+        attempt: u32,
+    ) -> bool {
+        if self
+            .spawn_capacity_retry_attempt_by_thread
+            .get(&thread_id)
+            .copied()
+            != Some(attempt)
+        {
+            return false;
+        }
+        self.spawn_capacity_retry_scheduled_by_thread
+            .remove(&thread_id);
+        true
+    }
+
+    pub(crate) fn clear_spawn_capacity_retry(&mut self, thread_id: ThreadId, task: &str) {
+        self.spawn_capacity_retry_attempt_by_thread
+            .remove(&thread_id);
+        self.spawn_capacity_retry_scheduled_by_thread
+            .remove(&thread_id);
+        self.spawn_capacity_notified_tasks
+            .remove(&(thread_id, spawn_dispatch_task_identity(task).to_string()));
+    }
+
+    pub(crate) fn flush_idle_pending_dispatches_after_slot_release(&mut self) -> bool {
+        let targets = self
+            .spawn_pending_dispatches_by_thread
+            .keys()
+            .copied()
+            .filter(|thread_id| !self.native_spawn_target_is_busy(*thread_id))
+            .collect::<Vec<_>>();
+        let mut flushed = false;
+        for thread_id in targets {
+            // Logically cancel the old timer. If this event-driven attempt is still at
+            // capacity, its new failure schedules the next backoff generation; the stale
+            // timer is ignored by its attempt number.
+            self.spawn_capacity_retry_scheduled_by_thread
+                .remove(&thread_id);
+            flushed |= self.flush_pending_dispatches_for_thread(thread_id);
+        }
+        flushed
     }
 
     pub(crate) fn flush_pending_dispatches_for_thread(
@@ -2270,6 +2407,12 @@ impl App {
         let acks = self.take_spawn_dispatch_acks_for_task(target_node_id, task);
         for ack in &acks {
             self.note_assignment_dispatch_delivered(&ack.source_node_id);
+            if self.spawn_capacity_notified_dispatch_seqs.remove(&ack.seq) {
+                self.chat_widget.add_info_message(
+                    format!("Queued task delivered to {}.", ack.target_title),
+                    Some("A session execution slot became available; the target turn started exactly once.".to_string()),
+                );
+            }
         }
         self.record_spawn_dispatch_acks(&acks, "delivered", "target turn started", false);
     }
@@ -2284,6 +2427,7 @@ impl App {
         let acks = self.take_spawn_dispatch_acks_for_task(target_node_id, task);
         let mut retry_acks = Vec::new();
         for ack in &acks {
+            self.spawn_capacity_notified_dispatch_seqs.remove(&ack.seq);
             let Some((_, durable_target)) =
                 self.assignment_dispatch_target_for_holder(&ack.source_node_id)
             else {
@@ -5441,6 +5585,16 @@ fn combined_queued_dispatch_task(
 
 fn spawn_dispatch_task_ack_key(task: &str) -> String {
     task.trim().to_string()
+}
+
+fn spawn_dispatch_task_identity(task: &str) -> &str {
+    let task = task.trim();
+    if task.starts_with("Assigned by ")
+        && let Some((_, body)) = task.split_once("\n\n")
+    {
+        return body.trim();
+    }
+    task
 }
 
 fn claude_spawn_rollout_path(pane: &crate::claude_panes::ClaudePane) -> std::path::PathBuf {
