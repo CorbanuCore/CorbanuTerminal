@@ -68,6 +68,28 @@ fn developer_interrupted_marker() -> ResponseItem {
 }
 
 #[test]
+fn fresh_thread_spawn_honors_explicit_v2_config_over_legacy_v1_parent() {
+    assert_eq!(
+        resolve_spawn_multi_agent_version(
+            &InitialHistory::New,
+            Some(MultiAgentVersion::V1),
+            /*is_thread_spawn*/ true,
+            MultiAgentVersion::V2,
+        ),
+        Some(MultiAgentVersion::V2)
+    );
+    assert_eq!(
+        resolve_spawn_multi_agent_version(
+            &InitialHistory::New,
+            Some(MultiAgentVersion::Disabled),
+            /*is_thread_spawn*/ true,
+            MultiAgentVersion::V2,
+        ),
+        Some(MultiAgentVersion::Disabled)
+    );
+}
+
+#[test]
 fn truncates_before_requested_user_message() {
     let items = [
         user_msg("u1"),
