@@ -66,7 +66,7 @@ pub(super) fn ensure_manager_tool_allowed(
         .is_some_and(|role| role.eq_ignore_ascii_case("orc"))
     {
         return Err(FunctionCallError::RespondToModel(format!(
-            "{tool_name} rejected by the runtime: Orc agents are individual contributors and cannot use manager control tools; send_message the result to the parent Troll instead"
+            "{tool_name} rejected by the runtime: caller role orc has no manager tools; return your report to your parent Troll instead"
         )));
     }
     Ok(())

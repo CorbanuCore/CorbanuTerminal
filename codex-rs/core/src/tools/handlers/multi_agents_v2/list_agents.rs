@@ -30,9 +30,9 @@ impl Handler {
             payload,
             ..
         } = invocation;
+        ensure_manager_tool_allowed(&turn, "list_agents")?;
         let arguments = function_arguments(payload)?;
         let args: ListAgentsArgs = parse_arguments(&arguments)?;
-        ensure_manager_tool_allowed(&turn, "list_agents")?;
         session
             .services
             .agent_control

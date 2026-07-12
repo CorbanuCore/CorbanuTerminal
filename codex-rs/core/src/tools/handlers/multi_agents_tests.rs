@@ -4056,7 +4056,50 @@ async fn multi_agent_v2_wait_agent_rejects_orc_at_runtime_boundary() {
     assert_eq!(
         err,
         FunctionCallError::RespondToModel(
-            "wait_agent rejected by the runtime: Orc agents are individual contributors and cannot use manager control tools; send_message the result to the parent Troll instead"
+            "wait_agent rejected by the runtime: caller role orc has no manager tools; return your report to your parent Troll instead"
+                .to_string()
+        )
+    );
+}
+
+#[tokio::test]
+async fn multi_agent_v2_wait_agent_orc_role_rejection_precedes_argument_validation() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = ThreadId::new();
+    let mut config = (*turn.config).clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    set_turn_config(&mut turn, config);
+    turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: root.thread_id,
+        depth: 2,
+        agent_path: Some(AgentPath::try_from("/root/troll_burzum/orc_snaga").expect("agent path")),
+        agent_nickname: Some("Snaga".to_string()),
+        agent_role: Some("orc".to_string()),
+    });
+
+    let err = WaitAgentHandlerV2::default()
+        .handle(invocation(
+            Arc::new(session),
+            Arc::new(turn),
+            "wait_agent",
+            function_payload(json!({"ids": ["not-an-agent-id"]})),
+        ))
+        .await
+        .err()
+        .expect("Orc wait_agent call must be rejected before parsing manager-only arguments");
+    assert_eq!(
+        err,
+        FunctionCallError::RespondToModel(
+            "wait_agent rejected by the runtime: caller role orc has no manager tools; return your report to your parent Troll instead"
                 .to_string()
         )
     );
@@ -4998,6 +5041,97 @@ async fn multi_agent_v2_interrupt_requires_visible_reason_and_superseding_task()
     assert!(content.contains("verification scope changed after review"));
     assert!(content.contains("audit only the committed candidate"));
     assert_eq!(success, Some(true));
+}
+
+#[tokio::test]
+async fn multi_agent_v2_interrupt_target_receives_full_control_and_process_tuple() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = root.thread_id;
+    let mut config = (*turn.config).clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    set_turn_config(&mut turn, config);
+    turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: ThreadId::new(),
+        depth: 1,
+        agent_path: Some(AgentPath::try_from("/root/troll_burzum").expect("actor path")),
+        agent_nickname: Some("Burzum".to_string()),
+        agent_role: Some("troll".to_string()),
+    });
+    let session = Arc::new(session);
+    let turn = Arc::new(turn);
+
+    SpawnAgentHandlerV2::default()
+        .handle(invocation(
+            session.clone(),
+            turn.clone(),
+            "spawn_agent",
+            function_payload(json!({
+                "message": "run the long verification",
+                "task_name": "worker"
+            })),
+        ))
+        .await
+        .expect("spawn worker");
+    let worker_id = session
+        .services
+        .agent_control
+        .resolve_agent_reference(session.thread_id, &turn.session_source, "worker")
+        .await
+        .expect("worker path should resolve");
+    let worker_nickname = session
+        .services
+        .agent_control
+        .get_agent_metadata(worker_id)
+        .expect("worker metadata")
+        .agent_nickname
+        .expect("spawned worker nickname");
+
+    InterruptAgentHandler
+        .handle(invocation(
+            session,
+            turn,
+            "interrupt_agent",
+            function_payload(json!({
+                "target": "worker",
+                "reason": "verification scope changed after review",
+                "superseding_task": "dispatch #22: audit only the committed candidate"
+            })),
+        ))
+        .await
+        .expect("attributed interrupt should succeed");
+
+    let target_audit = manager
+        .captured_ops()
+        .into_iter()
+        .find_map(|(thread_id, op)| match op {
+            Op::InterAgentCommunication { communication }
+                if thread_id == worker_id
+                    && communication
+                        .encrypted_content
+                        .as_deref()
+                        .is_some_and(|content| content.contains("CONTROL EVENT — INTERRUPT")) =>
+            {
+                communication.encrypted_content
+            }
+            _ => None,
+        })
+        .expect("target pane must receive the interrupt audit");
+    let expected = format!(
+        "Actor: Burzum [troll] · /root/troll_burzum\nTarget: {worker_nickname} · /root/troll_burzum/worker\nReason: verification scope changed after review\nSuperseding task/dispatch: dispatch #22: audit only the committed candidate\nProcess effect: model turn aborted; active turn-owned tool processes receive SIGTERM cleanup before abort; durable unified-exec background processes are preserved and remain inspectable in /ps"
+    );
+    assert!(
+        target_audit.contains(&expected),
+        "target interrupt audit did not contain the full tuple: {target_audit:?}"
+    );
 }
 
 #[tokio::test]

@@ -35,9 +35,9 @@ async fn handle_interrupt_agent(
         call_id,
         ..
     } = invocation;
+    ensure_manager_tool_allowed(&turn, "interrupt_agent")?;
     let arguments = function_arguments(payload)?;
     let args: InterruptAgentArgs = parse_arguments(&arguments)?;
-    ensure_manager_tool_allowed(&turn, "interrupt_agent")?;
     let reason = args.reason.trim();
     if reason.is_empty() {
         return Err(FunctionCallError::RespondToModel(
@@ -93,11 +93,9 @@ async fn handle_interrupt_agent(
         (Some(nickname), None) => format!("{nickname} · {receiver_agent_path}"),
         (None, _) => receiver_agent_path.to_string(),
     };
-    let process_effect =
-        "model turn aborted; turn-owned processes receive the configured interrupt cleanup"
-            .to_string();
+    let process_effect = "model turn aborted; active turn-owned tool processes receive SIGTERM cleanup before abort; durable unified-exec background processes are preserved and remain inspectable in /ps".to_string();
     let audit_copy = format!(
-        "Actor: {actor}\nTarget: {target}\nReason: {reason}\nSuperseding task: {}\nProcess effect: {process_effect}",
+        "Actor: {actor}\nTarget: {target}\nReason: {reason}\nSuperseding task/dispatch: {}\nProcess effect: {process_effect}",
         superseding_task.as_deref().unwrap_or("none")
     );
     let result = match session

@@ -1740,8 +1740,8 @@ async fn hosted_tools_follow_provider_auth_model_and_config_gates() {
             codex_code_mode::WAIT_TOOL_NAME,
             "request_user_input",
             // Multi-agent v2 tools.
-            "spawn_agent",
             "send_message",
+            "spawn_agent",
             "followup_task",
             "wait_agent",
             "interrupt_agent",

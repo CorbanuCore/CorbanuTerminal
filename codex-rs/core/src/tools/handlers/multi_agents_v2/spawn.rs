@@ -47,6 +47,7 @@ async fn handle_spawn_agent(
         call_id,
         ..
     } = invocation;
+    ensure_manager_tool_allowed(&turn, "spawn_agent")?;
     let arguments = function_arguments(payload)?;
     let args: SpawnAgentArgs = parse_arguments(&arguments)?;
     let fork_mode = args.fork_mode()?;
