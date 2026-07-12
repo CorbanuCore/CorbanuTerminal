@@ -2068,11 +2068,13 @@ impl App {
             .spawn_pending_dispatches_by_thread
             .entry(target_thread_id)
             .or_default();
-        let identity = spawn_dispatch_task_identity(&dispatch.task);
-        if let Some(queued) = queue
-            .iter_mut()
-            .find(|queued| spawn_dispatch_task_identity(&queued.task) == identity)
-        {
+        let identities = spawn_dispatch_component_identities(&dispatch.task);
+        if let Some(queued) = queue.iter_mut().find(|queued| {
+            let queued_identities = spawn_dispatch_component_identities(&queued.task);
+            identities
+                .iter()
+                .any(|identity| queued_identities.contains(identity))
+        }) {
             let notify = !queued.duplicate_suppressed_notified;
             queued.duplicate_suppressed_notified = true;
             self.persist_pane_state();
@@ -2143,10 +2145,13 @@ impl App {
         pending: &PendingSpawnDispatch,
     ) {
         let should_notify = if pending.acks.is_empty() {
-            self.spawn_capacity_notified_tasks.insert((
-                target_thread_id,
-                spawn_dispatch_task_identity(&pending.task).to_string(),
-            ))
+            let mut notify = false;
+            for identity in spawn_dispatch_component_identities(&pending.task) {
+                notify |= self
+                    .spawn_capacity_notified_tasks
+                    .insert((target_thread_id, identity.to_string()));
+            }
+            notify
         } else {
             let mut notify = false;
             for ack in &pending.acks {
@@ -2209,8 +2214,10 @@ impl App {
             .remove(&thread_id);
         self.spawn_capacity_retry_scheduled_by_thread
             .remove(&thread_id);
-        self.spawn_capacity_notified_tasks
-            .remove(&(thread_id, spawn_dispatch_task_identity(task).to_string()));
+        for identity in spawn_dispatch_component_identities(task) {
+            self.spawn_capacity_notified_tasks
+                .remove(&(thread_id, identity));
+        }
     }
 
     pub(crate) fn flush_idle_pending_dispatches_after_slot_release(&mut self) -> bool {
@@ -5566,21 +5573,55 @@ fn combined_queued_dispatch_task(
     if dispatches.len() == 1 {
         return dispatches.remove(0);
     }
-    let mut combined = String::from(
-        "Multiple spawn dispatches were queued while you were busy. Execute each task below in \
-         order, do not skip any task, and treat every section as assigned work.\n\n",
-    );
+    let mut tasks = Vec::new();
     let mut acks = Vec::new();
-    for (index, dispatch) in dispatches.into_iter().enumerate() {
-        let _ = writeln!(
-            combined,
-            "## Queued dispatch {}\n{}\n",
-            index + 1,
-            dispatch.task
-        );
+    for dispatch in dispatches {
+        if let Some(components) = parse_combined_queued_dispatch_tasks(&dispatch.task) {
+            tasks.extend(components);
+        } else {
+            tasks.push(dispatch.task);
+        }
         acks.extend(dispatch.acks);
     }
+    let mut combined = String::from(COMBINED_QUEUED_DISPATCH_HEADER);
+    for (index, task) in tasks.into_iter().enumerate() {
+        let _ = writeln!(
+            combined,
+            "## Queued dispatch {} (bytes={})\n{}",
+            index + 1,
+            task.len(),
+            task,
+        );
+    }
     PendingSpawnDispatch::new(combined, acks)
+}
+
+const COMBINED_QUEUED_DISPATCH_HEADER: &str = "Multiple spawn dispatches were queued while you were busy. Execute each task below in order, do not skip any task, and treat every section as assigned work.\n\n";
+
+/// Decodes only envelopes emitted by `combined_queued_dispatch_task`. Byte lengths make the
+/// framing unambiguous even when an assigned task itself contains markdown dispatch headings.
+fn parse_combined_queued_dispatch_tasks(task: &str) -> Option<Vec<String>> {
+    let mut rest = task.strip_prefix(COMBINED_QUEUED_DISPATCH_HEADER)?;
+    let mut tasks = Vec::new();
+    let mut index = 1;
+    while !rest.is_empty() {
+        let heading_prefix = format!("## Queued dispatch {index} (bytes=");
+        rest = rest.strip_prefix(&heading_prefix)?;
+        let (length, after_length) = rest.split_once(")\n")?;
+        let length = length.parse::<usize>().ok()?;
+        if after_length.len() < length || !after_length.is_char_boundary(length) {
+            return None;
+        }
+        let (component, tail) = after_length.split_at(length);
+        tasks.push(component.to_string());
+        rest = if tail.is_empty() {
+            tail
+        } else {
+            tail.strip_prefix('\n')?
+        };
+        index += 1;
+    }
+    (!tasks.is_empty()).then_some(tasks)
 }
 
 fn spawn_dispatch_task_ack_key(task: &str) -> String {
@@ -5595,6 +5636,18 @@ fn spawn_dispatch_task_identity(task: &str) -> &str {
         return body.trim();
     }
     task
+}
+
+fn spawn_dispatch_component_identities(task: &str) -> Vec<String> {
+    parse_combined_queued_dispatch_tasks(task).map_or_else(
+        || vec![spawn_dispatch_task_identity(task).to_string()],
+        |tasks| {
+            tasks
+                .iter()
+                .map(|task| spawn_dispatch_task_identity(task).to_string())
+                .collect()
+        },
+    )
 }
 
 fn claude_spawn_rollout_path(pane: &crate::claude_panes::ClaudePane) -> std::path::PathBuf {

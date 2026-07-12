@@ -3157,22 +3157,46 @@ async fn saturated_capacity_queue_notifies_once_backs_off_and_delivers_each_task
         );
     }
 
-    let pending_retry =
-        app.pending_dispatch_from_registered_task(&target_node_id, first_attempt.clone());
+    // The app-server turn/start boundary normalizes trailing whitespace before returning a
+    // capacity error. Exercise that live shape so retry envelope parsing cannot depend on the
+    // formatter's final newline surviving the round trip.
+    let pending_retry = app.pending_dispatch_from_registered_task(
+        &target_node_id,
+        first_attempt.trim_end().to_string(),
+    );
     assert!(
         app.enqueue_pending_dispatch_for_thread(orc_thread_id, pending_retry.clone())
             .is_none()
     );
     app.note_spawn_capacity_pending(orc_thread_id, &label, 3, &pending_retry);
+    let interleaved = crate::spawn_orchestration::PendingSpawnDispatch::new(
+        "capacity task 4 arrived between retry attempts".to_string(),
+        Vec::new(),
+    );
+    assert!(
+        app.enqueue_pending_dispatch_for_thread(orc_thread_id, interleaved.clone())
+            .is_none()
+    );
+    app.note_spawn_capacity_pending(orc_thread_id, &label, 3, &interleaved);
     app.schedule_spawn_capacity_retry(orc_thread_id);
     assert_eq!(
         app.spawn_capacity_retry_attempt_by_thread
             .get(&orc_thread_id),
         Some(&2)
     );
-    assert!(
-        app_event_rx.try_recv().is_err(),
-        "capacity retry must not emit another queue notification"
+    let mut interleaved_notices = Vec::new();
+    while let Ok(event) = app_event_rx.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            interleaved_notices.push(lines_to_single_string(&cell.display_lines(/*width*/ 160)));
+        }
+    }
+    assert_eq!(
+        interleaved_notices
+            .iter()
+            .filter(|line| line.contains("slots full; will deliver automatically"))
+            .count(),
+        1,
+        "only the newly interleaved task should notify"
     );
     assert!(!app.accept_spawn_capacity_retry_timer(orc_thread_id, 1));
     assert!(app.accept_spawn_capacity_retry_timer(orc_thread_id, 2));
@@ -3180,7 +3204,26 @@ async fn saturated_capacity_queue_notifies_once_backs_off_and_delivers_each_task
     assert!(app.flush_idle_pending_dispatches_after_slot_release());
     let delivered = drain_spawn_agent_task_for(&mut app_event_rx, orc_thread_id)
         .expect("slot release should deliver the combined task");
-    assert_eq!(delivered, first_attempt);
+    for seq in 1..=3 {
+        assert_eq!(
+            delivered.matches(&format!("capacity task {seq}")).count(),
+            1,
+            "retry framing must retain each original task exactly once"
+        );
+    }
+    assert_eq!(
+        delivered
+            .matches("capacity task 4 arrived between retry attempts")
+            .count(),
+        1
+    );
+    assert_eq!(
+        delivered
+            .matches("Multiple spawn dispatches were queued while you were busy")
+            .count(),
+        1,
+        "retry framing must be flat, never recursively nested"
+    );
     app.record_spawn_dispatch_delivered_for_task(&target_node_id, &delivered);
 
     let mut delivered_rendered = Vec::new();
