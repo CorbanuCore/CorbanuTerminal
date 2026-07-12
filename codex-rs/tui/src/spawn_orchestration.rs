@@ -1281,6 +1281,35 @@ impl App {
         self.dispatch_spawn_task_blocks_with_origins(source_pane_id, dispatches);
     }
 
+    fn dispatch_spawn_task_blocks_from_model_item(
+        &mut self,
+        source_pane_id: &str,
+        logical_source_id: &str,
+        source_turn_id: &str,
+        dispatches: Vec<SpawnTaskDispatch>,
+    ) {
+        let dispatches = dispatches
+            .into_iter()
+            .enumerate()
+            .filter_map(|(ordinal, dispatch)| {
+                // App-server live item notifications and the later durable turn snapshot can
+                // assign different transport item IDs to the same assistant message. Derive the
+                // origin from the canonical dispatch payload instead so both views reconcile.
+                // An exact same-payload retry in one model turn is intentionally one dispatch.
+                let origin_id = crate::dispatch_queue::model_payload_dispatch_origin_id(
+                    logical_source_id,
+                    source_turn_id,
+                    &dispatch.target,
+                    &dispatch.task,
+                    ordinal as u32,
+                );
+                (!self.spawn_processed_dispatch_origins.contains(&origin_id))
+                    .then_some((dispatch, Some(origin_id)))
+            })
+            .collect::<Vec<_>>();
+        self.dispatch_spawn_task_blocks_with_origins(source_pane_id, dispatches);
+    }
+
     fn dispatch_spawn_task_blocks_with_origins(
         &mut self,
         source_pane_id: &str,
@@ -1570,6 +1599,7 @@ impl App {
                     assistant_text.push('\n');
                 }
                 assistant_text.push_str(text);
+                self.dispatch_native_spawn_task_blocks_from_item(source_thread_id, &turn.id, text);
             }
         }
         let source_node_id = if self.is_codex_main_bound_spawn_root_thread(source_thread_id) {
@@ -1578,16 +1608,46 @@ impl App {
             thread_node_id(source_thread_id)
         };
         self.dispatch_orchestrate_blocks_from_text(&source_node_id, &assistant_text);
-        let saw_assistant_dispatch = self.dispatch_native_spawn_task_blocks_from_text(
-            source_thread_id,
-            &turn.id,
-            &assistant_text,
-        );
+        let saw_assistant_dispatch = !extract_spawn_task_dispatches(&assistant_text).1.is_empty();
         if !saw_assistant_dispatch && turn_contains_exec_wrapped_spawn_task_dispatch(turn) {
             self.correct_exec_wrapped_spawn_task_dispatch(source_thread_id, &turn.id);
         }
     }
 
+    pub(crate) fn dispatch_native_spawn_task_blocks_from_item(
+        &mut self,
+        source_thread_id: ThreadId,
+        turn_id: &str,
+        assistant_text: &str,
+    ) -> bool {
+        let source_node_id = thread_node_id(source_thread_id);
+        if !self.is_spawn_orchestration_thread(source_thread_id)
+            && !self.is_assignment_holder(&source_node_id)
+        {
+            return false;
+        }
+        if assistant_text.trim().is_empty() {
+            return false;
+        }
+        let (_visible, dispatches) = extract_spawn_task_dispatches(assistant_text);
+        if dispatches.is_empty() {
+            return false;
+        }
+        let source_node_id = if self.is_codex_main_bound_spawn_root_thread(source_thread_id) {
+            self.spawn_root_node_id()
+        } else {
+            source_node_id
+        };
+        self.dispatch_spawn_task_blocks_from_model_item(
+            &source_node_id,
+            &source_node_id,
+            turn_id,
+            dispatches,
+        );
+        true
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn dispatch_native_spawn_task_blocks_from_text(
         &mut self,
         source_thread_id: ThreadId,

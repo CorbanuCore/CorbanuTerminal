@@ -609,6 +609,40 @@ fn session_target_from_app_server_thread(
     }
 }
 
+fn local_session_target_has_rollout(target: &resume_picker::SessionTarget) -> bool {
+    target.path.as_deref().is_some_and(|path| {
+        std::fs::metadata(path).is_ok_and(|metadata| metadata.is_file() && metadata.len() > 0)
+    })
+}
+
+fn explicit_resume_selection(
+    codex_home: &Path,
+    id_str: &str,
+    target: Option<resume_picker::SessionTarget>,
+    uses_remote_workspace: bool,
+) -> Option<resume_picker::SessionSelection> {
+    if let Some(target) = target
+        && (uses_remote_workspace || local_session_target_has_rollout(&target))
+    {
+        return Some(resume_picker::SessionSelection::Resume(target));
+    }
+
+    crate::claude_panes::load_pane_layout(codex_home, Some(id_str)).map(|_| {
+        resume_picker::SessionSelection::ResumePanesOnly {
+            codex_thread_id: id_str.to_string(),
+        }
+    })
+}
+
+fn explicit_fork_selection(
+    target: Option<resume_picker::SessionTarget>,
+    uses_remote_workspace: bool,
+) -> Option<resume_picker::SessionSelection> {
+    target
+        .filter(|target| uses_remote_workspace || local_session_target_has_rollout(target))
+        .map(resume_picker::SessionSelection::Fork)
+}
+
 pub(crate) fn resume_source_kinds(include_non_interactive: bool) -> Vec<ThreadSourceKind> {
     let mut source_kinds = vec![ThreadSourceKind::Cli, ThreadSourceKind::VsCode];
     if include_non_interactive {
@@ -1511,8 +1545,9 @@ async fn run_ratatui_app(
             let Some(startup_app_server) = app_server.as_mut() else {
                 unreachable!("app server should be initialized for --fork <id>");
             };
-            match lookup_session_target_with_app_server(startup_app_server, id_str).await? {
-                Some(target_session) => resume_picker::SessionSelection::Fork(target_session),
+            let target = lookup_session_target_with_app_server(startup_app_server, id_str).await?;
+            match explicit_fork_selection(target, uses_remote_workspace) {
+                Some(selection) => selection,
                 None => {
                     shutdown_app_server_if_present(app_server.take()).await;
                     return missing_session_exit(id_str, "fork");
@@ -1568,19 +1603,17 @@ async fn run_ratatui_app(
         let Some(startup_app_server) = app_server.as_mut() else {
             unreachable!("app server should be initialized for --resume <id>");
         };
-        match lookup_session_target_with_app_server(startup_app_server, id_str).await? {
-            Some(target_session) => resume_picker::SessionSelection::Resume(target_session),
+        let target = lookup_session_target_with_app_server(startup_app_server, id_str).await?;
+        match explicit_resume_selection(
+            config.codex_home.as_ref(),
+            id_str,
+            target,
+            uses_remote_workspace,
+        ) {
+            Some(selection) => selection,
             None => {
-                if crate::claude_panes::load_pane_layout(config.codex_home.as_ref(), Some(id_str))
-                    .is_some()
-                {
-                    resume_picker::SessionSelection::ResumePanesOnly {
-                        codex_thread_id: id_str.to_string(),
-                    }
-                } else {
-                    shutdown_app_server_if_present(app_server.take()).await;
-                    return missing_session_exit(id_str, "resume");
-                }
+                shutdown_app_server_if_present(app_server.take()).await;
+                return missing_session_exit(id_str, "resume");
             }
         }
     } else if cli.resume_last {
@@ -2118,6 +2151,9 @@ fn provider_credential_is_linked(config: &Config, env_key: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::claude_panes::PANE_LAYOUT_VERSION;
+    use crate::claude_panes::PaneLayoutState;
+    use crate::claude_panes::persist_pane_layout;
     use crate::legacy_core::config::ConfigBuilder;
     use crate::legacy_core::config::ConfigOverrides;
     use codex_app_server_protocol::AskForApproval;
@@ -2135,6 +2171,94 @@ mod tests {
             .codex_home(temp_dir.path().to_path_buf())
             .build()
             .await
+    }
+
+    #[test]
+    fn explicit_resume_uses_panes_only_for_placeholder_metadata() {
+        let codex_home = TempDir::new().unwrap();
+        let thread_id = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174020").unwrap();
+        let thread_id_text = thread_id.to_string();
+        let placeholder_path = codex_home
+            .path()
+            .join("sessions/spawn-placeholders")
+            .join(format!("rollout-{thread_id}.jsonl"));
+        let target = resume_picker::SessionTarget {
+            path: Some(placeholder_path),
+            thread_id,
+        };
+        persist_pane_layout(
+            codex_home.path(),
+            &PaneLayoutState {
+                version: PANE_LAYOUT_VERSION,
+                codex_thread_id: Some(thread_id_text.clone()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let selection = explicit_resume_selection(
+            codex_home.path(),
+            &thread_id_text,
+            Some(target.clone()),
+            /*uses_remote_workspace*/ false,
+        );
+        assert!(matches!(
+            selection,
+            Some(resume_picker::SessionSelection::ResumePanesOnly { codex_thread_id })
+                if codex_thread_id == thread_id_text
+        ));
+        assert!(explicit_fork_selection(Some(target), false).is_none());
+    }
+
+    #[test]
+    fn explicit_resume_requires_a_nonempty_local_rollout() {
+        let codex_home = TempDir::new().unwrap();
+        let thread_id = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174021").unwrap();
+        let thread_id_text = thread_id.to_string();
+        let rollout_path = codex_home.path().join("rollout.jsonl");
+        std::fs::write(&rollout_path, "{\"type\":\"session_meta\"}\n").unwrap();
+        let target = resume_picker::SessionTarget {
+            path: Some(rollout_path),
+            thread_id,
+        };
+
+        assert!(matches!(
+            explicit_resume_selection(
+                codex_home.path(),
+                &thread_id_text,
+                Some(target.clone()),
+                false,
+            ),
+            Some(resume_picker::SessionSelection::Resume(_))
+        ));
+        assert!(matches!(
+            explicit_fork_selection(Some(target), false),
+            Some(resume_picker::SessionSelection::Fork(_))
+        ));
+    }
+
+    #[test]
+    fn explicit_remote_resume_does_not_require_a_local_rollout() {
+        let codex_home = TempDir::new().unwrap();
+        let thread_id = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174022").unwrap();
+        let target = resume_picker::SessionTarget {
+            path: None,
+            thread_id,
+        };
+
+        assert!(matches!(
+            explicit_resume_selection(
+                codex_home.path(),
+                &thread_id.to_string(),
+                Some(target.clone()),
+                true,
+            ),
+            Some(resume_picker::SessionSelection::Resume(_))
+        ));
+        assert!(matches!(
+            explicit_fork_selection(Some(target), true),
+            Some(resume_picker::SessionSelection::Fork(_))
+        ));
     }
 
     #[tokio::test]

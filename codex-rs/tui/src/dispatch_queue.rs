@@ -301,6 +301,26 @@ pub(crate) fn model_dispatch_origin_id(
     format!("model-origin-{:x}", digest.finalize())
 }
 
+pub(crate) fn model_payload_dispatch_origin_id(
+    source_pane_id: &str,
+    source_turn_id: &str,
+    target: &str,
+    task: &str,
+    ordinal: u32,
+) -> String {
+    let mut digest = Sha256::new();
+    digest.update(source_pane_id.as_bytes());
+    digest.update([0]);
+    digest.update(source_turn_id.as_bytes());
+    digest.update([0]);
+    digest.update(target.as_bytes());
+    digest.update([0]);
+    digest.update(task.as_bytes());
+    digest.update([0]);
+    digest.update(ordinal.to_le_bytes());
+    format!("model-payload-origin-{:x}", digest.finalize())
+}
+
 pub(crate) fn delivery_id(target_pane_id: &str, ordered_dispatch_ids: &[String]) -> String {
     let mut digest = Sha256::new();
     digest.update(target_pane_id.as_bytes());

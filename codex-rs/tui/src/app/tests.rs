@@ -5710,6 +5710,119 @@ DISPATCH"#;
 }
 
 #[tokio::test]
+async fn separate_completed_messages_in_one_long_turn_dispatch_once_each() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let nazgul_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000675").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000676").expect("valid thread id");
+    let snaga_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000677").expect("valid thread id");
+    let krimp_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000678").expect("valid thread id");
+
+    for (thread_id, nickname, role) in [
+        (nazgul_thread_id, "Angmar", "nazgul"),
+        (troll_thread_id, "Burzum", "troll"),
+        (snaga_thread_id, "Snaga", "orc"),
+        (krimp_thread_id, "Krimp", "orc"),
+    ] {
+        app.upsert_agent_picker_thread(
+            thread_id,
+            Some(nickname.to_string()),
+            Some(role.to_string()),
+            /*is_closed*/ false,
+        );
+    }
+    app.spawn_parent_by_thread
+        .insert(troll_thread_id, nazgul_thread_id);
+    app.spawn_parent_by_thread
+        .insert(snaga_thread_id, troll_thread_id);
+    app.spawn_parent_by_thread
+        .insert(krimp_thread_id, troll_thread_id);
+
+    let first = r#"<pfterminal_send_task target="Snaga">
+Collect telemetry.
+</pfterminal_send_task>"#;
+    let second = r#"<pfterminal_send_task target="Krimp">
+Run the independent proof.
+</pfterminal_send_task>"#;
+    let turn_id = "manager-long-running-turn";
+
+    app.update_spawn_status_for_thread_notification(&item_completed_notification(
+        troll_thread_id,
+        turn_id,
+        "manager-message-1",
+        first,
+    ));
+    app.update_spawn_status_for_thread_notification(&item_completed_notification(
+        troll_thread_id,
+        turn_id,
+        "manager-message-2",
+        second,
+    ));
+
+    assert!(matches!(rx.try_recv(), Ok(AppEvent::PumpSpawnDispatches)));
+    assert_eq!(
+        app.spawn_pending_dispatches
+            .get(&thread_node_id(snaga_thread_id))
+            .map_or(0, std::collections::VecDeque::len),
+        1
+    );
+    assert_eq!(
+        app.spawn_pending_dispatches
+            .get(&thread_node_id(krimp_thread_id))
+            .map_or(0, std::collections::VecDeque::len),
+        1
+    );
+    assert_eq!(app.spawn_processed_dispatch_origins.len(), 2);
+
+    app.update_spawn_status_for_thread_notification(&item_completed_notification(
+        troll_thread_id,
+        turn_id,
+        "manager-message-2",
+        second,
+    ));
+    app.update_spawn_status_for_thread_notification(&ServerNotification::TurnCompleted(
+        TurnCompletedNotification {
+            thread_id: troll_thread_id.to_string(),
+            turn: Turn {
+                completed_at: Some(0),
+                duration_ms: Some(1),
+                ..test_turn(
+                    turn_id,
+                    TurnStatus::Completed,
+                    vec![
+                        ThreadItem::AgentMessage {
+                            id: "durable-manager-message-1".to_string(),
+                            text: first.to_string(),
+                            phase: None,
+                            memory_citation: None,
+                        },
+                        ThreadItem::AgentMessage {
+                            id: "durable-manager-message-2".to_string(),
+                            text: second.to_string(),
+                            phase: None,
+                            memory_citation: None,
+                        },
+                    ],
+                )
+            },
+        },
+    ));
+
+    assert_eq!(
+        app.spawn_pending_dispatches
+            .values()
+            .map(std::collections::VecDeque::len)
+            .sum::<usize>(),
+        2,
+        "item replay and completed-turn catch-up must not duplicate either dispatch"
+    );
+    assert_eq!(app.spawn_processed_dispatch_origins.len(), 2);
+}
+
+#[tokio::test]
 async fn partial_completed_assistant_message_and_interrupted_turn_do_not_dispatch() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let nazgul_thread_id =

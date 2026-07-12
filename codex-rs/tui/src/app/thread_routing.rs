@@ -1865,7 +1865,7 @@ impl App {
                 {
                     let source_node_id = self.spawn_auto_loop_node_for_thread(thread_id);
                     self.dispatch_orchestrate_blocks_from_text(&source_node_id, text);
-                    self.dispatch_native_spawn_task_blocks_from_text(
+                    self.dispatch_native_spawn_task_blocks_from_item(
                         thread_id,
                         &notification.turn_id,
                         text,
