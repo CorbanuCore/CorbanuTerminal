@@ -71,6 +71,7 @@ use codex_app_server_protocol::ThreadGoalSetResponse;
 use codex_app_server_protocol::ThreadGoalStatus;
 use codex_app_server_protocol::ThreadInjectItemsParams;
 use codex_app_server_protocol::ThreadInjectItemsResponse;
+use codex_app_server_protocol::ThreadItem;
 use codex_app_server_protocol::ThreadListParams;
 use codex_app_server_protocol::ThreadListResponse;
 use codex_app_server_protocol::ThreadLoadedListParams;
@@ -150,9 +151,15 @@ const PER_THREAD_REQUEST_BACKOFF: [Duration; 2] =
 const TURN_START_FAULT_ENV: &str = "PFTERMINAL_INJECT_TURN_START_FAILURES";
 const SPAWN_AGENT_FAULT_ENV: &str = "PFTERMINAL_INJECT_SPAWN_AGENT_FAILURES";
 
-#[derive(Debug)]
-pub(crate) struct TurnStartOutcome {
-    pub(crate) recovered_failures: Vec<String>,
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum TurnStartOutcome {
+    Started {
+        turn_id: String,
+        recovered_failures: Vec<String>,
+    },
+    CapacityUnavailable {
+        max_threads: usize,
+    },
 }
 
 fn injected_failure_count(name: &str) -> usize {
@@ -845,6 +852,18 @@ impl AppServerSession {
         Ok(response.thread)
     }
 
+    pub(crate) async fn find_turn_for_client_message(
+        &mut self,
+        thread_id: ThreadId,
+        client_user_message_id: &str,
+    ) -> Result<Option<String>> {
+        let thread = self.thread_read(thread_id, /*include_turns*/ true).await?;
+        Ok(turn_for_client_message(
+            thread.turns,
+            client_user_message_id,
+        ))
+    }
+
     pub(crate) async fn thread_archive(&mut self, thread_id: ThreadId) -> Result<()> {
         let request_id = self.next_request_id();
         let _: ThreadArchiveResponse = self
@@ -988,13 +1007,15 @@ impl AppServerSession {
         additional_context: Option<
             HashMap<String, codex_app_server_protocol::AdditionalContextEntry>,
         >,
+        client_user_message_id: Option<String>,
     ) -> Result<TurnStartOutcome> {
         let (sandbox_policy, permissions) =
             turn_permissions_overrides(permissions_override, cwd.as_path());
         let mut recovered_failures = Vec::new();
         // Reuse one idempotency key across retries so an ambiguous transport
         // failure cannot submit the same user message twice.
-        let client_user_message_id = Uuid::now_v7().to_string();
+        let client_user_message_id =
+            client_user_message_id.unwrap_or_else(|| Uuid::now_v7().to_string());
         for attempt in 1..=PER_THREAD_REQUEST_ATTEMPTS {
             let request_id = self.next_request_id();
             let injected = self.injected_turn_start_failures > 0;
@@ -1034,10 +1055,16 @@ impl AppServerSession {
                     .wrap_err("turn/start failed in TUI")
             };
             match result {
-                Ok(_) => {
-                    return Ok(TurnStartOutcome { recovered_failures });
+                Ok(response) => {
+                    return Ok(TurnStartOutcome::Started {
+                        turn_id: response.turn.id,
+                        recovered_failures,
+                    });
                 }
                 Err(error) => {
+                    if let Some(max_threads) = turn_start_execution_capacity(&error) {
+                        return Ok(TurnStartOutcome::CapacityUnavailable { max_threads });
+                    }
                     record_turn_start_failure(thread_id, attempt, &error);
                     if attempt == PER_THREAD_REQUEST_ATTEMPTS
                         || (!injected && !retry_is_known_not_to_have_committed(&error))
@@ -1083,6 +1110,7 @@ impl AppServerSession {
         thread_id: ThreadId,
         turn_id: String,
         items: Vec<UserInput>,
+        client_user_message_id: Option<String>,
     ) -> std::result::Result<TurnSteerResponse, TypedRequestError> {
         let request_id = self.next_request_id();
         self.client
@@ -1090,7 +1118,7 @@ impl AppServerSession {
                 request_id,
                 params: TurnSteerParams {
                     thread_id: thread_id.to_string(),
-                    client_user_message_id: None,
+                    client_user_message_id,
                     input: items,
                     responsesapi_client_metadata: None,
                     additional_context: None,
@@ -1404,6 +1432,26 @@ impl AppServerSession {
         self.next_request_id += 1;
         RequestId::Integer(request_id)
     }
+}
+
+fn turn_for_client_message(
+    turns: impl IntoIterator<Item = Turn>,
+    client_user_message_id: &str,
+) -> Option<String> {
+    turns.into_iter().find_map(|turn| {
+        turn.items
+            .iter()
+            .any(|item| {
+                matches!(
+                    item,
+                    ThreadItem::UserMessage {
+                        client_id: Some(client_id),
+                        ..
+                    } if client_id == client_user_message_id
+                )
+            })
+            .then_some(turn.id)
+    })
 }
 
 pub(crate) async fn start_thread_with_request_handle(
@@ -2092,6 +2140,42 @@ mod tests {
             .build()
             .await
             .expect("config should build")
+    }
+
+    #[test]
+    fn delivery_reconciliation_finds_client_id_in_any_persisted_turn() {
+        let turn = |id: &str, client_id: Option<&str>| Turn {
+            id: id.to_string(),
+            items: vec![ThreadItem::UserMessage {
+                id: format!("user-{id}"),
+                client_id: client_id.map(str::to_string),
+                content: vec![UserInput::Text {
+                    text: format!("task for {id}"),
+                    text_elements: Vec::new(),
+                }],
+            }],
+            items_view: codex_app_server_protocol::TurnItemsView::Full,
+            status: codex_app_server_protocol::TurnStatus::Completed,
+            error: None,
+            started_at: None,
+            completed_at: None,
+            duration_ms: None,
+        };
+
+        assert_eq!(
+            turn_for_client_message(
+                vec![
+                    turn("turn-1", Some("other-delivery")),
+                    turn("turn-2", Some("delivery-42")),
+                ],
+                "delivery-42",
+            ),
+            Some("turn-2".to_string())
+        );
+        assert_eq!(
+            turn_for_client_message(vec![turn("turn-1", None)], "delivery-42"),
+            None
+        );
     }
 
     #[tokio::test]

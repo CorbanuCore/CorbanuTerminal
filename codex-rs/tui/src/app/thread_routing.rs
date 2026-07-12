@@ -5,6 +5,7 @@
 //! when the visible thread changes.
 
 use super::*;
+use crate::app_server_session::TurnStartOutcome;
 use crate::session_resume::read_session_model;
 use std::fmt::Write as _;
 
@@ -738,7 +739,12 @@ impl App {
                     let mut retried_after_turn_mismatch = false;
                     loop {
                         match app_server
-                            .turn_steer(thread_id, steer_turn_id.clone(), items.to_vec())
+                            .turn_steer(
+                                thread_id,
+                                steer_turn_id.clone(),
+                                items.to_vec(),
+                                /*client_user_message_id*/ None,
+                            )
                             .await
                         {
                             Ok(_) => return Ok(true),
@@ -829,18 +835,26 @@ impl App {
                             *personality,
                             final_output_json_schema.clone(),
                             self.spawn_additional_context_for_thread(thread_id),
+                            /*client_user_message_id*/ None,
                         )
                         .await
                     {
-                        Ok(outcome) => {
-                            if !outcome.recovered_failures.is_empty() {
+                        Ok(TurnStartOutcome::Started {
+                            recovered_failures, ..
+                        }) => {
+                            if !recovered_failures.is_empty() {
                                 self.surface_turn_start_failure(
                                     thread_id,
-                                    outcome.recovered_failures.join("\n"),
+                                    recovered_failures.join("\n"),
                                     /*will_retry*/ true,
                                 )
                                 .await;
                             }
+                        }
+                        Ok(TurnStartOutcome::CapacityUnavailable { max_threads }) => {
+                            self.chat_widget.add_error_message(format!(
+                                "Cannot start turn: all {max_threads} execution slots are in use."
+                            ));
                         }
                         Err(error) => {
                             let details = format!("{error:#}");

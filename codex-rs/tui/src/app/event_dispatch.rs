@@ -5,6 +5,7 @@
 
 use super::resize_reflow::trailing_run_start;
 use super::*;
+use crate::app_server_session::TurnStartOutcome;
 use crate::config_update::format_config_error;
 use crate::external_agent_config_migration_flow::ExternalAgentConfigMigrationFlowOutcome;
 use crate::spawn_orchestration::PendingDispatchEnqueueResult;
@@ -2645,6 +2646,7 @@ impl App {
                             text: task_for_submission,
                             text_elements: Vec::new(),
                         }],
+                        /*client_user_message_id*/ None,
                     )
                     .await
                 {
@@ -2868,15 +2870,18 @@ impl App {
                         session.personality,
                         /*output_schema*/ None,
                         additional_context,
+                        /*client_user_message_id*/ None,
                     )
                     .await
                 {
-                    Ok(outcome) => {
+                    Ok(TurnStartOutcome::Started {
+                        recovered_failures, ..
+                    }) => {
                         self.clear_spawn_capacity_retry(thread_id, &task);
-                        if !outcome.recovered_failures.is_empty() {
+                        if !recovered_failures.is_empty() {
                             self.surface_turn_start_failure(
                                 thread_id,
-                                outcome.recovered_failures.join("\n"),
+                                recovered_failures.join("\n"),
                                 /*will_retry*/ true,
                             )
                             .await;
@@ -2908,51 +2913,47 @@ impl App {
                             );
                         }
                     }
-                    Err(err) => {
-                        if let Some(max_threads) =
-                            crate::app_server_session::turn_start_execution_capacity(&err)
-                        {
-                            let pending = self.pending_dispatch_from_registered_task(
-                                &original_target_node_id,
-                                task,
-                            );
-                            let pending_for_notification = pending.clone();
-                            match self.enqueue_pending_dispatch_for_thread(thread_id, pending) {
-                                PendingDispatchEnqueueResult::Queued => {
-                                    self.record_spawn_dispatch_acks(
-                                        &pending_for_notification.acks,
-                                        "queued_capacity",
-                                        format!(
-                                            "session execution capacity reached ({max_threads}); will retry"
-                                        ),
-                                        false,
-                                    );
-                                    self.note_spawn_capacity_pending(
-                                        thread_id,
-                                        &label,
-                                        max_threads,
-                                        &pending_for_notification,
-                                    );
-                                }
-                                PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
-                                    self.record_duplicate_pending_dispatch(&label, &acks, notify);
-                                }
-                                PendingDispatchEnqueueResult::Rejected { acks, reason } => {
-                                    self.record_spawn_dispatch_acks(
-                                        &acks,
-                                        "failed",
-                                        format!("queue rejected: {reason}"),
-                                        true,
-                                    );
-                                    self.chat_widget.add_error_message(format!(
-                                        "Cannot queue task for {label}: {reason}"
-                                    ));
-                                    return Ok(AppRunControl::Continue);
-                                }
+                    Ok(TurnStartOutcome::CapacityUnavailable { max_threads }) => {
+                        let pending = self
+                            .pending_dispatch_from_registered_task(&original_target_node_id, task);
+                        let pending_for_notification = pending.clone();
+                        match self.enqueue_pending_dispatch_for_thread(thread_id, pending) {
+                            PendingDispatchEnqueueResult::Queued => {
+                                self.record_spawn_dispatch_acks(
+                                    &pending_for_notification.acks,
+                                    "queued_capacity",
+                                    format!(
+                                        "session execution capacity reached ({max_threads}); will retry"
+                                    ),
+                                    false,
+                                );
+                                self.note_spawn_capacity_pending(
+                                    thread_id,
+                                    &label,
+                                    max_threads,
+                                    &pending_for_notification,
+                                );
                             }
-                            self.schedule_spawn_capacity_retry(thread_id);
-                            return Ok(AppRunControl::Continue);
+                            PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
+                                self.record_duplicate_pending_dispatch(&label, &acks, notify);
+                            }
+                            PendingDispatchEnqueueResult::Rejected { acks, reason } => {
+                                self.record_spawn_dispatch_acks(
+                                    &acks,
+                                    "failed",
+                                    format!("queue rejected: {reason}"),
+                                    true,
+                                );
+                                self.chat_widget.add_error_message(format!(
+                                    "Cannot queue task for {label}: {reason}"
+                                ));
+                                return Ok(AppRunControl::Continue);
+                            }
                         }
+                        self.schedule_spawn_capacity_retry(thread_id);
+                        return Ok(AppRunControl::Continue);
+                    }
+                    Err(err) => {
                         self.clear_spawn_capacity_retry(thread_id, &task);
                         let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                         self.abort_spawn_auto_processing_turn(&node_key);

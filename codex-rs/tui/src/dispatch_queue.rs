@@ -313,6 +313,16 @@ pub(crate) fn model_dispatch_origin_id(
     format!("model-origin-{:x}", digest.finalize())
 }
 
+pub(crate) fn delivery_id(target_pane_id: &str, ordered_dispatch_ids: &[String]) -> String {
+    let mut digest = Sha256::new();
+    digest.update(target_pane_id.as_bytes());
+    for dispatch_id in ordered_dispatch_ids {
+        digest.update([0]);
+        digest.update(dispatch_id.as_bytes());
+    }
+    format!("delivery-{:x}", digest.finalize())
+}
+
 fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }

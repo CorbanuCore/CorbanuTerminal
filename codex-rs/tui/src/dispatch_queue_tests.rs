@@ -8,6 +8,7 @@ use super::MAX_TARGET_DISPATCH_BYTES;
 use super::MAX_TARGET_DISPATCH_ITEMS;
 use super::PendingSpawnDispatch;
 use super::bounded_delivery_batch;
+use super::delivery_id;
 use super::expand_legacy_batch;
 use super::model_dispatch_origin_id;
 use super::queue_bound_violation;
@@ -98,4 +99,23 @@ fn delivery_batch_preserves_fifo_while_enforcing_item_and_byte_caps() {
         .map(|_| PendingSpawnDispatch::new("x".repeat(32 * 1024), Vec::new()))
         .collect::<Vec<_>>();
     assert_eq!(bounded_delivery_batch(dispatches).len(), 4);
+}
+
+#[test]
+fn delivery_identity_is_stable_and_order_sensitive() {
+    let ordered = vec!["dispatch-1".to_string(), "dispatch-2".to_string()];
+    let reversed = vec!["dispatch-2".to_string(), "dispatch-1".to_string()];
+
+    assert_eq!(
+        delivery_id("thread:target", &ordered),
+        delivery_id("thread:target", &ordered)
+    );
+    assert_ne!(
+        delivery_id("thread:target", &ordered),
+        delivery_id("thread:target", &reversed)
+    );
+    assert_ne!(
+        delivery_id("thread:target", &ordered),
+        delivery_id("thread:other", &ordered)
+    );
 }

@@ -9866,17 +9866,23 @@ async fn steer_input_returns_active_turn_id() {
     }];
     let turn_id = sess
         .steer_input(
-            steer_input,
+            steer_input.clone(),
             /*additional_context*/ Default::default(),
             Some(&tc.sub_id),
-            /*client_user_message_id*/ None,
+            /*client_user_message_id*/ Some("delivery-steer-1".to_string()),
             /*responsesapi_client_metadata*/ None,
         )
         .await
         .expect("steering with matching expected turn id should succeed");
 
     assert_eq!(turn_id, tc.sub_id);
-    assert!(sess.input_queue.has_pending_input(&sess.active_turn).await);
+    assert_eq!(
+        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        vec![TurnInput::UserInput {
+            content: steer_input,
+            client_id: Some("delivery-steer-1".to_string()),
+        }]
+    );
 }
 
 #[tokio::test]
