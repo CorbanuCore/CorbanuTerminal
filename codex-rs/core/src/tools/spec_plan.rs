@@ -229,6 +229,7 @@ fn apply_direct_model_only_namespace_overrides(
             ToolExposure::Direct
             | ToolExposure::Deferred
             | ToolExposure::DirectModelOnly
+            | ToolExposure::CodeModeOnly
             | ToolExposure::Hidden => {}
         }
     }
@@ -892,7 +893,7 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mu
                         }),
                         tool_namespace,
                     ),
-                    ToolExposure::Hidden,
+                    ToolExposure::CodeModeOnly,
                 ));
                 for handler in [
                     multi_agent_v2_handler(FollowupTaskHandlerV2, tool_namespace),
@@ -903,7 +904,8 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mu
                     multi_agent_v2_handler(InterruptAgentHandler, tool_namespace),
                     multi_agent_v2_handler(ListAgentsHandlerV2, tool_namespace),
                 ] {
-                    planned_tools.add_arc(override_tool_exposure(handler, ToolExposure::Hidden));
+                    planned_tools
+                        .add_arc(override_tool_exposure(handler, ToolExposure::CodeModeOnly));
                 }
             }
         } else {
