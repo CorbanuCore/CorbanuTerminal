@@ -2100,6 +2100,35 @@ impl App {
             .unwrap_or_else(|| thread_node_id(thread_id))
     }
 
+    pub(crate) fn active_spawn_dispatch_queue_usage(&self) -> Option<(usize, usize)> {
+        let node_id = if self.claude_panes.active_user_pane_id() != CODEX_MAIN_PANE_ID {
+            let pane_id = self.claude_panes.active_user_pane_id();
+            self.claude_panes
+                .panes()
+                .iter()
+                .any(|pane| pane.id == pane_id && pane.spawn_role.is_some())
+                .then(|| pane_node_id(pane_id))?
+        } else {
+            let thread_id = self.active_thread_id.or(self.chat_widget.thread_id())?;
+            let is_spawn_pane = self.nazgul_bound_thread_id() == Some(thread_id)
+                || self
+                    .agent_navigation
+                    .get(&thread_id)
+                    .and_then(|entry| entry.agent_role.as_deref())
+                    .is_some_and(|role| {
+                        role == NAZGUL_ROLE_NAME || role == TROLL_ROLE || role == ORC_ROLE
+                    });
+            is_spawn_pane.then(|| self.logical_native_node_for_thread(thread_id))?
+        };
+        let queue = self.spawn_pending_dispatches.get(&node_id);
+        Some(queue.map_or((0, 0), |queue| {
+            (
+                queue.len(),
+                crate::dispatch_queue::queue_payload_bytes(queue),
+            )
+        }))
+    }
+
     pub(crate) fn enqueue_pending_dispatch_for_thread(
         &mut self,
         target_thread_id: ThreadId,
@@ -5031,7 +5060,7 @@ impl App {
         } else {
             let _ = writeln!(
                 context,
-                "Your persistent Nazgul role instructions come from the built-in nazgul.toml agent config; this application context supplies only live hierarchy and dispatch state."
+                "Your persistent Nazgul role instructions come from the built-in nazgul.toml agent config; this application context supplies only live hierarchy and routing capabilities."
             );
         }
         let _ = writeln!(
@@ -5156,16 +5185,10 @@ impl App {
         let status = spawn_entry_status(self, thread_id, entry);
         let node_id = self.logical_native_node_for_thread(thread_id);
         let has_new_report = self.child_has_new_report(&node_id, &name);
-        let context_left = self
-            .spawn_context_left_by_thread
-            .get(&thread_id)
-            .map(|percent| format!("; context_left={percent}%"))
-            .unwrap_or_default();
         let sequence = self.spawn_node_sequence_suffix(&node_id);
-        let pending = self.spawn_native_pending_suffix(thread_id);
         let _ = writeln!(
             context,
-            "{prefix}{name}; status={status}; has_new_report={has_new_report}; thread={thread_id}{context_left}{sequence}{pending}"
+            "{prefix}{name}; status={status}; has_new_report={has_new_report}; thread={thread_id}{sequence}"
         );
         if let Some(task) = entry
             .last_task_message
@@ -5205,74 +5228,6 @@ impl App {
         suffix
     }
 
-    fn spawn_native_pending_suffix(&self, thread_id: ThreadId) -> String {
-        let mut suffix = String::new();
-        if let Some(count) = self
-            .spawn_pending_reports_by_thread
-            .get(&thread_id)
-            .map(VecDeque::len)
-            .filter(|count| *count > 0)
-        {
-            let _ = write!(suffix, "; pending_reports={count}");
-        }
-        if let Some(queue) = self
-            .spawn_pending_dispatches
-            .get(&self.logical_native_node_for_thread(thread_id))
-            .filter(|queue| !queue.is_empty())
-        {
-            let _ = write!(suffix, "; pending_dispatches={}", queue.len());
-            let now_ms = Utc::now().timestamp_millis();
-            for dispatch in queue.iter().take(3) {
-                let seq = dispatch
-                    .acks
-                    .first()
-                    .map(|ack| ack.seq.to_string())
-                    .unwrap_or_else(|| "legacy".to_string());
-                let age_seconds = now_ms.saturating_sub(dispatch.created_at_ms) / 1_000;
-                let preview = compact_spawn_context_value(&dispatch.task);
-                let _ = write!(
-                    suffix,
-                    "; queue[#{} age={}s status={} task={}]",
-                    seq,
-                    age_seconds,
-                    dispatch.state.as_str(),
-                    preview
-                );
-            }
-        }
-        suffix
-    }
-
-    fn spawn_claude_pane_pending_suffix(&self, pane_id: &str) -> String {
-        let Some(queue) = self
-            .spawn_pending_dispatches
-            .get(&pane_node_id(pane_id))
-            .filter(|queue| !queue.is_empty())
-        else {
-            return String::new();
-        };
-        let mut suffix = format!("; pending_dispatches={}", queue.len());
-        let now_ms = Utc::now().timestamp_millis();
-        for dispatch in queue.iter().take(3) {
-            let seq = dispatch
-                .acks
-                .first()
-                .map(|ack| ack.seq.to_string())
-                .unwrap_or_else(|| "legacy".to_string());
-            let age_seconds = now_ms.saturating_sub(dispatch.created_at_ms) / 1_000;
-            let preview = compact_spawn_context_value(&dispatch.task);
-            let _ = write!(
-                suffix,
-                "; queue[#{} age={}s status={} task={}]",
-                seq,
-                age_seconds,
-                dispatch.state.as_str(),
-                preview
-            );
-        }
-        suffix
-    }
-
     fn write_spawn_context_claude_pane(
         &self,
         context: &mut String,
@@ -5287,31 +5242,28 @@ impl App {
         let node_id = pane_node_id(&pane.id);
         let has_new_report = self.child_has_new_report(&node_id, &pane.title);
         let sequence = self.spawn_node_sequence_suffix(&node_id);
-        let pending = self.spawn_claude_pane_pending_suffix(&pane.id);
         if let Some(thread_id) = pane.spawn_thread_id {
             let _ = writeln!(
                 context,
-                "{prefix}{}; role={}; harness=Claude Code; status={}; has_new_report={}; thread={}; pane={}{}{}",
+                "{prefix}{}; role={}; harness=Claude Code; status={}; has_new_report={}; thread={}; pane={}{}",
                 pane.title,
                 role.label(),
                 status,
                 has_new_report,
                 thread_id,
                 pane.id,
-                sequence,
-                pending
+                sequence
             );
         } else {
             let _ = writeln!(
                 context,
-                "{prefix}{}; role={}; harness=Claude Code; status={}; has_new_report={}; pane={}{}{}",
+                "{prefix}{}; role={}; harness=Claude Code; status={}; has_new_report={}; pane={}{}",
                 pane.title,
                 role.label(),
                 status,
                 has_new_report,
                 pane.id,
-                sequence,
-                pending
+                sequence
             );
         }
         if let Some(task) = pane.latest_task_message.as_deref() {
@@ -5377,7 +5329,7 @@ fn write_spawn_product_contract(context: &mut String) {
     );
     let _ = writeln!(
         context,
-        "Roster context percentage is pressure telemetry, not a lifecycle or availability signal. PFTerminal/Codex compacts long-running pane history and the pane continues afterward; a low percentage alone must not trigger checkpoint, handoff, respawn, reassignment, interruption, or claims that work will be orphaned. Continue routing normally unless status, an explicit turn error, or Sauron says otherwise."
+        "Runtime capability: automatic_compaction=enabled. Pane availability is determined by explicit runtime status and errors, never inferred from context telemetry."
     );
     let _ = writeln!(
         context,

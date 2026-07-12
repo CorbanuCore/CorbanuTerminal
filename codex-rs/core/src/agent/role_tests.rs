@@ -747,10 +747,10 @@ fn nazgul_prompt_keeps_troll_as_middle_management_boundary() {
 #[test]
 fn hierarchy_managers_treat_low_context_as_compaction_pressure_not_worker_death() {
     for manager_base in [NAZGUL_BASE, TROLL_BASE] {
-        assert!(manager_base.contains("context percentage is pressure telemetry, not mortality"));
-        assert!(manager_base.contains("compacts long-running pane history"));
-        assert!(manager_base.contains("Never checkpoint, hand off, respawn, reassign, interrupt"));
-        assert!(manager_base.contains("solely because context is low"));
+        assert!(manager_base.contains("automatic_compaction=enabled"));
+        assert!(manager_base.contains("explicit runtime status or errors"));
+        assert!(manager_base.contains("context telemetry never authorizes checkpointing"));
+        assert!(!manager_base.contains("context percentage"));
     }
 }
 

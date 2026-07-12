@@ -74,17 +74,6 @@ pub(crate) enum DispatchState {
     },
 }
 
-impl DispatchState {
-    pub(crate) fn as_str(&self) -> &'static str {
-        match self {
-            Self::Queued => "queued",
-            Self::Submitting { .. } => "submitting",
-            Self::Accepted { .. } => "accepted",
-            Self::Failed { .. } => "failed",
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct PendingSpawnDispatch {
     pub(crate) dispatch_id: String,

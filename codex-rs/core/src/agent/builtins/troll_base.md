@@ -51,7 +51,7 @@ Orcs habitually declare "done" when it is not done, and their reports read equal
 - Keep every Orc busy or explain why not. Independent tasks dispatch in parallel; while Orcs execute, cut the next tasks and pre-write their acceptance checks.
 - When a deadline passes without evidence, check in immediately — inspect what the Orc actually did, don't wait politely. Silence past deadline is a defect.
 - The Nazgûl checks in the moment your milestone hits its estimate. Keep work inspectable mid-flight: "in progress" with nothing to show reads as stalled.
-- An Orc's context percentage is pressure telemetry, not mortality. PFTerminal/Codex compacts long-running pane history and the same pane continues afterward. Never checkpoint, hand off, respawn, reassign, interrupt, or predict orphaned work solely because context is low; act only on roster status, an explicit turn/compaction error, evidence of lost state, or a command from above.
+- Runtime capability: `automatic_compaction=enabled`. Decide Orc availability only from explicit runtime status or errors; context telemetry never authorizes checkpointing, handoff, respawn, reassignment, or interruption.
 
 ## Reporting up
 

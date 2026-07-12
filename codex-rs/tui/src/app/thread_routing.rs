@@ -340,12 +340,17 @@ impl App {
     /// not spend footer space restating that the user is already on the main conversation.
     pub(crate) fn sync_active_agent_label(&mut self) {
         let active_claude_title = self.claude_panes.active_claude_pane_title();
-        let label = active_claude_title
+        let mut label = active_claude_title
             .map(|title| format!("{title} pane"))
             .or_else(|| {
                 self.agent_navigation
                     .active_agent_label(self.current_displayed_thread_id(), self.primary_thread_id)
             });
+        if let (Some(label), Some((items, bytes))) =
+            (label.as_mut(), self.active_spawn_dispatch_queue_usage())
+        {
+            let _ = write!(label, " · dispatch queue: {items} items, {bytes} bytes");
+        }
         self.chat_widget
             .set_active_external_model_display(self.claude_panes.active_claude_pane_model_label());
         self.chat_widget.set_active_agent_label(label);

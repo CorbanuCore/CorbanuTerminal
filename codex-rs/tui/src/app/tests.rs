@@ -2620,7 +2620,7 @@ async fn failed_spawn_turn_report_includes_turn_error_reason() {
 }
 
 #[tokio::test]
-async fn spawn_roster_line_includes_context_left() {
+async fn spawn_roster_keeps_context_pressure_out_of_model_context() {
     let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
     let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
 
@@ -2634,10 +2634,8 @@ async fn spawn_roster_line_includes_context_left() {
     let context = app
         .spawn_context_for_thread(troll_thread_id)
         .expect("Troll should receive spawn context");
-    assert!(
-        context.contains("context_left=11%"),
-        "got context: {context}"
-    );
+    assert!(!context.contains("context_left="), "got context: {context}");
+    assert!(context.contains("automatic_compaction=enabled"));
 }
 
 #[tokio::test]
@@ -2664,10 +2662,9 @@ async fn low_context_telemetry_does_not_manufacture_a_lifecycle_warning() {
     let context = app
         .spawn_context_for_thread(troll_thread_id)
         .expect("Troll should receive spawn context");
-    assert!(context.contains("context_left=11%"));
-    assert!(context.contains("context percentage is pressure telemetry"));
-    assert!(context.contains("low percentage alone must not trigger checkpoint"));
-    assert!(context.contains("handoff, respawn, reassignment, interruption"));
+    assert!(!context.contains("context_left="));
+    assert!(context.contains("automatic_compaction=enabled"));
+    assert!(context.contains("never inferred from context telemetry"));
 }
 
 #[tokio::test]
@@ -2716,7 +2713,7 @@ async fn spawn_roster_lines_carry_dispatch_and_report_seq() {
 }
 
 #[tokio::test]
-async fn spawn_roster_lines_surface_pending_queue_depths() {
+async fn spawn_roster_keeps_pending_queue_control_state_out_of_model_context() {
     let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
     let nazgul_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000450").expect("valid thread id");
@@ -2747,10 +2744,10 @@ async fn spawn_roster_lines_surface_pending_queue_depths() {
     let context = app
         .spawn_context_for_thread(nazgul_thread_id)
         .expect("Nazgul should receive spawn context");
-    assert!(context.contains("pending_reports=1"), "got: {context}");
-    assert!(context.contains("pending_dispatches=1"), "got: {context}");
-    assert!(context.contains("status=created"), "got: {context}");
-    assert!(context.contains("queued seq task"), "got: {context}");
+    assert!(!context.contains("pending_reports="), "got: {context}");
+    assert!(!context.contains("pending_dispatches="), "got: {context}");
+    assert!(context.contains("status=running"), "got: {context}");
+    assert!(!context.contains("queued seq task"), "got: {context}");
 }
 
 #[cfg(any())]
@@ -3001,6 +2998,27 @@ async fn durable_pump_marks_native_delivery_submitting_before_adapter() {
             if id == &delivery_id
     ));
     assert!(!app.spawn_accepted_delivery_ids.contains(&delivery_id));
+}
+
+#[tokio::test]
+async fn active_spawn_pane_queue_header_uses_authoritative_items_and_bytes() {
+    let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
+    let (_source, target) = register_native_dispatch_pair(&mut app);
+    app.active_thread_id = Some(target);
+    let dispatch = crate::spawn_orchestration::PendingSpawnDispatch::new(
+        "measure this queued payload".to_string(),
+        Vec::new(),
+    );
+    let expected_bytes = dispatch.payload_bytes();
+    assert!(matches!(
+        app.enqueue_pending_dispatch_for_thread(target, dispatch),
+        crate::spawn_orchestration::PendingDispatchEnqueueResult::Queued
+    ));
+
+    assert_eq!(
+        app.active_spawn_dispatch_queue_usage(),
+        Some((1, expected_bytes))
+    );
 }
 
 #[tokio::test]
