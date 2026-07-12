@@ -49,6 +49,7 @@ impl Handler {
         } = invocation;
         let arguments = function_arguments(payload)?;
         let args: WaitArgs = parse_arguments(&arguments)?;
+        ensure_manager_tool_allowed(&turn, "wait_agent")?;
         let min_timeout_ms = turn.config.multi_agent_v2.min_wait_timeout_ms;
         let max_timeout_ms = turn.config.multi_agent_v2.max_wait_timeout_ms;
         let default_timeout_ms = turn.config.multi_agent_v2.default_wait_timeout_ms;
@@ -66,6 +67,30 @@ impl Handler {
             Some(ms) => ms,
             None => default_timeout_ms,
         };
+
+        let current_path = turn
+            .session_source
+            .get_agent_path()
+            .unwrap_or_else(AgentPath::root);
+        let descendant_prefix = format!("{}/", current_path.as_str().trim_end_matches('/'));
+        let agents = session
+            .services
+            .agent_control
+            .list_agents(&turn.session_source, /*path_prefix*/ None)
+            .await
+            .unwrap_or_default();
+        if !agents.iter().any(|agent| {
+            agent.agent_name.starts_with(&descendant_prefix)
+                && !matches!(
+                    agent.agent_status,
+                    AgentStatus::Shutdown | AgentStatus::NotFound
+                )
+        }) {
+            return Err(FunctionCallError::RespondToModel(
+                "wait_agent rejected: this agent has no eligible child agents; return the result to its parent instead"
+                    .to_string(),
+            ));
+        }
 
         let turn_state = session
             .input_queue

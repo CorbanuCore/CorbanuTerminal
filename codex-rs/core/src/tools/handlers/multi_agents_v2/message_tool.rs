@@ -81,6 +81,9 @@ pub(crate) async fn handle_message_string_tool(
         call_id,
         ..
     } = invocation;
+    if mode == MessageDeliveryMode::TriggerTurn {
+        ensure_manager_tool_allowed(&turn, "followup_task")?;
+    }
     let receiver_thread_id = resolve_agent_target(&session, &turn, &target).await?;
     let receiver_agent = session
         .services

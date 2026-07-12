@@ -308,22 +308,58 @@ pub fn create_close_agent_tool_v1() -> ToolSpec {
 }
 
 pub fn create_interrupt_agent_tool_v2() -> ToolSpec {
-    let properties = BTreeMap::from([(
-        "target".to_string(),
-        JsonSchema::string(Some(
-            "Agent id or canonical task name to interrupt (from spawn_agent).".to_string(),
-        )),
-    )]);
+    let properties = BTreeMap::from([
+        (
+            "target".to_string(),
+            JsonSchema::string(Some(
+                "Agent id or canonical task name to interrupt (from spawn_agent).".to_string(),
+            )),
+        ),
+        (
+            "reason".to_string(),
+            JsonSchema::string(Some(
+                "Operator-visible reason for interrupting the current turn.".to_string(),
+            )),
+        ),
+        (
+            "superseding_task".to_string(),
+            JsonSchema::string(Some(
+                "Replacement instruction or dispatch identifier, when this interrupt supersedes work."
+                    .to_string(),
+            )),
+        ),
+    ]);
 
     ToolSpec::Function(ResponsesApiTool {
         name: "interrupt_agent".to_string(),
-        description: "Interrupt an agent's current turn, if any, and return its previous status. The agent remains available for messages and follow-up tasks.".to_string(),
+        description: "Interrupt an agent's current model turn with an operator-visible reason, and return its previous status. The agent remains available for messages and follow-up tasks.".to_string(),
         strict: false,
         defer_loading: None,
-        parameters: JsonSchema::object(properties, Some(vec!["target".to_string()]), Some(false.into())),
-        output_schema: Some(agent_previous_status_output_schema(
-            "The agent status observed before the interrupt request was handled.",
-        )),
+        parameters: JsonSchema::object(
+            properties,
+            Some(vec!["target".to_string(), "reason".to_string()]),
+            Some(false.into()),
+        ),
+        output_schema: Some(interrupt_agent_output_schema()),
+    })
+}
+
+fn interrupt_agent_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "previous_status": {
+                "description": "The agent status observed before the interrupt request was handled.",
+                "allOf": [agent_status_output_schema()]
+            },
+            "actor": {"type": "string"},
+            "target": {"type": "string"},
+            "reason": {"type": "string"},
+            "superseding_task": {"type": ["string", "null"]},
+            "process_effect": {"type": "string"}
+        },
+        "required": ["previous_status", "actor", "target", "reason", "superseding_task", "process_effect"],
+        "additionalProperties": false
     })
 }
 

@@ -2,6 +2,7 @@ use super::*;
 use crate::tools::handlers::multi_agents_spec::create_interrupt_agent_tool_v2;
 use crate::turn_timing::now_unix_timestamp_ms;
 use codex_protocol::error::CodexErr;
+use codex_protocol::models::ResponseItemMetadata;
 use codex_tools::ToolSpec;
 
 pub(crate) struct Handler;
@@ -36,6 +37,17 @@ async fn handle_interrupt_agent(
     } = invocation;
     let arguments = function_arguments(payload)?;
     let args: InterruptAgentArgs = parse_arguments(&arguments)?;
+    ensure_manager_tool_allowed(&turn, "interrupt_agent")?;
+    let reason = args.reason.trim();
+    if reason.is_empty() {
+        return Err(FunctionCallError::RespondToModel(
+            "interrupt reason must not be empty".to_string(),
+        ));
+    }
+    let superseding_task = args
+        .superseding_task
+        .map(|task| task.trim().to_string())
+        .filter(|task| !task.is_empty());
     let agent_id = resolve_agent_target(&session, &turn, &args.target).await?;
     let receiver_agent = session
         .services
@@ -61,6 +73,33 @@ async fn handle_interrupt_agent(
         FunctionCallError::RespondToModel("target agent is missing an agent_path".to_string())
     })?;
     let status = session.services.agent_control.get_status(agent_id).await;
+    let actor_path = turn
+        .session_source
+        .get_agent_path()
+        .unwrap_or_else(AgentPath::root);
+    let actor = match (
+        turn.session_source.get_nickname(),
+        turn.session_source.get_agent_role(),
+    ) {
+        (Some(nickname), Some(role)) => format!("{nickname} [{role}] · {actor_path}"),
+        (Some(nickname), None) => format!("{nickname} · {actor_path}"),
+        (None, _) => actor_path.to_string(),
+    };
+    let target = match (
+        receiver_agent.agent_nickname.as_deref(),
+        receiver_agent.agent_role.as_deref(),
+    ) {
+        (Some(nickname), Some(role)) => format!("{nickname} [{role}] · {receiver_agent_path}"),
+        (Some(nickname), None) => format!("{nickname} · {receiver_agent_path}"),
+        (None, _) => receiver_agent_path.to_string(),
+    };
+    let process_effect =
+        "model turn aborted; turn-owned processes receive the configured interrupt cleanup"
+            .to_string();
+    let audit_copy = format!(
+        "Actor: {actor}\nTarget: {target}\nReason: {reason}\nSuperseding task: {}\nProcess effect: {process_effect}",
+        superseding_task.as_deref().unwrap_or("none")
+    );
     let result = match session
         .services
         .agent_control
@@ -71,6 +110,23 @@ async fn handle_interrupt_agent(
         Err(err) => Err(collab_agent_error(agent_id, err)),
     };
     result?;
+    if status != AgentStatus::NotFound {
+        let mut communication = communication_from_tool_message(
+            actor_path,
+            receiver_agent_path.clone(),
+            format!("CONTROL EVENT — INTERRUPT\n{audit_copy}"),
+        );
+        communication
+            .metadata
+            .get_or_insert_with(ResponseItemMetadata::default)
+            .source_call_id = Some(call_id.clone());
+        session
+            .services
+            .agent_control
+            .send_inter_agent_communication(agent_id, communication)
+            .await
+            .map_err(|err| collab_agent_error(agent_id, err))?;
+    }
     session
         .send_event(
             &turn,
@@ -81,7 +137,7 @@ async fn handle_interrupt_agent(
                 agent_path: receiver_agent_path,
                 agent_nickname: receiver_agent.agent_nickname,
                 agent_role: receiver_agent.agent_role,
-                task_preview: None,
+                task_preview: Some(audit_copy),
                 kind: SubAgentActivityKind::Interrupted,
             }
             .into(),
@@ -90,6 +146,11 @@ async fn handle_interrupt_agent(
 
     Ok(InterruptAgentResult {
         previous_status: status,
+        actor,
+        target,
+        reason: reason.to_string(),
+        superseding_task,
+        process_effect,
     })
 }
 
@@ -103,11 +164,18 @@ impl CoreToolRuntime for Handler {
 #[serde(deny_unknown_fields)]
 struct InterruptAgentArgs {
     target: String,
+    reason: String,
+    superseding_task: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct InterruptAgentResult {
     pub(crate) previous_status: AgentStatus,
+    actor: String,
+    target: String,
+    reason: String,
+    superseding_task: Option<String>,
+    process_effect: String,
 }
 
 impl ToolOutput for InterruptAgentResult {

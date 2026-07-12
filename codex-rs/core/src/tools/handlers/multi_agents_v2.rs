@@ -3,6 +3,7 @@
 use crate::agent::AgentStatus;
 use crate::agent::agent_resolver::resolve_agent_target;
 use crate::function_tool::FunctionCallError;
+use crate::session::turn_context::TurnContext;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolOutput;
 use crate::tools::context::ToolPayload;
@@ -52,4 +53,21 @@ pub(super) fn communication_from_tool_message(
         message,
         /*trigger_turn*/ true,
     )
+}
+
+pub(super) fn ensure_manager_tool_allowed(
+    turn: &TurnContext,
+    tool_name: &str,
+) -> Result<(), FunctionCallError> {
+    if turn
+        .session_source
+        .get_agent_role()
+        .as_deref()
+        .is_some_and(|role| role.eq_ignore_ascii_case("orc"))
+    {
+        return Err(FunctionCallError::RespondToModel(format!(
+            "{tool_name} rejected by the runtime: Orc agents are individual contributors and cannot use manager control tools; send_message the result to the parent Troll instead"
+        )));
+    }
+    Ok(())
 }

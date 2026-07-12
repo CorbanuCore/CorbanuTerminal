@@ -13,6 +13,8 @@ use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_models_manager::model_info;
+use codex_protocol::AgentPath;
+use codex_protocol::ThreadId;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
 use codex_protocol::models::PermissionProfile;
@@ -1390,6 +1392,32 @@ async fn multi_agent_v2_message_schemas_are_encrypted() {
             Some(true)
         );
     }
+}
+
+#[tokio::test]
+async fn orc_tool_surface_excludes_manager_controls() {
+    let plan = probe(|turn| {
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+        turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            parent_thread_id: ThreadId::new(),
+            depth: 2,
+            agent_path: Some(
+                AgentPath::try_from("/root/troll_burzum/orc_snaga").expect("agent path"),
+            ),
+            agent_nickname: Some("Snaga".to_string()),
+            agent_role: Some("orc".to_string()),
+        });
+    })
+    .await;
+
+    plan.assert_visible_contains(&["send_message"]);
+    plan.assert_visible_lacks(&[
+        "spawn_agent",
+        "followup_task",
+        "wait_agent",
+        "interrupt_agent",
+        "list_agents",
+    ]);
 }
 
 #[tokio::test]
