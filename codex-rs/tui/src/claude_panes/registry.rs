@@ -597,11 +597,42 @@ fn migrate_pane_layout(mut layout: PaneLayoutState) -> PaneLayoutState {
     for (pane_id, dispatches) in &mut layout.spawn_pending_dispatches_by_pane {
         migrate_dispatch_queue(&format!("pane:{pane_id}"), dispatches);
     }
+    for (target, dispatches) in &mut layout.spawn_pending_dispatches {
+        migrate_dispatch_queue(target, dispatches);
+    }
+    for (thread_id, dispatches) in std::mem::take(&mut layout.spawn_pending_dispatches_by_thread) {
+        layout
+            .spawn_pending_dispatches
+            .entry(format!("thread:{thread_id}"))
+            .or_default()
+            .extend(dispatches);
+    }
+    for (pane_id, dispatches) in std::mem::take(&mut layout.spawn_pending_dispatches_by_pane) {
+        layout
+            .spawn_pending_dispatches
+            .entry(format!("pane:{pane_id}"))
+            .or_default()
+            .extend(dispatches);
+    }
+    let native_nodes = layout
+        .spawn_nazgul_pane_id
+        .iter()
+        .chain(layout.spawn_parent_by_node.keys())
+        .chain(layout.spawn_parent_by_node.values())
+        .chain(layout.spawn_native_runtime_by_node.keys())
+        .chain(layout.spawn_pending_dispatches.keys())
+        .filter_map(|node| node.strip_prefix("thread:").map(str::to_string))
+        .collect::<Vec<_>>();
+    for thread_id in native_nodes {
+        layout
+            .spawn_native_endpoint_by_node
+            .entry(format!("thread:{thread_id}"))
+            .or_insert(thread_id);
+    }
     layout.spawn_processed_dispatch_origin_ids.extend(
         layout
-            .spawn_pending_dispatches_by_thread
+            .spawn_pending_dispatches
             .values()
-            .chain(layout.spawn_pending_dispatches_by_pane.values())
             .flatten()
             .map(|dispatch| dispatch.origin.origin_id.clone())
             .filter(|origin_id| !origin_id.is_empty()),

@@ -218,21 +218,22 @@ pub(crate) enum AppEvent {
     SubmitSpawnAgentTask {
         thread_id: codex_protocol::ThreadId,
         task: String,
+        /// Present only for a delivery selected and durably marked by the pump.
+        delivery_id: Option<String>,
     },
     /// Steer a running spawned-agent turn that is blocked in `wait_agent`.
     SteerWaitingSpawnAgentTask {
         thread_id: codex_protocol::ThreadId,
         task: String,
+        delivery_id: Option<String>,
     },
-    /// Retry queued work after transient session-wide execution capacity clears.
-    RetryPendingSpawnAgentTask {
-        thread_id: codex_protocol::ThreadId,
-        attempt: u32,
-    },
+    /// Run one coalesced step of the durable dispatch delivery pump.
+    PumpSpawnDispatches,
     /// Start a normal turn in an existing Claude spawn pane.
     SubmitSpawnClaudePaneTask {
         pane_id: String,
         task: String,
+        delivery_id: Option<String>,
     },
     /// Show the current orchestration tree.
     OpenSpawnStatus,

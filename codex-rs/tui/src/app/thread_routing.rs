@@ -1192,10 +1192,10 @@ impl App {
                     .set_last_result_message(thread_id, status.message.clone());
                 if !is_running && self.is_spawn_orchestration_thread(thread_id) {
                     let flushed_dispatch = self
-                        .spawn_pending_dispatches_by_thread
-                        .get(&thread_id)
+                        .spawn_pending_dispatches
+                        .get(&crate::spawn_orchestration::thread_node_id(thread_id))
                         .is_some_and(|queue| !queue.is_empty());
-                    self.flush_idle_pending_dispatches_after_slot_release();
+                    self.request_spawn_dispatch_pump();
                     if !flushed_dispatch {
                         self.flush_pending_reports_for_thread(thread_id);
                     }
@@ -1728,7 +1728,7 @@ impl App {
                 {
                     self.spawn_waiting_for_agents_by_thread
                         .insert(thread_id, (notification.turn_id.clone(), id.clone()));
-                    self.steer_pending_dispatches_for_waiting_thread(thread_id);
+                    self.request_spawn_dispatch_pump();
                 }
             }
             ServerNotification::ItemCompleted(notification) => {
@@ -1943,10 +1943,10 @@ impl App {
             self.record_spawn_child_report_for_thread(thread_id, status, report_message);
             // Commands queued for this target take priority over informational child reports.
             let flushed_dispatch = self
-                .spawn_pending_dispatches_by_thread
-                .get(&thread_id)
+                .spawn_pending_dispatches
+                .get(&crate::spawn_orchestration::thread_node_id(thread_id))
                 .is_some_and(|queue| !queue.is_empty());
-            self.flush_idle_pending_dispatches_after_slot_release();
+            self.request_spawn_dispatch_pump();
             // This thread just went idle. If child reports arrived while it was mid-turn, flush them
             // now into a real processing turn so no report is silently dropped (the multi-turn race).
             let flushed_reports = if flushed_dispatch {

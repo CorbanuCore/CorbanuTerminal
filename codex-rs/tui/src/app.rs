@@ -758,6 +758,9 @@ pub(crate) struct App {
     pub(crate) agent_navigation: AgentNavigationState,
     pub(crate) spawn_parent_by_thread: HashMap<ThreadId, ThreadId>,
     pub(crate) spawn_parent_by_node: HashMap<String, String>,
+    pub(crate) spawn_native_runtime_by_node:
+        HashMap<String, crate::dispatch_queue::SavedNativeSpawnRuntime>,
+    pub(crate) spawn_native_endpoint_by_node: HashMap<String, ThreadId>,
     pub(crate) spawn_status_by_thread:
         HashMap<ThreadId, codex_app_server_protocol::CollabAgentState>,
     /// Active `wait_agent` call by native spawn thread, keyed to the exact turn and item so a
@@ -769,24 +772,19 @@ pub(crate) struct App {
     /// into a parent processing turn) when the parent goes idle. Keyed by parent thread id so a
     /// flush only fires for the pane that actually became idle.
     pub(crate) spawn_pending_reports_by_thread: HashMap<ThreadId, VecDeque<String>>,
-    /// Spawn tasks destined for a native Codex thread that arrived while the target was busy.
-    ///
-    /// These are flushed as a fresh turn when the target thread next goes idle so dispatches never
-    /// rely on mid-turn steer semantics.
-    pub(crate) spawn_pending_dispatches_by_thread:
-        HashMap<ThreadId, VecDeque<crate::spawn_orchestration::PendingSpawnDispatch>>,
-    /// Spawn tasks destined for Claude panes that arrived while the pane was already running.
-    pub(crate) spawn_pending_dispatches_by_pane:
+    /// The single durable dispatch inbox, keyed by logical target node id (`thread:`/`pane:`).
+    pub(crate) spawn_pending_dispatches:
         HashMap<String, VecDeque<crate::spawn_orchestration::PendingSpawnDispatch>>,
-    pub(crate) spawn_capacity_retry_attempt_by_thread: HashMap<ThreadId, u32>,
-    pub(crate) spawn_capacity_retry_scheduled_by_thread: HashSet<ThreadId>,
-    pub(crate) spawn_capacity_notified_dispatch_seqs: HashSet<u64>,
-    pub(crate) spawn_capacity_notified_tasks: HashSet<(ThreadId, String)>,
+    /// Coalesces pump wakes and prevents more than one in-flight delivery per destination.
+    pub(crate) spawn_dispatch_pump_scheduled: bool,
+    pub(crate) spawn_dispatch_inflight_targets: HashSet<String>,
+    pub(crate) spawn_dispatch_round_robin_after: Option<String>,
     pub(crate) spawn_dispatch_acks_by_target_task:
         HashMap<(String, String), VecDeque<crate::spawn_orchestration::SpawnDispatchAck>>,
     pub(crate) spawn_next_dispatch_seq: u64,
     pub(crate) spawn_processed_dispatch_seq_ids: HashSet<u64>,
     pub(crate) spawn_processed_dispatch_origins: HashSet<String>,
+    pub(crate) spawn_accepted_delivery_ids: HashSet<String>,
     /// Terminal turn notifications are observed both on receipt and during buffered replay. Keep
     /// orchestration side effects idempotent across those two delivery paths.
     pub(crate) spawn_processed_terminal_turns: HashSet<(ThreadId, String)>,
@@ -1433,52 +1431,60 @@ See the PFTerminal keymap documentation for supported actions and examples."
             agent_navigation: AgentNavigationState::default(),
             spawn_parent_by_thread: HashMap::new(),
             spawn_parent_by_node: restored_spawn_parent_by_node,
-            spawn_status_by_thread: HashMap::new(),
-            spawn_waiting_for_agents_by_thread: HashMap::new(),
-            spawn_parent_reports_by_node: HashMap::new(),
-            spawn_pending_reports_by_thread: HashMap::new(),
-            spawn_pending_dispatches_by_thread: restored_pane_layout
+            spawn_native_runtime_by_node: restored_pane_layout
                 .as_ref()
                 .map(|layout| {
                     layout
-                        .spawn_pending_dispatches_by_thread
+                        .spawn_native_runtime_by_node
+                        .clone()
+                        .into_iter()
+                        .collect()
+                })
+                .unwrap_or_default(),
+            spawn_native_endpoint_by_node: restored_pane_layout
+                .as_ref()
+                .map(|layout| {
+                    layout
+                        .spawn_native_endpoint_by_node
                         .iter()
-                        .filter_map(|(thread_id, queue)| {
-                            ThreadId::from_string(thread_id).ok().map(|thread_id| {
-                                (
-                                    thread_id,
-                                    crate::spawn_orchestration::reconcile_restored_dispatches(
-                                        queue,
-                                    ),
-                                )
-                            })
+                        .filter_map(|(node, endpoint)| {
+                            ThreadId::from_string(endpoint)
+                                .ok()
+                                .map(|endpoint| (node.clone(), endpoint))
                         })
                         .collect()
                 })
                 .unwrap_or_default(),
-            spawn_pending_dispatches_by_pane: restored_pane_layout
+            spawn_status_by_thread: HashMap::new(),
+            spawn_waiting_for_agents_by_thread: HashMap::new(),
+            spawn_parent_reports_by_node: HashMap::new(),
+            spawn_pending_reports_by_thread: HashMap::new(),
+            spawn_pending_dispatches: restored_pane_layout
                 .as_ref()
                 .map(|layout| {
                     layout
-                        .spawn_pending_dispatches_by_pane
+                        .spawn_pending_dispatches
                         .iter()
-                        .map(|(pane_id, queue)| {
+                        .map(|(target, queue)| {
                             (
-                                pane_id.clone(),
+                                target.clone(),
                                 crate::spawn_orchestration::reconcile_restored_dispatches(queue),
                             )
                         })
                         .collect()
                 })
                 .unwrap_or_default(),
-            spawn_capacity_retry_attempt_by_thread: HashMap::new(),
-            spawn_capacity_retry_scheduled_by_thread: HashSet::new(),
-            spawn_capacity_notified_dispatch_seqs: HashSet::new(),
-            spawn_capacity_notified_tasks: HashSet::new(),
+            spawn_dispatch_pump_scheduled: false,
+            spawn_dispatch_inflight_targets: HashSet::new(),
+            spawn_dispatch_round_robin_after: None,
             spawn_dispatch_acks_by_target_task: HashMap::new(),
             spawn_next_dispatch_seq: restored_spawn_next_dispatch_seq,
             spawn_processed_dispatch_seq_ids: restored_spawn_processed_dispatch_seq_ids,
             spawn_processed_dispatch_origins: restored_spawn_processed_dispatch_origins,
+            spawn_accepted_delivery_ids: restored_pane_layout
+                .as_ref()
+                .map(|layout| layout.spawn_accepted_delivery_ids.iter().cloned().collect())
+                .unwrap_or_default(),
             spawn_processed_terminal_turns: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
             spawn_operator_input_seen: false,

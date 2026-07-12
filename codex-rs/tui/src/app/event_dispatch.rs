@@ -2551,6 +2551,7 @@ impl App {
                             agent_nickname.clone(),
                             agent_type,
                             started,
+                            true,
                         )
                         .await;
                         // When spawning a Nazgul pane, bind it as the visible root so subsequent
@@ -2625,16 +2626,31 @@ impl App {
             AppEvent::OpenSpawnClaudePaneTaskPrompt { pane_id } => {
                 self.open_spawn_claude_pane_task_prompt(pane_id);
             }
-            AppEvent::SteerWaitingSpawnAgentTask { thread_id, task } => {
+            AppEvent::SteerWaitingSpawnAgentTask {
+                thread_id,
+                task,
+                delivery_id,
+            } => {
                 let task = task.trim().to_string();
-                let target_node_id = crate::spawn_orchestration::thread_node_id(thread_id);
+                let target_node_id = self.logical_native_node_for_thread(thread_id);
+                let Some(delivery_id) = delivery_id else {
+                    self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+                        thread_id,
+                        task,
+                        delivery_id: None,
+                    });
+                    return Ok(AppRunControl::Continue);
+                };
                 let Some((turn_id, _)) = self
                     .spawn_waiting_for_agents_by_thread
                     .get(&thread_id)
                     .cloned()
                 else {
-                    self.app_event_tx
-                        .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
+                    self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+                        thread_id,
+                        task,
+                        delivery_id: Some(delivery_id),
+                    });
                     return Ok(AppRunControl::Continue);
                 };
                 let task_for_submission = self.spawn_agent_task_for_submission(thread_id, &task);
@@ -2646,13 +2662,13 @@ impl App {
                             text: task_for_submission,
                             text_elements: Vec::new(),
                         }],
-                        /*client_user_message_id*/ None,
+                        Some(delivery_id.clone()),
                     )
                     .await
                 {
                     Ok(_) => {
                         self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
-                        self.record_spawn_dispatch_delivered_for_task(&target_node_id, &task);
+                        self.finish_spawn_dispatch_delivery(&target_node_id, &delivery_id, &task);
                         self.agent_navigation.set_last_task_message(
                             thread_id,
                             Some(task.chars().take(240).collect()),
@@ -2662,21 +2678,57 @@ impl App {
                         tracing::warn!(
                             %thread_id,
                             %error,
-                            "failed to steer agent wait; retrying through normal task submission"
+                            "ambiguous wait steer retained for identity reconciliation"
                         );
-                        self.app_event_tx
-                            .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
+                        self.contain_ambiguous_spawn_dispatch(&target_node_id);
                     }
                 }
             }
-            AppEvent::SubmitSpawnAgentTask { thread_id, task } => {
+            AppEvent::SubmitSpawnAgentTask {
+                thread_id,
+                task,
+                delivery_id,
+            } => {
                 let task = task.trim().to_string();
-                let original_target_node_id = crate::spawn_orchestration::thread_node_id(thread_id);
+                let original_target_node_id = self.logical_native_node_for_thread(thread_id);
                 if task.is_empty() {
                     self.chat_widget
                         .add_error_message("Spawn task cannot be empty.".to_string());
                     return Ok(AppRunControl::Continue);
                 }
+                if delivery_id.is_none() {
+                    let label = self.thread_label(thread_id);
+                    let pending =
+                        self.pending_dispatch_from_registered_task(&original_target_node_id, task);
+                    let acks = pending.acks.clone();
+                    match self.enqueue_pending_dispatch_for_thread(thread_id, pending) {
+                        PendingDispatchEnqueueResult::Queued => {
+                            self.record_spawn_dispatch_acks(
+                                &acks,
+                                "queued",
+                                "durably queued for the delivery pump",
+                                false,
+                            );
+                            self.request_spawn_dispatch_pump();
+                        }
+                        PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
+                            self.record_duplicate_pending_dispatch(&label, &acks, notify);
+                        }
+                        PendingDispatchEnqueueResult::Rejected { acks, reason } => {
+                            self.record_spawn_dispatch_acks(
+                                &acks,
+                                "failed",
+                                format!("queue rejected: {reason}"),
+                                true,
+                            );
+                            self.chat_widget.add_error_message(format!(
+                                "Cannot queue task for {label}: {reason}"
+                            ));
+                        }
+                    }
+                    return Ok(AppRunControl::Continue);
+                }
+                let delivery_id = delivery_id.expect("pump delivery identity checked above");
                 let task_preview = task.chars().take(240).collect::<String>();
                 let mut thread_id = thread_id;
                 let mut label = self.thread_label(thread_id);
@@ -2702,11 +2754,9 @@ impl App {
                         Err(err) => {
                             let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                             self.abort_spawn_auto_processing_turn(&node_key);
-                            self.requeue_spawn_report_processing_task(thread_id, &task);
-                            self.record_spawn_dispatch_failed_for_task(
+                            self.defer_spawn_dispatch_for_capacity(
                                 &original_target_node_id,
-                                &task,
-                                format!("failed to attach pane session: {err}"),
+                                &delivery_id,
                             );
                             self.chat_widget.add_error_message(format!(
                                 "Cannot send task to {label}; failed to attach pane session: {err}"
@@ -2759,13 +2809,9 @@ impl App {
                                 Err(materialize_err) => {
                                     let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                                     self.abort_spawn_auto_processing_turn(&node_key);
-                                    self.requeue_spawn_report_processing_task(thread_id, &task);
-                                    self.record_spawn_dispatch_failed_for_task(
+                                    self.defer_spawn_dispatch_for_capacity(
                                         &original_target_node_id,
-                                        &task,
-                                        format!(
-                                            "failed to read pane metadata: {err}; failed to materialize saved pane: {materialize_err}"
-                                        ),
+                                        &delivery_id,
                                     );
                                     self.chat_widget.add_error_message(format!(
                                         "Cannot send task to {label}; failed to read pane metadata: {err}; failed to materialize saved pane: {materialize_err}"
@@ -2779,66 +2825,27 @@ impl App {
                 let Some(session) = session else {
                     let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                     self.abort_spawn_auto_processing_turn(&node_key);
-                    self.requeue_spawn_report_processing_task(thread_id, &task);
                     let detail = self
                         .unloaded_agent_thread_reason(thread_id)
                         .unwrap_or_else(|| "Pane session is not loaded.".to_string());
-                    self.record_spawn_dispatch_failed_for_task(
-                        &original_target_node_id,
-                        &task,
-                        &detail,
-                    );
+                    self.defer_spawn_dispatch_for_capacity(&original_target_node_id, &delivery_id);
                     self.chat_widget
                         .add_error_message(format!("Cannot send task to {label}; {detail}"));
                     return Ok(AppRunControl::Continue);
                 };
+                let delivery_target_node_id = self.logical_native_node_for_thread(thread_id);
                 if let Some(message) =
                     self.native_spawn_provider_auth_error(Some(session.model_provider_id.as_str()))
                 {
                     let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                     self.abort_spawn_auto_processing_turn(&node_key);
-                    self.requeue_spawn_report_processing_task(thread_id, &task);
-                    self.record_spawn_dispatch_failed_for_task(
-                        &original_target_node_id,
-                        &task,
-                        &message,
-                    );
+                    self.defer_spawn_dispatch_for_capacity(&delivery_target_node_id, &delivery_id);
                     self.chat_widget
                         .add_error_message(format!("Cannot send task to {label}: {message}"));
                     return Ok(AppRunControl::Continue);
                 }
                 if self.native_spawn_target_is_busy(thread_id) {
-                    let pending =
-                        self.pending_dispatch_from_registered_task(&original_target_node_id, task);
-                    let pending_for_ack = pending.clone();
-                    match self.enqueue_pending_dispatch_for_thread(thread_id, pending) {
-                        PendingDispatchEnqueueResult::Queued => {
-                            self.record_spawn_dispatch_acks(
-                                &pending_for_ack.acks,
-                                "queued_busy",
-                                "target became busy before turn start; will deliver when idle",
-                                false,
-                            );
-                            self.chat_widget.add_info_message(
-                                format!("Task queued for {label}."),
-                                Some("The target pane is busy; PFTerminal will deliver it when the pane goes idle.".to_string()),
-                            );
-                        }
-                        PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
-                            self.record_duplicate_pending_dispatch(&label, &acks, notify);
-                        }
-                        PendingDispatchEnqueueResult::Rejected { acks, reason } => {
-                            self.record_spawn_dispatch_acks(
-                                &acks,
-                                "failed",
-                                format!("queue rejected: {reason}"),
-                                true,
-                            );
-                            self.chat_widget.add_error_message(format!(
-                                "Cannot queue task for {label}: {reason}"
-                            ));
-                        }
-                    }
+                    self.defer_spawn_dispatch_for_capacity(&delivery_target_node_id, &delivery_id);
                     return Ok(AppRunControl::Continue);
                 }
                 // Inject the live spawn hierarchy as additional context so native spawn panes
@@ -2870,14 +2877,13 @@ impl App {
                         session.personality,
                         /*output_schema*/ None,
                         additional_context,
-                        /*client_user_message_id*/ None,
+                        Some(delivery_id.clone()),
                     )
                     .await
                 {
                     Ok(TurnStartOutcome::Started {
                         recovered_failures, ..
                     }) => {
-                        self.clear_spawn_capacity_retry(thread_id, &task);
                         if !recovered_failures.is_empty() {
                             self.surface_turn_start_failure(
                                 thread_id,
@@ -2893,8 +2899,9 @@ impl App {
                                 message: None,
                             },
                         );
-                        self.record_spawn_dispatch_delivered_for_task(
-                            &original_target_node_id,
+                        self.finish_spawn_dispatch_delivery(
+                            &delivery_target_node_id,
+                            &delivery_id,
                             &task,
                         );
                         self.agent_navigation
@@ -2914,82 +2921,145 @@ impl App {
                         }
                     }
                     Ok(TurnStartOutcome::CapacityUnavailable { max_threads }) => {
-                        let pending = self
-                            .pending_dispatch_from_registered_task(&original_target_node_id, task);
-                        let pending_for_notification = pending.clone();
-                        match self.enqueue_pending_dispatch_for_thread(thread_id, pending) {
-                            PendingDispatchEnqueueResult::Queued => {
-                                self.record_spawn_dispatch_acks(
-                                    &pending_for_notification.acks,
-                                    "queued_capacity",
-                                    format!(
-                                        "session execution capacity reached ({max_threads}); will retry"
-                                    ),
-                                    false,
-                                );
-                                self.note_spawn_capacity_pending(
-                                    thread_id,
-                                    &label,
-                                    max_threads,
-                                    &pending_for_notification,
-                                );
-                            }
-                            PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
-                                self.record_duplicate_pending_dispatch(&label, &acks, notify);
-                            }
-                            PendingDispatchEnqueueResult::Rejected { acks, reason } => {
-                                self.record_spawn_dispatch_acks(
-                                    &acks,
-                                    "failed",
-                                    format!("queue rejected: {reason}"),
-                                    true,
-                                );
-                                self.chat_widget.add_error_message(format!(
-                                    "Cannot queue task for {label}: {reason}"
-                                ));
-                                return Ok(AppRunControl::Continue);
-                            }
-                        }
-                        self.schedule_spawn_capacity_retry(thread_id);
-                        return Ok(AppRunControl::Continue);
+                        tracing::info!(
+                            %thread_id,
+                            max_threads,
+                            "dispatch pump paused at typed session capacity"
+                        );
+                        self.defer_spawn_dispatch_for_capacity(
+                            &delivery_target_node_id,
+                            &delivery_id,
+                        );
                     }
                     Err(err) => {
-                        self.clear_spawn_capacity_retry(thread_id, &task);
-                        let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
-                        self.abort_spawn_auto_processing_turn(&node_key);
-                        self.requeue_spawn_report_processing_task(thread_id, &task);
                         let detail = format!("{err:#}");
                         tracing::error!(
                             %thread_id,
                             error = ?err,
                             error_chain = %detail,
-                            "spawn task turn/start retry limit reached; containing failure to pane"
+                            "ambiguous pump delivery retained for identity reconciliation"
                         );
+                        self.contain_ambiguous_spawn_dispatch(&delivery_target_node_id);
                         self.surface_turn_start_failure(
-                            thread_id,
-                            detail.clone(),
-                            /*will_retry*/ false,
+                            thread_id, detail, /*will_retry*/ true,
                         )
                         .await;
-                        self.record_spawn_dispatch_failed_for_task(
-                            &original_target_node_id,
-                            &task,
-                            detail.clone(),
-                        );
-                        self.chat_widget
-                            .add_error_message(format!("Failed to send task to {label}: {detail}"));
                     }
                 }
             }
-            AppEvent::RetryPendingSpawnAgentTask { thread_id, attempt } => {
-                if self.accept_spawn_capacity_retry_timer(thread_id, attempt)
-                    && !self.native_spawn_target_is_busy(thread_id)
-                {
-                    self.flush_pending_dispatches_for_thread(thread_id);
+            AppEvent::PumpSpawnDispatches => {
+                // Reconcile every non-live Submitting record before selecting new work. Native
+                // thread history is the durable acceptance witness; absence permits a same-ID
+                // resend. Claude has no equivalent witness and is therefore never auto-replayed.
+                for (target, delivery_id, task) in self.submitting_spawn_dispatches() {
+                    let Ok(crate::spawn_orchestration::SpawnTaskTarget::Native(thread_id)) =
+                        self.resolve_spawn_task_target(&target)
+                    else {
+                        continue;
+                    };
+                    match app_server
+                        .find_turn_for_client_message(thread_id, &delivery_id)
+                        .await
+                    {
+                        Ok(Some(_destination_turn_id)) => {
+                            self.finish_spawn_dispatch_delivery(&target, &delivery_id, &task);
+                        }
+                        Ok(None) => {
+                            self.defer_spawn_dispatch_for_capacity(&target, &delivery_id);
+                        }
+                        Err(error) => {
+                            tracing::warn!(
+                                %thread_id,
+                                %delivery_id,
+                                %error,
+                                "dispatch reconciliation deferred until the next state change"
+                            );
+                        }
+                    }
+                }
+                if let Some(delivery) = self.select_spawn_dispatch_pump_delivery() {
+                    match delivery {
+                        crate::spawn_orchestration::SpawnDispatchPumpDelivery::Native {
+                            thread_id,
+                            task,
+                            delivery_id,
+                            steer,
+                        } => {
+                            if steer {
+                                self.app_event_tx
+                                    .send(AppEvent::SteerWaitingSpawnAgentTask {
+                                        thread_id,
+                                        task,
+                                        delivery_id: Some(delivery_id),
+                                    });
+                            } else {
+                                self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+                                    thread_id,
+                                    task,
+                                    delivery_id: Some(delivery_id),
+                                });
+                            }
+                        }
+                        crate::spawn_orchestration::SpawnDispatchPumpDelivery::Claude {
+                            pane_id,
+                            task,
+                            delivery_id,
+                        } => self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
+                            pane_id,
+                            task,
+                            delivery_id: Some(delivery_id),
+                        }),
+                    }
                 }
             }
-            AppEvent::SubmitSpawnClaudePaneTask { pane_id, task } => {
-                self.submit_claude_pane_task(pane_id, task);
+            AppEvent::SubmitSpawnClaudePaneTask {
+                pane_id,
+                task,
+                delivery_id,
+            } => {
+                if delivery_id.is_none() {
+                    let target = crate::spawn_orchestration::pane_node_id(&pane_id);
+                    let pending = self.pending_dispatch_from_registered_task(&target, task);
+                    let acks = pending.acks.clone();
+                    match self.enqueue_pending_dispatch_for_claude_pane(pane_id.clone(), pending) {
+                        PendingDispatchEnqueueResult::Queued => {
+                            self.record_spawn_dispatch_acks(
+                                &acks,
+                                "queued",
+                                "durably queued for the delivery pump",
+                                false,
+                            );
+                            self.request_spawn_dispatch_pump();
+                        }
+                        PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
+                            self.record_duplicate_pending_dispatch(&pane_id, &acks, notify);
+                        }
+                        PendingDispatchEnqueueResult::Rejected { acks, reason } => {
+                            self.record_spawn_dispatch_acks(
+                                &acks,
+                                "failed",
+                                format!("queue rejected: {reason}"),
+                                true,
+                            );
+                        }
+                    }
+                    return Ok(AppRunControl::Continue);
+                }
+                if self.claude_panes.claude_pane_is_running(&pane_id) {
+                    self.defer_spawn_dispatch_for_capacity(
+                        &crate::spawn_orchestration::pane_node_id(&pane_id),
+                        delivery_id.as_deref().expect("pump delivery id"),
+                    );
+                    return Ok(AppRunControl::Continue);
+                }
+                self.submit_claude_pane_task(pane_id.clone(), task.clone());
+                if let Some(delivery_id) = delivery_id.as_deref() {
+                    self.finish_spawn_dispatch_delivery(
+                        &crate::spawn_orchestration::pane_node_id(&pane_id),
+                        delivery_id,
+                        &task,
+                    );
+                }
             }
             AppEvent::OpenSpawnStatus => {
                 self.open_spawn_status();

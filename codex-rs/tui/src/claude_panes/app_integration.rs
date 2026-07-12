@@ -15,7 +15,6 @@ use crate::bottom_pane::SelectionViewParams;
 use crate::bottom_pane::custom_prompt_view::CustomPromptView;
 use crate::bottom_pane::popup_consts::standard_popup_hint_line;
 use crate::key_hint;
-use crate::spawn_orchestration::PendingDispatchEnqueueResult;
 use crate::spawn_orchestration::SpawnRole;
 use crate::spawn_orchestration::thread_node_id;
 use crate::tui;
@@ -328,6 +327,16 @@ impl App {
                 .iter()
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect(),
+            spawn_native_runtime_by_node: self
+                .spawn_native_runtime_by_node
+                .iter()
+                .map(|(node, runtime)| (node.clone(), runtime.clone()))
+                .collect(),
+            spawn_native_endpoint_by_node: self
+                .spawn_native_endpoint_by_node
+                .iter()
+                .map(|(node, endpoint)| (node.clone(), endpoint.to_string()))
+                .collect(),
             orchestrate_whips: self
                 .orchestrate_whips
                 .iter()
@@ -335,21 +344,13 @@ impl App {
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect(),
             orchestrate_next_whip_seq: self.orchestrate_next_whip_seq,
-            spawn_pending_dispatches_by_thread: self
-                .spawn_pending_dispatches_by_thread
+            spawn_pending_dispatches: self
+                .spawn_pending_dispatches
                 .iter()
-                .map(|(thread_id, queue)| {
-                    (
-                        thread_id.to_string(),
-                        queue.iter().cloned().collect::<Vec<_>>(),
-                    )
-                })
+                .map(|(target, queue)| (target.clone(), queue.iter().cloned().collect()))
                 .collect(),
-            spawn_pending_dispatches_by_pane: self
-                .spawn_pending_dispatches_by_pane
-                .iter()
-                .map(|(pane_id, queue)| (pane_id.clone(), queue.iter().cloned().collect()))
-                .collect(),
+            spawn_pending_dispatches_by_thread: Default::default(),
+            spawn_pending_dispatches_by_pane: Default::default(),
             spawn_next_dispatch_seq: self.spawn_next_dispatch_seq.max(1),
             spawn_processed_dispatch_seq_ids: self.recent_spawn_processed_dispatch_seq_ids(),
             spawn_processed_dispatch_origin_ids: {
@@ -360,6 +361,15 @@ impl App {
                     .collect::<Vec<_>>();
                 origins.sort();
                 origins
+            },
+            spawn_accepted_delivery_ids: {
+                let mut deliveries = self
+                    .spawn_accepted_delivery_ids
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                deliveries.sort();
+                deliveries
             },
         };
         if let Err(err) = persist_pane_layout(self.config.codex_home.as_ref(), &layout) {
@@ -642,41 +652,6 @@ impl App {
                 .add_error_message("Claude pane task cannot be empty.".to_string());
             return;
         }
-        if self.claude_panes.claude_pane_is_running(&pane_id) {
-            let title = self.user_pane_title(&pane_id);
-            let pending = self.pending_dispatch_from_registered_task(&target_node_id, task);
-            match self.enqueue_pending_dispatch_for_claude_pane(pane_id, pending.clone()) {
-                PendingDispatchEnqueueResult::Queued => {
-                    self.record_spawn_dispatch_acks(
-                        &pending.acks,
-                        "queued_busy",
-                        "target became busy before turn start; will deliver when idle",
-                        false,
-                    );
-                    self.chat_widget.add_info_message(
-                        format!("Task queued for {title}."),
-                        Some(
-                            "The target pane is busy; PFTerminal will deliver it when the pane goes idle."
-                                .to_string(),
-                        ),
-                    );
-                }
-                PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
-                    self.record_duplicate_pending_dispatch(&title, &acks, notify);
-                }
-                PendingDispatchEnqueueResult::Rejected { acks, reason } => {
-                    self.record_spawn_dispatch_acks(
-                        &acks,
-                        "failed",
-                        format!("queue rejected: {reason}"),
-                        true,
-                    );
-                    self.chat_widget
-                        .add_error_message(format!("Cannot queue task for {title}: {reason}"));
-                }
-            }
-            return;
-        }
         let is_active = self.claude_panes.active_user_pane_id() == pane_id;
         let user_cell =
             crate::history_cell::new_user_prompt(task.clone(), Vec::new(), Vec::new(), Vec::new());
@@ -802,7 +777,11 @@ impl App {
                     .claude_panes
                     .filter_new_spawn_dispatches(&pane_id, dispatches);
                 self.claude_panes.finish_turn(&pane_id, &Ok(output.clone()));
-                let flushed_dispatch = self.flush_pending_dispatches_for_claude_pane(&pane_id);
+                let flushed_dispatch = self
+                    .spawn_pending_dispatches
+                    .get(&crate::spawn_orchestration::pane_node_id(&pane_id))
+                    .is_some_and(|queue| !queue.is_empty());
+                self.request_spawn_dispatch_pump();
                 let report_status = output.status.label().to_string();
                 let report_text = if output.text.trim().is_empty() {
                     output.failure_message()
@@ -819,7 +798,12 @@ impl App {
                 // turns must never dispatch: their text can contain a complete-looking
                 // pfterminal_send_task block whose task was truncated mid-thought.
                 if output.status.is_success() && !dispatches.is_empty() {
-                    self.dispatch_spawn_task_blocks(&pane_id, dispatches);
+                    self.dispatch_spawn_task_blocks_from_model_turn(
+                        &pane_id,
+                        &crate::spawn_orchestration::pane_node_id(&pane_id),
+                        &format!("claude-artifact:{}", output.artifact_path.display()),
+                        dispatches,
+                    );
                 }
                 // Loop breaker: finalize AFTER the dispatch call above so a dispatch emitted by
                 // this turn is attributed to it before the auto-turn flags clear.
@@ -891,7 +875,11 @@ impl App {
                 self.claude_panes.finish_turn(&pane_id, &Err(error.clone()));
                 let source_node_id = crate::spawn_orchestration::pane_node_id(&pane_id);
                 self.note_spawn_turn_completed_for_auto_loop(&source_node_id);
-                let flushed_dispatch = self.flush_pending_dispatches_for_claude_pane(&pane_id);
+                let flushed_dispatch = self
+                    .spawn_pending_dispatches
+                    .get(&crate::spawn_orchestration::pane_node_id(&pane_id))
+                    .is_some_and(|queue| !queue.is_empty());
+                self.request_spawn_dispatch_pump();
                 self.record_spawn_child_report_for_claude_pane(&pane_id, "error", Some(&error));
                 self.note_whip_target_idle_with_fire_control(
                     &source_node_id,

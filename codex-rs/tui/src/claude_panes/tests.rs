@@ -489,13 +489,20 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
         spawn_nazgul_pane_id: Some("claude-root".to_string()),
         claude_pane_ids: vec!["claude-root".to_string(), "claude-active".to_string()],
         spawn_parent_by_node: parents.clone(),
+        spawn_native_runtime_by_node: BTreeMap::new(),
+        spawn_native_endpoint_by_node: BTreeMap::from([(
+            "thread:019f0657-1d67-7103-9d65-89e71587347d".to_string(),
+            "019f0e22-e6e9-7e02-9cca-9dc18667b3e5".to_string(),
+        )]),
         orchestrate_whips: whips.clone(),
         orchestrate_next_whip_seq: 3,
+        spawn_pending_dispatches: BTreeMap::new(),
         spawn_pending_dispatches_by_thread: pending_native_dispatches.clone(),
         spawn_pending_dispatches_by_pane: pending_claude_dispatches.clone(),
         spawn_next_dispatch_seq: 42,
         spawn_processed_dispatch_seq_ids: vec![39, 41],
         spawn_processed_dispatch_origin_ids: Vec::new(),
+        spawn_accepted_delivery_ids: Vec::new(),
     };
 
     persist_pane_layout(codex_home.path(), &layout).expect("persist layout");
@@ -516,17 +523,21 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
     );
     assert_eq!(restored.claude_pane_ids, layout.claude_pane_ids);
     assert_eq!(restored.spawn_parent_by_node, parents);
+    assert_eq!(
+        restored.spawn_native_endpoint_by_node["thread:019f0657-1d67-7103-9d65-89e71587347d"],
+        "019f0e22-e6e9-7e02-9cca-9dc18667b3e5"
+    );
     assert_eq!(restored.orchestrate_whips, whips);
     assert_eq!(restored.orchestrate_next_whip_seq, 3);
     let restored_native =
-        &restored.spawn_pending_dispatches_by_thread["019f0657-1d67-7103-9d65-89e71587347d"][0];
+        &restored.spawn_pending_dispatches["thread:019f0657-1d67-7103-9d65-89e71587347d"][0];
     assert_eq!(restored_native.task, "native queued task");
     assert!(!restored_native.dispatch_id.is_empty());
     assert_eq!(
         restored_native.target_pane_id,
         "thread:019f0657-1d67-7103-9d65-89e71587347d"
     );
-    let restored_claude = &restored.spawn_pending_dispatches_by_pane["claude-active"][0];
+    let restored_claude = &restored.spawn_pending_dispatches["pane:claude-active"][0];
     assert_eq!(restored_claude.task, "claude queued task");
     assert!(!restored_claude.dispatch_id.is_empty());
     assert_eq!(restored_claude.target_pane_id, "pane:claude-active");
@@ -688,8 +699,8 @@ fn pane_layout_v1_migrates_legacy_batch_once() {
 
     let restored = load_pane_layout(codex_home.path(), Some(thread_id)).expect("migrated layout");
     let migrated = restored
-        .spawn_pending_dispatches_by_thread
-        .get(thread_id)
+        .spawn_pending_dispatches
+        .get(&format!("thread:{thread_id}"))
         .expect("migrated queue");
 
     assert_eq!(

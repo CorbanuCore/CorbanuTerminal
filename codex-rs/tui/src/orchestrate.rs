@@ -2690,12 +2690,18 @@ impl App {
         );
         match destination {
             FireDestination::Native(thread_id) => {
-                self.app_event_tx
-                    .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
+                self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+                    thread_id,
+                    task,
+                    delivery_id: None,
+                });
             }
             FireDestination::ClaudePane(pane_id) => {
-                self.app_event_tx
-                    .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task });
+                self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
+                    pane_id,
+                    task,
+                    delivery_id: None,
+                });
             }
         }
         self.chat_widget.add_info_message(
@@ -2894,12 +2900,14 @@ impl App {
                 self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
                     thread_id,
                     task: plan.task,
+                    delivery_id: None,
                 });
             }
             FireDestination::ClaudePane(pane_id) => {
                 self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
                     pane_id,
                     task: plan.task,
+                    delivery_id: None,
                 });
             }
         }
@@ -3076,12 +3084,20 @@ impl App {
                 "Assignment {id} recovery: your previous turn completed successfully but emitted no visible assistant response. Process the latest user message already present in this conversation. Continue drafting the assignment from the available context and dispatch the Worker when the specification is sufficiently concrete. Do not ask the user to repeat information they already supplied."
             );
             match self.fire_destination_for_node(manager) {
-                Ok(FireDestination::Native(thread_id)) => self
-                    .app_event_tx
-                    .send(AppEvent::SubmitSpawnAgentTask { thread_id, task }),
-                Ok(FireDestination::ClaudePane(pane_id)) => self
-                    .app_event_tx
-                    .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task }),
+                Ok(FireDestination::Native(thread_id)) => {
+                    self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+                        thread_id,
+                        task,
+                        delivery_id: None,
+                    })
+                }
+                Ok(FireDestination::ClaudePane(pane_id)) => {
+                    self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
+                        pane_id,
+                        task,
+                        delivery_id: None,
+                    })
+                }
                 Err(err) => {
                     pause_ids.push(id.clone());
                     self.chat_widget.add_error_message(format!(

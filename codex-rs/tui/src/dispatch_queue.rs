@@ -4,6 +4,13 @@ use serde::Serialize;
 use sha2::Digest;
 use sha2::Sha256;
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct SavedNativeSpawnRuntime {
+    pub(crate) model: String,
+    pub(crate) provider: String,
+    pub(crate) reasoning_effort: Option<codex_protocol::openai_models::ReasoningEffort>,
+}
+
 pub(crate) const MAX_DISPATCH_TASK_BYTES: usize = 32 * 1024;
 pub(crate) const MAX_TARGET_DISPATCH_ITEMS: usize = 256;
 pub(crate) const MAX_TARGET_DISPATCH_BYTES: usize = 2 * 1024 * 1024;
