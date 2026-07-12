@@ -1418,6 +1418,22 @@ async fn orc_tool_surface_excludes_manager_controls() {
         "interrupt_agent",
         "list_agents",
     ]);
+    plan.assert_registered_contains(&[
+        "spawn_agent",
+        "followup_task",
+        "wait_agent",
+        "interrupt_agent",
+        "list_agents",
+    ]);
+    for tool_name in [
+        "spawn_agent",
+        "followup_task",
+        "wait_agent",
+        "interrupt_agent",
+        "list_agents",
+    ] {
+        assert_eq!(plan.exposure(tool_name), ToolExposure::Hidden);
+    }
 }
 
 #[tokio::test]

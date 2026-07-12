@@ -5109,27 +5109,32 @@ async fn multi_agent_v2_interrupt_target_receives_full_control_and_process_tuple
         .await
         .expect("attributed interrupt should succeed");
 
-    let target_audit = manager
-        .captured_ops()
-        .into_iter()
-        .find_map(|(thread_id, op)| match op {
-            Op::InterAgentCommunication { communication }
-                if thread_id == worker_id
-                    && communication
-                        .encrypted_content
-                        .as_deref()
-                        .is_some_and(|content| content.contains("CONTROL EVENT — INTERRUPT")) =>
-            {
-                communication.encrypted_content
-            }
-            _ => None,
-        })
-        .expect("target pane must receive the interrupt audit");
+    let target_audit =
+        manager
+            .captured_ops()
+            .into_iter()
+            .find_map(|(thread_id, op)| match op {
+                Op::InterAgentCommunication { communication }
+                    if thread_id == worker_id
+                        && (communication.content.contains("CONTROL EVENT — INTERRUPT")
+                            || communication.encrypted_content.as_deref().is_some_and(
+                                |content| content.contains("CONTROL EVENT — INTERRUPT"),
+                            )) =>
+                {
+                    Some(communication)
+                }
+                _ => None,
+            })
+            .expect("target pane must receive the interrupt audit");
     let expected = format!(
         "Actor: Burzum [troll] · /root/troll_burzum\nTarget: {worker_nickname} · /root/troll_burzum/worker\nReason: verification scope changed after review\nSuperseding task/dispatch: dispatch #22: audit only the committed candidate\nProcess effect: model turn aborted; active turn-owned tool processes receive SIGTERM cleanup before abort; durable unified-exec background processes are preserved and remain inspectable in /ps"
     );
     assert!(
-        target_audit.contains(&expected),
+        target_audit.encrypted_content.is_none(),
+        "runtime-generated plaintext must not be mislabeled as encrypted model content: {target_audit:?}"
+    );
+    assert!(
+        target_audit.content.contains(&expected),
         "target interrupt audit did not contain the full tuple: {target_audit:?}"
     );
 }

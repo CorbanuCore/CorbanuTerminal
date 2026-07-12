@@ -867,6 +867,44 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mu
                     multi_agent_v2_handler(ListAgentsHandlerV2, tool_namespace),
                     exposure,
                 ));
+            } else {
+                // Orcs must not be offered manager controls to the model, while the runtime
+                // still needs registered handlers so indirect/code-mode calls are rejected by
+                // role with an actionable error instead of looking like an unknown tool.
+                planned_tools.add_arc(override_tool_exposure(
+                    multi_agent_v2_handler(
+                        SpawnAgentHandlerV2::new(SpawnAgentToolOptions {
+                            available_models: spawn_agent_available_models(turn_context),
+                            agent_type_description,
+                            hide_agent_type_model_reasoning: turn_context
+                                .config
+                                .multi_agent_v2
+                                .hide_spawn_agent_metadata,
+                            include_usage_hint: turn_context
+                                .config
+                                .multi_agent_v2
+                                .usage_hint_enabled,
+                            usage_hint_text: turn_context
+                                .config
+                                .multi_agent_v2
+                                .usage_hint_text
+                                .clone(),
+                        }),
+                        tool_namespace,
+                    ),
+                    ToolExposure::Hidden,
+                ));
+                for handler in [
+                    multi_agent_v2_handler(FollowupTaskHandlerV2, tool_namespace),
+                    multi_agent_v2_handler(
+                        WaitAgentHandlerV2::new(context.wait_agent_timeouts),
+                        tool_namespace,
+                    ),
+                    multi_agent_v2_handler(InterruptAgentHandler, tool_namespace),
+                    multi_agent_v2_handler(ListAgentsHandlerV2, tool_namespace),
+                ] {
+                    planned_tools.add_arc(override_tool_exposure(handler, ToolExposure::Hidden));
+                }
             }
         } else {
             let agent_type_description =
