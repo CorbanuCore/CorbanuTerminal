@@ -1468,7 +1468,17 @@ impl ChatWidget {
             .unified_exec_processes
             .iter()
             .map(|process| history_cell::UnifiedExecProcessDetails {
-                command_display: process.command_display.clone(),
+                command_display: format!(
+                    "{} · pid={}{} · status=running · call={} · output=thread-transcript",
+                    process.command_display,
+                    process.key,
+                    process
+                        .interrupt_notes
+                        .last()
+                        .map(|_| " · interrupt=preserved".to_string())
+                        .unwrap_or_default(),
+                    process.call_id,
+                ),
                 recent_chunks: process.recent_chunks.clone(),
             })
             .collect();
