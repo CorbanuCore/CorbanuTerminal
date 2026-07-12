@@ -93,6 +93,7 @@ use codex_app_server_protocol::ConfigLayerSource;
 use codex_app_server_protocol::ConfigReadResponse;
 use codex_app_server_protocol::ConfigValueWriteParams;
 use codex_app_server_protocol::ConfigWriteResponse;
+use codex_app_server_protocol::ErrorNotification;
 use codex_app_server_protocol::FeedbackUploadParams;
 use codex_app_server_protocol::FeedbackUploadResponse;
 use codex_app_server_protocol::GetAccountRateLimitsResponse;
@@ -1683,8 +1684,23 @@ See the PFTerminal keymap documentation for supported actions and examples."
                 }
             }
         };
+        let shutdown_detail = match &exit_reason_result {
+            Ok(_) => "user or terminal exit",
+            Err(_) => "TUI event loop failure",
+        };
+        if let Err(error) = app
+            .show_backend_shutdown_control_events(tui, shutdown_detail)
+            .await
+        {
+            tracing::error!(
+                error = ?error,
+                error_chain = %format!("{error:#}"),
+                "failed to render backend shutdown control events"
+            );
+        }
+        app.abort_all_thread_event_listeners();
         if let Err(err) = app_server.shutdown().await {
-            tracing::warn!(error = %err, "failed to shut down embedded app server");
+            tracing::error!(error = ?err, "failed to shut down embedded app server");
         }
         tui_input_watchdog.abort();
         let clear_pet_result = tui.clear_ambient_pet_image();
@@ -1807,6 +1823,50 @@ See the PFTerminal keymap documentation for supported actions and examples."
         self.chat_widget.pre_draw_tick();
         self.render_chat_widget_frame(tui)?;
         Ok(())
+    }
+
+    async fn show_backend_shutdown_control_events(
+        &mut self,
+        tui: &mut tui::Tui,
+        detail: &str,
+    ) -> Result<()> {
+        let message = format!("CONTROL EVENT — TUI shutdown: {detail}");
+        self.chat_widget.add_info_message(
+            message.clone(),
+            Some(
+                "Stopping every pane and flushing rollouts before returning to the shell."
+                    .to_string(),
+            ),
+        );
+        let mut thread_ids = self
+            .thread_event_channels
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        if let Some(thread_id) = self.primary_thread_id {
+            thread_ids.push(thread_id);
+        }
+        thread_ids.sort_by_key(ThreadId::to_string);
+        thread_ids.dedup();
+        for thread_id in thread_ids {
+            let notification =
+                ServerNotification::Warning(codex_app_server_protocol::WarningNotification {
+                    thread_id: Some(thread_id.to_string()),
+                    message: message.clone(),
+                });
+            if let Err(error) = self
+                .enqueue_thread_notification(thread_id, notification)
+                .await
+            {
+                tracing::error!(
+                    %thread_id,
+                    error = ?error,
+                    error_chain = %format!("{error:#}"),
+                    "failed to record backend shutdown control event"
+                );
+            }
+        }
+        self.show_shutdown_feedback(tui)
     }
 
     fn render_chat_widget_frame(&mut self, tui: &mut tui::Tui) -> Result<Rect> {

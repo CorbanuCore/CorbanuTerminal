@@ -93,7 +93,10 @@ pub mod legacy_core {
     }
 }
 
-const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+// This deadline must exceed the embedded app-server's own two-stage shutdown
+// window. Aborting the bridge while that nested shutdown is still running can
+// detach its runtime and leave turns writing headlessly after the TUI exits.
+const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Runs the embedded app-server personality migration.
 ///
@@ -396,10 +399,10 @@ where
         }
     }
 
-    if event_requires_delivery(&event) || coalesced_events.has_pending() {
-        if coalesced_events.flush(event_tx) == ForwardEventResult::DisableStream {
-            return ForwardEventResult::DisableStream;
-        }
+    if (event_requires_delivery(&event) || coalesced_events.has_pending())
+        && coalesced_events.flush(event_tx) == ForwardEventResult::DisableStream
+    {
+        return ForwardEventResult::DisableStream;
     }
 
     match event_tx.send(event) {

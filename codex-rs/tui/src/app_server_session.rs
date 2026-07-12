@@ -144,6 +144,41 @@ const JSONRPC_METHOD_NOT_FOUND: i64 = -32601;
 pub(crate) const EXTERNAL_AGENT_CONFIG_IMPORT_IN_PROGRESS_MESSAGE: &str =
     "A previous Claude Code import is still running. Wait for it to finish before importing again.";
 const THREAD_SETTINGS_UPDATE_METHOD: &str = "thread/settings/update";
+const PER_THREAD_REQUEST_ATTEMPTS: usize = 3;
+const PER_THREAD_REQUEST_BACKOFF: [Duration; 2] =
+    [Duration::from_millis(100), Duration::from_millis(250)];
+const TURN_START_FAULT_ENV: &str = "PFTERMINAL_INJECT_TURN_START_FAILURES";
+const SPAWN_AGENT_FAULT_ENV: &str = "PFTERMINAL_INJECT_SPAWN_AGENT_FAILURES";
+
+#[derive(Debug)]
+pub(crate) struct TurnStartOutcome {
+    pub(crate) recovered_failures: Vec<String>,
+}
+
+fn injected_failure_count(name: &str) -> usize {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0)
+}
+
+fn record_turn_start_failure(thread_id: ThreadId, attempt: usize, error: &color_eyre::Report) {
+    tracing::error!(
+        %thread_id,
+        attempt,
+        max_attempts = PER_THREAD_REQUEST_ATTEMPTS,
+        error = ?error,
+        error_chain = %format!("{error:#}"),
+        "per-thread turn/start failed; retrying without terminating the TUI"
+    );
+}
+
+fn retry_is_known_not_to_have_committed(error: &color_eyre::Report) -> bool {
+    matches!(
+        error.downcast_ref::<TypedRequestError>(),
+        Some(TypedRequestError::Server { .. })
+    )
+}
 
 pub(crate) fn turn_start_execution_capacity(error: &color_eyre::Report) -> Option<usize> {
     let error = error.downcast_ref::<TypedRequestError>()?;
@@ -245,6 +280,8 @@ pub(crate) struct AppServerSession {
     default_model: Option<String>,
     available_models: Vec<ModelPreset>,
     external_agent_config_import_completion_pending: AtomicBool,
+    injected_turn_start_failures: usize,
+    injected_spawn_agent_failures: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -295,6 +332,8 @@ impl AppServerSession {
             default_model: None,
             available_models: Vec::new(),
             external_agent_config_import_completion_pending: AtomicBool::new(false),
+            injected_turn_start_failures: injected_failure_count(TURN_START_FAULT_ENV),
+            injected_spawn_agent_failures: injected_failure_count(SPAWN_AGENT_FAULT_ENV),
         }
     }
 
@@ -578,7 +617,6 @@ impl AppServerSession {
         reasoning_effort: Option<codex_protocol::openai_models::ReasoningEffort>,
         base_instructions: Option<String>,
     ) -> Result<AppServerStartedThread> {
-        let request_id = self.next_request_id();
         let mut session_config = self.session_config_with_effective_service_tier(config);
         session_config.model = Some(model);
         session_config.model_reasoning_effort = reasoning_effort;
@@ -594,19 +632,49 @@ impl AppServerSession {
         if let Some(base_instructions) = base_instructions {
             thread.base_instructions = Some(base_instructions);
         }
-        let response: ThreadSpawnAgentResponse = self
-            .client
-            .request_typed(ClientRequest::ThreadSpawnAgent {
-                request_id,
-                params: ThreadSpawnAgentParams {
-                    parent_thread_id: parent_thread_id.to_string(),
-                    agent_role,
-                    agent_nickname,
-                    thread,
-                },
-            })
-            .await
-            .wrap_err("thread/spawnAgent failed while creating native agent pane")?;
+        let mut attempt = 1;
+        let response = loop {
+            let request_id = self.next_request_id();
+            let injected = self.injected_spawn_agent_failures > 0;
+            let result: Result<ThreadSpawnAgentResponse> = if injected {
+                self.injected_spawn_agent_failures -= 1;
+                Err(color_eyre::eyre::eyre!(
+                    "injected thread/spawnAgent fault for qualification"
+                ))
+            } else {
+                self.client
+                    .request_typed(ClientRequest::ThreadSpawnAgent {
+                        request_id,
+                        params: ThreadSpawnAgentParams {
+                            parent_thread_id: parent_thread_id.to_string(),
+                            agent_role: agent_role.clone(),
+                            agent_nickname: agent_nickname.clone(),
+                            thread: thread.clone(),
+                        },
+                    })
+                    .await
+                    .wrap_err("thread/spawnAgent failed while creating native agent pane")
+            };
+            match result {
+                Ok(started) => break started,
+                Err(error) => {
+                    tracing::error!(
+                        %parent_thread_id,
+                        attempt,
+                        error = ?error,
+                        error_chain = %format!("{error:#}"),
+                        "per-thread request failed; thread/spawnAgent remains pane-local"
+                    );
+                    if attempt >= PER_THREAD_REQUEST_ATTEMPTS
+                        || (!injected && !retry_is_known_not_to_have_committed(&error))
+                    {
+                        return Err(error);
+                    }
+                    tokio::time::sleep(PER_THREAD_REQUEST_BACKOFF[attempt - 1]).await;
+                    attempt += 1;
+                }
+            }
+        };
         started_thread_from_spawn_agent_response(response, config, self.thread_params_mode()).await
     }
 
@@ -920,38 +988,68 @@ impl AppServerSession {
         additional_context: Option<
             HashMap<String, codex_app_server_protocol::AdditionalContextEntry>,
         >,
-    ) -> Result<TurnStartResponse> {
-        let request_id = self.next_request_id();
+    ) -> Result<TurnStartOutcome> {
         let (sandbox_policy, permissions) =
             turn_permissions_overrides(permissions_override, cwd.as_path());
-        self.client
-            .request_typed(ClientRequest::TurnStart {
-                request_id,
-                params: TurnStartParams {
-                    thread_id: thread_id.to_string(),
-                    client_user_message_id: None,
-                    input: items,
-                    responsesapi_client_metadata: None,
-                    additional_context,
-                    environments: None,
-                    cwd: Some(cwd),
-                    runtime_workspace_roots: Some(workspace_roots.to_vec()),
-                    approval_policy: Some(approval_policy),
-                    approvals_reviewer: Some(approvals_reviewer.into()),
-                    sandbox_policy,
-                    permissions,
-                    model: Some(model),
-                    service_tier,
-                    effort,
-                    summary,
-                    personality,
-                    output_schema,
-                    collaboration_mode,
-                    multi_agent_mode: None,
-                },
-            })
-            .await
-            .wrap_err("turn/start failed in TUI")
+        let mut recovered_failures = Vec::new();
+        // Reuse one idempotency key across retries so an ambiguous transport
+        // failure cannot submit the same user message twice.
+        let client_user_message_id = Uuid::now_v7().to_string();
+        for attempt in 1..=PER_THREAD_REQUEST_ATTEMPTS {
+            let request_id = self.next_request_id();
+            let injected = self.injected_turn_start_failures > 0;
+            let result: Result<TurnStartResponse> = if injected {
+                self.injected_turn_start_failures -= 1;
+                Err(color_eyre::eyre::eyre!(
+                    "injected turn/start fault for qualification"
+                ))
+            } else {
+                self.client
+                    .request_typed(ClientRequest::TurnStart {
+                        request_id,
+                        params: TurnStartParams {
+                            thread_id: thread_id.to_string(),
+                            client_user_message_id: Some(client_user_message_id.clone()),
+                            input: items.clone(),
+                            responsesapi_client_metadata: None,
+                            additional_context: additional_context.clone(),
+                            environments: None,
+                            cwd: Some(cwd.clone()),
+                            runtime_workspace_roots: Some(workspace_roots.to_vec()),
+                            approval_policy: Some(approval_policy),
+                            approvals_reviewer: Some(approvals_reviewer.into()),
+                            sandbox_policy: sandbox_policy.clone(),
+                            permissions: permissions.clone(),
+                            model: Some(model.clone()),
+                            service_tier: service_tier.clone(),
+                            effort: effort.clone(),
+                            summary,
+                            personality,
+                            output_schema: output_schema.clone(),
+                            collaboration_mode: collaboration_mode.clone(),
+                            multi_agent_mode: None,
+                        },
+                    })
+                    .await
+                    .wrap_err("turn/start failed in TUI")
+            };
+            match result {
+                Ok(_) => {
+                    return Ok(TurnStartOutcome { recovered_failures });
+                }
+                Err(error) => {
+                    record_turn_start_failure(thread_id, attempt, &error);
+                    if attempt == PER_THREAD_REQUEST_ATTEMPTS
+                        || (!injected && !retry_is_known_not_to_have_committed(&error))
+                    {
+                        return Err(error);
+                    }
+                    recovered_failures.push(format!("attempt {attempt}: {error:#}"));
+                    tokio::time::sleep(PER_THREAD_REQUEST_BACKOFF[attempt - 1]).await;
+                }
+            }
+        }
+        unreachable!("bounded turn/start retry loop always returns")
     }
 
     pub(crate) async fn turn_interrupt(
@@ -1986,6 +2084,7 @@ mod tests {
     use codex_utils_path_uri::LegacyAppPathString;
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
+    use tracing_subscriber::prelude::*;
 
     async fn build_config(temp_dir: &TempDir) -> Config {
         ConfigBuilder::default()
@@ -1993,6 +2092,52 @@ mod tests {
             .build()
             .await
             .expect("config should build")
+    }
+
+    #[tokio::test]
+    async fn injected_turn_start_failure_persists_error_with_full_chain() {
+        let temp_dir = TempDir::new().expect("create temporary PFTerminal home");
+        let state = codex_state::StateRuntime::init(
+            temp_dir.path().to_path_buf(),
+            "test-provider".to_string(),
+        )
+        .await
+        .expect("initialize runtime databases");
+        let log_db = codex_state::log_db::start(state.clone());
+        let subscriber = tracing_subscriber::registry().with(log_db.clone());
+        let dispatch = tracing::Dispatch::new(subscriber);
+        let thread_id = ThreadId::new();
+        let error = color_eyre::eyre::eyre!("injected low-level fault")
+            .wrap_err("turn/start failed in TUI");
+
+        tracing::dispatcher::with_default(&dispatch, || {
+            record_turn_start_failure(thread_id, 1, &error);
+        });
+        log_db.flush().await;
+
+        let rows = state
+            .query_logs(&codex_state::LogQuery {
+                descending: true,
+                limit: Some(10),
+                ..Default::default()
+            })
+            .await
+            .expect("query persisted logs");
+        let row = rows
+            .iter()
+            .find(|row| row.level == "ERROR")
+            .expect("injected turn/start failure should persist an ERROR row");
+        let message = row
+            .message
+            .as_deref()
+            .expect("ERROR row should have a body");
+        assert!(message.contains("turn/start failed in TUI"));
+        assert!(message.contains("injected low-level fault"));
+        assert_eq!(
+            row.thread_id.as_deref(),
+            Some(thread_id.to_string().as_str())
+        );
+        assert!(temp_dir.path().join(codex_state::LOGS_DB_FILENAME).exists());
     }
 
     #[test]

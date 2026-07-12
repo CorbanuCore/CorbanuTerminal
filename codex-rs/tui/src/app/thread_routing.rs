@@ -9,6 +9,44 @@ use crate::session_resume::read_session_model;
 use std::fmt::Write as _;
 
 impl App {
+    pub(super) async fn surface_turn_start_failure(
+        &mut self,
+        thread_id: ThreadId,
+        details: String,
+        will_retry: bool,
+    ) {
+        let label = self.thread_label(thread_id);
+        let message = if will_retry {
+            format!("turn/start failed for {label}; recovered after bounded retry")
+        } else {
+            format!("turn/start failed for {label}; retry limit reached, pane remains available")
+        };
+        let notification = ServerNotification::Error(ErrorNotification {
+            error: AppServerTurnError {
+                message,
+                codex_error_info: None,
+                additional_details: Some(details.clone()),
+            },
+            will_retry,
+            thread_id: thread_id.to_string(),
+            turn_id: "turn-start-recovery".to_string(),
+        });
+        if let Err(error) = self
+            .enqueue_thread_notification(thread_id, notification)
+            .await
+        {
+            tracing::error!(
+                %thread_id,
+                error = ?error,
+                error_chain = %format!("{error:#}"),
+                "failed to enqueue pane-local turn/start error banner"
+            );
+            self.chat_widget.add_error_message(format!(
+                "turn/start failed for {label}: {details}. The pane remains available."
+            ));
+        }
+    }
+
     pub(crate) fn native_thread_loaded_for_orchestrate(&self, thread_id: ThreadId) -> bool {
         match self.agent_navigation.get(&thread_id) {
             Some(entry) => !entry.is_closed,
@@ -737,7 +775,7 @@ impl App {
                             .as_ref()
                             .map(|profile| &profile.permission_profile),
                     );
-                    app_server
+                    match app_server
                         .turn_start(
                             thread_id,
                             items.to_vec(),
@@ -755,7 +793,32 @@ impl App {
                             final_output_json_schema.clone(),
                             self.spawn_additional_context_for_thread(thread_id),
                         )
-                        .await?;
+                        .await
+                    {
+                        Ok(outcome) => {
+                            if !outcome.recovered_failures.is_empty() {
+                                self.surface_turn_start_failure(
+                                    thread_id,
+                                    outcome.recovered_failures.join("\n"),
+                                    /*will_retry*/ true,
+                                )
+                                .await;
+                            }
+                        }
+                        Err(error) => {
+                            let details = format!("{error:#}");
+                            tracing::error!(
+                                %thread_id,
+                                error = ?error,
+                                error_chain = %details,
+                                "turn/start retry limit reached; containing failure to pane"
+                            );
+                            self.surface_turn_start_failure(
+                                thread_id, details, /*will_retry*/ false,
+                            )
+                            .await;
+                        }
+                    }
                 }
                 Ok(true)
             }

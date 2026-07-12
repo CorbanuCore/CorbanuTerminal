@@ -2582,8 +2582,14 @@ impl App {
                         );
                     }
                     Err(err) => {
+                        tracing::error!(
+                            error = ?err,
+                            error_chain = %format!("{err:#}"),
+                            role = role.label(),
+                            "thread/spawnAgent retry limit reached; keeping the TUI alive"
+                        );
                         self.chat_widget.add_error_message(format!(
-                            "Failed to spawn Codex {} pane: {err}",
+                            "Failed to spawn Codex {} pane: {err:#}",
                             role.label()
                         ));
                     }
@@ -2601,6 +2607,11 @@ impl App {
                         );
                     }
                     Err(err) => {
+                        tracing::error!(
+                            error = ?err,
+                            error_chain = %format!("{err:#}"),
+                            "standard crew spawn failed; keeping all live panes available"
+                        );
                         self.chat_widget
                             .add_error_message(format!("Failed to create standard crew: {err:#}"));
                     }
@@ -2841,7 +2852,15 @@ impl App {
                     )
                     .await
                 {
-                    Ok(_) => {
+                    Ok(outcome) => {
+                        if !outcome.recovered_failures.is_empty() {
+                            self.surface_turn_start_failure(
+                                thread_id,
+                                outcome.recovered_failures.join("\n"),
+                                /*will_retry*/ true,
+                            )
+                            .await;
+                        }
                         self.spawn_status_by_thread.insert(
                             thread_id,
                             codex_app_server_protocol::CollabAgentState {
@@ -2904,6 +2923,18 @@ impl App {
                         self.abort_spawn_auto_processing_turn(&node_key);
                         self.requeue_spawn_report_processing_task(thread_id, &task);
                         let detail = format!("{err:#}");
+                        tracing::error!(
+                            %thread_id,
+                            error = ?err,
+                            error_chain = %detail,
+                            "spawn task turn/start retry limit reached; containing failure to pane"
+                        );
+                        self.surface_turn_start_failure(
+                            thread_id,
+                            detail.clone(),
+                            /*will_retry*/ false,
+                        )
+                        .await;
                         self.record_spawn_dispatch_failed_for_task(
                             &original_target_node_id,
                             &task,

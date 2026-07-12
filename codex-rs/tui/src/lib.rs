@@ -1268,7 +1268,13 @@ pub async fn run_main(
         environment_manager,
     )
     .await
-    .map_err(|err| std::io::Error::other(err.to_string()))
+    .map_err(report_as_io_error)
+}
+
+fn report_as_io_error(err: color_eyre::Report) -> std::io::Error {
+    // Debug formatting is intentional: Display contains only the outer eyre
+    // context and was the reason the P0's underlying turn/start cause was lost.
+    std::io::Error::other(format!("{err:?}"))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3274,4 +3280,13 @@ trust_level = "untrusted"
         );
         Ok(())
     }
+}
+#[test]
+fn fatal_tui_error_preserves_full_cause_chain() {
+    let report =
+        color_eyre::eyre::eyre!("low-level injected cause").wrap_err("turn/start failed in TUI");
+    let rendered = report_as_io_error(report).to_string();
+
+    assert!(rendered.contains("turn/start failed in TUI"));
+    assert!(rendered.contains("low-level injected cause"));
 }

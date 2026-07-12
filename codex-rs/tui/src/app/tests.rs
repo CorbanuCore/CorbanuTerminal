@@ -3126,6 +3126,51 @@ async fn combined_native_dispatch_flush_records_failed_acks_for_all_senders() {
 }
 
 #[tokio::test]
+async fn turn_start_failure_is_buffered_in_only_the_affected_pane() {
+    let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
+    let affected = ThreadId::from_string("00000000-0000-0000-0000-000000000461")
+        .expect("valid affected thread id");
+    let unaffected = ThreadId::from_string("00000000-0000-0000-0000-000000000462")
+        .expect("valid unaffected thread id");
+    app.ensure_thread_channel(affected);
+    app.ensure_thread_channel(unaffected);
+
+    app.surface_turn_start_failure(
+        affected,
+        "turn/start failed in TUI: injected transport fault".to_string(),
+        /*will_retry*/ false,
+    )
+    .await;
+
+    {
+        let affected_store = app
+            .thread_event_channels
+            .get(&affected)
+            .expect("affected channel")
+            .store
+            .lock()
+            .await;
+        assert!(affected_store.buffer.iter().any(|event| matches!(
+            event,
+            ThreadBufferedEvent::Notification(ServerNotification::Error(notification))
+                if !notification.will_retry
+                    && notification.error.message.contains("pane remains available")
+                    && notification.error.additional_details.as_deref()
+                        == Some("turn/start failed in TUI: injected transport fault")
+        )));
+    }
+
+    let unaffected_store = app
+        .thread_event_channels
+        .get(&unaffected)
+        .expect("unaffected channel")
+        .store
+        .lock()
+        .await;
+    assert!(unaffected_store.buffer.is_empty());
+}
+
+#[tokio::test]
 async fn native_dispatch_crossing_turn_completion_delivers_once_in_either_order() {
     for dispatch_first in [true, false] {
         let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
