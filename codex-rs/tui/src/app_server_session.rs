@@ -1448,6 +1448,17 @@ fn config_request_overrides_from_config(
     if config.bypass_hook_trust {
         overrides.insert("bypass_hook_trust".to_string(), true.into());
     }
+    for feature in [
+        codex_features::Feature::MultiAgentV2,
+        codex_features::Feature::MultiAgentMode,
+    ] {
+        if config.features.enabled(feature) {
+            overrides.insert(
+                format!("features.{}", feature.key()),
+                serde_json::Value::Bool(true),
+            );
+        }
+    }
     // `thread/spawnAgent` reloads config inside the app-server before enforcing spawn depth.
     // Forward the effective TUI value so native spawned panes honor `native_spawn_agent_config()`
     // (including the standard crew's minimum depth) instead of falling back to the app-server's
@@ -2439,6 +2450,36 @@ mod tests {
         assert_eq!(resume.model_provider, None);
         assert_eq!(resume.config, Some(expected_resume_config));
         assert_eq!(fork.config, Some(expected_config));
+    }
+
+    #[tokio::test]
+    async fn thread_start_params_forward_enabled_native_spawn_features() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let mut config = build_config(&temp_dir).await;
+        config
+            .features
+            .enable(Feature::MultiAgentV2)
+            .expect("multi-agent v2 should be enableable");
+        config
+            .features
+            .enable(Feature::MultiAgentMode)
+            .expect("multi-agent mode should be enableable");
+
+        let params = thread_start_params_from_config(
+            &config,
+            ThreadParamsMode::Embedded,
+            /*remote_cwd_override*/ None,
+            /*session_start_source*/ None,
+        );
+        let overrides = params.config.expect("thread config overrides");
+        assert_eq!(
+            overrides.get("features.multi_agent_v2"),
+            Some(&serde_json::json!(true))
+        );
+        assert_eq!(
+            overrides.get("features.multi_agent_mode"),
+            Some(&serde_json::json!(true))
+        );
     }
 
     #[tokio::test]
