@@ -97,6 +97,27 @@ pub mod legacy_core {
 // window. Aborting the bridge while that nested shutdown is still running can
 // detach its runtime and leave turns writing headlessly after the TUI exits.
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(15);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+async fn await_in_process_response<T>(
+    response_rx: oneshot::Receiver<T>,
+    operation: &'static str,
+) -> IoResult<T> {
+    timeout(REQUEST_TIMEOUT, response_rx)
+        .await
+        .map_err(|_| {
+            IoError::new(
+                ErrorKind::TimedOut,
+                format!("in-process app-server {operation} timed out after 30 seconds"),
+            )
+        })?
+        .map_err(|_| {
+            IoError::new(
+                ErrorKind::BrokenPipe,
+                format!("in-process app-server {operation} channel is closed"),
+            )
+        })
+}
 
 /// Runs the embedded app-server personality migration.
 ///
@@ -787,12 +808,7 @@ impl InProcessAppServerClient {
                     "in-process app-server worker channel is closed",
                 )
             })?;
-        response_rx.await.map_err(|_| {
-            IoError::new(
-                ErrorKind::BrokenPipe,
-                "in-process app-server request channel is closed",
-            )
-        })?
+        await_in_process_response(response_rx, "request").await?
     }
 
     /// Sends a typed client request and decodes the successful response body.
@@ -836,12 +852,7 @@ impl InProcessAppServerClient {
                     "in-process app-server worker channel is closed",
                 )
             })?;
-        response_rx.await.map_err(|_| {
-            IoError::new(
-                ErrorKind::BrokenPipe,
-                "in-process app-server notify channel is closed",
-            )
-        })?
+        await_in_process_response(response_rx, "notification").await?
     }
 
     /// Resolves a pending server request.
@@ -867,12 +878,7 @@ impl InProcessAppServerClient {
                     "in-process app-server worker channel is closed",
                 )
             })?;
-        response_rx.await.map_err(|_| {
-            IoError::new(
-                ErrorKind::BrokenPipe,
-                "in-process app-server resolve channel is closed",
-            )
-        })?
+        await_in_process_response(response_rx, "server-request resolution").await?
     }
 
     /// Rejects a pending server request with JSON-RPC error payload.
@@ -895,12 +901,7 @@ impl InProcessAppServerClient {
                     "in-process app-server worker channel is closed",
                 )
             })?;
-        response_rx.await.map_err(|_| {
-            IoError::new(
-                ErrorKind::BrokenPipe,
-                "in-process app-server reject channel is closed",
-            )
-        })?
+        await_in_process_response(response_rx, "server-request rejection").await?
     }
 
     /// Returns the next in-process event, or `None` when worker exits.
@@ -966,12 +967,7 @@ impl InProcessAppServerRequestHandle {
                     "in-process app-server worker channel is closed",
                 )
             })?;
-        response_rx.await.map_err(|_| {
-            IoError::new(
-                ErrorKind::BrokenPipe,
-                "in-process app-server request channel is closed",
-            )
-        })?
+        await_in_process_response(response_rx, "request").await?
     }
 
     pub async fn request_typed<T>(&self, request: ClientRequest) -> Result<T, TypedRequestError>
@@ -2479,5 +2475,14 @@ mod tests {
             .await
             .expect("shutdown should not wait for the 5s fallback timeout")
             .expect("shutdown should complete");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn in_process_response_wait_has_uniform_deadline() {
+        let (_tx, rx) = oneshot::channel::<()>();
+        let error = await_in_process_response(rx, "test request")
+            .await
+            .expect_err("unanswered response must time out");
+        assert_eq!(error.kind(), ErrorKind::TimedOut);
     }
 }

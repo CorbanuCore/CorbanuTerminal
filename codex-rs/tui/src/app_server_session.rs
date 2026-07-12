@@ -852,16 +852,29 @@ impl AppServerSession {
         Ok(response.thread)
     }
 
-    pub(crate) async fn find_turn_for_client_message(
+    pub(crate) fn spawn_find_turn_for_client_message(
         &mut self,
         thread_id: ThreadId,
-        client_user_message_id: &str,
-    ) -> Result<Option<String>> {
-        let thread = self.thread_read(thread_id, /*include_turns*/ true).await?;
-        Ok(turn_for_client_message(
-            thread.turns,
-            client_user_message_id,
-        ))
+        client_user_message_id: String,
+    ) -> tokio::task::JoinHandle<Result<Option<String>>> {
+        let request_id = self.next_request_id();
+        let request_handle = self.request_handle();
+        tokio::spawn(async move {
+            let response: ThreadReadResponse = request_handle
+                .request_typed(ClientRequest::ThreadRead {
+                    request_id,
+                    params: ThreadReadParams {
+                        thread_id: thread_id.to_string(),
+                        include_turns: true,
+                    },
+                })
+                .await
+                .wrap_err("thread/read failed during delivery reconciliation")?;
+            Ok(turn_for_client_message(
+                response.thread.turns,
+                &client_user_message_id,
+            ))
+        })
     }
 
     pub(crate) async fn thread_archive(&mut self, thread_id: ThreadId) -> Result<()> {
@@ -988,6 +1001,74 @@ impl AppServerSession {
     }
 
     #[allow(clippy::too_many_arguments)]
+    pub(crate) fn spawn_turn_start(
+        &mut self,
+        thread_id: ThreadId,
+        items: Vec<UserInput>,
+        cwd: PathBuf,
+        approval_policy: AskForApproval,
+        approvals_reviewer: codex_protocol::config_types::ApprovalsReviewer,
+        permissions_override: TurnPermissionsOverride,
+        workspace_roots: &[AbsolutePathBuf],
+        model: String,
+        effort: Option<codex_protocol::openai_models::ReasoningEffort>,
+        summary: Option<codex_protocol::config_types::ReasoningSummary>,
+        service_tier: Option<Option<String>>,
+        collaboration_mode: Option<codex_protocol::config_types::CollaborationMode>,
+        personality: Option<codex_protocol::config_types::Personality>,
+        output_schema: Option<serde_json::Value>,
+        additional_context: Option<
+            HashMap<String, codex_app_server_protocol::AdditionalContextEntry>,
+        >,
+        client_user_message_id: Option<String>,
+    ) -> tokio::task::JoinHandle<Result<TurnStartOutcome>> {
+        let (sandbox_policy, permissions) =
+            turn_permissions_overrides(permissions_override, cwd.as_path());
+        let client_user_message_id =
+            client_user_message_id.unwrap_or_else(|| Uuid::now_v7().to_string());
+        let request_handle = self.request_handle();
+        let injected_failures = self
+            .injected_turn_start_failures
+            .min(PER_THREAD_REQUEST_ATTEMPTS);
+        self.injected_turn_start_failures -= injected_failures;
+        let mut requests = Vec::with_capacity(PER_THREAD_REQUEST_ATTEMPTS);
+        for _ in 0..PER_THREAD_REQUEST_ATTEMPTS {
+            let request_id = self.next_request_id();
+            requests.push(ClientRequest::TurnStart {
+                request_id,
+                params: TurnStartParams {
+                    thread_id: thread_id.to_string(),
+                    client_user_message_id: Some(client_user_message_id.clone()),
+                    input: items.clone(),
+                    responsesapi_client_metadata: None,
+                    additional_context: additional_context.clone(),
+                    environments: None,
+                    cwd: Some(cwd.clone()),
+                    runtime_workspace_roots: Some(workspace_roots.to_vec()),
+                    approval_policy: Some(approval_policy),
+                    approvals_reviewer: Some(approvals_reviewer.into()),
+                    sandbox_policy: sandbox_policy.clone(),
+                    permissions: permissions.clone(),
+                    model: Some(model.clone()),
+                    service_tier: service_tier.clone(),
+                    effort: effort.clone(),
+                    summary,
+                    personality,
+                    output_schema: output_schema.clone(),
+                    collaboration_mode: collaboration_mode.clone(),
+                    multi_agent_mode: None,
+                },
+            });
+        }
+        tokio::spawn(run_turn_start_requests(
+            request_handle,
+            thread_id,
+            requests,
+            injected_failures,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn turn_start(
         &mut self,
         thread_id: ThreadId,
@@ -1009,74 +1090,26 @@ impl AppServerSession {
         >,
         client_user_message_id: Option<String>,
     ) -> Result<TurnStartOutcome> {
-        let (sandbox_policy, permissions) =
-            turn_permissions_overrides(permissions_override, cwd.as_path());
-        let mut recovered_failures = Vec::new();
-        // Reuse one idempotency key across retries so an ambiguous transport
-        // failure cannot submit the same user message twice.
-        let client_user_message_id =
-            client_user_message_id.unwrap_or_else(|| Uuid::now_v7().to_string());
-        for attempt in 1..=PER_THREAD_REQUEST_ATTEMPTS {
-            let request_id = self.next_request_id();
-            let injected = self.injected_turn_start_failures > 0;
-            let result: Result<TurnStartResponse> = if injected {
-                self.injected_turn_start_failures -= 1;
-                Err(color_eyre::eyre::eyre!(
-                    "injected turn/start fault for qualification"
-                ))
-            } else {
-                self.client
-                    .request_typed(ClientRequest::TurnStart {
-                        request_id,
-                        params: TurnStartParams {
-                            thread_id: thread_id.to_string(),
-                            client_user_message_id: Some(client_user_message_id.clone()),
-                            input: items.clone(),
-                            responsesapi_client_metadata: None,
-                            additional_context: additional_context.clone(),
-                            environments: None,
-                            cwd: Some(cwd.clone()),
-                            runtime_workspace_roots: Some(workspace_roots.to_vec()),
-                            approval_policy: Some(approval_policy),
-                            approvals_reviewer: Some(approvals_reviewer.into()),
-                            sandbox_policy: sandbox_policy.clone(),
-                            permissions: permissions.clone(),
-                            model: Some(model.clone()),
-                            service_tier: service_tier.clone(),
-                            effort: effort.clone(),
-                            summary,
-                            personality,
-                            output_schema: output_schema.clone(),
-                            collaboration_mode: collaboration_mode.clone(),
-                            multi_agent_mode: None,
-                        },
-                    })
-                    .await
-                    .wrap_err("turn/start failed in TUI")
-            };
-            match result {
-                Ok(response) => {
-                    return Ok(TurnStartOutcome::Started {
-                        turn_id: response.turn.id,
-                        recovered_failures,
-                    });
-                }
-                Err(error) => {
-                    if let Some(max_threads) = turn_start_execution_capacity(&error) {
-                        return Ok(TurnStartOutcome::CapacityUnavailable { max_threads });
-                    }
-                    record_turn_start_failure(thread_id, attempt, &error);
-                    if attempt == PER_THREAD_REQUEST_ATTEMPTS
-                        || (!injected && !retry_is_known_not_to_have_committed(&error))
-                    {
-                        return Err(error);
-                    }
-                    recovered_failures.push(format!("attempt {attempt}: {error:#}"));
-                    tokio::time::sleep(PER_THREAD_REQUEST_BACKOFF[attempt - 1]).await;
-                }
-            }
-        }
-        unreachable!("bounded turn/start retry loop always returns")
+        self.spawn_turn_start(
+            thread_id,
+            items,
+            cwd,
+            approval_policy,
+            approvals_reviewer,
+            permissions_override,
+            workspace_roots,
+            model,
+            effort,
+            summary,
+            service_tier,
+            collaboration_mode,
+            personality,
+            output_schema,
+            additional_context,
+            client_user_message_id,
+        )
+        .await
+        .map_err(|error| color_eyre::eyre::eyre!("turn/start worker panicked: {error}"))?
     }
 
     pub(crate) async fn turn_interrupt(
@@ -1103,6 +1136,32 @@ impl AppServerSession {
         thread_id: ThreadId,
     ) -> std::result::Result<(), TypedRequestError> {
         self.turn_interrupt(thread_id, String::new()).await
+    }
+
+    pub(crate) fn spawn_turn_steer(
+        &mut self,
+        thread_id: ThreadId,
+        turn_id: String,
+        items: Vec<UserInput>,
+        client_user_message_id: Option<String>,
+    ) -> tokio::task::JoinHandle<std::result::Result<TurnSteerResponse, TypedRequestError>> {
+        let request_id = self.next_request_id();
+        let request_handle = self.request_handle();
+        tokio::spawn(async move {
+            request_handle
+                .request_typed(ClientRequest::TurnSteer {
+                    request_id,
+                    params: TurnSteerParams {
+                        thread_id: thread_id.to_string(),
+                        client_user_message_id,
+                        input: items,
+                        responsesapi_client_metadata: None,
+                        additional_context: None,
+                        expected_turn_id: turn_id,
+                    },
+                })
+                .await
+        })
     }
 
     pub(crate) async fn turn_steer(
@@ -1432,6 +1491,51 @@ impl AppServerSession {
         self.next_request_id += 1;
         RequestId::Integer(request_id)
     }
+}
+
+async fn run_turn_start_requests(
+    request_handle: AppServerRequestHandle,
+    thread_id: ThreadId,
+    requests: Vec<ClientRequest>,
+    injected_failures: usize,
+) -> Result<TurnStartOutcome> {
+    let mut recovered_failures = Vec::new();
+    for (index, request) in requests.into_iter().enumerate() {
+        let attempt = index + 1;
+        let injected = index < injected_failures;
+        let result: Result<TurnStartResponse> = if injected {
+            Err(color_eyre::eyre::eyre!(
+                "injected turn/start fault for qualification"
+            ))
+        } else {
+            request_handle
+                .request_typed(request)
+                .await
+                .wrap_err("turn/start failed in TUI")
+        };
+        match result {
+            Ok(response) => {
+                return Ok(TurnStartOutcome::Started {
+                    turn_id: response.turn.id,
+                    recovered_failures,
+                });
+            }
+            Err(error) => {
+                if let Some(max_threads) = turn_start_execution_capacity(&error) {
+                    return Ok(TurnStartOutcome::CapacityUnavailable { max_threads });
+                }
+                record_turn_start_failure(thread_id, attempt, &error);
+                if attempt == PER_THREAD_REQUEST_ATTEMPTS
+                    || (!injected && !retry_is_known_not_to_have_committed(&error))
+                {
+                    return Err(error);
+                }
+                recovered_failures.push(format!("attempt {attempt}: {error:#}"));
+                tokio::time::sleep(PER_THREAD_REQUEST_BACKOFF[index]).await;
+            }
+        }
+    }
+    unreachable!("bounded turn/start request list always returns")
 }
 
 fn turn_for_client_message(

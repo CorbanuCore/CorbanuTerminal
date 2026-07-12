@@ -1597,6 +1597,12 @@ See the PFTerminal keymap documentation for supported actions and examples."
         }
 
         let mut listen_for_app_server_events = true;
+        let mut app_server_reconnect_tick = tokio::time::interval(Duration::from_secs(5));
+        app_server_reconnect_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let (app_server_reconnect_tx, mut app_server_reconnect_rx) =
+            mpsc::unbounded_channel::<Result<AppServerSession, String>>();
+        let mut app_server_reconnect_inflight = false;
+        let mut app_server_reconnect_failure_notified = false;
         let mut waiting_for_initial_session_configured = wait_for_initial_session_configured;
 
         #[cfg(not(debug_assertions))]
@@ -1628,7 +1634,13 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     Some(event) = app_event_rx.recv() => {
                         match Box::pin(app.handle_event(tui, &mut app_server, event)).await {
                             Ok(control) => control,
-                            Err(err) => break Err(err),
+                            Err(err) => {
+                                tracing::error!(error = ?err, "contained app event handler failure");
+                                app.chat_widget.add_error_message(format!(
+                                    "A command failed but PFTerminal is still running: {err:#}"
+                                ));
+                                AppRunControl::Continue
+                            },
                         }
                     }
                     active = async {
@@ -1643,7 +1655,10 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     ) => {
                         if let Some(event) = active {
                             if let Err(err) = app.handle_active_thread_event(tui, &mut app_server, event).await {
-                                break Err(err);
+                                tracing::error!(error = ?err, "contained active-thread event failure");
+                                app.chat_widget.add_error_message(format!(
+                                    "A pane event failed but PFTerminal is still running: {err:#}"
+                                ));
                             }
                         } else {
                             app.clear_active_thread().await;
@@ -1655,7 +1670,13 @@ See the PFTerminal keymap documentation for supported actions and examples."
                             tui_input_watchdog_state.note_handled();
                             match app.handle_tui_event(tui, &mut app_server, event).await {
                                 Ok(control) => control,
-                                Err(err) => break Err(err),
+                                Err(err) => {
+                                    tracing::error!(error = ?err, "contained terminal input handler failure");
+                                    app.chat_widget.add_error_message(format!(
+                                        "An input command failed but PFTerminal is still running: {err:#}"
+                                    ));
+                                    AppRunControl::Continue
+                                },
                             }
                         } else {
                             tracing::warn!("terminal input stream closed; shutting down active thread");
@@ -1677,7 +1698,13 @@ See the PFTerminal keymap documentation for supported actions and examples."
                             .await
                             {
                                 Ok(control) => control,
-                                Err(err) => break Err(err),
+                                Err(err) => {
+                                    tracing::error!(error = ?err, "contained interrupt handler failure");
+                                    app.chat_widget.add_error_message(format!(
+                                        "Interrupt failed but PFTerminal is still running: {err:#}"
+                                    ));
+                                    AppRunControl::Continue
+                                },
                             }
                         } else {
                             app.handle_exit_mode(&mut app_server, ExitMode::ShutdownFirst).await
@@ -1689,6 +1716,61 @@ See the PFTerminal keymap documentation for supported actions and examples."
                             None => {
                                 listen_for_app_server_events = false;
                                 tracing::warn!("app-server event stream closed");
+                                app.chat_widget.add_error_message(
+                                    "App-server event stream closed; PFTerminal is degraded and will reconnect automatically."
+                                        .to_string(),
+                                );
+                            }
+                        }
+                        AppRunControl::Continue
+                    }
+                    _ = app_server_reconnect_tick.tick(), if !listen_for_app_server_events && !app_server_reconnect_inflight => {
+                        app_server_reconnect_inflight = true;
+                        let config = app.config.clone();
+                        let target = app.app_server_target.clone();
+                        let state_db = app.state_db.clone();
+                        let environment_manager = app.environment_manager.clone();
+                        let reconnect_tx = app_server_reconnect_tx.clone();
+                        tokio::spawn(async move {
+                            let result = crate::start_app_server_for_picker(
+                                &config,
+                                &target,
+                                state_db,
+                                environment_manager,
+                            )
+                            .await
+                            .map_err(|error| format!("{error:#}"));
+                            let _ = reconnect_tx.send(result);
+                        });
+                        AppRunControl::Continue
+                    }
+                    Some(result) = app_server_reconnect_rx.recv(), if app_server_reconnect_inflight => {
+                        app_server_reconnect_inflight = false;
+                        match result {
+                            Ok(mut replacement) => {
+                                std::mem::swap(&mut app_server, &mut replacement);
+                                tokio::spawn(async move {
+                                    if let Err(error) = replacement.shutdown().await {
+                                        tracing::warn!(%error, "old app-server shutdown after reconnect failed");
+                                    }
+                                });
+                                app.restore_native_spawn_panes_from_saved_state(&mut app_server).await;
+                                app.request_spawn_dispatch_pump();
+                                listen_for_app_server_events = true;
+                                app_server_reconnect_failure_notified = false;
+                                app.chat_widget.add_info_message(
+                                    "App-server connection restored.".to_string(),
+                                    Some("Pending identified deliveries are being reconciled.".to_string()),
+                                );
+                            }
+                            Err(error) => {
+                                tracing::warn!(%error, "bounded app-server reconnect attempt failed");
+                                if !app_server_reconnect_failure_notified {
+                                    app_server_reconnect_failure_notified = true;
+                                    app.chat_widget.add_error_message(format!(
+                                        "App-server reconnect failed; retrying every 5 seconds: {error:#}"
+                                    ));
+                                }
                             }
                         }
                         AppRunControl::Continue

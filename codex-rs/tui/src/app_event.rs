@@ -227,8 +227,32 @@ pub(crate) enum AppEvent {
         task: String,
         delivery_id: Option<String>,
     },
+    NativeSpawnSteerCompleted {
+        thread_id: codex_protocol::ThreadId,
+        target_node_id: String,
+        task: String,
+        delivery_id: String,
+        result: Result<(), String>,
+    },
     /// Run one coalesced step of the durable dispatch delivery pump.
     PumpSpawnDispatches,
+    /// Completion of a supervised native turn/start adapter call.
+    NativeSpawnDeliveryCompleted {
+        thread_id: codex_protocol::ThreadId,
+        target_node_id: String,
+        task: String,
+        delivery_id: String,
+        task_preview: String,
+        label: String,
+        result: Result<crate::app_server_session::TurnStartOutcome, String>,
+    },
+    NativeSpawnReconciliationCompleted {
+        thread_id: codex_protocol::ThreadId,
+        target_node_id: String,
+        task: String,
+        delivery_id: String,
+        result: Result<Option<String>, String>,
+    },
     /// Start a normal turn in an existing Claude spawn pane.
     SubmitSpawnClaudePaneTask {
         pane_id: String,

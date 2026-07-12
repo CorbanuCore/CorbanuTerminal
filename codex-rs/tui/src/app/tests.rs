@@ -10589,6 +10589,40 @@ async fn primary_thread_ignores_child_mcp_startup_notifications() {
 }
 
 #[tokio::test]
+async fn app_server_disconnect_is_visible_without_requesting_tui_exit() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    while app_event_rx.try_recv().is_ok() {}
+    let app_server = crate::start_embedded_app_server_for_picker(app.chat_widget.config_ref())
+        .await
+        .expect("embedded app server");
+
+    app.handle_app_server_event(
+        &app_server,
+        codex_app_server_client::AppServerEvent::Disconnected {
+            message: "injected transport loss".to_string(),
+        },
+    )
+    .await;
+
+    let mut rendered = Vec::new();
+    while let Ok(event) = app_event_rx.try_recv() {
+        match event {
+            AppEvent::InsertHistoryCell(cell) => {
+                rendered.push(lines_to_single_string(&cell.display_lines(/*width*/ 120)));
+            }
+            AppEvent::Exit(_) | AppEvent::FatalExitRequest { .. } => {
+                panic!("a routine app-server disconnect must not request TUI exit");
+            }
+            _ => {}
+        }
+    }
+    assert!(
+        rendered.join("\n").contains("reconnect automatically"),
+        "degraded connection state should be visible"
+    );
+}
+
+#[tokio::test]
 async fn app_scoped_mcp_startup_notifications_do_not_render_in_active_thread() {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
     while app_event_rx.try_recv().is_ok() {}
