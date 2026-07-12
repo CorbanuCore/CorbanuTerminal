@@ -164,8 +164,9 @@ impl TurnRequestProcessor {
         &self,
         request_id: &ConnectionRequestId,
         params: TurnSteerParams,
+        app_server_client_name: Option<&str>,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
-        self.turn_steer_inner(request_id, params)
+        self.turn_steer_inner(request_id, params, app_server_client_name)
             .await
             .map(|response| Some(response.into()))
     }
@@ -837,6 +838,7 @@ impl TurnRequestProcessor {
         &self,
         request_id: &ConnectionRequestId,
         params: TurnSteerParams,
+        app_server_client_name: Option<&str>,
     ) -> Result<TurnSteerResponse, JSONRPCErrorError> {
         let (_, thread) = self
             .load_thread(&params.thread_id)
@@ -844,7 +846,7 @@ impl TurnRequestProcessor {
             .inspect_err(|error| {
                 self.track_error_response(request_id, error, /*error_type*/ None);
             })?;
-        self.ensure_direct_input_allowed(request_id, thread.as_ref(), None)
+        self.ensure_direct_input_allowed(request_id, thread.as_ref(), app_server_client_name)
             .await?;
 
         if params.expected_turn_id.is_empty() {

@@ -289,6 +289,8 @@ pub(crate) struct AppServerSession {
     external_agent_config_import_completion_pending: AtomicBool,
     injected_turn_start_failures: usize,
     injected_spawn_agent_failures: usize,
+    #[cfg(test)]
+    drop_next_turn_steer_response_after_acceptance: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -341,7 +343,14 @@ impl AppServerSession {
             external_agent_config_import_completion_pending: AtomicBool::new(false),
             injected_turn_start_failures: injected_failure_count(TURN_START_FAULT_ENV),
             injected_spawn_agent_failures: injected_failure_count(SPAWN_AGENT_FAULT_ENV),
+            #[cfg(test)]
+            drop_next_turn_steer_response_after_acceptance: false,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn inject_lost_next_turn_steer_response_after_acceptance(&mut self) {
+        self.drop_next_turn_steer_response_after_acceptance = true;
     }
 
     pub(crate) fn with_remote_cwd_override(mut self, remote_cwd_override: Option<PathBuf>) -> Self {
@@ -1147,8 +1156,13 @@ impl AppServerSession {
     ) -> tokio::task::JoinHandle<std::result::Result<TurnSteerResponse, TypedRequestError>> {
         let request_id = self.next_request_id();
         let request_handle = self.request_handle();
+        #[cfg(test)]
+        let drop_response_after_acceptance =
+            std::mem::take(&mut self.drop_next_turn_steer_response_after_acceptance);
+        #[cfg(not(test))]
+        let drop_response_after_acceptance = false;
         tokio::spawn(async move {
-            request_handle
+            let response = request_handle
                 .request_typed(ClientRequest::TurnSteer {
                     request_id,
                     params: TurnSteerParams {
@@ -1160,7 +1174,17 @@ impl AppServerSession {
                         expected_turn_id: turn_id,
                     },
                 })
-                .await
+                .await;
+            if drop_response_after_acceptance && response.is_ok() {
+                return Err(TypedRequestError::Transport {
+                    method: "turn/steer".to_string(),
+                    source: std::io::Error::new(
+                        std::io::ErrorKind::ConnectionReset,
+                        "injected lost response after durable acceptance",
+                    ),
+                });
+            }
+            response
         })
     }
 
