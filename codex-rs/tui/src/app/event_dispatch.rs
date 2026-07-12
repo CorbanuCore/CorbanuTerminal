@@ -7,6 +7,7 @@ use super::resize_reflow::trailing_run_start;
 use super::*;
 use crate::config_update::format_config_error;
 use crate::external_agent_config_migration_flow::ExternalAgentConfigMigrationFlowOutcome;
+use crate::spawn_orchestration::PendingDispatchEnqueueResult;
 use chrono::Utc;
 #[cfg(target_os = "windows")]
 use codex_config::types::WindowsSandboxModeToml;
@@ -2808,21 +2809,33 @@ impl App {
                     let pending =
                         self.pending_dispatch_from_registered_task(&original_target_node_id, task);
                     let pending_for_ack = pending.clone();
-                    if let Some((acks, notify)) =
-                        self.enqueue_pending_dispatch_for_thread(thread_id, pending)
-                    {
-                        self.record_duplicate_pending_dispatch(&label, &acks, notify);
-                    } else {
-                        self.record_spawn_dispatch_acks(
-                            &pending_for_ack.acks,
-                            "queued_busy",
-                            "target became busy before turn start; will deliver when idle",
-                            false,
-                        );
-                        self.chat_widget.add_info_message(
-                            format!("Task queued for {label}."),
-                            Some("The target pane is busy; PFTerminal will deliver it when the pane goes idle.".to_string()),
-                        );
+                    match self.enqueue_pending_dispatch_for_thread(thread_id, pending) {
+                        PendingDispatchEnqueueResult::Queued => {
+                            self.record_spawn_dispatch_acks(
+                                &pending_for_ack.acks,
+                                "queued_busy",
+                                "target became busy before turn start; will deliver when idle",
+                                false,
+                            );
+                            self.chat_widget.add_info_message(
+                                format!("Task queued for {label}."),
+                                Some("The target pane is busy; PFTerminal will deliver it when the pane goes idle.".to_string()),
+                            );
+                        }
+                        PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
+                            self.record_duplicate_pending_dispatch(&label, &acks, notify);
+                        }
+                        PendingDispatchEnqueueResult::Rejected { acks, reason } => {
+                            self.record_spawn_dispatch_acks(
+                                &acks,
+                                "failed",
+                                format!("queue rejected: {reason}"),
+                                true,
+                            );
+                            self.chat_widget.add_error_message(format!(
+                                "Cannot queue task for {label}: {reason}"
+                            ));
+                        }
                     }
                     return Ok(AppRunControl::Continue);
                 }
@@ -2904,25 +2917,38 @@ impl App {
                                 task,
                             );
                             let pending_for_notification = pending.clone();
-                            if let Some((acks, notify)) =
-                                self.enqueue_pending_dispatch_for_thread(thread_id, pending)
-                            {
-                                self.record_duplicate_pending_dispatch(&label, &acks, notify);
-                            } else {
-                                self.record_spawn_dispatch_acks(
-                                    &pending_for_notification.acks,
-                                    "queued_capacity",
-                                    format!(
-                                        "session execution capacity reached ({max_threads}); will retry"
-                                    ),
-                                    false,
-                                );
-                                self.note_spawn_capacity_pending(
-                                    thread_id,
-                                    &label,
-                                    max_threads,
-                                    &pending_for_notification,
-                                );
+                            match self.enqueue_pending_dispatch_for_thread(thread_id, pending) {
+                                PendingDispatchEnqueueResult::Queued => {
+                                    self.record_spawn_dispatch_acks(
+                                        &pending_for_notification.acks,
+                                        "queued_capacity",
+                                        format!(
+                                            "session execution capacity reached ({max_threads}); will retry"
+                                        ),
+                                        false,
+                                    );
+                                    self.note_spawn_capacity_pending(
+                                        thread_id,
+                                        &label,
+                                        max_threads,
+                                        &pending_for_notification,
+                                    );
+                                }
+                                PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
+                                    self.record_duplicate_pending_dispatch(&label, &acks, notify);
+                                }
+                                PendingDispatchEnqueueResult::Rejected { acks, reason } => {
+                                    self.record_spawn_dispatch_acks(
+                                        &acks,
+                                        "failed",
+                                        format!("queue rejected: {reason}"),
+                                        true,
+                                    );
+                                    self.chat_widget.add_error_message(format!(
+                                        "Cannot queue task for {label}: {reason}"
+                                    ));
+                                    return Ok(AppRunControl::Continue);
+                                }
                             }
                             self.schedule_spawn_capacity_retry(thread_id);
                             return Ok(AppRunControl::Continue);

@@ -1,6 +1,9 @@
 //! Registry of Claude panes with layout persistence.
 
 use std::fs;
+use std::fs::File;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -9,6 +12,10 @@ use std::time::UNIX_EPOCH;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
+use serde::Deserialize;
+use serde::Serialize;
+use sha2::Digest;
+use sha2::Sha256;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -34,8 +41,16 @@ use super::turn_types::PreparedClaudePaneTurn;
 
 pub(crate) const CODEX_MAIN_PANE_ID: &str = "codex-main";
 pub(crate) const PANE_LAYOUT_FILE: &str = "pane-layout.json";
-pub(crate) const PANE_LAYOUT_VERSION: u32 = 1;
+pub(crate) const PANE_LAYOUT_VERSION: u32 = 2;
 const PANE_LAYOUTS_DIR: &str = "pane-layouts";
+const PANE_LAYOUT_PREVIOUS_SUFFIX: &str = "previous";
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PersistedPaneLayout {
+    format_version: u32,
+    checksum: String,
+    layout: PaneLayoutState,
+}
 #[derive(Debug)]
 pub(crate) struct ClaudePaneRegistry {
     active_user_pane_id: String,
@@ -413,20 +428,25 @@ pub(crate) fn load_pane_layout(
     let thread_scoped_path = thread_scoped_pane_layout_path(codex_home, thread_id);
     let thread_scoped_layout = read_pane_layout(&thread_scoped_path)
         .filter(|layout| layout.codex_thread_id.as_deref() == Some(thread_id));
-    if thread_scoped_layout
+    let loaded = if thread_scoped_layout
         .as_ref()
         .is_some_and(pane_layout_has_panes)
     {
-        return thread_scoped_layout;
+        thread_scoped_layout
+    } else if let Some(layout) = find_related_pane_layout(codex_home, thread_id) {
+        Some(layout)
+    } else {
+        let legacy_path = codex_home.join("panes").join(PANE_LAYOUT_FILE);
+        let legacy_layout = read_pane_layout(&legacy_path)
+            .filter(|layout| layout.codex_thread_id.as_deref() == Some(thread_id));
+        thread_scoped_layout.or(legacy_layout)
+    }?;
+    let was_legacy = loaded.version < PANE_LAYOUT_VERSION;
+    let migrated = migrate_pane_layout(loaded);
+    if was_legacy && let Err(err) = persist_pane_layout(codex_home, &migrated) {
+        tracing::warn!(error = %err, "loaded legacy pane layout but failed to persist migration");
     }
-    if let Some(layout) = find_related_pane_layout(codex_home, thread_id) {
-        return Some(layout);
-    }
-
-    let legacy_path = codex_home.join("panes").join(PANE_LAYOUT_FILE);
-    let legacy_layout = read_pane_layout(&legacy_path)
-        .filter(|layout| layout.codex_thread_id.as_deref() == Some(thread_id));
-    thread_scoped_layout.or(legacy_layout)
+    Some(migrated)
 }
 
 fn find_related_pane_layout(codex_home: &Path, thread_id: &str) -> Option<PaneLayoutState> {
@@ -477,12 +497,32 @@ fn pane_layout_mentions_thread(layout: &PaneLayoutState, thread_node_id: &str) -
 }
 
 fn read_pane_layout(path: &Path) -> Option<PaneLayoutState> {
-    let contents = fs::read_to_string(path).ok()?;
-    match serde_json::from_str::<PaneLayoutState>(&contents) {
+    match read_pane_layout_generation(path) {
         Ok(layout) => Some(layout),
-        Err(err) => {
-            tracing::warn!(path = %path.display(), error = %err, "failed to load pane layout");
-            None
+        Err(primary_err) => {
+            let previous_path = previous_pane_layout_path(path);
+            match read_pane_layout_generation(&previous_path) {
+                Ok(layout) => {
+                    tracing::warn!(
+                        path = %path.display(),
+                        previous_path = %previous_path.display(),
+                        error = %primary_err,
+                        "pane layout primary generation is unavailable; recovered verified previous generation"
+                    );
+                    Some(layout)
+                }
+                Err(previous_err) => {
+                    if path.exists() || previous_path.exists() {
+                        tracing::warn!(
+                            path = %path.display(),
+                            error = %primary_err,
+                            previous_error = %previous_err,
+                            "failed to load pane layout or its previous generation"
+                        );
+                    }
+                    None
+                }
+            }
         }
     }
 }
@@ -495,30 +535,208 @@ pub(crate) fn persist_pane_layout(codex_home: &Path, layout: &PaneLayoutState) -
             panes_dir.display()
         )
     })?;
-    let mut layout = layout.clone();
-    layout.version = PANE_LAYOUT_VERSION;
-    let contents = serde_json::to_string_pretty(&layout)
+    let layout = migrate_pane_layout(layout.clone());
+    let thread_id = layout
+        .codex_thread_id
+        .clone()
+        .ok_or_else(|| anyhow!("pane layout is missing its owning thread id"))?;
+    let checksum = pane_layout_checksum(&layout)?;
+    let persisted = PersistedPaneLayout {
+        format_version: PANE_LAYOUT_VERSION,
+        checksum,
+        layout,
+    };
+    let contents = serde_json::to_vec_pretty(&persisted)
         .context("failed to serialize pane layout metadata")?;
-    if let Some(thread_id) = layout.codex_thread_id.as_deref() {
-        let thread_scoped_path = thread_scoped_pane_layout_path(codex_home, thread_id);
-        if let Some(parent) = thread_scoped_path.parent() {
-            fs::create_dir_all(parent).with_context(|| {
+    let thread_scoped_path = thread_scoped_pane_layout_path(codex_home, &thread_id);
+    atomic_replace_with_previous(&thread_scoped_path, &contents)
+}
+
+fn read_pane_layout_generation(path: &Path) -> Result<PaneLayoutState> {
+    let contents = fs::read(path)
+        .with_context(|| format!("failed to read pane layout `{}`", path.display()))?;
+    if let Ok(persisted) = serde_json::from_slice::<PersistedPaneLayout>(&contents) {
+        if persisted.format_version != PANE_LAYOUT_VERSION {
+            return Err(anyhow!(
+                "unsupported pane layout version {} at `{}`",
+                persisted.format_version,
+                path.display()
+            ));
+        }
+        let actual_checksum = pane_layout_checksum(&persisted.layout)?;
+        if actual_checksum != persisted.checksum {
+            return Err(anyhow!(
+                "pane layout checksum mismatch at `{}`",
+                path.display()
+            ));
+        }
+        return Ok(persisted.layout);
+    }
+    let layout = serde_json::from_slice::<PaneLayoutState>(&contents)
+        .with_context(|| format!("failed to decode pane layout `{}`", path.display()))?;
+    if layout.version > 1 {
+        return Err(anyhow!(
+            "unsupported unwrapped pane layout version {} at `{}`",
+            layout.version,
+            path.display()
+        ));
+    }
+    Ok(layout)
+}
+
+fn pane_layout_checksum(layout: &PaneLayoutState) -> Result<String> {
+    let bytes =
+        serde_json::to_vec(layout).context("failed to encode pane layout checksum input")?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
+fn migrate_pane_layout(mut layout: PaneLayoutState) -> PaneLayoutState {
+    for (thread_id, dispatches) in &mut layout.spawn_pending_dispatches_by_thread {
+        migrate_dispatch_queue(&format!("thread:{thread_id}"), dispatches);
+    }
+    for (pane_id, dispatches) in &mut layout.spawn_pending_dispatches_by_pane {
+        migrate_dispatch_queue(&format!("pane:{pane_id}"), dispatches);
+    }
+    layout.spawn_processed_dispatch_origin_ids.extend(
+        layout
+            .spawn_pending_dispatches_by_thread
+            .values()
+            .chain(layout.spawn_pending_dispatches_by_pane.values())
+            .flatten()
+            .map(|dispatch| dispatch.origin.origin_id.clone())
+            .filter(|origin_id| !origin_id.is_empty()),
+    );
+    layout.spawn_processed_dispatch_origin_ids.extend(
+        layout
+            .spawn_processed_dispatch_seq_ids
+            .iter()
+            .map(|seq| format!("host-seq-{seq:020}")),
+    );
+    layout.spawn_processed_dispatch_origin_ids.sort();
+    layout.spawn_processed_dispatch_origin_ids.dedup();
+    layout.version = PANE_LAYOUT_VERSION;
+    layout
+}
+
+fn migrate_dispatch_queue(
+    target_pane_id: &str,
+    dispatches: &mut Vec<crate::spawn_orchestration::PendingSpawnDispatch>,
+) {
+    let mut migrated = Vec::new();
+    for dispatch in std::mem::take(dispatches) {
+        if let Some(tasks) = crate::dispatch_queue::expand_legacy_batch(&dispatch.task) {
+            let mut acks = dispatch.acks.into_iter();
+            let task_count = tasks.len();
+            for (task_index, task) in tasks.into_iter().enumerate() {
+                let mut item = crate::spawn_orchestration::PendingSpawnDispatch::new(
+                    task,
+                    acks.next().into_iter().collect(),
+                );
+                item.created_at_ms = dispatch.created_at_ms;
+                item.duplicate_suppressed_notified = dispatch.duplicate_suppressed_notified;
+                if task_index + 1 == task_count {
+                    item.acks.extend(acks.by_ref());
+                }
+                let ordinal = migrated.len();
+                item.migrate_legacy_identity(target_pane_id, ordinal);
+                migrated.push(item);
+            }
+        } else {
+            let mut dispatch = dispatch;
+            let ordinal = migrated.len();
+            dispatch.migrate_legacy_identity(target_pane_id, ordinal);
+            migrated.push(dispatch);
+        }
+    }
+    *dispatches = migrated;
+}
+
+fn atomic_replace_with_previous(path: &Path, contents: &[u8]) -> Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow!("pane layout path has no parent"))?;
+    fs::create_dir_all(parent).with_context(|| {
+        format!(
+            "failed to create pane layout directory `{}`",
+            parent.display()
+        )
+    })?;
+    let temp_path = parent.join(format!(
+        ".pane-layout-{}-{}.tmp",
+        std::process::id(),
+        Uuid::new_v4()
+    ));
+    let mut temp = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&temp_path)
+        .with_context(|| format!("failed to create `{}`", temp_path.display()))?;
+    temp.write_all(contents)
+        .with_context(|| format!("failed to write `{}`", temp_path.display()))?;
+    temp.sync_all()
+        .with_context(|| format!("failed to sync `{}`", temp_path.display()))?;
+    drop(temp);
+
+    let previous_path = previous_pane_layout_path(path);
+    if path.exists() {
+        if read_pane_layout_generation(path).is_ok() {
+            if previous_path.exists() {
+                fs::remove_file(&previous_path).with_context(|| {
+                    format!(
+                        "failed to replace previous pane layout `{}`",
+                        previous_path.display()
+                    )
+                })?;
+            }
+            fs::rename(path, &previous_path).with_context(|| {
                 format!(
-                    "failed to create pane layout directory `{}`",
-                    parent.display()
+                    "failed to preserve pane layout `{}` as `{}`",
+                    path.display(),
+                    previous_path.display()
                 )
             })?;
+        } else {
+            tracing::warn!(
+                path = %path.display(),
+                "current pane layout is unverified; preserving existing previous generation"
+            );
+            fs::remove_file(path).with_context(|| {
+                format!("failed to replace corrupt pane layout `{}`", path.display())
+            })?;
         }
-        fs::write(&thread_scoped_path, &contents).with_context(|| {
-            format!(
-                "failed to write pane layout `{}`",
-                thread_scoped_path.display()
-            )
-        })?;
     }
-    let legacy_path = panes_dir.join(PANE_LAYOUT_FILE);
-    fs::write(&legacy_path, contents)
-        .with_context(|| format!("failed to write pane layout `{}`", legacy_path.display()))
+    if let Err(err) = fs::rename(&temp_path, path) {
+        if !path.exists() && previous_path.exists() {
+            let _ = fs::rename(&previous_path, path);
+        }
+        let _ = fs::remove_file(&temp_path);
+        return Err(err).with_context(|| {
+            format!(
+                "failed to atomically install pane layout `{}`",
+                path.display()
+            )
+        });
+    }
+    sync_parent_directory(parent)
+}
+
+fn previous_pane_layout_path(path: &Path) -> PathBuf {
+    let mut previous = path.as_os_str().to_os_string();
+    previous.push(format!(".{PANE_LAYOUT_PREVIOUS_SUFFIX}"));
+    PathBuf::from(previous)
+}
+
+#[cfg(unix)]
+fn sync_parent_directory(path: &Path) -> Result<()> {
+    File::open(path)
+        .with_context(|| format!("failed to open directory `{}`", path.display()))?
+        .sync_all()
+        .with_context(|| format!("failed to sync directory `{}`", path.display()))
+}
+
+#[cfg(not(unix))]
+fn sync_parent_directory(_path: &Path) -> Result<()> {
+    Ok(())
 }
 
 fn thread_scoped_pane_layout_path(codex_home: &Path, thread_id: &str) -> PathBuf {

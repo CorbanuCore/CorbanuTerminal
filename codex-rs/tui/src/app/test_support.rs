@@ -71,7 +71,7 @@ pub(super) async fn make_test_app() -> App {
         spawn_dispatch_acks_by_target_task: HashMap::new(),
         spawn_next_dispatch_seq: 1,
         spawn_processed_dispatch_seq_ids: HashSet::new(),
-        spawn_processed_dispatches: HashSet::new(),
+        spawn_processed_dispatch_origins: HashSet::new(),
         spawn_processed_terminal_turns: HashSet::new(),
         spawn_auto_loop_state_by_node: HashMap::new(),
         spawn_operator_input_seen: false,

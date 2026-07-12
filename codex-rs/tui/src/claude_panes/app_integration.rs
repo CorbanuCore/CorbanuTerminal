@@ -15,6 +15,7 @@ use crate::bottom_pane::SelectionViewParams;
 use crate::bottom_pane::custom_prompt_view::CustomPromptView;
 use crate::bottom_pane::popup_consts::standard_popup_hint_line;
 use crate::key_hint;
+use crate::spawn_orchestration::PendingDispatchEnqueueResult;
 use crate::spawn_orchestration::SpawnRole;
 use crate::spawn_orchestration::thread_node_id;
 use crate::tui;
@@ -351,6 +352,15 @@ impl App {
                 .collect(),
             spawn_next_dispatch_seq: self.spawn_next_dispatch_seq.max(1),
             spawn_processed_dispatch_seq_ids: self.recent_spawn_processed_dispatch_seq_ids(),
+            spawn_processed_dispatch_origin_ids: {
+                let mut origins = self
+                    .spawn_processed_dispatch_origins
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                origins.sort();
+                origins
+            },
         };
         if let Err(err) = persist_pane_layout(self.config.codex_home.as_ref(), &layout) {
             tracing::warn!(error = %err, "failed to persist pane layout");
@@ -635,20 +645,36 @@ impl App {
         if self.claude_panes.claude_pane_is_running(&pane_id) {
             let title = self.user_pane_title(&pane_id);
             let pending = self.pending_dispatch_from_registered_task(&target_node_id, task);
-            self.record_spawn_dispatch_acks(
-                &pending.acks,
-                "queued_busy",
-                "target became busy before turn start; will deliver when idle",
-                false,
-            );
-            self.enqueue_pending_dispatch_for_claude_pane(pane_id, pending);
-            self.chat_widget.add_info_message(
-                format!("Task queued for {title}."),
-                Some(
-                    "The target pane is busy; PFTerminal will deliver it when the pane goes idle."
-                        .to_string(),
-                ),
-            );
+            match self.enqueue_pending_dispatch_for_claude_pane(pane_id, pending.clone()) {
+                PendingDispatchEnqueueResult::Queued => {
+                    self.record_spawn_dispatch_acks(
+                        &pending.acks,
+                        "queued_busy",
+                        "target became busy before turn start; will deliver when idle",
+                        false,
+                    );
+                    self.chat_widget.add_info_message(
+                        format!("Task queued for {title}."),
+                        Some(
+                            "The target pane is busy; PFTerminal will deliver it when the pane goes idle."
+                                .to_string(),
+                        ),
+                    );
+                }
+                PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
+                    self.record_duplicate_pending_dispatch(&title, &acks, notify);
+                }
+                PendingDispatchEnqueueResult::Rejected { acks, reason } => {
+                    self.record_spawn_dispatch_acks(
+                        &acks,
+                        "failed",
+                        format!("queue rejected: {reason}"),
+                        true,
+                    );
+                    self.chat_widget
+                        .add_error_message(format!("Cannot queue task for {title}: {reason}"));
+                }
+            }
             return;
         }
         let is_active = self.claude_panes.active_user_pane_id() == pane_id;

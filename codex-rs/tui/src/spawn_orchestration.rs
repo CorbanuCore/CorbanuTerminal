@@ -30,9 +30,6 @@ use codex_protocol::protocol::ThreadSource as CoreThreadSource;
 use codex_state::DirectionalThreadSpawnEdgeStatus;
 use color_eyre::eyre::Result;
 use color_eyre::eyre::eyre;
-use serde::Deserialize;
-use serde::Deserializer;
-use serde::Serialize;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -49,15 +46,14 @@ const SEND_TASK_FENCE_OPEN: &str = "```pfterminal-send-task";
 const SEND_TASK_FENCE_CLOSE: &str = "```";
 const SEND_TASK_OPEN: &str = "<pfterminal_send_task";
 const SEND_TASK_CLOSE: &str = "</pfterminal_send_task>";
-const EXEC_WRAPPED_DISPATCH_CORRECTION_TARGET: &str =
-    "__pfterminal_exec_wrapped_dispatch_correction__";
 const EXEC_WRAPPED_DISPATCH_CORRECTION_TASK: &str = "PFTerminal host correction: you emitted a <pfterminal_send_task> dispatch block inside exec_command/shell text, so it was not routed to the target pane. Re-emit the same dispatch now as plain assistant message text, not inside a shell command, cat, echo, heredoc, markdown fence, or tool call. Do not claim it was sent until the plain-text block appears.";
 const SPAWN_PARENT_REPORT_LIMIT: usize = 12;
+#[cfg(test)]
 const SPAWN_PROCESSED_DISPATCH_TURN_LIMIT: usize = 1024;
+#[cfg(test)]
 const SPAWN_PROCESSED_DISPATCH_TURN_RETAIN: usize = SPAWN_PROCESSED_DISPATCH_TURN_LIMIT / 2;
 const SPAWN_PROCESSED_DISPATCH_SEQ_RETAIN: usize = 256;
 const SPAWN_REPORT_RESULT_MAX_CHARS: usize = 12_000;
-const SPAWN_PENDING_DISPATCH_TTL_MS: i64 = 30 * 60 * 1_000;
 /// Loop breaker: maximum consecutive auto-triggered child-report processing turns that may each
 /// dispatch follow-up work before auto-processing pauses for that parent node. Without a ceiling,
 /// report -> auto processing turn -> dispatch -> report cycles never terminate on their own. The
@@ -87,140 +83,14 @@ pub(crate) struct SpawnTaskDispatch {
     pub(crate) seq: Option<u64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct SpawnDispatchAck {
-    pub(crate) seq: u64,
-    pub(crate) source_node_id: String,
-    pub(crate) target_node_id: String,
-    pub(crate) target_title: String,
-    #[serde(default)]
-    pub(crate) attempt: u8,
-}
-
-/// Authoritative lifecycle for one delegated unit of work.
-///
-/// Host dispatches, agent messages, follow-up tasks, and completion reports must map to these
-/// states: created -> delivered -> acknowledged -> active -> one terminal state. A replacement
-/// never deletes history: it transitions the older unit to `Superseded`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum DispatchLifecycleStatus {
-    #[default]
-    Created,
-    Delivered,
-    Acknowledged,
-    Active,
-    Completed,
-    Superseded,
-    Cancelled,
-    Expired,
-}
-
-impl DispatchLifecycleStatus {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Created => "created",
-            Self::Delivered => "delivered",
-            Self::Acknowledged => "acknowledged",
-            Self::Active => "active",
-            Self::Completed => "completed",
-            Self::Superseded => "superseded",
-            Self::Cancelled => "cancelled",
-            Self::Expired => "expired",
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct PendingSpawnDispatch {
-    pub(crate) task: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub(crate) acks: Vec<SpawnDispatchAck>,
-    #[serde(default = "spawn_dispatch_now_ms")]
-    pub(crate) created_at_ms: i64,
-    #[serde(default)]
-    pub(crate) status: DispatchLifecycleStatus,
-    #[serde(default)]
-    pub(crate) duplicate_suppressed_notified: bool,
-}
-
-impl PendingSpawnDispatch {
-    pub(crate) fn new(task: String, acks: Vec<SpawnDispatchAck>) -> Self {
-        Self {
-            task,
-            acks,
-            created_at_ms: spawn_dispatch_now_ms(),
-            status: DispatchLifecycleStatus::Created,
-            duplicate_suppressed_notified: false,
-        }
-    }
-
-    fn legacy(task: String) -> Self {
-        Self {
-            task,
-            acks: Vec::new(),
-            created_at_ms: spawn_dispatch_now_ms(),
-            status: DispatchLifecycleStatus::Created,
-            duplicate_suppressed_notified: false,
-        }
-    }
-
-    pub(crate) fn is_expired(&self, now_ms: i64) -> bool {
-        now_ms.saturating_sub(self.created_at_ms) > SPAWN_PENDING_DISPATCH_TTL_MS
-    }
-}
-
-fn spawn_dispatch_now_ms() -> i64 {
-    Utc::now().timestamp_millis()
-}
+pub(crate) use crate::dispatch_queue::PendingDispatchEnqueueResult;
+pub(crate) use crate::dispatch_queue::PendingSpawnDispatch;
+pub(crate) use crate::dispatch_queue::SpawnDispatchAck;
 
 pub(crate) fn reconcile_restored_dispatches(
     dispatches: &[PendingSpawnDispatch],
 ) -> VecDeque<PendingSpawnDispatch> {
-    let now_ms = spawn_dispatch_now_ms();
-    dispatches
-        .iter()
-        .filter(|dispatch| !dispatch.is_expired(now_ms))
-        .cloned()
-        .collect()
-}
-
-impl<'de> Deserialize<'de> for PendingSpawnDispatch {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct PendingSpawnDispatchFields {
-            task: String,
-            #[serde(default)]
-            acks: Vec<SpawnDispatchAck>,
-            #[serde(default = "spawn_dispatch_now_ms")]
-            created_at_ms: i64,
-            #[serde(default)]
-            status: DispatchLifecycleStatus,
-            #[serde(default)]
-            duplicate_suppressed_notified: bool,
-        }
-
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum PendingSpawnDispatchRepr {
-            Full(PendingSpawnDispatchFields),
-            Legacy(String),
-        }
-
-        match PendingSpawnDispatchRepr::deserialize(deserializer)? {
-            PendingSpawnDispatchRepr::Full(fields) => Ok(Self {
-                task: fields.task,
-                acks: fields.acks,
-                created_at_ms: fields.created_at_ms,
-                status: fields.status,
-                duplicate_suppressed_notified: fields.duplicate_suppressed_notified,
-            }),
-            PendingSpawnDispatchRepr::Legacy(task) => Ok(Self::legacy(task)),
-        }
-    }
+    dispatches.iter().cloned().collect()
 }
 
 pub(crate) enum SpawnTaskTarget {
@@ -1406,25 +1276,40 @@ impl App {
                         );
                     } else if self.native_spawn_target_is_busy(thread_id) {
                         let pending = PendingSpawnDispatch::new(task, vec![ack.clone()]);
-                        if let Some((acks, notify)) =
-                            self.enqueue_pending_dispatch_for_thread(thread_id, pending)
-                        {
-                            self.record_duplicate_pending_dispatch(&label, &acks, notify);
-                        } else {
-                            self.record_spawn_dispatch_acks(
-                                &[ack],
-                                "queued_busy",
-                                "target busy; will deliver when idle",
-                                false,
-                            );
-                            self.record_spawn_dispatch_queued(
-                                source_pane_id,
-                                source_is_active,
-                                &format!(
-                                    "Queued task for {label} (target busy; will deliver when idle)."
-                                ),
-                                &dispatch.task,
-                            );
+                        match self.enqueue_pending_dispatch_for_thread(thread_id, pending) {
+                            PendingDispatchEnqueueResult::Queued => {
+                                self.record_spawn_dispatch_acks(
+                                    &[ack],
+                                    "queued_busy",
+                                    "target busy; will deliver when idle",
+                                    false,
+                                );
+                                self.record_spawn_dispatch_queued(
+                                    source_pane_id,
+                                    source_is_active,
+                                    &format!(
+                                        "Queued task for {label} (target busy; will deliver when idle)."
+                                    ),
+                                    &dispatch.task,
+                                );
+                            }
+                            PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
+                                self.record_duplicate_pending_dispatch(&label, &acks, notify);
+                            }
+                            PendingDispatchEnqueueResult::Rejected { acks, reason } => {
+                                self.record_spawn_dispatch_acks(
+                                    &acks,
+                                    "failed",
+                                    format!("queue rejected: {reason}"),
+                                    true,
+                                );
+                                self.record_spawn_dispatch_error(
+                                    source_pane_id,
+                                    source_is_active,
+                                    format!("Cannot queue task for {label}: {reason}"),
+                                );
+                                continue;
+                            }
                         }
                     } else {
                         self.register_spawn_dispatch_acks_for_task(
@@ -1499,21 +1384,41 @@ impl App {
                     self.note_whip_holder_dispatched(source_pane_id, &target_node_id);
                     if self.claude_panes.claude_pane_is_running(&pane_id) {
                         let pending = PendingSpawnDispatch::new(task, vec![ack.clone()]);
-                        self.enqueue_pending_dispatch_for_claude_pane(pane_id, pending);
-                        self.record_spawn_dispatch_acks(
-                            &[ack],
-                            "queued_busy",
-                            "target busy; will deliver when idle",
-                            false,
-                        );
-                        self.record_spawn_dispatch_queued(
-                            source_pane_id,
-                            source_is_active,
-                            &format!(
-                                "Queued task for {title} (target busy; will deliver when idle)."
-                            ),
-                            &dispatch.task,
-                        );
+                        match self.enqueue_pending_dispatch_for_claude_pane(pane_id, pending) {
+                            PendingDispatchEnqueueResult::Queued => {
+                                self.record_spawn_dispatch_acks(
+                                    &[ack],
+                                    "queued_busy",
+                                    "target busy; will deliver when idle",
+                                    false,
+                                );
+                                self.record_spawn_dispatch_queued(
+                                    source_pane_id,
+                                    source_is_active,
+                                    &format!(
+                                        "Queued task for {title} (target busy; will deliver when idle)."
+                                    ),
+                                    &dispatch.task,
+                                );
+                            }
+                            PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
+                                self.record_duplicate_pending_dispatch(&title, &acks, notify);
+                            }
+                            PendingDispatchEnqueueResult::Rejected { acks, reason } => {
+                                self.record_spawn_dispatch_acks(
+                                    &acks,
+                                    "failed",
+                                    format!("queue rejected: {reason}"),
+                                    true,
+                                );
+                                self.record_spawn_dispatch_error(
+                                    source_pane_id,
+                                    source_is_active,
+                                    format!("Cannot queue task for {title}: {reason}"),
+                                );
+                                continue;
+                            }
+                        }
                     } else {
                         self.register_spawn_dispatch_acks_for_task(
                             &target_node_id,
@@ -1604,8 +1509,8 @@ impl App {
             return false;
         }
         let mut pending_dispatches = Vec::new();
-        for dispatch in dispatches {
-            if self.mark_spawn_task_dispatch_processed(source_thread_id, turn_id, &dispatch) {
+        for (ordinal, dispatch) in dispatches.into_iter().enumerate() {
+            if self.mark_spawn_task_dispatch_processed(source_thread_id, turn_id, ordinal as u32) {
                 pending_dispatches.push(dispatch);
             }
         }
@@ -1626,13 +1531,7 @@ impl App {
         source_thread_id: ThreadId,
         turn_id: &str,
     ) {
-        let correction_dispatch = SpawnTaskDispatch {
-            target: EXEC_WRAPPED_DISPATCH_CORRECTION_TARGET.to_string(),
-            task: EXEC_WRAPPED_DISPATCH_CORRECTION_TASK.to_string(),
-            seq: None,
-        };
-        if !self.mark_spawn_task_dispatch_processed(source_thread_id, turn_id, &correction_dispatch)
-        {
+        if !self.mark_spawn_task_dispatch_processed(source_thread_id, turn_id, u32::MAX) {
             return;
         }
         self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
@@ -1769,51 +1668,20 @@ impl App {
         &mut self,
         source_thread_id: ThreadId,
         turn_id: &str,
-        dispatch: &SpawnTaskDispatch,
+        ordinal: u32,
     ) -> bool {
-        let dispatch_key = (
-            source_thread_id,
-            turn_id.to_string(),
-            dispatch.target.trim().to_string(),
-            dispatch.task.clone(),
-        );
-        let inserted = self.spawn_processed_dispatches.insert(dispatch_key.clone());
+        let source_pane_id = if self.is_codex_main_bound_spawn_root_thread(source_thread_id) {
+            self.spawn_root_node_id()
+        } else {
+            thread_node_id(source_thread_id)
+        };
+        let origin_id =
+            crate::dispatch_queue::model_dispatch_origin_id(&source_pane_id, turn_id, ordinal);
+        let inserted = self.spawn_processed_dispatch_origins.insert(origin_id);
         if inserted {
-            self.evict_spawn_processed_dispatches_if_needed(&dispatch_key);
+            self.persist_pane_state();
         }
         inserted
-    }
-
-    fn evict_spawn_processed_dispatches_if_needed(
-        &mut self,
-        protected_dispatch: &(ThreadId, String, String, String),
-    ) {
-        if self.spawn_processed_dispatches.len() <= SPAWN_PROCESSED_DISPATCH_TURN_LIMIT {
-            return;
-        }
-        let live_threads: HashSet<ThreadId> = self
-            .agent_navigation
-            .ordered_threads()
-            .into_iter()
-            .map(|(thread_id, _)| thread_id)
-            .collect();
-        let protected_budget =
-            usize::from(self.spawn_processed_dispatches.contains(protected_dispatch));
-        let retain_budget = SPAWN_PROCESSED_DISPATCH_TURN_RETAIN.saturating_sub(protected_budget);
-        let mut retained = 0usize;
-        self.spawn_processed_dispatches.retain(|dispatch| {
-            if dispatch == protected_dispatch {
-                return true;
-            }
-            if retained >= retain_budget {
-                return false;
-            }
-            if live_threads.contains(&dispatch.0) {
-                retained += 1;
-                return true;
-            }
-            false
-        });
     }
 
     pub(crate) fn record_spawn_child_report_for_thread(
@@ -2062,24 +1930,71 @@ impl App {
     pub(crate) fn enqueue_pending_dispatch_for_thread(
         &mut self,
         target_thread_id: ThreadId,
-        dispatch: PendingSpawnDispatch,
-    ) -> Option<(Vec<SpawnDispatchAck>, bool)> {
+        mut dispatch: PendingSpawnDispatch,
+    ) -> PendingDispatchEnqueueResult {
+        let identities = spawn_dispatch_component_identities(&dispatch.task);
+        if let Some(queued) = self
+            .spawn_pending_dispatches_by_thread
+            .get_mut(&target_thread_id)
+            .and_then(|queue| {
+                queue.iter_mut().find(|queued| {
+                    let queued_identities = spawn_dispatch_component_identities(&queued.task);
+                    identities
+                        .iter()
+                        .any(|identity| queued_identities.contains(identity))
+                })
+            })
+        {
+            let notify = !queued.duplicate_suppressed_notified;
+            queued.duplicate_suppressed_notified = true;
+            self.persist_pane_state();
+            return PendingDispatchEnqueueResult::Duplicate {
+                acks: dispatch.acks,
+                notify,
+            };
+        }
+        let (target_items, target_bytes) = self
+            .spawn_pending_dispatches_by_thread
+            .get(&target_thread_id)
+            .map_or((0, 0), |queue| {
+                (
+                    queue.len(),
+                    crate::dispatch_queue::queue_payload_bytes(queue),
+                )
+            });
+        let (global_items, global_bytes) = self.pending_dispatch_queue_usage();
+        if let Some(reason) = crate::dispatch_queue::queue_bound_violation(
+            dispatch.payload_bytes(),
+            target_items,
+            target_bytes,
+            global_items,
+            global_bytes,
+        ) {
+            return PendingDispatchEnqueueResult::Rejected {
+                acks: dispatch.acks,
+                reason,
+            };
+        }
+        let seq = dispatch
+            .acks
+            .first()
+            .map(|ack| ack.seq)
+            .unwrap_or_else(|| self.reserve_spawn_dispatch_seq_without_persist());
+        let source_pane_id = dispatch
+            .acks
+            .first()
+            .map(|ack| ack.source_node_id.clone())
+            .unwrap_or_else(|| pane_node_id(CODEX_MAIN_PANE_ID));
+        dispatch.assign_identity(
+            seq,
+            &source_pane_id,
+            &thread_node_id(target_thread_id),
+            None,
+        );
         let queue = self
             .spawn_pending_dispatches_by_thread
             .entry(target_thread_id)
             .or_default();
-        let identities = spawn_dispatch_component_identities(&dispatch.task);
-        if let Some(queued) = queue.iter_mut().find(|queued| {
-            let queued_identities = spawn_dispatch_component_identities(&queued.task);
-            identities
-                .iter()
-                .any(|identity| queued_identities.contains(identity))
-        }) {
-            let notify = !queued.duplicate_suppressed_notified;
-            queued.duplicate_suppressed_notified = true;
-            self.persist_pane_state();
-            return Some((dispatch.acks, notify));
-        }
         queue.push_back(dispatch);
         tracing::info!(
             thread_id = %target_thread_id,
@@ -2087,24 +2002,65 @@ impl App {
             "queued spawn dispatch for busy native target; will flush on target idle"
         );
         self.persist_pane_state();
-        None
+        PendingDispatchEnqueueResult::Queued
     }
 
     pub(crate) fn enqueue_pending_dispatch_for_claude_pane(
         &mut self,
         pane_id: String,
-        dispatch: PendingSpawnDispatch,
-    ) {
+        mut dispatch: PendingSpawnDispatch,
+    ) -> PendingDispatchEnqueueResult {
+        if self
+            .spawn_pending_dispatches_by_pane
+            .get(&pane_id)
+            .is_some_and(|queue| {
+                queue
+                    .iter()
+                    .any(|queued| queued.task.trim() == dispatch.task.trim())
+            })
+        {
+            return PendingDispatchEnqueueResult::Duplicate {
+                acks: dispatch.acks,
+                notify: true,
+            };
+        }
+        let (target_items, target_bytes) = self
+            .spawn_pending_dispatches_by_pane
+            .get(&pane_id)
+            .map_or((0, 0), |queue| {
+                (
+                    queue.len(),
+                    crate::dispatch_queue::queue_payload_bytes(queue),
+                )
+            });
+        let (global_items, global_bytes) = self.pending_dispatch_queue_usage();
+        if let Some(reason) = crate::dispatch_queue::queue_bound_violation(
+            dispatch.payload_bytes(),
+            target_items,
+            target_bytes,
+            global_items,
+            global_bytes,
+        ) {
+            return PendingDispatchEnqueueResult::Rejected {
+                acks: dispatch.acks,
+                reason,
+            };
+        }
+        let seq = dispatch
+            .acks
+            .first()
+            .map(|ack| ack.seq)
+            .unwrap_or_else(|| self.reserve_spawn_dispatch_seq_without_persist());
+        let source_pane_id = dispatch
+            .acks
+            .first()
+            .map(|ack| ack.source_node_id.clone())
+            .unwrap_or_else(|| pane_node_id(CODEX_MAIN_PANE_ID));
+        dispatch.assign_identity(seq, &source_pane_id, &pane_node_id(&pane_id), None);
         let queue = self
             .spawn_pending_dispatches_by_pane
             .entry(pane_id.clone())
             .or_default();
-        if queue
-            .back()
-            .is_some_and(|queued| queued.task == dispatch.task)
-        {
-            return;
-        }
         queue.push_back(dispatch);
         tracing::info!(
             pane_id = %pane_id,
@@ -2112,6 +2068,26 @@ impl App {
             "queued spawn dispatch for busy Claude pane; will flush on pane idle"
         );
         self.persist_pane_state();
+        PendingDispatchEnqueueResult::Queued
+    }
+
+    fn pending_dispatch_queue_usage(&self) -> (usize, usize) {
+        let native = self
+            .spawn_pending_dispatches_by_thread
+            .values()
+            .flat_map(|queue| queue.iter());
+        let claude = self
+            .spawn_pending_dispatches_by_pane
+            .values()
+            .flat_map(|queue| queue.iter());
+        let dispatches = native.chain(claude);
+        let mut items = 0;
+        let mut bytes = 0usize;
+        for dispatch in dispatches {
+            items += 1;
+            bytes = bytes.saturating_add(dispatch.payload_bytes());
+        }
+        (items, bytes)
     }
 
     pub(crate) fn record_duplicate_pending_dispatch(
@@ -2545,6 +2521,13 @@ impl App {
         self.spawn_next_dispatch_seq = next_seq.max(reserved.saturating_add(1));
         self.evict_spawn_processed_dispatch_seq_ids();
         self.persist_pane_state();
+        reserved
+    }
+
+    fn reserve_spawn_dispatch_seq_without_persist(&mut self) -> u64 {
+        let reserved = self.spawn_next_dispatch_seq.max(1);
+        self.spawn_next_dispatch_seq = reserved.saturating_add(1);
+        self.evict_spawn_processed_dispatch_seq_ids();
         reserved
     }
 
@@ -4939,7 +4922,7 @@ impl App {
             .filter(|queue| !queue.is_empty())
         {
             let _ = write!(suffix, "; pending_dispatches={}", queue.len());
-            let now_ms = spawn_dispatch_now_ms();
+            let now_ms = Utc::now().timestamp_millis();
             for dispatch in queue.iter().take(3) {
                 let seq = dispatch
                     .acks
@@ -4953,7 +4936,7 @@ impl App {
                     "; queue[#{} age={}s status={} task={}]",
                     seq,
                     age_seconds,
-                    dispatch.status.as_str(),
+                    dispatch.state.as_str(),
                     preview
                 );
             }
@@ -4970,7 +4953,7 @@ impl App {
             return String::new();
         };
         let mut suffix = format!("; pending_dispatches={}", queue.len());
-        let now_ms = spawn_dispatch_now_ms();
+        let now_ms = Utc::now().timestamp_millis();
         for dispatch in queue.iter().take(3) {
             let seq = dispatch
                 .acks
@@ -4984,7 +4967,7 @@ impl App {
                 "; queue[#{} age={}s status={} task={}]",
                 seq,
                 age_seconds,
-                dispatch.status.as_str(),
+                dispatch.state.as_str(),
                 preview
             );
         }

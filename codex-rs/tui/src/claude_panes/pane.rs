@@ -167,6 +167,8 @@ pub(crate) struct PaneLayoutState {
     pub(crate) spawn_next_dispatch_seq: u64,
     #[serde(default)]
     pub(crate) spawn_processed_dispatch_seq_ids: Vec<u64>,
+    #[serde(default)]
+    pub(crate) spawn_processed_dispatch_origin_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

@@ -786,7 +786,7 @@ pub(crate) struct App {
         HashMap<(String, String), VecDeque<crate::spawn_orchestration::SpawnDispatchAck>>,
     pub(crate) spawn_next_dispatch_seq: u64,
     pub(crate) spawn_processed_dispatch_seq_ids: HashSet<u64>,
-    pub(crate) spawn_processed_dispatches: HashSet<(ThreadId, String, String, String)>,
+    pub(crate) spawn_processed_dispatch_origins: HashSet<String>,
     /// Terminal turn notifications are observed both on receipt and during buffered replay. Keep
     /// orchestration side effects idempotent across those two delivery paths.
     pub(crate) spawn_processed_terminal_turns: HashSet<(ThreadId, String)>,
@@ -1380,6 +1380,16 @@ See the PFTerminal keymap documentation for supported actions and examples."
                 )
             })
             .unwrap_or_default();
+        let restored_spawn_processed_dispatch_origins = restored_pane_layout
+            .as_ref()
+            .map(|layout| {
+                layout
+                    .spawn_processed_dispatch_origin_ids
+                    .iter()
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
 
         let mut app = Self {
             model_catalog,
@@ -1468,7 +1478,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
             spawn_dispatch_acks_by_target_task: HashMap::new(),
             spawn_next_dispatch_seq: restored_spawn_next_dispatch_seq,
             spawn_processed_dispatch_seq_ids: restored_spawn_processed_dispatch_seq_ids,
-            spawn_processed_dispatches: HashSet::new(),
+            spawn_processed_dispatch_origins: restored_spawn_processed_dispatch_origins,
             spawn_processed_terminal_turns: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
             spawn_operator_input_seen: false,

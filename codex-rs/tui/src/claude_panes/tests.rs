@@ -495,6 +495,7 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
         spawn_pending_dispatches_by_pane: pending_claude_dispatches.clone(),
         spawn_next_dispatch_seq: 42,
         spawn_processed_dispatch_seq_ids: vec![39, 41],
+        spawn_processed_dispatch_origin_ids: Vec::new(),
     };
 
     persist_pane_layout(codex_home.path(), &layout).expect("persist layout");
@@ -517,14 +518,18 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
     assert_eq!(restored.spawn_parent_by_node, parents);
     assert_eq!(restored.orchestrate_whips, whips);
     assert_eq!(restored.orchestrate_next_whip_seq, 3);
+    let restored_native =
+        &restored.spawn_pending_dispatches_by_thread["019f0657-1d67-7103-9d65-89e71587347d"][0];
+    assert_eq!(restored_native.task, "native queued task");
+    assert!(!restored_native.dispatch_id.is_empty());
     assert_eq!(
-        restored.spawn_pending_dispatches_by_thread,
-        pending_native_dispatches
+        restored_native.target_pane_id,
+        "thread:019f0657-1d67-7103-9d65-89e71587347d"
     );
-    assert_eq!(
-        restored.spawn_pending_dispatches_by_pane,
-        pending_claude_dispatches
-    );
+    let restored_claude = &restored.spawn_pending_dispatches_by_pane["claude-active"][0];
+    assert_eq!(restored_claude.task, "claude queued task");
+    assert!(!restored_claude.dispatch_id.is_empty());
+    assert_eq!(restored_claude.target_pane_id, "pane:claude-active");
     assert_eq!(restored.spawn_next_dispatch_seq, 42);
     assert_eq!(restored.spawn_processed_dispatch_seq_ids, vec![39, 41]);
 }
@@ -610,6 +615,98 @@ fn pane_layout_load_finds_related_root_layout_for_native_spawn_thread() {
         Some(format!("thread:{nazgul_thread}").as_str())
     );
     assert_eq!(restored.spawn_parent_by_node, parents);
+}
+
+#[test]
+fn pane_layout_recovers_verified_previous_generation_after_corruption() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let thread_id = "019f2b89-775c-7dc1-9d20-4fdf7e990199";
+    let first = PaneLayoutState {
+        version: 0,
+        codex_thread_id: Some(thread_id.to_string()),
+        active_user_pane_id: Some("first".to_string()),
+        ..Default::default()
+    };
+    let second = PaneLayoutState {
+        active_user_pane_id: Some("second".to_string()),
+        ..first.clone()
+    };
+    persist_pane_layout(codex_home.path(), &first).expect("first generation");
+    persist_pane_layout(codex_home.path(), &second).expect("second generation");
+    let primary = codex_home
+        .path()
+        .join("panes")
+        .join("pane-layouts")
+        .join(format!("{thread_id}.json"));
+    std::fs::write(&primary, b"{truncated").expect("corrupt primary");
+
+    let restored =
+        load_pane_layout(codex_home.path(), Some(thread_id)).expect("verified previous generation");
+
+    assert_eq!(restored.active_user_pane_id.as_deref(), Some("first"));
+}
+
+#[test]
+fn pane_layout_v1_migrates_legacy_batch_once() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let thread_id = "019f2b89-cba2-7c81-ae8f-f48106932d0b";
+    let first = "first legacy task";
+    let second = "second legacy task";
+    let envelope = format!(
+        "Multiple spawn dispatches were queued while you were busy. Execute each task below in order, do not skip any task, and treat every section as assigned work.\n\n## Queued dispatch 1 (bytes={})\n{}\n## Queued dispatch 2 (bytes={})\n{}",
+        first.len(),
+        first,
+        second.len(),
+        second
+    );
+    let mut queues = BTreeMap::new();
+    queues.insert(
+        thread_id.to_string(),
+        vec![crate::spawn_orchestration::PendingSpawnDispatch::new(
+            envelope,
+            Vec::new(),
+        )],
+    );
+    let legacy = PaneLayoutState {
+        version: 1,
+        codex_thread_id: Some(thread_id.to_string()),
+        spawn_nazgul_pane_id: Some(format!("thread:{thread_id}")),
+        spawn_pending_dispatches_by_thread: queues,
+        ..Default::default()
+    };
+    let primary = codex_home
+        .path()
+        .join("panes")
+        .join("pane-layouts")
+        .join(format!("{thread_id}.json"));
+    std::fs::create_dir_all(primary.parent().expect("layout parent")).expect("layout dir");
+    std::fs::write(
+        &primary,
+        serde_json::to_vec_pretty(&legacy).expect("legacy JSON"),
+    )
+    .expect("legacy layout");
+
+    let restored = load_pane_layout(codex_home.path(), Some(thread_id)).expect("migrated layout");
+    let migrated = restored
+        .spawn_pending_dispatches_by_thread
+        .get(thread_id)
+        .expect("migrated queue");
+
+    assert_eq!(
+        migrated
+            .iter()
+            .map(|dispatch| dispatch.task.as_str())
+            .collect::<Vec<_>>(),
+        vec![first, second]
+    );
+    assert!(
+        migrated
+            .iter()
+            .all(|dispatch| !dispatch.dispatch_id.is_empty())
+    );
+    let persisted = std::fs::read_to_string(primary).expect("version 2 layout");
+    assert!(persisted.contains("\"format_version\": 2"));
+    assert!(persisted.contains("\"checksum\""));
 }
 
 #[test]

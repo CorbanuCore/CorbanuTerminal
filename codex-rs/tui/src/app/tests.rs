@@ -3114,10 +3114,10 @@ async fn saturated_capacity_queue_notifies_once_backs_off_and_delivers_each_task
                 attempt: 0,
             }],
         );
-        assert!(
-            app.enqueue_pending_dispatch_for_thread(orc_thread_id, pending.clone())
-                .is_none()
-        );
+        assert!(matches!(
+            app.enqueue_pending_dispatch_for_thread(orc_thread_id, pending.clone()),
+            crate::spawn_orchestration::PendingDispatchEnqueueResult::Queued
+        ));
         app.note_spawn_capacity_pending(orc_thread_id, &label, 3, &pending);
     }
     app.schedule_spawn_capacity_retry(orc_thread_id);
@@ -3164,19 +3164,19 @@ async fn saturated_capacity_queue_notifies_once_backs_off_and_delivers_each_task
         &target_node_id,
         first_attempt.trim_end().to_string(),
     );
-    assert!(
-        app.enqueue_pending_dispatch_for_thread(orc_thread_id, pending_retry.clone())
-            .is_none()
-    );
+    assert!(matches!(
+        app.enqueue_pending_dispatch_for_thread(orc_thread_id, pending_retry.clone()),
+        crate::spawn_orchestration::PendingDispatchEnqueueResult::Queued
+    ));
     app.note_spawn_capacity_pending(orc_thread_id, &label, 3, &pending_retry);
     let interleaved = crate::spawn_orchestration::PendingSpawnDispatch::new(
         "capacity task 4 arrived between retry attempts".to_string(),
         Vec::new(),
     );
-    assert!(
-        app.enqueue_pending_dispatch_for_thread(orc_thread_id, interleaved.clone())
-            .is_none()
-    );
+    assert!(matches!(
+        app.enqueue_pending_dispatch_for_thread(orc_thread_id, interleaved.clone()),
+        crate::spawn_orchestration::PendingDispatchEnqueueResult::Queued
+    ));
     app.note_spawn_capacity_pending(orc_thread_id, &label, 3, &interleaved);
     app.schedule_spawn_capacity_retry(orc_thread_id);
     assert_eq!(
@@ -3264,14 +3264,16 @@ async fn identical_pending_dispatch_is_suppressed_with_one_render_only_notice() 
         )
     };
 
-    assert!(
-        app.enqueue_pending_dispatch_for_thread(orc_thread_id, pending(1))
-            .is_none()
-    );
+    assert!(matches!(
+        app.enqueue_pending_dispatch_for_thread(orc_thread_id, pending(1)),
+        crate::spawn_orchestration::PendingDispatchEnqueueResult::Queued
+    ));
     for seq in [2, 3] {
-        let (acks, notify) = app
-            .enqueue_pending_dispatch_for_thread(orc_thread_id, pending(seq))
-            .expect("identical task should be suppressed");
+        let crate::spawn_orchestration::PendingDispatchEnqueueResult::Duplicate { acks, notify } =
+            app.enqueue_pending_dispatch_for_thread(orc_thread_id, pending(seq))
+        else {
+            panic!("identical task should be suppressed");
+        };
         app.record_duplicate_pending_dispatch(&label, &acks, notify);
     }
 
@@ -3500,21 +3502,16 @@ async fn queued_native_dispatch_fails_and_is_removed_from_persistence_when_targe
             .get(&orc_thread_id)
             .is_none_or(std::collections::VecDeque::is_empty)
     );
-    let layout_path = app
-        .config
-        .codex_home
-        .as_ref()
-        .join("panes")
-        .join("pane-layout.json");
-    let layout: crate::claude_panes::PaneLayoutState = serde_json::from_str(
-        &std::fs::read_to_string(&layout_path).expect("pane layout should be persisted"),
+    let layout = crate::claude_panes::load_pane_layout(
+        app.config.codex_home.as_ref(),
+        Some(&troll_thread_id.to_string()),
     )
-    .expect("pane layout should deserialize");
+    .expect("pane layout should be persisted");
     assert!(
         !layout
             .spawn_pending_dispatches_by_thread
             .contains_key(&orc_thread_id.to_string()),
-        "closed target queue must not persist in {layout_path:?}"
+        "closed target queue must not persist"
     );
 }
 
@@ -3706,19 +3703,14 @@ async fn processed_dispatch_seq_persists_and_suppresses_reissue_after_restore() 
     );
     assert_eq!(drain_spawn_agent_tasks_for(&mut rx, orc_thread_id).len(), 1);
 
-    let layout_path = app
-        .config
-        .codex_home
-        .as_ref()
-        .join("panes")
-        .join("pane-layout.json");
-    let layout: crate::claude_panes::PaneLayoutState = serde_json::from_str(
-        &std::fs::read_to_string(&layout_path).expect("pane layout should be persisted"),
+    let layout = crate::claude_panes::load_pane_layout(
+        app.config.codex_home.as_ref(),
+        Some(&troll_thread_id.to_string()),
     )
-    .expect("pane layout should deserialize");
+    .expect("pane layout should be persisted");
     assert!(
         layout.spawn_processed_dispatch_seq_ids.contains(&91),
-        "processed dispatch seq should persist in {layout_path:?}"
+        "processed dispatch seq should persist in the authoritative layout"
     );
 
     let (mut restored_app, mut restored_rx, _restored_op_rx) = make_test_app_with_channels().await;
@@ -3761,6 +3753,47 @@ async fn processed_dispatch_seq_persists_and_suppresses_reissue_after_restore() 
     assert!(
         !restored_app.spawn_processed_dispatch_seq_ids.contains(&1),
         "seq far below the retention window should be evicted"
+    );
+}
+
+#[tokio::test]
+async fn model_dispatch_origin_persists_and_suppresses_replayed_turn() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
+    app.primary_thread_id = Some(troll_thread_id);
+    let block = format!(
+        "```pfterminal-send-task\n{{\"target\":\"{orc_thread_id}\",\"task\":\"origin replay proof\"}}\n```"
+    );
+
+    assert!(app.dispatch_native_spawn_task_blocks_from_text(
+        troll_thread_id,
+        "stable-source-turn",
+        &block,
+    ));
+    assert_eq!(drain_spawn_agent_tasks_for(&mut rx, orc_thread_id).len(), 1);
+    let layout = crate::claude_panes::load_pane_layout(
+        app.config.codex_home.as_ref(),
+        Some(&troll_thread_id.to_string()),
+    )
+    .expect("authoritative layout");
+    assert_eq!(layout.spawn_processed_dispatch_origin_ids.len(), 1);
+
+    let (mut restored_app, mut restored_rx, _restored_op_rx) = make_test_app_with_channels().await;
+    register_native_dispatch_pair(&mut restored_app);
+    restored_app.primary_thread_id = Some(troll_thread_id);
+    restored_app.spawn_processed_dispatch_origins = layout
+        .spawn_processed_dispatch_origin_ids
+        .into_iter()
+        .collect();
+
+    assert!(restored_app.dispatch_native_spawn_task_blocks_from_text(
+        troll_thread_id,
+        "stable-source-turn",
+        &block,
+    ));
+    assert!(
+        drain_spawn_agent_tasks_for(&mut restored_rx, orc_thread_id).is_empty(),
+        "replaying one completed source turn must not present the task again"
     );
 }
 
@@ -6258,21 +6291,17 @@ async fn queued_claude_pane_dispatch_fails_and_is_removed_from_persistence_when_
             .get(&orc_pane_id)
             .is_none_or(std::collections::VecDeque::is_empty)
     );
-    let layout_path = app
-        .config
-        .codex_home
-        .as_ref()
-        .join("panes")
-        .join("pane-layout.json");
-    let layout: crate::claude_panes::PaneLayoutState = serde_json::from_str(
-        &std::fs::read_to_string(&layout_path).expect("pane layout should be persisted"),
+    let primary_thread_id = app.primary_thread_id.expect("primary thread");
+    let layout = crate::claude_panes::load_pane_layout(
+        app.config.codex_home.as_ref(),
+        Some(&primary_thread_id.to_string()),
     )
-    .expect("pane layout should deserialize");
+    .expect("pane layout should be persisted");
     assert!(
         !layout
             .spawn_pending_dispatches_by_pane
             .contains_key(&orc_pane_id),
-        "removed Claude target queue must not persist in {layout_path:?}"
+        "removed Claude target queue must not persist"
     );
 }
 
@@ -10875,7 +10904,7 @@ async fn make_test_app() -> App {
         spawn_dispatch_acks_by_target_task: HashMap::new(),
         spawn_next_dispatch_seq: 1,
         spawn_processed_dispatch_seq_ids: HashSet::new(),
-        spawn_processed_dispatches: HashSet::new(),
+        spawn_processed_dispatch_origins: HashSet::new(),
         spawn_processed_terminal_turns: HashSet::new(),
         spawn_auto_loop_state_by_node: HashMap::new(),
         spawn_operator_input_seen: false,
@@ -10971,7 +11000,7 @@ async fn make_test_app_with_channels() -> (
             spawn_dispatch_acks_by_target_task: HashMap::new(),
             spawn_next_dispatch_seq: 1,
             spawn_processed_dispatch_seq_ids: HashSet::new(),
-            spawn_processed_dispatches: HashSet::new(),
+            spawn_processed_dispatch_origins: HashSet::new(),
             spawn_processed_terminal_turns: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
             spawn_operator_input_seen: false,
