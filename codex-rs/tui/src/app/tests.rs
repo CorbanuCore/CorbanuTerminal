@@ -11749,6 +11749,34 @@ async fn interrupt_failure_message_is_pane_local() {
 }
 
 #[tokio::test]
+async fn unexpected_turn_steer_failure_is_pane_local_and_nonfatal() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let thread_id = ThreadId::new();
+    app.active_thread_id = Some(thread_id);
+    let error = TypedRequestError::Server {
+        method: "turn/steer".to_string(),
+        source: JSONRPCErrorError {
+            code: -32600,
+            message: "direct app-server input is not allowed for multi-agent v2 sub-agents"
+                .to_string(),
+            data: None,
+        },
+    };
+
+    app.note_thread_steer_failure(thread_id, error);
+
+    let mut rendered = String::new();
+    while let Ok(event) = app_event_rx.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            rendered.push_str(&lines_to_single_string(&cell.display_lines(/*width*/ 120)));
+        }
+    }
+    assert!(rendered.contains("Failed to steer"));
+    assert!(rendered.contains("direct app-server input is not allowed"));
+    assert!(rendered.contains("pane remains open"));
+}
+
+#[tokio::test]
 async fn fresh_session_config_uses_current_service_tier() {
     let mut app = make_test_app().await;
     app.chat_widget.set_service_tier(Some(

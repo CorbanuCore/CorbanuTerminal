@@ -92,6 +92,24 @@ impl App {
         ));
     }
 
+    pub(super) fn note_thread_steer_failure(
+        &mut self,
+        thread_id: ThreadId,
+        error: TypedRequestError,
+    ) {
+        let label = self.thread_label(thread_id);
+        tracing::error!(
+            %thread_id,
+            error = ?error,
+            "turn/steer failed in TUI; queueing the user input and keeping the pane alive"
+        );
+        if !self.chat_widget.enqueue_rejected_steer() {
+            self.chat_widget.add_error_message(format!(
+                "Failed to steer {label}: {error}. The pane remains open."
+            ));
+        }
+    }
+
     pub(super) async fn shutdown_current_thread(&mut self, app_server: &mut AppServerSession) {
         if let Some(thread_id) = self.chat_widget.thread_id() {
             // Clear any in-flight rollback guard when switching threads.
@@ -771,9 +789,13 @@ impl App {
                                             let mut store = channel.store.lock().await;
                                             store.active_turn_id = Some(actual_turn_id);
                                         }
-                                        return Err(error.into());
+                                        self.note_thread_steer_failure(thread_id, error);
+                                        return Ok(true);
                                     }
-                                    None => return Err(error.into()),
+                                    None => {
+                                        self.note_thread_steer_failure(thread_id, error);
+                                        return Ok(true);
+                                    }
                                 }
                             }
                         }
