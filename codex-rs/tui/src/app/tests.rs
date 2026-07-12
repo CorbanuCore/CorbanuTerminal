@@ -2944,7 +2944,7 @@ async fn completed_agent_wait_restores_busy_dispatch_queue_behavior() {
             thread_id: orc_thread_id.to_string(),
             turn_id: "turn-waiting".to_string(),
             started_at_ms: 0,
-            item: wait_item.clone(),
+            item: wait_item,
         },
     ));
     app.update_spawn_status_for_thread_notification(&ServerNotification::ItemCompleted(
