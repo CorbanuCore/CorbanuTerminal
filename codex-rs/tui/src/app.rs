@@ -1430,9 +1430,14 @@ See the PFTerminal keymap documentation for supported actions and examples."
                         .spawn_pending_dispatches_by_thread
                         .iter()
                         .filter_map(|(thread_id, queue)| {
-                            ThreadId::from_string(thread_id)
-                                .ok()
-                                .map(|thread_id| (thread_id, queue.iter().cloned().collect()))
+                            ThreadId::from_string(thread_id).ok().map(|thread_id| {
+                                (
+                                    thread_id,
+                                    crate::spawn_orchestration::reconcile_restored_dispatches(
+                                        queue,
+                                    ),
+                                )
+                            })
                         })
                         .collect()
                 })
@@ -1443,7 +1448,12 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     layout
                         .spawn_pending_dispatches_by_pane
                         .iter()
-                        .map(|(pane_id, queue)| (pane_id.clone(), queue.iter().cloned().collect()))
+                        .map(|(pane_id, queue)| {
+                            (
+                                pane_id.clone(),
+                                crate::spawn_orchestration::reconcile_restored_dispatches(queue),
+                            )
+                        })
                         .collect()
                 })
                 .unwrap_or_default(),

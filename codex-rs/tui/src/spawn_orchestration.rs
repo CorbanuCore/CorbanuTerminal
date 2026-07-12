@@ -57,6 +57,7 @@ const SPAWN_PROCESSED_DISPATCH_TURN_LIMIT: usize = 1024;
 const SPAWN_PROCESSED_DISPATCH_TURN_RETAIN: usize = SPAWN_PROCESSED_DISPATCH_TURN_LIMIT / 2;
 const SPAWN_PROCESSED_DISPATCH_SEQ_RETAIN: usize = 256;
 const SPAWN_REPORT_RESULT_MAX_CHARS: usize = 12_000;
+const SPAWN_PENDING_DISPATCH_TTL_MS: i64 = 30 * 60 * 1_000;
 /// Loop breaker: maximum consecutive auto-triggered child-report processing turns that may each
 /// dispatch follow-up work before auto-processing pauses for that parent node. Without a ceiling,
 /// report -> auto processing turn -> dispatch -> report cycles never terminate on their own. The
@@ -96,24 +97,88 @@ pub(crate) struct SpawnDispatchAck {
     pub(crate) attempt: u8,
 }
 
+/// Authoritative lifecycle for one delegated unit of work.
+///
+/// Host dispatches, agent messages, follow-up tasks, and completion reports must map to these
+/// states: created -> delivered -> acknowledged -> active -> one terminal state. A replacement
+/// never deletes history: it transitions the older unit to `Superseded`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DispatchLifecycleStatus {
+    #[default]
+    Created,
+    Delivered,
+    Acknowledged,
+    Active,
+    Completed,
+    Superseded,
+    Cancelled,
+    Expired,
+}
+
+impl DispatchLifecycleStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Created => "created",
+            Self::Delivered => "delivered",
+            Self::Acknowledged => "acknowledged",
+            Self::Active => "active",
+            Self::Completed => "completed",
+            Self::Superseded => "superseded",
+            Self::Cancelled => "cancelled",
+            Self::Expired => "expired",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct PendingSpawnDispatch {
     pub(crate) task: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) acks: Vec<SpawnDispatchAck>,
+    #[serde(default = "spawn_dispatch_now_ms")]
+    pub(crate) created_at_ms: i64,
+    #[serde(default)]
+    pub(crate) status: DispatchLifecycleStatus,
 }
 
 impl PendingSpawnDispatch {
     pub(crate) fn new(task: String, acks: Vec<SpawnDispatchAck>) -> Self {
-        Self { task, acks }
+        Self {
+            task,
+            acks,
+            created_at_ms: spawn_dispatch_now_ms(),
+            status: DispatchLifecycleStatus::Created,
+        }
     }
 
     fn legacy(task: String) -> Self {
         Self {
             task,
             acks: Vec::new(),
+            created_at_ms: spawn_dispatch_now_ms(),
+            status: DispatchLifecycleStatus::Created,
         }
     }
+
+    pub(crate) fn is_expired(&self, now_ms: i64) -> bool {
+        now_ms.saturating_sub(self.created_at_ms) > SPAWN_PENDING_DISPATCH_TTL_MS
+    }
+}
+
+fn spawn_dispatch_now_ms() -> i64 {
+    Utc::now().timestamp_millis()
+}
+
+pub(crate) fn reconcile_restored_dispatches(
+    dispatches: &[PendingSpawnDispatch],
+) -> VecDeque<PendingSpawnDispatch> {
+    let now_ms = spawn_dispatch_now_ms();
+    dispatches
+        .iter()
+        .filter(|dispatch| !dispatch.is_expired(now_ms))
+        .cloned()
+        .collect()
 }
 
 impl<'de> Deserialize<'de> for PendingSpawnDispatch {
@@ -126,6 +191,10 @@ impl<'de> Deserialize<'de> for PendingSpawnDispatch {
             task: String,
             #[serde(default)]
             acks: Vec<SpawnDispatchAck>,
+            #[serde(default = "spawn_dispatch_now_ms")]
+            created_at_ms: i64,
+            #[serde(default)]
+            status: DispatchLifecycleStatus,
         }
 
         #[derive(Deserialize)]
@@ -139,6 +208,8 @@ impl<'de> Deserialize<'de> for PendingSpawnDispatch {
             PendingSpawnDispatchRepr::Full(fields) => Ok(Self {
                 task: fields.task,
                 acks: fields.acks,
+                created_at_ms: fields.created_at_ms,
+                status: fields.status,
             }),
             PendingSpawnDispatchRepr::Legacy(task) => Ok(Self::legacy(task)),
         }
@@ -4711,27 +4782,62 @@ impl App {
         {
             let _ = write!(suffix, "; pending_reports={count}");
         }
-        if let Some(count) = self
+        if let Some(queue) = self
             .spawn_pending_dispatches_by_thread
             .get(&thread_id)
-            .map(VecDeque::len)
-            .filter(|count| *count > 0)
+            .filter(|queue| !queue.is_empty())
         {
-            let _ = write!(suffix, "; pending_dispatches={count}");
+            let _ = write!(suffix, "; pending_dispatches={}", queue.len());
+            let now_ms = spawn_dispatch_now_ms();
+            for dispatch in queue.iter().take(3) {
+                let seq = dispatch
+                    .acks
+                    .first()
+                    .map(|ack| ack.seq.to_string())
+                    .unwrap_or_else(|| "legacy".to_string());
+                let age_seconds = now_ms.saturating_sub(dispatch.created_at_ms) / 1_000;
+                let preview = compact_spawn_context_value(&dispatch.task);
+                let _ = write!(
+                    suffix,
+                    "; queue[#{} age={}s status={} task={}]",
+                    seq,
+                    age_seconds,
+                    dispatch.status.as_str(),
+                    preview
+                );
+            }
         }
         suffix
     }
 
     fn spawn_claude_pane_pending_suffix(&self, pane_id: &str) -> String {
-        let Some(count) = self
+        let Some(queue) = self
             .spawn_pending_dispatches_by_pane
             .get(pane_id)
-            .map(VecDeque::len)
-            .filter(|count| *count > 0)
+            .filter(|queue| !queue.is_empty())
         else {
             return String::new();
         };
-        format!("; pending_dispatches={count}")
+        let mut suffix = format!("; pending_dispatches={}", queue.len());
+        let now_ms = spawn_dispatch_now_ms();
+        for dispatch in queue.iter().take(3) {
+            let seq = dispatch
+                .acks
+                .first()
+                .map(|ack| ack.seq.to_string())
+                .unwrap_or_else(|| "legacy".to_string());
+            let age_seconds = now_ms.saturating_sub(dispatch.created_at_ms) / 1_000;
+            let preview = compact_spawn_context_value(&dispatch.task);
+            let _ = write!(
+                suffix,
+                "; queue[#{} age={}s status={} task={}]",
+                seq,
+                age_seconds,
+                dispatch.status.as_str(),
+                preview
+            );
+        }
+        suffix
     }
 
     fn write_spawn_context_claude_pane(

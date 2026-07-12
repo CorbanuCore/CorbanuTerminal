@@ -2771,6 +2771,8 @@ async fn spawn_roster_lines_surface_pending_queue_depths() {
         .expect("Nazgul should receive spawn context");
     assert!(context.contains("pending_reports=1"), "got: {context}");
     assert!(context.contains("pending_dispatches=1"), "got: {context}");
+    assert!(context.contains("status=created"), "got: {context}");
+    assert!(context.contains("queued seq task"), "got: {context}");
 }
 
 #[tokio::test]
