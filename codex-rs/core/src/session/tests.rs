@@ -45,6 +45,7 @@ use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::config_types::ServiceTier;
 use codex_protocol::config_types::TrustLevel;
 use codex_protocol::exec_output::ExecToolCallOutput;
+use codex_protocol::items::AgentMessageContent;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
@@ -7366,6 +7367,44 @@ pub(crate) async fn make_session_and_context_with_rx() -> (
     async_channel::Receiver<Event>,
 ) {
     make_session_and_context_with_dynamic_tools_and_rx(Vec::new()).await
+}
+
+#[tokio::test]
+async fn plaintext_inter_agent_communication_emits_visible_item_lifecycle() {
+    let (session, turn_context, rx) = make_session_and_context_with_rx().await;
+    let control = "CONTROL EVENT — INTERRUPT\nActor: Burzum [troll]\nTarget: Snaga [orc]";
+    session
+        .record_inter_agent_communication(
+            &turn_context,
+            InterAgentCommunication::new(
+                AgentPath::try_from("/root/troll_burzum").expect("author path"),
+                AgentPath::try_from("/root/troll_burzum/orc_snaga").expect("recipient path"),
+                Vec::new(),
+                control.to_string(),
+                /*trigger_turn*/ true,
+            ),
+        )
+        .await;
+
+    let deadline = tokio::time::Instant::now() + StdDuration::from_secs(2);
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        let event = tokio::time::timeout(remaining, rx.recv())
+            .await
+            .expect("expected visible inter-agent item lifecycle")
+            .expect("event channel open");
+        if let EventMsg::ItemCompleted(completed) = event.msg
+            && let TurnItem::AgentMessage(message) = completed.item
+            && message.content.iter().any(|content| {
+                matches!(
+                    content,
+                    AgentMessageContent::Text { text } if text.contains(control)
+                )
+            })
+        {
+            break;
+        }
+    }
 }
 
 #[tokio::test]

@@ -2895,6 +2895,13 @@ impl Session {
         self.persist_rollout_items(&[RolloutItem::InterAgentCommunication(communication)])
             .await;
         self.send_raw_response_items(turn_context, items).await;
+        // Plaintext inter-agent controls are operator-visible transcript content. Raw response
+        // notifications preserve provider compatibility, but app-server clients render the
+        // item lifecycle; emit it here just as we do for ordinary recorded response items.
+        if let Some(item) = parse_turn_item(&response_item) {
+            self.emit_turn_item_started(turn_context, &item).await;
+            self.emit_turn_item_completed(turn_context, item).await;
+        }
     }
 
     async fn maybe_warn_on_server_model_mismatch(
