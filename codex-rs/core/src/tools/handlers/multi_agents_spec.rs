@@ -545,6 +545,16 @@ fn wait_output_schema_v2() -> Value {
                 "type": "boolean",
                 "description": "Whether the wait call returned because no mailbox update arrived before the timeout."
             },
+            "waiting_for": {
+                "type": "string",
+                "description": "The eligible child-agent subtree whose mailbox activity is being awaited."
+            },
+            "wake_conditions": {
+                "type": "string",
+                "description": "The events that end the wait."
+            },
+            "consecutive_empty_waits": {"type": "integer"},
+            "watchdog_escalated": {"type": "boolean"},
             "agents": {
                 "type": "array",
                 "items": {
@@ -581,7 +591,7 @@ fn wait_output_schema_v2() -> Value {
                 "description": "Live agents visible in the current root thread tree after the wait."
             }
         },
-        "required": ["message", "timed_out", "agents"],
+        "required": ["message", "timed_out", "waiting_for", "wake_conditions", "consecutive_empty_waits", "watchdog_escalated", "agents"],
         "additionalProperties": false
     })
 }

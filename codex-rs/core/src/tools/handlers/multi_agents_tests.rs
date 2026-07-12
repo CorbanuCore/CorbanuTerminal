@@ -4208,6 +4208,67 @@ async fn multi_agent_v2_wait_agent_allows_zero_configured_timeout() {
 }
 
 #[tokio::test]
+async fn multi_agent_v2_wait_watchdog_escalates_and_blocks_polling_loop() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let mut config = (*turn.config).clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    config.multi_agent_v2.min_wait_timeout_ms = 0;
+    config.multi_agent_v2.max_wait_timeout_ms = 0;
+    config.multi_agent_v2.default_wait_timeout_ms = 0;
+    set_turn_config(&mut turn, config);
+    let _manager = register_v2_wait_child(&mut session, &turn).await;
+    let session = Arc::new(session);
+    let turn = Arc::new(turn);
+    let handler = WaitAgentHandlerV2::default();
+
+    let mut third_result = None;
+    for _ in 0..3 {
+        let output = handler
+            .handle(invocation(
+                session.clone(),
+                turn.clone(),
+                "wait_agent",
+                function_payload(json!({})),
+            ))
+            .await
+            .expect("first three waits return structured status");
+        let (content, _) = expect_text_output(output);
+        third_result = Some(
+            serde_json::from_str::<crate::tools::handlers::multi_agents_v2::wait::WaitAgentResult>(
+                &content,
+            )
+            .expect("wait result should parse"),
+        );
+    }
+
+    let third_result = third_result.expect("third result");
+    assert_eq!(third_result.consecutive_empty_waits, 3);
+    assert!(third_result.watchdog_escalated);
+    assert!(third_result.message.contains("WATCHDOG ESCALATION"));
+
+    let err = handler
+        .handle(invocation(
+            session,
+            turn,
+            "wait_agent",
+            function_payload(json!({})),
+        ))
+        .await
+        .err()
+        .expect("watchdog must break the polling loop");
+    assert_eq!(
+        err,
+        FunctionCallError::RespondToModel(
+            "wait_agent watchdog is open after 3 consecutive empty waits; polling is blocked until new work starts"
+                .to_string()
+        )
+    );
+}
+
+#[tokio::test]
 async fn multi_agent_v2_wait_agent_rejects_timeout_above_configured_max() {
     let (session, mut turn) = make_session_and_context().await;
     let mut config = (*turn.config).clone();

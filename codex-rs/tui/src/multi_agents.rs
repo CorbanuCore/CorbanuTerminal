@@ -430,11 +430,11 @@ fn waiting_begin(
             agent_label(*thread_id, metadata),
             /*spawn_request*/ None,
         ),
-        [] => title_text("Waiting for agents"),
+        [] => title_text("Waiting for child-agent mailbox activity"),
         _ => title_text(format!("Waiting for {} agents", receiver_agents.len())),
     };
 
-    let details = if receiver_agents.len() > 1 {
+    let mut details = if receiver_agents.len() > 1 {
         receiver_agents
             .iter()
             .map(|(thread_id, metadata)| agent_label_line(agent_label(*thread_id, metadata)))
@@ -442,6 +442,9 @@ fn waiting_begin(
     } else {
         Vec::new()
     };
+    details.push(Line::from(
+        "Wakes on a child report/message, follow-up task, human steering, or timeout.",
+    ));
 
     collab_event(title, details)
 }
@@ -451,8 +454,18 @@ fn waiting_end(
     agents_states: &std::collections::HashMap<String, CollabAgentState>,
     agent_metadata: &mut impl FnMut(ThreadId) -> AgentMetadata,
 ) -> PlainHistoryCell {
-    let details = wait_complete_lines(receiver_thread_ids, agents_states, agent_metadata);
-    collab_event(title_text("Finished waiting"), details)
+    let mut details = wait_complete_lines(receiver_thread_ids, agents_states, agent_metadata);
+    let title = if details.is_empty() {
+        title_text("Wait ended — no child completion reported")
+    } else {
+        title_text("Wait ended — child status update")
+    };
+    if details.is_empty() {
+        details.push(Line::from(
+            "Ended by mailbox activity, steering, or timeout; no child completion was attached.",
+        ));
+    }
+    collab_event(title, details)
 }
 
 fn close_end(
@@ -628,7 +641,7 @@ fn wait_complete_lines(
     entries.extend(extras);
 
     if entries.is_empty() {
-        vec![Line::from(Span::from("No agents completed yet"))]
+        Vec::new()
     } else {
         entries
             .into_iter()
