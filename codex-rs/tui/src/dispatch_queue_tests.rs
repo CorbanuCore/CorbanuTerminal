@@ -7,7 +7,6 @@ use super::MAX_GLOBAL_DISPATCH_ITEMS;
 use super::MAX_TARGET_DISPATCH_BYTES;
 use super::MAX_TARGET_DISPATCH_ITEMS;
 use super::PendingSpawnDispatch;
-use super::bounded_delivery_batch;
 use super::delivery_id;
 use super::expand_legacy_batch;
 use super::model_dispatch_origin_id;
@@ -83,22 +82,6 @@ fn model_origin_uses_turn_and_ordinal_not_task_wording() {
     assert_eq!(first, model_dispatch_origin_id("thread:a", "turn-1", 0));
     assert_ne!(first, model_dispatch_origin_id("thread:a", "turn-1", 1));
     assert_ne!(first, model_dispatch_origin_id("thread:a", "turn-2", 0));
-}
-
-#[test]
-fn delivery_batch_preserves_fifo_while_enforcing_item_and_byte_caps() {
-    let dispatches = (0..20)
-        .map(|index| PendingSpawnDispatch::new(format!("task-{index}"), Vec::new()))
-        .collect::<Vec<_>>();
-    let item_bounded = bounded_delivery_batch(dispatches);
-    assert_eq!(item_bounded.len(), 16);
-    assert_eq!(item_bounded[0].task, "task-0");
-    assert_eq!(item_bounded[15].task, "task-15");
-
-    let dispatches = (0..8)
-        .map(|_| PendingSpawnDispatch::new("x".repeat(32 * 1024), Vec::new()))
-        .collect::<Vec<_>>();
-    assert_eq!(bounded_delivery_batch(dispatches).len(), 4);
 }
 
 #[test]

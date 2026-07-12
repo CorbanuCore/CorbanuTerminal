@@ -16,8 +16,6 @@ pub(crate) const MAX_TARGET_DISPATCH_ITEMS: usize = 256;
 pub(crate) const MAX_TARGET_DISPATCH_BYTES: usize = 2 * 1024 * 1024;
 pub(crate) const MAX_GLOBAL_DISPATCH_ITEMS: usize = 1024;
 pub(crate) const MAX_GLOBAL_DISPATCH_BYTES: usize = 8 * 1024 * 1024;
-pub(crate) const MAX_DELIVERY_BATCH_ITEMS: usize = 16;
-pub(crate) const MAX_DELIVERY_BATCH_BYTES: usize = 128 * 1024;
 
 const LEGACY_BATCH_HEADER: &str = "Multiple spawn dispatches were queued while you were busy. Execute each task below in order, do not skip any task, and treat every section as assigned work.\n\n";
 
@@ -242,22 +240,6 @@ pub(crate) fn queue_payload_bytes<'a>(
         .into_iter()
         .map(PendingSpawnDispatch::payload_bytes)
         .sum()
-}
-
-pub(crate) fn bounded_delivery_batch(
-    dispatches: impl IntoIterator<Item = PendingSpawnDispatch>,
-) -> Vec<PendingSpawnDispatch> {
-    let mut batch = Vec::new();
-    let mut bytes = 0usize;
-    for dispatch in dispatches {
-        let next_bytes = bytes.saturating_add(dispatch.payload_bytes());
-        if batch.len() >= MAX_DELIVERY_BATCH_ITEMS || next_bytes > MAX_DELIVERY_BATCH_BYTES {
-            break;
-        }
-        bytes = next_bytes;
-        batch.push(dispatch);
-    }
-    batch
 }
 
 pub(crate) fn queue_bound_violation(

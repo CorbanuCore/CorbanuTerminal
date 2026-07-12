@@ -9,7 +9,6 @@ use crate::claude_panes::CODEX_MAIN_PANE_ID;
 use crate::claude_panes::ClaudeProviderProfileKind;
 use crate::multi_agents::agent_picker_status_dot_spans;
 use crate::multi_agents::format_agent_picker_item_name;
-use crate::session_state::ThreadSessionState;
 use chrono::Utc;
 use codex_app_server_protocol::AdditionalContextEntry;
 use codex_app_server_protocol::AdditionalContextKind;
@@ -473,51 +472,6 @@ impl App {
     ) -> bool {
         self.replacement_for_superseded_saved_native_spawn_thread(thread_id, entry)
             .is_some()
-    }
-
-    pub(crate) fn apply_native_spawn_task_session_fallbacks(
-        &self,
-        thread_id: ThreadId,
-        session: &mut ThreadSessionState,
-    ) {
-        if session.model.trim().is_empty() {
-            session.model = self.native_spawn_fallback_model_for_thread(thread_id);
-        }
-        if session.model_provider_id.trim().is_empty() {
-            // Derive the provider from the model, not the config default: the config default
-            // provider has no relationship to a role-derived or rollout-restored model, and a
-            // mismatched pair 400s at the remote ("Unknown model").
-            session.model_provider_id =
-                crate::chatwidget::ChatWidget::model_provider_for_selection(&session.model)
-                    .unwrap_or_else(|| self.config.model_provider_id.clone());
-        } else if let Some(corrected) =
-            corrected_native_spawn_provider(&session.model, &session.model_provider_id)
-        {
-            tracing::warn!(
-                thread_id = %thread_id,
-                model = %session.model,
-                stored_provider = %session.model_provider_id,
-                corrected_provider = %corrected,
-                "correcting impossible model/provider pair on native spawn session bind"
-            );
-            session.model_provider_id = corrected;
-        }
-        if session.runtime_workspace_roots.is_empty() {
-            session.runtime_workspace_roots = self.config.workspace_roots.clone();
-        }
-    }
-
-    fn native_spawn_fallback_model_for_thread(&self, thread_id: ThreadId) -> String {
-        match self
-            .agent_navigation
-            .get(&thread_id)
-            .and_then(|entry| entry.agent_role.as_deref())
-        {
-            Some(NAZGUL_ROLE_NAME) => Self::STANDARD_NAZGUL_MODEL.to_string(),
-            Some(TROLL_ROLE) => Self::STANDARD_TROLL_MODEL.to_string(),
-            Some(ORC_ROLE) => Self::STANDARD_ORC_MODEL.to_string(),
-            _ => self.chat_widget.current_model().to_string(),
-        }
     }
 
     pub(crate) async fn materialize_saved_native_spawn_thread_for_task(
@@ -1304,20 +1258,6 @@ impl App {
         self.chat_widget.show_custom_prompt_view(view);
     }
 
-    pub(crate) fn dispatch_spawn_task_blocks(
-        &mut self,
-        source_pane_id: &str,
-        dispatches: Vec<SpawnTaskDispatch>,
-    ) {
-        self.dispatch_spawn_task_blocks_with_origins(
-            source_pane_id,
-            dispatches
-                .into_iter()
-                .map(|dispatch| (dispatch, None))
-                .collect(),
-        );
-    }
-
     pub(crate) fn dispatch_spawn_task_blocks_from_model_turn(
         &mut self,
         source_pane_id: &str,
@@ -2058,18 +1998,6 @@ impl App {
         );
     }
 
-    pub(crate) fn requeue_spawn_report_processing_task(
-        &mut self,
-        parent_thread_id: ThreadId,
-        task: &str,
-    ) -> bool {
-        let Some(report) = child_report_from_processing_prompt(task) else {
-            return false;
-        };
-        self.enqueue_pending_report(parent_thread_id, report);
-        true
-    }
-
     pub(crate) fn native_spawn_target_is_busy(&self, thread_id: ThreadId) -> bool {
         let navigation_busy = self
             .agent_navigation
@@ -2521,23 +2449,6 @@ impl App {
             .spawn_pending_dispatches
             .remove(&self.logical_native_node_for_thread(target_thread_id))
         else {
-            return false;
-        };
-        let acks = queue
-            .into_iter()
-            .flat_map(|dispatch| dispatch.acks)
-            .collect::<Vec<_>>();
-        self.record_spawn_dispatch_acks(&acks, "failed", detail.as_ref(), true);
-        self.persist_pane_state();
-        true
-    }
-
-    pub(crate) fn fail_pending_dispatches_for_claude_pane(
-        &mut self,
-        pane_id: &str,
-        detail: impl AsRef<str>,
-    ) -> bool {
-        let Some(queue) = self.spawn_pending_dispatches.remove(&pane_node_id(pane_id)) else {
             return false;
         };
         let acks = queue
