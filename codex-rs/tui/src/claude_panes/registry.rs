@@ -708,6 +708,14 @@ fn atomic_replace_with_previous(path: &Path, contents: &[u8]) -> Result<()> {
         .with_context(|| format!("failed to sync `{}`", temp_path.display()))?;
     drop(temp);
 
+    #[cfg(test)]
+    if path.exists()
+        && std::env::var("PFTERMINAL_DISPATCH_CRASH_CUT").as_deref()
+            == Ok("during_atomic_snapshot_write")
+    {
+        std::process::exit(86);
+    }
+
     let previous_path = previous_pane_layout_path(path);
     if path.exists() {
         if read_pane_layout_generation(path).is_ok() {

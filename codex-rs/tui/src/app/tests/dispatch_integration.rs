@@ -23,6 +23,11 @@ struct RealDispatchFixture {
 impl RealDispatchFixture {
     async fn start(mock: &MockServer, max_threads: usize) -> Result<Self> {
         let (mut app, app_events, _op_rx) = make_test_app_with_channels().await;
+        if let Ok(crash_home) = std::env::var("PFTERMINAL_DISPATCH_CRASH_HOME") {
+            app.config.codex_home = codex_utils_absolute_path::AbsolutePathBuf::try_from(
+                std::path::PathBuf::from(crash_home),
+            )?;
+        }
         let mut provider = app.config.model_provider.clone();
         provider.name = "Dispatch integration mock".to_string();
         provider.base_url = Some(format!("{}/v1", mock.uri()));
@@ -438,9 +443,13 @@ fn lost_wait_steer_response_reconciles_without_start_fallback() -> Result<()> {
             .wrap_err("waiting target never entered the real wait state")?;
 
         let steer_task = "continue from the wait using this steered task";
-        fixture
-            .server
-            .inject_lost_next_turn_steer_response_after_acceptance();
+        if std::env::var("PFTERMINAL_DISPATCH_CRASH_CUT").as_deref()
+            != Ok("response_before_local_tombstone")
+        {
+            fixture
+                .server
+                .inject_lost_next_turn_steer_response_after_acceptance();
+        }
         fixture
             .app
             .app_event_tx

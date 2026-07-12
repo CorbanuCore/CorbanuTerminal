@@ -657,6 +657,331 @@ fn pane_layout_recovers_verified_previous_generation_after_corruption() {
     assert_eq!(restored.active_user_pane_id.as_deref(), Some("first"));
 }
 
+fn persisted_layout_path(codex_home: &std::path::Path, thread_id: &str) -> PathBuf {
+    codex_home
+        .join("panes")
+        .join("pane-layouts")
+        .join(format!("{thread_id}.json"))
+}
+
+#[test]
+fn pane_layout_bad_checksum_recovers_verified_previous_generation() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let thread_id = "019f2b89-775c-7dc1-9d20-4fdf7e990299";
+    let first = PaneLayoutState {
+        codex_thread_id: Some(thread_id.to_string()),
+        active_user_pane_id: Some("checksum-previous".to_string()),
+        ..Default::default()
+    };
+    let second = PaneLayoutState {
+        active_user_pane_id: Some("checksum-primary".to_string()),
+        ..first.clone()
+    };
+    persist_pane_layout(codex_home.path(), &first).expect("first generation");
+    persist_pane_layout(codex_home.path(), &second).expect("second generation");
+    let primary = persisted_layout_path(codex_home.path(), thread_id);
+    let mut json: Value =
+        serde_json::from_slice(&std::fs::read(&primary).expect("primary")).expect("persisted JSON");
+    json["checksum"] = Value::String("bad-checksum".to_string());
+    std::fs::write(&primary, serde_json::to_vec_pretty(&json).expect("JSON"))
+        .expect("corrupt checksum");
+
+    let restored = load_pane_layout(codex_home.path(), Some(thread_id)).expect("previous");
+    assert_eq!(
+        restored.active_user_pane_id.as_deref(),
+        Some("checksum-previous")
+    );
+}
+
+#[test]
+fn pane_layout_corrupt_primary_without_previous_fails_closed() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let thread_id = "019f2b89-775c-7dc1-9d20-4fdf7e990399";
+    let layout = PaneLayoutState {
+        codex_thread_id: Some(thread_id.to_string()),
+        active_user_pane_id: Some("only-generation".to_string()),
+        ..Default::default()
+    };
+    persist_pane_layout(codex_home.path(), &layout).expect("primary generation");
+    std::fs::write(
+        persisted_layout_path(codex_home.path(), thread_id),
+        b"{truncated",
+    )
+    .expect("truncate primary");
+
+    assert!(load_pane_layout(codex_home.path(), Some(thread_id)).is_none());
+}
+
+#[test]
+fn pane_layout_incompatible_version_fails_closed() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let thread_id = "019f2b89-775c-7dc1-9d20-4fdf7e990499";
+    let layout = PaneLayoutState {
+        codex_thread_id: Some(thread_id.to_string()),
+        ..Default::default()
+    };
+    persist_pane_layout(codex_home.path(), &layout).expect("primary generation");
+    let primary = persisted_layout_path(codex_home.path(), thread_id);
+    let mut json: Value =
+        serde_json::from_slice(&std::fs::read(&primary).expect("primary")).expect("persisted JSON");
+    json["format_version"] = serde_json::json!(PANE_LAYOUT_VERSION + 1);
+    std::fs::write(&primary, serde_json::to_vec_pretty(&json).expect("JSON"))
+        .expect("incompatible version");
+
+    assert!(load_pane_layout(codex_home.path(), Some(thread_id)).is_none());
+}
+
+const CRASH_MATRIX_THREAD_ID: &str = "019f2b89-775c-7dc1-9d20-4fdf7e991000";
+const CRASH_MATRIX_TARGET_ID: &str = "019f2b89-775c-7dc1-9d20-4fdf7e991001";
+
+fn crash_matrix_layout(state: Option<crate::dispatch_queue::DispatchState>) -> PaneLayoutState {
+    let target = format!("thread:{CRASH_MATRIX_TARGET_ID}");
+    let mut layout = PaneLayoutState {
+        codex_thread_id: Some(CRASH_MATRIX_THREAD_ID.to_string()),
+        spawn_native_endpoint_by_node: BTreeMap::from([(
+            target.clone(),
+            CRASH_MATRIX_TARGET_ID.to_string(),
+        )]),
+        ..Default::default()
+    };
+    if let Some(state) = state {
+        let mut dispatch = crate::spawn_orchestration::PendingSpawnDispatch::new(
+            "crash matrix task".to_string(),
+            Vec::new(),
+        );
+        dispatch.assign_identity(1, "pane:codex-main", &target, Some("crash-matrix-origin"));
+        dispatch.state = state;
+        layout
+            .spawn_processed_dispatch_origin_ids
+            .push(dispatch.origin.origin_id.clone());
+        layout
+            .spawn_pending_dispatches
+            .insert(target, vec![dispatch]);
+    }
+    layout
+}
+
+#[test]
+fn dispatch_process_cut_child() {
+    let Ok(home) = std::env::var("PFTERMINAL_DISPATCH_CRASH_HOME") else {
+        return;
+    };
+    let cut = std::env::var("PFTERMINAL_DISPATCH_CRASH_CUT").expect("crash cut");
+    let home = PathBuf::from(home);
+    persist_pane_layout(&home, &crash_matrix_layout(None)).expect("baseline generation");
+    let queued = crate::dispatch_queue::DispatchState::Queued;
+    let submitting = crate::dispatch_queue::DispatchState::Submitting {
+        delivery_id: "delivery-crash-matrix".to_string(),
+        ordered_dispatch_ids: vec!["dispatch-crash-matrix".to_string()],
+    };
+    let marker = |name: &str| std::fs::write(home.join(name), b"durable").expect("marker");
+    match cut.as_str() {
+        "before_enqueue_commit" => {}
+        "after_enqueue_before_receipt" => {
+            persist_pane_layout(&home, &crash_matrix_layout(Some(queued))).expect("queued commit");
+        }
+        "after_submitting_before_send" => {
+            persist_pane_layout(&home, &crash_matrix_layout(Some(submitting)))
+                .expect("submitting commit");
+        }
+        "request_bytes_before_server_receipt" => {
+            persist_pane_layout(&home, &crash_matrix_layout(Some(submitting)))
+                .expect("submitting commit");
+            marker("rpc-bytes-sent");
+        }
+        "server_accept_before_response" => {
+            persist_pane_layout(&home, &crash_matrix_layout(Some(submitting)))
+                .expect("submitting commit");
+            marker("rpc-bytes-sent");
+            marker("server-durable-acceptance");
+        }
+        "response_before_local_tombstone" => {
+            persist_pane_layout(&home, &crash_matrix_layout(Some(submitting)))
+                .expect("submitting commit");
+            marker("rpc-bytes-sent");
+            marker("server-durable-acceptance");
+            marker("rpc-response-received");
+        }
+        "during_atomic_snapshot_write" => {
+            // The registry fault exits after the replacement temp file is synced but before the
+            // verified baseline generation is rotated.
+            persist_pane_layout(&home, &crash_matrix_layout(Some(queued)))
+                .expect("fault exits before return");
+            unreachable!("atomic snapshot fault must terminate the process");
+        }
+        "during_thread_replacement_migration" => {
+            let mut in_memory = crash_matrix_layout(Some(queued));
+            in_memory.spawn_native_endpoint_by_node.insert(
+                format!("thread:{CRASH_MATRIX_TARGET_ID}"),
+                "019f2b89-775c-7dc1-9d20-4fdf7e991099".to_string(),
+            );
+            marker("replacement-mutation-started");
+            std::hint::black_box(in_memory);
+        }
+        "event_stream_disconnected" => {
+            persist_pane_layout(&home, &crash_matrix_layout(Some(queued))).expect("queued commit");
+            marker("event-stream-disconnected");
+        }
+        "during_tui_shutdown" => {
+            persist_pane_layout(&home, &crash_matrix_layout(Some(queued))).expect("queued commit");
+            marker("shutdown-started");
+        }
+        other => panic!("unknown crash cut {other}"),
+    }
+    std::process::exit(86);
+}
+
+fn crash_matrix_loaded_layout(home: &std::path::Path) -> Option<PaneLayoutState> {
+    std::fs::read_dir(home.join("panes").join("pane-layouts"))
+        .ok()?
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            (path.extension().and_then(|extension| extension.to_str()) == Some("json"))
+                .then(|| path.file_stem()?.to_str().map(str::to_string))
+                .flatten()
+        })
+        .find_map(|thread_id| load_pane_layout(home, Some(&thread_id)))
+}
+
+fn crash_tree_contains(path: &std::path::Path, needle: &str) -> bool {
+    if path.is_file() {
+        return std::fs::read(path)
+            .ok()
+            .is_some_and(|bytes| String::from_utf8_lossy(&bytes).contains(needle));
+    }
+    std::fs::read_dir(path)
+        .ok()
+        .into_iter()
+        .flatten()
+        .flatten()
+        .any(|entry| crash_tree_contains(&entry.path(), needle))
+}
+
+#[test]
+fn deterministic_dispatch_process_crash_matrix_recovers_readable_state() {
+    let cuts = [
+        "before_enqueue_commit",
+        "after_enqueue_before_receipt",
+        "after_submitting_before_send",
+        "request_bytes_before_server_receipt",
+        "server_accept_before_response",
+        "response_before_local_tombstone",
+        "during_atomic_snapshot_write",
+        "during_thread_replacement_migration",
+        "event_stream_disconnected",
+        "during_tui_shutdown",
+    ];
+    for cut in cuts {
+        let home = tempfile::tempdir().expect("crash home");
+        let rpc_cut = matches!(
+            cut,
+            "server_accept_before_response" | "response_before_local_tombstone"
+        );
+        let test_filter = if rpc_cut {
+            "app::tests::dispatch_integration::lost_wait_steer_response_reconciles_without_start_fallback"
+        } else {
+            "claude_panes::tests::dispatch_process_cut_child"
+        };
+        let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args(["--exact", test_filter, "--nocapture"])
+            .env("PFTERMINAL_DISPATCH_CRASH_HOME", home.path())
+            .env("PFTERMINAL_DISPATCH_CRASH_CUT", cut)
+            .output()
+            .expect("spawn crash child");
+        assert_eq!(
+            output.status.code(),
+            Some(86),
+            "cut={cut}; stdout={}; stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        if rpc_cut {
+            let restored = crash_matrix_loaded_layout(home.path())
+                .unwrap_or_else(|| panic!("cut={cut}: no persisted RPC layout"));
+            let queue = restored
+                .spawn_pending_dispatches
+                .values()
+                .find(|queue| !queue.is_empty())
+                .unwrap_or_else(|| panic!("cut={cut}: submitting RPC record was lost"));
+            assert_eq!(queue.len(), 1, "cut={cut}: duplicate RPC presentation");
+            let crate::dispatch_queue::DispatchState::Submitting { delivery_id, .. } =
+                &queue[0].state
+            else {
+                panic!("cut={cut}: RPC cut did not retain Submitting state")
+            };
+            assert!(
+                crash_tree_contains(home.path(), delivery_id),
+                "cut={cut}: core rollout lacks the durable client delivery identity"
+            );
+            let owner = restored.codex_thread_id.expect("layout owner");
+            let primary = persisted_layout_path(home.path(), &owner);
+            let stable = std::fs::read(&primary).expect("stable RPC primary bytes");
+            std::thread::sleep(Duration::from_millis(30));
+            assert_eq!(
+                std::fs::read(&primary).expect("RPC primary after child death"),
+                stable,
+                "cut={cut}: stale RPC writer continued after termination"
+            );
+            continue;
+        }
+
+        let restored = load_pane_layout(home.path(), Some(CRASH_MATRIX_THREAD_ID))
+            .unwrap_or_else(|| panic!("cut={cut}: restart could not read a verified generation"));
+        let target = format!("thread:{CRASH_MATRIX_TARGET_ID}");
+        let queue = restored.spawn_pending_dispatches.get(&target);
+        match cut {
+            "before_enqueue_commit"
+            | "during_atomic_snapshot_write"
+            | "during_thread_replacement_migration" => assert!(
+                queue.is_none_or(Vec::is_empty),
+                "cut={cut}: uncommitted work became visible"
+            ),
+            "after_enqueue_before_receipt"
+            | "event_stream_disconnected"
+            | "during_tui_shutdown" => assert!(matches!(
+                queue
+                    .and_then(|queue| queue.first())
+                    .map(|item| &item.state),
+                Some(crate::dispatch_queue::DispatchState::Queued)
+            )),
+            _ => assert!(matches!(
+                queue
+                    .and_then(|queue| queue.first())
+                    .map(|item| &item.state),
+                Some(crate::dispatch_queue::DispatchState::Submitting { .. })
+            )),
+        }
+        assert!(queue.is_none_or(|queue| queue.len() <= 1));
+        if matches!(
+            cut,
+            "server_accept_before_response" | "response_before_local_tombstone"
+        ) {
+            assert!(home.path().join("server-durable-acceptance").exists());
+        }
+        if cut == "during_thread_replacement_migration" {
+            assert_eq!(
+                restored
+                    .spawn_native_endpoint_by_node
+                    .get(&target)
+                    .map(String::as_str),
+                Some(CRASH_MATRIX_TARGET_ID),
+                "replacement must restore wholly before or wholly after migration"
+            );
+        }
+
+        let primary = persisted_layout_path(home.path(), CRASH_MATRIX_THREAD_ID);
+        let stable = std::fs::read(&primary).expect("stable primary bytes");
+        std::thread::sleep(Duration::from_millis(30));
+        assert_eq!(
+            std::fs::read(&primary).expect("primary after child death"),
+            stable,
+            "cut={cut}: stale process continued writing after termination"
+        );
+    }
+}
+
 #[test]
 fn pane_layout_v1_migrates_legacy_batch_once() {
     let codex_home = tempfile::tempdir().expect("codex home");

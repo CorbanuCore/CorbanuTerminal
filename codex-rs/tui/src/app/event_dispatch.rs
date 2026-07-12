@@ -2686,6 +2686,12 @@ impl App {
                 result,
             } => match result {
                 Ok(()) => {
+                    #[cfg(test)]
+                    if std::env::var("PFTERMINAL_DISPATCH_CRASH_CUT").as_deref()
+                        == Ok("response_before_local_tombstone")
+                    {
+                        std::process::exit(86);
+                    }
                     self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
                     self.finish_spawn_dispatch_delivery(&target_node_id, &delivery_id, &task);
                     self.agent_navigation

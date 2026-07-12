@@ -1175,6 +1175,13 @@ impl AppServerSession {
                     },
                 })
                 .await;
+            #[cfg(test)]
+            if response.is_ok()
+                && std::env::var("PFTERMINAL_DISPATCH_CRASH_CUT").as_deref()
+                    == Ok("server_accept_before_response")
+            {
+                std::process::exit(86);
+            }
             if drop_response_after_acceptance && response.is_ok() {
                 return Err(TypedRequestError::Transport {
                     method: "turn/steer".to_string(),
