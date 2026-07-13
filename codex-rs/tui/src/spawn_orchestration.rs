@@ -46,6 +46,7 @@ const SEND_TASK_FENCE_CLOSE: &str = "```";
 const SEND_TASK_OPEN: &str = "<pfterminal_send_task";
 const SEND_TASK_CLOSE: &str = "</pfterminal_send_task>";
 const EXEC_WRAPPED_DISPATCH_CORRECTION_TASK: &str = "PFTerminal host correction: you emitted a <pfterminal_send_task> dispatch block inside exec_command/shell text, so it was not routed to the target pane. Re-emit the same dispatch now as plain assistant message text, not inside a shell command, cat, echo, heredoc, markdown fence, or tool call. Do not claim it was sent until the plain-text block appears.";
+const WORKFLOW_CLASSIFICATION_CORRECTION_TASK: &str = "PFTerminal host correction: your Nazgul dispatch was rejected because its task body did not satisfy the structured workflow gate. Re-evaluate the work and re-emit the dispatch with the first nonblank line exactly `PFTERMINAL_WORK_KIND: visual-baseline`, `PFTERMINAL_WORK_KIND: visual-implementation`, or `PFTERMINAL_WORK_KIND: nonvisual`. User-facing visual or interactive behavior is visual work. Use `visual-baseline` only for a baseline-only evidence task: identify the exact starting commit/content manifest, record fresh real-user-input video with required interaction/directional coverage, and run pfterminal visual-judge to produce a failing defect verdict; do not include implementation. Use `visual-implementation` only after that evidence exists, and add non-placeholder `PFTERMINAL_BASELINE_MANIFEST:`, `PFTERMINAL_BASELINE_VIDEO:`, and `PFTERMINAL_BASELINE_VERDICT:` lines. Use `nonvisual` only when the task cannot change user-visible appearance or interactive behavior. Do not claim a rejected dispatch was sent.";
 const SPAWN_PARENT_REPORT_LIMIT: usize = 12;
 #[cfg(test)]
 const SPAWN_PROCESSED_DISPATCH_TURN_LIMIT: usize = 1024;
@@ -80,6 +81,126 @@ pub(crate) struct SpawnTaskDispatch {
     pub(crate) target: String,
     pub(crate) task: String,
     pub(crate) seq: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DispatchWorkKind {
+    VisualBaseline,
+    VisualImplementation,
+    Nonvisual,
+}
+
+fn dispatch_workflow_header<'a>(task: &'a str, name: &str) -> Option<&'a str> {
+    let prefix = format!("{name}:");
+    task.lines()
+        .take(16)
+        .find_map(|line| line.trim().strip_prefix(&prefix).map(str::trim))
+        .filter(|value| !value.is_empty())
+}
+
+fn dispatch_work_kind(task: &str) -> Result<DispatchWorkKind, String> {
+    let first = task
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .ok_or_else(|| "task body is empty".to_string())?;
+    let value = first
+        .strip_prefix("PFTERMINAL_WORK_KIND:")
+        .map(str::trim)
+        .ok_or_else(|| {
+            "first nonblank line must be `PFTERMINAL_WORK_KIND: visual-baseline`, `PFTERMINAL_WORK_KIND: visual-implementation`, or `PFTERMINAL_WORK_KIND: nonvisual`"
+                .to_string()
+        })?;
+    match value {
+        "visual-baseline" => Ok(DispatchWorkKind::VisualBaseline),
+        "visual-implementation" => Ok(DispatchWorkKind::VisualImplementation),
+        "nonvisual" => Ok(DispatchWorkKind::Nonvisual),
+        _ => Err(format!("unknown PFTERMINAL_WORK_KIND `{value}`")),
+    }
+}
+
+fn resolve_dispatch_evidence_path(cwd: &Path, value: &str) -> std::path::PathBuf {
+    let path = Path::new(value);
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        cwd.join(path)
+    }
+}
+
+fn validate_nazgul_dispatch_workflow(task: &str, cwd: &Path) -> Result<DispatchWorkKind, String> {
+    let kind = dispatch_work_kind(task)?;
+    if kind != DispatchWorkKind::VisualImplementation {
+        return Ok(kind);
+    }
+
+    let manifest = dispatch_workflow_header(task, "PFTERMINAL_BASELINE_MANIFEST")
+        .ok_or_else(|| "visual-implementation requires PFTERMINAL_BASELINE_MANIFEST".to_string())?;
+    let video = dispatch_workflow_header(task, "PFTERMINAL_BASELINE_VIDEO")
+        .ok_or_else(|| "visual-implementation requires PFTERMINAL_BASELINE_VIDEO".to_string())?;
+    let verdict = dispatch_workflow_header(task, "PFTERMINAL_BASELINE_VERDICT")
+        .ok_or_else(|| "visual-implementation requires PFTERMINAL_BASELINE_VERDICT".to_string())?;
+    for (name, value) in [
+        ("manifest", manifest),
+        ("video", video),
+        ("verdict", verdict),
+    ] {
+        if matches!(
+            value.to_ascii_lowercase().as_str(),
+            "none" | "n/a" | "pending" | "tbd" | "to-produce" | "unknown"
+        ) {
+            return Err(format!("visual-implementation {name} is a placeholder"));
+        }
+    }
+
+    let video_path = resolve_dispatch_evidence_path(cwd, video);
+    let video_len = std::fs::metadata(&video_path)
+        .map_err(|error| {
+            format!(
+                "baseline video `{}` is unavailable: {error}",
+                video_path.display()
+            )
+        })?
+        .len();
+    if video_len == 0 {
+        return Err(format!(
+            "baseline video `{}` is empty",
+            video_path.display()
+        ));
+    }
+
+    let verdict_path = resolve_dispatch_evidence_path(cwd, verdict);
+    let verdict_bytes = std::fs::read(&verdict_path).map_err(|error| {
+        format!(
+            "baseline verdict `{}` is unavailable: {error}",
+            verdict_path.display()
+        )
+    })?;
+    let verdict_json: serde_json::Value =
+        serde_json::from_slice(&verdict_bytes).map_err(|error| {
+            format!(
+                "baseline verdict `{}` is not valid JSON: {error}",
+                verdict_path.display()
+            )
+        })?;
+    if verdict_json
+        .get("verdict")
+        .and_then(serde_json::Value::as_str)
+        != Some("fail")
+    {
+        return Err("baseline verdict must be fail before implementation".to_string());
+    }
+    if verdict_json
+        .get("defects")
+        .and_then(serde_json::Value::as_array)
+        .is_none_or(Vec::is_empty)
+    {
+        return Err(
+            "baseline verdict must contain at least one visible-behavior defect".to_string(),
+        );
+    }
+
+    Ok(kind)
 }
 
 pub(crate) use crate::dispatch_queue::PendingDispatchEnqueueResult;
@@ -1324,6 +1445,13 @@ impl App {
         let source_title = self
             .spawn_node_title(source_pane_id)
             .unwrap_or_else(|| self.user_pane_title(source_pane_id));
+        let source_native_role = self
+            .spawn_node_backing_thread_id(source_pane_id)
+            .and_then(|thread_id| self.agent_navigation.get(&thread_id))
+            .and_then(|entry| entry.agent_role.as_deref());
+        let enforce_nazgul_workflow = source_pane_id == self.spawn_root_node_id()
+            && !matches!(source_native_role, Some(TROLL_ROLE | ORC_ROLE));
+        let mut workflow_correction_queued = false;
         let mut any_queued = false;
         let mut pending = dispatches
             .into_iter()
@@ -1358,6 +1486,32 @@ impl App {
                     "ignored empty task dispatch",
                     true,
                 );
+                continue;
+            }
+            if attempt == 0
+                && origin_id.is_some()
+                && enforce_nazgul_workflow
+                && let Err(reason) =
+                    validate_nazgul_dispatch_workflow(&dispatch.task, self.config.cwd.as_path())
+            {
+                if let Some(origin_id) = origin_id.as_ref() {
+                    self.spawn_processed_dispatch_origins
+                        .insert(origin_id.clone());
+                    self.persist_pane_state();
+                }
+                let ack = self.make_spawn_dispatch_ack(
+                    source_pane_id,
+                    dispatch.target.trim().to_string(),
+                    dispatch.target.trim().to_string(),
+                    dispatch.seq,
+                );
+                let detail = format!("workflow gate rejected Nazgul dispatch: {reason}");
+                self.record_spawn_dispatch_error(source_pane_id, source_is_active, detail.clone());
+                self.record_spawn_dispatch_acks(&[ack], "failed", &detail, true);
+                if !workflow_correction_queued {
+                    self.queue_spawn_workflow_classification_correction(source_pane_id);
+                    workflow_correction_queued = true;
+                }
                 continue;
             }
             let resolved = self.resolve_spawn_task_target(&dispatch.target);
@@ -1578,6 +1732,26 @@ impl App {
         }
         if any_queued {
             self.note_spawn_dispatch_for_auto_loop(source_pane_id);
+        }
+    }
+
+    fn queue_spawn_workflow_classification_correction(&self, source_node_id: &str) {
+        if let Some(thread_id) = self.spawn_node_backing_thread_id(source_node_id) {
+            self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+                thread_id,
+                task: WORKFLOW_CLASSIFICATION_CORRECTION_TASK.to_string(),
+                delivery_id: None,
+            });
+            return;
+        }
+        if let Some(pane_id) = node_id_pane(source_node_id)
+            && pane_id != CODEX_MAIN_PANE_ID
+        {
+            self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
+                pane_id: pane_id.to_string(),
+                task: WORKFLOW_CLASSIFICATION_CORRECTION_TASK.to_string(),
+                delivery_id: None,
+            });
         }
     }
 
@@ -5335,6 +5509,18 @@ fn write_spawn_dispatch_contract(context: &mut String) {
     );
     let _ = writeln!(
         context,
+        "Every Nazgul dispatch task body must begin with one structured classification line: `PFTERMINAL_WORK_KIND: visual-baseline`, `PFTERMINAL_WORK_KIND: visual-implementation`, or `PFTERMINAL_WORK_KIND: nonvisual`. Missing or unknown classification is rejected fail-closed and returned for correction. User-facing visual or interactive behavior is visual work; `nonvisual` is only for work that cannot change visible appearance or interactive behavior."
+    );
+    let _ = writeln!(
+        context,
+        "Use `visual-baseline` only for a baseline-only evidence task: establish the exact starting commit/content manifest, fresh real-user-input recording with all required interaction/directional coverage, and a failing visual-judge defect verdict before any implementation. Do not combine implementation into that dispatch."
+    );
+    let _ = writeln!(
+        context,
+        "Use `visual-implementation` only after the baseline exists. Its next header lines must be `PFTERMINAL_BASELINE_MANIFEST: <exact id>`, `PFTERMINAL_BASELINE_VIDEO: <existing nonempty path>`, and `PFTERMINAL_BASELINE_VERDICT: <existing visual-judge JSON path>`; the host rejects missing evidence, a non-fail baseline verdict, or an empty defect list."
+    );
+    let _ = writeln!(
+        context,
         "If the target pane is busy, PFTerminal queues the dispatch and delivers it as a fresh turn when the target goes idle; do not assume immediate pickup."
     );
     let _ = writeln!(
@@ -6369,6 +6555,69 @@ mod tests {
     use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
     use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
     use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
+
+    #[test]
+    fn nazgul_dispatch_workflow_classification_is_fail_closed() {
+        let cwd = tempfile::tempdir().expect("tempdir");
+        assert!(
+            validate_nazgul_dispatch_workflow("Fix the visible route stall.", cwd.path())
+                .expect_err("missing classification must fail")
+                .contains("first nonblank line")
+        );
+        assert_eq!(
+            validate_nazgul_dispatch_workflow(
+                "PFTERMINAL_WORK_KIND: visual-baseline\nCapture evidence only.",
+                cwd.path(),
+            ),
+            Ok(DispatchWorkKind::VisualBaseline)
+        );
+        assert_eq!(
+            validate_nazgul_dispatch_workflow(
+                "PFTERMINAL_WORK_KIND: nonvisual\nAudit dependency licenses.",
+                cwd.path(),
+            ),
+            Ok(DispatchWorkKind::Nonvisual)
+        );
+        assert!(
+            validate_nazgul_dispatch_workflow(
+                "PFTERMINAL_WORK_KIND: visual-implementation\nPFTERMINAL_BASELINE_MANIFEST: abc123",
+                cwd.path(),
+            )
+            .expect_err("missing evidence paths must fail")
+            .contains("PFTERMINAL_BASELINE_VIDEO")
+        );
+    }
+
+    #[test]
+    fn visual_implementation_requires_real_failing_judge_evidence() {
+        let cwd = tempfile::tempdir().expect("tempdir");
+        std::fs::write(cwd.path().join("baseline.mp4"), b"video").expect("write video");
+        std::fs::write(
+            cwd.path().join("verdict.json"),
+            br#"{"verdict":"fail","defects":[{"category":"clipping"}]}"#,
+        )
+        .expect("write verdict");
+        let task = "PFTERMINAL_WORK_KIND: visual-implementation\n\
+PFTERMINAL_BASELINE_MANIFEST: abc123\n\
+PFTERMINAL_BASELINE_VIDEO: baseline.mp4\n\
+PFTERMINAL_BASELINE_VERDICT: verdict.json\n\
+Implement only the defects in the baseline verdict.";
+        assert_eq!(
+            validate_nazgul_dispatch_workflow(task, cwd.path()),
+            Ok(DispatchWorkKind::VisualImplementation)
+        );
+
+        std::fs::write(
+            cwd.path().join("verdict.json"),
+            br#"{"verdict":"pass","defects":[]}"#,
+        )
+        .expect("rewrite verdict");
+        assert!(
+            validate_nazgul_dispatch_workflow(task, cwd.path())
+                .expect_err("pass verdict cannot authorize implementation")
+                .contains("must be fail")
+        );
+    }
 
     #[test]
     fn corrected_native_spawn_provider_fixes_impossible_pairs_only() {

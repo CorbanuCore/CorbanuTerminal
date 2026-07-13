@@ -5755,6 +5755,84 @@ DISPATCH"#;
 }
 
 #[tokio::test]
+async fn bound_nazgul_dispatch_without_workflow_classification_is_rejected_and_corrected() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let main_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000638").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000639").expect("valid thread id");
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+    app.bind_spawn_nazgul_pane(CODEX_MAIN_PANE_ID.to_string());
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_node.insert(
+        crate::spawn_orchestration::thread_node_id(troll_thread_id),
+        crate::spawn_orchestration::pane_node_id(CODEX_MAIN_PANE_ID),
+    );
+
+    let message = r#"<pfterminal_send_task target="Burzum">
+Resume implementation from the existing screenshots and gate logs.
+</pfterminal_send_task>"#;
+    assert!(app.dispatch_native_spawn_task_blocks_from_text(
+        main_thread_id,
+        "turn-missing-workflow-classification",
+        message,
+    ));
+    assert!(app.dispatch_native_spawn_task_blocks_from_text(
+        main_thread_id,
+        "turn-missing-workflow-classification",
+        message,
+    ));
+    assert!(
+        app.spawn_pending_dispatches
+            .get(&crate::spawn_orchestration::thread_node_id(troll_thread_id))
+            .is_none_or(VecDeque::is_empty),
+        "rejected implementation must not reach the Troll queue"
+    );
+
+    let mut corrections = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        match event {
+            AppEvent::SubmitSpawnAgentTask { thread_id, .. } if thread_id == troll_thread_id => {
+                panic!("unclassified dispatch must not route to the Troll");
+            }
+            AppEvent::SubmitSpawnAgentTask {
+                thread_id, task, ..
+            } if thread_id == main_thread_id => corrections.push(task),
+            _ => {}
+        }
+    }
+    assert_eq!(corrections.len(), 1);
+    assert!(corrections[0].contains("structured workflow gate"));
+    assert!(corrections[0].contains("visual-baseline"));
+    assert!(corrections[0].contains("visual-implementation"));
+    assert!(corrections[0].contains("nonvisual"));
+
+    let baseline_message = r#"<pfterminal_send_task target="Burzum">
+PFTERMINAL_WORK_KIND: visual-baseline
+Capture a fresh real-input baseline and fail-closed vision verdict only; do not implement.
+</pfterminal_send_task>"#;
+    assert!(app.dispatch_native_spawn_task_blocks_from_text(
+        main_thread_id,
+        "turn-valid-visual-baseline",
+        baseline_message,
+    ));
+    assert!(matches!(rx.try_recv(), Ok(AppEvent::PumpSpawnDispatches)));
+    assert_eq!(
+        app.spawn_pending_dispatches
+            .get(&crate::spawn_orchestration::thread_node_id(troll_thread_id))
+            .map_or(0, VecDeque::len),
+        1,
+        "classified visual baseline should route exactly once"
+    );
+}
+
+#[tokio::test]
 async fn separate_completed_messages_in_one_long_turn_dispatch_once_each() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let nazgul_thread_id =
