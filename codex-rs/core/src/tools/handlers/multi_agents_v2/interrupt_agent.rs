@@ -48,21 +48,35 @@ async fn handle_interrupt_agent(
         .superseding_task
         .map(|task| task.trim().to_string())
         .filter(|task| !task.is_empty());
-    let agent_id = resolve_agent_target(&session, &turn, &args.target).await?;
-    let receiver_agent = session
-        .services
-        .agent_control
-        .ensure_agent_known(agent_id)
-        .map_err(|err| collab_agent_error(agent_id, err))?;
-    if receiver_agent
-        .agent_path
-        .as_ref()
-        .is_some_and(AgentPath::is_root)
-    {
+    let explicit_agent_path = AgentPath::try_from(args.target.trim()).ok();
+    if explicit_agent_path.as_ref().is_some_and(AgentPath::is_root) {
         return Err(FunctionCallError::RespondToModel(
             "root is not a spawned agent".to_string(),
         ));
     }
+    let agent_id = resolve_agent_target(&session, &turn, &args.target).await?;
+    if session.services.agent_control.is_root_thread(agent_id) {
+        return Err(FunctionCallError::RespondToModel(
+            "root is not a spawned agent".to_string(),
+        ));
+    }
+    let receiver_agent = match explicit_agent_path.as_ref() {
+        Some(agent_path) => session
+            .services
+            .agent_control
+            .get_agent_metadata_for_path(agent_path)
+            .filter(|metadata| metadata.agent_id == Some(agent_id))
+            .ok_or_else(|| {
+                FunctionCallError::RespondToModel(format!(
+                    "live agent path `{agent_path}` no longer matches its resolved thread"
+                ))
+            })?,
+        None => session
+            .services
+            .agent_control
+            .ensure_agent_known(agent_id)
+            .map_err(|err| collab_agent_error(agent_id, err))?,
+    };
     if agent_id == session.thread_id {
         return Err(FunctionCallError::RespondToModel(
             "an agent cannot interrupt itself; return your result and let the parent interrupt you if needed"

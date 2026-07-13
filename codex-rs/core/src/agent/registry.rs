@@ -146,6 +146,15 @@ impl AgentRegistry {
             .and_then(|metadata| metadata.agent_id)
     }
 
+    pub(crate) fn agent_metadata_for_path(&self, agent_path: &AgentPath) -> Option<AgentMetadata> {
+        self.active_agents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .agent_tree
+            .get(agent_path.as_str())
+            .cloned()
+    }
+
     pub(crate) fn agent_id_for_nickname(&self, agent_nickname: &str) -> Option<ThreadId> {
         let agent_nickname = agent_nickname.trim();
         if agent_nickname.is_empty() {

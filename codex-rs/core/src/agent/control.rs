@@ -260,6 +260,17 @@ impl AgentControl {
         self.state.agent_metadata_for_thread(agent_id)
     }
 
+    pub(crate) fn get_agent_metadata_for_path(
+        &self,
+        agent_path: &AgentPath,
+    ) -> Option<AgentMetadata> {
+        self.state.agent_metadata_for_path(agent_path)
+    }
+
+    pub(crate) fn is_root_thread(&self, agent_id: ThreadId) -> bool {
+        self.state.agent_id_for_path(&AgentPath::root()) == Some(agent_id)
+    }
+
     pub(crate) fn ensure_agent_known(&self, agent_id: ThreadId) -> CodexResult<AgentMetadata> {
         self.state
             .agent_metadata_for_thread(agent_id)

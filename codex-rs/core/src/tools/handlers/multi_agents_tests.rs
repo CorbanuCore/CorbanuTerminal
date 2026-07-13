@@ -5032,6 +5032,99 @@ async fn multi_agent_v2_interrupt_agent_accepts_task_name_target() {
 }
 
 #[tokio::test]
+async fn multi_agent_v2_interrupt_agent_accepts_canonical_child_path() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = root.thread_id;
+    let mut config = (*turn.config).clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    set_turn_config(&mut turn, config);
+
+    let session = Arc::new(session);
+    let turn = Arc::new(turn);
+    SpawnAgentHandlerV2::default()
+        .handle(invocation(
+            session.clone(),
+            turn.clone(),
+            "spawn_agent",
+            function_payload(json!({
+                "message": "inspect this repo",
+                "task_name": "worker"
+            })),
+        ))
+        .await
+        .expect("worker spawn should succeed");
+    let worker_id = session
+        .services
+        .agent_control
+        .resolve_agent_reference(session.thread_id, &turn.session_source, "worker")
+        .await
+        .expect("worker path should resolve");
+    let worker_thread = manager
+        .get_thread(worker_id)
+        .await
+        .expect("worker thread should be resident");
+    let worker_session = worker_thread.codex.session.clone();
+    SpawnAgentHandlerV2::default()
+        .handle(invocation(
+            worker_session.clone(),
+            worker_session.new_default_turn().await,
+            "spawn_agent",
+            function_payload(json!({
+                "message": "inspect a child task",
+                "task_name": "child"
+            })),
+        ))
+        .await
+        .expect("child spawn should succeed");
+    let child_id = session
+        .services
+        .agent_control
+        .resolve_agent_reference(session.thread_id, &turn.session_source, "worker/child")
+        .await
+        .expect("child path should resolve");
+
+    let output = InterruptAgentHandler
+        .handle(invocation(
+            session,
+            turn,
+            "interrupt_agent",
+            function_payload(json!({
+                "target": "/root/worker/child",
+                "reason": "correct the child capture",
+                "superseding_task": "record all eight party directions"
+            })),
+        ))
+        .await
+        .expect("interrupt_agent should accept the canonical child path from list_agents");
+    let (content, success) = expect_text_output(output);
+    let result: InterruptAgentResult =
+        serde_json::from_str(&content).expect("canonical interrupt result should be json");
+    assert_ne!(result.previous_status, AgentStatus::NotFound);
+    assert_eq!(success, Some(true));
+    assert!(
+        manager
+            .captured_ops()
+            .iter()
+            .any(|(thread_id, op)| { *thread_id == child_id && matches!(op, Op::Interrupt) })
+    );
+    assert!(
+        !manager
+            .captured_ops()
+            .iter()
+            .any(|(thread_id, op)| { *thread_id == worker_id && matches!(op, Op::Interrupt) })
+    );
+}
+
+#[tokio::test]
 async fn multi_agent_v2_interrupt_requires_visible_reason_and_superseding_task() {
     let (mut session, mut turn) = make_session_and_context().await;
     let manager = thread_manager();
