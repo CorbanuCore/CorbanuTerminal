@@ -761,6 +761,9 @@ fn hierarchy_roles_require_fail_closed_visual_acceptance() {
         assert!(role_base.contains("real user inputs"));
         assert!(role_base.contains("pointer/action intent"));
         assert!(role_base.contains("visible defect"));
+        assert!(role_base.contains("every supported movement direction"));
+        assert!(role_base.contains("candidate-ready"));
+        assert!(role_base.contains("infer readiness"));
     }
 }
 

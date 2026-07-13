@@ -5304,11 +5304,15 @@ fn write_spawn_product_contract(context: &mut String) {
     );
     let _ = writeln!(
         context,
-        "Visual acceptance contract: for any user-facing visual or interactive product, completion requires a screen recording captured through real user inputs from the candidate build and a fail-closed vision verdict produced with `pfterminal visual-judge --video <capture.mp4> --rubric <rubric.txt> --out <verdict.json>`."
+        "Visual acceptance contract: for any user-facing visual or interactive product, capture a baseline recording driven through real user inputs before implementation and a candidate recording driven through real user inputs for acceptance, then produce a fail-closed vision verdict with `pfterminal visual-judge --video <capture.mp4> --rubric <rubric.txt> --out <verdict.json>`."
     );
     let _ = writeln!(
         context,
-        "The recording must exercise representative flows, idle/no-command behavior, transitions, and relevant movement directions or interactions, and must make pointer/action intent visible so the judge can compare the requested action with the outcome. Screenshots, engine state, logs, pixel samples, and structural tests are supporting evidence only; they never substitute for the recording and vision verdict. Any unresolved visible defect blocks acceptance."
+        "Both recordings must exercise representative flows, idle/no-command behavior, transitions, and relevant interactions. For products with directional control, both must exercise every supported movement direction; pointer/action intent must be visible so the judge can compare the requested action with the outcome. Screenshots, engine state, logs, pixel samples, and structural tests are supporting evidence only; they never substitute for the recording and vision verdict. Any unresolved visible defect blocks acceptance."
+    );
+    let _ = writeln!(
+        context,
+        "Independent verification starts only after an explicit candidate-ready handoff names the exact commit or content manifest and the author stops modifying those inputs. Never infer readiness from shared-tree changes. The verifier must compare every verified input before and after the run; any change invalidates the evidence."
     );
     let _ = writeln!(
         context,

@@ -2536,6 +2536,9 @@ async fn spawn_roster_keeps_context_pressure_out_of_model_context() {
     assert!(context.contains("automatic_compaction=enabled"));
     assert!(context.contains("pfterminal visual-judge"));
     assert!(context.contains("pointer/action intent"));
+    assert!(context.contains("every supported movement direction"));
+    assert!(context.contains("explicit candidate-ready handoff"));
+    assert!(context.contains("infer readiness"));
 }
 
 #[tokio::test]
