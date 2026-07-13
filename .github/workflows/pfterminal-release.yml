@@ -142,7 +142,13 @@ jobs:
             "${RUNNER_TEMP}/rusty_v8" \
             "${HOME}/.cargo/git" \
             "${HOME}/.cargo/registry/cache" \
-            "${HOME}/.cargo/registry/src"
+            "${HOME}/.cargo/registry/src" \
+            "${HOME}/Library/Caches/Homebrew" \
+            "${HOME}/Library/Developer/CoreSimulator"
+          sudo rm -rf \
+            /Applications/Xcode*.app \
+            /Library/Developer/CoreSimulator
+          ls -lh "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz"
           df -h .
 
       - name: Build macOS DMG installer
