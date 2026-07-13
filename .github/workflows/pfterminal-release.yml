@@ -130,6 +130,21 @@ jobs:
           ! find "$package_dir" -type f -o -type l | grep -E '/codex([^/-]*)(\.exe)?$'
           test -x "$package_dir/codex-path/rg"
 
+      - name: Free runner disk before DMG packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h .
+          rm -rf \
+            codex-rs/target \
+            "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
+            "${RUNNER_TEMP}/smoke-${TARGET}" \
+            "${RUNNER_TEMP}/rusty_v8" \
+            "${HOME}/.cargo/git" \
+            "${HOME}/.cargo/registry/cache" \
+            "${HOME}/.cargo/registry/src"
+          df -h .
+
       - name: Build macOS DMG installer
         shell: bash
         run: |
