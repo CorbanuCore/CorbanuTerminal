@@ -145,9 +145,12 @@ Advanced terminal install:
 EOF
 
 volume_name="PFTerminal-${version}-${target}"
+archive_size_bytes="$(stat -f '%z' "$archive_path")"
+image_size_mib="$(( (archive_size_bytes + 1048575) / 1048576 + 256 ))"
 hdiutil create \
   -volname "$volume_name" \
   -srcfolder "$staging_dir" \
+  -size "${image_size_mib}m" \
   -ov \
   -format UDZO \
   "$output_path"
