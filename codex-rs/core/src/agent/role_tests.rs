@@ -754,6 +754,16 @@ fn hierarchy_managers_treat_low_context_as_compaction_pressure_not_worker_death(
     }
 }
 
+#[test]
+fn hierarchy_roles_require_fail_closed_visual_acceptance() {
+    for role_base in [NAZGUL_BASE, TROLL_BASE, ORC_BASE] {
+        assert!(role_base.contains("pfterminal visual-judge"));
+        assert!(role_base.contains("real user inputs"));
+        assert!(role_base.contains("pointer/action intent"));
+        assert!(role_base.contains("visible defect"));
+    }
+}
+
 #[tokio::test]
 async fn no_role_config_keeps_model_default_base_instructions() {
     let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;

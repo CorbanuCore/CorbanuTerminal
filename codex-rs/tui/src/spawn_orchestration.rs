@@ -5304,6 +5304,14 @@ fn write_spawn_product_contract(context: &mut String) {
     );
     let _ = writeln!(
         context,
+        "Visual acceptance contract: for any user-facing visual or interactive product, completion requires a screen recording captured through real user inputs from the candidate build and a fail-closed vision verdict produced with `pfterminal visual-judge --video <capture.mp4> --rubric <rubric.txt> --out <verdict.json>`."
+    );
+    let _ = writeln!(
+        context,
+        "The recording must exercise representative flows, idle/no-command behavior, transitions, and relevant movement directions or interactions, and must make pointer/action intent visible so the judge can compare the requested action with the outcome. Screenshots, engine state, logs, pixel samples, and structural tests are supporting evidence only; they never substitute for the recording and vision verdict. Any unresolved visible defect blocks acceptance."
+    );
+    let _ = writeln!(
+        context,
         "Do not describe PFTerminal as a crypto/trading/Hyperliquid/GPU/staking/borrowing product unless Sauron explicitly asks for that legacy positioning."
     );
 }

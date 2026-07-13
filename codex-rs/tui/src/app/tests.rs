@@ -2534,6 +2534,8 @@ async fn spawn_roster_keeps_context_pressure_out_of_model_context() {
         .expect("Troll should receive spawn context");
     assert!(!context.contains("context_left="), "got context: {context}");
     assert!(context.contains("automatic_compaction=enabled"));
+    assert!(context.contains("pfterminal visual-judge"));
+    assert!(context.contains("pointer/action intent"));
 }
 
 #[tokio::test]

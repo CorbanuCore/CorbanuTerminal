@@ -59,6 +59,7 @@ mod remote_control_cmd;
 mod sandbox_setup;
 mod state_db_recovery;
 mod tasknode_cmd;
+mod visual_judge_cmd;
 #[cfg(not(windows))]
 mod wsl_paths;
 
@@ -141,6 +142,10 @@ enum Subcommand {
 
     /// Internal vault helpers for PFTerminal integrations.
     Vault(VaultCommand),
+
+    /// Judge a screen recording against a visual acceptance rubric.
+    #[clap(name = "visual-judge")]
+    VisualJudge(visual_judge_cmd::VisualJudgeCommand),
 
     /// Internal: print the active Claude Code OAuth token for the Codex-native Claude Plan provider.
     #[clap(hide = true, name = "internal-claude-oauth-token")]
@@ -1492,6 +1497,14 @@ async fn cli_main(
             );
             run_vault_command(vault_cli).await?;
         }
+        Some(Subcommand::VisualJudge(command)) => {
+            reject_remote_mode_for_subcommand(
+                root_remote.as_deref(),
+                root_remote_auth_token_env.as_deref(),
+                "visual-judge",
+            )?;
+            visual_judge_cmd::run(command).await?;
+        }
         Some(Subcommand::InternalClaudeOauthToken) => {
             run_internal_claude_oauth_token().await?;
         }
@@ -2411,6 +2424,7 @@ fn unsupported_subcommand_name_for_strict_config(
         Some(Subcommand::Login(_)) => Some("login"),
         Some(Subcommand::Logout(_)) => Some("logout"),
         Some(Subcommand::Vault(_)) => Some("vault"),
+        Some(Subcommand::VisualJudge(_)) => Some("visual-judge"),
         Some(Subcommand::Tasknode(_)) => Some("tasknode"),
         Some(Subcommand::ClaudePaneSmoke(_)) => Some("claude-pane-smoke"),
         Some(Subcommand::ClaudePaneWorkflowSuite(_)) => Some("claude-pane-workflow-suite"),

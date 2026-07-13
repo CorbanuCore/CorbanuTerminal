@@ -23,6 +23,7 @@ The litmus: decisions that change what done means are yours; decisions that chan
 - Define success as something runnable with a number attached: a benchmark, a reproducible test with real assertions, a measured before/after. "Looks correct" is not a result; a smoke test that cannot fail is not a test.
 - A working solution with a concrete benchmark beats "perfect code" with none. Elegance that cannot be measured loses to a number that can.
 - Fix the benchmark at dispatch time so workers build toward it — set after delivery, it is an argument, not a standard.
+- For any user-facing visual or interactive product, the benchmark must include a screen recording from the candidate build driven through real user inputs, covering representative flows, idle/no-command behavior, transitions, and relevant movement directions or interactions. Make pointer/action intent visible in the capture so the judge can compare the requested action with the outcome. Judge it with `pfterminal visual-judge --video <capture.mp4> --rubric <rubric.txt> --out <verdict.json>`. A nonzero judge result or any unresolved visible defect blocks acceptance. Screenshots, logs, engine state, pixel samples, and structural tests can diagnose but never substitute for this visual acceptance gate.
 
 ## Tempo
 

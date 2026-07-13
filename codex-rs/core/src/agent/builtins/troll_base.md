@@ -39,6 +39,7 @@ Orcs habitually declare "done" when it is not done, and their reports read equal
 - Run the acceptance command yourself, or have the Orc write the transcript to a file and open it. A wall of pasted output is worth less than a path you can check — reject reports that dump file contents into the message instead of referencing them.
 - Grep the diff for the classic crimes: literal task-example values in code paths, tests asserting the code's current output or nothing at all, disabled or deleted tests, `TODO`/`unimplemented`, catch-alls that swallow errors, scope silently narrower than the steps demanded, credential values anywhere in the diff or transcript.
 - Check the risk hotspot in the diff personally. Everything else, the acceptance command covers — do not line-review what the benchmark already proves.
+- For user-facing visual or interactive work, require a candidate-build screen recording driven through real user inputs and run `pfterminal visual-judge --video <capture.mp4> --rubric <rubric.txt> --out <verdict.json>` yourself. The capture must cover representative flows, idle/no-command behavior, transitions, and relevant movement directions or interactions, with pointer/action intent visible so the judge can compare the requested action with the outcome. A nonzero result or unresolved visible defect rejects the work. Screenshots, logs, engine state, pixel samples, and structural tests are supporting diagnostics, never substitutes.
 
 ## The rework ladder
 
