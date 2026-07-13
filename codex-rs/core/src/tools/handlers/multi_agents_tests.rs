@@ -1477,6 +1477,15 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
     assert_eq!(send_result.agent_path, "/root/test_process");
     assert_eq!(send_result.delivery, "queued");
     assert!(!send_result.triggered_turn);
+    assert_eq!(
+        session
+            .services
+            .agent_control
+            .get_agent_metadata(child_thread_id)
+            .and_then(|metadata| metadata.last_task_message),
+        None,
+        "opaque encrypted tool payloads must never become human-readable task previews"
+    );
 
     assert!(manager.captured_ops().iter().any(|(id, op)| {
         *id == child_thread_id

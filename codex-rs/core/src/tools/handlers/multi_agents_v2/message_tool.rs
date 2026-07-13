@@ -74,7 +74,6 @@ pub(crate) async fn handle_message_string_tool(
     message: String,
 ) -> Result<FunctionToolOutput, FunctionCallError> {
     let message = message_content(message)?;
-    let task_preview = message.clone();
     let ToolInvocation {
         session,
         turn,
@@ -127,10 +126,10 @@ pub(crate) async fn handle_message_string_tool(
         .await
         .map_err(|err| collab_agent_error(receiver_thread_id, err));
     result?;
-    let task_preview = session
-        .services
-        .agent_control
-        .record_agent_task_message(receiver_thread_id, task_preview);
+    // V2 messages are opaque encrypted Responses payloads. Recording that wire value as a
+    // human-readable task preview leaks ciphertext into list_agents and /spawn status, and can
+    // overwrite the plaintext preview already owned by the TUI dispatch path.
+    let task_preview = None;
     session
         .send_event(
             &turn,

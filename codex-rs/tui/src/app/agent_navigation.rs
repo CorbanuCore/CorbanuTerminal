@@ -423,6 +423,38 @@ mod tests {
         assert!(entry.is_running);
     }
 
+    #[test]
+    fn encrypted_activity_without_preview_preserves_dispatch_task_text() {
+        let mut state = AgentNavigationState::default();
+        let thread_id = ThreadId::new();
+        state.upsert(
+            thread_id,
+            Some("Snaga".to_string()),
+            Some("orc".to_string()),
+            /*is_closed*/ false,
+        );
+        state.set_last_task_message(
+            thread_id,
+            Some("verify the route-stall regression".to_string()),
+        );
+
+        state.record_sub_agent_activity(SubAgentActivityDisplay {
+            thread_id,
+            agent_path: "/root/troll_burzum/orc_snaga".to_string(),
+            agent_nickname: Some("Snaga".to_string()),
+            agent_role: Some("orc".to_string()),
+            task_preview: None,
+            is_running_hint: true,
+        });
+
+        let entry = state.get(&thread_id).expect("agent should remain cached");
+        assert_eq!(
+            entry.last_task_message.as_deref(),
+            Some("verify the route-stall regression")
+        );
+        assert!(entry.is_running);
+    }
+
     fn populated_state() -> (AgentNavigationState, ThreadId, ThreadId, ThreadId) {
         let mut state = AgentNavigationState::default();
         let main_thread_id =
