@@ -764,6 +764,10 @@ fn hierarchy_roles_require_fail_closed_visual_acceptance() {
         assert!(role_base.contains("every supported movement direction"));
         assert!(role_base.contains("candidate-ready"));
         assert!(role_base.contains("infer readiness"));
+        assert!(role_base.contains("exact starting commit/content manifest"));
+        assert!(role_base.contains("implementation"));
+        assert!(role_base.contains("Pre-existing screenshots"));
+        assert!(role_base.contains("independent verifier"));
     }
 }
 

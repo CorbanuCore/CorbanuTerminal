@@ -17,6 +17,7 @@ use crate::chatwidget::tests::helpers::render_bottom_popup;
 use crate::chatwidget::tests::make_chatwidget_manual_with_sender;
 use crate::chatwidget::tests::set_chatgpt_auth;
 use crate::chatwidget::tests::set_fast_mode_test_catalog;
+use crate::claude_panes::CODEX_MAIN_PANE_ID;
 use crate::file_search::FileSearchManager;
 use crate::goal_files;
 use crate::history_cell::AgentMarkdownCell;
@@ -37,6 +38,7 @@ use crate::legacy_core::config::ConfigOverrides;
 use crate::legacy_core::config::PermissionProfileSnapshot;
 use crate::legacy_core::config::TerminalResizeReflowMaxRows;
 use codex_app_server_client::AppServerPath;
+use codex_app_server_protocol::AdditionalContextKind;
 use codex_app_server_protocol::AdditionalFileSystemPermissions;
 use codex_app_server_protocol::AdditionalNetworkPermissions;
 use codex_app_server_protocol::AdditionalPermissionProfile;
@@ -1965,6 +1967,44 @@ async fn nazgul_can_be_bound_to_a_codex_agent_pane() {
         nazgul_item.is_current,
         "Nazgul row should be current when the bound Codex pane is active"
     );
+}
+
+#[tokio::test]
+async fn codex_main_bound_nazgul_turn_receives_strict_visual_workflow_context() {
+    let mut app = make_test_app().await;
+    let main_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000303").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000304").expect("valid thread id");
+
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+    app.bind_spawn_nazgul_pane(CODEX_MAIN_PANE_ID.to_string());
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_node.insert(
+        crate::spawn_orchestration::thread_node_id(troll_thread_id),
+        crate::spawn_orchestration::pane_node_id(CODEX_MAIN_PANE_ID),
+    );
+
+    let context_map = app
+        .spawn_additional_context_for_thread(main_thread_id)
+        .expect("bound Codex Main turn should receive Nazgul application context");
+    let entry = context_map
+        .get("pfterminal_spawn_context")
+        .expect("spawn context entry");
+
+    assert_eq!(entry.kind, AdditionalContextKind::Application);
+    assert!(entry.value.contains("Nazgul/root pane"));
+    assert!(entry.value.contains("Burzum [troll]"));
+    assert!(entry.value.contains("implementation work is blocked"));
+    assert!(entry.value.contains("first execution dispatch"));
+    assert!(entry.value.contains("exactly matches the starting state"));
+    assert!(entry.value.contains("independent verifier"));
 }
 
 #[tokio::test]

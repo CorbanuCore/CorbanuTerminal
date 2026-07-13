@@ -5304,7 +5304,7 @@ fn write_spawn_product_contract(context: &mut String) {
     );
     let _ = writeln!(
         context,
-        "Visual acceptance contract: for any user-facing visual or interactive product, capture a baseline recording driven through real user inputs before implementation and a candidate recording driven through real user inputs for acceptance, then produce a fail-closed vision verdict with `pfterminal visual-judge --video <capture.mp4> --rubric <rubric.txt> --out <verdict.json>`."
+        "Visual acceptance critical path: for any user-facing visual or interactive product, implementation work is blocked until the exact starting commit/content manifest is identified, a fresh baseline is recorded from that state through real user inputs, and `pfterminal visual-judge --video <capture.mp4> --rubric <rubric.txt> --out <verdict.json>` produces the visible-behavior defect list that becomes acceptance criteria. The first execution dispatch must establish that baseline and verdict. Pre-existing visual artifacts count only when their manifest exactly matches the starting state and their coverage satisfies the current objective."
     );
     let _ = writeln!(
         context,
@@ -5312,7 +5312,7 @@ fn write_spawn_product_contract(context: &mut String) {
     );
     let _ = writeln!(
         context,
-        "Independent verification starts only after an explicit candidate-ready handoff names the exact commit or content manifest and the author stops modifying those inputs. Never infer readiness from shared-tree changes. The verifier must compare every verified input before and after the run; any change invalidates the evidence."
+        "Candidate acceptance starts only after an explicit candidate-ready handoff names the exact commit/content manifest and the author stops modifying those inputs. An independent verifier then records that immutable candidate through the same real-input flows and rubric and compares it with the baseline. Never infer readiness from shared-tree changes. The verifier must compare every verified input before and after the run; any change invalidates the evidence."
     );
     let _ = writeln!(
         context,
