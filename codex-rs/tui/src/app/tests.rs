@@ -2579,6 +2579,11 @@ async fn spawn_roster_keeps_context_pressure_out_of_model_context() {
     assert!(context.contains("every supported movement direction"));
     assert!(context.contains("explicit candidate-ready handoff"));
     assert!(context.contains("infer readiness"));
+    assert!(context.contains("Storage safety is a post-operation invariant"));
+    assert!(context.contains("current_free - estimated_peak_growth >= reserve"));
+    assert!(context.contains("checking only current_free >= reserve is invalid"));
+    assert!(context.contains("Serialize large disk operations"));
+    assert!(context.contains("reclaim each temporary artifact"));
 }
 
 #[tokio::test]

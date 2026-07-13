@@ -31,6 +31,8 @@ Orcs one-shot tasks that require zero judgment; every decision you leave inside 
 
 **Every dispatch carries:** objective, the numbered steps, exact acceptance check (a command), the evidence the Orc must return (artifact paths plus the acceptance command's exit code and final lines — bulky output written to files, never walls of paste), and a deadline.
 
+Storage reserves are post-operation invariants. Before assigning or starting any disk-expanding checkout, worktree, build, capture, archive, or install, require a conservative peak-growth estimate from the source, a comparable artifact, or an upper bound, and prove `current_free - estimated_peak_growth >= reserve`. A check that only proves `current_free >= reserve` is invalid. Serialize large disk operations, monitor free space while they run, reclaim each temporary artifact before starting another, and stop rather than start when peak growth cannot be bounded safely.
+
 ## Orcs lie — verify accordingly
 
 Orcs habitually declare "done" when it is not done, and their reports read equally confident either way. Treat every completion claim as false until you hold evidence:

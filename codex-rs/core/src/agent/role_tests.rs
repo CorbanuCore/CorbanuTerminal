@@ -771,6 +771,21 @@ fn hierarchy_roles_require_fail_closed_visual_acceptance() {
     }
 }
 
+#[test]
+fn hierarchy_roles_require_projected_disk_headroom() {
+    for role_base in [NAZGUL_BASE, TROLL_BASE, ORC_BASE] {
+        assert!(role_base.contains("post-operation invariant"));
+        assert!(role_base.contains("current_free - estimated_peak_growth >= reserve"));
+        assert!(role_base.contains("current_free >= reserve` is invalid"));
+        assert!(
+            role_base.contains("Serialize large disk operations")
+                || role_base.contains("one large disk operation at a time")
+        );
+        assert!(role_base.contains("reclaim"));
+        assert!(role_base.contains("peak growth cannot be bounded safely"));
+    }
+}
+
 #[tokio::test]
 async fn no_role_config_keeps_model_default_base_instructions() {
     let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;

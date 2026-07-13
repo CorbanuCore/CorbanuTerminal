@@ -5490,6 +5490,10 @@ fn write_spawn_product_contract(context: &mut String) {
     );
     let _ = writeln!(
         context,
+        "Storage safety is a post-operation invariant. Before any disk-expanding operation (including a checkout, worktree, build, capture, archive, or dependency install), determine the required free-space reserve, measure current free space, and conservatively estimate peak additional bytes from the source tree, a comparable prior artifact, or an upper bound. Start only when current_free - estimated_peak_growth >= reserve; checking only current_free >= reserve is invalid. Serialize large disk operations, recheck free space while they run, and reclaim each temporary artifact as soon as its proof completes before starting another. If peak growth cannot be bounded safely, stop and report instead of starting."
+    );
+    let _ = writeln!(
+        context,
         "Do not describe PFTerminal as a crypto/trading/Hyperliquid/GPU/staking/borrowing product unless Sauron explicitly asks for that legacy positioning."
     );
 }
