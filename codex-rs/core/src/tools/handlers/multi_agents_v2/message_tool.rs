@@ -6,6 +6,7 @@
 use super::*;
 use crate::tools::context::FunctionToolOutput;
 use crate::turn_timing::now_unix_timestamp_ms;
+use codex_protocol::error::CodexErr;
 use codex_protocol::models::ResponseItemMetadata;
 use codex_protocol::protocol::InterAgentCommunication;
 
@@ -123,9 +124,19 @@ pub(crate) async fn handle_message_string_tool(
         .services
         .agent_control
         .send_inter_agent_communication(receiver_thread_id, mode.apply(communication))
-        .await
-        .map_err(|err| collab_agent_error(receiver_thread_id, err));
-    result?;
+        .await;
+    match result {
+        Err(CodexErr::AgentLimitReached { max_threads }) => {
+            return Ok(FunctionToolOutput::from_text(
+                format!(
+                    "capacity unavailable: maximum {max_threads} agent turns are active; task was not accepted; wait for capacity before retrying"
+                ),
+                Some(false),
+            ));
+        }
+        Err(err) => return Err(collab_agent_error(receiver_thread_id, err)),
+        Ok(_) => {}
+    }
     // V2 messages are opaque encrypted Responses payloads. Recording that wire value as a
     // human-readable task preview leaks ciphertext into list_agents and /spawn status, and can
     // overwrite the plaintext preview already owned by the TUI dispatch path.

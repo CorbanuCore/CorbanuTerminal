@@ -48,6 +48,7 @@ use codex_protocol::protocol::FileSystemSandboxEntry;
 use codex_protocol::protocol::FileSystemSandboxPolicy;
 use codex_protocol::protocol::InitialHistory;
 use codex_protocol::protocol::InterAgentCommunication;
+use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::NetworkSandboxPolicy;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::RolloutItem;
@@ -2596,6 +2597,46 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
             )
     }));
 
+    let captured_ops_before_capacity_rejection = manager.captured_ops().len();
+    let max_threads = turn
+        .config
+        .effective_agent_max_threads(MultiAgentVersion::V2)
+        .expect("MultiAgentV2 should have a bounded turn capacity");
+    let execution_guards = (0..max_threads)
+        .map(|_| {
+            session
+                .services
+                .agent_control
+                .execution_guard(MultiAgentVersion::V2, &turn.session_source)
+                .expect("a Troll turn should consume MultiAgentV2 capacity")
+        })
+        .collect::<Vec<_>>();
+    let capacity_output = FollowupTaskHandlerV2
+        .handle(invocation(
+            session.clone(),
+            turn.clone(),
+            "followup_task",
+            function_payload(json!({
+                "target": "orc_snaga",
+                "message": "Start another task while every execution slot is occupied."
+            })),
+        ))
+        .await
+        .expect("expected capacity pressure should be a normal unsuccessful tool result");
+    let (capacity_message, success) = expect_text_output(capacity_output);
+    assert_eq!(success, Some(false));
+    assert_eq!(
+        capacity_message,
+        format!(
+            "capacity unavailable: maximum {max_threads} agent turns are active; task was not accepted; wait for capacity before retrying"
+        )
+    );
+    assert_eq!(
+        manager.captured_ops().len(),
+        captured_ops_before_capacity_rejection
+    );
+    drop(execution_guards);
+
     session.services.agent_control.record_agent_result_status(
         first_orc.thread_id,
         &AgentStatus::Completed(Some("animation shell complete".to_string())),
@@ -2622,14 +2663,14 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
         agent.agent_name == first_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Snaga")
             && agent.agent_role.as_deref() == Some("orc")
-            && agent.last_task_message.as_deref() == Some(first_delegated_message)
+            && agent.last_task_message.is_none()
             && agent.last_result_message.as_deref() == Some("animation shell complete")
     }));
     assert!(result.agents.iter().any(|agent| {
         agent.agent_name == second_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Ghash")
             && agent.agent_role.as_deref() == Some("orc")
-            && agent.last_task_message.as_deref() == Some(second_delegated_message)
+            && agent.last_task_message.is_none()
             && agent.last_result_message.as_deref() == Some("formula checks complete")
     }));
     let context = session
@@ -2641,10 +2682,7 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
         context.contains("orc_snaga: Snaga"),
         "Troll context should name the first Orc, got {context:?}"
     );
-    assert!(
-        context.contains(first_delegated_message),
-        "Troll context should expose the first Orc task, got {context:?}"
-    );
+    assert!(!context.contains(first_delegated_message));
     assert!(
         context.contains("animation shell complete"),
         "Troll context should expose the first Orc result, got {context:?}"
@@ -2653,10 +2691,7 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
         context.contains("orc_ghash: Ghash"),
         "Troll context should name the second Orc, got {context:?}"
     );
-    assert!(
-        context.contains(second_delegated_message),
-        "Troll context should expose the second Orc task, got {context:?}"
-    );
+    assert!(!context.contains(second_delegated_message));
     assert!(
         context.contains("formula checks complete"),
         "Troll context should expose the second Orc result, got {context:?}"
@@ -2730,32 +2765,25 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
     assert!(result.agents.iter().any(|agent| {
         agent.agent_name == first_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Snaga")
-            && agent.last_task_message.as_deref() == Some(first_improvement_message)
-            && agent.last_result_message.is_none()
+            && agent.last_task_message.is_none()
+            && agent.last_result_message.as_deref() == Some("animation shell complete")
     }));
     assert!(result.agents.iter().any(|agent| {
         agent.agent_name == second_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Ghash")
-            && agent.last_task_message.as_deref() == Some(second_improvement_message)
-            && agent.last_result_message.is_none()
+            && agent.last_task_message.is_none()
+            && agent.last_result_message.as_deref() == Some("formula checks complete")
     }));
     let context = session
         .services
         .agent_control
         .format_environment_context_subagents(troll.thread_id)
         .await;
+    assert!(!context.contains(first_improvement_message));
+    assert!(!context.contains(second_improvement_message));
     assert!(
-        context.contains(first_improvement_message),
-        "Troll context should expose first Orc rework request, got {context:?}"
-    );
-    assert!(
-        context.contains(second_improvement_message),
-        "Troll context should expose second Orc rework request, got {context:?}"
-    );
-    assert!(
-        !context.contains("animation shell complete")
-            && !context.contains("formula checks complete"),
-        "Troll context should clear stale result previews after rework requests, got {context:?}"
+        context.contains("animation shell complete") && context.contains("formula checks complete"),
+        "encrypted rework payloads should not replace readable result previews, got {context:?}"
     );
 }
 
