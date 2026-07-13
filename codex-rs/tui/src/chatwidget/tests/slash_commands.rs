@@ -424,7 +424,9 @@ async fn queued_settings_selection_applies_before_next_input() {
     assert_matches!(op_rx.try_recv(), Err(TryRecvError::Empty));
     while let Ok(event) = rx.try_recv() {
         match event {
-            AppEvent::OpenReasoningPopup { model } => chat.open_reasoning_popup(model),
+            AppEvent::OpenReasoningPopup { model, purpose } => {
+                chat.open_reasoning_popup_for_purpose(model, purpose)
+            }
             AppEvent::UpdateModel(model) => chat.set_model(&model),
             AppEvent::UpdateModelSelection { model, .. } => chat.set_model(&model),
             AppEvent::UpdateReasoningEffort(effort) => chat.set_reasoning_effort(effort),
@@ -462,7 +464,7 @@ async fn queued_bare_rename_drains_next_input_after_name_update() {
     complete_turn_with_message(&mut chat, "turn-1", Some("done"));
 
     assert_eq!(chat.input_queue.queued_user_messages.len(), 1);
-    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("Name thread"));
+    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("Name pane"));
     assert_matches!(op_rx.try_recv(), Err(TryRecvError::Empty));
 
     chat.handle_paste("Queued rename".to_string());
@@ -472,9 +474,9 @@ async fn queued_bare_rename_drains_next_input_after_name_update() {
     assert!(
         events.iter().any(|event| matches!(
             event,
-            AppEvent::CodexOp(Op::SetThreadName { name }) if name == "Queued rename"
+            AppEvent::RenameCurrentPane { name } if name == "Queued rename"
         )),
-        "expected rename prompt to submit thread name; events: {events:?}"
+        "expected rename prompt to submit pane name; events: {events:?}"
     );
 
     chat.handle_server_notification(
@@ -517,9 +519,9 @@ async fn queued_inline_rename_does_not_drain_again_before_turn_started() {
     assert!(
         events.iter().any(|event| matches!(
             event,
-            AppEvent::CodexOp(Op::SetThreadName { name }) if name == "Queued rename"
+            AppEvent::RenameCurrentPane { name } if name == "Queued rename"
         )),
-        "expected queued /rename to submit thread name; events: {events:?}"
+        "expected queued /rename to submit pane name; events: {events:?}"
     );
 
     match next_submit_op(&mut op_rx) {
@@ -1185,7 +1187,7 @@ async fn slash_rename_prefills_existing_thread_name() {
 
     assert_matches!(
         rx.try_recv(),
-        Ok(AppEvent::CodexOp(Op::SetThreadName { name })) if name == "Current project title"
+        Ok(AppEvent::RenameCurrentPane { name }) if name == "Current project title"
     );
 }
 
@@ -1196,7 +1198,7 @@ async fn slash_rename_without_existing_thread_name_starts_empty() {
     chat.dispatch_command(SlashCommand::Rename);
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
-    assert!(popup.contains("Name thread"));
+    assert!(popup.contains("Name pane"));
     assert!(popup.contains("Type a name and press Enter"));
 
     chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
@@ -1220,6 +1222,35 @@ async fn slash_spawn_status_opens_status_picker() {
     chat.dispatch_command_with_args(SlashCommand::Spawn, "status".to_string(), Vec::new());
 
     assert_matches!(rx.try_recv(), Ok(AppEvent::OpenSpawnStatus));
+}
+
+#[tokio::test]
+async fn slash_orchestrate_routes_to_app_event() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.dispatch_command(SlashCommand::Orchestrate);
+
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::HandleOrchestrateCommand { args }) if args.is_empty()
+    );
+}
+
+#[tokio::test]
+async fn slash_orchestrate_with_args_routes_to_app_event() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.dispatch_command_with_args(
+        SlashCommand::Orchestrate,
+        "attach Krimp quant --mode auto".to_string(),
+        Vec::new(),
+    );
+
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::HandleOrchestrateCommand { args })
+            if args == "attach Krimp quant --mode auto"
+    );
 }
 
 #[tokio::test]

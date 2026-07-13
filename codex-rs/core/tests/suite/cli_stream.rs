@@ -475,6 +475,10 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
     let resp_mock =
         responses::mount_sse_sequence(&server, vec![cli_sse_response(), cli_sse_response()]).await;
     let repo_root = repo_root();
+    let provider_override = format!(
+        "model_providers.mock={{ name = \"mock\", base_url = \"{}/v1\", env_key = \"PATH\", wire_api = \"responses\", supports_websockets = false }}",
+        server.uri()
+    );
 
     // 4. Run the codex CLI and invoke `exec`, which is what records a session.
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
@@ -482,12 +486,16 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
     cmd.arg("exec")
         .arg("--skip-git-repo-check")
         .arg("-c")
-        .arg(format!("openai_base_url=\"{}/v1\"", server.uri()))
+        .arg(&provider_override)
+        .arg("-c")
+        .arg("model_provider=\"mock\"")
+        .arg("-c")
+        .arg("model=\"gpt-5.5\"")
         .arg("-C")
         .arg(&repo_root)
         .arg(&prompt);
     cmd.env("CODEX_HOME", home.path())
-        .env(CODEX_API_KEY_ENV_VAR, "dummy");
+        .env("OPENAI_API_KEY", "dummy");
 
     let output = run_cli_command(&mut cmd).unwrap();
     assert!(
@@ -598,7 +606,11 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
     cmd2.arg("exec")
         .arg("--skip-git-repo-check")
         .arg("-c")
-        .arg(format!("openai_base_url=\"{}/v1\"", server.uri()))
+        .arg(&provider_override)
+        .arg("-c")
+        .arg("model_provider=\"mock\"")
+        .arg("-c")
+        .arg("model=\"gpt-5.5\"")
         .arg("-C")
         .arg(&repo_root)
         .arg(&prompt2)

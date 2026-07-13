@@ -542,6 +542,7 @@
         },
         {
           "properties": {
+            "anthropic_content_block": true,
             "content": {
               "default": null,
               "items": {
@@ -941,6 +942,9 @@
                   "type": "null"
                 }
               ]
+            },
+            "anthropic_content_block": {
+              "description": "Provider-native server-side search blocks that must be replayed as assistant content for providers that own the web-search execution."
             },
             "id": {
               "type": [

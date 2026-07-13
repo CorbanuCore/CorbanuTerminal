@@ -156,13 +156,10 @@ impl ChatWidget {
         self.spawn_tasknode_value_request(
             "tasks",
             {
-                let tab = tab.clone();
-                move |client| client.tasks(&tab)
+                let fetch_tab = tab.clone();
+                move |client| client.tasks(&fetch_tab)
             },
-            move |result| AppEvent::TaskNodeTaskListResult {
-                tab: tab.clone(),
-                result,
-            },
+            move |result| AppEvent::TaskNodeTaskListResult { tab, result },
         );
     }
 
@@ -215,13 +212,10 @@ impl ChatWidget {
         self.spawn_tasknode_value_request(
             "task-detail",
             {
-                let task_id = task_id.clone();
-                move |client| client.task_detail(&task_id)
+                let fetch_task_id = task_id.clone();
+                move |client| client.task_detail(&fetch_task_id)
             },
-            move |result| AppEvent::TaskNodeTaskActionsResult {
-                task_id: task_id.clone(),
-                result,
-            },
+            move |result| AppEvent::TaskNodeTaskActionsResult { task_id, result },
         );
     }
 
@@ -265,13 +259,10 @@ impl ChatWidget {
         self.spawn_tasknode_value_request(
             "copy-task-brief",
             {
-                let task_id = task_id.clone();
-                move |client| client.task_detail(&task_id)
+                let fetch_task_id = task_id.clone();
+                move |client| client.task_detail(&fetch_task_id)
             },
-            move |result| AppEvent::CopyTaskNodeTaskBriefResult {
-                task_id: task_id.clone(),
-                result,
-            },
+            move |result| AppEvent::CopyTaskNodeTaskBriefResult { task_id, result },
         );
     }
 
@@ -312,14 +303,10 @@ impl ChatWidget {
         self.spawn_tasknode_value_request(
             "task-action",
             {
-                let task_id = task_id.clone();
-                let action = action.clone();
-                move |client| client.task_action(&task_id, &action)
+                let fetch_action = action.clone();
+                move |client| client.task_action(&task_id, &fetch_action)
             },
-            move |result| AppEvent::SubmitTaskNodeTaskActionResult {
-                action: action.clone(),
-                result,
-            },
+            move |result| AppEvent::SubmitTaskNodeTaskActionResult { action, result },
         );
     }
 
@@ -348,13 +335,10 @@ impl ChatWidget {
         self.spawn_tasknode_value_request(
             "evidence-context",
             {
-                let task_id = task_id.clone();
-                move |client| client.task_detail(&task_id)
+                let fetch_task_id = task_id.clone();
+                move |client| client.task_detail(&fetch_task_id)
             },
-            move |result| AppEvent::OpenTaskNodeEvidencePromptResult {
-                task_id: task_id.clone(),
-                result,
-            },
+            move |result| AppEvent::OpenTaskNodeEvidencePromptResult { task_id, result },
         );
     }
 
@@ -388,7 +372,7 @@ impl ChatWidget {
                     self.add_info_message(
                         "Task Node evidence context unavailable; submit evidence directly."
                             .to_string(),
-                        Some(err.to_string()),
+                        Some(err),
                     );
                     self.add_plain_history_lines(tasknode_evidence_context_fallback_lines(
                         &task_id,
@@ -748,12 +732,12 @@ impl ChatWidget {
         self.spawn_tasknode_value_request(
             "chat-history",
             {
-                let conversation_id = conversation_id.clone();
-                move |client| client.chat_history(&conversation_id)
+                let fetch_conversation_id = conversation_id.clone();
+                move |client| client.chat_history(&fetch_conversation_id)
             },
             move |result| AppEvent::OpenTaskNodeChatHistoryResult {
-                conversation_id: conversation_id.clone(),
-                title: title.clone(),
+                conversation_id,
+                title,
                 result,
             },
         );
@@ -1452,7 +1436,7 @@ fn tasknode_task_detail_header(
 
     let mut header: ColumnRenderable<'static> = ColumnRenderable::new();
     header.push(Line::from(title.bold()));
-    header.push(Line::from(task_id.clone().dim()));
+    header.push(Line::from(task_id.dim()));
     header.push(Line::from(
         [
             status,
@@ -1526,13 +1510,13 @@ fn tasknode_task_detail_header(
             .clone()
             .or(request.ask.clone())
             .unwrap_or_default();
-        if let Some(reason) = &request.reason {
-            if !reason.is_empty() {
-                if !body.is_empty() {
-                    body.push('\n');
-                }
-                body.push_str(&format!("Reason: {reason}"));
+        if let Some(reason) = &request.reason
+            && !reason.is_empty()
+        {
+            if !body.is_empty() {
+                body.push('\n');
             }
+            body.push_str(&format!("Reason: {reason}"));
         }
         push_tasknode_section(&mut header, "Current Verification Request", &body);
     }
@@ -1574,10 +1558,10 @@ fn tasknode_task_detail_header(
         if let Some(count) = forensics.event_count {
             parts.push(format!("{count} indexed event(s)"));
         }
-        if let Some(tx) = &forensics.last_event_tx_hash {
-            if !tx.is_empty() {
-                parts.push(format!("last tx {tx}"));
-            }
+        if let Some(tx) = &forensics.last_event_tx_hash
+            && !tx.is_empty()
+        {
+            parts.push(format!("last tx {tx}"));
         }
         if !parts.is_empty() {
             push_tasknode_section(&mut header, "Forensics", &parts.join("\n"));
@@ -1636,7 +1620,6 @@ fn tasknode_task_action_items(
         name: "Copy task brief".to_string(),
         description: Some("Copy objective, steps, verification, and requested output".to_string()),
         actions: vec![Box::new({
-            let task_id = task_id.clone();
             move |tx| {
                 tx.send(AppEvent::CopyTaskNodeTaskBrief {
                     task_id: task_id.clone(),
@@ -1873,12 +1856,12 @@ fn tasknode_evidence_context_lines(
         Line::from(task_id.dim()),
     ];
     if let Some(task) = task {
-        if let Some(description) = &task.description {
-            if !description.trim().is_empty() {
-                lines.push(Line::from(""));
-                lines.push(Line::from("Objective".bold()));
-                lines.push(Line::from(description.clone()));
-            }
+        if let Some(description) = &task.description
+            && !description.trim().is_empty()
+        {
+            lines.push(Line::from(""));
+            lines.push(Line::from("Objective".bold()));
+            lines.push(Line::from(description.clone()));
         }
         if !task.steps.is_empty() {
             lines.push(Line::from(""));
@@ -1914,10 +1897,10 @@ fn tasknode_evidence_context_lines(
             lines.push(Line::from("Current verification request".bold()));
             lines.push(Line::from(body));
         }
-        if let Some(reason) = &request.reason {
-            if !reason.is_empty() {
-                lines.push(Line::from(format!("Reason: {reason}").dim()));
-            }
+        if let Some(reason) = &request.reason
+            && !reason.is_empty()
+        {
+            lines.push(Line::from(format!("Reason: {reason}").dim()));
         }
     }
     lines
@@ -1925,7 +1908,7 @@ fn tasknode_evidence_context_lines(
 
 fn tasknode_evidence_context_fallback_lines(fallback_task_id: &str) -> Vec<Line<'static>> {
     vec![
-        Line::from(vec!["Task Node evidence context unavailable".bold().yellow()]),
+        Line::from(vec!["Task Node evidence context unavailable".bold().cyan()]),
         Line::from(fallback_task_id.to_string().dim()),
         Line::from(
             "Submit the evidence directly. Include the proof text, command result, PR URL, commit, or concise verification response."
@@ -2186,7 +2169,6 @@ fn tasknode_request_items(requests: Vec<TaskNodeRequestRow>) -> Vec<SelectionIte
                 actions: if is_pending {
                     Vec::new()
                 } else {
-                    let generated_task_id = generated_task_id.clone();
                     vec![Box::new(move |tx| {
                         tx.send(AppEvent::OpenTaskNodeTaskActions {
                             task_id: generated_task_id.clone(),
@@ -2255,7 +2237,7 @@ fn tasknode_chat_conversation_items(
                 .unwrap_or_else(|| {
                     format!("{} message(s)", conversation.message_count.unwrap_or(0))
                 }),
-            conversation.updated_at.clone().unwrap_or_default(),
+            conversation.updated_at.unwrap_or_default(),
         ]
         .into_iter()
         .filter(|part| !part.trim().is_empty())
@@ -2273,7 +2255,6 @@ fn tasknode_chat_conversation_items(
                 Vec::new()
             } else {
                 vec![Box::new({
-                    let conversation_id = conversation_id.clone();
                     move |tx| {
                         tx.send(AppEvent::OpenTaskNodeChatHistory {
                             conversation_id: conversation_id.clone(),
@@ -2295,8 +2276,8 @@ fn tasknode_chat_conversation_items(
 fn tasknode_chat_thread_items(conversation_id: String, title: String) -> Vec<SelectionItem> {
     let send_conversation_id = conversation_id.clone();
     let send_title = title.clone();
-    let refresh_conversation_id = conversation_id.clone();
-    let refresh_title = title.clone();
+    let refresh_conversation_id = conversation_id;
+    let refresh_title = title;
     vec![
         SelectionItem {
             name: "Send message".to_string(),

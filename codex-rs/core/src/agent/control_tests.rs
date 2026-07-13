@@ -2398,10 +2398,6 @@ async fn direct_thread_spawn_named_child_registers_path_for_v2_targeting() {
         "troll context should expose the child nickname, got {context:?}"
     );
 
-    troll_control.record_agent_task_message(
-        orc.thread_id,
-        "build the animated website shell".to_string(),
-    );
     troll_control.record_agent_result_status(
         orc.thread_id,
         &AgentStatus::Completed(Some(
@@ -2418,10 +2414,6 @@ async fn direct_thread_spawn_named_child_registers_path_for_v2_targeting() {
     assert!(
         context.contains("status=pending"),
         "troll context should expose the child status, got {context:?}"
-    );
-    assert!(
-        context.contains("task=build the animated website shell"),
-        "troll context should expose the child task preview, got {context:?}"
     );
     assert!(
         context.contains("result=created index.html with cryptographic formula copy"),
@@ -2513,12 +2505,12 @@ async fn resume_thread_subagent_restores_stored_metadata_and_effective_multi_age
     child_thread
         .codex
         .session
-        .persist_rollout_items(&[RolloutItem::TurnContext(child_turn_context)])
+        .ensure_rollout_materialized()
         .await;
     child_thread
         .codex
         .session
-        .ensure_rollout_materialized()
+        .persist_rollout_items(&[RolloutItem::TurnContext(child_turn_context)])
         .await;
     child_thread
         .codex

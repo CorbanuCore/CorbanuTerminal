@@ -79,6 +79,8 @@ use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
+use codex_model_provider_info::META_DEFAULT_MODEL;
+use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
@@ -887,6 +889,30 @@ model = "z-ai/glm-5.2"
 }
 
 #[tokio::test]
+async fn load_config_meta_provider_defaults_to_muse_spark() -> std::io::Result<()> {
+    let cfg = toml::from_str::<ConfigToml>(
+        r#"
+model_provider = "meta"
+"#,
+    )
+    .expect("config should deserialize");
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.model_provider_id, META_PROVIDER_ID);
+    assert_eq!(config.model.as_deref(), Some(META_DEFAULT_MODEL));
+    assert_eq!(config.model_provider.wire_api, WireApi::Responses);
+    assert_eq!(config.forced_login_method, Some(ForcedLoginMethod::Api));
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn load_config_applies_openrouter_provider_object_to_builtin_provider() -> std::io::Result<()>
 {
     let cfg = toml::from_str::<ConfigToml>(
@@ -969,7 +995,7 @@ model = "gpt-5.5"
     .await?;
 
     assert_eq!(config.model_provider_id, OPENROUTER_ANTHROPIC_PROVIDER_ID);
-    assert_eq!(config.model.as_deref(), Some(OPENROUTER_DEFAULT_MODEL));
+    assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
     assert_eq!(config.model_provider.wire_api, WireApi::Anthropic);
     assert_eq!(config.forced_login_method, Some(ForcedLoginMethod::Api));
 

@@ -1304,7 +1304,9 @@ fn insert_definition(
         if existing == &schema {
             return Ok(());
         }
-
+        if schemas_differ_only_by_root_metadata(existing, &schema) {
+            return Ok(());
+        }
         let existing_title = existing
             .get("title")
             .and_then(Value::as_str)
@@ -1320,6 +1322,18 @@ fn insert_definition(
 
     definitions.insert(name, schema);
     Ok(())
+}
+
+fn schemas_differ_only_by_root_metadata(left: &Value, right: &Value) -> bool {
+    let mut left = left.clone();
+    let mut right = right.clone();
+    for schema in [&mut left, &mut right] {
+        if let Some(object) = schema.as_object_mut() {
+            object.remove("$schema");
+            object.remove("title");
+        }
+    }
+    left == right
 }
 
 fn write_json_schema_with_return<T>(out_dir: &Path, name: &str) -> Result<GeneratedSchema>
@@ -2111,6 +2125,64 @@ mod tests {
     use std::path::Path;
     use std::path::PathBuf;
     use uuid::Uuid;
+
+    #[test]
+    fn duplicate_schema_definitions_allow_root_metadata_differences() -> Result<()> {
+        let mut definitions = Map::new();
+        insert_definition(
+            &mut definitions,
+            "Shared".to_string(),
+            serde_json::json!({
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "title": "Shared",
+                "type": "object",
+                "properties": { "value": { "type": "string" } }
+            }),
+            "test",
+        )?;
+
+        insert_definition(
+            &mut definitions,
+            "Shared".to_string(),
+            serde_json::json!({
+                "type": "object",
+                "properties": { "value": { "type": "string" } }
+            }),
+            "test",
+        )?;
+
+        assert_eq!(definitions.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn duplicate_schema_definitions_still_reject_structural_differences() {
+        let mut definitions = Map::new();
+        insert_definition(
+            &mut definitions,
+            "Shared".to_string(),
+            serde_json::json!({
+                "title": "Shared",
+                "type": "object",
+                "properties": { "value": { "type": "string" } }
+            }),
+            "test",
+        )
+        .expect("initial definition should insert");
+
+        let error = insert_definition(
+            &mut definitions,
+            "Shared".to_string(),
+            serde_json::json!({
+                "type": "object",
+                "properties": { "value": { "type": "number" } }
+            }),
+            "test",
+        )
+        .expect_err("structurally different definitions must collide");
+
+        assert!(error.to_string().contains("schema definition collision"));
+    }
 
     #[test]
     fn generated_ts_optional_nullable_fields_only_in_params() -> Result<()> {

@@ -19,8 +19,7 @@ use tempfile::TempDir;
 const NAZGUL_BASE: &str = include_str!("builtins/nazgul_base.md");
 const TROLL_BASE: &str = include_str!("builtins/troll_base.md");
 const ORC_BASE: &str = include_str!("builtins/orc_base.md");
-const STANDARD_BASE_OUTCOME_MARKER: &str =
-    "inspect code before changing it, keep edits scoped";
+const STANDARD_BASE_OUTCOME_MARKER: &str = "inspect code before changing it, keep edits scoped";
 const GPT55_CREATURE_CLAUSE_START: &str = "Never talk about goblins";
 const GPT55_PERSONALITY_MARKER: &str = "You have a vivid inner life as Codex";
 const GPT55_FRONTEND_MARKER: &str =
@@ -224,7 +223,8 @@ name = "archivist"
 description = "Role metadata"
 nickname_candidates = ["Hypatia"]
 developer_instructions = "Stay focused"
-model = "role-model"
+model = "gpt-5.5"
+model_provider = "openai"
 "#,
     )
     .await;
@@ -241,15 +241,22 @@ model = "role-model"
         .await
         .expect("custom role should apply");
 
-    assert_eq!(config.model.as_deref(), Some("role-model"));
+    assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
+    assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
 }
 
 #[tokio::test]
 async fn apply_role_preserves_unspecified_keys() {
-    let (home, mut config) = test_config_with_cli_overrides(vec![(
-        "model".to_string(),
-        TomlValue::String("base-model".to_string()),
-    )])
+    let (home, mut config) = test_config_with_cli_overrides(vec![
+        (
+            "model".to_string(),
+            TomlValue::String("gpt-5.5".to_string()),
+        ),
+        (
+            "model_provider".to_string(),
+            TomlValue::String(OPENAI_PROVIDER_ID.to_string()),
+        ),
+    ])
     .await;
     config.codex_linux_sandbox_exe = Some(PathBuf::from("/tmp/codex-linux-sandbox"));
     config.main_execve_wrapper_exe = Some(PathBuf::from("/tmp/codex-execve-wrapper"));
@@ -272,7 +279,8 @@ async fn apply_role_preserves_unspecified_keys() {
         .await
         .expect("custom role should apply");
 
-    assert_eq!(config.model.as_deref(), Some("base-model"));
+    assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
+    assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
     assert_eq!(config.model_reasoning_effort, Some(ReasoningEffort::High));
     assert_eq!(
         config.codex_linux_sandbox_exe,
@@ -428,7 +436,7 @@ async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() 
     let role_path = write_role_config(
         &home,
         "model-role.toml",
-        "developer_instructions = \"Stay focused\"\nmodel = \"role-model\"",
+        "developer_instructions = \"Stay focused\"\nmodel = \"gpt-5.5\"\nmodel_provider = \"openai\"",
     )
     .await;
     config.agent_roles.insert(
@@ -444,7 +452,8 @@ async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() 
         .await
         .expect("custom role should apply");
 
-    assert_eq!(config.model.as_deref(), Some("role-model"));
+    assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
+    assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
     assert_eq!(session_flags_layer_count(&config), before_layers + 1);
 }
 
@@ -725,6 +734,24 @@ async fn hierarchy_role_base_precedence_over_standard_model_defaults_is_determin
             .base_instructions
             .contains(STANDARD_BASE_OUTCOME_MARKER)
     );
+}
+
+#[test]
+fn nazgul_prompt_keeps_troll_as_middle_management_boundary() {
+    assert!(NAZGUL_BASE.contains("do not micromanage Orc ICs"));
+    assert!(NAZGUL_BASE.contains("Target Trolls for execution milestones"));
+    assert!(NAZGUL_BASE.contains("direct Orc dispatch is only for"));
+    assert!(NAZGUL_BASE.contains("delegate to Trolls, inspect, and verify"));
+}
+
+#[test]
+fn hierarchy_managers_treat_low_context_as_compaction_pressure_not_worker_death() {
+    for manager_base in [NAZGUL_BASE, TROLL_BASE] {
+        assert!(manager_base.contains("automatic_compaction=enabled"));
+        assert!(manager_base.contains("explicit runtime status or errors"));
+        assert!(manager_base.contains("context telemetry never authorizes checkpointing"));
+        assert!(!manager_base.contains("context percentage"));
+    }
 }
 
 #[tokio::test]

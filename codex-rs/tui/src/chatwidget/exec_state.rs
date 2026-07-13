@@ -16,6 +16,7 @@ pub(super) struct UnifiedExecProcessSummary {
     pub(super) call_id: String,
     pub(super) command_display: String,
     pub(super) recent_chunks: Vec<String>,
+    pub(super) interrupt_notes: Vec<String>,
 }
 
 pub(super) struct UnifiedExecWaitState {

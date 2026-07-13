@@ -81,6 +81,7 @@ use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
 use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
+use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OLLAMA_CHAT_PROVIDER_REMOVED_ERROR;
 use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
@@ -3414,9 +3415,11 @@ impl Config {
         // model (stale thread metadata, dropped spawn override, config default recorded next to
         // a role-derived model) would 400/404 at the remote with "Unknown model". Correct the
         // unambiguous cases; see corrected_catalog_provider for what qualifies.
-        let (model_provider_id, model_provider) = match model
-            .as_deref()
-            .and_then(|value| corrected_catalog_provider(value, &model_provider_id))
+        let corrected_provider = (!model_provider_was_explicit)
+            .then(|| model.as_deref())
+            .flatten()
+            .and_then(|value| corrected_catalog_provider(value, &model_provider_id));
+        let (model_provider_id, model_provider) = match corrected_provider
             .and_then(|corrected| {
                 model_providers
                     .get(corrected)
@@ -3565,6 +3568,7 @@ impl Config {
 
         let ambient_provider_selected = model_provider_id == AMBIENT_PROVIDER_ID;
         let anthropic_provider_selected = model_provider_id == ANTHROPIC_PROVIDER_ID;
+        let meta_provider_selected = model_provider_id == META_PROVIDER_ID;
         let baseten_provider_selected =
             matches!(model_provider_id.as_str(), BASETEN_PROVIDER_ID | BASETEN_ANTHROPIC_PROVIDER_ID);
         let openrouter_provider_selected = matches!(
@@ -3583,6 +3587,7 @@ impl Config {
             .or_else(|| {
                 (ambient_provider_selected
                     || anthropic_provider_selected
+                    || meta_provider_selected
                     || baseten_provider_selected
                     || openrouter_provider_selected
                     || vercel_provider_selected

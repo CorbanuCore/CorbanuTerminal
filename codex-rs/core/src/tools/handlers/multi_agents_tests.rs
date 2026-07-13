@@ -48,6 +48,7 @@ use codex_protocol::protocol::FileSystemSandboxEntry;
 use codex_protocol::protocol::FileSystemSandboxPolicy;
 use codex_protocol::protocol::InitialHistory;
 use codex_protocol::protocol::InterAgentCommunication;
+use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::NetworkSandboxPolicy;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::RolloutItem;
@@ -195,6 +196,41 @@ model_reasoning_effort = "minimal"
 fn set_turn_config(turn: &mut TurnContext, config: crate::config::Config) {
     turn.multi_agent_version = config.multi_agent_version_from_features();
     turn.config = Arc::new(config);
+}
+
+async fn register_v2_wait_child(
+    session: &mut crate::session::session::Session,
+    turn: &TurnContext,
+) -> ThreadManager {
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = root.thread_id;
+    session
+        .services
+        .agent_control
+        .spawn_agent_with_metadata(
+            (*turn.config).clone(),
+            vec![UserInput::Text {
+                text: "wait-test child".to_string(),
+                text_elements: Vec::new(),
+            }]
+            .into(),
+            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id: root.thread_id,
+                depth: 1,
+                agent_path: Some(AgentPath::try_from("/root/worker").expect("agent path")),
+                agent_nickname: Some("Worker".to_string()),
+                agent_role: Some("worker".to_string()),
+            })),
+            crate::agent::control::SpawnAgentOptions::default(),
+        )
+        .await
+        .expect("wait-test child should spawn");
+    manager
 }
 
 fn expect_text_output<T>(output: T) -> (String, Option<bool>)
@@ -1442,6 +1478,15 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
     assert_eq!(send_result.agent_path, "/root/test_process");
     assert_eq!(send_result.delivery, "queued");
     assert!(!send_result.triggered_turn);
+    assert_eq!(
+        session
+            .services
+            .agent_control
+            .get_agent_metadata(child_thread_id)
+            .and_then(|metadata| metadata.last_task_message),
+        None,
+        "opaque encrypted tool payloads must never become human-readable task previews"
+    );
 
     assert!(manager.captured_ops().iter().any(|(id, op)| {
         *id == child_thread_id
@@ -2041,7 +2086,7 @@ async fn multi_agent_v2_list_agents_keeps_interrupted_resident_agents() {
             session.clone(),
             turn.clone(),
             "interrupt_agent",
-            function_payload(json!({"target": "worker"})),
+            function_payload(json!({"target": "worker", "reason": "review correction"})),
         ))
         .await
         .expect("interrupt_agent should succeed");
@@ -2177,9 +2222,7 @@ async fn multi_agent_v2_send_message_rejects_interrupt_parameter() {
     let FunctionCallError::RespondToModel(message) = err else {
         panic!("expected model-facing parse error");
     };
-    assert!(message.starts_with(
-        "failed to parse function arguments: unknown field `interrupt`, expected `target` or `message`"
-    ));
+    assert!(message.contains("unknown field `interrupt`"));
 
     let ops = manager.captured_ops();
     let ops_for_agent: Vec<&Op> = ops
@@ -2554,6 +2597,46 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
             )
     }));
 
+    let captured_ops_before_capacity_rejection = manager.captured_ops().len();
+    let max_threads = turn
+        .config
+        .effective_agent_max_threads(MultiAgentVersion::V2)
+        .expect("MultiAgentV2 should have a bounded turn capacity");
+    let execution_guards = (0..max_threads)
+        .map(|_| {
+            session
+                .services
+                .agent_control
+                .execution_guard(MultiAgentVersion::V2, &turn.session_source)
+                .expect("a Troll turn should consume MultiAgentV2 capacity")
+        })
+        .collect::<Vec<_>>();
+    let capacity_output = FollowupTaskHandlerV2
+        .handle(invocation(
+            session.clone(),
+            turn.clone(),
+            "followup_task",
+            function_payload(json!({
+                "target": "orc_snaga",
+                "message": "Start another task while every execution slot is occupied."
+            })),
+        ))
+        .await
+        .expect("expected capacity pressure should be a normal unsuccessful tool result");
+    let (capacity_message, success) = expect_text_output(capacity_output);
+    assert_eq!(success, Some(false));
+    assert_eq!(
+        capacity_message,
+        format!(
+            "capacity unavailable: maximum {max_threads} agent turns are active; task was not accepted; wait for capacity before retrying"
+        )
+    );
+    assert_eq!(
+        manager.captured_ops().len(),
+        captured_ops_before_capacity_rejection
+    );
+    drop(execution_guards);
+
     session.services.agent_control.record_agent_result_status(
         first_orc.thread_id,
         &AgentStatus::Completed(Some("animation shell complete".to_string())),
@@ -2580,14 +2663,14 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
         agent.agent_name == first_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Snaga")
             && agent.agent_role.as_deref() == Some("orc")
-            && agent.last_task_message.as_deref() == Some(first_delegated_message)
+            && agent.last_task_message.is_none()
             && agent.last_result_message.as_deref() == Some("animation shell complete")
     }));
     assert!(result.agents.iter().any(|agent| {
         agent.agent_name == second_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Ghash")
             && agent.agent_role.as_deref() == Some("orc")
-            && agent.last_task_message.as_deref() == Some(second_delegated_message)
+            && agent.last_task_message.is_none()
             && agent.last_result_message.as_deref() == Some("formula checks complete")
     }));
     let context = session
@@ -2599,10 +2682,7 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
         context.contains("orc_snaga: Snaga"),
         "Troll context should name the first Orc, got {context:?}"
     );
-    assert!(
-        context.contains(first_delegated_message),
-        "Troll context should expose the first Orc task, got {context:?}"
-    );
+    assert!(!context.contains(first_delegated_message));
     assert!(
         context.contains("animation shell complete"),
         "Troll context should expose the first Orc result, got {context:?}"
@@ -2611,10 +2691,7 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
         context.contains("orc_ghash: Ghash"),
         "Troll context should name the second Orc, got {context:?}"
     );
-    assert!(
-        context.contains(second_delegated_message),
-        "Troll context should expose the second Orc task, got {context:?}"
-    );
+    assert!(!context.contains(second_delegated_message));
     assert!(
         context.contains("formula checks complete"),
         "Troll context should expose the second Orc result, got {context:?}"
@@ -2688,32 +2765,25 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
     assert!(result.agents.iter().any(|agent| {
         agent.agent_name == first_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Snaga")
-            && agent.last_task_message.as_deref() == Some(first_improvement_message)
-            && agent.last_result_message.is_none()
+            && agent.last_task_message.is_none()
+            && agent.last_result_message.as_deref() == Some("animation shell complete")
     }));
     assert!(result.agents.iter().any(|agent| {
         agent.agent_name == second_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Ghash")
-            && agent.last_task_message.as_deref() == Some(second_improvement_message)
-            && agent.last_result_message.is_none()
+            && agent.last_task_message.is_none()
+            && agent.last_result_message.as_deref() == Some("formula checks complete")
     }));
     let context = session
         .services
         .agent_control
         .format_environment_context_subagents(troll.thread_id)
         .await;
+    assert!(!context.contains(first_improvement_message));
+    assert!(!context.contains(second_improvement_message));
     assert!(
-        context.contains(first_improvement_message),
-        "Troll context should expose first Orc rework request, got {context:?}"
-    );
-    assert!(
-        context.contains(second_improvement_message),
-        "Troll context should expose second Orc rework request, got {context:?}"
-    );
-    assert!(
-        !context.contains("animation shell complete")
-            && !context.contains("formula checks complete"),
-        "Troll context should clear stale result previews after rework requests, got {context:?}"
+        context.contains("animation shell complete") && context.contains("formula checks complete"),
+        "encrypted rework payloads should not replace readable result previews, got {context:?}"
     );
 }
 
@@ -3948,6 +4018,131 @@ async fn multi_agent_v2_wait_agent_accepts_timeout_only_argument() {
 }
 
 #[tokio::test]
+async fn multi_agent_v2_wait_agent_rejects_agent_without_eligible_children() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = root.thread_id;
+    let mut config = (*turn.config).clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    config.multi_agent_v2.min_wait_timeout_ms = 0;
+    config.multi_agent_v2.max_wait_timeout_ms = 0;
+    config.multi_agent_v2.default_wait_timeout_ms = 0;
+    set_turn_config(&mut turn, config);
+
+    let err = WaitAgentHandlerV2::default()
+        .handle(invocation(
+            Arc::new(session),
+            Arc::new(turn),
+            "wait_agent",
+            function_payload(json!({})),
+        ))
+        .await
+        .err()
+        .expect("a childless agent must not enter a meaningless wait");
+    assert_eq!(
+        err,
+        FunctionCallError::RespondToModel(
+            "wait_agent rejected: this agent has no eligible child agents; return the result to its parent instead"
+                .to_string()
+        )
+    );
+}
+
+#[tokio::test]
+async fn multi_agent_v2_wait_agent_rejects_orc_at_runtime_boundary() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = ThreadId::new();
+    let mut config = (*turn.config).clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    set_turn_config(&mut turn, config);
+    turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: root.thread_id,
+        depth: 2,
+        agent_path: Some(AgentPath::try_from("/root/troll_burzum/orc_snaga").expect("agent path")),
+        agent_nickname: Some("Snaga".to_string()),
+        agent_role: Some("orc".to_string()),
+    });
+
+    let err = WaitAgentHandlerV2::default()
+        .handle(invocation(
+            Arc::new(session),
+            Arc::new(turn),
+            "wait_agent",
+            function_payload(json!({})),
+        ))
+        .await
+        .err()
+        .expect("Orc wait_agent call must be rejected by the executor");
+    assert_eq!(
+        err,
+        FunctionCallError::RespondToModel(
+            "wait_agent rejected by the runtime: caller role orc has no manager tools; return your report to your parent Troll instead"
+                .to_string()
+        )
+    );
+}
+
+#[tokio::test]
+async fn multi_agent_v2_wait_agent_orc_role_rejection_precedes_argument_validation() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = ThreadId::new();
+    let mut config = (*turn.config).clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    set_turn_config(&mut turn, config);
+    turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: root.thread_id,
+        depth: 2,
+        agent_path: Some(AgentPath::try_from("/root/troll_burzum/orc_snaga").expect("agent path")),
+        agent_nickname: Some("Snaga".to_string()),
+        agent_role: Some("orc".to_string()),
+    });
+
+    let err = WaitAgentHandlerV2::default()
+        .handle(invocation(
+            Arc::new(session),
+            Arc::new(turn),
+            "wait_agent",
+            function_payload(json!({"ids": ["not-an-agent-id"]})),
+        ))
+        .await
+        .err()
+        .expect("Orc wait_agent call must be rejected before parsing manager-only arguments");
+    assert_eq!(
+        err,
+        FunctionCallError::RespondToModel(
+            "wait_agent rejected by the runtime: caller role orc has no manager tools; return your report to your parent Troll instead"
+                .to_string()
+        )
+    );
+}
+
+#[tokio::test]
 async fn multi_agent_v2_wait_agent_rejects_timeout_below_configured_min() {
     let (session, mut turn) = make_session_and_context().await;
     let mut config = (*turn.config).clone();
@@ -3979,7 +4174,7 @@ async fn multi_agent_v2_wait_agent_rejects_timeout_below_configured_min() {
 
 #[tokio::test]
 async fn multi_agent_v2_wait_agent_accepts_explicit_timeout_at_configured_min() {
-    let (session, mut turn) = make_session_and_context().await;
+    let (mut session, mut turn) = make_session_and_context().await;
     let mut config = (*turn.config).clone();
     config
         .features
@@ -3989,6 +4184,7 @@ async fn multi_agent_v2_wait_agent_accepts_explicit_timeout_at_configured_min() 
     config.multi_agent_v2.max_wait_timeout_ms = 1_000;
     config.multi_agent_v2.default_wait_timeout_ms = 50;
     set_turn_config(&mut turn, config);
+    let _manager = register_v2_wait_child(&mut session, &turn).await;
 
     let output = WaitAgentHandlerV2::default()
         .handle(invocation(
@@ -4008,7 +4204,7 @@ async fn multi_agent_v2_wait_agent_accepts_explicit_timeout_at_configured_min() 
 
 #[tokio::test]
 async fn multi_agent_v2_wait_agent_uses_configured_default_timeout() {
-    let (session, mut turn) = make_session_and_context().await;
+    let (mut session, mut turn) = make_session_and_context().await;
     let mut config = (*turn.config).clone();
     config
         .features
@@ -4018,6 +4214,7 @@ async fn multi_agent_v2_wait_agent_uses_configured_default_timeout() {
     config.multi_agent_v2.max_wait_timeout_ms = 1_000;
     config.multi_agent_v2.default_wait_timeout_ms = 50;
     set_turn_config(&mut turn, config);
+    let _manager = register_v2_wait_child(&mut session, &turn).await;
     let session = Arc::new(session);
     let turn = Arc::new(turn);
 
@@ -4057,7 +4254,7 @@ async fn multi_agent_v2_wait_agent_uses_configured_default_timeout() {
 
 #[tokio::test]
 async fn multi_agent_v2_wait_agent_allows_zero_configured_timeout() {
-    let (session, mut turn) = make_session_and_context().await;
+    let (mut session, mut turn) = make_session_and_context().await;
     let mut config = (*turn.config).clone();
     config
         .features
@@ -4067,6 +4264,7 @@ async fn multi_agent_v2_wait_agent_allows_zero_configured_timeout() {
     config.multi_agent_v2.max_wait_timeout_ms = 0;
     config.multi_agent_v2.default_wait_timeout_ms = 0;
     set_turn_config(&mut turn, config);
+    let _manager = register_v2_wait_child(&mut session, &turn).await;
     let session = Arc::new(session);
     let turn = Arc::new(turn);
 
@@ -4087,6 +4285,67 @@ async fn multi_agent_v2_wait_agent_allows_zero_configured_timeout() {
         serde_json::from_str(&content).expect("wait_agent result should be json");
     assert_wait_v2_result(&result, "Wait timed out.", /*timed_out*/ true);
     assert_eq!(success, None);
+}
+
+#[tokio::test]
+async fn multi_agent_v2_wait_watchdog_escalates_and_blocks_polling_loop() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let mut config = (*turn.config).clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    config.multi_agent_v2.min_wait_timeout_ms = 0;
+    config.multi_agent_v2.max_wait_timeout_ms = 0;
+    config.multi_agent_v2.default_wait_timeout_ms = 0;
+    set_turn_config(&mut turn, config);
+    let _manager = register_v2_wait_child(&mut session, &turn).await;
+    let session = Arc::new(session);
+    let turn = Arc::new(turn);
+    let handler = WaitAgentHandlerV2::default();
+
+    let mut third_result = None;
+    for _ in 0..3 {
+        let output = handler
+            .handle(invocation(
+                session.clone(),
+                turn.clone(),
+                "wait_agent",
+                function_payload(json!({})),
+            ))
+            .await
+            .expect("first three waits return structured status");
+        let (content, _) = expect_text_output(output);
+        third_result = Some(
+            serde_json::from_str::<crate::tools::handlers::multi_agents_v2::wait::WaitAgentResult>(
+                &content,
+            )
+            .expect("wait result should parse"),
+        );
+    }
+
+    let third_result = third_result.expect("third result");
+    assert_eq!(third_result.consecutive_empty_waits, 3);
+    assert!(third_result.watchdog_escalated);
+    assert!(third_result.message.contains("WATCHDOG ESCALATION"));
+
+    let err = handler
+        .handle(invocation(
+            session,
+            turn,
+            "wait_agent",
+            function_payload(json!({})),
+        ))
+        .await
+        .err()
+        .expect("watchdog must break the polling loop");
+    assert_eq!(
+        err,
+        FunctionCallError::RespondToModel(
+            "wait_agent watchdog is open after 3 consecutive empty waits; polling is blocked until new work starts"
+                .to_string()
+        )
+    );
 }
 
 #[tokio::test]
@@ -4121,7 +4380,7 @@ async fn multi_agent_v2_wait_agent_rejects_timeout_above_configured_max() {
 
 #[tokio::test]
 async fn multi_agent_v2_wait_agent_accepts_explicit_timeout_at_configured_max() {
-    let (session, mut turn) = make_session_and_context().await;
+    let (mut session, mut turn) = make_session_and_context().await;
     let mut config = (*turn.config).clone();
     config
         .features
@@ -4131,6 +4390,7 @@ async fn multi_agent_v2_wait_agent_accepts_explicit_timeout_at_configured_max() 
     config.multi_agent_v2.max_wait_timeout_ms = 1;
     config.multi_agent_v2.default_wait_timeout_ms = 1;
     set_turn_config(&mut turn, config);
+    let _manager = register_v2_wait_child(&mut session, &turn).await;
 
     let output = WaitAgentHandlerV2::default()
         .handle(invocation(
@@ -4729,7 +4989,7 @@ async fn multi_agent_v2_interrupt_agent_accepts_task_name_target() {
             session.clone(),
             turn.clone(),
             "interrupt_agent",
-            function_payload(json!({"target": "worker"})),
+            function_payload(json!({"target": "worker", "reason": "review correction"})),
         ))
         .await
         .expect("interrupt_agent should succeed for v2 task names");
@@ -4766,6 +5026,153 @@ async fn multi_agent_v2_interrupt_agent_accepts_task_name_target() {
     assert!(
         !ops.iter()
             .any(|(thread_id, op)| *thread_id == child_id && matches!(op, Op::Interrupt))
+    );
+}
+
+#[tokio::test]
+async fn multi_agent_v2_interrupt_requires_visible_reason_and_superseding_task() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = root.thread_id;
+    let mut config = (*turn.config).clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    set_turn_config(&mut turn, config);
+    let session = Arc::new(session);
+    let turn = Arc::new(turn);
+
+    SpawnAgentHandlerV2::default()
+        .handle(invocation(
+            session.clone(),
+            turn.clone(),
+            "spawn_agent",
+            function_payload(json!({
+                "message": "run the long verification",
+                "task_name": "worker"
+            })),
+        ))
+        .await
+        .expect("spawn worker");
+
+    let output = InterruptAgentHandler
+        .handle(invocation(
+            session,
+            turn,
+            "interrupt_agent",
+            function_payload(json!({
+                "target": "worker",
+                "reason": "verification scope changed after review",
+                "superseding_task": "audit only the committed candidate"
+            })),
+        ))
+        .await
+        .expect("attributed interrupt should succeed");
+    let (content, success) = expect_text_output(output);
+    assert!(content.contains("verification scope changed after review"));
+    assert!(content.contains("audit only the committed candidate"));
+    assert_eq!(success, Some(true));
+}
+
+#[tokio::test]
+async fn multi_agent_v2_interrupt_target_receives_full_control_and_process_tuple() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = root.thread_id;
+    let mut config = (*turn.config).clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    set_turn_config(&mut turn, config);
+    turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: ThreadId::new(),
+        depth: 1,
+        agent_path: Some(AgentPath::try_from("/root/troll_burzum").expect("actor path")),
+        agent_nickname: Some("Burzum".to_string()),
+        agent_role: Some("troll".to_string()),
+    });
+    let session = Arc::new(session);
+    let turn = Arc::new(turn);
+
+    SpawnAgentHandlerV2::default()
+        .handle(invocation(
+            session.clone(),
+            turn.clone(),
+            "spawn_agent",
+            function_payload(json!({
+                "message": "run the long verification",
+                "task_name": "worker"
+            })),
+        ))
+        .await
+        .expect("spawn worker");
+    let worker_id = session
+        .services
+        .agent_control
+        .resolve_agent_reference(session.thread_id, &turn.session_source, "worker")
+        .await
+        .expect("worker path should resolve");
+    let worker_nickname = session
+        .services
+        .agent_control
+        .get_agent_metadata(worker_id)
+        .expect("worker metadata")
+        .agent_nickname
+        .expect("spawned worker nickname");
+
+    InterruptAgentHandler
+        .handle(invocation(
+            session,
+            turn,
+            "interrupt_agent",
+            function_payload(json!({
+                "target": "worker",
+                "reason": "verification scope changed after review",
+                "superseding_task": "dispatch #22: audit only the committed candidate"
+            })),
+        ))
+        .await
+        .expect("attributed interrupt should succeed");
+
+    let target_audit =
+        manager
+            .captured_ops()
+            .into_iter()
+            .find_map(|(thread_id, op)| match op {
+                Op::InterAgentCommunication { communication }
+                    if thread_id == worker_id
+                        && (communication.content.contains("CONTROL EVENT — INTERRUPT")
+                            || communication.encrypted_content.as_deref().is_some_and(
+                                |content| content.contains("CONTROL EVENT — INTERRUPT"),
+                            )) =>
+                {
+                    Some(communication)
+                }
+                _ => None,
+            })
+            .expect("target pane must receive the interrupt audit");
+    let expected = format!(
+        "Actor: Burzum [troll] · /root/troll_burzum\nTarget: {worker_nickname} · /root/troll_burzum/worker\nReason: verification scope changed after review\nSuperseding task/dispatch: dispatch #22: audit only the committed candidate\nProcess effect: model turn aborted; active turn-owned tool processes receive SIGTERM cleanup before abort; durable unified-exec background processes are preserved and remain inspectable in /ps"
+    );
+    assert!(
+        target_audit.encrypted_content.is_none(),
+        "runtime-generated plaintext must not be mislabeled as encrypted model content: {target_audit:?}"
+    );
+    assert!(
+        target_audit.content.contains(&expected),
+        "target interrupt audit did not contain the full tuple: {target_audit:?}"
     );
 }
 
@@ -4836,7 +5243,7 @@ async fn multi_agent_v2_interrupt_agent_accepts_unloaded_task_name_target() {
             session.clone(),
             turn.clone(),
             "interrupt_agent",
-            function_payload(json!({"target": "worker"})),
+            function_payload(json!({"target": "worker", "reason": "review correction"})),
         ))
         .await
         .expect("interrupt_agent should accept unloaded v2 task names");
@@ -4903,7 +5310,7 @@ async fn multi_agent_v2_interrupt_agent_rejects_root_target_and_id() {
             session.clone(),
             turn.clone(),
             "interrupt_agent",
-            function_payload(json!({"target": "/root"})),
+            function_payload(json!({"target": "/root", "reason": "invalid root test"})),
         ))
         .await
         .err()
@@ -4918,7 +5325,9 @@ async fn multi_agent_v2_interrupt_agent_rejects_root_target_and_id() {
             session,
             turn,
             "interrupt_agent",
-            function_payload(json!({"target": root.thread_id.to_string()})),
+            function_payload(
+                json!({"target": root.thread_id.to_string(), "reason": "invalid root test"}),
+            ),
         ))
         .await
         .err()
@@ -4983,7 +5392,9 @@ async fn multi_agent_v2_interrupt_agent_rejects_self_target_by_id() {
             Arc::new(session),
             Arc::new(turn),
             "interrupt_agent",
-            function_payload(json!({"target": child_thread_id.to_string()})),
+            function_payload(
+                json!({"target": child_thread_id.to_string(), "reason": "invalid self test"}),
+            ),
         ))
         .await
         .err()
@@ -5051,7 +5462,9 @@ async fn multi_agent_v2_interrupt_agent_rejects_self_target_by_task_name() {
             Arc::new(session),
             Arc::new(turn),
             "interrupt_agent",
-            function_payload(json!({"target": child_path.to_string()})),
+            function_payload(
+                json!({"target": child_path.to_string(), "reason": "invalid self test"}),
+            ),
         ))
         .await
         .err()

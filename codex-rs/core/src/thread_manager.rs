@@ -1156,6 +1156,7 @@ impl ThreadManagerState {
             session_source,
             parent_thread_id,
             forked_from_thread_id,
+            config,
         )
         .await
         .unwrap_or_else(|| config.multi_agent_version_from_features())
@@ -1167,6 +1168,7 @@ impl ThreadManagerState {
         session_source: Option<&SessionSource>,
         parent_thread_id: Option<ThreadId>,
         forked_from_thread_id: Option<ThreadId>,
+        config: &Config,
     ) -> Option<MultiAgentVersion> {
         let inherited_thread_id = match session_source {
             Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
@@ -1186,7 +1188,15 @@ impl ThreadManagerState {
                 .and_then(|thread| thread.multi_agent_version()),
             None => None,
         };
-        resolve_multi_agent_version(initial_history, inherited_multi_agent_version)
+        resolve_spawn_multi_agent_version(
+            initial_history,
+            inherited_multi_agent_version,
+            matches!(
+                session_source,
+                Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. }))
+            ),
+            config.multi_agent_version_from_features(),
+        )
     }
 
     /// Resolves the provider snapshot for a newly spawned runtime.
@@ -1483,6 +1493,7 @@ impl ThreadManagerState {
                 Some(&session_source),
                 parent_thread_id,
                 forked_from_thread_id,
+                &config,
             )
             .await;
         let CodexSpawnOk {
@@ -1813,6 +1824,26 @@ fn append_interrupted_boundary(
             InitialHistory::Forked(resumed.history)
         }
     }
+}
+
+fn resolve_spawn_multi_agent_version(
+    initial_history: &InitialHistory,
+    inherited_multi_agent_version: Option<MultiAgentVersion>,
+    is_thread_spawn: bool,
+    configured_multi_agent_version: MultiAgentVersion,
+) -> Option<MultiAgentVersion> {
+    // A fresh app-server thread/spawnAgent request is an explicit runtime boundary. PFTerminal
+    // enables V2 on the child config even when the long-lived user-facing parent predates V2 and
+    // is pinned to V1. Preserve an explicitly disabled parent, but otherwise honor that V2 child
+    // request instead of silently exposing the legacy send_input(interrupt=true) surface.
+    if is_thread_spawn
+        && configured_multi_agent_version == MultiAgentVersion::V2
+        && inherited_multi_agent_version != Some(MultiAgentVersion::Disabled)
+    {
+        return Some(MultiAgentVersion::V2);
+    }
+
+    resolve_multi_agent_version(initial_history, inherited_multi_agent_version)
 }
 
 #[cfg(test)]

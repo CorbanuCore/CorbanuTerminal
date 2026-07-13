@@ -161,6 +161,7 @@ pub struct ThreadSpawnAgentParams {
     #[ts(optional = nullable)]
     pub agent_nickname: Option<String>,
     /// Thread creation settings for the agent pane.
+    #[experimental(nested)]
     pub thread: ThreadStartParams,
 }
 

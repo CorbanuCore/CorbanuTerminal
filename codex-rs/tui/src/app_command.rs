@@ -89,9 +89,6 @@ pub(crate) enum AppCommand {
         force_reload: bool,
     },
     Compact,
-    SetThreadName {
-        name: String,
-    },
     Shutdown,
     ThreadRollback {
         num_turns: u32,
@@ -245,10 +242,6 @@ impl AppCommand {
 
     pub(crate) fn compact() -> Self {
         Self::Compact
-    }
-
-    pub(crate) fn set_thread_name(name: String) -> Self {
-        Self::SetThreadName { name }
     }
 
     #[allow(dead_code)]

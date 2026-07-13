@@ -420,7 +420,7 @@ Rules:
                     "nazgul".to_string(),
                     AgentRoleConfig {
                         description: Some(r#"Use `nazgul` for CTO-level architecture, delegation, security review, and orchestration.
-Nazgul report to Sauron/the human, translate the user's vision into implementation blueprints, delegate execution to Trolls, and do not act as individual contributors."#.to_string()),
+Nazgul report to Sauron/the human, translate the user's vision into implementation blueprints, delegate execution to Trolls rather than Orc ICs, and do not act as individual contributors."#.to_string()),
                         config_file: Some("nazgul.toml".to_string().parse().unwrap_or_default()),
                         nickname_candidates: Some(vec![
                             "Angmar".to_string(),

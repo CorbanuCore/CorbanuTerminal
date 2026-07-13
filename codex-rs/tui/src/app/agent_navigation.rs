@@ -89,6 +89,7 @@ impl AgentNavigationState {
         }
         let (
             previous_agent_path,
+            previous_model,
             previous_last_task_message,
             previous_last_result_message,
             previous_is_running,
@@ -98,18 +99,20 @@ impl AgentNavigationState {
             .map(|entry| {
                 (
                     entry.agent_path.clone(),
+                    entry.model.clone(),
                     entry.last_task_message.clone(),
                     entry.last_result_message.clone(),
                     entry.is_running,
                 )
             })
-            .unwrap_or((None, None, None, false));
+            .unwrap_or((None, None, None, None, false));
         self.threads.insert(
             thread_id,
             AgentPickerThreadEntry {
                 agent_nickname,
                 agent_role,
                 agent_path: previous_agent_path,
+                model: previous_model,
                 last_task_message: previous_last_task_message,
                 last_result_message: previous_last_result_message,
                 is_running: previous_is_running && !is_closed,
@@ -129,12 +132,19 @@ impl AgentNavigationState {
                     agent_nickname: None,
                     agent_role: None,
                     agent_path: None,
+                    model: None,
                     last_task_message: None,
                     last_result_message: None,
                     is_running: false,
                     is_closed: false,
                 });
         entry.agent_path = Some(activity.agent_path);
+        if activity.agent_nickname.is_some() {
+            entry.agent_nickname = activity.agent_nickname;
+        }
+        if activity.agent_role.is_some() {
+            entry.agent_role = activity.agent_role;
+        }
         if let Some(task_preview) = activity.task_preview {
             entry.last_task_message = Some(task_preview);
         }
@@ -174,6 +184,26 @@ impl AgentNavigationState {
         {
             entry.agent_path = Some(agent_path);
         }
+    }
+
+    pub(crate) fn set_model(&mut self, thread_id: ThreadId, model: Option<String>) {
+        if let Some(model) = model.filter(|model| !model.trim().is_empty())
+            && let Some(entry) = self.threads.get_mut(&thread_id)
+        {
+            entry.model = Some(model);
+        }
+    }
+
+    pub(crate) fn set_agent_nickname(
+        &mut self,
+        thread_id: ThreadId,
+        agent_nickname: Option<String>,
+    ) -> bool {
+        let Some(entry) = self.threads.get_mut(&thread_id) else {
+            return false;
+        };
+        entry.agent_nickname = agent_nickname;
+        true
     }
 
     /// Marks a thread as closed without removing it from the traversal cache.
@@ -375,6 +405,8 @@ mod tests {
         state.record_sub_agent_activity(SubAgentActivityDisplay {
             thread_id,
             agent_path: "/root/troll_burzum/orc_snaga".to_string(),
+            agent_nickname: None,
+            agent_role: None,
             task_preview: Some("build the animated website shell".to_string()),
             is_running_hint: true,
         });
@@ -387,6 +419,38 @@ mod tests {
         assert_eq!(
             entry.last_task_message.as_deref(),
             Some("build the animated website shell")
+        );
+        assert!(entry.is_running);
+    }
+
+    #[test]
+    fn encrypted_activity_without_preview_preserves_dispatch_task_text() {
+        let mut state = AgentNavigationState::default();
+        let thread_id = ThreadId::new();
+        state.upsert(
+            thread_id,
+            Some("Snaga".to_string()),
+            Some("orc".to_string()),
+            /*is_closed*/ false,
+        );
+        state.set_last_task_message(
+            thread_id,
+            Some("verify the route-stall regression".to_string()),
+        );
+
+        state.record_sub_agent_activity(SubAgentActivityDisplay {
+            thread_id,
+            agent_path: "/root/troll_burzum/orc_snaga".to_string(),
+            agent_nickname: Some("Snaga".to_string()),
+            agent_role: Some("orc".to_string()),
+            task_preview: None,
+            is_running_hint: true,
+        });
+
+        let entry = state.get(&thread_id).expect("agent should remain cached");
+        assert_eq!(
+            entry.last_task_message.as_deref(),
+            Some("verify the route-stall regression")
         );
         assert!(entry.is_running);
     }

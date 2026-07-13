@@ -4195,7 +4195,11 @@ async fn snapshot_request_shape_pre_turn_compaction_including_incoming_user_mess
     let request_log = mount_sse_sequence(&server, vec![sse1, sse2, sse3, sse4]).await;
 
     let model_provider = non_openai_model_provider(&server);
+    // This scenario verifies that compaction retains an incoming image for a model that accepts
+    // image input. Keep that capability explicit instead of inheriting the product's default
+    // provider/model, which may legitimately be text-only.
     let codex = test_codex()
+        .with_model("gpt-5.4")
         .with_config(move |config| {
             config.model_provider = model_provider;
             set_test_compact_prompt(config);

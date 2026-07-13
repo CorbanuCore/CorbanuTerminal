@@ -221,7 +221,8 @@ fn truncated_structured_write_is_non_retriable_before_dispatch() {
 
 #[tokio::test]
 async fn mcp_parallel_support_uses_handler_data() -> anyhow::Result<()> {
-    let (_, turn) = make_session_and_context().await;
+    let (_, mut turn) = make_session_and_context().await;
+    use_openai_provider(&mut turn);
     let router = ToolRouter::from_turn_context(
         &turn,
         ToolRouterParams {

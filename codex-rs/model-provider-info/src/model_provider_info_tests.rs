@@ -602,6 +602,87 @@ fn test_built_in_model_providers_include_openrouter() {
 }
 
 #[test]
+fn test_built_in_model_providers_include_meta() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let meta = providers
+        .get(META_PROVIDER_ID)
+        .expect("Meta provider should be built in");
+
+    assert_eq!(meta.base_url.as_deref(), Some(META_BASE_URL));
+    assert_eq!(meta.env_key.as_deref(), Some(META_API_KEY_ENV_VAR));
+    assert_eq!(meta.wire_api, WireApi::Responses);
+    assert!(meta.is_meta());
+    assert!(!meta.requires_openai_auth);
+    assert!(!meta.supports_websockets);
+    assert_eq!(
+        resolve_model_for_provider(None, META_PROVIDER_ID).as_deref(),
+        Some(META_DEFAULT_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(Some(META_DEFAULT_MODEL.to_string()), META_PROVIDER_ID)
+            .as_deref(),
+        Some(META_DEFAULT_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(Some("gpt-5.6-sol".to_string()), META_PROVIDER_ID).as_deref(),
+        Some(META_DEFAULT_MODEL)
+    );
+}
+
+#[test]
+fn openrouter_preserves_nonempty_model_slugs() {
+    for provider in [OPENROUTER_PROVIDER_ID, OPENROUTER_ANTHROPIC_PROVIDER_ID] {
+        for model in [
+            "minimax/minimax-m3",
+            "google/gemini-3.5-flash",
+            "x-ai/grok-4.5",
+            "deepseek/deepseek-v4-pro",
+            "tencent/hy3:free",
+            "vendor/future-model",
+        ] {
+            assert_eq!(
+                resolve_model_for_provider(Some(model.to_string()), provider).as_deref(),
+                Some(model),
+                "expected {provider} to preserve {model}"
+            );
+        }
+        assert_eq!(
+            resolve_model_for_provider(Some("  ".to_string()), provider).as_deref(),
+            Some(OPENROUTER_DEFAULT_MODEL)
+        );
+        assert_eq!(
+            resolve_model_for_provider(None, provider).as_deref(),
+            Some(OPENROUTER_DEFAULT_MODEL)
+        );
+    }
+}
+
+#[test]
+fn direct_zai_retries_transient_provider_rate_limits() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let zai = providers
+        .get(ZAI_PROVIDER_ID)
+        .expect("Z.AI provider should be built in");
+    let openrouter = providers
+        .get(OPENROUTER_PROVIDER_ID)
+        .expect("OpenRouter provider should be built in");
+
+    assert!(
+        zai.to_api_provider(None)
+            .expect("Z.AI should convert to API provider")
+            .retry
+            .retry_429
+    );
+    assert!(
+        !openrouter
+            .to_api_provider(None)
+            .expect("OpenRouter should convert to API provider")
+            .retry
+            .retry_429
+    );
+}
+
+#[test]
 fn configured_built_in_provider_can_override_transport_knobs() {
     let configured = HashMap::from([(
         OPENROUTER_PROVIDER_ID.to_string(),

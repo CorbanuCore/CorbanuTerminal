@@ -423,6 +423,38 @@ fn items_after_last_model_output(input: &[ResponseItem]) -> Option<Vec<ResponseI
     (!incremental_items.is_empty()).then(|| incremental_items.to_vec())
 }
 
+/// Whether an outbound Responses `input` contains at least one user-role message.
+///
+/// The Vercel gateway rejects `previous_response_id` continuations whose `input`
+/// holds only tool results (`invalid_request_error`: "At least one user message
+/// is required in the input"), which broke tool-call follow-up turns.
+fn responses_input_includes_user_message(items: &[ResponseItem]) -> bool {
+    items
+        .iter()
+        .any(|item| matches!(item, ResponseItem::Message { role, .. } if role == "user"))
+}
+
+/// Adopts a server-state incremental continuation only when the incremental
+/// `input` is a shape the Vercel gateway accepts (at least one user-role
+/// message). Otherwise the request is left as a full-context replay with no
+/// `previous_response_id`; server-conversation state still updates from the
+/// response, so later user-initiated continuations stay incremental.
+fn apply_http_server_state_continuation(
+    request: &mut ResponsesApiRequest,
+    response_id: String,
+    incremental_items: Vec<ResponseItem>,
+) {
+    if !responses_input_includes_user_message(&incremental_items) {
+        debug!(
+            "skipping server-state incremental continuation without a user message; \
+             sending full-context responses request"
+        );
+        return;
+    }
+    request.previous_response_id = Some(response_id);
+    request.input = incremental_items;
+}
+
 fn is_model_output_item(item: &ResponseItem) -> bool {
     match item {
         ResponseItem::Message { role, .. } => role == "assistant",
@@ -490,9 +522,11 @@ fn trace_stream_timing_enabled() -> bool {
 
 fn trace_stream_timing(label: &str, start: Instant) {
     if trace_stream_timing_enabled() {
-        eprintln!(
-            "[pfterminal-stream] {label} elapsed_ms={}",
-            start.elapsed().as_millis()
+        debug!(
+            target: "pfterminal_stream",
+            label,
+            elapsed_ms = start.elapsed().as_millis(),
+            "pfterminal stream timing"
         );
     }
 }
@@ -1186,9 +1220,7 @@ impl ModelClient {
 
         let input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
         let mut skipped_tool_call_ids = HashSet::new();
-        for item in input {
-            append_chat_messages_for_response_item(item, &mut messages, &mut skipped_tool_call_ids);
-        }
+        append_chat_messages_for_response_items(input, &mut messages, &mut skipped_tool_call_ids);
 
         // GLM chat streams proper tool calls when OpenAI's `strict` function
         // flag is omitted. Keep the JSON schema, but drop that
@@ -1319,6 +1351,7 @@ impl ModelClient {
         let mut system = Vec::new();
         let instructions = prompt.base_instructions.text.trim();
         let is_claude_plan = is_claude_plan_model_slug(&model_info.slug);
+        let cache_control = anthropic_cache_control(is_claude_plan);
         if is_claude_plan {
             system.push(json!({
                 "type": "text",
@@ -1332,7 +1365,7 @@ impl ModelClient {
             });
             system.push(instruction_block);
         }
-        apply_anthropic_cache_control_to_last_system_block(&mut system);
+        apply_anthropic_cache_control_to_last_system_block(&mut system, &cache_control);
 
         let input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
         let mut messages = Vec::new();
@@ -1344,9 +1377,9 @@ impl ModelClient {
                 &mut skipped_tool_call_ids,
             );
         }
-        apply_anthropic_cache_control_to_last_user_messages(&mut messages);
+        apply_anthropic_cache_control_to_last_user_messages(&mut messages, &cache_control);
 
-        let tools = create_tools_json_for_anthropic_messages(&prompt.tools)?;
+        let tools = create_tools_json_for_anthropic_messages(&prompt.tools, &cache_control)?;
         let tool_choice = (!tools.is_empty()).then(|| json!({ "type": "auto" }));
         let upstream_model = anthropic_upstream_model(&model_info.slug);
         let (thinking, output_config) = anthropic_reasoning_for_model_and_effort(
@@ -1391,6 +1424,12 @@ impl ModelClient {
     }
 
     fn prepare_response_items_for_request(&self, input: &mut [ResponseItem], store: bool) {
+        if self.state.provider.info().is_meta() {
+            for item in input {
+                item.assign_id_if_missing();
+            }
+            return;
+        }
         if self.state.item_ids_enabled || store {
             return;
         }
@@ -1426,6 +1465,16 @@ impl ModelClient {
             api_provider,
             api_auth,
         })
+    }
+
+    fn unauthorized_recovery(&self) -> Option<UnauthorizedRecovery> {
+        if self.state.provider.info().env_key.is_some() {
+            return None;
+        }
+        self.state
+            .provider
+            .auth_manager()
+            .map(|manager| manager.unauthorized_recovery())
     }
 
     /// Opens a websocket connection using the same header and telemetry wiring as normal turns.
@@ -1727,10 +1776,7 @@ impl ModelClientSession {
         responses_metadata: &CodexResponsesMetadata,
         inference_trace: &InferenceTraceContext,
     ) -> Result<ResponseStream> {
-        let auth_manager = self.client.state.provider.auth_manager();
-        let mut auth_recovery = auth_manager
-            .as_ref()
-            .map(AuthManager::unauthorized_recovery);
+        let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
         loop {
             let provider_request_started_at = Instant::now();
@@ -1886,15 +1932,21 @@ impl ModelClientSession {
                     self.client.state.provider.info().is_openai(),
                     /*allow_empty_delta*/ false,
                 ) {
-                    request.previous_response_id = Some(state.last_response.response_id);
-                    request.input = incremental_items;
+                    apply_http_server_state_continuation(
+                        request,
+                        state.last_response.response_id,
+                        incremental_items,
+                    );
                     return;
                 }
             } else if let Some(incremental_items) =
                 items_after_last_model_output(&logical_request.input)
             {
-                request.previous_response_id = Some(state.last_response.response_id);
-                request.input = incremental_items;
+                apply_http_server_state_continuation(
+                    request,
+                    state.last_response.response_id,
+                    incremental_items,
+                );
                 return;
             }
         }
@@ -1907,9 +1959,28 @@ impl ModelClientSession {
                 /*allow_empty_delta*/ false,
             )
         {
-            request.previous_response_id = Some(last_response.response_id);
-            request.input = incremental_items;
+            apply_http_server_state_continuation(
+                request,
+                last_response.response_id,
+                incremental_items,
+            );
         }
+    }
+
+    /// Drops every source `prepare_http_server_state_request` can draw a
+    /// `previous_response_id` continuation from, so the next attempt in the
+    /// retry loop rebuilds as a full-context request. Used to self-heal after
+    /// the provider rejects a server-state continuation.
+    fn clear_http_server_conversation_state(&mut self) {
+        {
+            let handle = self.client.server_conversation_state_handle();
+            let mut state = handle
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            *state = None;
+        }
+        self.websocket_session.last_request = None;
+        self.websocket_session.last_response_rx = None;
     }
 
     fn prepare_websocket_request(
@@ -2092,10 +2163,7 @@ impl ModelClientSession {
         inference_trace: &InferenceTraceContext,
         same_turn_attempt_index: u64,
     ) -> Result<ResponseStream> {
-        let auth_manager = self.client.state.provider.auth_manager();
-        let mut auth_recovery = auth_manager
-            .as_ref()
-            .map(AuthManager::unauthorized_recovery);
+        let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
         loop {
             let provider_request_started_at = Instant::now();
@@ -2223,11 +2291,9 @@ impl ModelClientSession {
         responses_metadata: &CodexResponsesMetadata,
         inference_trace: &InferenceTraceContext,
     ) -> Result<ResponseStream> {
-        let auth_manager = self.client.state.provider.auth_manager();
-        let mut auth_recovery = auth_manager
-            .as_ref()
-            .map(AuthManager::unauthorized_recovery);
+        let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
+        let mut server_state_retry_used = false;
         loop {
             let provider_request_started_at = Instant::now();
             trace_stream_timing(
@@ -2274,6 +2340,7 @@ impl ModelClientSession {
             if uses_http_server_state {
                 self.prepare_http_server_state_request(&mut request, &logical_request);
             }
+            let request_used_server_state = request.previous_response_id.is_some();
             let store = request.store;
             self.client
                 .prepare_response_items_for_request(&mut request.input, store);
@@ -2344,6 +2411,32 @@ impl ModelClientSession {
                     );
                     continue;
                 }
+                Err(ApiError::Transport(
+                    bad_request_transport @ TransportError::Http { status, .. },
+                )) if status == StatusCode::BAD_REQUEST
+                    && request_used_server_state
+                    && !server_state_retry_used =>
+                {
+                    // Self-heal: the provider rejected a `previous_response_id`
+                    // continuation (e.g. the Vercel gateway requires a user
+                    // message in `input`). Drop the server-conversation state
+                    // and retry once with a full-context request instead of
+                    // failing the turn.
+                    let response_debug_context =
+                        extract_response_debug_context(&bad_request_transport);
+                    inference_trace_attempt.record_failed(
+                        &bad_request_transport,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    warn!(
+                        "server-state responses continuation rejected with 400; \
+                         clearing server conversation state and retrying with full context"
+                    );
+                    self.clear_http_server_conversation_state();
+                    server_state_retry_used = true;
+                    continue;
+                }
                 Err(err) => {
                     let response_debug_context =
                         extract_response_debug_context_from_api_error(&err);
@@ -2387,11 +2480,7 @@ impl ModelClientSession {
         request_trace: Option<W3cTraceContext>,
         inference_trace: &InferenceTraceContext,
     ) -> Result<WebsocketStreamOutcome> {
-        let auth_manager = self.client.state.provider.auth_manager();
-
-        let mut auth_recovery = auth_manager
-            .as_ref()
-            .map(AuthManager::unauthorized_recovery);
+        let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
         loop {
             let client_setup = self.client.current_client_setup().await?;
@@ -2769,15 +2858,14 @@ fn apply_chat_cache_control(messages: &mut [ChatMessage]) {
         mark_chat_message_cache_control(system_message);
     }
 
-    let user_indices = messages
-        .iter()
-        .enumerate()
-        .filter_map(|(index, message)| (message.role == "user").then_some(index))
-        .collect::<Vec<_>>();
-
-    for index in user_indices.into_iter().rev().take(2) {
-        if let Some(message) = messages.get_mut(index) {
-            mark_chat_message_cache_control(message);
+    let mut marked_user_messages = 0usize;
+    for index in (0..messages.len()).rev() {
+        if messages[index].role == "user" {
+            mark_chat_message_cache_control(&mut messages[index]);
+            marked_user_messages += 1;
+            if marked_user_messages >= 2 {
+                break;
+            }
         }
     }
 }
@@ -2790,11 +2878,13 @@ fn mark_chat_message_cache_control(message: &mut ChatMessage) -> bool {
     let marked_content = match content {
         ChatMessageContent::Text(text) => ChatMessageContent::cache_control_text(text),
         ChatMessageContent::Parts(mut parts) => {
-            if let Some(part) = parts
-                .iter_mut()
-                .rev()
-                .find(|part| part.kind == "text" && !part.text.trim().is_empty())
-            {
+            if let Some(part) = parts.iter_mut().rev().find(|part| {
+                part.kind == "text"
+                    && part
+                        .text
+                        .as_deref()
+                        .is_some_and(|text| !text.trim().is_empty())
+            }) {
                 part.cache_control = Some(ChatCacheControl::ephemeral());
             } else {
                 parts.push(ChatContentPart::cache_control_text("..."));
@@ -2807,17 +2897,53 @@ fn mark_chat_message_cache_control(message: &mut ChatMessage) -> bool {
     true
 }
 
+#[cfg(test)]
 fn append_chat_messages_for_response_item(
     item: ResponseItem,
     messages: &mut Vec<ChatMessage>,
     skipped_tool_call_ids: &mut HashSet<String>,
 ) {
+    append_chat_messages_for_response_items(std::iter::once(item), messages, skipped_tool_call_ids);
+}
+
+fn append_chat_messages_for_response_items(
+    items: impl IntoIterator<Item = ResponseItem>,
+    messages: &mut Vec<ChatMessage>,
+    skipped_tool_call_ids: &mut HashSet<String>,
+) {
+    let mut pending_tool_result_images = Vec::new();
+
+    for item in items {
+        if !matches!(
+            &item,
+            ResponseItem::FunctionCallOutput { .. } | ResponseItem::CustomToolCallOutput { .. }
+        ) {
+            flush_chat_tool_result_images(messages, &mut pending_tool_result_images);
+        }
+
+        append_chat_message_for_response_item(
+            item,
+            messages,
+            skipped_tool_call_ids,
+            &mut pending_tool_result_images,
+        );
+    }
+
+    flush_chat_tool_result_images(messages, &mut pending_tool_result_images);
+}
+
+fn append_chat_message_for_response_item(
+    item: ResponseItem,
+    messages: &mut Vec<ChatMessage>,
+    skipped_tool_call_ids: &mut HashSet<String>,
+    pending_tool_result_images: &mut Vec<ChatContentPart>,
+) {
     match item {
         ResponseItem::Message { role, content, .. } => {
-            if let Some(content) = content_items_to_chat_text(&content) {
+            if let Some(content) = content_items_to_chat_content(&content) {
                 messages.push(ChatMessage {
                     role: normalize_chat_role(&role),
-                    content: Some(ChatMessageContent::text(content)),
+                    content: Some(content),
                     tool_call_id: None,
                     tool_calls: Vec::new(),
                 });
@@ -2845,16 +2971,26 @@ fn append_chat_messages_for_response_item(
                 skipped_tool_call_ids.insert(call_id);
                 return;
             }
-            messages.push(ChatMessage {
-                role: "assistant".to_string(),
-                content: None,
-                tool_call_id: None,
-                tool_calls: vec![ChatToolCall {
-                    id: call_id,
-                    kind: "function".to_string(),
-                    function: ChatToolFunction { name, arguments },
-                }],
-            });
+            let tool_call = ChatToolCall {
+                id: call_id,
+                kind: "function".to_string(),
+                function: ChatToolFunction { name, arguments },
+            };
+            if let Some(message) = messages.last_mut().filter(|message| {
+                message.role == "assistant"
+                    && message.content.is_none()
+                    && message.tool_call_id.is_none()
+                    && !message.tool_calls.is_empty()
+            }) {
+                message.tool_calls.push(tool_call);
+            } else {
+                messages.push(ChatMessage {
+                    role: "assistant".to_string(),
+                    content: None,
+                    tool_call_id: None,
+                    tool_calls: vec![tool_call],
+                });
+            }
         }
         ResponseItem::FunctionCallOutput {
             call_id, output, ..
@@ -2869,14 +3005,22 @@ fn append_chat_messages_for_response_item(
                 );
                 return;
             }
+            let image_parts = chat_tool_result_image_parts(&output);
+            let output_text = output.body.to_text().filter(|text| !text.trim().is_empty());
+            let output_text = output_text.unwrap_or_else(|| {
+                if image_parts.is_empty() {
+                    "(tool output omitted)".to_string()
+                } else {
+                    "(image attached)".to_string()
+                }
+            });
             messages.push(ChatMessage {
                 role: "tool".to_string(),
-                content: Some(ChatMessageContent::text(
-                    output.body.to_text().unwrap_or_else(|| output.to_string()),
-                )),
+                content: Some(ChatMessageContent::text(output_text)),
                 tool_call_id: Some(call_id),
                 tool_calls: Vec::new(),
             });
+            pending_tool_result_images.extend(image_parts);
         }
         ResponseItem::Reasoning { .. }
         | ResponseItem::LocalShellCall { .. }
@@ -2889,6 +3033,88 @@ fn append_chat_messages_for_response_item(
         | ResponseItem::ContextCompaction { .. }
         | ResponseItem::Other => {}
     }
+}
+
+fn flush_chat_tool_result_images(
+    messages: &mut Vec<ChatMessage>,
+    pending_tool_result_images: &mut Vec<ChatContentPart>,
+) {
+    if pending_tool_result_images.is_empty() {
+        return;
+    }
+
+    messages.push(ChatMessage {
+        role: "user".to_string(),
+        content: Some(ChatMessageContent::Parts(std::mem::take(
+            pending_tool_result_images,
+        ))),
+        tool_call_id: None,
+        tool_calls: Vec::new(),
+    });
+}
+
+fn chat_image_detail(detail: Option<codex_protocol::models::ImageDetail>) -> Option<String> {
+    detail.map(|detail| match detail {
+        codex_protocol::models::ImageDetail::Auto => "auto".to_string(),
+        codex_protocol::models::ImageDetail::Low => "low".to_string(),
+        codex_protocol::models::ImageDetail::High
+        | codex_protocol::models::ImageDetail::Original => "high".to_string(),
+    })
+}
+
+fn chat_image_part(
+    image_url: String,
+    detail: Option<codex_protocol::models::ImageDetail>,
+) -> ChatContentPart {
+    ChatContentPart::image_url(image_url, chat_image_detail(detail))
+}
+
+fn content_items_to_chat_content(content: &[ContentItem]) -> Option<ChatMessageContent> {
+    if !content
+        .iter()
+        .any(|item| matches!(item, ContentItem::InputImage { .. }))
+    {
+        return content_items_to_chat_text(content).map(ChatMessageContent::text);
+    }
+
+    let parts = content
+        .iter()
+        .filter_map(|item| match item {
+            ContentItem::InputText { text } | ContentItem::OutputText { text }
+                if !text.trim().is_empty() =>
+            {
+                Some(ChatContentPart::text(text.clone()))
+            }
+            ContentItem::InputImage { image_url, detail } => {
+                Some(chat_image_part(image_url.clone(), *detail))
+            }
+            ContentItem::InputText { .. } | ContentItem::OutputText { .. } => None,
+        })
+        .collect::<Vec<_>>();
+
+    (!parts.is_empty()).then_some(ChatMessageContent::Parts(parts))
+}
+
+fn chat_tool_result_image_parts(
+    output: &codex_protocol::models::FunctionCallOutputPayload,
+) -> Vec<ChatContentPart> {
+    let codex_protocol::models::FunctionCallOutputBody::ContentItems(items) = &output.body else {
+        return Vec::new();
+    };
+
+    items
+        .iter()
+        .filter_map(|item| match item {
+            codex_protocol::models::FunctionCallOutputContentItem::InputImage {
+                image_url,
+                detail,
+            } => Some(chat_image_part(image_url.clone(), *detail)),
+            codex_protocol::models::FunctionCallOutputContentItem::InputText { .. }
+            | codex_protocol::models::FunctionCallOutputContentItem::EncryptedContent { .. } => {
+                None
+            }
+        })
+        .collect()
 }
 
 fn content_items_to_chat_text(content: &[ContentItem]) -> Option<String> {
@@ -2909,6 +3135,58 @@ fn content_items_to_chat_text(content: &[ContentItem]) -> Option<String> {
     }
 }
 
+fn anthropic_image_block(image_url: &str) -> Value {
+    let source = if let Some((metadata, data)) = image_url
+        .strip_prefix("data:")
+        .and_then(|value| value.split_once(','))
+        && let Some(media_type) = metadata.strip_suffix(";base64")
+    {
+        json!({
+            "type": "base64",
+            "media_type": media_type,
+            "data": data,
+        })
+    } else {
+        json!({
+            "type": "url",
+            "url": image_url,
+        })
+    };
+
+    json!({
+        "type": "image",
+        "source": source,
+    })
+}
+
+fn anthropic_tool_result_content(
+    output: &codex_protocol::models::FunctionCallOutputPayload,
+) -> Value {
+    match &output.body {
+        codex_protocol::models::FunctionCallOutputBody::Text(text) => Value::String(text.clone()),
+        codex_protocol::models::FunctionCallOutputBody::ContentItems(items) => Value::Array(
+            items
+                .iter()
+                .filter_map(|item| match item {
+                    codex_protocol::models::FunctionCallOutputContentItem::InputText { text } => {
+                        Some(json!({
+                            "type": "text",
+                            "text": text,
+                        }))
+                    }
+                    codex_protocol::models::FunctionCallOutputContentItem::InputImage {
+                        image_url,
+                        ..
+                    } => Some(anthropic_image_block(image_url)),
+                    codex_protocol::models::FunctionCallOutputContentItem::EncryptedContent {
+                        ..
+                    } => None,
+                })
+                .collect(),
+        ),
+    }
+}
+
 fn normalize_chat_role(role: &str) -> String {
     match role {
         "assistant" | "system" | "tool" | "user" => role.to_string(),
@@ -2924,20 +3202,25 @@ fn append_anthropic_message_for_response_item(
 ) {
     match item {
         ResponseItem::Message { role, content, .. } => {
-            if let Some(text) = content_items_to_chat_text(&content) {
-                let role = if role == "assistant" {
-                    "assistant"
-                } else {
-                    "user"
+            let role = if role == "assistant" {
+                "assistant"
+            } else {
+                "user"
+            };
+            for item in content {
+                let block = match item {
+                    ContentItem::InputText { text } | ContentItem::OutputText { text }
+                        if !text.trim().is_empty() =>
+                    {
+                        json!({
+                            "type": "text",
+                            "text": text,
+                        })
+                    }
+                    ContentItem::InputImage { image_url, .. } => anthropic_image_block(&image_url),
+                    ContentItem::InputText { .. } | ContentItem::OutputText { .. } => continue,
                 };
-                push_anthropic_message(
-                    messages,
-                    role,
-                    json!({
-                        "type": "text",
-                        "text": text,
-                    }),
-                );
+                push_anthropic_message(messages, role, block);
             }
         }
         ResponseItem::AgentMessage { .. } => {}
@@ -2995,7 +3278,7 @@ fn append_anthropic_message_for_response_item(
                 json!({
                     "type": "tool_result",
                     "tool_use_id": call_id,
-                    "content": output.body.to_text().unwrap_or_else(|| output.to_string()),
+                    "content": anthropic_tool_result_content(&output),
                 }),
             );
         }
@@ -3039,35 +3322,41 @@ fn push_anthropic_message(messages: &mut Vec<Value>, role: &str, block: Value) {
     }));
 }
 
-fn apply_anthropic_cache_control_to_last_user_messages(messages: &mut [Value]) {
-    let user_indices = messages
-        .iter()
-        .enumerate()
-        .filter_map(|(index, message)| {
-            (message.get("role").and_then(Value::as_str) == Some("user")).then_some(index)
-        })
-        .collect::<Vec<_>>();
+fn anthropic_cache_control(use_one_hour_ttl: bool) -> Value {
+    if use_one_hour_ttl {
+        json!({ "type": "ephemeral", "ttl": "1h" })
+    } else {
+        json!({ "type": "ephemeral" })
+    }
+}
 
-    for index in user_indices
-        .into_iter()
-        .rev()
-        .take(ANTHROPIC_MESSAGES_MAX_CACHE_CONTROL_BLOCKS.saturating_sub(2))
-    {
-        if let Some(message) = messages.get_mut(index) {
-            mark_anthropic_message_cache_control(message);
+fn apply_anthropic_cache_control_to_last_user_messages(
+    messages: &mut [Value],
+    cache_control: &Value,
+) {
+    let max_user_messages = ANTHROPIC_MESSAGES_MAX_CACHE_CONTROL_BLOCKS.saturating_sub(2);
+    let mut marked_user_messages = 0usize;
+    for index in (0..messages.len()).rev() {
+        let is_user = messages[index].get("role").and_then(Value::as_str) == Some("user");
+        if is_user && let Some(message) = messages.get_mut(index) {
+            mark_anthropic_message_cache_control(message, cache_control);
+            marked_user_messages += 1;
+            if marked_user_messages >= max_user_messages {
+                break;
+            }
         }
     }
 }
 
-fn apply_anthropic_cache_control_to_last_system_block(system: &mut [Value]) {
+fn apply_anthropic_cache_control_to_last_system_block(system: &mut [Value], cache_control: &Value) {
     if let Some(block) = system.last_mut()
         && let Some(object) = block.as_object_mut()
     {
-        object.insert("cache_control".to_string(), json!({ "type": "ephemeral" }));
+        object.insert("cache_control".to_string(), cache_control.clone());
     }
 }
 
-fn mark_anthropic_message_cache_control(message: &mut Value) {
+fn mark_anthropic_message_cache_control(message: &mut Value, cache_control: &Value) {
     let Some(content) = message.get_mut("content").and_then(Value::as_array_mut) else {
         return;
     };
@@ -3078,7 +3367,7 @@ fn mark_anthropic_message_cache_control(message: &mut Value) {
         )
     }) && let Some(object) = block.as_object_mut()
     {
-        object.insert("cache_control".to_string(), json!({ "type": "ephemeral" }));
+        object.insert("cache_control".to_string(), cache_control.clone());
     }
 }
 
@@ -3157,21 +3446,24 @@ fn anthropic_thinking_for_effort(effort: Option<&ReasoningEffortConfig>) -> Opti
     }
 }
 
-fn create_tools_json_for_anthropic_messages(tools: &[ToolSpec]) -> Result<Vec<Value>> {
+fn create_tools_json_for_anthropic_messages(
+    tools: &[ToolSpec],
+    cache_control: &Value,
+) -> Result<Vec<Value>> {
     let mut tools = tools
         .iter()
-        .filter_map(|tool| tool_spec_to_anthropic_tool(tool))
+        .filter_map(tool_spec_to_anthropic_tool)
         .collect::<Result<Vec<_>>>()?;
     tools.sort_by_key(|tool| {
         usize::from(
             tool.get("type").and_then(Value::as_str) != Some(ANTHROPIC_WEB_SEARCH_TOOL_TYPE),
         )
     });
-    mark_last_anthropic_tool_cache_control(&mut tools);
+    mark_last_anthropic_tool_cache_control(&mut tools, cache_control);
     Ok(tools)
 }
 
-fn mark_last_anthropic_tool_cache_control(tools: &mut [Value]) {
+fn mark_last_anthropic_tool_cache_control(tools: &mut [Value], cache_control: &Value) {
     if let Some(object) = tools
         .iter_mut()
         .rev()
@@ -3183,7 +3475,7 @@ fn mark_last_anthropic_tool_cache_control(tools: &mut [Value]) {
             )
         })
     {
-        object.insert("cache_control".to_string(), json!({ "type": "ephemeral" }));
+        object.insert("cache_control".to_string(), cache_control.clone());
     }
 }
 

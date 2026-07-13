@@ -546,7 +546,10 @@ impl ChatMessageContent {
 pub struct ChatContentPart {
     #[serde(rename = "type")]
     pub kind: String,
-    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<ChatImageUrl>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_control: Option<ChatCacheControl>,
 }
@@ -555,10 +558,39 @@ impl ChatContentPart {
     pub fn cache_control_text(text: impl Into<String>) -> Self {
         Self {
             kind: "text".to_string(),
-            text: text.into(),
+            text: Some(text.into()),
+            image_url: None,
             cache_control: Some(ChatCacheControl::ephemeral()),
         }
     }
+
+    pub fn text(text: impl Into<String>) -> Self {
+        Self {
+            kind: "text".to_string(),
+            text: Some(text.into()),
+            image_url: None,
+            cache_control: None,
+        }
+    }
+
+    pub fn image_url(url: impl Into<String>, detail: Option<String>) -> Self {
+        Self {
+            kind: "image_url".to_string(),
+            text: None,
+            image_url: Some(ChatImageUrl {
+                url: url.into(),
+                detail,
+            }),
+            cache_control: None,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+pub struct ChatImageUrl {
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
@@ -814,10 +846,20 @@ mod tests {
             plugins: None,
         };
 
-        let serialized = serde_json::to_string(&request).expect("serialize request");
+        let serialized = serde_json::to_value(&request).expect("serialize request");
         assert_eq!(
             serialized,
-            r#"{"model":"z-ai/glm-5.2","messages":[{"role":"user","content":"hello"}],"stream":true,"stream_options":{"include_usage":true},"tools":[{"function":{"name":"noop"},"type":"function"}],"tool_choice":"auto","parallel_tool_calls":true,"prompt_cache_key":"cache-key","reasoning":{"effort":"medium"}}"#
+            json!({
+                "model": "z-ai/glm-5.2",
+                "messages": [{"role": "user", "content": "hello"}],
+                "stream": true,
+                "stream_options": {"include_usage": true},
+                "tools": [{"type": "function", "function": {"name": "noop"}}],
+                "tool_choice": "auto",
+                "parallel_tool_calls": true,
+                "prompt_cache_key": "cache-key",
+                "reasoning": {"effort": "medium"}
+            })
         );
     }
 

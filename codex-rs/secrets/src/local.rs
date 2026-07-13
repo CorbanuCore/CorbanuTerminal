@@ -1,10 +1,13 @@
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::OnceLock;
+use std::sync::Weak;
 use std::sync::atomic::Ordering;
 use std::sync::atomic::compiler_fence;
 use std::time::SystemTime;
@@ -42,9 +45,11 @@ const SECRETS_VERSION: u8 = 1;
 const LOCAL_SECRETS_FILENAME: &str = "local.age";
 const CODEX_AUTH_SECRETS_FILENAME: &str = "codex_auth.age";
 const MCP_OAUTH_SECRETS_FILENAME: &str = "mcp_oauth.age";
+const LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR: u8 = 16;
+const LOCAL_SECRETS_MAX_SCRYPT_WORK_FACTOR: u8 = 20;
 
 /// Selects the local encrypted file used by a `LocalSecretsBackend`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum LocalSecretsNamespace {
     /// General managed secrets stored in `local.age`.
     #[default]
@@ -82,7 +87,12 @@ impl LocalSecretsBackend {
     pub(crate) fn new_with_default_keyring(codex_home: PathBuf) -> Self {
         let keyring_store: Arc<dyn KeyringStore> =
             Arc::new(LocalFallbackKeyringStore::new(codex_home.clone()));
-        Self::new(codex_home, keyring_store)
+        Self {
+            cached_file: shared_default_cache(&codex_home, LocalSecretsNamespace::ManagedSecrets),
+            codex_home,
+            keyring_store,
+            namespace: LocalSecretsNamespace::ManagedSecrets,
+        }
     }
 
     pub fn new(codex_home: PathBuf, keyring_store: Arc<dyn KeyringStore>) -> Self {
@@ -197,6 +207,15 @@ impl LocalSecretsBackend {
                 parsed.version,
                 SECRETS_VERSION
             );
+            if should_reencrypt_scrypt_file(&ciphertext)
+                && let Err(err) = self.save_file(&parsed)
+            {
+                warn!(
+                    path = %path.display(),
+                    error = %err,
+                    "failed to normalize local secrets scrypt work factor after decrypt"
+                );
+            }
             parsed
         };
 
@@ -249,6 +268,27 @@ impl LocalSecretsBackend {
             }
         }
     }
+}
+
+type SharedSecretsCache =
+    Mutex<HashMap<(PathBuf, LocalSecretsNamespace), Weak<Mutex<Option<SecretsFile>>>>>;
+
+fn shared_default_cache(
+    codex_home: &Path,
+    namespace: LocalSecretsNamespace,
+) -> Arc<Mutex<Option<SecretsFile>>> {
+    static CACHES: OnceLock<SharedSecretsCache> = OnceLock::new();
+    let caches = CACHES.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut caches = caches
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let key = (codex_home.to_path_buf(), namespace);
+    if let Some(cache) = caches.get(&key).and_then(Weak::upgrade) {
+        return cache;
+    }
+    let cache = Arc::new(Mutex::new(None));
+    caches.insert(key, Arc::downgrade(&cache));
+    cache
 }
 
 #[derive(Debug)]
@@ -618,13 +658,39 @@ fn wipe_bytes(bytes: &mut [u8]) {
 }
 
 fn encrypt_with_passphrase(plaintext: &[u8], passphrase: &SecretString) -> Result<Vec<u8>> {
-    let recipient = ScryptRecipient::new(passphrase.clone());
+    let mut recipient = ScryptRecipient::new(passphrase.clone());
+    // The passphrase is generated with 32 bytes of entropy and stored in the
+    // local keyring/fallback store. Pinning the age/scrypt factor avoids slow
+    // machine-calibrated files that later exceed the decrypt safety limit.
+    recipient.set_work_factor(LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR);
     encrypt(&recipient, plaintext).context("failed to encrypt secrets file")
 }
 
 fn decrypt_with_passphrase(ciphertext: &[u8], passphrase: &SecretString) -> Result<Vec<u8>> {
-    let identity = ScryptIdentity::new(passphrase.clone());
+    let mut identity = ScryptIdentity::new(passphrase.clone());
+    // These files are local, PFTerminal-owned vaults. Older/faster hosts can
+    // produce age/scrypt headers above the library's current machine-calibrated
+    // default limit, which makes existing provider keys appear missing.
+    identity.set_max_work_factor(LOCAL_SECRETS_MAX_SCRYPT_WORK_FACTOR);
     decrypt(&identity, ciphertext).context("failed to decrypt secrets file")
+}
+
+fn should_reencrypt_scrypt_file(ciphertext: &[u8]) -> bool {
+    scrypt_work_factor_from_age_header(ciphertext)
+        .is_some_and(|work_factor| work_factor > LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR)
+}
+
+fn scrypt_work_factor_from_age_header(ciphertext: &[u8]) -> Option<u8> {
+    for line in ciphertext.split(|byte| *byte == b'\n') {
+        let line = std::str::from_utf8(line).ok()?;
+        if line.starts_with("---") {
+            break;
+        }
+        if let Some(fields) = line.strip_prefix("-> scrypt ") {
+            return fields.split_whitespace().nth(1)?.parse().ok();
+        }
+    }
+    None
 }
 
 fn parse_canonical_key(canonical_key: &str) -> Option<SecretListEntry> {
@@ -659,6 +725,15 @@ fn parse_canonical_key(canonical_key: &str) -> Option<SecretListEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_backends_share_decrypted_file_cache() {
+        let codex_home = tempfile::tempdir().expect("temp dir");
+        let first = LocalSecretsBackend::new_with_default_keyring(codex_home.path().to_path_buf());
+        let second = LocalSecretsBackend::new_with_default_keyring(codex_home.path().to_path_buf());
+
+        assert!(Arc::ptr_eq(&first.cached_file, &second.cached_file));
+    }
     use codex_keyring_store::tests::MockKeyringStore;
     use keyring::Error as KeyringError;
     use pretty_assertions::assert_eq;
@@ -803,6 +878,51 @@ mod tests {
             .collect();
         assert_eq!(filenames, vec![LOCAL_SECRETS_FILENAME.to_string()]);
         assert_eq!(backend.get(&scope, &name)?, Some("two".to_string()));
+        Ok(())
+    }
+
+    #[test]
+    fn scrypt_header_parser_flags_files_needing_normalization() {
+        let high_work_factor = LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR + 1;
+        let high_header = format!("age-encryption.org/v1\n-> scrypt salt {high_work_factor}\n---");
+        let pinned_header = format!(
+            "age-encryption.org/v1\n-> scrypt salt {LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR}\n---"
+        );
+        let recipient_header = "age-encryption.org/v1\n-> X25519 key\n---";
+
+        assert_eq!(
+            scrypt_work_factor_from_age_header(high_header.as_bytes()),
+            Some(high_work_factor)
+        );
+        assert!(should_reencrypt_scrypt_file(high_header.as_bytes()));
+        assert_eq!(
+            scrypt_work_factor_from_age_header(pinned_header.as_bytes()),
+            Some(LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR)
+        );
+        assert!(!should_reencrypt_scrypt_file(pinned_header.as_bytes()));
+        assert_eq!(
+            scrypt_work_factor_from_age_header(recipient_header.as_bytes()),
+            None
+        );
+        assert!(!should_reencrypt_scrypt_file(recipient_header.as_bytes()));
+    }
+
+    #[test]
+    fn passphrase_encryption_pins_scrypt_work_factor_and_round_trips() -> Result<()> {
+        let passphrase = SecretString::from("test-only-local-secrets-passphrase");
+        let plaintext = br#"{"version":1,"secrets":{"global/TEST_SECRET":"secret-value"}}"#;
+
+        let ciphertext = encrypt_with_passphrase(plaintext, &passphrase)?;
+
+        assert_eq!(
+            scrypt_work_factor_from_age_header(&ciphertext),
+            Some(LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR)
+        );
+        assert!(!should_reencrypt_scrypt_file(&ciphertext));
+        assert_eq!(
+            decrypt_with_passphrase(&ciphertext, &passphrase)?,
+            plaintext
+        );
         Ok(())
     }
 

@@ -1,0 +1,6 @@
+---
+source: tui/src/multi_agents.rs
+expression: cell_to_text(&cell)
+---
+• Interacted with `Burzum [troll] · /root/troll_burzum`
+  └   Instruction: Close the M2 verification gap from committed SHA 6a78c394.

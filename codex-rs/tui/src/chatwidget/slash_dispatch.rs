@@ -324,6 +324,11 @@ impl ChatWidget {
             SlashCommand::Spawn => {
                 self.app_event_tx.send(AppEvent::OpenSpawnRolePicker);
             }
+            SlashCommand::Orchestrate => {
+                self.app_event_tx.send(AppEvent::HandleOrchestrateCommand {
+                    args: String::new(),
+                });
+            }
             SlashCommand::Tasknode => {
                 self.app_event_tx.send(AppEvent::OpenTaskNodeMenu);
             }
@@ -744,9 +749,24 @@ impl ChatWidget {
                     self.open_vault_credential_add();
                     return;
                 }
-                let lines =
-                    crate::vault_command::handle_vault_command(&self.config.codex_home, trimmed);
-                self.add_plain_history_lines(lines);
+                let codex_home = self.config.codex_home.clone();
+                let args = trimmed.to_string();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let task = tokio::task::spawn_blocking(move || {
+                        crate::vault_command::handle_vault_command(&codex_home, &args)
+                    });
+                    let lines = match tokio::time::timeout(std::time::Duration::from_secs(10), task)
+                        .await
+                    {
+                        Ok(Ok(lines)) => lines,
+                        Ok(Err(err)) => vec![Line::from(format!("Vault task failed: {err}"))],
+                        Err(_) => vec![Line::from("Vault operation timed out.")],
+                    };
+                    tx.send(AppEvent::InsertHistoryCell(Box::new(
+                        PlainHistoryCell::new(lines),
+                    )));
+                });
             }
             SlashCommand::Spawn => {
                 let mut parts = trimmed.splitn(2, ' ');
@@ -765,6 +785,11 @@ impl ChatWidget {
                     _ => self
                         .add_error_message("Usage: /spawn [status|nazgul|troll|orc]".to_string()),
                 }
+            }
+            SlashCommand::Orchestrate => {
+                self.app_event_tx.send(AppEvent::HandleOrchestrateCommand {
+                    args: trimmed.to_string(),
+                });
             }
             SlashCommand::Tasknode => {
                 let mut parts = trimmed.splitn(2, ' ');
@@ -870,7 +895,7 @@ impl ChatWidget {
                     self.add_error_message("Thread name cannot be empty.".to_string());
                     return;
                 };
-                self.app_event_tx.set_thread_name(name);
+                self.app_event_tx.rename_current_pane(name);
             }
             SlashCommand::Plan if !trimmed.is_empty() => {
                 if !self.apply_plan_slash_command() {
@@ -1240,6 +1265,7 @@ impl ChatWidget {
             | SlashCommand::Providers
             | SlashCommand::Panes
             | SlashCommand::Spawn
+            | SlashCommand::Orchestrate
             | SlashCommand::Tasknode
             | SlashCommand::Rollout
             | SlashCommand::Vault

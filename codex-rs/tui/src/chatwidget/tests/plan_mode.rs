@@ -664,7 +664,7 @@ async fn plan_reasoning_scope_popup_mentions_built_in_plan_default_when_no_overr
     );
 
     let popup = render_bottom_popup(&chat, /*width*/ 100);
-    assert!(popup.contains("built-in Plan default (extra high)"));
+    assert!(popup.contains("built-in Plan default"));
 }
 
 #[tokio::test]
@@ -1312,7 +1312,7 @@ async fn collab_mode_shift_tab_cycles_only_when_idle() {
 async fn mode_switch_surfaces_model_change_notification_when_effective_model_changes() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5")).await;
     chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
-    let default_model = chat.current_model().to_string();
+    let default_model_label = chat.model_display_name();
 
     let mut plan_mask =
         collaboration_modes::mask_for_kind(chat.model_catalog.as_ref(), ModeKind::Plan)
@@ -1326,7 +1326,7 @@ async fn mode_switch_surfaces_model_change_notification_when_effective_model_cha
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        plan_messages.contains("Model changed to gpt-5.4-mini medium for Plan mode."),
+        plan_messages.contains("Model changed to GPT-5.4-Mini medium for Plan mode."),
         "expected Plan-mode model switch notice, got: {plan_messages:?}"
     );
 
@@ -1340,7 +1340,7 @@ async fn mode_switch_surfaces_model_change_notification_when_effective_model_cha
         .collect::<Vec<_>>()
         .join("\n");
     let expected_default_message =
-        format!("Model changed to {default_model} default for Default mode.");
+        format!("Model changed to {default_model_label} default for Default mode.");
     assert!(
         default_messages.contains(&expected_default_message),
         "expected Default-mode model switch notice, got: {default_messages:?}"

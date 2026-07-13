@@ -15,6 +15,7 @@ const BUILT_IN_PROVIDER_AUTH_ENV_VARS: &[&str] = &[
     "AMBIENT_API_KEY",
     "ZAI_API_KEY",
     "OPENROUTER_API_KEY",
+    "MODEL_API_KEY",
     "BASETEN_API_KEY",
     "AI_GATEWAY_API_KEY",
 ];

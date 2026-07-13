@@ -45,6 +45,7 @@ use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::config_types::ServiceTier;
 use codex_protocol::config_types::TrustLevel;
 use codex_protocol::exec_output::ExecToolCallOutput;
+use codex_protocol::items::AgentMessageContent;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
@@ -4942,6 +4943,7 @@ async fn session_new_fails_when_zsh_fork_enabled_without_packaged_zsh() {
         user_shell_override: None,
     };
 
+    let (tx_sub, _rx_sub) = async_channel::bounded(16);
     let (tx_event, _rx_event) = async_channel::unbounded();
     let (agent_status_tx, _agent_status_rx) = watch::channel(AgentStatus::PendingInit);
     let plugins_manager = Arc::new(PluginsManager::new(config.codex_home.to_path_buf()));
@@ -4959,6 +4961,7 @@ async fn session_new_fails_when_zsh_fork_enabled_without_packaged_zsh() {
         auth_manager,
         models_manager,
         Arc::new(ExecPolicyManager::default()),
+        tx_sub,
         tx_event,
         agent_status_tx,
         InitialHistory::New,
@@ -4994,6 +4997,7 @@ async fn session_new_fails_when_zsh_fork_enabled_without_packaged_zsh() {
 
 // todo: use online model info
 async fn make_session_and_context_for_home(codex_home: &Path) -> (Session, TurnContext) {
+    let (tx_sub, _rx_sub) = async_channel::bounded(16);
     let (tx_event, _rx_event) = async_channel::unbounded();
     let config = build_test_config(codex_home).await;
     let config = Arc::new(config);
@@ -5208,6 +5212,7 @@ async fn make_session_and_context_for_home(codex_home: &Path) -> (Session, TurnC
     let session = Session {
         thread_id,
         installation_id: "11111111-1111-4111-8111-111111111111".to_string(),
+        tx_sub,
         tx_event,
         agent_status: agent_status_tx,
         out_of_band_elicitation_paused: watch::channel(false).0,
@@ -5330,6 +5335,7 @@ async fn make_session_with_config_and_rx(
     ));
     let environment_manager = Arc::new(EnvironmentManager::default_for_tests());
 
+    let (tx_sub, _rx_sub) = async_channel::bounded(16);
     let session = Session::new(
         session_configuration,
         Arc::clone(&config),
@@ -5338,6 +5344,7 @@ async fn make_session_with_config_and_rx(
         auth_manager,
         models_manager,
         Arc::new(ExecPolicyManager::default()),
+        tx_sub,
         tx_event,
         agent_status_tx,
         InitialHistory::New,
@@ -5440,6 +5447,7 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
     ));
     let environment_manager = Arc::new(EnvironmentManager::default_for_tests());
 
+    let (tx_sub, _rx_sub) = async_channel::bounded(16);
     let session = Session::new(
         session_configuration,
         Arc::clone(&config),
@@ -5448,6 +5456,7 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
         auth_manager,
         models_manager,
         Arc::new(ExecPolicyManager::default()),
+        tx_sub,
         tx_event,
         agent_status_tx,
         initial_history,
@@ -7058,6 +7067,7 @@ where
         dynamic_tools,
         codex_home.path(),
         configure_config,
+        /*start_submission_loop*/ false,
     )
     .await
 }
@@ -7067,6 +7077,7 @@ async fn make_session_and_context_with_auth_config_home_and_rx<F>(
     dynamic_tools: Vec<DynamicToolSpec>,
     codex_home: &Path,
     configure_config: F,
+    start_submission_loop: bool,
 ) -> (
     Arc<Session>,
     Arc<TurnContext>,
@@ -7075,6 +7086,7 @@ async fn make_session_and_context_with_auth_config_home_and_rx<F>(
 where
     F: FnOnce(&mut Config),
 {
+    let (tx_sub, rx_sub) = async_channel::bounded(16);
     let (tx_event, rx_event) = async_channel::unbounded();
     let mut config = build_test_config(codex_home).await;
     configure_config(&mut config);
@@ -7288,6 +7300,7 @@ where
     let session = Arc::new(Session {
         thread_id,
         installation_id: "11111111-1111-4111-8111-111111111111".to_string(),
+        tx_sub,
         tx_event,
         agent_status: agent_status_tx,
         out_of_band_elicitation_paused: watch::channel(false).0,
@@ -7304,7 +7317,31 @@ where
         next_internal_sub_id: AtomicU64::new(0),
     });
 
+    if start_submission_loop {
+        let session_for_loop = Arc::clone(&session);
+        let config_for_loop = Arc::clone(&config);
+        let loop_future: futures::future::BoxFuture<'static, ()> =
+            Box::pin(submission_loop(session_for_loop, config_for_loop, rx_sub));
+        tokio::spawn(loop_future);
+    }
+
     (session, turn_context, rx_event)
+}
+
+async fn make_session_and_context_with_submission_loop_and_rx() -> (
+    Arc<Session>,
+    Arc<TurnContext>,
+    async_channel::Receiver<Event>,
+) {
+    let codex_home = tempfile::tempdir().expect("create temp dir");
+    make_session_and_context_with_auth_config_home_and_rx(
+        CodexAuth::from_api_key("Test API Key"),
+        Vec::new(),
+        codex_home.path(),
+        |_config| {},
+        /*start_submission_loop*/ true,
+    )
+    .await
 }
 
 pub(crate) async fn make_session_and_context_with_dynamic_tools_and_rx(
@@ -7330,6 +7367,44 @@ pub(crate) async fn make_session_and_context_with_rx() -> (
     async_channel::Receiver<Event>,
 ) {
     make_session_and_context_with_dynamic_tools_and_rx(Vec::new()).await
+}
+
+#[tokio::test]
+async fn plaintext_inter_agent_communication_emits_visible_item_lifecycle() {
+    let (session, turn_context, rx) = make_session_and_context_with_rx().await;
+    let control = "CONTROL EVENT — INTERRUPT\nActor: Burzum [troll]\nTarget: Snaga [orc]";
+    session
+        .record_inter_agent_communication(
+            &turn_context,
+            InterAgentCommunication::new(
+                AgentPath::try_from("/root/troll_burzum").expect("author path"),
+                AgentPath::try_from("/root/troll_burzum/orc_snaga").expect("recipient path"),
+                Vec::new(),
+                control.to_string(),
+                /*trigger_turn*/ true,
+            ),
+        )
+        .await;
+
+    let deadline = tokio::time::Instant::now() + StdDuration::from_secs(2);
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        let event = tokio::time::timeout(remaining, rx.recv())
+            .await
+            .expect("expected visible inter-agent item lifecycle")
+            .expect("event channel open");
+        if let EventMsg::ItemCompleted(completed) = event.msg
+            && let TurnItem::AgentMessage(message) = completed.item
+            && message.content.iter().any(|content| {
+                matches!(
+                    content,
+                    AgentMessageContent::Text { text } if text.contains(control)
+                )
+            })
+        {
+            break;
+        }
+    }
 }
 
 #[tokio::test]
@@ -9003,9 +9078,32 @@ async fn abort_gracefully_emits_marker_before_turn_aborted() {
     assert!(rx.try_recv().is_err());
 }
 
+async fn expect_user_message_item_started(
+    rx: &async_channel::Receiver<Event>,
+    expected_content: &[UserInput],
+) {
+    let deadline = tokio::time::Instant::now() + StdDuration::from_secs(2);
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        let event = tokio::time::timeout(remaining, rx.recv())
+            .await
+            .expect("expected item started event")
+            .expect("channel open");
+        if matches!(
+            event.msg,
+            EventMsg::ItemStarted(ItemStartedEvent {
+                item: TurnItem::UserMessage(UserMessageItem { content, .. }),
+                ..
+            }) if content == expected_content
+        ) {
+            return;
+        }
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn task_finish_emits_turn_item_lifecycle_for_leftover_pending_user_input() {
-    let (sess, tc, rx) = make_session_and_context_with_rx().await;
+async fn task_finish_starts_follow_up_turn_for_leftover_pending_user_input() {
+    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
     let input = vec![TurnInput::UserInput {
         content: vec![UserInput::Text {
             text: "hello".to_string(),
@@ -9046,76 +9144,27 @@ async fn task_finish_emits_turn_item_lifecycle_for_leftover_pending_user_input()
     sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
         .await;
 
-    let history = sess.clone_history().await;
-    let expected = ResponseItem::Message {
-        id: None,
-        role: "user".to_string(),
-        content: vec![ContentItem::InputText {
-            text: "late pending input".to_string(),
-        }],
-        phase: None,
-        metadata: None,
+    let first = {
+        let started_at = std::time::Instant::now();
+        loop {
+            match rx.try_recv() {
+                Ok(event) => break event,
+                Err(async_channel::TryRecvError::Empty)
+                    if started_at.elapsed() < std::time::Duration::from_secs(2) =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(async_channel::TryRecvError::Empty) => {
+                    panic!("expected original turn complete event");
+                }
+                Err(async_channel::TryRecvError::Closed) => {
+                    panic!("channel open");
+                }
+            }
+        }
     };
-    assert!(
-        history.raw_items().iter().any(|item| item == &expected),
-        "expected pending input to be persisted into history on turn completion"
-    );
-
-    let first = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
-        .await
-        .expect("expected raw response item event")
-        .expect("channel open");
-    assert!(matches!(first.msg, EventMsg::RawResponseItem(_)));
-
-    let second = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
-        .await
-        .expect("expected item started event")
-        .expect("channel open");
     assert!(matches!(
-        second.msg,
-        EventMsg::ItemStarted(ItemStartedEvent {
-            item: TurnItem::UserMessage(UserMessageItem { content, .. }),
-            ..
-        }) if content == pending_user_input
-    ));
-
-    let third = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
-        .await
-        .expect("expected item completed event")
-        .expect("channel open");
-    assert!(matches!(
-        third.msg,
-        EventMsg::ItemCompleted(ItemCompletedEvent {
-            item: TurnItem::UserMessage(UserMessageItem { content, .. }),
-            ..
-        }) if content == pending_user_input
-    ));
-
-    let fourth = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
-        .await
-        .expect("expected legacy user message event")
-        .expect("channel open");
-    assert!(matches!(
-        fourth.msg,
-        EventMsg::UserMessage(UserMessageEvent {
-                client_id: None,
-            message,
-            images,
-            text_elements,
-            local_images,
-            ..
-        }) if message == "late pending input"
-            && images == Some(Vec::new())
-            && text_elements == vec![text_element]
-            && local_images.is_empty()
-    ));
-
-    let fifth = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
-        .await
-        .expect("expected turn complete event")
-        .expect("channel open");
-    assert!(matches!(
-        fifth.msg,
+        first.msg,
         EventMsg::TurnComplete(TurnCompleteEvent {
             turn_id,
             last_agent_message: None,
@@ -9123,6 +9172,359 @@ async fn task_finish_emits_turn_item_lifecycle_for_leftover_pending_user_input()
             ..
         }) if turn_id == tc.sub_id
     ));
+
+    let second = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+        .await
+        .expect("expected follow-up turn started event")
+        .expect("channel open");
+    let follow_up_turn_id = match second.msg {
+        EventMsg::TurnStarted(TurnStartedEvent { turn_id, .. }) => turn_id,
+        other => panic!("expected follow-up turn started event, got {other:?}"),
+    };
+    assert_ne!(follow_up_turn_id, tc.sub_id);
+
+    expect_user_message_item_started(&rx, &pending_user_input).await;
+
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn task_finish_submits_follow_up_when_active_turn_was_replaced() {
+    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: false,
+        },
+    )
+    .await;
+
+    while rx.try_recv().is_ok() {}
+
+    let pending_user_input = vec![UserInput::Text {
+        text: "survives finish replacement".to_string(),
+        text_elements: Vec::new(),
+    }];
+    sess.steer_input(
+        pending_user_input.clone(),
+        /*additional_context*/ Default::default(),
+        Some(&tc.sub_id),
+        /*client_user_message_id*/ None,
+        /*responsesapi_client_metadata*/ None,
+    )
+    .await
+    .expect("steer pending input into active turn");
+
+    let guardian_guard = sess
+        .services
+        .guardian_rejection_circuit_breaker
+        .lock()
+        .await;
+    let finish_session = Arc::clone(&sess);
+    let finish_context = Arc::clone(&tc);
+    let finish = tokio::spawn(async move {
+        finish_session
+            .on_task_finished(finish_context, /*task_result*/ Ok(None))
+            .await;
+    });
+
+    let first = {
+        let started_at = std::time::Instant::now();
+        loop {
+            match rx.try_recv() {
+                Ok(event) => break event,
+                Err(async_channel::TryRecvError::Empty)
+                    if started_at.elapsed() < std::time::Duration::from_secs(2) =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(async_channel::TryRecvError::Empty) => {
+                    panic!("expected original turn complete event");
+                }
+                Err(async_channel::TryRecvError::Closed) => {
+                    panic!("channel open");
+                }
+            }
+        }
+    };
+    assert!(matches!(
+        first.msg,
+        EventMsg::TurnComplete(TurnCompleteEvent { turn_id, .. }) if turn_id == tc.sub_id
+    ));
+
+    *sess
+        .active_turn
+        .try_lock()
+        .expect("active turn lock available while finish is paused") = Some(ActiveTurn::default());
+    drop(guardian_guard);
+    finish.await.expect("finish task should not panic");
+
+    let second = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+        .await
+        .expect("expected follow-up turn started event")
+        .expect("channel open");
+    assert!(matches!(
+        second.msg,
+        EventMsg::TurnStarted(TurnStartedEvent { turn_id, .. }) if turn_id != tc.sub_id
+    ));
+
+    expect_user_message_item_started(&rx, &pending_user_input).await;
+
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn task_finish_starts_turn_for_trigger_turn_mailbox_tail() {
+    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: false,
+        },
+    )
+    .await;
+
+    while rx.try_recv().is_ok() {}
+
+    sess.input_queue
+        .defer_mailbox_delivery_to_next_turn(&sess.active_turn, &tc.sub_id)
+        .await;
+    sess.input_queue
+        .enqueue_mailbox_communication(InterAgentCommunication::new(
+            AgentPath::try_from("/root/worker").expect("worker path should parse"),
+            AgentPath::root(),
+            Vec::new(),
+            "late trigger update".to_string(),
+            /*trigger_turn*/ true,
+        ))
+        .await;
+
+    sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
+        .await;
+
+    let first = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+        .await
+        .expect("expected original turn complete event")
+        .expect("channel open");
+    assert!(matches!(
+        first.msg,
+        EventMsg::TurnComplete(TurnCompleteEvent { turn_id, .. }) if turn_id == tc.sub_id
+    ));
+
+    let second = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+        .await
+        .expect("expected mailbox-triggered follow-up turn started event")
+        .expect("channel open");
+    assert!(matches!(
+        second.msg,
+        EventMsg::TurnStarted(TurnStartedEvent { turn_id, .. }) if turn_id != tc.sub_id
+    ));
+
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn non_steerable_turn_defers_user_input_until_completion() {
+    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Compact,
+            listen_to_cancellation_token: false,
+        },
+    )
+    .await;
+
+    while rx.try_recv().is_ok() {}
+
+    let deferred_input = vec![UserInput::Text {
+        text: "run after compact".to_string(),
+        text_elements: Vec::new(),
+    }];
+    super::handlers::user_input_or_turn_inner(
+        &sess,
+        "deferred-input".to_string(),
+        Op::UserInput {
+            items: deferred_input.clone(),
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: ThreadSettingsOverrides::default(),
+        },
+        /*client_user_message_id*/ None,
+    )
+    .await;
+
+    assert!(
+        rx.try_recv().is_err(),
+        "non-steerable input should not emit an immediate error"
+    );
+
+    sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
+        .await;
+
+    let first = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+        .await
+        .expect("expected compact turn complete event")
+        .expect("channel open");
+    assert!(matches!(
+        first.msg,
+        EventMsg::TurnComplete(TurnCompleteEvent { turn_id, .. }) if turn_id == tc.sub_id
+    ));
+
+    let second = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+        .await
+        .expect("expected deferred-input follow-up turn started event")
+        .expect("channel open");
+    assert!(matches!(
+        second.msg,
+        EventMsg::TurnStarted(TurnStartedEvent { turn_id, .. }) if turn_id != tc.sub_id
+    ));
+
+    expect_user_message_item_started(&rx, &deferred_input).await;
+
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn non_steerable_defer_race_starts_fresh_turn_without_error() {
+    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Compact,
+            listen_to_cancellation_token: false,
+        },
+    )
+    .await;
+
+    while rx.try_recv().is_ok() {}
+
+    let deferred_input = vec![UserInput::Text {
+        text: "run after compact race".to_string(),
+        text_elements: Vec::new(),
+    }];
+    let (reached_tx, reached_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+    super::handlers::set_active_turn_not_steerable_defer_hook_for_test(reached_tx, release_rx);
+
+    let handler_session = Arc::clone(&sess);
+    let handler_input = deferred_input.clone();
+    let handler = tokio::spawn(async move {
+        super::handlers::user_input_or_turn_inner(
+            &handler_session,
+            "deferred-race-input".to_string(),
+            Op::UserInput {
+                items: handler_input,
+                final_output_json_schema: None,
+                responsesapi_client_metadata: None,
+                additional_context: Default::default(),
+                thread_settings: ThreadSettingsOverrides::default(),
+            },
+            /*client_user_message_id*/ None,
+        )
+        .await;
+    });
+
+    reached_rx
+        .await
+        .expect("handler should reach the pre-defer race hook");
+    sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
+        .await;
+
+    let compact_complete = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+        .await
+        .expect("expected compact turn complete event")
+        .expect("channel open");
+    assert!(matches!(
+        compact_complete.msg,
+        EventMsg::TurnComplete(TurnCompleteEvent { turn_id, .. }) if turn_id == tc.sub_id
+    ));
+
+    release_tx.send(()).expect("handler release receiver open");
+    handler.await.expect("handler task should not panic");
+
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        let event = tokio::time::timeout(remaining, rx.recv())
+            .await
+            .expect("expected fresh turn start without error")
+            .expect("channel open");
+        match event.msg {
+            EventMsg::Error(err) => panic!("defer race should not emit an error: {err:?}"),
+            EventMsg::TurnStarted(TurnStartedEvent { turn_id, .. }) => {
+                assert_ne!(turn_id, tc.sub_id);
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    expect_user_message_item_started(&rx, &deferred_input).await;
+
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn interrupt_clears_steered_input_without_follow_up_turn() {
+    let (sess, tc, rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+
+    while rx.try_recv().is_ok() {}
+
+    sess.steer_input(
+        vec![UserInput::Text {
+            text: "drop on interrupt".to_string(),
+            text_elements: Vec::new(),
+        }],
+        /*additional_context*/ Default::default(),
+        Some(&tc.sub_id),
+        /*client_user_message_id*/ None,
+        /*responsesapi_client_metadata*/ None,
+    )
+    .await
+    .expect("steer pending input into active turn");
+
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        let event = tokio::time::timeout(remaining, rx.recv())
+            .await
+            .expect("expected turn aborted event")
+            .expect("channel open");
+        if matches!(event.msg, EventMsg::TurnAborted(_)) {
+            break;
+        }
+    }
+
+    assert!(sess.active_turn.lock().await.is_none());
+    assert_eq!(
+        Vec::<TurnInput>::new(),
+        sess.input_queue.get_pending_input(&sess.active_turn).await
+    );
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv())
+            .await
+            .is_err(),
+        "interrupt should not start a follow-up turn for cleared steer input"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -9464,17 +9866,23 @@ async fn steer_input_returns_active_turn_id() {
     }];
     let turn_id = sess
         .steer_input(
-            steer_input,
+            steer_input.clone(),
             /*additional_context*/ Default::default(),
             Some(&tc.sub_id),
-            /*client_user_message_id*/ None,
+            /*client_user_message_id*/ Some("delivery-steer-1".to_string()),
             /*responsesapi_client_metadata*/ None,
         )
         .await
         .expect("steering with matching expected turn id should succeed");
 
     assert_eq!(turn_id, tc.sub_id);
-    assert!(sess.input_queue.has_pending_input(&sess.active_turn).await);
+    assert_eq!(
+        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        vec![TurnInput::UserInput {
+            content: steer_input,
+            client_id: Some("delivery-steer-1".to_string()),
+        }]
+    );
 }
 
 #[tokio::test]

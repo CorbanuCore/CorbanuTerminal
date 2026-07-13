@@ -10,6 +10,7 @@ use codex_login::ExternalAuth;
 use codex_login::ExternalAuthRefreshContext;
 use codex_login::ExternalAuthTokens;
 use codex_login::TokenData;
+use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::ReasoningEffort;
@@ -27,8 +28,7 @@ use tempfile::tempdir;
 mod model_info_overrides_tests;
 
 const STANDARD_BASE: &str = include_str!("../../core/src/agent/builtins/standard_base.md");
-const STANDARD_BASE_OUTCOME_MARKER: &str =
-    "inspect code before changing it, keep edits scoped";
+const STANDARD_BASE_OUTCOME_MARKER: &str = "inspect code before changing it, keep edits scoped";
 const STANDARD_BASE_EVIDENCE_MARKER: &str = "only narrate when needed";
 const OLD_STANDARD_BASE_MARKER: &str = "Narrate as you work";
 const GPT55_GUIDE_MARKER: &str = "vivid inner life";
@@ -525,6 +525,153 @@ async fn refresh_available_models_preserves_bundled_catalog_for_empty_chatgpt_re
 }
 
 #[tokio::test]
+async fn chatgpt_catalog_keeps_verified_gpt_5_6_models_when_remote_omits_them() {
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(vec![Vec::new()]);
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+
+    let available = manager.list_models(RefreshStrategy::Online).await;
+    let picker_visibility = available
+        .iter()
+        .filter(|model| model.model.starts_with("gpt-5.6-"))
+        .map(|model| (model.model.as_str(), model.show_in_picker))
+        .collect::<Vec<_>>();
+
+    for slug in ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] {
+        assert!(
+            picker_visibility.contains(&(slug, true)),
+            "{slug} should remain available unless the server explicitly hides it"
+        );
+    }
+
+    assert!(
+        available
+            .iter()
+            .any(|model| model.model == "gpt-5.6-sol" && model.is_default),
+        "Sol should be the default visible preset"
+    );
+}
+
+#[tokio::test]
+async fn chatgpt_catalog_honors_explicit_remote_hiding_for_gpt_5_6_models() {
+    let mut remote_models = crate::bundled_models_response()
+        .expect("bundled models should parse")
+        .models
+        .into_iter()
+        .filter(|model| model.slug.starts_with("gpt-5.6-"))
+        .collect::<Vec<_>>();
+    for model in &mut remote_models {
+        model.visibility = ModelVisibility::Hide;
+    }
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(vec![remote_models]);
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+
+    let available = manager.list_models(RefreshStrategy::Online).await;
+
+    assert!(
+        available
+            .iter()
+            .filter(|model| model.model.starts_with("gpt-5.6-"))
+            .all(|model| !model.show_in_picker),
+        "an explicit hidden response must override bundled visibility"
+    );
+}
+
+#[tokio::test]
+async fn chatgpt_catalog_shows_server_advertised_gpt_5_6_models() {
+    let mut remote_models = crate::bundled_models_response()
+        .expect("bundled models should parse")
+        .models
+        .into_iter()
+        .filter(|model| model.slug.starts_with("gpt-5.6-"))
+        .collect::<Vec<_>>();
+    for model in &mut remote_models {
+        model.visibility = ModelVisibility::List;
+        model.description = Some(format!("Server metadata for {}", model.slug));
+    }
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(vec![remote_models]);
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+
+    let available = manager.list_models(RefreshStrategy::Online).await;
+    assert!(
+        available
+            .iter()
+            .any(|model| model.model == "gpt-5.6-sol" && model.is_default)
+    );
+    assert!(
+        available
+            .iter()
+            .filter(|model| model.model.starts_with("gpt-5.6-"))
+            .flat_map(|model| &model.supported_reasoning_efforts)
+            .all(|level| {
+                !matches!(&level.effort, ReasoningEffort::Custom(value) if value == "ultra")
+            })
+    );
+    let advertised = available
+        .into_iter()
+        .filter(|model| model.model.starts_with("gpt-5.6-"))
+        .map(|model| (model.model, model.description, model.show_in_picker))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        advertised,
+        vec![
+            (
+                "gpt-5.6-sol".to_string(),
+                "Server metadata for gpt-5.6-sol".to_string(),
+                true,
+            ),
+            (
+                "gpt-5.6-terra".to_string(),
+                "Server metadata for gpt-5.6-terra".to_string(),
+                true,
+            ),
+            (
+                "gpt-5.6-luna".to_string(),
+                "Server metadata for gpt-5.6-luna".to_string(),
+                true,
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn remote_catalog_preserves_bundled_reasoning_when_remote_omits_it() {
+    let mut remote_model = crate::bundled_models_response()
+        .expect("bundled models should parse")
+        .models
+        .into_iter()
+        .find(|model| model.slug == "deepseek/deepseek-v4-pro")
+        .expect("bundled catalog should include DeepSeek V4 Pro");
+    remote_model.display_name = "Remote DeepSeek V4 Pro".to_string();
+    remote_model.default_reasoning_level = None;
+    remote_model.supported_reasoning_levels.clear();
+
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(vec![vec![remote_model]]);
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+
+    let available = manager.list_models(RefreshStrategy::Online).await;
+    let deepseek = available
+        .iter()
+        .find(|model| model.model == "deepseek/deepseek-v4-pro")
+        .expect("remote DeepSeek model should remain available");
+
+    assert_eq!(deepseek.display_name, "Remote DeepSeek V4 Pro");
+    assert_eq!(deepseek.default_reasoning_effort, ReasoningEffort::High);
+    assert_eq!(
+        deepseek
+            .supported_reasoning_efforts
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![ReasoningEffort::High, ReasoningEffort::XHigh]
+    );
+}
+
+#[tokio::test]
 async fn refresh_available_models_merges_hidden_only_chatgpt_remote_with_bundled_catalog() {
     let hidden_remote = remote_model_with_visibility(
         "chatgpt-hidden-only",
@@ -1005,6 +1152,115 @@ fn bundled_models_json_roundtrips() {
 }
 
 #[test]
+fn bundled_models_json_tracks_verified_image_capabilities() {
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+
+    let supports_images = |slug: &str| {
+        response
+            .models
+            .iter()
+            .find(|model| model.slug == slug)
+            .unwrap_or_else(|| panic!("bundled models.json should include {slug}"))
+            .input_modalities
+            .contains(&InputModality::Image)
+    };
+
+    for slug in [
+        "moonshotai/kimi-k2.7-code",
+        "minimax/minimax-m3",
+        "google/gemini-3.5-flash",
+        "claude-opus-4-8-plan",
+        "claude-fable-5-plan",
+        "claude-opus-4-8",
+        "claude-fable-5",
+    ] {
+        assert!(supports_images(slug), "{slug} should accept image input");
+    }
+
+    for slug in [
+        "z-ai/glm-5.2",
+        "zai/glm-5.2",
+        "deepseek/deepseek-v4-pro",
+        "tencent/hy3:free",
+        "openrouter/owl-alpha",
+    ] {
+        assert!(!supports_images(slug), "{slug} should remain text-only");
+    }
+}
+
+#[test]
+fn bundled_models_json_contains_gpt_5_6_family_metadata() {
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+    let actual = response
+        .models
+        .iter()
+        .filter(|model| model.slug.starts_with("gpt-5.6-"))
+        .map(|model| {
+            (
+                model.slug.as_str(),
+                model.context_window,
+                model.default_reasoning_level.clone(),
+                model
+                    .supported_reasoning_levels
+                    .iter()
+                    .map(|level| level.effort.clone())
+                    .collect::<Vec<_>>(),
+                model.visibility,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        actual,
+        vec![
+            (
+                "gpt-5.6-sol",
+                Some(372_000),
+                Some(ReasoningEffort::Low),
+                vec![
+                    ReasoningEffort::Low,
+                    ReasoningEffort::Medium,
+                    ReasoningEffort::High,
+                    ReasoningEffort::XHigh,
+                    ReasoningEffort::Custom("max".to_string()),
+                    ReasoningEffort::Custom("ultra".to_string()),
+                ],
+                ModelVisibility::List,
+            ),
+            (
+                "gpt-5.6-terra",
+                Some(372_000),
+                Some(ReasoningEffort::Medium),
+                vec![
+                    ReasoningEffort::Low,
+                    ReasoningEffort::Medium,
+                    ReasoningEffort::High,
+                    ReasoningEffort::XHigh,
+                    ReasoningEffort::Custom("max".to_string()),
+                    ReasoningEffort::Custom("ultra".to_string()),
+                ],
+                ModelVisibility::List,
+            ),
+            (
+                "gpt-5.6-luna",
+                Some(372_000),
+                Some(ReasoningEffort::Medium),
+                vec![
+                    ReasoningEffort::Low,
+                    ReasoningEffort::Medium,
+                    ReasoningEffort::High,
+                    ReasoningEffort::XHigh,
+                    ReasoningEffort::Custom("max".to_string()),
+                ],
+                ModelVisibility::List,
+            ),
+        ]
+    );
+}
+
+#[test]
 fn bundled_models_json_contains_ambient_models() {
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
@@ -1089,6 +1345,10 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
         "minimax/minimax-m3",
         "openrouter/owl-alpha",
         "google/gemini-3.5-flash",
+        "x-ai/grok-4.5",
+        "deepseek/deepseek-v4-pro",
+        "tencent/hy3:free",
+        "muse-spark-1.1",
         "claude-opus-4-8-plan",
         "claude-fable-5-plan",
         "claude-opus-4-8",
@@ -1152,6 +1412,77 @@ fn bundled_models_json_contains_openrouter_models() {
             .unwrap_or_default()
             .contains("$0/M input, $0/M output")
     );
+
+    let openrouter_model = |slug: &str| {
+        response
+            .models
+            .iter()
+            .find(|model| model.slug == slug)
+            .unwrap_or_else(|| panic!("bundled models.json should include {slug}"))
+    };
+
+    let grok = openrouter_model("x-ai/grok-4.5");
+    assert_eq!(grok.display_name, "OpenRouter Grok 4.5");
+    assert_eq!(grok.context_window, Some(500_000));
+    assert_eq!(grok.default_reasoning_level, Some(ReasoningEffort::High));
+    assert_eq!(
+        grok.supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            ReasoningEffort::Low,
+            ReasoningEffort::Medium,
+            ReasoningEffort::High,
+        ]
+    );
+
+    let deepseek = openrouter_model("deepseek/deepseek-v4-pro");
+    assert_eq!(deepseek.display_name, "OpenRouter DeepSeek V4 Pro");
+    assert_eq!(deepseek.context_window, Some(1_048_576));
+    assert_eq!(
+        deepseek.default_reasoning_level,
+        Some(ReasoningEffort::High)
+    );
+    assert_eq!(
+        deepseek
+            .supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![ReasoningEffort::High, ReasoningEffort::XHigh]
+    );
+
+    let hy3 = openrouter_model("tencent/hy3:free");
+    assert_eq!(hy3.display_name, "OpenRouter Tencent Hy3 Free");
+    assert_eq!(hy3.context_window, Some(262_144));
+    assert_eq!(hy3.default_reasoning_level, Some(ReasoningEffort::None));
+    assert_eq!(
+        hy3.supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            ReasoningEffort::None,
+            ReasoningEffort::Low,
+            ReasoningEffort::High,
+        ]
+    );
+    for model in [grok, deepseek, hy3] {
+        assert_eq!(model.visibility, ModelVisibility::List);
+        assert!(!model.supports_parallel_tool_calls);
+        assert_standard_base(&model.base_instructions);
+    }
+
+    let meta = response
+        .models
+        .iter()
+        .find(|model| model.slug == "muse-spark-1.1")
+        .expect("bundled models.json should include Meta Muse Spark 1.1");
+    assert_eq!(meta.context_window, Some(1_048_576));
+    assert!(meta.apply_patch_tool_type.is_none());
+    assert!(meta.supports_parallel_tool_calls);
+    assert_standard_base(&meta.base_instructions);
 
     let claude_opus = response
         .models

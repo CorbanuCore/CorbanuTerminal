@@ -160,6 +160,7 @@ pub struct TurnContext {
     pub(crate) model_edit_protocol_state: Arc<ModelEditProtocolState>,
     pub(crate) explicit_tool_budget_state: Arc<ExplicitToolBudgetState>,
     pub(crate) server_model_warning_emitted: AtomicBool,
+    pub(crate) provider_cache_pressure_warning_emitted: AtomicBool,
     pub(crate) model_verification_emitted: AtomicBool,
 }
 
@@ -393,6 +394,10 @@ impl TurnContext {
             explicit_tool_budget_state: Arc::clone(&self.explicit_tool_budget_state),
             server_model_warning_emitted: AtomicBool::new(
                 self.server_model_warning_emitted.load(Ordering::Relaxed),
+            ),
+            provider_cache_pressure_warning_emitted: AtomicBool::new(
+                self.provider_cache_pressure_warning_emitted
+                    .load(Ordering::Relaxed),
             ),
             model_verification_emitted: AtomicBool::new(
                 self.model_verification_emitted.load(Ordering::Relaxed),
@@ -688,6 +693,7 @@ impl Session {
             model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
             explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
             server_model_warning_emitted: AtomicBool::new(false),
+            provider_cache_pressure_warning_emitted: AtomicBool::new(false),
             model_verification_emitted: AtomicBool::new(false),
         }
     }

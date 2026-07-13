@@ -113,7 +113,6 @@ jobs:
             --target "$TARGET" \
             --variant pfterminal \
             --entrypoint-bin "codex-rs/target/${TARGET}/release/pfterminal" \
-            --extra-bin "codex=codex-rs/target/${TARGET}/release/pfterminal" \
             --cargo-profile release \
             --package-dir "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
             --archive-output "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz" \
@@ -128,7 +127,7 @@ jobs:
           mkdir -p "$package_dir"
           tar -xzf "$archive" -C "$package_dir"
           "$package_dir/bin/pfterminal" --version
-          test -x "$package_dir/bin/codex"
+          ! find "$package_dir" -type f -o -type l | grep -E '/codex([^/-]*)(\.exe)?$'
           test -x "$package_dir/codex-path/rg"
 
       - name: Build macOS DMG installer
@@ -264,7 +263,6 @@ jobs:
             --target "$TARGET" \
             --variant pfterminal \
             --entrypoint-bin "codex-rs/target/${TARGET}/release/pfterminal" \
-            --extra-bin "codex=codex-rs/target/${TARGET}/release/pfterminal" \
             --cargo-profile release \
             --package-dir "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
             --archive-output "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz" \
@@ -279,7 +277,7 @@ jobs:
           mkdir -p "$package_dir"
           tar -xzf "$archive" -C "$package_dir"
           "$package_dir/bin/pfterminal" --version
-          test -x "$package_dir/bin/codex"
+          ! find "$package_dir" -type f -o -type l | grep -E '/codex([^/-]*)(\.exe)?$'
           test -x "$package_dir/codex-path/rg"
           test -x "$package_dir/codex-resources/bwrap"
 
@@ -346,7 +344,6 @@ jobs:
             --target "$TARGET" \
             --variant pfterminal \
             --entrypoint-bin "codex-rs/target/${TARGET}/release/pfterminal.exe" \
-            --extra-bin "codex=codex-rs/target/${TARGET}/release/pfterminal.exe" \
             --codex-command-runner-bin "codex-rs/target/${TARGET}/release/codex-command-runner.exe" \
             --codex-windows-sandbox-setup-bin "codex-rs/target/${TARGET}/release/codex-windows-sandbox-setup.exe" \
             --cargo-profile release \
@@ -366,7 +363,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
           Expand-Archive -Path $archive -DestinationPath $packageDir
           & (Join-Path $packageDir "bin/pfterminal.exe") --version
-          if (-not (Test-Path (Join-Path $packageDir "bin/codex.exe"))) { throw "missing codex.exe" }
+          $forbidden = Get-ChildItem -Path $packageDir -Recurse -File | Where-Object { $_.Name -match '^codex(?:\.exe)?$' }
+          if ($forbidden) { throw "package contains forbidden codex entrypoint: $($forbidden.FullName -join ', ')" }
           if (-not (Test-Path (Join-Path $packageDir "codex-path/rg.exe"))) { throw "missing rg.exe" }
           if (-not (Test-Path (Join-Path $packageDir "codex-resources/codex-command-runner.exe"))) { throw "missing command runner" }
           if (-not (Test-Path (Join-Path $packageDir "codex-resources/codex-windows-sandbox-setup.exe"))) { throw "missing sandbox setup" }

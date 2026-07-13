@@ -2703,7 +2703,10 @@ async fn guardian_mode_mcp_denial_returns_rationale_message() {
         .set(AskForApproval::OnRequest)
         .expect("test setup should allow updating approval policy");
     let mut config = (*turn_context.config).clone();
-    config.model_provider.base_url = Some(format!("{}/v1", server.uri()));
+    config.model_provider = codex_model_provider_info::ModelProviderInfo::create_openai_provider(
+        Some(format!("{}/v1", server.uri())),
+    );
+    config.model_provider.supports_websockets = false;
     config.approvals_reviewer = ApprovalsReviewer::AutoReview;
     let config = Arc::new(config);
     let models_manager = models_manager_with_provider(
@@ -2756,8 +2759,14 @@ async fn guardian_mode_mcp_denial_returns_rationale_message() {
     else {
         panic!("guardian-denied MCP approval should carry a rejection message");
     };
-    assert!(message.contains("Reason: The tool call would expose private calendar data"));
-    assert!(message.contains("policy circumvention"));
+    assert!(
+        message.contains("Reason: The tool call would expose private calendar data"),
+        "unexpected guardian rejection: {message}"
+    );
+    assert!(
+        message.contains("policy circumvention"),
+        "unexpected guardian rejection: {message}"
+    );
     assert_eq!(
         guardian_request_log.single_request().path(),
         "/v1/responses"

@@ -173,3 +173,29 @@ fn fixed_secret_mode_submits_known_label_without_label_step() {
     );
     assert!(view.is_complete());
 }
+
+#[test]
+fn fixed_secret_cancel_callback_runs_once() {
+    let cancellations = Arc::new(Mutex::new(0));
+    let cancellations_for_callback = Arc::clone(&cancellations);
+    let mut view = VaultSecretEntryView::new_fixed_secret_with_cancel(
+        "oauth".to_string(),
+        "OAuth".to_string(),
+        "Authorization code — masked".to_string(),
+        "Paste code".to_string(),
+        Box::new(|_, _| {}),
+        Box::new(move || {
+            *cancellations_for_callback.lock().unwrap() += 1;
+        }),
+    );
+    let escape = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+
+    view.handle_key_event(escape);
+    view.handle_key_event(escape);
+
+    assert_eq!(*cancellations.lock().unwrap(), 1);
+    assert_eq!(
+        view.completion(),
+        Some(crate::bottom_pane::ViewCompletion::Cancelled)
+    );
+}

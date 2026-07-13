@@ -218,14 +218,128 @@ pub(crate) enum AppEvent {
     SubmitSpawnAgentTask {
         thread_id: codex_protocol::ThreadId,
         task: String,
+        /// Present only for a delivery selected and durably marked by the pump.
+        delivery_id: Option<String>,
+    },
+    /// Steer a running spawned-agent turn that is blocked in `wait_agent`.
+    SteerWaitingSpawnAgentTask {
+        thread_id: codex_protocol::ThreadId,
+        task: String,
+        delivery_id: Option<String>,
+    },
+    NativeSpawnSteerCompleted {
+        thread_id: codex_protocol::ThreadId,
+        target_node_id: String,
+        task: String,
+        delivery_id: String,
+        result: Result<(), String>,
+    },
+    /// Run one coalesced step of the durable dispatch delivery pump.
+    PumpSpawnDispatches,
+    /// Completion of a supervised native turn/start adapter call.
+    NativeSpawnDeliveryCompleted {
+        thread_id: codex_protocol::ThreadId,
+        target_node_id: String,
+        task: String,
+        delivery_id: String,
+        task_preview: String,
+        label: String,
+        result: Result<crate::app_server_session::TurnStartOutcome, String>,
+    },
+    NativeSpawnReconciliationCompleted {
+        thread_id: codex_protocol::ThreadId,
+        target_node_id: String,
+        task: String,
+        delivery_id: String,
+        result: Result<Option<String>, String>,
     },
     /// Start a normal turn in an existing Claude spawn pane.
     SubmitSpawnClaudePaneTask {
         pane_id: String,
         task: String,
+        delivery_id: Option<String>,
     },
     /// Show the current orchestration tree.
     OpenSpawnStatus,
+    /// Handle a native `/orchestrate` whip command.
+    HandleOrchestrateCommand {
+        args: String,
+    },
+    /// Start the guided `/orchestrate attach` flow.
+    OpenOrchestrateTargetPicker,
+    /// Start the two-choice `/orchestrate` fast path.
+    OpenOrchestrateFastTargetPicker,
+    /// Choose a Manager for the two-choice `/orchestrate` fast path.
+    OpenOrchestrateFastManagerPicker {
+        target: String,
+    },
+    /// Bind an existing Manager using the fast-path defaults.
+    AttachOrchestrateFastManager {
+        target: String,
+        manager_node_id: String,
+    },
+    /// Choose how long a guided whip should stay armed.
+    OpenOrchestrateDurationPicker {
+        target: String,
+    },
+    /// Choose the instruction document for a guided whip.
+    OpenOrchestrateWhipPicker {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+    },
+    /// Compose a new global whip instruction document from the guided flow.
+    OpenOrchestrateWriteWhipPrompt {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+    },
+    /// Prompt for the slug to save a composed global whip instruction document.
+    OpenOrchestrateSaveWhipPrompt {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        instructions: String,
+    },
+    /// Save a composed global whip and continue to guided confirm.
+    SaveOrchestrateWhipAndConfirm {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        requested_name: String,
+        instructions: String,
+    },
+    /// Choose the conversational Manager for a guided assignment.
+    OpenOrchestrateManagerPicker {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        whip_name: String,
+    },
+    /// Create a native Codex Manager pane and attach the guided assignment to it.
+    CreateOrchestrateManager {
+        target: String,
+        duration_arg: String,
+        whip_name: String,
+    },
+    /// Confirm the guided whip attach command.
+    OpenOrchestrateConfirm {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        whip_name: String,
+        manager_node_id: String,
+    },
+    /// Show actions/details for one whip row.
+    OpenOrchestrateWhipDetails {
+        whip_id: String,
+    },
+    /// Open a duration picker for extending one whip.
+    OpenOrchestrateExtendDurationPicker {
+        whip_id: String,
+    },
+    /// Periodic native whip sweep; intentionally low priority and no-op when no whips are armed.
+    WhipSweepTick,
     /// Switch the active user pane.
     SelectUserPane {
         pane_id: String,
@@ -237,12 +351,46 @@ pub(crate) enum AppEvent {
         model: String,
         provider: Option<String>,
         effort: Option<ReasoningEffort>,
+        display_name: Option<String>,
+    },
+    /// Prompt for the display name of a native Codex pane before creation.
+    OpenCodexPaneNamePrompt {
+        model: String,
+        provider: Option<String>,
+        effort: Option<ReasoningEffort>,
     },
     /// Open the Claude Code provider picker.
     OpenClaudePaneProfilePicker,
     /// Create and switch to a Claude Code headless pane.
     CreateClaudePane {
         profile: crate::claude_panes::ClaudeProviderProfileKind,
+        display_name: Option<String>,
+    },
+    /// Prompt for the display name of a Claude Code pane before creation.
+    OpenClaudePaneNamePrompt {
+        profile: crate::claude_panes::ClaudeProviderProfileKind,
+    },
+    /// Rename the currently visible pane display name.
+    RenameCurrentPane {
+        name: String,
+    },
+    /// Open a rename prompt for a native Codex pane row.
+    OpenRenameCodexPanePrompt {
+        thread_id: codex_protocol::ThreadId,
+    },
+    /// Open a rename prompt for a Claude Code pane row.
+    OpenRenameClaudePanePrompt {
+        pane_id: String,
+    },
+    /// Rename a specific native Codex pane row.
+    RenameCodexPane {
+        thread_id: codex_protocol::ThreadId,
+        name: String,
+    },
+    /// Rename a specific Claude Code pane row.
+    RenameClaudePane {
+        pane_id: String,
+        name: String,
     },
     /// Create and switch to a Claude Code headless pane for a spawn role.
     CreateSpawnClaudePane {
@@ -1015,6 +1163,7 @@ pub(crate) enum AppEvent {
     /// Open the reasoning selection popup after picking a model.
     OpenReasoningPopup {
         model: ModelPreset,
+        purpose: crate::chatwidget::ModelSelectionPurpose,
     },
 
     /// Open the Plan-mode reasoning scope prompt for the selected model/effort.
@@ -1044,6 +1193,38 @@ pub(crate) enum AppEvent {
 
     /// Start OpenAI Codex account device-code login from the Providers screen.
     OpenCodexAccountDeviceLogin,
+
+    /// Start Claude Code's subscription OAuth flow from the Providers screen.
+    OpenClaudeCodePlanLogin,
+
+    /// Claude Code opened a browser login URL and is waiting for its authorization code.
+    ClaudeCodePlanLoginReady {
+        verification_url: String,
+        input_tx: tokio::sync::mpsc::UnboundedSender<
+            crate::chatwidget::claude_code_login::ClaudeCodeLoginInput,
+        >,
+    },
+
+    /// Open masked entry for the Claude Code OAuth authorization code.
+    OpenClaudeCodePlanLoginCodeEntry {
+        input_tx: tokio::sync::mpsc::UnboundedSender<
+            crate::chatwidget::claude_code_login::ClaudeCodeLoginInput,
+        >,
+    },
+
+    /// Claude Code's login subprocess completed or failed.
+    ClaudeCodePlanLoginFinished {
+        result: Option<Result<String, String>>,
+    },
+
+    /// Latest provider credential statuses loaded away from the TUI event thread.
+    ProviderCredentialStatusesReady {
+        claude_status: crate::chatwidget::claude_code_login::ClaudeCodePlanStatus,
+        api_key_statuses: Vec<(
+            String,
+            crate::chatwidget::provider_credentials::ProviderApiKeyStatus,
+        )>,
+    },
 
     /// Device-code login data returned by account/login/start.
     CodexAccountDeviceLoginReady {
@@ -1076,6 +1257,19 @@ pub(crate) enum AppEvent {
     /// Copy a vault credential secret to the clipboard without writing it to history.
     OpenVaultCopySecret {
         label: String,
+    },
+
+    VaultMenuCredentialsReady {
+        result: Result<Vec<codex_vault::VaultCredentialMeta>, String>,
+    },
+
+    VaultCredentialsReady {
+        result: Result<Vec<codex_vault::VaultCredentialMeta>, String>,
+    },
+
+    VaultCopySecretFinished {
+        label: String,
+        result: Result<Option<crate::clipboard_copy::ClipboardLease>, String>,
     },
 
     /// Open the confirmation prompt before enabling full access mode.

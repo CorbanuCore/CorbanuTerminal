@@ -363,8 +363,7 @@ fn line_is_sse_comment(line: &[u8]) -> bool {
     let line = line.strip_suffix(b"\r").unwrap_or(line);
     line.iter()
         .copied()
-        .skip_while(|byte| matches!(byte, b' ' | b'\t'))
-        .next()
+        .find(|byte| !matches!(byte, b' ' | b'\t'))
         == Some(b':')
 }
 
@@ -469,7 +468,10 @@ impl ChatCallMetrics {
     }
 
     fn record_response_headers(&self, elapsed: Duration, headers: &HeaderMap) {
-        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         inner.ms_to_response_headers = Some(duration_ms(elapsed));
         inner.x_request_id = header_value(headers, REQUEST_ID_HEADER);
         inner.generation_id = GENERATION_ID_HEADERS
@@ -478,13 +480,19 @@ impl ChatCallMetrics {
     }
 
     fn record_response_header_error(&self, elapsed: Duration) {
-        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         inner.ms_to_response_headers = Some(duration_ms(elapsed));
     }
 
     fn record_sse_bytes(&self, bytes: &[u8], comment_frames: u64) {
         let elapsed_ms = self.elapsed_ms();
-        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if !bytes.is_empty() && inner.ms_to_first_sse_byte.is_none() {
             inner.ms_to_first_sse_byte = Some(elapsed_ms);
         }
@@ -493,7 +501,10 @@ impl ChatCallMetrics {
 
     fn record_parsed_data_event(&self) {
         let elapsed_ms = self.elapsed_ms();
-        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if inner.ms_to_first_parsed_data_event.is_none() {
             inner.ms_to_first_parsed_data_event = Some(elapsed_ms);
         }
@@ -504,7 +515,10 @@ impl ChatCallMetrics {
         let Some(generation_id) = generation_id.filter(|value| !value.is_empty()) else {
             return;
         };
-        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if inner.generation_id.is_none() {
             inner.generation_id = Some(generation_id.to_string());
         }
@@ -514,7 +528,10 @@ impl ChatCallMetrics {
         let Some(provider) = provider.filter(|value| !value.is_empty()) else {
             return;
         };
-        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if inner.provider.is_none() {
             inner.provider = Some(provider.to_string());
         }
@@ -522,7 +539,10 @@ impl ChatCallMetrics {
 
     fn record_actionable_event(&self) {
         let elapsed_ms = self.elapsed_ms();
-        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if inner.ms_to_first_actionable_event.is_none() {
             inner.ms_to_first_actionable_event = Some(elapsed_ms);
         }
@@ -532,7 +552,10 @@ impl ChatCallMetrics {
         let finish_reason = finish_reason.into();
         let total_stream_ms = self.elapsed_ms();
         let record = {
-            let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+            let mut inner = self
+                .inner
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if inner.emitted {
                 return;
             }

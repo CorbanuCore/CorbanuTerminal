@@ -7,11 +7,14 @@ use codex_login::CodexAuth;
 use codex_mcp::ToolInfo;
 use codex_model_provider::create_model_provider;
 use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
+use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_models_manager::model_info;
+use codex_protocol::AgentPath;
+use codex_protocol::ThreadId;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
 use codex_protocol::models::PermissionProfile;
@@ -289,6 +292,15 @@ fn use_zai_provider(turn: &mut TurnContext) {
     let provider_info = ModelProviderInfo::create_zai_provider();
     update_config(turn, |config| {
         config.model_provider_id = ZAI_PROVIDER_ID.to_string();
+        config.model_provider = provider_info.clone();
+    });
+    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+}
+
+fn use_meta_provider(turn: &mut TurnContext) {
+    let provider_info = ModelProviderInfo::create_meta_provider();
+    update_config(turn, |config| {
+        config.model_provider_id = META_PROVIDER_ID.to_string();
         config.model_provider = provider_info.clone();
     });
     turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
@@ -688,6 +700,30 @@ async fn zai_provider_uses_structured_edit_tools_instead_of_apply_patch() {
     plan.assert_registered_contains(&["structured_edit", "structured_write"]);
     plan.assert_visible_lacks(&["apply_patch"]);
     plan.assert_registered_lacks(&["apply_patch"]);
+}
+
+#[tokio::test]
+async fn meta_provider_uses_function_edit_tools_instead_of_custom_apply_patch() {
+    let plan = probe(|turn| {
+        turn.permission_profile = PermissionProfile::workspace_write();
+        use_meta_provider(turn);
+        turn.model_info.slug = "muse-spark-1.1".to_string();
+        turn.model_info.apply_patch_tool_type = None;
+    })
+    .await;
+
+    plan.assert_visible_contains(&["structured_edit", "structured_write"]);
+    plan.assert_registered_contains(&["structured_edit", "structured_write"]);
+    plan.assert_visible_lacks(&["apply_patch"]);
+    plan.assert_registered_lacks(&["apply_patch"]);
+    assert!(matches!(
+        plan.visible_spec("structured_edit"),
+        ToolSpec::Function(_)
+    ));
+    assert!(matches!(
+        plan.visible_spec("structured_write"),
+        ToolSpec::Function(_)
+    ));
 }
 
 #[tokio::test]
@@ -1359,6 +1395,48 @@ async fn multi_agent_v2_message_schemas_are_encrypted() {
 }
 
 #[tokio::test]
+async fn orc_tool_surface_excludes_manager_controls() {
+    let plan = probe(|turn| {
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+        turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            parent_thread_id: ThreadId::new(),
+            depth: 2,
+            agent_path: Some(
+                AgentPath::try_from("/root/troll_burzum/orc_snaga").expect("agent path"),
+            ),
+            agent_nickname: Some("Snaga".to_string()),
+            agent_role: Some("orc".to_string()),
+        });
+    })
+    .await;
+
+    plan.assert_visible_contains(&["send_message"]);
+    plan.assert_visible_lacks(&[
+        "spawn_agent",
+        "followup_task",
+        "wait_agent",
+        "interrupt_agent",
+        "list_agents",
+    ]);
+    plan.assert_registered_contains(&[
+        "spawn_agent",
+        "followup_task",
+        "wait_agent",
+        "interrupt_agent",
+        "list_agents",
+    ]);
+    for tool_name in [
+        "spawn_agent",
+        "followup_task",
+        "wait_agent",
+        "interrupt_agent",
+        "list_agents",
+    ] {
+        assert_eq!(plan.exposure(tool_name), ToolExposure::CodeModeOnly);
+    }
+}
+
+#[tokio::test]
 async fn tool_mode_selector_overrides_feature_flags() {
     let direct = probe(|turn| {
         set_features(turn, &[Feature::CodeMode, Feature::CodeModeOnly]);
@@ -1678,8 +1756,8 @@ async fn hosted_tools_follow_provider_auth_model_and_config_gates() {
             codex_code_mode::WAIT_TOOL_NAME,
             "request_user_input",
             // Multi-agent v2 tools.
-            "spawn_agent",
             "send_message",
+            "spawn_agent",
             "followup_task",
             "wait_agent",
             "interrupt_agent",

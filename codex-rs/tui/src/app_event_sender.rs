@@ -34,7 +34,7 @@ impl AppEventSender {
     pub(crate) fn send_checked(&self, event: AppEvent) -> bool {
         // Record inbound events for high-fidelity session replay.
         // Avoid double-logging Ops; those are logged at the point of submission.
-        if !matches!(event, AppEvent::CodexOp(_)) {
+        if !matches!(event, AppEvent::CodexOp(_) | AppEvent::WhipSweepTick) {
             session_log::log_inbound_app_event(&event);
         }
         match self.app_event_tx.send(event) {
@@ -66,8 +66,8 @@ impl AppEventSender {
         self.send(AppEvent::CodexOp(AppCommand::compact()));
     }
 
-    pub(crate) fn set_thread_name(&self, name: String) {
-        self.send(AppEvent::CodexOp(AppCommand::set_thread_name(name)));
+    pub(crate) fn rename_current_pane(&self, name: String) {
+        self.send(AppEvent::RenameCurrentPane { name });
     }
 
     pub(crate) fn review(&self, target: ReviewTarget) {

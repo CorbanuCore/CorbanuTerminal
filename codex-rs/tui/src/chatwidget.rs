@@ -375,6 +375,7 @@ use self::plugins::PluginsCacheState;
 mod plan_implementation;
 use self::plan_implementation::PLAN_IMPLEMENTATION_TITLE;
 mod model_popups;
+pub(crate) use model_popups::ModelSelectionPurpose;
 mod notifications;
 use self::notifications::Notification;
 mod permission_popups;
@@ -421,7 +422,8 @@ use self::tps::TpsEstimator;
 mod turn_lifecycle;
 mod turn_runtime;
 use self::turn_lifecycle::TurnLifecycleState;
-mod provider_credentials;
+pub(crate) mod claude_code_login;
+pub(crate) mod provider_credentials;
 mod tasknode_menu;
 mod usage;
 mod user_messages;
@@ -1466,7 +1468,17 @@ impl ChatWidget {
             .unified_exec_processes
             .iter()
             .map(|process| history_cell::UnifiedExecProcessDetails {
-                command_display: process.command_display.clone(),
+                command_display: format!(
+                    "{} · pid={}{} · status=running · call={} · output=thread-transcript",
+                    process.command_display,
+                    process.key,
+                    process
+                        .interrupt_notes
+                        .last()
+                        .map(|_| " · interrupt=preserved".to_string())
+                        .unwrap_or_default(),
+                    process.call_id,
+                ),
                 recent_chunks: process.recent_chunks.clone(),
             })
             .collect();

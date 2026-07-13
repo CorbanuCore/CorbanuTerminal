@@ -266,23 +266,6 @@ impl AgentControl {
             .ok_or(CodexErr::ThreadNotFound(agent_id))
     }
 
-    pub(crate) fn record_agent_task_message(
-        &self,
-        agent_id: ThreadId,
-        message: String,
-    ) -> Option<String> {
-        let task_message = non_empty_task_message(message);
-        match task_message.as_ref() {
-            Some(message) => {
-                self.state
-                    .update_last_task_message(agent_id, message.clone());
-                self.state.clear_last_result_message(agent_id);
-            }
-            None => self.state.clear_last_task_message(agent_id),
-        }
-        task_message
-    }
-
     pub(crate) fn record_agent_result_status(
         &self,
         agent_id: ThreadId,
