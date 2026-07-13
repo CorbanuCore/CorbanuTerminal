@@ -1380,6 +1380,7 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
     }
 
     let (mut session, mut turn) = make_session_and_context().await;
+    set_turn_to_openai_provider(&mut turn);
     let manager = thread_manager();
     let root = manager
         .start_thread((*turn.config).clone())
@@ -1631,6 +1632,7 @@ async fn multi_agent_v2_spawn_rejects_zero_fork_turns() {
 #[tokio::test]
 async fn multi_agent_v2_send_message_accepts_root_target_from_child() {
     let (mut session, mut turn) = make_session_and_context().await;
+    set_turn_to_openai_provider(&mut turn);
     let manager = thread_manager();
     let mut config = (*turn.config).clone();
     config

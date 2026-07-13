@@ -128,8 +128,12 @@ async fn handle_spawn_agent(
                         .session_source
                         .get_agent_path()
                         .unwrap_or_else(AgentPath::root);
-                    let mut communication =
-                        communication_from_tool_message(author, new_agent_path.clone(), message);
+                    let mut communication = communication_from_model_tool_message(
+                        author,
+                        new_agent_path.clone(),
+                        message,
+                        &turn.config.model_provider_id,
+                    );
                     communication
                         .metadata
                         .get_or_insert_with(ResponseItemMetadata::default)

@@ -114,8 +114,12 @@ pub(crate) async fn handle_message_string_tool(
         .session_source
         .get_agent_path()
         .unwrap_or_else(AgentPath::root);
-    let mut communication =
-        communication_from_tool_message(author, receiver_agent_path.clone(), message);
+    let mut communication = communication_from_model_tool_message(
+        author,
+        receiver_agent_path.clone(),
+        message,
+        &turn.config.model_provider_id,
+    );
     communication
         .metadata
         .get_or_insert_with(ResponseItemMetadata::default)

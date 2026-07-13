@@ -176,12 +176,14 @@ impl Handler {
                 .get_agent_metadata(parent_thread_id)
             && let Some(parent_path) = parent.agent_path
         {
-            let communication = communication_from_tool_message(
+            let communication = InterAgentCommunication::new(
                 current_path.clone(),
                 parent_path,
+                Vec::new(),
                 format!(
                     "WATCHDOG ESCALATION — {current_path} reached {consecutive_empty_waits} consecutive empty waits. Automatic polling is now blocked; dispatch real work or end the manager turn."
                 ),
+                /*trigger_turn*/ true,
             );
             session
                 .services
