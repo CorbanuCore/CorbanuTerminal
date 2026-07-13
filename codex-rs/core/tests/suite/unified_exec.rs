@@ -8,6 +8,7 @@ use anyhow::Context;
 use anyhow::Result;
 use codex_exec_server::CreateDirectoryOptions;
 use codex_features::Feature;
+use codex_protocol::ThreadId;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::permissions::NetworkSandboxPolicy;
@@ -16,6 +17,8 @@ use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ExecCommandSource;
 use codex_protocol::protocol::ExecCommandStatus;
 use codex_protocol::protocol::Op;
+use codex_protocol::protocol::SessionSource;
+use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::user_input::UserInput;
 use codex_utils_path_uri::PathUri;
 use core_test_support::TempDirExt;
@@ -24,6 +27,7 @@ use core_test_support::managed_network_requirements_loader;
 use core_test_support::process::process_is_alive;
 use core_test_support::process::wait_for_pid_file;
 use core_test_support::process::wait_for_process_exit;
+use core_test_support::responses;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
@@ -444,6 +448,91 @@ async fn unified_exec_emits_exec_command_begin_event() -> Result<()> {
     })
     .await;
 
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hierarchy_exec_rejects_worktree_when_measured_headroom_is_insufficient() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+    skip_if_windows!(Ok(()));
+
+    let server = start_mock_server().await;
+    let session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: ThreadId::new(),
+        depth: 1,
+        agent_path: None,
+        agent_nickname: Some("DiskGuardTest".to_string()),
+        agent_role: Some("orc".to_string()),
+    });
+    let mut builder = test_codex()
+        .with_model("gpt-5.2")
+        .with_session_source(session_source)
+        .with_config(|config| {
+            config.use_experimental_unified_exec_tool = true;
+            config
+                .features
+                .enable(Feature::UnifiedExec)
+                .expect("test config should allow feature update");
+        });
+    let test = builder.build(&server).await?;
+    let repository = test.config.cwd.as_path();
+    let git_init = std::process::Command::new("git")
+        .arg("init")
+        .arg(repository)
+        .output()?;
+    anyhow::ensure!(
+        git_init.status.success(),
+        "git init failed: {}",
+        String::from_utf8_lossy(&git_init.stderr)
+    );
+    let sparse_file = std::fs::File::create(repository.join("measured-source.bin"))?;
+    sparse_file.set_len(1024_u64 * 1024 * 1024 * 1024)?;
+    let worktree = repository.join("must-not-exist");
+
+    let call_id = "hierarchy-disk-guard";
+    let args = json!({
+        "cmd": format!("git worktree add '{}' HEAD", worktree.display()),
+        "yield_time_ms": 250,
+    });
+    responses::mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-1"),
+            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_completed("resp-1"),
+        ]),
+    )
+    .await;
+    let second_request = responses::mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-2"),
+            ev_assistant_message("msg-1", "guard observed"),
+            ev_completed("resp-2"),
+        ]),
+    )
+    .await;
+
+    submit_unified_exec_turn(
+        &test,
+        "try the oversized worktree",
+        PermissionProfile::Disabled,
+    )
+    .await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+
+    let request = second_request.single_request();
+    let (output, _) = request
+        .function_call_output_content_and_success(call_id)
+        .context("missing disk-guard tool output")?;
+    let output = output.context("disk-guard output should contain text")?;
+    assert!(output.contains("PFTerminal hierarchy disk guard rejected `git worktree add`"));
+    assert!(output.contains("required reserve=60.0 GiB"));
+    assert!(!worktree.exists(), "rejected worktree must not be created");
     Ok(())
 }
 

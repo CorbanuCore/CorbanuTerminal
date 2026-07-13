@@ -277,6 +277,7 @@ pub struct TestCodexBuilder {
     user_instructions_provider: Option<Arc<dyn UserInstructionsProvider>>,
     supports_openai_form_elicitation: bool,
     external_time_provider: Option<Arc<dyn TimeProvider>>,
+    session_source: SessionSource,
 }
 
 impl TestCodexBuilder {
@@ -380,6 +381,11 @@ impl TestCodexBuilder {
 
     pub fn with_external_time_provider(mut self, provider: Arc<dyn TimeProvider>) -> Self {
         self.external_time_provider = Some(provider);
+        self
+    }
+
+    pub fn with_session_source(mut self, session_source: SessionSource) -> Self {
+        self.session_source = session_source;
         self
     }
 
@@ -580,7 +586,7 @@ impl TestCodexBuilder {
         let thread_manager = ThreadManager::new(
             &config,
             codex_core::test_support::auth_manager_from_auth(auth.clone()),
-            SessionSource::Exec,
+            self.session_source.clone(),
             Arc::clone(&environment_manager),
             Arc::clone(&self.extensions),
             user_instructions_provider,
@@ -1196,6 +1202,7 @@ pub fn test_codex() -> TestCodexBuilder {
         user_instructions_provider: None,
         supports_openai_form_elicitation: false,
         external_time_provider: None,
+        session_source: SessionSource::Exec,
     }
 }
 
