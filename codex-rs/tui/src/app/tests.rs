@@ -5534,6 +5534,45 @@ async fn child_report_to_codex_main_is_recorded_without_auto_submitting_main_tur
 }
 
 #[tokio::test]
+async fn child_report_to_bound_codex_main_triggers_nazgul_processing_turn() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let primary_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000521").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000522").expect("valid thread id");
+    app.primary_thread_id = Some(primary_thread_id);
+    app.active_thread_id = Some(primary_thread_id);
+    app.spawn_nazgul_pane_id = Some(CODEX_MAIN_PANE_ID.to_string());
+    app.spawn_operator_input_seen = true;
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(troll_thread_id, primary_thread_id);
+
+    app.record_spawn_child_report_for_thread(
+        troll_thread_id,
+        codex_app_server_protocol::CollabAgentStatus::Completed,
+        Some("baseline evidence is ready for Nazgul review".to_string()),
+    );
+
+    let task = drain_spawn_agent_task_for(&mut rx, primary_thread_id)
+        .expect("bound Main Nazgul should auto-process its Troll report");
+    assert!(task.contains("A child pane has reported back"));
+    assert!(task.contains("Burzum"));
+    assert!(task.contains("baseline evidence is ready for Nazgul review"));
+    assert!(
+        app.spawn_pending_reports_by_thread
+            .get(&primary_thread_id)
+            .is_none_or(std::collections::VecDeque::is_empty),
+        "idle bound Main Nazgul report should be submitted immediately"
+    );
+}
+
+#[tokio::test]
 async fn child_report_to_codex_main_is_visible_even_when_child_thread_active() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let primary_thread_id =

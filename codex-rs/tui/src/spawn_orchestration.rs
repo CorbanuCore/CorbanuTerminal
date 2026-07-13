@@ -2165,10 +2165,19 @@ impl App {
             || parent_thread_id.is_some_and(|thread_id| self.primary_thread_id == Some(thread_id));
         if let Some(parent_thread_id) = parent_thread_id {
             if parent_is_codex_main {
-                self.chat_widget.add_info_message(summary, hint);
-                return;
+                self.chat_widget
+                    .add_info_message(summary.clone(), hint.clone());
+                // Main is normally a human-facing pane, so passive child reports must not start
+                // surprise model turns. Once the user explicitly binds Main as the Nazgul root,
+                // however, it owns the unattended hierarchy just like a spawned Nazgul thread.
+                // Let the normal idle/busy report-delivery path below auto-process its reports;
+                // otherwise the hierarchy stops permanently after the first Troll completion.
+                if self.spawn_nazgul_pane_id.as_deref() != Some(CODEX_MAIN_PANE_ID) {
+                    return;
+                }
             }
-            if self.active_thread_id == Some(parent_thread_id)
+            if !parent_is_codex_main
+                && self.active_thread_id == Some(parent_thread_id)
                 && self.claude_panes.active_user_pane_id() == CODEX_MAIN_PANE_ID
             {
                 self.chat_widget.add_info_message(summary, hint);
