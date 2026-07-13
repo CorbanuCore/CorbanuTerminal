@@ -58,3 +58,42 @@ fn execution_guards_ignore_root_and_v1_turns() {
             .is_none()
     );
 }
+
+#[test]
+fn execution_guards_reserve_nazgul_control_path_under_worker_saturation() {
+    let control = control_with_limit(/*max_threads*/ 1);
+    let worker_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: codex_protocol::ThreadId::new(),
+        depth: 1,
+        agent_path: None,
+        agent_nickname: Some("Snaga".to_string()),
+        agent_role: Some("orc".to_string()),
+    });
+    let nazgul_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: codex_protocol::ThreadId::new(),
+        depth: 1,
+        agent_path: None,
+        agent_nickname: Some("Angmar".to_string()),
+        agent_role: Some("nazgul".to_string()),
+    });
+
+    let _worker = control
+        .execution_guard(MultiAgentVersion::V2, &worker_source)
+        .expect("worker should occupy the only worker slot");
+    let Err(CodexErr::AgentLimitReached { max_threads }) =
+        control.ensure_execution_capacity(MultiAgentVersion::V2, &worker_source)
+    else {
+        panic!("another worker should remain capacity limited");
+    };
+    assert_eq!(max_threads, 1);
+
+    control
+        .ensure_execution_capacity(MultiAgentVersion::V2, &nazgul_source)
+        .expect("Nazgul control turns must bypass saturated worker capacity");
+    assert!(
+        control
+            .execution_guard(MultiAgentVersion::V2, &nazgul_source)
+            .is_none(),
+        "Nazgul control turns must not consume worker capacity"
+    );
+}

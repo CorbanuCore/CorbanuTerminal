@@ -755,6 +755,19 @@ fn hierarchy_managers_treat_low_context_as_compaction_pressure_not_worker_death(
 }
 
 #[test]
+fn hierarchy_managers_keep_evidence_failures_task_local() {
+    for manager_base in [NAZGUL_BASE, TROLL_BASE] {
+        assert!(manager_base.contains("Never bench, unbench, suspend, blacklist"));
+        assert!(manager_base.contains("put on probation"));
+        assert!(manager_base.contains("invalidate the evidence"));
+        assert!(manager_base.contains("reassigning the current task"));
+        assert!(manager_base.contains("remains eligible for later assignment"));
+        assert!(manager_base.contains("explicit runtime unavailability"));
+        assert!(manager_base.contains("direct instruction from Sauron"));
+    }
+}
+
+#[test]
 fn hierarchy_roles_require_fail_closed_visual_acceptance() {
     for role_base in [NAZGUL_BASE, TROLL_BASE, ORC_BASE] {
         assert!(role_base.contains("pfterminal visual-judge"));

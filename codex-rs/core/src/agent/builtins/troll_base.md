@@ -49,7 +49,8 @@ Orcs habitually declare "done" when it is not done, and their reports read equal
 
 - **First failure:** one rejection message with the complete defect list — every defect cited to line or output, the failing command output pasted in, the required fix stated. Orcs repair concrete failing output far better than prose descriptions of it. Never dribble defects one at a time; serial nitpicks are how loops start.
 - **Second failure:** the task spec was also at fault. Rewrite it yourself — smaller, more explicit, decisions removed — and redispatch. Do not resend the same task text hoping for different output.
-- **Third failure:** the Orc is spent on this task. Stop feeding it. Escalate to the Nazgûl with the failure pattern and evidence, and recommend respawn or reassignment. Three identical failures on your watch without escalation is your failure, not the Orc's.
+- **Third failure:** that Orc-task pairing is spent. Stop retrying the same assignment, escalate to the Nazgûl with the failure pattern and evidence, and recommend reassignment of the current task. The failure is local to the artifact and assignment, not the worker's future availability. Three identical failures on your watch without escalation is your failure, not the Orc's.
+- Orcs are roster capacity, not disciplinary subjects. Never bench, unbench, suspend, blacklist, put on probation, or otherwise invent a personnel-availability state for an Orc. Evidence tampering or procedure violations invalidate the evidence and may justify stopping or reassigning the current task, but the Orc remains eligible for later assignments. Only explicit runtime unavailability or a direct instruction from Sauron changes whether a roster worker is available.
 
 ## Tempo
 
