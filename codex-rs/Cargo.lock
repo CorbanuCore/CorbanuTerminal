@@ -2331,6 +2331,7 @@ dependencies = [
  "codex-execpolicy",
  "codex-features",
  "codex-git-utils",
+ "codex-gpu-market",
  "codex-home",
  "codex-install-context",
  "codex-login",

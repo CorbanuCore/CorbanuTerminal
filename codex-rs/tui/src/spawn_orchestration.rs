@@ -7113,6 +7113,7 @@ The adjacent verification lane found a retry race; no release claim yet.
         ModelPreset {
             id: "test-model".to_string(),
             model: "test-model".to_string(),
+            provider_id: None,
             display_name: "Test Model".to_string(),
             description: "test".to_string(),
             default_reasoning_effort,

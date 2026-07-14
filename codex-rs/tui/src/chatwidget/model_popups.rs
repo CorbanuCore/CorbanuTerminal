@@ -88,7 +88,7 @@ struct ModelPickerProviderGroup {
     subtitle: &'static str,
 }
 
-const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 9] = [
+const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 10] = [
     ModelPickerProviderGroup {
         id: "openai",
         label: "OpenAI",
@@ -133,6 +133,11 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 9] = [
         id: "openrouter",
         label: "OpenRouter",
         subtitle: "OpenRouter API key",
+    },
+    ModelPickerProviderGroup {
+        id: "gpu",
+        label: "Rented GPU",
+        subtitle: "Authenticated PFTerminal rental",
     },
 ];
 
@@ -235,6 +240,7 @@ impl ChatWidget {
                 );
                 let actions = Self::model_selection_actions(
                     model.clone(),
+                    preset.provider_id.clone(),
                     Some(preset.default_reasoning_effort.clone()),
                     should_prompt_plan_mode_scope,
                 );
@@ -338,6 +344,12 @@ impl ChatWidget {
         None
     }
 
+    fn resolved_model_provider(&self, model: &str) -> Option<String> {
+        self.model_catalog
+            .provider_for_model(model)
+            .or_else(|| Self::model_provider_for_selection(model))
+    }
+
     fn is_openrouter_model(model: &str) -> bool {
         matches!(
             model,
@@ -391,7 +403,10 @@ impl ChatWidget {
             .map(|group| (group, Vec::new()))
             .collect::<Vec<(ModelPickerProviderGroup, Vec<SelectionItem>)>>();
         for preset in presets.into_iter() {
-            let provider = Self::model_provider_for_selection(&preset.model);
+            let provider = preset
+                .provider_id
+                .clone()
+                .or_else(|| Self::model_provider_for_selection(&preset.model));
             let Some(group) = Self::model_picker_provider_group(provider.as_deref()) else {
                 continue;
             };
@@ -410,7 +425,7 @@ impl ChatWidget {
 
         let (items, tabs, initial_tab_id, footer_hint) = if provider_items.len() > 1 {
             let selected_model = purpose.selected_model(self.current_model());
-            let current_provider = Self::model_provider_for_selection(selected_model);
+            let current_provider = self.resolved_model_provider(selected_model);
             let current_group = Self::model_picker_provider_group(current_provider.as_deref());
             let initial_tab_id = current_group
                 .filter(|group| {
@@ -525,7 +540,10 @@ impl ChatWidget {
             return false;
         }
 
-        let provider = Self::model_provider_for_selection(&preset.model);
+        let provider = preset
+            .provider_id
+            .clone()
+            .or_else(|| Self::model_provider_for_selection(&preset.model));
         match provider.as_deref() {
             Some(OPENAI_PROVIDER_ID) => Self::is_openai_coding_plan_model(&preset.model),
             Some(
@@ -540,6 +558,7 @@ impl ChatWidget {
                 | VERCEL_PROVIDER_ID
                 | VERCEL_ANTHROPIC_FAST_PROVIDER_ID,
             ) => true,
+            Some(provider) if provider.starts_with("gpu-") => true,
             _ => false,
         }
     }
@@ -565,6 +584,7 @@ impl ChatWidget {
             Some(VERCEL_PROVIDER_ID | VERCEL_ANTHROPIC_FAST_PROVIDER_ID) => "vercel",
             Some(BASETEN_PROVIDER_ID) => "baseten",
             Some(OPENROUTER_PROVIDER_ID | OPENROUTER_ANTHROPIC_PROVIDER_ID) => "openrouter",
+            Some(provider) if provider.starts_with("gpu-") => "gpu",
             _ => return None,
         };
         MODEL_PICKER_PROVIDER_GROUPS
@@ -574,14 +594,15 @@ impl ChatWidget {
 
     fn model_selection_actions(
         model_for_action: String,
+        provider_for_action: Option<String>,
         effort_for_action: Option<ReasoningEffortConfig>,
         should_prompt_plan_mode_scope: bool,
     ) -> Vec<SelectionAction> {
-        let provider_for_action = Self::model_provider_for_selection(&model_for_action);
         vec![Box::new(move |tx| {
             if should_prompt_plan_mode_scope {
                 tx.send(AppEvent::OpenPlanReasoningScopePrompt {
                     model: model_for_action.clone(),
+                    provider: provider_for_action.clone(),
                     effort: effort_for_action.clone(),
                 });
                 return;
@@ -623,6 +644,7 @@ impl ChatWidget {
     pub(crate) fn open_plan_reasoning_scope_prompt(
         &mut self,
         model: String,
+        provider: Option<String>,
         effort: Option<ReasoningEffortConfig>,
     ) {
         let reasoning_phrase = match effort.as_ref() {
@@ -667,7 +689,7 @@ impl ChatWidget {
         let plan_only_actions: Vec<SelectionAction> = vec![Box::new({
             let model = model.clone();
             let effort = effort.clone();
-            let provider = Self::model_provider_for_selection(&model);
+            let provider = provider.clone();
             move |tx| {
                 tx.send(AppEvent::UpdateModelSelection {
                     model: model.clone(),
@@ -677,7 +699,6 @@ impl ChatWidget {
                 tx.send(AppEvent::PersistPlanModeReasoningEffort(effort.clone()));
             }
         })];
-        let provider = Self::model_provider_for_selection(&model);
         let all_modes_actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
             tx.send(AppEvent::UpdateModelSelection {
                 model: model.clone(),
@@ -739,6 +760,10 @@ impl ChatWidget {
             ModelSelectionPurpose::CodexPane { .. } => None,
         };
         let model_label = Self::model_display_label_for_preset(&preset);
+        let provider = preset
+            .provider_id
+            .clone()
+            .or_else(|| Self::model_provider_for_selection(&preset.model));
         let default_effort = preset.default_reasoning_effort;
         let supported = preset.supported_reasoning_efforts;
         let in_plan_mode =
@@ -786,6 +811,7 @@ impl ChatWidget {
                         self.app_event_tx
                             .send(AppEvent::OpenPlanReasoningScopePrompt {
                                 model: selected_model,
+                                provider,
                                 effort: selected_effort,
                             });
                     } else {
@@ -794,7 +820,7 @@ impl ChatWidget {
                 }
                 ModelSelectionPurpose::CodexPane { .. } => {
                     self.app_event_tx.send(AppEvent::OpenCodexPaneNamePrompt {
-                        provider: Self::model_provider_for_selection(&selected_model),
+                        provider,
                         model: selected_model,
                         effort: selected_effort,
                     });
@@ -807,7 +833,7 @@ impl ChatWidget {
                     role,
                     parent_node_id,
                     agent_nickname: None,
-                    provider: Self::model_provider_for_selection(&selected_model),
+                    provider,
                     model: selected_model,
                     effort: selected_effort,
                 }),
@@ -874,18 +900,18 @@ impl ChatWidget {
                     choice_effort.clone(),
                 );
             let purpose_for_action = purpose.clone();
+            let provider_for_action = provider.clone();
             let actions: Vec<SelectionAction> =
                 vec![Box::new(move |tx| match &purpose_for_action {
                     ModelSelectionPurpose::Session => {
                         if should_prompt_plan_mode_scope {
                             tx.send(AppEvent::OpenPlanReasoningScopePrompt {
                                 model: model_for_action.clone(),
+                                provider: provider_for_action.clone(),
                                 effort: choice_effort.clone(),
                             });
                             return;
                         }
-                        let provider_for_action =
-                            Self::model_provider_for_selection(&model_for_action);
                         tx.send(AppEvent::UpdateModelSelection {
                             model: model_for_action.clone(),
                             provider: provider_for_action.clone(),
@@ -893,13 +919,13 @@ impl ChatWidget {
                         tx.send(AppEvent::UpdateReasoningEffort(choice_effort.clone()));
                         tx.send(AppEvent::PersistModelSelection {
                             model: model_for_action.clone(),
-                            provider: provider_for_action,
+                            provider: provider_for_action.clone(),
                             effort: choice_effort.clone(),
                         });
                     }
                     ModelSelectionPurpose::CodexPane { .. } => {
                         tx.send(AppEvent::OpenCodexPaneNamePrompt {
-                            provider: Self::model_provider_for_selection(&model_for_action),
+                            provider: provider_for_action.clone(),
                             model: model_for_action.clone(),
                             effort: choice_effort.clone(),
                         });
@@ -912,7 +938,7 @@ impl ChatWidget {
                         role: *role,
                         parent_node_id: parent_node_id.clone(),
                         agent_nickname: None,
-                        provider: Self::model_provider_for_selection(&model_for_action),
+                        provider: provider_for_action.clone(),
                         model: model_for_action.clone(),
                         effort: choice_effort.clone(),
                     }),
@@ -1002,7 +1028,7 @@ impl ChatWidget {
         model: String,
         effort: Option<ReasoningEffortConfig>,
     ) {
-        let provider = Self::model_provider_for_selection(&model);
+        let provider = self.resolved_model_provider(&model);
         self.app_event_tx
             .send(AppEvent::UpdateModelSelection { model, provider });
         self.app_event_tx
@@ -1011,7 +1037,7 @@ impl ChatWidget {
 
     fn apply_model_and_effort(&self, model: String, effort: Option<ReasoningEffortConfig>) {
         self.apply_model_and_effort_without_persist(model.clone(), effort.clone());
-        let provider = Self::model_provider_for_selection(&model);
+        let provider = self.resolved_model_provider(&model);
         self.app_event_tx.send(AppEvent::PersistModelSelection {
             model,
             provider,
@@ -1212,6 +1238,7 @@ mod tests {
         ModelPreset {
             id: model.to_string(),
             model: model.to_string(),
+            provider_id: None,
             display_name: model.to_string(),
             description: format!("{model} description"),
             default_reasoning_effort: ReasoningEffortConfig::Medium,

@@ -155,6 +155,7 @@ use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
 use codex_protocol::models::PermissionProfile;
+use codex_protocol::openai_models::InputModality;
 #[cfg(test)]
 use codex_protocol::openai_models::ModelAvailabilityNux;
 use codex_protocol::openai_models::ModelPreset;
@@ -1056,7 +1057,42 @@ impl App {
         };
         let bootstrap_ms = bootstrap.duration.as_millis();
         let mut model = bootstrap.default_model;
-        let available_models = bootstrap.available_models;
+        let mut available_models = bootstrap.available_models;
+        if let Some(state_db) = state_db.as_ref() {
+            match state_db.list_gpu_runtime_providers().await {
+                Ok(providers) => {
+                    available_models.extend(providers.into_iter().filter_map(|provider| {
+                        if provider.health != "ready" || !provider.provider_id.starts_with("gpu-") {
+                            return None;
+                        }
+                        Some(ModelPreset {
+                            id: format!("{}:{}", provider.provider_id, provider.model_id),
+                            model: provider.model_id.clone(),
+                            provider_id: Some(provider.provider_id),
+                            display_name: provider.model_id.clone(),
+                            description: format!(
+                                "Active GPU rental {} · ${:.4}/hour",
+                                provider.rental_id,
+                                provider.display_hourly_microusd as f64 / 1_000_000.0
+                            ),
+                            default_reasoning_effort: ReasoningEffortConfig::None,
+                            supported_reasoning_efforts: Vec::new(),
+                            supports_personality: false,
+                            additional_speed_tiers: Vec::new(),
+                            service_tiers: Vec::new(),
+                            default_service_tier: None,
+                            is_default: false,
+                            upgrade: None,
+                            show_in_picker: true,
+                            availability_nux: None,
+                            supported_in_api: true,
+                            input_modalities: vec![InputModality::Text],
+                        })
+                    }));
+                }
+                Err(error) => tracing::warn!(%error, "failed to load GPU rental model catalog"),
+            }
+        }
         let remote_connection = crate::status::remote_connection::remote_connection_status_value(
             &app_server_target,
             app_server.server_version(),

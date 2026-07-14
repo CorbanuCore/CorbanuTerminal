@@ -1151,9 +1151,13 @@ impl App {
                 self.chat_widget
                     .open_reasoning_popup_for_purpose(model, purpose);
             }
-            AppEvent::OpenPlanReasoningScopePrompt { model, effort } => {
+            AppEvent::OpenPlanReasoningScopePrompt {
+                model,
+                provider,
+                effort,
+            } => {
                 self.chat_widget
-                    .open_plan_reasoning_scope_prompt(model, effort);
+                    .open_plan_reasoning_scope_prompt(model, provider, effort);
             }
             AppEvent::OpenAllModelsPopup { models } => {
                 self.chat_widget.open_all_models_popup(models);

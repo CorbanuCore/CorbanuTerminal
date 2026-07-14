@@ -146,6 +146,10 @@ enum Subcommand {
     #[clap(hide = true, name = "internal-claude-oauth-token")]
     InternalClaudeOauthToken,
 
+    /// Internal: print one rental endpoint token for command-backed provider authentication.
+    #[clap(hide = true, name = "internal-gpu-endpoint-token")]
+    InternalGpuEndpointToken { rental_id: String },
+
     /// Agent JSON helper for GitHub-linked Task Node terminal sessions.
     Tasknode(tasknode_cmd::TaskNodeCli),
 
@@ -1495,6 +1499,9 @@ async fn cli_main(
         Some(Subcommand::InternalClaudeOauthToken) => {
             run_internal_claude_oauth_token().await?;
         }
+        Some(Subcommand::InternalGpuEndpointToken { rental_id }) => {
+            run_internal_gpu_endpoint_token(rental_id)?;
+        }
         Some(Subcommand::Tasknode(mut tasknode_cli)) => {
             reject_remote_mode_for_subcommand(
                 root_remote.as_deref(),
@@ -2192,6 +2199,15 @@ async fn run_internal_claude_oauth_token() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn run_internal_gpu_endpoint_token(rental_id: String) -> anyhow::Result<()> {
+    let label =
+        codex_gpu_market::GpuCredentialKind::RentalEndpointToken { rental_id }.canonical_label()?;
+    let vault = codex_vault::Vault::new(find_codex_home()?.to_path_buf());
+    let secret = vault.reveal(label.as_str())?;
+    std::io::stdout().write_all(secret.as_bytes())?;
+    Ok(())
+}
+
 async fn run_vault_auth_helper(
     config_overrides: CliConfigOverrides,
     command: VaultAuthHelperCommand,
@@ -2398,7 +2414,8 @@ fn unsupported_subcommand_name_for_strict_config(
         | Some(Subcommand::Unarchive(_))
         | Some(Subcommand::Fork(_))
         | Some(Subcommand::Doctor(_))
-        | Some(Subcommand::InternalClaudeOauthToken) => None,
+        | Some(Subcommand::InternalClaudeOauthToken)
+        | Some(Subcommand::InternalGpuEndpointToken { .. }) => None,
         Some(Subcommand::AppServer(app_server)) if app_server.subcommand.is_none() => None,
         Some(Subcommand::AppServer(app_server)) => {
             Some(app_server_subcommand_name(app_server.subcommand.as_ref()))

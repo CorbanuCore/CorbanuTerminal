@@ -1169,6 +1169,7 @@ pub(crate) enum AppEvent {
     /// Open the Plan-mode reasoning scope prompt for the selected model/effort.
     OpenPlanReasoningScopePrompt {
         model: String,
+        provider: Option<String>,
         effort: Option<ReasoningEffort>,
     },
 

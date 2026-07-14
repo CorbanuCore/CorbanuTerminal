@@ -177,6 +177,11 @@ fn validate_identifier(name: &str, value: &str) -> anyhow::Result<()> {
 
 fn validate_runtime_provider(provider: &GpuRuntimeProviderUpsert) -> anyhow::Result<()> {
     validate_identifier("provider_id", provider.provider_id.as_str())?;
+    if !provider.provider_id.starts_with("gpu-") {
+        return Err(anyhow::anyhow!(
+            "runtime GPU provider id must use the gpu- namespace"
+        ));
+    }
     if provider.rental_id.is_empty() || provider.model_id.is_empty() {
         return Err(anyhow::anyhow!(
             "runtime provider identity must not be empty"

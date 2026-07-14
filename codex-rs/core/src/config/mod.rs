@@ -89,16 +89,19 @@ use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_PROVIDER_ID;
+use codex_model_provider_info::WireApi;
 use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_model_provider_info::built_in_model_providers;
 use codex_model_provider_info::corrected_catalog_provider;
+use codex_model_provider_info::create_oss_provider_with_base_url;
 use codex_model_provider_info::merge_configured_model_providers;
 use codex_model_provider_info::resolve_model_for_provider;
 use codex_models_manager::ModelsManagerConfig;
 use codex_protocol::config_types::AltScreenMode;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
 use codex_protocol::config_types::ForcedLoginMethod;
+use codex_protocol::config_types::ModelProviderAuthInfo;
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
@@ -133,6 +136,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::ErrorKind;
+use std::num::NonZeroU64;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -1382,6 +1386,54 @@ impl ConfigBuilder {
     pub(crate) fn without_managed_config_for_tests() -> Self {
         Self::default().loader_overrides(LoaderOverrides::without_managed_config_for_tests())
     }
+}
+
+async fn load_gpu_runtime_model_providers(
+    codex_home: &AbsolutePathBuf,
+) -> HashMap<String, ModelProviderInfo> {
+    let runtime = match codex_state::StateRuntime::init(
+        codex_home.to_path_buf(),
+        "gpu-runtime-overlay".to_string(),
+    )
+    .await
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            tracing::warn!(%error, "failed to open GPU runtime provider overlay");
+            return HashMap::new();
+        }
+    };
+    let records = match runtime.list_gpu_runtime_providers().await {
+        Ok(records) => records,
+        Err(error) => {
+            tracing::warn!(%error, "failed to read GPU runtime provider overlay");
+            return HashMap::new();
+        }
+    };
+    records
+        .into_iter()
+        .filter(|record| record.health == "ready")
+        .filter_map(|record| {
+            if !record.provider_id.starts_with("gpu-") {
+                tracing::warn!(
+                    provider_id = %record.provider_id,
+                    "ignoring invalid GPU runtime provider id"
+                );
+                return None;
+            }
+            let mut provider =
+                create_oss_provider_with_base_url(record.base_url.as_str(), WireApi::Chat);
+            provider.name = format!("Rented GPU · {}", record.model_id);
+            provider.auth = Some(ModelProviderAuthInfo {
+                command: "pfterminal".to_string(),
+                args: vec!["internal-gpu-endpoint-token".to_string(), record.rental_id],
+                timeout_ms: NonZeroU64::new(5_000).expect("constant is non-zero"),
+                refresh_interval_ms: 60_000,
+                cwd: codex_home.clone(),
+            });
+            Some((record.provider_id, provider))
+        })
+        .collect()
 }
 
 impl Config {
@@ -3381,6 +3433,7 @@ impl Config {
             .filter(|value| !value.is_empty());
 
         let mut built_in_model_providers = built_in_model_providers(openai_base_url);
+        built_in_model_providers.extend(load_gpu_runtime_model_providers(&codex_home).await);
         if let Some(openrouter_provider) =
             openrouter_provider_body_provider(cfg.openrouter_provider.clone())?
             && let Some(provider) = built_in_model_providers.get_mut(OPENROUTER_PROVIDER_ID)
