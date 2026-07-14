@@ -124,6 +124,31 @@ async fn wrong_model_identity_never_becomes_ready() {
     assert!(!report.ready());
 }
 
+#[tokio::test]
+async fn a_fast_completed_response_does_not_masquerade_as_cancellation() {
+    let server = MockServer::start().await;
+    mount_endpoint(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .and(PromptContains("deliberately long"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("data: [DONE]\n\n"))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    let token = SecretValue::new(TOKEN.to_string()).expect("token");
+    let report = GpuEndpointProber::new(Duration::from_secs(1), Duration::from_millis(100))
+        .probe(
+            format!("{}/v1", server.uri()).as_str(),
+            "pinned/model",
+            &token,
+        )
+        .await
+        .expect("probe");
+
+    assert!(!report.cancellation_ok);
+    assert!(!report.ready());
+}
+
 #[test]
 fn public_plaintext_endpoint_is_rejected_before_network_access() {
     let token = SecretValue::new(TOKEN.to_string()).expect("token");

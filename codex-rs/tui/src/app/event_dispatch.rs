@@ -1592,6 +1592,48 @@ impl App {
                 }
                 Err(message) => self.chat_widget.add_error_message(message),
             },
+            AppEvent::OpenGpuProviderCredential { provider } => {
+                self.chat_widget.open_gpu_provider_credential(provider);
+            }
+            AppEvent::SaveGpuProviderCredential { provider, api_key } => {
+                let (label, display_name) = match provider.as_str() {
+                    "runpod" => (codex_gpu_market::RUNPOD_API_KEY_LABEL, "RunPod"),
+                    "vast" => (codex_gpu_market::VAST_API_KEY_LABEL, "Vast.ai"),
+                    _ => {
+                        self.chat_widget
+                            .add_error_message("Unsupported GPU provider credential.".to_string());
+                        return Ok(AppRunControl::Continue);
+                    }
+                };
+                let vault = codex_vault::Vault::new(self.config.codex_home.clone().to_path_buf());
+                let secret = api_key.into_inner();
+                let result = if vault.exists(label).unwrap_or(false) {
+                    vault
+                        .update(label, Some(secret), None, None, None)
+                        .map(|_| ())
+                } else {
+                    vault.add(codex_vault::AddCredential {
+                        label: label.to_string(),
+                        credential_type: codex_vault::CredentialType::ApiKey,
+                        provider: Some(provider),
+                        notes: Some("PFTerminal GPU rental provider credential".to_string()),
+                        revocation_notes: Some(
+                            "Revoke at the provider and delete from /vault when retired."
+                                .to_string(),
+                        ),
+                        secret,
+                    })
+                };
+                match result {
+                    Ok(()) => self.chat_widget.add_info_message(
+                        format!("Stored {display_name} API key in the vault."),
+                        None,
+                    ),
+                    Err(_) => self.chat_widget.add_error_message(format!(
+                        "Could not store {display_name} API key in the vault."
+                    )),
+                }
+            }
             AppEvent::OpenProviderApiKeyAdd {
                 provider_id,
                 provider_name,

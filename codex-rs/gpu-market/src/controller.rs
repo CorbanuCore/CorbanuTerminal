@@ -313,8 +313,14 @@ where
         }
         if instance.gpu_model != recipe.hardware.gpu_model
             || instance.gpu_count < recipe.hardware.gpu_count
+            || instance
+                .host_ram_mib
+                .is_none_or(|ram| ram < recipe.hardware.minimum_host_ram_mib)
+            || instance
+                .disk_gib
+                .is_none_or(|disk| disk < recipe.hardware.minimum_disk_gib)
             || (recipe.hardware.requires_high_bandwidth_interconnect
-                && instance.high_bandwidth_interconnect != Some(true))
+                && instance.high_bandwidth_interconnect == Some(false))
         {
             return self
                 .record_terminal_failure(
@@ -357,7 +363,11 @@ where
                             "resource_id": resource_id,
                             "gpu_model": instance.gpu_model,
                             "gpu_count": instance.gpu_count,
+                            "host_ram_mib": instance.host_ram_mib,
+                            "disk_gib": instance.disk_gib,
                             "high_bandwidth_interconnect": instance.high_bandwidth_interconnect,
+                            "runtime_topology_gate": recipe.hardware.requires_high_bandwidth_interconnect
+                                && instance.high_bandwidth_interconnect.is_none(),
                         })
                         .to_string()
                         .as_str(),

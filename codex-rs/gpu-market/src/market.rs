@@ -227,6 +227,24 @@ fn merge_search_results(
     first: Result<Vec<GpuOffer>, ProviderError>,
     second: Result<Vec<GpuOffer>, ProviderError>,
 ) -> Result<Vec<GpuOffer>, ProviderError> {
+    if matches!(
+        (&first, &second),
+        (
+            Err(ProviderError {
+                kind: ProviderErrorKind::NotConfigured,
+                ..
+            }),
+            Err(ProviderError {
+                kind: ProviderErrorKind::NotConfigured,
+                ..
+            })
+        )
+    ) {
+        return Err(ProviderError::new(
+            ProviderErrorKind::NotConfigured,
+            "Configure at least one GPU provider API key from /gpu before searching.",
+        ));
+    }
     if let (Err(first_error), Err(second_error)) = (&first, &second)
         && first_error.kind == ProviderErrorKind::RateLimited
         && second_error.kind == ProviderErrorKind::RateLimited
@@ -249,7 +267,9 @@ fn merge_search_results(
             Err(error)
                 if matches!(
                     error.kind,
-                    ProviderErrorKind::OfferUnavailable | ProviderErrorKind::RateLimited
+                    ProviderErrorKind::NotConfigured
+                        | ProviderErrorKind::OfferUnavailable
+                        | ProviderErrorKind::RateLimited
                 ) => {}
             Err(error) => return Err(error),
         }

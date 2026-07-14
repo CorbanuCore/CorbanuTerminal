@@ -31,8 +31,13 @@ fn verified_recipe() -> GpuRecipe {
         model_weight_bytes: 180_000_000_000,
         kv_cache_reserve_bytes: 40_000_000_000,
         workspace_reserve_bytes: 20_000_000_000,
-        launch_arguments: vec!["--tensor-parallel-size=2".to_string()],
-        environment_allowlist: vec!["VLLM_API_KEY".to_string()],
+        launch_command: vec![
+            "server".to_string(),
+            "nvidia-smi topo -m --enable-p2p-check".to_string(),
+            "--api-key".to_string(),
+            "$PFT_ENDPOINT_TOKEN".to_string(),
+        ],
+        environment_allowlist: vec!["PFT_ENDPOINT_TOKEN".to_string()],
         startup_deadline_ms: 120_000,
         download_deadline_ms: 3_600_000,
         probe_deadline_ms: 60_000,
@@ -57,13 +62,32 @@ fn verified_recipe_accepts_only_complete_immutable_manifests() {
 }
 
 #[test]
+fn built_in_deepseek_recipe_is_a_validated_runtime_specific_manifest() {
+    let catalog = RecipeCatalog::default();
+    let recipe = catalog
+        .get("deepseek-flash-2xh200")
+        .expect("DeepSeek recipe");
+    RecipeCatalog::new(vec![recipe.clone()]).expect("valid built-in DeepSeek manifest");
+
+    assert!(recipe.manifest_verified);
+    assert_eq!(recipe.runtime, "sglang");
+    assert_eq!(recipe.tensor_parallel_size, 2);
+    assert_eq!(recipe.launch_command[0], "bash");
+    assert!(recipe.launch_command.iter().any(|part| {
+        part.contains("--tool-call-parser deepseekv4")
+            && part.contains("--api-key \"$PFT_ENDPOINT_TOKEN\"")
+            && part.contains("nvidia-smi topo -m")
+    }));
+}
+
+#[test]
 fn verified_recipe_fails_capacity_and_secret_boundaries() {
     let mut over_capacity = verified_recipe();
     over_capacity.kv_cache_reserve_bytes = u64::MAX;
     assert!(RecipeCatalog::new(vec![over_capacity]).is_err());
 
     let mut embedded_secret = verified_recipe();
-    embedded_secret.launch_arguments = vec!["--api-key=plaintext".to_string()];
+    embedded_secret.launch_command = vec!["--api-key=plaintext".to_string()];
     assert!(RecipeCatalog::new(vec![embedded_secret]).is_err());
 
     let mut unknown_environment = verified_recipe();

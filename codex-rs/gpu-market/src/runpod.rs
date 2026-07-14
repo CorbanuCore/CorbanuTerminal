@@ -143,6 +143,7 @@ impl RunpodProvider {
             host_ram_mib: request.hardware.minimum_host_ram_mib,
             disk_gib: request.hardware.minimum_disk_gib,
             high_bandwidth_interconnect: false,
+            runtime_topology_verification: request.hardware.requires_high_bandwidth_interconnect,
             cuda_versions: request.hardware.allowed_cuda_versions.clone(),
             region: "RunPod Secure Cloud".to_string(),
             security_class: "secure".to_string(),
@@ -217,7 +218,8 @@ impl GpuProvider for RunpodProvider {
                 minimum_vram_mib_per_gpu: request.offer.vram_mib_per_gpu,
                 minimum_host_ram_mib: request.offer.host_ram_mib,
                 minimum_disk_gib: request.disk_gib,
-                requires_high_bandwidth_interconnect: request.offer.high_bandwidth_interconnect,
+                requires_high_bandwidth_interconnect: request.offer.high_bandwidth_interconnect
+                    || request.offer.runtime_topology_verification,
                 allowed_cuda_versions: request.offer.cuda_versions.clone(),
             },
             allow_interruptible: false,
@@ -239,15 +241,16 @@ impl GpuProvider for RunpodProvider {
             .host_ram_mib
             .div_ceil(u64::from(request.offer.gpu_count).max(1))
             .div_ceil(1024);
-        let mut environment = vec![serde_json::json!({
-            "key": "VLLM_API_KEY",
-            "value": request.endpoint_token.expose(),
-        })];
+        let mut environment = serde_json::Map::new();
+        environment.insert(
+            "PFT_ENDPOINT_TOKEN".to_string(),
+            serde_json::Value::String(request.endpoint_token.expose().to_string()),
+        );
         if let Some(token) = request.huggingface_token.as_ref() {
-            environment.push(serde_json::json!({
-                "key": "HF_TOKEN",
-                "value": token.expose(),
-            }));
+            environment.insert(
+                "HF_TOKEN".to_string(),
+                serde_json::Value::String(token.expose().to_string()),
+            );
         }
         let body = serde_json::json!({
             "name": request.ownership_tag,
@@ -385,6 +388,11 @@ fn pod_to_instance(pod: &Value, fallback_tag: Option<String>) -> ProviderResult<
             .and_then(Value::as_u64)
             .and_then(|value| value.try_into().ok())
             .unwrap_or_default(),
+        host_ram_mib: pod
+            .get("memoryInGb")
+            .and_then(Value::as_u64)
+            .and_then(|gib| gib.checked_mul(1024)),
+        disk_gib: pod.get("containerDiskInGb").and_then(Value::as_u64),
         high_bandwidth_interconnect: None,
         hourly_microusd: pod
             .get("adjustedCostPerHr")

@@ -145,27 +145,38 @@ impl GpuEndpointProber {
             false
         };
 
-        let cancellation = self
-            .client
-            .post(chat_url.as_str())
-            .bearer_auth(token.expose())
-            .timeout(self.request_timeout)
-            .json(&chat_body(
-                model_id,
-                "Generate a deliberately long response for cancellation testing.",
-                true,
-            ))
-            .send();
-        let cancellation_was_dropped =
-            match tokio::time::timeout(self.cancellation_deadline, cancellation).await {
-                Err(_) => true,
-                Ok(Ok(mut response)) if response.status().is_success() => {
-                    tokio::time::timeout(self.cancellation_deadline, response.chunk())
-                        .await
-                        .is_err()
-                }
-                Ok(Ok(_)) | Ok(Err(_)) => false,
-            };
+        let cancellation_client = self.client.clone();
+        let cancellation_url = chat_url.clone();
+        let cancellation_model = model_id.to_string();
+        let cancellation_token = token.expose().to_string();
+        let cancellation_timeout = self.request_timeout;
+        let cancellation = tokio::spawn(async move {
+            let response = cancellation_client
+                .post(cancellation_url)
+                .bearer_auth(cancellation_token)
+                .timeout(cancellation_timeout)
+                .json(&serde_json::json!({
+                    "model": cancellation_model,
+                    "messages": [{
+                        "role": "user",
+                        "content": "Generate a deliberately long response for cancellation testing."
+                    }],
+                    "stream": true,
+                    "max_tokens": 4_096
+                }))
+                .send()
+                .await?;
+            anyhow::ensure!(response.status().is_success());
+            let _ = response.bytes().await?;
+            anyhow::Ok(())
+        });
+        tokio::time::sleep(self.cancellation_deadline).await;
+        let cancellation_was_dropped = if cancellation.is_finished() {
+            false
+        } else {
+            cancellation.abort();
+            cancellation.await.is_err_and(|error| error.is_cancelled())
+        };
         // Dropping an in-flight request is only useful if it does not poison the endpoint/client.
         // A fresh authenticated request must still work immediately afterward.
         let cancellation_ok = if cancellation_was_dropped {

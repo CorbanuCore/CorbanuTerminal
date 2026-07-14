@@ -91,7 +91,7 @@ async fn unverified_recipe_fails_before_provider_search() {
     let first = QuoteProvider::new("first", 2_000_000);
     let second = QuoteProvider::new("second", 1_000_000);
     let error = service
-        .search("deepseek-flash-2xh200", 3_000_000, &first, &second)
+        .search("qwen-32b-1xh200", 3_000_000, &first, &second)
         .await
         .expect_err("unverified recipe must fail closed");
     assert_eq!(error.kind, ProviderErrorKind::InvalidRequest);
@@ -126,6 +126,46 @@ fn two_rate_limited_providers_do_not_masquerade_as_empty_inventory() {
     let error = merge_search_results(Err(first), Err(second)).expect_err("must preserve outage");
     assert_eq!(error.kind, ProviderErrorKind::RateLimited);
     assert_eq!(error.retry_after_ms, Some(2_000));
+}
+
+#[test]
+fn one_unconfigured_provider_does_not_block_configured_inventory() {
+    let offers = vec![offer(
+        "configured",
+        1_000_000,
+        &SearchOffersRequest {
+            hardware: hardware(),
+            allow_interruptible: false,
+            require_verified_or_secure: true,
+            maximum_hourly_microusd: 2_000_000,
+        },
+    )];
+    let merged = merge_search_results(
+        Err(ProviderError::new(
+            ProviderErrorKind::NotConfigured,
+            "missing",
+        )),
+        Ok(offers),
+    )
+    .expect("configured provider remains usable");
+    assert_eq!(merged.len(), 1);
+}
+
+#[test]
+fn two_unconfigured_providers_return_actionable_error() {
+    let error = merge_search_results(
+        Err(ProviderError::new(
+            ProviderErrorKind::NotConfigured,
+            "missing first",
+        )),
+        Err(ProviderError::new(
+            ProviderErrorKind::NotConfigured,
+            "missing second",
+        )),
+    )
+    .expect_err("no configured provider must not look like empty capacity");
+    assert_eq!(error.kind, ProviderErrorKind::NotConfigured);
+    assert!(error.safe_message.contains("/gpu"));
 }
 
 #[tokio::test]
@@ -234,8 +274,13 @@ fn recipe() -> GpuRecipe {
         model_weight_bytes: 100_000_000_000,
         kv_cache_reserve_bytes: 20_000_000_000,
         workspace_reserve_bytes: 10_000_000_000,
-        launch_arguments: vec!["--tensor-parallel-size=2".to_string()],
-        environment_allowlist: vec!["VLLM_API_KEY".to_string()],
+        launch_command: vec![
+            "server".to_string(),
+            "nvidia-smi topo -m --enable-p2p-check".to_string(),
+            "--api-key".to_string(),
+            "$PFT_ENDPOINT_TOKEN".to_string(),
+        ],
+        environment_allowlist: vec!["PFT_ENDPOINT_TOKEN".to_string()],
         startup_deadline_ms: 120_000,
         download_deadline_ms: 3_600_000,
         probe_deadline_ms: 60_000,
@@ -268,6 +313,7 @@ fn offer(provider: &str, price: i64, request: &SearchOffersRequest) -> GpuOffer 
         host_ram_mib: request.hardware.minimum_host_ram_mib,
         disk_gib: request.hardware.minimum_disk_gib,
         high_bandwidth_interconnect: request.hardware.requires_high_bandwidth_interconnect,
+        runtime_topology_verification: false,
         cuda_versions: request.hardware.allowed_cuda_versions.clone(),
         region: "test".to_string(),
         security_class: "secure".to_string(),

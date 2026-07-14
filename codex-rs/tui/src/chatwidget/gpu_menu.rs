@@ -27,6 +27,24 @@ impl ChatWidget {
             });
         }
 
+        for (provider, display_name) in [("runpod", "RunPod"), ("vast", "Vast.ai")] {
+            let provider = provider.to_string();
+            items.push(SelectionItem {
+                name: format!("Configure {display_name} API key"),
+                description: Some(
+                    "Masked entry stored in the PFTerminal vault; replacing a key is supported."
+                        .to_string(),
+                ),
+                actions: vec![Box::new(move |tx| {
+                    tx.send(AppEvent::OpenGpuProviderCredential {
+                        provider: provider.clone(),
+                    });
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            });
+        }
+
         for recipe in RecipeCatalog::default().list() {
             let verified = recipe.manifest_verified;
             let recipe_id = recipe.id.clone();
@@ -72,6 +90,30 @@ impl ChatWidget {
             is_searchable: false,
             ..Default::default()
         });
+    }
+
+    pub(crate) fn open_gpu_provider_credential(&mut self, provider: String) {
+        let (display_name, label) = match provider.as_str() {
+            "runpod" => ("RunPod", codex_gpu_market::RUNPOD_API_KEY_LABEL),
+            "vast" => ("Vast.ai", codex_gpu_market::VAST_API_KEY_LABEL),
+            _ => {
+                self.add_error_message("Unsupported GPU provider credential.".to_string());
+                return;
+            }
+        };
+        let tx = self.app_event_tx.clone();
+        let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
+            label.to_string(),
+            format!("Add or replace {display_name} API key"),
+            "API key (masked - not shown, not stored in chat)".to_string(),
+            Box::new(move |_label: String, secret: String| {
+                tx.send(AppEvent::SaveGpuProviderCredential {
+                    provider: provider.clone(),
+                    api_key: crate::app_event::ProviderApiKeySecret::new(secret),
+                });
+            }),
+        );
+        self.bottom_pane.show_view(Box::new(view));
     }
 
     pub(crate) fn open_gpu_authorization_prompt(&mut self, recipe_id: String) {
@@ -135,10 +177,17 @@ impl ChatWidget {
                         offer.hourly_microusd as f64 / 1_000_000.0
                     ),
                     description: Some(format!(
-                        "{} · {} · {} · quote {}",
+                        "{} · {} · {} · topology {} · quote {}",
                         offer.offer_id,
                         offer.security_class,
                         offer.region,
+                        if offer.high_bandwidth_interconnect {
+                            "provider-attested"
+                        } else if offer.runtime_topology_verification {
+                            "verified on allocation before serving"
+                        } else {
+                            "not required"
+                        },
                         if offer.expires_at_ms.is_some() {
                             "best-effort/expiring"
                         } else {

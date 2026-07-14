@@ -4,7 +4,12 @@ use crate::ProviderErrorKind;
 use reqwest::Response;
 
 pub(crate) fn credential_error(error: GpuCredentialError) -> ProviderError {
-    ProviderError::new(ProviderErrorKind::Unauthorized, error.to_string())
+    let kind = if error == GpuCredentialError::Missing {
+        ProviderErrorKind::NotConfigured
+    } else {
+        ProviderErrorKind::Unauthorized
+    };
+    ProviderError::new(kind, error.to_string())
 }
 
 pub(crate) async fn decode_json(response: Response) -> Result<serde_json::Value, ProviderError> {

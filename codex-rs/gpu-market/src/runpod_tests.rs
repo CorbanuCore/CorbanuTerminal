@@ -32,7 +32,7 @@ fn requirements() -> SearchOffersRequest {
             minimum_vram_mib_per_gpu: 130_000,
             minimum_host_ram_mib: 128_000,
             minimum_disk_gib: 400,
-            requires_high_bandwidth_interconnect: false,
+            requires_high_bandwidth_interconnect: true,
             allowed_cuda_versions: vec!["12.8".to_string()],
         },
         allow_interruptible: false,
@@ -87,6 +87,8 @@ async fn secure_offer_is_normalized_and_secret_stays_in_auth_header() {
     assert_eq!(offers[0].hourly_microusd, 3_500_000);
     assert_eq!(offers[0].security_class, "secure");
     assert!(!offers[0].interruptible);
+    assert!(!offers[0].high_bandwidth_interconnect);
+    assert!(offers[0].runtime_topology_verification);
     assert!(!serde_json::to_string(&offers).unwrap().contains(TEST_KEY));
 }
 
@@ -148,8 +150,7 @@ async fn create_revalidates_price_and_uses_owned_secure_pod() {
     assert_eq!(create_body["startSsh"], false);
     assert_eq!(create_body["ports"][0], "8000/http");
     assert_eq!(create_body["dockerStartCmd"][0], "model-id");
-    assert_eq!(create_body["env"][0]["key"], "VLLM_API_KEY");
-    assert_eq!(create_body["env"][0]["value"], "endpoint-secret");
+    assert_eq!(create_body["env"]["PFT_ENDPOINT_TOKEN"], "endpoint-secret");
     assert!(!create_body.to_string().contains(TEST_KEY));
 }
 

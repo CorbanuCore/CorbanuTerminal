@@ -1216,6 +1216,13 @@ pub(crate) enum AppEvent {
     GpuRentalConfirmationFinished {
         result: Result<codex_state::GpuRental, String>,
     },
+    OpenGpuProviderCredential {
+        provider: String,
+    },
+    SaveGpuProviderCredential {
+        provider: String,
+        api_key: ProviderApiKeySecret,
+    },
 
     /// Open masked entry for a provider API key.
     OpenProviderApiKeyAdd {

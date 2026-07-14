@@ -24,7 +24,11 @@ pub struct GpuRecipe {
     pub model_weight_bytes: u64,
     pub kv_cache_reserve_bytes: u64,
     pub workspace_reserve_bytes: u64,
-    pub launch_arguments: Vec<String>,
+    /// Complete argv supplied to the pinned image after its entrypoint.
+    ///
+    /// Runtime-specific launch behavior belongs to the immutable recipe. The
+    /// controller must not infer a vLLM/SGLang command from the model name.
+    pub launch_command: Vec<String>,
     pub environment_allowlist: Vec<String>,
     pub startup_deadline_ms: u64,
     pub download_deadline_ms: u64,
@@ -140,7 +144,7 @@ fn validate_verified_recipe(recipe: &GpuRecipe) -> anyhow::Result<()> {
             .is_some_and(|required| required <= disk_bytes),
         "verified recipe exceeds its minimum disk capacity"
     );
-    let allowed_environment = ["VLLM_API_KEY", "HF_TOKEN"];
+    let allowed_environment = ["PFT_ENDPOINT_TOKEN", "HF_TOKEN"];
     anyhow::ensure!(
         recipe
             .environment_allowlist
@@ -149,7 +153,7 @@ fn validate_verified_recipe(recipe: &GpuRecipe) -> anyhow::Result<()> {
             && recipe
                 .environment_allowlist
                 .iter()
-                .any(|name| name == "VLLM_API_KEY")
+                .any(|name| name == "PFT_ENDPOINT_TOKEN")
             && (!recipe.requires_huggingface_token
                 || recipe
                     .environment_allowlist
@@ -157,13 +161,22 @@ fn validate_verified_recipe(recipe: &GpuRecipe) -> anyhow::Result<()> {
                     .any(|name| name == "HF_TOKEN")),
         "verified recipe environment allowlist is unsafe or incomplete"
     );
+    let launch = recipe.launch_command.join(" ");
+    let scoped_auth = recipe
+        .launch_command
+        .windows(2)
+        .any(|arguments| arguments == ["--api-key", "$PFT_ENDPOINT_TOKEN"])
+        || launch.contains("--api-key \"$PFT_ENDPOINT_TOKEN\"");
     anyhow::ensure!(
-        recipe
-            .launch_arguments
-            .iter()
-            .all(|argument| argument != "--api-key" && !argument.starts_with("--api-key=")),
-        "verified recipe cannot embed endpoint credentials in launch arguments"
+        !recipe.launch_command.is_empty() && !launch.contains("--api-key=") && scoped_auth,
+        "verified recipe must launch an authenticated endpoint using its scoped token"
     );
+    if recipe.hardware.requires_high_bandwidth_interconnect {
+        anyhow::ensure!(
+            launch.contains("nvidia-smi topo -m") && launch.contains("--enable-p2p-check"),
+            "verified multi-GPU recipe must gate serving on allocation-local topology checks"
+        );
+    }
     anyhow::ensure!(
         recipe.probe_contract == "pfterminal-openai-v1",
         "verified recipe readiness contract is unsupported"
@@ -213,8 +226,8 @@ fn qwen_recipe() -> GpuRecipe {
         model_weight_bytes: 0,
         kv_cache_reserve_bytes: 0,
         workspace_reserve_bytes: 0,
-        launch_arguments: Vec::new(),
-        environment_allowlist: vec!["VLLM_API_KEY".to_string()],
+        launch_command: Vec::new(),
+        environment_allowlist: vec!["PFT_ENDPOINT_TOKEN".to_string()],
         startup_deadline_ms: 0,
         download_deadline_ms: 0,
         probe_deadline_ms: 0,
@@ -228,17 +241,17 @@ fn qwen_recipe() -> GpuRecipe {
 fn deepseek_flash_recipe() -> GpuRecipe {
     GpuRecipe {
         id: "deepseek-flash-2xh200".to_string(),
-        revision: "prior-run-validated-manifest-pending".to_string(),
+        revision: "deepseek-v4-flash-sglang-v0.5.12-r1".to_string(),
         model_id: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
-        model_revision: "main".to_string(),
-        image: "vllm/vllm-openai:manifest-pending".to_string(),
-        runtime: "vllm".to_string(),
-        serving_runtime_version: "manifest-pending".to_string(),
-        license_id: "manifest-pending".to_string(),
-        requires_huggingface_token: true,
-        minimum_driver_version: "manifest-pending".to_string(),
-        gpu_architectures: Vec::new(),
-        weight_format: "manifest-pending".to_string(),
+        model_revision: "fea5c29efd213e8f5e6a8e7d897a68b40a390bdf".to_string(),
+        image: "lmsysorg/sglang@sha256:015f39a45844be5a7b35270c56dc4d9ebcfe9b0c21a3b4f877a4ee22e795bd7a".to_string(),
+        runtime: "sglang".to_string(),
+        serving_runtime_version: "0.5.12+127b9e3283f7c2a43234b852ff5c9f1796d53624".to_string(),
+        license_id: "MIT".to_string(),
+        requires_huggingface_token: false,
+        minimum_driver_version: "570.26".to_string(),
+        gpu_architectures: vec!["sm_90".to_string()],
+        weight_format: "mixed-fp8-int8".to_string(),
         hardware: HardwareRequirements {
             gpu_model: "NVIDIA H200".to_string(),
             gpu_count: 2,
@@ -246,24 +259,46 @@ fn deepseek_flash_recipe() -> GpuRecipe {
             minimum_host_ram_mib: 256 * 1024,
             minimum_disk_gib: 400,
             requires_high_bandwidth_interconnect: true,
-            allowed_cuda_versions: Vec::new(),
+            allowed_cuda_versions: vec!["13.0".to_string()],
         },
         tensor_parallel_size: 2,
         maximum_context_tokens: 384_000,
         maximum_concurrent_requests: 2,
-        expected_download_bytes: 180_000_000_000,
-        model_weight_bytes: 0,
-        kv_cache_reserve_bytes: 0,
-        workspace_reserve_bytes: 0,
-        launch_arguments: Vec::new(),
-        environment_allowlist: vec!["VLLM_API_KEY".to_string(), "HF_TOKEN".to_string()],
-        startup_deadline_ms: 0,
-        download_deadline_ms: 0,
-        probe_deadline_ms: 0,
+        expected_download_bytes: 159_634_522_129,
+        model_weight_bytes: 159_617_149_040,
+        kv_cache_reserve_bytes: 48_000_000_000,
+        workspace_reserve_bytes: 48_000_000_000,
+        launch_command: vec![
+            "bash".to_string(),
+            "-lc".to_string(),
+            concat!(
+                "set -euo pipefail; ",
+                "test \"$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)\" -eq 2; ",
+                "nvidia-smi --query-gpu=name --format=csv,noheader | ",
+                "awk 'index($0, \"H200\") == 0 { exit 1 }'; ",
+                "driver=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1); ",
+                "test \"$(printf '%s\\n' 570.26 \"$driver\" | sort -V | head -1)\" = 570.26; ",
+                "nvidia-smi topo -m | awk '$1 == \"GPU0\" && $2 ~ /^NV/ { ok=1 } END { exit !ok }'; ",
+                "exec python3 -m sglang.launch_server ",
+                "--model-path deepseek-ai/DeepSeek-V4-Flash ",
+                "--revision fea5c29efd213e8f5e6a8e7d897a68b40a390bdf ",
+                "--served-model-name deepseek-ai/DeepSeek-V4-Flash ",
+                "--host 0.0.0.0 --port 8000 --tp 2 --enable-p2p-check ",
+                "--context-length 384000 --max-running-requests 2 ",
+                "--chunked-prefill-size 8192 --mem-fraction-static 0.82 ",
+                "--trust-remote-code --tool-call-parser deepseekv4 ",
+                "--reasoning-parser deepseek-v4 --api-key \"$PFT_ENDPOINT_TOKEN\""
+            )
+            .to_string(),
+        ],
+        environment_allowlist: vec!["PFT_ENDPOINT_TOKEN".to_string()],
+        startup_deadline_ms: 45 * 60 * 1_000,
+        download_deadline_ms: 35 * 60 * 1_000,
+        probe_deadline_ms: 10 * 60 * 1_000,
         inference_port: 8000,
         chat_encoding: "deepseek-v4-encoding".to_string(),
         probe_contract: "pfterminal-openai-v1".to_string(),
-        manifest_verified: false,
+        manifest_verified: true,
     }
 }
 

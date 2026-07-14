@@ -31,7 +31,12 @@ pub struct GpuOffer {
     pub vram_mib_per_gpu: u64,
     pub host_ram_mib: u64,
     pub disk_gib: u64,
+    /// True when the provider inventory itself attests the requested link.
     pub high_bandwidth_interconnect: bool,
+    /// True when the pinned launch command gates server startup on an
+    /// allocation-local topology probe. This is disclosed separately because
+    /// it is not a provider offer guarantee.
+    pub runtime_topology_verification: bool,
     pub cuda_versions: Vec<String>,
     pub region: String,
     pub security_class: String,
@@ -68,7 +73,8 @@ impl GpuOffer {
             || self.host_ram_mib < request.hardware.minimum_host_ram_mib
             || self.disk_gib < request.hardware.minimum_disk_gib
             || (request.hardware.requires_high_bandwidth_interconnect
-                && !self.high_bandwidth_interconnect)
+                && !self.high_bandwidth_interconnect
+                && !self.runtime_topology_verification)
             || (!request.hardware.allowed_cuda_versions.is_empty()
                 && !self.cuda_versions.is_empty()
                 && !self.cuda_versions.iter().any(|available| {
@@ -147,6 +153,8 @@ pub struct GpuInstance {
     pub state: GpuInstanceState,
     pub gpu_model: String,
     pub gpu_count: u16,
+    pub host_ram_mib: Option<u64>,
+    pub disk_gib: Option<u64>,
     /// `None` means the provider response did not prove the allocated topology.
     pub high_bandwidth_interconnect: Option<bool>,
     pub hourly_microusd: i64,
@@ -175,6 +183,7 @@ pub struct ProviderCapabilities {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderErrorKind {
+    NotConfigured,
     Unauthorized,
     InvalidRequest,
     OfferUnavailable,

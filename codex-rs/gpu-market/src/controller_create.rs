@@ -94,13 +94,6 @@ where
         } else {
             None
         };
-        let mut launch_command = vec![
-            recipe.model_id.clone(),
-            "--revision".to_string(),
-            recipe.model_revision.clone(),
-        ];
-        launch_command.extend(recipe.launch_arguments.clone());
-
         let operation_id = format!("gpu-create-{}", uuid::Uuid::new_v4());
         let began = self
             .state
@@ -131,7 +124,7 @@ where
             ownership_tag: lease.rental.ownership_tag.clone(),
             image: recipe.image.clone(),
             disk_gib: recipe.hardware.minimum_disk_gib,
-            launch_command,
+            launch_command: recipe.launch_command.clone(),
             inference_port: recipe.inference_port,
             endpoint_token,
             huggingface_token,

@@ -137,7 +137,7 @@ async fn create_is_bound_to_revalidated_ask_and_ownership_label() {
     assert_eq!(body["cancel_unavail"], true);
     assert_eq!(body["runtype"], "args");
     assert_eq!(body["args_str"], "model-id 'argument with space'");
-    assert_eq!(body["env"]["VLLM_API_KEY"], "endpoint-secret");
+    assert_eq!(body["env"]["PFT_ENDPOINT_TOKEN"], "endpoint-secret");
     assert_eq!(body["ports"][0], "8000/tcp");
     assert!(!body.to_string().contains(TEST_KEY));
 }

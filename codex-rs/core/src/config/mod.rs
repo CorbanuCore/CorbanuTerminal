@@ -1405,13 +1405,25 @@ pub fn gpu_runtime_model_provider(
     let mut provider = create_oss_provider_with_base_url(record.base_url.as_str(), WireApi::Chat);
     provider.name = format!("Rented GPU · {}", record.model_id);
     provider.auth = Some(ModelProviderAuthInfo {
-        command: "pfterminal".to_string(),
+        command: current_pfterminal_auth_helper(),
         args: vec!["internal-gpu-endpoint-token".to_string(), record.rental_id],
         timeout_ms: NonZeroU64::new(5_000).expect("constant is non-zero"),
         refresh_interval_ms: 60_000,
         cwd: codex_home.clone(),
     });
     Some((record.provider_id, provider))
+}
+
+fn current_pfterminal_auth_helper() -> String {
+    std::env::current_exe()
+        .ok()
+        .filter(|path| {
+            path.file_stem()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name == "pfterminal")
+        })
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "pfterminal".to_string())
 }
 
 pub async fn load_gpu_runtime_model_providers(

@@ -157,7 +157,8 @@ impl GpuProvider for VastProvider {
                 minimum_vram_mib_per_gpu: request.offer.vram_mib_per_gpu,
                 minimum_host_ram_mib: request.offer.host_ram_mib,
                 minimum_disk_gib: request.disk_gib,
-                requires_high_bandwidth_interconnect: request.offer.high_bandwidth_interconnect,
+                requires_high_bandwidth_interconnect: request.offer.high_bandwidth_interconnect
+                    || request.offer.runtime_topology_verification,
                 allowed_cuda_versions: request.offer.cuda_versions.clone(),
             },
             allow_interruptible: false,
@@ -185,7 +186,7 @@ impl GpuProvider for VastProvider {
         let key = self.api_key()?;
         let mut environment = serde_json::Map::new();
         environment.insert(
-            "VLLM_API_KEY".to_string(),
+            "PFT_ENDPOINT_TOKEN".to_string(),
             Value::String(request.endpoint_token.expose().to_string()),
         );
         if let Some(token) = request.huggingface_token.as_ref() {
@@ -237,6 +238,8 @@ impl GpuProvider for VastProvider {
             state: GpuInstanceState::Allocating,
             gpu_model: request.offer.gpu_model,
             gpu_count: request.offer.gpu_count,
+            host_ram_mib: Some(request.offer.host_ram_mib),
+            disk_gib: Some(request.disk_gib),
             high_bandwidth_interconnect: Some(request.offer.high_bandwidth_interconnect),
             hourly_microusd: request.offer.hourly_microusd,
             created_at_ms: Some(unix_now_ms()),
@@ -404,6 +407,7 @@ fn vast_offer(raw: &Value, now_ms: i64) -> ProviderResult<GpuOffer> {
             .get("bw_nvlink")
             .and_then(Value::as_f64)
             .is_some_and(|bandwidth| bandwidth > 0.0),
+        runtime_topology_verification: false,
         cuda_versions: raw
             .get("cuda_max_good")
             .and_then(Value::as_f64)
@@ -468,6 +472,8 @@ fn vast_instance(raw: &Value) -> ProviderResult<GpuInstance> {
             .and_then(Value::as_u64)
             .and_then(|value| value.try_into().ok())
             .unwrap_or_default(),
+        host_ram_mib: raw.get("cpu_ram").and_then(Value::as_u64),
+        disk_gib: raw.get("disk_space").and_then(Value::as_u64),
         high_bandwidth_interconnect: raw
             .get("bw_nvlink")
             .and_then(Value::as_f64)
