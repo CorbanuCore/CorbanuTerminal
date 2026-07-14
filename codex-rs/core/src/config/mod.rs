@@ -1388,7 +1388,33 @@ impl ConfigBuilder {
     }
 }
 
-async fn load_gpu_runtime_model_providers(
+pub fn gpu_runtime_model_provider(
+    record: codex_state::GpuRuntimeProvider,
+    codex_home: &AbsolutePathBuf,
+) -> Option<(String, ModelProviderInfo)> {
+    if record.health != "ready" {
+        return None;
+    }
+    if !record.provider_id.starts_with("gpu-") {
+        tracing::warn!(
+            provider_id = %record.provider_id,
+            "ignoring invalid GPU runtime provider id"
+        );
+        return None;
+    }
+    let mut provider = create_oss_provider_with_base_url(record.base_url.as_str(), WireApi::Chat);
+    provider.name = format!("Rented GPU · {}", record.model_id);
+    provider.auth = Some(ModelProviderAuthInfo {
+        command: "pfterminal".to_string(),
+        args: vec!["internal-gpu-endpoint-token".to_string(), record.rental_id],
+        timeout_ms: NonZeroU64::new(5_000).expect("constant is non-zero"),
+        refresh_interval_ms: 60_000,
+        cwd: codex_home.clone(),
+    });
+    Some((record.provider_id, provider))
+}
+
+pub async fn load_gpu_runtime_model_providers(
     sqlite_home: &Path,
     codex_home: &AbsolutePathBuf,
 ) -> HashMap<String, ModelProviderInfo> {
@@ -1413,27 +1439,7 @@ async fn load_gpu_runtime_model_providers(
     };
     records
         .into_iter()
-        .filter(|record| record.health == "ready")
-        .filter_map(|record| {
-            if !record.provider_id.starts_with("gpu-") {
-                tracing::warn!(
-                    provider_id = %record.provider_id,
-                    "ignoring invalid GPU runtime provider id"
-                );
-                return None;
-            }
-            let mut provider =
-                create_oss_provider_with_base_url(record.base_url.as_str(), WireApi::Chat);
-            provider.name = format!("Rented GPU · {}", record.model_id);
-            provider.auth = Some(ModelProviderAuthInfo {
-                command: "pfterminal".to_string(),
-                args: vec!["internal-gpu-endpoint-token".to_string(), record.rental_id],
-                timeout_ms: NonZeroU64::new(5_000).expect("constant is non-zero"),
-                refresh_interval_ms: 60_000,
-                cwd: codex_home.clone(),
-            });
-            Some((record.provider_id, provider))
-        })
+        .filter_map(|record| gpu_runtime_model_provider(record, codex_home))
         .collect()
 }
 

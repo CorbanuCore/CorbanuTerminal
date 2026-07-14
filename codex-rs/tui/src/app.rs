@@ -866,6 +866,35 @@ async fn resolve_runtime_model_provider_base_url(provider: &ModelProviderInfo) -
     }
 }
 
+fn gpu_runtime_model_preset(provider: &codex_state::GpuRuntimeProvider) -> Option<ModelPreset> {
+    if provider.health != "ready" || !provider.provider_id.starts_with("gpu-") {
+        return None;
+    }
+    Some(ModelPreset {
+        id: format!("{}:{}", provider.provider_id, provider.model_id),
+        model: provider.model_id.clone(),
+        provider_id: Some(provider.provider_id.clone()),
+        display_name: provider.model_id.clone(),
+        description: format!(
+            "Active GPU rental {} · ${:.4}/hour",
+            provider.rental_id,
+            provider.display_hourly_microusd as f64 / 1_000_000.0
+        ),
+        default_reasoning_effort: ReasoningEffortConfig::None,
+        supported_reasoning_efforts: Vec::new(),
+        supports_personality: false,
+        additional_speed_tiers: Vec::new(),
+        service_tiers: Vec::new(),
+        default_service_tier: None,
+        is_default: false,
+        upgrade: None,
+        show_in_picker: true,
+        availability_nux: None,
+        supported_in_api: true,
+        input_modalities: vec![InputModality::Text],
+    })
+}
+
 fn spawn_startup_thread_start(
     app_server: &AppServerSession,
     config: Config,
@@ -1061,34 +1090,7 @@ impl App {
         if let Some(state_db) = state_db.as_ref() {
             match state_db.list_gpu_runtime_providers().await {
                 Ok(providers) => {
-                    available_models.extend(providers.into_iter().filter_map(|provider| {
-                        if provider.health != "ready" || !provider.provider_id.starts_with("gpu-") {
-                            return None;
-                        }
-                        Some(ModelPreset {
-                            id: format!("{}:{}", provider.provider_id, provider.model_id),
-                            model: provider.model_id.clone(),
-                            provider_id: Some(provider.provider_id),
-                            display_name: provider.model_id.clone(),
-                            description: format!(
-                                "Active GPU rental {} · ${:.4}/hour",
-                                provider.rental_id,
-                                provider.display_hourly_microusd as f64 / 1_000_000.0
-                            ),
-                            default_reasoning_effort: ReasoningEffortConfig::None,
-                            supported_reasoning_efforts: Vec::new(),
-                            supports_personality: false,
-                            additional_speed_tiers: Vec::new(),
-                            service_tiers: Vec::new(),
-                            default_service_tier: None,
-                            is_default: false,
-                            upgrade: None,
-                            show_in_picker: true,
-                            availability_nux: None,
-                            supported_in_api: true,
-                            input_modalities: vec![InputModality::Text],
-                        })
-                    }));
+                    available_models.extend(providers.iter().filter_map(gpu_runtime_model_preset))
                 }
                 Err(error) => tracing::warn!(%error, "failed to load GPU rental model catalog"),
             }
@@ -1636,6 +1638,8 @@ See the PFTerminal keymap documentation for supported actions and examples."
         let mut listen_for_app_server_events = true;
         let mut app_server_reconnect_tick = tokio::time::interval(Duration::from_secs(5));
         app_server_reconnect_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut gpu_runtime_overlay_tick = tokio::time::interval(Duration::from_secs(5));
+        gpu_runtime_overlay_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let (app_server_reconnect_tx, mut app_server_reconnect_rx) =
             mpsc::unbounded_channel::<Result<AppServerSession, String>>();
         let mut app_server_reconnect_inflight = false;
@@ -1810,6 +1814,10 @@ See the PFTerminal keymap documentation for supported actions and examples."
                                 }
                             }
                         }
+                        AppRunControl::Continue
+                    }
+                    _ = gpu_runtime_overlay_tick.tick() => {
+                        app.refresh_gpu_runtime_overlay().await;
                         AppRunControl::Continue
                     }
                 };

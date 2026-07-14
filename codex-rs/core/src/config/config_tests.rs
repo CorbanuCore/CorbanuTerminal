@@ -11840,3 +11840,30 @@ fn test_tui_notification_condition_rejects_unknown_value() {
         "unexpected error: {err}"
     );
 }
+#[test]
+fn gpu_runtime_provider_uses_command_backed_scoped_auth() {
+    let home = tempfile::tempdir().expect("temporary home");
+    let codex_home = AbsolutePathBuf::try_from(home.path().to_path_buf()).expect("absolute home");
+    let (provider_id, provider) = gpu_runtime_model_provider(
+        codex_state::GpuRuntimeProvider {
+            rental_id: "rental-123".to_string(),
+            provider_id: "gpu-rental-123".to_string(),
+            base_url: "https://gpu.example.test/v1".to_string(),
+            model_id: "pinned-model".to_string(),
+            wire_api: "chat".to_string(),
+            health: "ready".to_string(),
+            display_hourly_microusd: 2_000_000,
+            catalog_sequence: 4,
+            updated_at_ms: 10,
+        },
+        &codex_home,
+    )
+    .expect("ready runtime provider");
+
+    assert_eq!(provider_id, "gpu-rental-123");
+    let auth = provider.auth.as_ref().expect("command-backed auth");
+    assert_eq!(auth.command, "pfterminal");
+    assert_eq!(auth.args, vec!["internal-gpu-endpoint-token", "rental-123"]);
+    assert!(provider.env_key.is_none());
+    assert!(provider.experimental_bearer_token.is_none());
+}

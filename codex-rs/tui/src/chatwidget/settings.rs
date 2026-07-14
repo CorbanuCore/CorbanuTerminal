@@ -4,6 +4,21 @@ use super::*;
 use crate::app_event::AppEvent;
 
 impl ChatWidget {
+    pub(crate) fn replace_gpu_model_providers(
+        &mut self,
+        runtime_providers: &std::collections::HashMap<
+            String,
+            codex_model_provider_info::ModelProviderInfo,
+        >,
+    ) {
+        self.config
+            .model_providers
+            .retain(|provider_id, _| !provider_id.starts_with("gpu-"));
+        self.config
+            .model_providers
+            .extend(runtime_providers.clone());
+    }
+
     /// Set the approval policy in the widget's config copy.
     pub(crate) fn set_approval_policy(&mut self, policy: AskForApproval) {
         if let Err(err) = self

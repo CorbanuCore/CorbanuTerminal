@@ -18,6 +18,42 @@ const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
 const RESERVED_PANE_DISPLAY_NAMES: &[&str] = &["Codex - Main", "me", "none", "root", "nazgul"];
 
 impl App {
+    pub(super) async fn refresh_gpu_runtime_overlay(&mut self) {
+        let Some(state_db) = self.state_db.as_ref() else {
+            self.model_catalog.replace_gpu_models(Vec::new());
+            self.refresh_gpu_spend_indicator().await;
+            return;
+        };
+        let providers = match state_db.list_gpu_runtime_providers().await {
+            Ok(providers) => providers,
+            Err(error) => {
+                tracing::warn!(%error, "failed to refresh GPU runtime provider overlay");
+                self.refresh_gpu_spend_indicator().await;
+                return;
+            }
+        };
+        let models = providers
+            .iter()
+            .filter_map(super::gpu_runtime_model_preset)
+            .collect();
+        let runtime_providers = providers
+            .into_iter()
+            .filter_map(|provider| {
+                codex_core::config::gpu_runtime_model_provider(provider, &self.config.codex_home)
+            })
+            .collect::<std::collections::HashMap<_, _>>();
+        self.model_catalog.replace_gpu_models(models);
+        self.config
+            .model_providers
+            .retain(|provider_id, _| !provider_id.starts_with("gpu-"));
+        self.config
+            .model_providers
+            .extend(runtime_providers.clone());
+        self.chat_widget
+            .replace_gpu_model_providers(&runtime_providers);
+        self.refresh_gpu_spend_indicator().await;
+    }
+
     fn normalize_pane_display_name(&self, name: &str) -> Result<String> {
         let normalized = name.split_whitespace().collect::<Vec<_>>().join(" ");
         if normalized.is_empty() {
