@@ -556,6 +556,7 @@ pub(crate) struct ChatWidget {
     session_header: SessionHeader,
     initial_user_message: Option<UserMessage>,
     status_account_display: Option<StatusAccountDisplay>,
+    gpu_spend_status: Option<String>,
     active_external_model_display: Option<String>,
     runtime_model_provider_base_url: Option<String>,
     pub(crate) remote_connection: Option<RemoteConnectionStatus>,

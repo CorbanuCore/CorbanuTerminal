@@ -169,6 +169,23 @@ async fn status_line_git_summary_items_render_values() {
 }
 
 #[tokio::test]
+async fn gpu_spend_indicator_is_visible_when_status_line_has_no_configured_items() {
+    let (mut chat, _rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.config.tui_status_line = Some(Vec::new());
+    chat.refresh_status_line();
+    assert_eq!(status_line_text(&chat), None);
+
+    chat.set_gpu_spend_status(Some(
+        "GPU SPEND 2 active · $1.25 est · ≤$4.00/hr".to_string(),
+    ));
+
+    assert_eq!(
+        status_line_text(&chat),
+        Some("GPU SPEND 2 active · $1.25 est · ≤$4.00/hr".to_string())
+    );
+}
+
+#[tokio::test]
 async fn raw_output_status_line_value_only_shows_when_enabled() {
     let (mut chat, _rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
 

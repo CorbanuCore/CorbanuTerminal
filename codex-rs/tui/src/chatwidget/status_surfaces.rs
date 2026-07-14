@@ -160,7 +160,7 @@ impl ChatWidget {
     }
 
     fn refresh_status_line_from_selections(&mut self, selections: &StatusSurfaceSelections) {
-        let enabled = !selections.status_line_items.is_empty();
+        let enabled = !selections.status_line_items.is_empty() || self.gpu_spend_status.is_some();
         self.bottom_pane.set_status_line_enabled(enabled);
         if !enabled {
             self.set_status_line(/*status_line*/ None);
@@ -175,10 +175,15 @@ impl ChatWidget {
             }
         }
 
-        self.set_status_line(status_line_from_segments(
-            segments,
-            self.config.tui_status_line_use_colors,
-        ));
+        let mut line = status_line_from_segments(segments, self.config.tui_status_line_use_colors)
+            .unwrap_or_default();
+        if let Some(gpu_spend_status) = self.gpu_spend_status.as_ref() {
+            if !line.spans.is_empty() {
+                line.spans.push(" · ".dim());
+            }
+            line.spans.push(gpu_spend_status.clone().red().bold());
+        }
+        self.set_status_line(Some(line));
         let hyperlink_url = selections
             .status_line_items
             .contains(&StatusLineItem::PullRequestNumber)

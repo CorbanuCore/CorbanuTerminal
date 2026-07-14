@@ -211,6 +211,41 @@ impl App {
 }
 
 impl App {
+    pub(super) async fn refresh_gpu_spend_indicator(&mut self) {
+        let Some(state_db) = self.state_db.as_ref() else {
+            self.chat_widget.set_gpu_spend_status(None);
+            return;
+        };
+        let status = state_db
+            .list_gpu_rentals(1_000)
+            .await
+            .ok()
+            .and_then(|rentals| {
+                let billable = rentals
+                    .into_iter()
+                    .filter(|rental| rental.observed_state.may_be_billable())
+                    .collect::<Vec<_>>();
+                if billable.is_empty() {
+                    return None;
+                }
+                let estimated = billable
+                    .iter()
+                    .map(|rental| rental.estimated_accrued_microusd)
+                    .sum::<i64>() as f64
+                    / 1_000_000.0;
+                let hourly_cap = billable
+                    .iter()
+                    .map(|rental| rental.max_hourly_microusd)
+                    .sum::<i64>() as f64
+                    / 1_000_000.0;
+                Some(format!(
+                    "GPU SPEND {} active · ${estimated:.2} est · ≤${hourly_cap:.2}/hr",
+                    billable.len()
+                ))
+            });
+        self.chat_widget.set_gpu_spend_status(status);
+    }
+
     pub(super) async fn handle_event(
         &mut self,
         tui: &mut tui::Tui,
@@ -1163,6 +1198,7 @@ impl App {
                 self.chat_widget.open_all_models_popup(models);
             }
             AppEvent::OpenGpuMenu => {
+                self.refresh_gpu_spend_indicator().await;
                 let Some(state_db) = self.state_db.as_ref() else {
                     self.chat_widget.add_error_message(
                         "GPU rental state is unavailable in this session.".to_string(),
@@ -1218,6 +1254,7 @@ impl App {
                         .chat_widget
                         .add_error_message(format!("Unable to stop GPU serving: {error}")),
                 }
+                self.refresh_gpu_spend_indicator().await;
             }
             AppEvent::TerminateGpuRental { rental_id } => {
                 let Some(state_db) = self.state_db.as_ref() else {
@@ -1247,6 +1284,7 @@ impl App {
                         .chat_widget
                         .add_error_message(format!("Unable to terminate GPU rental: {error}")),
                 }
+                self.refresh_gpu_spend_indicator().await;
             }
             AppEvent::OpenGpuAuthorizationPrompt { recipe_id } => {
                 self.chat_widget.open_gpu_authorization_prompt(recipe_id);
@@ -1406,6 +1444,7 @@ impl App {
                             .stderr(std::process::Stdio::null())
                             .spawn();
                     }
+                    self.refresh_gpu_spend_indicator().await;
                 }
                 Err(message) => self.chat_widget.add_error_message(message),
             },
