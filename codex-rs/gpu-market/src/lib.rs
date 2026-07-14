@@ -2,6 +2,7 @@
 
 mod controller;
 mod credential;
+mod market;
 mod provider;
 mod provider_http;
 mod readiness;
@@ -18,6 +19,8 @@ pub use credential::GpuCredentialKind;
 pub use credential::GpuCredentialResolver;
 pub use credential::SecretValue;
 pub use credential::VaultGpuCredentialResolver;
+pub use market::GpuMarketService;
+pub use market::RentalAuthorization;
 pub use provider::BillingState;
 pub use provider::CreateInstanceRequest;
 pub use provider::GpuInstance;
