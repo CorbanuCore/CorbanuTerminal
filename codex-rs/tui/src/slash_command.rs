@@ -13,6 +13,7 @@ pub enum SlashCommand {
     // DO NOT ALPHA-SORT! Enum order is presentation order in the popup, so
     // more frequently used commands should be listed first.
     Model,
+    Gpu,
     Ide,
     Permissions,
     Keymap,
@@ -122,6 +123,7 @@ impl SlashCommand {
             SlashCommand::MemoryDrop => "DO NOT USE",
             SlashCommand::MemoryUpdate => "DO NOT USE",
             SlashCommand::Model => "choose what model and reasoning effort to use",
+            SlashCommand::Gpu => "rent, inspect, or terminate GPU capacity",
             SlashCommand::Ide => {
                 "include current selection, open files, and other context from your IDE"
             }
@@ -186,6 +188,7 @@ impl SlashCommand {
                 | SlashCommand::Orchestrate
                 | SlashCommand::Tasknode
                 | SlashCommand::Vault
+                | SlashCommand::Gpu
         )
     }
 
@@ -205,6 +208,7 @@ impl SlashCommand {
                 | SlashCommand::Tasknode
                 | SlashCommand::Orchestrate
                 | SlashCommand::Vault
+                | SlashCommand::Gpu
         )
     }
 
@@ -234,6 +238,7 @@ impl SlashCommand {
             | SlashCommand::Docs
             | SlashCommand::Resume
             | SlashCommand::Model
+            | SlashCommand::Gpu
             | SlashCommand::Personality
             | SlashCommand::Permissions
             | SlashCommand::Copy

@@ -3016,6 +3016,30 @@ async fn bare_vault_opens_action_menu_without_history_spam() {
 }
 
 #[tokio::test]
+async fn gpu_commands_emit_durable_control_events() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.handle_slash_command_dispatch(SlashCommand::Gpu);
+    assert!(matches!(rx.try_recv(), Ok(AppEvent::OpenGpuMenu)));
+
+    chat.dispatch_command_with_args(SlashCommand::Gpu, "stop rental-1".to_string(), Vec::new());
+    assert!(matches!(
+        rx.try_recv(),
+        Ok(AppEvent::DisableGpuServing { rental_id }) if rental_id == "rental-1"
+    ));
+
+    chat.dispatch_command_with_args(
+        SlashCommand::Gpu,
+        "terminate rental-2".to_string(),
+        Vec::new(),
+    );
+    assert!(matches!(
+        rx.try_recv(),
+        Ok(AppEvent::TerminateGpuRental { rental_id }) if rental_id == "rental-2"
+    ));
+}
+
+#[tokio::test]
 async fn vault_credential_add_rejects_inline_secret_without_recall_leak() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     let secret = "sk-inline-secret";

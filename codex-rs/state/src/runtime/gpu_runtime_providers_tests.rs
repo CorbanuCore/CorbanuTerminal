@@ -144,6 +144,25 @@ async fn runtime_overlay_requires_ready_and_https_and_is_sequence_monotonic() {
     assert_eq!(providers.len(), 1);
     assert_eq!(providers[0].health, "ready");
     assert!(!providers[0].base_url.contains("token"));
+
+    assert!(
+        runtime
+            .set_gpu_runtime_provider_health("rental-overlay", "degraded", NOW_MS + 3)
+            .await
+            .expect("disable provider")
+    );
+    let providers = runtime
+        .list_gpu_runtime_providers()
+        .await
+        .expect("providers after disable");
+    assert_eq!(providers[0].health, "degraded");
+    assert_eq!(providers[0].catalog_sequence, 3);
+    assert!(
+        runtime
+            .set_gpu_runtime_provider_health("rental-overlay", "disabled", NOW_MS + 4)
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]

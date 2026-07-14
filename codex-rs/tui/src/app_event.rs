@@ -1178,6 +1178,18 @@ pub(crate) enum AppEvent {
         models: Vec<ModelPreset>,
     },
 
+    /// Open the durable GPU rental and recipe surface.
+    OpenGpuMenu,
+    OpenGpuRental {
+        rental_id: String,
+    },
+    DisableGpuServing {
+        rental_id: String,
+    },
+    TerminateGpuRental {
+        rental_id: String,
+    },
+
     /// Open masked entry for a provider API key.
     OpenProviderApiKeyAdd {
         provider_id: String,

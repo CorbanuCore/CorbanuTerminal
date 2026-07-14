@@ -4063,6 +4063,7 @@ dependencies = [
  "codex-feedback",
  "codex-file-search",
  "codex-git-utils",
+ "codex-gpu-market",
  "codex-install-context",
  "codex-keyring-store",
  "codex-login",

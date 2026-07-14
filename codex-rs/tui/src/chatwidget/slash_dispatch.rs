@@ -293,6 +293,9 @@ impl ChatWidget {
                 self.open_model_popup();
                 self.defer_input_until_settings_applied();
             }
+            SlashCommand::Gpu => {
+                self.app_event_tx.send(AppEvent::OpenGpuMenu);
+            }
             SlashCommand::Personality => {
                 self.open_personality_popup();
                 self.defer_input_until_settings_applied();
@@ -767,6 +770,27 @@ impl ChatWidget {
                         PlainHistoryCell::new(lines),
                     )));
                 });
+            }
+            SlashCommand::Gpu => {
+                let mut parts = trimmed.split_whitespace();
+                match (parts.next(), parts.next(), parts.next()) {
+                    (None | Some("status"), None, None) => {
+                        self.app_event_tx.send(AppEvent::OpenGpuMenu);
+                    }
+                    (Some("stop"), Some(rental_id), None) => {
+                        self.app_event_tx.send(AppEvent::DisableGpuServing {
+                            rental_id: rental_id.to_string(),
+                        });
+                    }
+                    (Some("terminate"), Some(rental_id), None) => {
+                        self.app_event_tx.send(AppEvent::TerminateGpuRental {
+                            rental_id: rental_id.to_string(),
+                        });
+                    }
+                    _ => self.add_error_message(
+                        "Usage: /gpu [status|stop <rental-id>|terminate <rental-id>]".to_string(),
+                    ),
+                }
             }
             SlashCommand::Spawn => {
                 let mut parts = trimmed.splitn(2, ' ');
@@ -1269,6 +1293,7 @@ impl ChatWidget {
             | SlashCommand::Tasknode
             | SlashCommand::Rollout
             | SlashCommand::Vault
+            | SlashCommand::Gpu
             | SlashCommand::Copy
             | SlashCommand::Raw
             | SlashCommand::Vim

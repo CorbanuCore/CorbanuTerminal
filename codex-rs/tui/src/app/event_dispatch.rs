@@ -1162,6 +1162,92 @@ impl App {
             AppEvent::OpenAllModelsPopup { models } => {
                 self.chat_widget.open_all_models_popup(models);
             }
+            AppEvent::OpenGpuMenu => {
+                let Some(state_db) = self.state_db.as_ref() else {
+                    self.chat_widget.add_error_message(
+                        "GPU rental state is unavailable in this session.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
+                match state_db.list_gpu_rentals(100).await {
+                    Ok(rentals) => self.chat_widget.open_gpu_menu(rentals),
+                    Err(error) => self
+                        .chat_widget
+                        .add_error_message(format!("Unable to read GPU rentals: {error}")),
+                }
+            }
+            AppEvent::OpenGpuRental { rental_id } => {
+                let Some(state_db) = self.state_db.as_ref() else {
+                    self.chat_widget.add_error_message(
+                        "GPU rental state is unavailable in this session.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
+                match state_db.get_gpu_rental(rental_id.as_str()).await {
+                    Ok(Some(rental)) => self.chat_widget.open_gpu_rental(rental),
+                    Ok(None) => self
+                        .chat_widget
+                        .add_error_message(format!("GPU rental {rental_id} was not found.")),
+                    Err(error) => self
+                        .chat_widget
+                        .add_error_message(format!("Unable to read GPU rental: {error}")),
+                }
+            }
+            AppEvent::DisableGpuServing { rental_id } => {
+                let Some(state_db) = self.state_db.as_ref() else {
+                    self.chat_widget.add_error_message(
+                        "GPU rental state is unavailable in this session.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
+                let now_ms = chrono::Utc::now().timestamp_millis();
+                match state_db
+                    .set_gpu_runtime_provider_health(rental_id.as_str(), "degraded", now_ms)
+                    .await
+                {
+                    Ok(true) => self.chat_widget.add_info_message(
+                        format!(
+                            "Stopped serving GPU rental {rental_id}. Provider billing may continue."
+                        ),
+                        None,
+                    ),
+                    Ok(false) => self.chat_widget.add_error_message(format!(
+                        "GPU rental {rental_id} has no active runtime provider."
+                    )),
+                    Err(error) => self
+                        .chat_widget
+                        .add_error_message(format!("Unable to stop GPU serving: {error}")),
+                }
+            }
+            AppEvent::TerminateGpuRental { rental_id } => {
+                let Some(state_db) = self.state_db.as_ref() else {
+                    self.chat_widget.add_error_message(
+                        "GPU rental state is unavailable in this session.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
+                let now_ms = chrono::Utc::now().timestamp_millis();
+                let _ = state_db
+                    .set_gpu_runtime_provider_health(rental_id.as_str(), "degraded", now_ms)
+                    .await;
+                match state_db
+                    .request_gpu_rental_termination(rental_id.as_str(), now_ms)
+                    .await
+                {
+                    Ok(true) => self.chat_widget.add_info_message(
+                        format!(
+                            "Termination requested for GPU rental {rental_id}; billing remains unresolved until the provider confirms absence."
+                        ),
+                        None,
+                    ),
+                    Ok(false) => self.chat_widget.add_error_message(format!(
+                        "GPU rental {rental_id} is already terminal or cannot be terminated."
+                    )),
+                    Err(error) => self
+                        .chat_widget
+                        .add_error_message(format!("Unable to terminate GPU rental: {error}")),
+                }
+            }
             AppEvent::OpenProviderApiKeyAdd {
                 provider_id,
                 provider_name,

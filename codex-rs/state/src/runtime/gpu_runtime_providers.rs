@@ -161,6 +161,30 @@ WHERE rental_id = ?
         .await?;
         Ok(result.rows_affected() == 1)
     }
+
+    pub async fn set_gpu_runtime_provider_health(
+        &self,
+        rental_id: &str,
+        health: &str,
+        now_ms: i64,
+    ) -> anyhow::Result<bool> {
+        if !matches!(health, "ready" | "degraded") {
+            return Err(anyhow::anyhow!("invalid runtime provider health"));
+        }
+        let result = sqlx::query(
+            r#"
+UPDATE gpu_runtime_providers
+SET health = ?, catalog_sequence = catalog_sequence + 1, updated_at_ms = ?
+WHERE rental_id = ?
+            "#,
+        )
+        .bind(health)
+        .bind(now_ms)
+        .bind(rental_id)
+        .execute(self.pool.as_ref())
+        .await?;
+        Ok(result.rows_affected() == 1)
+    }
 }
 
 fn validate_identifier(name: &str, value: &str) -> anyhow::Result<()> {
