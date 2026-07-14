@@ -113,6 +113,43 @@ async fn leases_serialize_two_runtime_instances() {
 }
 
 #[tokio::test]
+async fn provider_controller_only_claims_its_own_rentals() {
+    let runtime = runtime().await;
+    let fake = create_params("op-fake-provider");
+    let mut other = create_params("op-other-provider");
+    other.provider = "other".to_string();
+    runtime
+        .create_gpu_rental(&fake, NOW_MS)
+        .await
+        .expect("create fake rental");
+    runtime
+        .create_gpu_rental(&other, NOW_MS)
+        .await
+        .expect("create other rental");
+    runtime
+        .request_gpu_rental_creation(fake.rental_id.as_str(), NOW_MS)
+        .await
+        .expect("request fake creation");
+    runtime
+        .request_gpu_rental_creation(other.rental_id.as_str(), NOW_MS)
+        .await
+        .expect("request other creation");
+
+    let fake_claims = runtime
+        .claim_due_gpu_rentals_for_provider("fake-controller", "fake", NOW_MS, 30_000, 10)
+        .await
+        .expect("claim fake rentals");
+    let other_claims = runtime
+        .claim_due_gpu_rentals_for_provider("other-controller", "other", NOW_MS, 30_000, 10)
+        .await
+        .expect("claim other rentals");
+    assert_eq!(fake_claims.len(), 1);
+    assert_eq!(fake_claims[0].rental.rental_id, fake.rental_id);
+    assert_eq!(other_claims.len(), 1);
+    assert_eq!(other_claims[0].rental.rental_id, other.rental_id);
+}
+
+#[tokio::test]
 async fn state_update_is_owned_monotonic_and_releases_lease() {
     let runtime = runtime().await;
     let params = create_params("op-update");

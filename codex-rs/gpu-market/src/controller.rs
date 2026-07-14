@@ -88,10 +88,12 @@ where
     }
 
     pub async fn reconcile_due(&self, now_ms: i64) -> anyhow::Result<Vec<ControllerEvent>> {
+        let provider = self.provider.capabilities().provider;
         let leases = self
             .state
-            .claim_due_gpu_rentals(
+            .claim_due_gpu_rentals_for_provider(
                 self.config.controller_id.as_str(),
+                provider.as_str(),
                 now_ms,
                 self.config.lease_ttl_ms,
                 self.config.batch_size,

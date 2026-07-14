@@ -150,6 +150,10 @@ enum Subcommand {
     #[clap(hide = true, name = "internal-gpu-endpoint-token")]
     InternalGpuEndpointToken { rental_id: String },
 
+    /// Internal: reconcile durable GPU rentals independently of any TUI process.
+    #[clap(hide = true, name = "internal-gpu-controller")]
+    InternalGpuController(GpuControllerCommand),
+
     /// Agent JSON helper for GitHub-linked Task Node terminal sessions.
     Tasknode(tasknode_cmd::TaskNodeCli),
 
@@ -561,6 +565,16 @@ enum VaultSubcommand {
 struct VaultAuthHelperCommand {
     /// Vault label to reveal.
     label: String,
+}
+
+#[derive(Debug, Parser)]
+struct GpuControllerCommand {
+    #[clap(skip)]
+    config_overrides: CliConfigOverrides,
+
+    /// Reconcile each provider once and exit. Used by startup recovery and qualification.
+    #[arg(long)]
+    once: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -1502,6 +1516,10 @@ async fn cli_main(
         Some(Subcommand::InternalGpuEndpointToken { rental_id }) => {
             run_internal_gpu_endpoint_token(rental_id)?;
         }
+        Some(Subcommand::InternalGpuController(mut command)) => {
+            prepend_config_flags(&mut command.config_overrides, root_config_overrides.clone());
+            run_internal_gpu_controller(command).await?;
+        }
         Some(Subcommand::Tasknode(mut tasknode_cli)) => {
             reject_remote_mode_for_subcommand(
                 root_remote.as_deref(),
@@ -2208,6 +2226,66 @@ fn run_internal_gpu_endpoint_token(rental_id: String) -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn run_internal_gpu_controller(command: GpuControllerCommand) -> anyhow::Result<()> {
+    let cli_kv_overrides = command
+        .config_overrides
+        .parse_overrides()
+        .map_err(anyhow::Error::msg)?;
+    let config = ConfigBuilder::default()
+        .cli_overrides(cli_kv_overrides)
+        .build()
+        .await?;
+    let state =
+        StateRuntime::init(config.sqlite_home.clone(), "gpu-controller".to_string()).await?;
+    let installation_id = codex_core::resolve_installation_id(&config.codex_home).await?;
+    let credentials = Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
+        codex_vault::Vault::new(config.codex_home.to_path_buf()),
+    )));
+    let reconcile_config = codex_gpu_market::ReconcileConfig::default();
+    let vast = codex_gpu_market::GpuRentalController::new(
+        state.clone(),
+        codex_gpu_market::VastProvider::new(credentials.clone()),
+        codex_gpu_market::RecipeCatalog::default(),
+        installation_id.clone(),
+        reconcile_config.clone(),
+    );
+    let runpod = codex_gpu_market::GpuRentalController::new(
+        state.clone(),
+        codex_gpu_market::RunpodProvider::new(credentials),
+        codex_gpu_market::RecipeCatalog::default(),
+        installation_id,
+        codex_gpu_market::ReconcileConfig::default(),
+    );
+
+    loop {
+        let now_ms = i64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_millis(),
+        )?;
+        for event in vast
+            .reconcile_due(now_ms)
+            .await?
+            .into_iter()
+            .chain(runpod.reconcile_due(now_ms).await?)
+        {
+            tracing::info!(?event, "GPU rental controller event");
+        }
+        if command.once {
+            return Ok(());
+        }
+        let has_billable_work = state
+            .list_gpu_rentals(1_000)
+            .await?
+            .into_iter()
+            .any(|rental| rental.observed_state.may_be_billable());
+        if !has_billable_work {
+            return Ok(());
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+}
+
 async fn run_vault_auth_helper(
     config_overrides: CliConfigOverrides,
     command: VaultAuthHelperCommand,
@@ -2415,7 +2493,8 @@ fn unsupported_subcommand_name_for_strict_config(
         | Some(Subcommand::Fork(_))
         | Some(Subcommand::Doctor(_))
         | Some(Subcommand::InternalClaudeOauthToken)
-        | Some(Subcommand::InternalGpuEndpointToken { .. }) => None,
+        | Some(Subcommand::InternalGpuEndpointToken { .. })
+        | Some(Subcommand::InternalGpuController(_)) => None,
         Some(Subcommand::AppServer(app_server)) if app_server.subcommand.is_none() => None,
         Some(Subcommand::AppServer(app_server)) => {
             Some(app_server_subcommand_name(app_server.subcommand.as_ref()))

@@ -1389,10 +1389,11 @@ impl ConfigBuilder {
 }
 
 async fn load_gpu_runtime_model_providers(
+    sqlite_home: &Path,
     codex_home: &AbsolutePathBuf,
 ) -> HashMap<String, ModelProviderInfo> {
     let runtime = match codex_state::StateRuntime::init(
-        codex_home.to_path_buf(),
+        sqlite_home.to_path_buf(),
         "gpu-runtime-overlay".to_string(),
     )
     .await
@@ -3432,8 +3433,16 @@ impl Config {
             .clone()
             .filter(|value| !value.is_empty());
 
+        let sqlite_home = cfg
+            .sqlite_home
+            .as_ref()
+            .map(AbsolutePathBuf::to_path_buf)
+            .or_else(|| resolve_sqlite_home_env(&resolved_cwd))
+            .unwrap_or_else(|| codex_home.to_path_buf());
+
         let mut built_in_model_providers = built_in_model_providers(openai_base_url);
-        built_in_model_providers.extend(load_gpu_runtime_model_providers(&codex_home).await);
+        built_in_model_providers
+            .extend(load_gpu_runtime_model_providers(&sqlite_home, &codex_home).await);
         if let Some(openrouter_provider) =
             openrouter_provider_body_provider(cfg.openrouter_provider.clone())?
             && let Some(provider) = built_in_model_providers.get_mut(OPENROUTER_PROVIDER_ID)
@@ -3747,12 +3756,6 @@ impl Config {
             .as_ref()
             .map(AbsolutePathBuf::to_path_buf)
             .unwrap_or_else(|| codex_home.join("log").to_path_buf());
-        let sqlite_home = cfg
-            .sqlite_home
-            .as_ref()
-            .map(AbsolutePathBuf::to_path_buf)
-            .or_else(|| resolve_sqlite_home_env(&resolved_cwd))
-            .unwrap_or_else(|| codex_home.to_path_buf());
         let original_permission_profile = permission_profile.clone();
         apply_requirement_constrained_value(
             "approval_policy",

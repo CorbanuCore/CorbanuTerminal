@@ -217,6 +217,33 @@ WHERE rental_id = ? AND observed_state != ?
         lease_ttl_ms: i64,
         limit: usize,
     ) -> anyhow::Result<Vec<GpuRentalLease>> {
+        self.claim_due_gpu_rentals_inner(owner, None, now_ms, lease_ttl_ms, limit)
+            .await
+    }
+
+    pub async fn claim_due_gpu_rentals_for_provider(
+        &self,
+        owner: &str,
+        provider: &str,
+        now_ms: i64,
+        lease_ttl_ms: i64,
+        limit: usize,
+    ) -> anyhow::Result<Vec<GpuRentalLease>> {
+        if provider.is_empty() {
+            return Err(anyhow::anyhow!("GPU provider must not be empty"));
+        }
+        self.claim_due_gpu_rentals_inner(owner, Some(provider), now_ms, lease_ttl_ms, limit)
+            .await
+    }
+
+    async fn claim_due_gpu_rentals_inner(
+        &self,
+        owner: &str,
+        provider: Option<&str>,
+        now_ms: i64,
+        lease_ttl_ms: i64,
+        limit: usize,
+    ) -> anyhow::Result<Vec<GpuRentalLease>> {
         let lease_until_ms = now_ms.saturating_add(lease_ttl_ms.max(1));
         // One write statement avoids SQLite's deferred-transaction read→write upgrade race when
         // two PFTerminal processes try to claim the same due rental concurrently.
@@ -233,6 +260,10 @@ WHERE rental_id = ? AND observed_state != ?
         builder.push_bind(now_ms);
         builder.push(" AND observed_state != ");
         builder.push_bind(GpuRentalState::TerminatedConfirmed.as_str());
+        if let Some(provider) = provider {
+            builder.push(" AND provider = ");
+            builder.push_bind(provider);
+        }
         builder.push(" AND (controller_lease_until_ms <= ");
         builder.push_bind(now_ms);
         builder.push(" OR controller_lease_owner = ");
