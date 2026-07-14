@@ -1,5 +1,6 @@
 mod agent_job;
 mod backfill_state;
+mod gpu_rental;
 mod graph;
 mod log;
 mod memories;
@@ -15,6 +16,13 @@ pub use agent_job::AgentJobProgress;
 pub use agent_job::AgentJobStatus;
 pub use backfill_state::BackfillState;
 pub use backfill_state::BackfillStatus;
+pub use gpu_rental::GpuLimitEnforcement;
+pub use gpu_rental::GpuOperationKind;
+pub use gpu_rental::GpuRental;
+pub use gpu_rental::GpuRentalCreateParams;
+pub use gpu_rental::GpuRentalLease;
+pub use gpu_rental::GpuRentalState;
+pub use gpu_rental::GpuRentalUpdate;
 pub use graph::DirectionalThreadSpawnEdgeStatus;
 pub use log::LogEntry;
 pub use log::LogQuery;
@@ -37,6 +45,7 @@ pub use thread_metadata::ThreadsPage;
 
 pub(crate) use agent_job::AgentJobItemRow;
 pub(crate) use agent_job::AgentJobRow;
+pub(crate) use gpu_rental::GpuRentalRow;
 pub(crate) use thread_goal::ThreadGoalRow;
 pub(crate) use thread_metadata::ThreadRow;
 pub(crate) use thread_metadata::anchor_from_item;
