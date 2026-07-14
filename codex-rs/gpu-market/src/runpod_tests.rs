@@ -125,6 +125,10 @@ async fn create_revalidates_price_and_uses_owned_secure_pod() {
             ownership_tag: "pft-install-lease-1".to_string(),
             image: "example.invalid/runtime@sha256:abc".to_string(),
             disk_gib: 400,
+            launch_command: vec!["model-id".to_string(), "--revision=abc".to_string()],
+            inference_port: 8000,
+            endpoint_token: SecretValue::new("endpoint-secret".to_string()).unwrap(),
+            huggingface_token: Some(SecretValue::new("hf-secret".to_string()).unwrap()),
         })
         .await
         .expect("create pod");
@@ -141,6 +145,11 @@ async fn create_revalidates_price_and_uses_owned_secure_pod() {
     assert_eq!(create_body["cloudType"], "SECURE");
     assert_eq!(create_body["interruptible"], false);
     assert_eq!(create_body["name"], "pft-install-lease-1");
+    assert_eq!(create_body["startSsh"], false);
+    assert_eq!(create_body["ports"][0], "8000/http");
+    assert_eq!(create_body["dockerStartCmd"][0], "model-id");
+    assert_eq!(create_body["env"][0]["key"], "VLLM_API_KEY");
+    assert_eq!(create_body["env"][0]["value"], "endpoint-secret");
     assert!(!create_body.to_string().contains(TEST_KEY));
 }
 
@@ -173,6 +182,10 @@ async fn changed_price_fails_closed_before_create() {
             ownership_tag: "pft-install-lease-1".to_string(),
             image: "runtime@sha256:abc".to_string(),
             disk_gib: 400,
+            launch_command: vec!["model-id".to_string()],
+            inference_port: 8000,
+            endpoint_token: SecretValue::new("endpoint-secret".to_string()).unwrap(),
+            huggingface_token: None,
         })
         .await
         .expect_err("price drift must reject");

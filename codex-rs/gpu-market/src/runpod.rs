@@ -222,6 +222,16 @@ impl GpuProvider for RunpodProvider {
             .host_ram_mib
             .div_ceil(u64::from(request.offer.gpu_count).max(1))
             .div_ceil(1024);
+        let mut environment = vec![serde_json::json!({
+            "key": "VLLM_API_KEY",
+            "value": request.endpoint_token.expose(),
+        })];
+        if let Some(token) = request.huggingface_token.as_ref() {
+            environment.push(serde_json::json!({
+                "key": "HF_TOKEN",
+                "value": token.expose(),
+            }));
+        }
         let body = serde_json::json!({
             "name": request.ownership_tag,
             "imageName": request.image,
@@ -236,7 +246,10 @@ impl GpuProvider for RunpodProvider {
             "containerDiskInGb": request.disk_gib,
             "volumeInGb": 0,
             "supportPublicIp": true,
-            "startSsh": true,
+            "startSsh": false,
+            "ports": [format!("{}/http", request.inference_port)],
+            "dockerStartCmd": request.launch_command,
+            "env": environment,
         });
         let response = self
             .client

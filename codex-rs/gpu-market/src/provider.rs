@@ -91,13 +91,36 @@ impl GpuOffer {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct CreateInstanceRequest {
     pub offer: GpuOffer,
     pub client_operation_id: String,
     pub ownership_tag: String,
     pub image: String,
     pub disk_gib: u64,
+    pub launch_command: Vec<String>,
+    pub inference_port: u16,
+    pub endpoint_token: crate::SecretValue,
+    pub huggingface_token: Option<crate::SecretValue>,
+}
+
+impl fmt::Debug for CreateInstanceRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CreateInstanceRequest")
+            .field("offer", &self.offer)
+            .field("client_operation_id", &self.client_operation_id)
+            .field("ownership_tag", &self.ownership_tag)
+            .field("image", &self.image)
+            .field("disk_gib", &self.disk_gib)
+            .field("launch_command", &self.launch_command)
+            .field("inference_port", &self.inference_port)
+            .field("endpoint_token", &"[REDACTED]")
+            .field(
+                "huggingface_token",
+                &self.huggingface_token.as_ref().map(|_| "[REDACTED]"),
+            )
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

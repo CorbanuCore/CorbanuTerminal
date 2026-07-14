@@ -1,6 +1,10 @@
 use super::*;
 use crate::BillingState;
 use crate::CreateInstanceRequest;
+use crate::GpuCredential;
+use crate::GpuCredentialError;
+use crate::GpuCredentialKind;
+use crate::GpuCredentialResolver;
 use crate::GpuInstanceState;
 use crate::GpuOffer;
 use crate::GpuProvider;
@@ -12,6 +16,7 @@ use crate::ProviderError;
 use crate::ProviderErrorKind;
 use crate::ProviderResult;
 use crate::SearchOffersRequest;
+use crate::SecretValue;
 use codex_state::GpuLimitEnforcement;
 use codex_state::GpuRentalCreateParams;
 use pretty_assertions::assert_eq;
@@ -20,6 +25,22 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 const NOW_MS: i64 = 1_800_000_000_000;
+
+#[derive(Debug)]
+struct FakeCredentials;
+
+impl GpuCredentialResolver for FakeCredentials {
+    fn resolve(&self, kind: &GpuCredentialKind) -> Result<GpuCredential, GpuCredentialError> {
+        match kind {
+            GpuCredentialKind::RentalEndpointToken { .. } => Ok(GpuCredential {
+                label: kind.canonical_label()?,
+                secret: SecretValue::new("fake-rental-endpoint-token".to_string())?,
+            }),
+            GpuCredentialKind::HuggingFaceToken => Err(GpuCredentialError::Missing),
+            GpuCredentialKind::ProviderApiKey { .. } => Err(GpuCredentialError::Missing),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 enum CreateBehavior {
@@ -265,7 +286,7 @@ fn controller(
     state: Arc<StateRuntime>,
     provider: FakeProvider,
 ) -> GpuRentalController<FakeProvider> {
-    GpuRentalController::new(
+    GpuRentalController::new_with_credentials(
         state,
         provider,
         recipe_catalog(),
@@ -277,6 +298,7 @@ fn controller(
             maximum_retry_ms: 10_000,
             batch_size: 4,
         },
+        Arc::new(FakeCredentials),
     )
 }
 

@@ -104,6 +104,38 @@ impl VaultGpuCredentialResolver {
     pub fn new(vault: Arc<Vault>) -> Self {
         Self { vault }
     }
+
+    pub fn ensure_rental_endpoint_token(
+        &self,
+        rental_id: &str,
+    ) -> Result<GpuCredential, GpuCredentialError> {
+        let kind = GpuCredentialKind::RentalEndpointToken {
+            rental_id: rental_id.to_string(),
+        };
+        let label = kind.canonical_label()?;
+        match self.resolve(&kind) {
+            Ok(credential) => return Ok(credential),
+            Err(GpuCredentialError::Missing) => {}
+            Err(error) => return Err(error),
+        }
+        let token = format!(
+            "{}{}",
+            uuid::Uuid::new_v4().simple(),
+            uuid::Uuid::new_v4().simple()
+        );
+        let add_result = self.vault.add(codex_vault::AddCredential {
+            label: label.clone(),
+            credential_type: codex_vault::CredentialType::BearerToken,
+            provider: Some("gpu-rental".to_string()),
+            notes: Some("PFTerminal per-rental inference endpoint token".to_string()),
+            revocation_notes: Some("Delete after provider-confirmed termination".to_string()),
+            secret: token,
+        });
+        match add_result {
+            Ok(()) | Err(codex_vault::VaultError::CredentialExists { .. }) => self.resolve(&kind),
+            Err(_) => Err(GpuCredentialError::StoreUnavailable),
+        }
+    }
 }
 
 impl std::fmt::Debug for VaultGpuCredentialResolver {

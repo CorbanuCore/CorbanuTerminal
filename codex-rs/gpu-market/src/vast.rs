@@ -183,11 +183,26 @@ impl GpuProvider for VastProvider {
         }
 
         let key = self.api_key()?;
+        let mut environment = serde_json::Map::new();
+        environment.insert(
+            "VLLM_API_KEY".to_string(),
+            Value::String(request.endpoint_token.expose().to_string()),
+        );
+        if let Some(token) = request.huggingface_token.as_ref() {
+            environment.insert(
+                "HF_TOKEN".to_string(),
+                Value::String(token.expose().to_string()),
+            );
+        }
         let body = serde_json::json!({
             "image": request.image,
             "disk": request.disk_gib,
             "label": request.ownership_tag,
             "cancel_unavail": true,
+            "runtype": "args",
+            "args_str": join_shell_arguments(&request.launch_command),
+            "env": environment,
+            "ports": [format!("{}/tcp", request.inference_port)],
         });
         let response = self
             .client
@@ -323,6 +338,23 @@ impl GpuProvider for VastProvider {
             still_billable: instance.state != GpuInstanceState::Stopped,
         })
     }
+}
+
+fn join_shell_arguments(arguments: &[String]) -> String {
+    arguments
+        .iter()
+        .map(|argument| {
+            if argument
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"_@%+=:,./-".contains(&byte))
+            {
+                argument.clone()
+            } else {
+                format!("'{}'", argument.replace('\'', "'\"'\"'"))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn vast_offer(raw: &Value, now_ms: i64) -> ProviderResult<GpuOffer> {

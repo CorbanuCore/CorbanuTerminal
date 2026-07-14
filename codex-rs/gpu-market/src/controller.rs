@@ -65,6 +65,7 @@ pub struct GpuRentalController<P> {
     recipes: RecipeCatalog,
     installation_id: String,
     config: ReconcileConfig,
+    credentials: Option<Arc<dyn crate::GpuCredentialResolver>>,
 }
 
 impl<P> GpuRentalController<P>
@@ -84,6 +85,25 @@ where
             recipes,
             installation_id,
             config,
+            credentials: None,
+        }
+    }
+
+    pub fn new_with_credentials(
+        state: Arc<StateRuntime>,
+        provider: P,
+        recipes: RecipeCatalog,
+        installation_id: String,
+        config: ReconcileConfig,
+        credentials: Arc<dyn crate::GpuCredentialResolver>,
+    ) -> Self {
+        Self {
+            state,
+            provider,
+            recipes,
+            installation_id,
+            config,
+            credentials: Some(credentials),
         }
     }
 

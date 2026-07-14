@@ -2254,19 +2254,21 @@ async fn run_internal_gpu_controller(command: GpuControllerCommand) -> anyhow::R
         codex_vault::Vault::new(config.codex_home.to_path_buf()),
     )));
     let reconcile_config = codex_gpu_market::ReconcileConfig::default();
-    let vast = codex_gpu_market::GpuRentalController::new(
+    let vast = codex_gpu_market::GpuRentalController::new_with_credentials(
         state.clone(),
         codex_gpu_market::VastProvider::new(credentials.clone()),
         codex_gpu_market::RecipeCatalog::default(),
         installation_id.clone(),
         reconcile_config.clone(),
+        credentials.clone(),
     );
-    let runpod = codex_gpu_market::GpuRentalController::new(
+    let runpod = codex_gpu_market::GpuRentalController::new_with_credentials(
         state.clone(),
-        codex_gpu_market::RunpodProvider::new(credentials),
+        codex_gpu_market::RunpodProvider::new(credentials.clone()),
         codex_gpu_market::RecipeCatalog::default(),
         installation_id,
         codex_gpu_market::ReconcileConfig::default(),
+        credentials,
     );
 
     loop {

@@ -51,6 +51,43 @@ where
                 .await;
         }
 
+        let Some(credentials) = self.credentials.as_ref() else {
+            return self
+                .record_terminal_failure(
+                    lease,
+                    "endpoint-token-unavailable",
+                    "The scoped endpoint credential resolver is unavailable.",
+                    now_ms,
+                )
+                .await;
+        };
+        let endpoint_token =
+            match credentials.resolve(&crate::GpuCredentialKind::RentalEndpointToken {
+                rental_id: lease.rental.rental_id.clone(),
+            }) {
+                Ok(credential) => credential.secret,
+                Err(_) => {
+                    return self
+                        .record_terminal_failure(
+                            lease,
+                            "endpoint-token-unavailable",
+                            "The per-rental endpoint token is unavailable.",
+                            now_ms,
+                        )
+                        .await;
+                }
+            };
+        let huggingface_token = credentials
+            .resolve(&crate::GpuCredentialKind::HuggingFaceToken)
+            .ok()
+            .map(|credential| credential.secret);
+        let mut launch_command = vec![
+            recipe.model_id.clone(),
+            "--revision".to_string(),
+            recipe.model_revision.clone(),
+        ];
+        launch_command.extend(recipe.launch_arguments.clone());
+
         let operation_id = format!("gpu-create-{}", uuid::Uuid::new_v4());
         let began = self
             .state
@@ -81,6 +118,10 @@ where
             ownership_tag: lease.rental.ownership_tag.clone(),
             image: recipe.image.clone(),
             disk_gib: recipe.hardware.minimum_disk_gib,
+            launch_command,
+            inference_port: 8000,
+            endpoint_token,
+            huggingface_token,
         };
         match self.provider.create_instance(request).await {
             Ok(instance) => {

@@ -117,6 +117,10 @@ async fn create_is_bound_to_revalidated_ask_and_ownership_label() {
             ownership_tag: "pft-install-rental-1".to_string(),
             image: "runtime@sha256:abc".to_string(),
             disk_gib: 400,
+            launch_command: vec!["model-id".to_string(), "argument with space".to_string()],
+            inference_port: 8000,
+            endpoint_token: SecretValue::new("endpoint-secret".to_string()).unwrap(),
+            huggingface_token: Some(SecretValue::new("hf-secret".to_string()).unwrap()),
         })
         .await
         .expect("create Vast instance");
@@ -131,6 +135,10 @@ async fn create_is_bound_to_revalidated_ask_and_ownership_label() {
         .expect("json body");
     assert_eq!(body["label"], "pft-install-rental-1");
     assert_eq!(body["cancel_unavail"], true);
+    assert_eq!(body["runtype"], "args");
+    assert_eq!(body["args_str"], "model-id 'argument with space'");
+    assert_eq!(body["env"]["VLLM_API_KEY"], "endpoint-secret");
+    assert_eq!(body["ports"][0], "8000/tcp");
     assert!(!body.to_string().contains(TEST_KEY));
 }
 

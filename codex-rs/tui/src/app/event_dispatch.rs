@@ -1389,6 +1389,13 @@ impl App {
                             Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
                                 codex_vault::Vault::new(codex_home.to_path_buf()),
                             )));
+                        let rental_id = format!("gpu-{}", authorization.client_operation_id);
+                        credentials
+                            .ensure_rental_endpoint_token(rental_id.as_str())
+                            .map_err(|_| {
+                                "Could not create the scoped GPU endpoint credential. No rental was started."
+                                    .to_string()
+                            })?;
                         let service = codex_gpu_market::GpuMarketService::new(
                             state_db,
                             codex_gpu_market::RecipeCatalog::default(),
@@ -1465,7 +1472,7 @@ impl App {
                                         recipe_id.as_str(),
                                         &offer,
                                         &authorization,
-                                        &codex_gpu_market::VastProvider::new(credentials),
+                                        &codex_gpu_market::VastProvider::new(credentials.clone()),
                                         now_ms,
                                     )
                                     .await
@@ -1476,7 +1483,7 @@ impl App {
                                         recipe_id.as_str(),
                                         &offer,
                                         &authorization,
-                                        &codex_gpu_market::RunpodProvider::new(credentials),
+                                        &codex_gpu_market::RunpodProvider::new(credentials.clone()),
                                         now_ms,
                                     )
                                     .await
