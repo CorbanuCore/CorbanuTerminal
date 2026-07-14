@@ -124,7 +124,7 @@ impl VaultGpuCredentialResolver {
             uuid::Uuid::new_v4().simple()
         );
         let add_result = self.vault.add(codex_vault::AddCredential {
-            label: label.clone(),
+            label,
             credential_type: codex_vault::CredentialType::BearerToken,
             provider: Some("gpu-rental".to_string()),
             notes: Some("PFTerminal per-rental inference endpoint token".to_string()),

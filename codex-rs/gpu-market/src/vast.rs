@@ -391,7 +391,6 @@ fn vast_offer(raw: &Value, now_ms: i64) -> ProviderResult<GpuOffer> {
         vram_mib_per_gpu: raw
             .get("gpu_ram")
             .and_then(Value::as_u64)
-            .and_then(|value| value.try_into().ok())
             .unwrap_or_default(),
         host_ram_mib: raw
             .get("cpu_ram")

@@ -117,7 +117,7 @@ impl RunpodProvider {
             .is_some_and(|counts| {
                 counts
                     .iter()
-                    .any(|count| count.as_u64() == u64::try_from(request.hardware.gpu_count).ok())
+                    .any(|count| count.as_u64() == Some(u64::from(request.hardware.gpu_count)))
             });
         if !available_counts {
             return Err(ProviderError::new(
