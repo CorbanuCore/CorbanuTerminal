@@ -52,9 +52,7 @@ impl GpuMarketService {
             first.search_offers(request.clone()),
             second.search_offers(request)
         );
-        let mut offers = Vec::new();
-        merge_search_result(&mut offers, first_result)?;
-        merge_search_result(&mut offers, second_result)?;
+        let mut offers = merge_search_results(first_result, second_result)?;
         offers.sort_by_key(|offer| {
             (
                 offer.hourly_microusd,
@@ -225,20 +223,38 @@ fn validate_authorization(
     Ok(())
 }
 
-fn merge_search_result(
-    offers: &mut Vec<GpuOffer>,
-    result: Result<Vec<GpuOffer>, ProviderError>,
-) -> Result<(), ProviderError> {
-    match result {
-        Ok(found) => offers.extend(found),
-        Err(error)
-            if matches!(
-                error.kind,
-                ProviderErrorKind::OfferUnavailable | ProviderErrorKind::RateLimited
-            ) => {}
-        Err(error) => return Err(error),
+fn merge_search_results(
+    first: Result<Vec<GpuOffer>, ProviderError>,
+    second: Result<Vec<GpuOffer>, ProviderError>,
+) -> Result<Vec<GpuOffer>, ProviderError> {
+    if let (Err(first_error), Err(second_error)) = (&first, &second)
+        && first_error.kind == ProviderErrorKind::RateLimited
+        && second_error.kind == ProviderErrorKind::RateLimited
+    {
+        return Err(ProviderError {
+            retry_after_ms: match (first_error.retry_after_ms, second_error.retry_after_ms) {
+                (Some(first), Some(second)) => Some(first.min(second)),
+                (first, second) => first.or(second),
+            },
+            ..ProviderError::new(
+                ProviderErrorKind::RateLimited,
+                "GPU provider searches are temporarily rate limited.",
+            )
+        });
     }
-    Ok(())
+    let mut offers = Vec::new();
+    for result in [first, second] {
+        match result {
+            Ok(found) => offers.extend(found),
+            Err(error)
+                if matches!(
+                    error.kind,
+                    ProviderErrorKind::OfferUnavailable | ProviderErrorKind::RateLimited
+                ) => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(offers)
 }
 
 fn state_error(error: anyhow::Error) -> ProviderError {

@@ -1,0 +1,74 @@
+use super::*;
+
+fn verified_recipe() -> GpuRecipe {
+    GpuRecipe {
+        id: "verified-test".to_string(),
+        revision: "manifest-v1".to_string(),
+        model_id: "owner/model".to_string(),
+        model_revision: "1111111111111111111111111111111111111111".to_string(),
+        image: "registry/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            .to_string(),
+        runtime: "vllm".to_string(),
+        serving_runtime_version: "1.0.0".to_string(),
+        license_id: "apache-2.0".to_string(),
+        requires_huggingface_token: false,
+        minimum_driver_version: "550.0".to_string(),
+        gpu_architectures: vec!["sm90".to_string()],
+        weight_format: "fp8".to_string(),
+        hardware: HardwareRequirements {
+            gpu_model: "NVIDIA H200".to_string(),
+            gpu_count: 2,
+            minimum_vram_mib_per_gpu: 130_000,
+            minimum_host_ram_mib: 128_000,
+            minimum_disk_gib: 400,
+            requires_high_bandwidth_interconnect: true,
+            allowed_cuda_versions: vec!["12.8".to_string()],
+        },
+        tensor_parallel_size: 2,
+        maximum_context_tokens: 32_768,
+        maximum_concurrent_requests: 2,
+        expected_download_bytes: 180_000_000_000,
+        model_weight_bytes: 180_000_000_000,
+        kv_cache_reserve_bytes: 40_000_000_000,
+        workspace_reserve_bytes: 20_000_000_000,
+        launch_arguments: vec!["--tensor-parallel-size=2".to_string()],
+        environment_allowlist: vec!["VLLM_API_KEY".to_string()],
+        startup_deadline_ms: 120_000,
+        download_deadline_ms: 3_600_000,
+        probe_deadline_ms: 60_000,
+        inference_port: 8000,
+        chat_encoding: "encoding-v1".to_string(),
+        probe_contract: "pfterminal-openai-v1".to_string(),
+        manifest_verified: true,
+    }
+}
+
+#[test]
+fn verified_recipe_accepts_only_complete_immutable_manifests() {
+    RecipeCatalog::new(vec![verified_recipe()]).expect("complete manifest");
+
+    let mut mutable_model = verified_recipe();
+    mutable_model.model_revision = "main".to_string();
+    assert!(RecipeCatalog::new(vec![mutable_model]).is_err());
+
+    let mut mutable_image = verified_recipe();
+    mutable_image.image = "registry/runtime:latest".to_string();
+    assert!(RecipeCatalog::new(vec![mutable_image]).is_err());
+}
+
+#[test]
+fn verified_recipe_fails_capacity_and_secret_boundaries() {
+    let mut over_capacity = verified_recipe();
+    over_capacity.kv_cache_reserve_bytes = u64::MAX;
+    assert!(RecipeCatalog::new(vec![over_capacity]).is_err());
+
+    let mut embedded_secret = verified_recipe();
+    embedded_secret.launch_arguments = vec!["--api-key=plaintext".to_string()];
+    assert!(RecipeCatalog::new(vec![embedded_secret]).is_err());
+
+    let mut unknown_environment = verified_recipe();
+    unknown_environment
+        .environment_allowlist
+        .push("AWS_SECRET_ACCESS_KEY".to_string());
+    assert!(RecipeCatalog::new(vec![unknown_environment]).is_err());
+}

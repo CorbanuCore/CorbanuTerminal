@@ -77,10 +77,23 @@ where
                         .await;
                 }
             };
-        let huggingface_token = credentials
-            .resolve(&crate::GpuCredentialKind::HuggingFaceToken)
-            .ok()
-            .map(|credential| credential.secret);
+        let huggingface_token = if recipe.requires_huggingface_token {
+            match credentials.resolve(&crate::GpuCredentialKind::HuggingFaceToken) {
+                Ok(credential) => Some(credential.secret),
+                Err(_) => {
+                    return self
+                        .record_terminal_failure(
+                            lease,
+                            "huggingface-token-unavailable",
+                            "The pinned recipe requires Hugging Face access, but its scoped token is unavailable.",
+                            now_ms,
+                        )
+                        .await;
+                }
+            }
+        } else {
+            None
+        };
         let mut launch_command = vec![
             recipe.model_id.clone(),
             "--revision".to_string(),
@@ -119,7 +132,7 @@ where
             image: recipe.image.clone(),
             disk_gib: recipe.hardware.minimum_disk_gib,
             launch_command,
-            inference_port: 8000,
+            inference_port: recipe.inference_port,
             endpoint_token,
             huggingface_token,
         };

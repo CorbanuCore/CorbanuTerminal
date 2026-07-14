@@ -113,6 +113,21 @@ async fn compatible_offers_are_ranked_only_after_hard_filters() {
     assert_eq!(offers[1].provider, "first");
 }
 
+#[test]
+fn two_rate_limited_providers_do_not_masquerade_as_empty_inventory() {
+    let first = ProviderError {
+        retry_after_ms: Some(5_000),
+        ..ProviderError::new(ProviderErrorKind::RateLimited, "first rate limit")
+    };
+    let second = ProviderError {
+        retry_after_ms: Some(2_000),
+        ..ProviderError::new(ProviderErrorKind::RateLimited, "second rate limit")
+    };
+    let error = merge_search_results(Err(first), Err(second)).expect_err("must preserve outage");
+    assert_eq!(error.kind, ProviderErrorKind::RateLimited);
+    assert_eq!(error.retry_after_ms, Some(2_000));
+}
+
 #[tokio::test]
 async fn confirmation_is_idempotent_and_never_calls_provider_create() {
     let service = service().await;
@@ -199,18 +214,34 @@ async fn service() -> GpuMarketService {
 fn recipe() -> GpuRecipe {
     GpuRecipe {
         id: "test-recipe".to_string(),
-        revision: "sha256:test".to_string(),
+        revision: "manifest-v1".to_string(),
         model_id: "test/model".to_string(),
-        model_revision: "sha256:model".to_string(),
-        image: "test/image@sha256:digest".to_string(),
+        model_revision: "1111111111111111111111111111111111111111".to_string(),
+        image: "test/image@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            .to_string(),
         runtime: "test-runtime".to_string(),
+        serving_runtime_version: "1.0.0".to_string(),
+        license_id: "apache-2.0".to_string(),
+        requires_huggingface_token: false,
+        minimum_driver_version: "550.0".to_string(),
+        gpu_architectures: vec!["sm90".to_string()],
+        weight_format: "fp8".to_string(),
         hardware: hardware(),
         tensor_parallel_size: 2,
         maximum_context_tokens: 32_768,
         maximum_concurrent_requests: 2,
         expected_download_bytes: 1_000_000,
+        model_weight_bytes: 100_000_000_000,
+        kv_cache_reserve_bytes: 20_000_000_000,
+        workspace_reserve_bytes: 10_000_000_000,
         launch_arguments: vec!["--tensor-parallel-size=2".to_string()],
+        environment_allowlist: vec!["VLLM_API_KEY".to_string()],
+        startup_deadline_ms: 120_000,
+        download_deadline_ms: 3_600_000,
+        probe_deadline_ms: 60_000,
+        inference_port: 8000,
         chat_encoding: "test-encoding".to_string(),
+        probe_contract: "pfterminal-openai-v1".to_string(),
         manifest_verified: true,
     }
 }
