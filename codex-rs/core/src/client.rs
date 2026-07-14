@@ -440,11 +440,16 @@ fn ensure_responses_input_ends_with_user_turn(input: &mut Vec<ResponseItem>) {
         return;
     }
 
-    let latest_message_role = input.iter().rev().find_map(|item| match item {
-        ResponseItem::Message { role, .. } => Some(role.as_str()),
+    let latest_message_is_assistant = input.iter().rev().find_map(|item| match item {
+        ResponseItem::Message { role, .. } => Some(role == "assistant"),
+        // Incoming collaboration mail is serialized as an assistant-originated message by the
+        // Responses adapters. Treat it as message-shaped here as well; otherwise child completion
+        // mail arriving after a turn leaves the next request in the same invalid prefill shape as
+        // a trailing ordinary assistant message.
+        ResponseItem::AgentMessage { .. } => Some(true),
         _ => None,
     });
-    if latest_message_role != Some("assistant") {
+    if latest_message_is_assistant != Some(true) {
         return;
     }
 
@@ -1414,6 +1419,7 @@ impl ModelClient {
                 &mut skipped_tool_call_ids,
             );
         }
+        ensure_anthropic_messages_end_with_user_turn(&mut messages);
         apply_anthropic_cache_control_to_last_user_messages(&mut messages, &cache_control);
 
         let tools = create_tools_json_for_anthropic_messages(&prompt.tools, &cache_control)?;
@@ -3357,6 +3363,32 @@ fn push_anthropic_message(messages: &mut Vec<Value>, role: &str, block: Value) {
         "role": role,
         "content": [block],
     }));
+}
+
+/// Anthropic rejects assistant-prefill requests for Claude Plan models.
+///
+/// Some durable items, including incoming collaboration mail, are intentionally omitted by the
+/// Anthropic adapter. When such an item arrives immediately after a completed model turn, the
+/// omission can expose that completed assistant message as the terminal request message. Keep the
+/// repair request-local so durable history and the operator-visible transcript remain unchanged.
+fn ensure_anthropic_messages_end_with_user_turn(messages: &mut Vec<Value>) {
+    if messages
+        .last()
+        .and_then(|message| message.get("role"))
+        .and_then(Value::as_str)
+        != Some("assistant")
+    {
+        return;
+    }
+
+    push_anthropic_message(
+        messages,
+        "user",
+        json!({
+            "type": "text",
+            "text": "Continue.",
+        }),
+    );
 }
 
 fn anthropic_cache_control(use_one_hour_ttl: bool) -> Value {

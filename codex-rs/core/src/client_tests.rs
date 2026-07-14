@@ -98,6 +98,15 @@ fn responses_input_normalizes_accidental_assistant_prefill_without_changing_user
         phase: None,
         metadata: None,
     };
+    let child_message = |text: &str| ResponseItem::AgentMessage {
+        id: None,
+        author: "/root/nazgul/troll".to_string(),
+        recipient: "/root/nazgul".to_string(),
+        content: vec![AgentMessageInputContent::InputText {
+            text: text.to_string(),
+        }],
+        metadata: None,
+    };
     let cases = [
         (
             vec![
@@ -124,6 +133,42 @@ fn responses_input_normalizes_accidental_assistant_prefill_without_changing_user
         ),
         (
             vec![
+                message("user", "Review child reports."),
+                message("assistant", "The first report is accepted."),
+                child_message("Message Type: FINAL_ANSWER\nPayload:\nWork complete."),
+            ],
+            vec![
+                message("user", "Review child reports."),
+                message("assistant", "The first report is accepted."),
+                child_message("Message Type: FINAL_ANSWER\nPayload:\nWork complete."),
+                message("user", "Continue."),
+            ],
+        ),
+        (
+            vec![
+                message("user", "Review child reports."),
+                child_message("A child checkpoint arrived."),
+                ResponseItem::Other,
+            ],
+            vec![
+                message("user", "Review child reports."),
+                child_message("A child checkpoint arrived."),
+                ResponseItem::Other,
+                message("user", "Continue."),
+            ],
+        ),
+        (
+            vec![
+                child_message("Earlier child report."),
+                message("user", "This human message is already terminal."),
+            ],
+            vec![
+                child_message("Earlier child report."),
+                message("user", "This human message is already terminal."),
+            ],
+        ),
+        (
+            vec![
                 message("user", "Compact this conversation."),
                 message("assistant", "Earlier result."),
                 ResponseItem::CompactionTrigger { metadata: None },
@@ -140,6 +185,71 @@ fn responses_input_normalizes_accidental_assistant_prefill_without_changing_user
         super::ensure_responses_input_ends_with_user_turn(&mut input);
         assert_eq!(input, expected);
     }
+}
+
+#[test]
+fn claude_plan_request_normalizes_child_mail_after_completed_assistant_turn() {
+    let message = |role: &str, text: &str| ResponseItem::Message {
+        id: None,
+        role: role.to_string(),
+        content: vec![ContentItem::InputText {
+            text: text.to_string(),
+        }],
+        phase: None,
+        metadata: None,
+    };
+    let child_message = ResponseItem::AgentMessage {
+        id: None,
+        author: "/root/nazgul/troll".to_string(),
+        recipient: "/root/nazgul".to_string(),
+        content: vec![AgentMessageInputContent::InputText {
+            text: concat!(
+                "Message Type: FINAL_ANSWER\n",
+                "Task name: /root/nazgul\n",
+                "Payload:\nWork complete."
+            )
+            .to_string(),
+        }],
+        metadata: None,
+    };
+    let prompt = super::Prompt {
+        input: vec![
+            message("user", "Review child reports."),
+            message("assistant", "The delivery is accepted."),
+            child_message,
+        ],
+        ..Default::default()
+    };
+
+    let request = test_model_client(SessionSource::Cli)
+        .build_anthropic_messages_request(&prompt, &test_claude_fable_plan_model_info(), None)
+        .expect("Claude Fable Plan request");
+
+    assert_eq!(
+        request.messages.last(),
+        Some(&json!({
+            "role": "user",
+            "content": [{
+                "type": "text",
+                "text": "Continue.",
+                "cache_control": {
+                    "type": "ephemeral",
+                    "ttl": "1h",
+                },
+            }],
+        }))
+    );
+    assert_eq!(
+        request
+            .messages
+            .iter()
+            .filter(
+                |message| message.get("role").and_then(serde_json::Value::as_str) == Some("user")
+            )
+            .count(),
+        2,
+        "the repair adds one request-only user continuation"
+    );
 }
 
 fn test_model_client(session_source: SessionSource) -> ModelClient {
