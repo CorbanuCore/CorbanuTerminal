@@ -49,8 +49,8 @@ impl GpuMarketService {
         let recipe = self.verified_recipe(recipe_id)?;
         let request = search_request(recipe, maximum_hourly_microusd)?;
         let (first_result, second_result) = tokio::join!(
-            first.search_offers(request.clone()),
-            second.search_offers(request)
+            search_secure_provider(first, request.clone()),
+            search_secure_provider(second, request)
         );
         let mut offers = merge_search_results(first_result, second_result)?;
         offers.sort_by_key(|offer| {
@@ -82,6 +82,12 @@ impl GpuMarketService {
             return Err(ProviderError::new(
                 ProviderErrorKind::InvalidRequest,
                 "The selected offer belongs to a different provider.",
+            ));
+        }
+        if !capabilities.supports_secure_endpoint_transport {
+            return Err(ProviderError::new(
+                ProviderErrorKind::CapabilityUnavailable,
+                "This GPU provider cannot yet prove a secure inference transport; creation is disabled.",
             ));
         }
         let local_enforcement =
@@ -201,6 +207,19 @@ fn search_request(
     })
 }
 
+async fn search_secure_provider<P: GpuProvider>(
+    provider: &P,
+    request: SearchOffersRequest,
+) -> Result<Vec<GpuOffer>, ProviderError> {
+    if !provider.capabilities().supports_secure_endpoint_transport {
+        return Err(ProviderError::new(
+            ProviderErrorKind::CapabilityUnavailable,
+            "GPU provider secure endpoint transport is not qualified.",
+        ));
+    }
+    provider.search_offers(request).await
+}
+
 fn validate_authorization(
     authorization: &RentalAuthorization,
     now_ms: i64,
@@ -245,6 +264,22 @@ fn merge_search_results(
             "Configure at least one GPU provider API key from /gpu before searching.",
         ));
     }
+    if matches!(
+        (&first, &second),
+        (Err(first_error), Err(second_error))
+            if matches!(
+                first_error.kind,
+                ProviderErrorKind::NotConfigured | ProviderErrorKind::CapabilityUnavailable
+            ) && matches!(
+                second_error.kind,
+                ProviderErrorKind::NotConfigured | ProviderErrorKind::CapabilityUnavailable
+            )
+    ) {
+        return Err(ProviderError::new(
+            ProviderErrorKind::CapabilityUnavailable,
+            "Configure a GPU provider whose secure endpoint transport is qualified.",
+        ));
+    }
     if let (Err(first_error), Err(second_error)) = (&first, &second)
         && first_error.kind == ProviderErrorKind::RateLimited
         && second_error.kind == ProviderErrorKind::RateLimited
@@ -268,6 +303,7 @@ fn merge_search_results(
                 if matches!(
                     error.kind,
                     ProviderErrorKind::NotConfigured
+                        | ProviderErrorKind::CapabilityUnavailable
                         | ProviderErrorKind::OfferUnavailable
                         | ProviderErrorKind::RateLimited
                 ) => {}

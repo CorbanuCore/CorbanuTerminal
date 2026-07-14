@@ -139,6 +139,7 @@ impl GpuProvider for VastProvider {
             provider: "vast".to_string(),
             supports_ownership_tags: true,
             supports_inventory: true,
+            supports_secure_endpoint_transport: false,
             supports_native_ttl: false,
             supports_native_spend_cap: false,
             security_classes: vec!["verified".to_string()],

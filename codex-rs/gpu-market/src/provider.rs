@@ -176,6 +176,7 @@ pub struct ProviderCapabilities {
     pub provider: String,
     pub supports_ownership_tags: bool,
     pub supports_inventory: bool,
+    pub supports_secure_endpoint_transport: bool,
     pub supports_native_ttl: bool,
     pub supports_native_spend_cap: bool,
     pub security_classes: Vec<String>,
@@ -184,6 +185,7 @@ pub struct ProviderCapabilities {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderErrorKind {
     NotConfigured,
+    CapabilityUnavailable,
     Unauthorized,
     InvalidRequest,
     OfferUnavailable,

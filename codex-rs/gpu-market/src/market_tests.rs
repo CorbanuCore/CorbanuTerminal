@@ -18,6 +18,7 @@ const NOW_MS: i64 = 1_800_000_000_000;
 struct QuoteProvider {
     name: &'static str,
     price: i64,
+    secure_transport: bool,
     search_calls: Arc<AtomicUsize>,
 }
 
@@ -26,8 +27,14 @@ impl QuoteProvider {
         Self {
             name,
             price,
+            secure_transport: true,
             search_calls: Arc::new(AtomicUsize::new(0)),
         }
+    }
+
+    fn without_secure_transport(mut self) -> Self {
+        self.secure_transport = false;
+        self
     }
 }
 
@@ -37,6 +44,7 @@ impl GpuProvider for QuoteProvider {
             provider: self.name.to_string(),
             supports_ownership_tags: true,
             supports_inventory: true,
+            supports_secure_endpoint_transport: self.secure_transport,
             supports_native_ttl: false,
             supports_native_spend_cap: false,
             security_classes: vec!["secure".to_string()],
@@ -111,6 +119,22 @@ async fn compatible_offers_are_ranked_only_after_hard_filters() {
     assert_eq!(offers.len(), 2);
     assert_eq!(offers[0].provider, "second");
     assert_eq!(offers[1].provider, "first");
+}
+
+#[tokio::test]
+async fn insecure_provider_is_excluded_before_inventory_or_spend() {
+    let service = service().await;
+    let insecure = QuoteProvider::new("insecure", 500_000).without_secure_transport();
+    let secure = QuoteProvider::new("secure", 1_000_000);
+    let offers = service
+        .search("test-recipe", 2_000_000, &insecure, &secure)
+        .await
+        .expect("secure provider remains available");
+
+    assert_eq!(offers.len(), 1);
+    assert_eq!(offers[0].provider, "secure");
+    assert_eq!(insecure.search_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(secure.search_calls.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -204,6 +228,37 @@ async fn confirmation_is_idempotent_and_never_calls_provider_create() {
     assert_eq!(replay.desired_state, GpuRentalState::CreatePending);
     assert_eq!(replay.observed_state, GpuRentalState::Quoted);
     assert_eq!(provider.search_calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn confirmation_rejects_unqualified_transport_before_provider_search() {
+    let service = service().await;
+    let provider = QuoteProvider::new("insecure", 1_000_000).without_secure_transport();
+    let request = SearchOffersRequest {
+        hardware: hardware(),
+        allow_interruptible: false,
+        require_verified_or_secure: true,
+        maximum_hourly_microusd: 2_000_000,
+    };
+    let error = service
+        .confirm(
+            "test-recipe",
+            &offer("insecure", 1_000_000, &request),
+            &RentalAuthorization {
+                client_operation_id: "unqualified-transport".to_string(),
+                maximum_hourly_microusd: 2_000_000,
+                maximum_total_microusd: 4_000_000,
+                terminate_at_ms: NOW_MS + 3_600_000,
+                acknowledged_local_enforcement: true,
+            },
+            &provider,
+            NOW_MS,
+        )
+        .await
+        .expect_err("unqualified transport must fail before authorization persists");
+
+    assert_eq!(error.kind, ProviderErrorKind::CapabilityUnavailable);
+    assert_eq!(provider.search_calls.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]

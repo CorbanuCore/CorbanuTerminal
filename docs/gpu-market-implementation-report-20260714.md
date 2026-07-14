@@ -39,7 +39,7 @@ an authenticated TLS endpoint transport.
 | One authorization creates at most one resource | Durable client operation IDs, create-operation ledger, ownership-tag inventory adoption, controller leases, and ambiguous-create regressions. |
 | Every possibly billable resource remains visible | Known provider IDs remain billable until provider-confirmed absence; failure routes to cleanup/`TERMINATION_UNCONFIRMED`; global spend status remains visible. |
 | Termination is confirmed only by provider state | Delete success enters reconciliation; only provider inventory absence records `TERMINATED_CONFIRMED`; provider-side deletion and ambiguous delete have regressions. |
-| No unauthenticated public inference | Per-rental vault token, provider bootstrap environment, HTTPS/loopback URL validation, missing/wrong-token probes, and fail-closed provider transport derivation. |
+| No unauthenticated public inference | Per-rental vault token, provider bootstrap environment, HTTPS/loopback URL validation, missing/wrong-token probes, and provider capability gating that excludes Vast before search/create until its secure transport is qualified. |
 | Secrets do not enter ordinary state or logs | Typed redacted secret values and create requests, scoped vault labels, masked `/gpu` credential entry, sanitized provider errors, and adapter assertions. |
 | Price is authorization | Offer snapshots expire, exact offer and price are revalidated before create, and hourly/total/TTL authorization is durable. |
 | Provisioning is deterministic and recoverable | Immutable image/model validation, recipe-owned runtime command, aggregate weight/KV/workspace capacity checks, actual allocated RAM/disk/model/count checks, pre-server NVLink/P2P/driver gates, digest-bound persisted steps, and recovery after process death. |
@@ -49,7 +49,7 @@ an authenticated TLS endpoint transport.
 
 ## Qualification executed
 
-- `cargo test -p codex-gpu-market`: 38 passed.
+- `cargo test -p codex-gpu-market`: 40 passed.
 - `cargo test -p codex-state gpu_`: 10 passed (prior candidate).
 - `cargo test -p codex-tui gpu --lib`: 5 passed (prior candidate).
 - `cargo clippy -p codex-gpu-market --tests -- -D warnings`: passed.

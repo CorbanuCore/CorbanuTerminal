@@ -178,6 +178,7 @@ impl GpuProvider for RunpodProvider {
             provider: "runpod".to_string(),
             supports_ownership_tags: true,
             supports_inventory: true,
+            supports_secure_endpoint_transport: true,
             supports_native_ttl: false,
             supports_native_spend_cap: false,
             security_classes: vec!["secure".to_string()],
