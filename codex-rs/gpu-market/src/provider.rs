@@ -147,6 +147,8 @@ pub struct GpuInstance {
     pub state: GpuInstanceState,
     pub gpu_model: String,
     pub gpu_count: u16,
+    /// `None` means the provider response did not prove the allocated topology.
+    pub high_bandwidth_interconnect: Option<bool>,
     pub hourly_microusd: i64,
     pub created_at_ms: Option<i64>,
     pub public_ip: Option<String>,
@@ -248,6 +250,17 @@ pub type ProviderResult<T> = Result<T, ProviderError>;
 /// owned-resource inventory broad enough to recover a create whose response was lost.
 pub trait GpuProvider: Send + Sync {
     fn capabilities(&self) -> ProviderCapabilities;
+
+    fn secure_endpoint_base_url(
+        &self,
+        _instance: &GpuInstance,
+        _inference_port: u16,
+    ) -> ProviderResult<String> {
+        Err(ProviderError::new(
+            ProviderErrorKind::Permanent,
+            "The provider adapter cannot prove a secure inference transport.",
+        ))
+    }
 
     fn search_offers(
         &self,

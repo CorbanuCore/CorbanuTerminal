@@ -237,6 +237,7 @@ impl GpuProvider for VastProvider {
             state: GpuInstanceState::Allocating,
             gpu_model: request.offer.gpu_model,
             gpu_count: request.offer.gpu_count,
+            high_bandwidth_interconnect: Some(request.offer.high_bandwidth_interconnect),
             hourly_microusd: request.offer.hourly_microusd,
             created_at_ms: Some(unix_now_ms()),
             public_ip: None,
@@ -468,6 +469,10 @@ fn vast_instance(raw: &Value) -> ProviderResult<GpuInstance> {
             .and_then(Value::as_u64)
             .and_then(|value| value.try_into().ok())
             .unwrap_or_default(),
+        high_bandwidth_interconnect: raw
+            .get("bw_nvlink")
+            .and_then(Value::as_f64)
+            .map(|bandwidth| bandwidth > 0.0),
         hourly_microusd: raw
             .get("dph_total")
             .and_then(parse_usd_micros)

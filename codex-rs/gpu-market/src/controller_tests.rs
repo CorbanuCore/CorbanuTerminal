@@ -1,6 +1,7 @@
 use super::*;
 use crate::BillingState;
 use crate::CreateInstanceRequest;
+use crate::EndpointReadinessReport;
 use crate::GpuCredential;
 use crate::GpuCredentialError;
 use crate::GpuCredentialKind;
@@ -8,6 +9,7 @@ use crate::GpuCredentialResolver;
 use crate::GpuInstanceState;
 use crate::GpuOffer;
 use crate::GpuProvider;
+use crate::GpuReadinessProbe;
 use crate::GpuRecipe;
 use crate::HardwareRequirements;
 use crate::OwnedInstanceQuery;
@@ -22,6 +24,8 @@ use codex_state::GpuRentalCreateParams;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use tokio::sync::Mutex;
 
 const NOW_MS: i64 = 1_800_000_000_000;
@@ -97,6 +101,10 @@ impl FakeProvider {
             .expect("fake instance exists")
             .state = instance_state;
     }
+
+    async fn remove_instance(&self, resource_id: &str) {
+        self.state.lock().await.instances.remove(resource_id);
+    }
 }
 
 impl GpuProvider for FakeProvider {
@@ -109,6 +117,17 @@ impl GpuProvider for FakeProvider {
             supports_native_spend_cap: false,
             security_classes: vec!["secure".to_string()],
         }
+    }
+
+    fn secure_endpoint_base_url(
+        &self,
+        instance: &GpuInstance,
+        _inference_port: u16,
+    ) -> ProviderResult<String> {
+        Ok(format!(
+            "https://{}.example.invalid/v1",
+            instance.resource_id
+        ))
     }
 
     async fn search_offers(&self, _request: SearchOffersRequest) -> ProviderResult<Vec<GpuOffer>> {
@@ -125,6 +144,7 @@ impl GpuProvider for FakeProvider {
             state: GpuInstanceState::Allocating,
             gpu_model: request.offer.gpu_model,
             gpu_count: request.offer.gpu_count,
+            high_bandwidth_interconnect: Some(request.offer.high_bandwidth_interconnect),
             hourly_microusd: request.offer.hourly_microusd,
             created_at_ms: Some(NOW_MS),
             public_ip: None,
@@ -198,6 +218,73 @@ impl GpuProvider for FakeProvider {
             estimated_accrued_microusd: 500_000,
             provider_reported_cost_microusd: None,
             still_billable: state.instances.contains_key(&resource_id),
+        })
+    }
+}
+
+#[derive(Debug)]
+struct FakeReadiness;
+
+impl GpuReadinessProbe for FakeReadiness {
+    fn probe<'a>(
+        &'a self,
+        _base_url: &'a str,
+        _model_id: &'a str,
+        _token: &'a SecretValue,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = anyhow::Result<EndpointReadinessReport>> + Send + 'a>,
+    > {
+        Box::pin(async {
+            Ok(EndpointReadinessReport {
+                rejects_missing_token: true,
+                rejects_wrong_token: true,
+                model_identity_ok: true,
+                chat_ok: true,
+                streaming_ok: true,
+                cancellation_ok: true,
+                tool_call_ok: true,
+            })
+        })
+    }
+}
+
+#[derive(Debug)]
+struct SwitchableReadiness {
+    ready: AtomicBool,
+}
+
+impl SwitchableReadiness {
+    fn new(ready: bool) -> Self {
+        Self {
+            ready: AtomicBool::new(ready),
+        }
+    }
+
+    fn set(&self, ready: bool) {
+        self.ready.store(ready, Ordering::SeqCst);
+    }
+}
+
+impl GpuReadinessProbe for SwitchableReadiness {
+    fn probe<'a>(
+        &'a self,
+        _base_url: &'a str,
+        _model_id: &'a str,
+        _token: &'a SecretValue,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = anyhow::Result<EndpointReadinessReport>> + Send + 'a>,
+    > {
+        let ready = self.ready.load(Ordering::SeqCst);
+        Box::pin(async move {
+            Ok(EndpointReadinessReport {
+                rejects_missing_token: ready,
+                rejects_wrong_token: ready,
+                model_identity_ok: ready,
+                chat_ok: ready,
+                streaming_ok: ready,
+                cancellation_ok: ready,
+                tool_call_ok: ready,
+            })
         })
     }
 }
@@ -303,7 +390,15 @@ fn controller(
     state: Arc<StateRuntime>,
     provider: FakeProvider,
 ) -> GpuRentalController<FakeProvider> {
-    GpuRentalController::new_with_credentials(
+    controller_with_readiness(state, provider, Arc::new(FakeReadiness))
+}
+
+fn controller_with_readiness(
+    state: Arc<StateRuntime>,
+    provider: FakeProvider,
+    readiness: Arc<dyn GpuReadinessProbe>,
+) -> GpuRentalController<FakeProvider> {
+    GpuRentalController::new_with_runtime(
         state,
         provider,
         recipe_catalog(),
@@ -313,9 +408,11 @@ fn controller(
             lease_ttl_ms: 10_000,
             normal_poll_ms: 1,
             maximum_retry_ms: 10_000,
+            health_poll_ms: 60_000,
             batch_size: 4,
         },
         Arc::new(FakeCredentials),
+        readiness,
     )
 }
 
@@ -352,6 +449,150 @@ async fn ordinary_create_records_one_provider_resource() {
         .expect("rental exists");
     assert_eq!(rental.observed_state, GpuRentalState::Allocating);
     assert_eq!(rental.provider_resource_id.as_deref(), Some("resource-1"));
+}
+
+#[tokio::test]
+async fn provider_native_bootstrap_reaches_ready_and_registers_runtime_once() {
+    let state = state_runtime().await;
+    let provider = FakeProvider::new(CreateBehavior::Success);
+    let controller = controller(state.clone(), provider.clone());
+    create_authorized_rental(&state, "ready").await;
+
+    controller.reconcile_due(NOW_MS).await.expect("create");
+    provider
+        .set_instance_state("resource-1", GpuInstanceState::Running)
+        .await;
+    controller
+        .reconcile_due(NOW_MS + 1)
+        .await
+        .expect("observe running");
+    controller
+        .reconcile_due(NOW_MS + 2)
+        .await
+        .expect("verify bootstrap");
+    let events = controller
+        .reconcile_due(NOW_MS + 3)
+        .await
+        .expect("authenticated readiness");
+
+    assert_eq!(provider.create_calls().await, 1);
+    assert_eq!(
+        events,
+        vec![ControllerEvent::StateChanged {
+            rental_id: "rental-ready".to_string(),
+            state: GpuRentalState::Ready,
+        }]
+    );
+    let rental = state
+        .get_gpu_rental("rental-ready")
+        .await
+        .expect("load rental")
+        .expect("rental");
+    assert_eq!(rental.observed_state, GpuRentalState::Ready);
+    assert_eq!(rental.desired_state, GpuRentalState::Ready);
+    assert_eq!(
+        rental.endpoint_base_url.as_deref(),
+        Some("https://resource-1.example.invalid/v1")
+    );
+    let steps = state
+        .list_gpu_provision_steps("rental-ready")
+        .await
+        .expect("steps");
+    assert_eq!(steps.len(), 2);
+    assert!(steps.iter().all(|step| step.status == "succeeded"));
+    let providers = state
+        .list_gpu_runtime_providers()
+        .await
+        .expect("runtime providers");
+    assert_eq!(providers.len(), 1);
+    assert_eq!(providers[0].model_id, "deepseek-ai/DeepSeek-V4-Flash");
+    assert_eq!(providers[0].health, "ready");
+}
+
+#[tokio::test]
+async fn readiness_loss_disables_runtime_until_the_full_contract_recovers() {
+    let state = state_runtime().await;
+    let provider = FakeProvider::new(CreateBehavior::Success);
+    let readiness = Arc::new(SwitchableReadiness::new(true));
+    let controller = controller_with_readiness(state.clone(), provider.clone(), readiness.clone());
+    create_authorized_rental(&state, "health").await;
+    controller.reconcile_due(NOW_MS).await.expect("create");
+    provider
+        .set_instance_state("resource-1", GpuInstanceState::Running)
+        .await;
+    controller.reconcile_due(NOW_MS + 1).await.expect("running");
+    controller
+        .reconcile_due(NOW_MS + 2)
+        .await
+        .expect("bootstrap");
+    controller.reconcile_due(NOW_MS + 3).await.expect("ready");
+
+    readiness.set(false);
+    let degraded = controller.reconcile_due(NOW_MS + 4).await.expect("degrade");
+    assert_eq!(
+        degraded,
+        vec![ControllerEvent::StateChanged {
+            rental_id: "rental-health".to_string(),
+            state: GpuRentalState::Degraded,
+        }]
+    );
+    assert_eq!(
+        state.list_gpu_runtime_providers().await.unwrap()[0].health,
+        "degraded"
+    );
+
+    readiness.set(true);
+    let recovered = controller
+        .reconcile_due(NOW_MS + 60_004)
+        .await
+        .expect("recover");
+    assert_eq!(
+        recovered,
+        vec![ControllerEvent::StateChanged {
+            rental_id: "rental-health".to_string(),
+            state: GpuRentalState::Ready,
+        }]
+    );
+    assert_eq!(
+        state.list_gpu_runtime_providers().await.unwrap()[0].health,
+        "ready"
+    );
+}
+
+#[tokio::test]
+async fn provider_side_absence_closes_billing_and_removes_runtime_overlay() {
+    let state = state_runtime().await;
+    let provider = FakeProvider::new(CreateBehavior::Success);
+    let controller = controller(state.clone(), provider.clone());
+    create_authorized_rental(&state, "manual-delete").await;
+    controller.reconcile_due(NOW_MS).await.expect("create");
+    provider
+        .set_instance_state("resource-1", GpuInstanceState::Running)
+        .await;
+    controller.reconcile_due(NOW_MS + 1).await.unwrap();
+    controller.reconcile_due(NOW_MS + 2).await.unwrap();
+    controller.reconcile_due(NOW_MS + 3).await.unwrap();
+    provider.remove_instance("resource-1").await;
+
+    let events = controller
+        .reconcile_due(NOW_MS + 4)
+        .await
+        .expect("reconcile provider-side deletion");
+    assert_eq!(
+        events,
+        vec![ControllerEvent::StateChanged {
+            rental_id: "rental-manual-delete".to_string(),
+            state: GpuRentalState::TerminatedConfirmed,
+        }]
+    );
+    let rental = state
+        .get_gpu_rental("rental-manual-delete")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(rental.observed_state, GpuRentalState::TerminatedConfirmed);
+    assert!(!rental.may_be_billable());
+    assert!(state.list_gpu_runtime_providers().await.unwrap().is_empty());
 }
 
 #[tokio::test]

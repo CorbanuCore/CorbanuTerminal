@@ -13,6 +13,7 @@ use codex_state::GpuRental;
 use codex_state::GpuRentalLease;
 use codex_state::GpuRentalState;
 use codex_state::GpuRentalUpdate;
+use codex_state::GpuRuntimeProviderUpsert;
 use codex_state::StateRuntime;
 use std::sync::Arc;
 
@@ -27,6 +28,7 @@ pub struct ReconcileConfig {
     pub lease_ttl_ms: i64,
     pub normal_poll_ms: i64,
     pub maximum_retry_ms: i64,
+    pub health_poll_ms: i64,
     pub batch_size: usize,
 }
 
@@ -37,6 +39,7 @@ impl Default for ReconcileConfig {
             lease_ttl_ms: 30_000,
             normal_poll_ms: 5_000,
             maximum_retry_ms: 5 * 60_000,
+            health_poll_ms: 60_000,
             batch_size: 8,
         }
     }
@@ -66,6 +69,7 @@ pub struct GpuRentalController<P> {
     installation_id: String,
     config: ReconcileConfig,
     credentials: Option<Arc<dyn crate::GpuCredentialResolver>>,
+    readiness: Option<Arc<dyn crate::GpuReadinessProbe>>,
 }
 
 impl<P> GpuRentalController<P>
@@ -86,6 +90,7 @@ where
             installation_id,
             config,
             credentials: None,
+            readiness: None,
         }
     }
 
@@ -104,6 +109,27 @@ where
             installation_id,
             config,
             credentials: Some(credentials),
+            readiness: None,
+        }
+    }
+
+    pub fn new_with_runtime(
+        state: Arc<StateRuntime>,
+        provider: P,
+        recipes: RecipeCatalog,
+        installation_id: String,
+        config: ReconcileConfig,
+        credentials: Arc<dyn crate::GpuCredentialResolver>,
+        readiness: Arc<dyn crate::GpuReadinessProbe>,
+    ) -> Self {
+        Self {
+            state,
+            provider,
+            recipes,
+            installation_id,
+            config,
+            credentials: Some(credentials),
+            readiness: Some(readiness),
         }
     }
 
@@ -229,10 +255,273 @@ where
                 )
                 .await;
         };
-        self.release_later(&lease, now_ms).await?;
-        Ok(vec![ControllerEvent::NeedsProvisioning {
+        let Some(recipe) = self.recipes.get(lease.rental.recipe_id.as_str()) else {
+            return self
+                .record_terminal_failure(
+                    lease,
+                    "recipe-missing",
+                    "Pinned GPU recipe is missing.",
+                    now_ms,
+                )
+                .await;
+        };
+        let deadline_ms = lease
+            .rental
+            .created_at_ms
+            .saturating_add(i64::try_from(recipe.download_deadline_ms).unwrap_or(i64::MAX))
+            .saturating_add(i64::try_from(recipe.startup_deadline_ms).unwrap_or(i64::MAX));
+        if now_ms > deadline_ms {
+            return self
+                .record_terminal_failure(
+                    lease,
+                    "provision-deadline-exceeded",
+                    "The pinned recipe did not become ready before its authorized provisioning deadline.",
+                    now_ms,
+                )
+                .await;
+        }
+        let instance = match self.provider.get_instance(resource_id.clone()).await {
+            Ok(Some(instance)) => instance,
+            Ok(None) => {
+                return self
+                    .record_terminal_failure(
+                        lease,
+                        "provider-resource-missing",
+                        "The provider resource disappeared during provisioning.",
+                        now_ms,
+                    )
+                    .await;
+            }
+            Err(error) => return self.record_retry(lease, error, now_ms).await,
+        };
+        if instance.state != GpuInstanceState::Running {
+            if matches!(
+                instance.state,
+                GpuInstanceState::Failed | GpuInstanceState::Stopped
+            ) {
+                return self
+                    .record_terminal_failure(
+                        lease,
+                        "provider-instance-failed",
+                        "The provider resource stopped before readiness completed.",
+                        now_ms,
+                    )
+                    .await;
+            }
+            self.release_later(&lease, now_ms).await?;
+            return Ok(Vec::new());
+        }
+        if instance.gpu_model != recipe.hardware.gpu_model
+            || instance.gpu_count < recipe.hardware.gpu_count
+            || (recipe.hardware.requires_high_bandwidth_interconnect
+                && instance.high_bandwidth_interconnect != Some(true))
+        {
+            return self
+                .record_terminal_failure(
+                    lease,
+                    "allocated-hardware-mismatch",
+                    "The allocated GPU model, count, or topology does not match the pinned recipe.",
+                    now_ms,
+                )
+                .await;
+        }
+
+        if lease.rental.observed_state != GpuRentalState::Probing {
+            let digest = manifest_step_digest(recipe.revision.as_str());
+            if !self
+                .state
+                .begin_gpu_provision_step(
+                    lease.rental.rental_id.as_str(),
+                    "01-provider-bootstrap",
+                    digest.as_str(),
+                    now_ms,
+                )
+                .await?
+            {
+                return self
+                    .record_terminal_failure(
+                        lease,
+                        "provision-manifest-conflict",
+                        "The persisted provision step does not match the pinned recipe revision.",
+                        now_ms,
+                    )
+                    .await;
+            }
+            self.state
+                .finish_gpu_provision_step(
+                    lease.rental.rental_id.as_str(),
+                    "01-provider-bootstrap",
+                    true,
+                    Some(
+                        serde_json::json!({
+                            "resource_id": resource_id,
+                            "gpu_model": instance.gpu_model,
+                            "gpu_count": instance.gpu_count,
+                            "high_bandwidth_interconnect": instance.high_bandwidth_interconnect,
+                        })
+                        .to_string()
+                        .as_str(),
+                    ),
+                    None,
+                    now_ms,
+                )
+                .await?;
+            self.apply_update(
+                &lease,
+                GpuRentalUpdate {
+                    observed_state: Some(GpuRentalState::Probing),
+                    provision_step: Some("02-readiness".to_string()),
+                    next_retry_at_ms: Some(now_ms),
+                    clear_last_error: true,
+                    ..GpuRentalUpdate::default()
+                },
+                now_ms,
+            )
+            .await?;
+            return Ok(vec![ControllerEvent::StateChanged {
+                rental_id: lease.rental.rental_id,
+                state: GpuRentalState::Probing,
+            }]);
+        }
+
+        let endpoint = match self
+            .provider
+            .secure_endpoint_base_url(&instance, recipe.inference_port)
+        {
+            Ok(endpoint) => endpoint,
+            Err(error) => {
+                let message = error.safe_message.clone();
+                return self
+                    .record_terminal_failure(lease, "secure-endpoint-unavailable", &message, now_ms)
+                    .await;
+            }
+        };
+        let (Some(credentials), Some(readiness)) = (&self.credentials, &self.readiness) else {
+            return self
+                .record_terminal_failure(
+                    lease,
+                    "readiness-runtime-unavailable",
+                    "The authenticated readiness runtime is unavailable.",
+                    now_ms,
+                )
+                .await;
+        };
+        let token = match credentials.resolve(&crate::GpuCredentialKind::RentalEndpointToken {
+            rental_id: lease.rental.rental_id.clone(),
+        }) {
+            Ok(credential) => credential.secret,
+            Err(_) => {
+                return self
+                    .record_terminal_failure(
+                        lease,
+                        "endpoint-token-unavailable",
+                        "The per-rental endpoint token is unavailable.",
+                        now_ms,
+                    )
+                    .await;
+            }
+        };
+        let probe_result = readiness
+            .probe(endpoint.as_str(), recipe.model_id.as_str(), &token)
+            .await;
+        let report = match probe_result {
+            Ok(report) if report.ready() => report,
+            Ok(_) => {
+                return self
+                    .record_retry(
+                        lease,
+                        ProviderError::new(
+                            ProviderErrorKind::Retryable,
+                            "The authenticated endpoint is not ready yet.",
+                        ),
+                        now_ms,
+                    )
+                    .await;
+            }
+            Err(_) => {
+                return self
+                    .record_retry(
+                        lease,
+                        ProviderError::new(
+                            ProviderErrorKind::Retryable,
+                            "The authenticated endpoint readiness probe could not complete.",
+                        ),
+                        now_ms,
+                    )
+                    .await;
+            }
+        };
+        let probe_digest = manifest_step_digest(recipe.probe_contract.as_str());
+        if !self
+            .state
+            .begin_gpu_provision_step(
+                lease.rental.rental_id.as_str(),
+                "02-readiness",
+                probe_digest.as_str(),
+                now_ms,
+            )
+            .await?
+        {
+            return self
+                .record_terminal_failure(
+                    lease,
+                    "readiness-contract-conflict",
+                    "The persisted readiness step does not match the pinned probe contract.",
+                    now_ms,
+                )
+                .await;
+        }
+        self.state
+            .finish_gpu_provision_step(
+                lease.rental.rental_id.as_str(),
+                "02-readiness",
+                true,
+                Some(&serde_json::to_string(&serde_json::json!({
+                    "authenticated": report.rejects_missing_token && report.rejects_wrong_token,
+                    "model_identity": report.model_identity_ok,
+                    "chat": report.chat_ok,
+                    "streaming": report.streaming_ok,
+                    "cancellation": report.cancellation_ok,
+                    "tool_call": report.tool_call_ok,
+                }))?),
+                None,
+                now_ms,
+            )
+            .await?;
+        let endpoint_provider_id = format!("gpu-{}", lease.rental.rental_id);
+        self.apply_update(
+            &lease,
+            GpuRentalUpdate {
+                desired_state: Some(GpuRentalState::Ready),
+                observed_state: Some(GpuRentalState::Ready),
+                provision_step: Some("ready".to_string()),
+                endpoint_base_url: Some(endpoint.clone()),
+                endpoint_provider_id: Some(endpoint_provider_id.clone()),
+                next_retry_at_ms: Some(now_ms.saturating_add(self.config.normal_poll_ms)),
+                clear_last_error: true,
+                ..GpuRentalUpdate::default()
+            },
+            now_ms,
+        )
+        .await?;
+        self.state
+            .upsert_gpu_runtime_provider(
+                &GpuRuntimeProviderUpsert {
+                    rental_id: lease.rental.rental_id.clone(),
+                    provider_id: endpoint_provider_id,
+                    base_url: endpoint,
+                    model_id: recipe.model_id.clone(),
+                    wire_api: "chat".to_string(),
+                    health: "ready".to_string(),
+                    display_hourly_microusd: lease.rental.max_hourly_microusd,
+                    catalog_sequence: lease.rental.state_sequence.saturating_add(1),
+                },
+                now_ms,
+            )
+            .await?;
+        Ok(vec![ControllerEvent::StateChanged {
             rental_id: lease.rental.rental_id,
-            provider_resource_id: resource_id,
+            state: GpuRentalState::Ready,
         }])
     }
 
@@ -251,23 +540,120 @@ where
                 )
                 .await;
         };
-        match self.provider.billing_state(resource_id).await {
-            Ok(billing) => {
+        match self.provider.get_instance(resource_id.clone()).await {
+            Ok(None) => {
                 self.apply_update(
                     &lease,
                     GpuRentalUpdate {
-                        estimated_accrued_microusd: Some(billing.estimated_accrued_microusd),
-                        provider_reported_cost_microusd: billing.provider_reported_cost_microusd,
-                        next_retry_at_ms: Some(now_ms.saturating_add(self.config.normal_poll_ms)),
+                        desired_state: Some(GpuRentalState::TerminatedConfirmed),
+                        observed_state: Some(GpuRentalState::TerminatedConfirmed),
+                        next_retry_at_ms: Some(i64::MAX),
                         clear_last_error: true,
                         ..GpuRentalUpdate::default()
                     },
                     now_ms,
                 )
                 .await?;
-                Ok(Vec::new())
+                self.state
+                    .remove_gpu_runtime_provider(lease.rental.rental_id.as_str())
+                    .await?;
+                return Ok(vec![ControllerEvent::StateChanged {
+                    rental_id: lease.rental.rental_id,
+                    state: GpuRentalState::TerminatedConfirmed,
+                }]);
             }
-            Err(error) => self.record_retry(lease, error, now_ms).await,
+            Ok(Some(instance))
+                if matches!(
+                    instance.state,
+                    GpuInstanceState::Stopped | GpuInstanceState::Failed
+                ) =>
+            {
+                self.apply_update(
+                    &lease,
+                    GpuRentalUpdate {
+                        desired_state: Some(GpuRentalState::TerminateRequested),
+                        observed_state: Some(GpuRentalState::TerminateRequested),
+                        last_error_code: Some("provider-side-stop".to_string()),
+                        last_error_message: Some(
+                            "The provider resource stopped outside PFTerminal; cleanup was requested."
+                                .to_string(),
+                        ),
+                        next_retry_at_ms: Some(now_ms),
+                        ..GpuRentalUpdate::default()
+                    },
+                    now_ms,
+                )
+                .await?;
+                return Ok(vec![ControllerEvent::Warning {
+                    rental_id: lease.rental.rental_id,
+                    code: "provider-side-stop".to_string(),
+                    message: "Provider-side stop detected; PFTerminal is confirming cleanup."
+                        .to_string(),
+                }]);
+            }
+            Ok(Some(_)) => {}
+            Err(error) => return self.record_retry(lease, error, now_ms).await,
+        }
+        let billing = match self.provider.billing_state(resource_id).await {
+            Ok(billing) => billing,
+            Err(error) => return self.record_retry(lease, error, now_ms).await,
+        };
+        let recipe = self.recipes.get(lease.rental.recipe_id.as_str());
+        let health = match (
+            recipe,
+            lease.rental.endpoint_base_url.as_deref(),
+            self.credentials.as_ref(),
+            self.readiness.as_ref(),
+        ) {
+            (Some(recipe), Some(endpoint), Some(credentials), Some(readiness)) => match credentials
+                .resolve(&crate::GpuCredentialKind::RentalEndpointToken {
+                    rental_id: lease.rental.rental_id.clone(),
+                }) {
+                Ok(credential) => readiness
+                    .probe(endpoint, recipe.model_id.as_str(), &credential.secret)
+                    .await
+                    .is_ok_and(|report| report.ready()),
+                Err(_) => false,
+            },
+            _ => false,
+        };
+        let observed_state = if health {
+            GpuRentalState::Ready
+        } else {
+            GpuRentalState::Degraded
+        };
+        let state_changed = observed_state != lease.rental.observed_state;
+        self.apply_update(
+            &lease,
+            GpuRentalUpdate {
+                observed_state: state_changed.then_some(observed_state),
+                estimated_accrued_microusd: Some(billing.estimated_accrued_microusd),
+                provider_reported_cost_microusd: billing.provider_reported_cost_microusd,
+                last_error_code: (!health).then(|| "endpoint-degraded".to_string()),
+                last_error_message: (!health).then(|| {
+                    "The authenticated endpoint failed its readiness contract.".to_string()
+                }),
+                next_retry_at_ms: Some(now_ms.saturating_add(self.config.health_poll_ms)),
+                clear_last_error: health,
+                ..GpuRentalUpdate::default()
+            },
+            now_ms,
+        )
+        .await?;
+        self.state
+            .set_gpu_runtime_provider_health(
+                lease.rental.rental_id.as_str(),
+                if health { "ready" } else { "degraded" },
+                now_ms,
+            )
+            .await?;
+        if state_changed {
+            Ok(vec![ControllerEvent::StateChanged {
+                rental_id: lease.rental.rental_id,
+                state: observed_state,
+            }])
+        } else {
+            Ok(Vec::new())
         }
     }
 
@@ -418,6 +804,15 @@ where
         }
         Ok(())
     }
+}
+
+fn manifest_step_digest(value: &str) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in value.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("fnv1a64:{hash:016x}")
 }
 
 #[cfg(test)]

@@ -98,6 +98,33 @@ async fn provision_steps_are_idempotent_and_digest_bound() {
 }
 
 #[tokio::test]
+async fn running_provision_step_can_be_resumed_after_controller_death() {
+    let state = runtime().await;
+    state
+        .create_gpu_rental(&params("rental-resume"), NOW_MS)
+        .await
+        .expect("create rental");
+    assert!(
+        state
+            .begin_gpu_provision_step("rental-resume", "01-hardware", "sha256:abc", NOW_MS)
+            .await
+            .expect("begin")
+    );
+    assert!(
+        state
+            .begin_gpu_provision_step("rental-resume", "01-hardware", "sha256:abc", NOW_MS + 1,)
+            .await
+            .expect("resume")
+    );
+    let steps = state
+        .list_gpu_provision_steps("rental-resume")
+        .await
+        .expect("steps");
+    assert_eq!(steps[0].status, "running");
+    assert_eq!(steps[0].attempt_count, 2);
+}
+
+#[tokio::test]
 async fn runtime_overlay_requires_ready_and_https_and_is_sequence_monotonic() {
     let runtime = runtime().await;
     runtime

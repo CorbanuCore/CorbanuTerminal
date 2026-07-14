@@ -1,6 +1,8 @@
 use crate::SecretValue;
 use reqwest::StatusCode;
 use serde_json::Value;
+use std::future::Future;
+use std::pin::Pin;
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,6 +26,15 @@ impl EndpointReadinessReport {
             && self.cancellation_ok
             && self.tool_call_ok
     }
+}
+
+pub trait GpuReadinessProbe: Send + Sync {
+    fn probe<'a>(
+        &'a self,
+        base_url: &'a str,
+        model_id: &'a str,
+        token: &'a SecretValue,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<EndpointReadinessReport>> + Send + 'a>>;
 }
 
 #[derive(Clone)]
@@ -145,9 +156,29 @@ impl GpuEndpointProber {
                 true,
             ))
             .send();
-        let cancellation_ok = tokio::time::timeout(self.cancellation_deadline, cancellation)
-            .await
-            .is_err();
+        let cancellation_was_dropped =
+            match tokio::time::timeout(self.cancellation_deadline, cancellation).await {
+                Err(_) => true,
+                Ok(Ok(mut response)) if response.status().is_success() => {
+                    tokio::time::timeout(self.cancellation_deadline, response.chunk())
+                        .await
+                        .is_err()
+                }
+                Ok(Ok(_)) | Ok(Err(_)) => false,
+            };
+        // Dropping an in-flight request is only useful if it does not poison the endpoint/client.
+        // A fresh authenticated request must still work immediately afterward.
+        let cancellation_ok = if cancellation_was_dropped {
+            self.client
+                .get(format!("{base_url}/models"))
+                .bearer_auth(token.expose())
+                .timeout(self.request_timeout)
+                .send()
+                .await
+                .is_ok_and(|response| response.status().is_success())
+        } else {
+            false
+        };
 
         let tools = self
             .client
@@ -191,6 +222,17 @@ impl GpuEndpointProber {
             cancellation_ok,
             tool_call_ok,
         })
+    }
+}
+
+impl GpuReadinessProbe for GpuEndpointProber {
+    fn probe<'a>(
+        &'a self,
+        base_url: &'a str,
+        model_id: &'a str,
+        token: &'a SecretValue,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<EndpointReadinessReport>> + Send + 'a>> {
+        Box::pin(GpuEndpointProber::probe(self, base_url, model_id, token))
     }
 }
 

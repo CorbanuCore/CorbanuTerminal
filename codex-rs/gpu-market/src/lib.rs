@@ -36,6 +36,7 @@ pub use provider::ProviderResult;
 pub use provider::SearchOffersRequest;
 pub use readiness::EndpointReadinessReport;
 pub use readiness::GpuEndpointProber;
+pub use readiness::GpuReadinessProbe;
 pub use recipe::GpuRecipe;
 pub use recipe::RecipeCatalog;
 pub use runpod::RunpodProvider;

@@ -183,6 +183,23 @@ impl GpuProvider for RunpodProvider {
         }
     }
 
+    fn secure_endpoint_base_url(
+        &self,
+        instance: &GpuInstance,
+        inference_port: u16,
+    ) -> ProviderResult<String> {
+        if instance.resource_id.is_empty() || inference_port == 0 {
+            return Err(ProviderError::new(
+                ProviderErrorKind::Permanent,
+                "RunPod endpoint identity is incomplete.",
+            ));
+        }
+        Ok(format!(
+            "https://{}-{}.proxy.runpod.net/v1",
+            instance.resource_id, inference_port
+        ))
+    }
+
     async fn search_offers(&self, request: SearchOffersRequest) -> ProviderResult<Vec<GpuOffer>> {
         match self.current_offer(&request).await {
             Ok(offer) if offer.validate_for(&request, unix_now_ms()).is_ok() => Ok(vec![offer]),
@@ -368,6 +385,7 @@ fn pod_to_instance(pod: &Value, fallback_tag: Option<String>) -> ProviderResult<
             .and_then(Value::as_u64)
             .and_then(|value| value.try_into().ok())
             .unwrap_or_default(),
+        high_bandwidth_interconnect: None,
         hourly_microusd: pod
             .get("adjustedCostPerHr")
             .or_else(|| pod.get("costPerHr"))

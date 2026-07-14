@@ -26,7 +26,7 @@ ON CONFLICT(rental_id, step_id) DO UPDATE SET
     completed_at_ms = NULL,
     updated_at_ms = excluded.updated_at_ms
 WHERE gpu_provision_steps.command_digest = excluded.command_digest
-  AND gpu_provision_steps.status IN ('pending', 'failed')
+  AND gpu_provision_steps.status IN ('pending', 'failed', 'running')
             "#,
         )
         .bind(rental_id)
