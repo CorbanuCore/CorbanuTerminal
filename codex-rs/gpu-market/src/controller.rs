@@ -127,17 +127,22 @@ where
                 .await;
         }
 
-        if lease.rental.observed_state.may_be_billable()
+        if lease.rental.may_be_billable()
             && (now_ms >= lease.rental.terminate_at_ms
                 || lease.rental.estimated_accrued_microusd >= lease.rental.max_total_microusd)
             && lease.rental.desired_state != GpuRentalState::TerminateRequested
         {
-            self.state
-                .request_gpu_rental_termination(lease.rental.rental_id.as_str(), now_ms)
-                .await?;
-            self.state
-                .release_gpu_rental_lease(&lease, now_ms, now_ms)
-                .await?;
+            self.apply_update(
+                &lease,
+                GpuRentalUpdate {
+                    desired_state: Some(GpuRentalState::TerminateRequested),
+                    observed_state: Some(GpuRentalState::TerminateRequested),
+                    next_retry_at_ms: Some(now_ms),
+                    ..GpuRentalUpdate::default()
+                },
+                now_ms,
+            )
+            .await?;
             return Ok(vec![ControllerEvent::Warning {
                 rental_id: lease.rental.rental_id,
                 code: "spend-limit".to_string(),
@@ -270,10 +275,7 @@ where
         error: ProviderError,
         now_ms: i64,
     ) -> anyhow::Result<Vec<ControllerEvent>> {
-        let retry_ms = error.retry_after_ms.unwrap_or_else(|| {
-            let exponent = u32::try_from(lease.rental.retry_count.clamp(0, 6)).unwrap_or(6);
-            1_000_i64.saturating_mul(2_i64.saturating_pow(exponent))
-        });
+        let retry_ms = self.retry_delay_ms(&lease.rental, error.retry_after_ms);
         let next_retry = now_ms.saturating_add(retry_ms.min(self.config.maximum_retry_ms));
         let state = if error.kind == ProviderErrorKind::Ambiguous {
             Some(GpuRentalState::Reconciling)
@@ -306,23 +308,70 @@ where
         message: &str,
         now_ms: i64,
     ) -> anyhow::Result<Vec<ControllerEvent>> {
+        let billing_risk = lease.rental.may_be_billable();
+        let terminal_state = if billing_risk {
+            GpuRentalState::TerminationUnconfirmed
+        } else {
+            GpuRentalState::Failed
+        };
+        let desired_state = if billing_risk {
+            GpuRentalState::TerminateRequested
+        } else {
+            GpuRentalState::Failed
+        };
         self.apply_update(
             &lease,
             GpuRentalUpdate {
-                desired_state: Some(GpuRentalState::Failed),
-                observed_state: Some(GpuRentalState::Failed),
+                desired_state: Some(desired_state),
+                observed_state: Some(terminal_state),
                 last_error_code: Some(code.to_string()),
                 last_error_message: Some(message.to_string()),
-                next_retry_at_ms: Some(i64::MAX),
+                next_retry_at_ms: Some(if billing_risk { now_ms } else { i64::MAX }),
                 ..GpuRentalUpdate::default()
             },
             now_ms,
         )
         .await?;
-        Ok(vec![ControllerEvent::StateChanged {
-            rental_id: lease.rental.rental_id,
-            state: GpuRentalState::Failed,
-        }])
+        if billing_risk {
+            Ok(vec![ControllerEvent::Warning {
+                rental_id: lease.rental.rental_id,
+                code: code.to_string(),
+                message: format!(
+                    "{message} Cleanup is required before billing can be considered stopped."
+                ),
+            }])
+        } else {
+            Ok(vec![ControllerEvent::StateChanged {
+                rental_id: lease.rental.rental_id,
+                state: GpuRentalState::Failed,
+            }])
+        }
+    }
+
+    pub(super) fn retry_delay_ms(&self, rental: &GpuRental, retry_after_ms: Option<i64>) -> i64 {
+        if let Some(retry_after_ms) = retry_after_ms {
+            return retry_after_ms.clamp(0, self.config.maximum_retry_ms);
+        }
+        let exponent = u32::try_from(rental.retry_count.clamp(0, 6)).unwrap_or(6);
+        let base_ms = 1_000_i64.saturating_mul(2_i64.saturating_pow(exponent));
+        let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+        for byte in rental
+            .rental_id
+            .as_bytes()
+            .iter()
+            .copied()
+            .chain(rental.retry_count.to_le_bytes().iter().copied())
+        {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        // Stable 75%-125% jitter prevents synchronized retries without volatile RNG state that
+        // changes after a process restart.
+        let jitter_per_mille = 750_i64 + i64::try_from(hash % 501).unwrap_or(0);
+        base_ms
+            .saturating_mul(jitter_per_mille)
+            .saturating_div(1_000)
+            .clamp(1, self.config.maximum_retry_ms)
     }
 
     async fn release_later(&self, lease: &GpuRentalLease, now_ms: i64) -> anyhow::Result<()> {

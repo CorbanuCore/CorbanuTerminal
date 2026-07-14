@@ -139,6 +139,17 @@ pub struct GpuRental {
     pub terminated_confirmed_at_ms: Option<i64>,
 }
 
+impl GpuRental {
+    /// A known provider resource remains a billing risk even if an older client wrote an
+    /// incorrect terminal-looking observed state. Provider-confirmed termination is the only
+    /// state that can make a known resource disappear from global spend visibility.
+    pub fn may_be_billable(&self) -> bool {
+        self.observed_state.may_be_billable()
+            || (self.provider_resource_id.is_some()
+                && self.observed_state != GpuRentalState::TerminatedConfirmed)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GpuRentalCreateParams {
     pub rental_id: String,

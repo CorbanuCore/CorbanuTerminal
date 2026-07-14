@@ -124,10 +124,7 @@ where
         error: ProviderError,
         now_ms: i64,
     ) -> anyhow::Result<Vec<ControllerEvent>> {
-        let retry_ms = error.retry_after_ms.unwrap_or_else(|| {
-            let exponent = u32::try_from(lease.rental.retry_count.clamp(0, 6)).unwrap_or(6);
-            1_000_i64.saturating_mul(2_i64.saturating_pow(exponent))
-        });
+        let retry_ms = self.retry_delay_ms(&lease.rental, error.retry_after_ms);
         self.apply_update(
             &lease,
             GpuRentalUpdate {

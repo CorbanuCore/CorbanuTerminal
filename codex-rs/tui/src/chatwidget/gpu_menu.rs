@@ -9,7 +9,7 @@ impl ChatWidget {
             let rental_id = rental.rental_id.clone();
             let hourly = rental.max_hourly_microusd as f64 / 1_000_000.0;
             let accrued = rental.estimated_accrued_microusd as f64 / 1_000_000.0;
-            let billable = rental.observed_state.may_be_billable();
+            let billable = rental.may_be_billable();
             items.push(SelectionItem {
                 name: format!("{} · {}", rental.recipe_id, rental.observed_state.as_str()),
                 description: Some(format!(
@@ -217,7 +217,7 @@ impl ChatWidget {
             rental.observed_state,
             codex_state::GpuRentalState::Ready | codex_state::GpuRentalState::Degraded
         );
-        let can_terminate = rental.observed_state.may_be_billable();
+        let can_terminate = rental.may_be_billable();
         let stop_id = rental_id.clone();
         let terminate_id = rental_id.clone();
         let items = vec![

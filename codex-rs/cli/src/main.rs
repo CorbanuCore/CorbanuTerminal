@@ -2235,6 +2235,18 @@ async fn run_internal_gpu_controller(command: GpuControllerCommand) -> anyhow::R
         .cli_overrides(cli_kv_overrides)
         .build()
         .await?;
+    std::fs::create_dir_all(&config.sqlite_home)?;
+    let controller_lock_path = config.sqlite_home.join("gpu-controller.lock");
+    let controller_lock = std::fs::OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open(&controller_lock_path)?;
+    match controller_lock.try_lock() {
+        Ok(()) => {}
+        Err(std::fs::TryLockError::WouldBlock) => return Ok(()),
+        Err(std::fs::TryLockError::Error(error)) => return Err(error.into()),
+    }
     let state =
         StateRuntime::init(config.sqlite_home.clone(), "gpu-controller".to_string()).await?;
     let installation_id = codex_core::resolve_installation_id(&config.codex_home).await?;
@@ -2278,7 +2290,7 @@ async fn run_internal_gpu_controller(command: GpuControllerCommand) -> anyhow::R
             .list_gpu_rentals(1_000)
             .await?
             .into_iter()
-            .any(|rental| rental.observed_state.may_be_billable());
+            .any(|rental| rental.may_be_billable());
         if !has_billable_work {
             return Ok(());
         }

@@ -211,6 +211,32 @@ impl App {
 }
 
 impl App {
+    fn start_gpu_controller(&mut self) {
+        let executable = match std::env::current_exe() {
+            Ok(executable) => executable,
+            Err(error) => {
+                self.chat_widget.add_error_message(format!(
+                    "GPU rental state was saved, but the independent controller could not be located: {error}"
+                ));
+                return;
+            }
+        };
+        match std::process::Command::new(executable)
+            .arg("internal-gpu-controller")
+            .env("CODEX_HOME", self.config.codex_home.as_path())
+            .env(codex_state::SQLITE_HOME_ENV, self.config.sqlite_home.as_path())
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(_) => {}
+            Err(error) => self.chat_widget.add_error_message(format!(
+                "GPU rental state was saved, but the independent controller did not start: {error}. Run `pfterminal internal-gpu-controller` before relying on local TTL or spend enforcement."
+            )),
+        }
+    }
+
     pub(super) async fn refresh_gpu_spend_indicator(&mut self) {
         let Some(state_db) = self.state_db.as_ref() else {
             self.chat_widget.set_gpu_spend_status(None);
@@ -223,7 +249,7 @@ impl App {
             .and_then(|rentals| {
                 let billable = rentals
                     .into_iter()
-                    .filter(|rental| rental.observed_state.may_be_billable())
+                    .filter(|rental| rental.may_be_billable())
                     .collect::<Vec<_>>();
                 if billable.is_empty() {
                     return None;
@@ -1271,12 +1297,15 @@ impl App {
                     .request_gpu_rental_termination(rental_id.as_str(), now_ms)
                     .await
                 {
-                    Ok(true) => self.chat_widget.add_info_message(
-                        format!(
-                            "Termination requested for GPU rental {rental_id}; billing remains unresolved until the provider confirms absence."
-                        ),
-                        None,
-                    ),
+                    Ok(true) => {
+                        self.chat_widget.add_info_message(
+                            format!(
+                                "Termination requested for GPU rental {rental_id}; billing remains unresolved until the provider confirms absence."
+                            ),
+                            None,
+                        );
+                        self.start_gpu_controller();
+                    }
                     Ok(false) => self.chat_widget.add_error_message(format!(
                         "GPU rental {rental_id} is already terminal or cannot be terminated."
                     )),
@@ -1436,14 +1465,7 @@ impl App {
                         ),
                         None,
                     );
-                    if let Ok(executable) = std::env::current_exe() {
-                        let _ = std::process::Command::new(executable)
-                            .arg("internal-gpu-controller")
-                            .stdin(std::process::Stdio::null())
-                            .stdout(std::process::Stdio::null())
-                            .stderr(std::process::Stdio::null())
-                            .spawn();
-                    }
+                    self.start_gpu_controller();
                     self.refresh_gpu_spend_indicator().await;
                 }
                 Err(message) => self.chat_widget.add_error_message(message),

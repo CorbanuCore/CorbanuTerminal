@@ -66,6 +66,16 @@ impl FakeProvider {
     async fn terminate_calls(&self) -> usize {
         self.state.lock().await.terminate_calls
     }
+
+    async fn set_instance_state(&self, resource_id: &str, instance_state: GpuInstanceState) {
+        self.state
+            .lock()
+            .await
+            .instances
+            .get_mut(resource_id)
+            .expect("fake instance exists")
+            .state = instance_state;
+    }
 }
 
 impl GpuProvider for FakeProvider {
@@ -346,7 +356,7 @@ async fn ambiguous_create_adopts_inventory_without_duplicate() {
         .await
         .expect("first reconcile");
     controller
-        .reconcile_due(NOW_MS + 1_000)
+        .reconcile_due(NOW_MS + 2_000)
         .await
         .expect("inventory reconcile");
 
@@ -371,7 +381,7 @@ async fn unresolved_ambiguous_create_never_retries_creation() {
         .await
         .expect("first reconcile");
     let events = controller
-        .reconcile_due(NOW_MS + 1_000)
+        .reconcile_due(NOW_MS + 2_000)
         .await
         .expect("inventory reconcile");
 
@@ -477,4 +487,87 @@ async fn ambiguous_termination_is_reconciled_by_inventory_without_duplicate_dele
             .observed_state,
         GpuRentalState::TerminatedConfirmed
     );
+}
+
+#[tokio::test]
+async fn provider_failure_with_known_resource_enters_cleanup_instead_of_failed() {
+    let state = state_runtime().await;
+    let provider = FakeProvider::new(CreateBehavior::Success);
+    create_authorized_rental(&state, "provider-failed").await;
+    let controller = controller(state.clone(), provider.clone());
+    controller
+        .reconcile_due(NOW_MS)
+        .await
+        .expect("create instance");
+    provider
+        .set_instance_state("resource-1", GpuInstanceState::Failed)
+        .await;
+
+    controller
+        .reconcile_due(NOW_MS + 1)
+        .await
+        .expect("observe provider failure");
+
+    let rental = state
+        .get_gpu_rental("rental-provider-failed")
+        .await
+        .expect("load rental")
+        .expect("rental exists");
+    assert_eq!(rental.desired_state, GpuRentalState::TerminateRequested);
+    assert_eq!(rental.observed_state, GpuRentalState::TerminateRequested);
+    assert!(rental.may_be_billable());
+}
+
+#[tokio::test]
+async fn ttl_boundary_transitions_atomically_under_the_controller_lease() {
+    let state = state_runtime().await;
+    let provider = FakeProvider::new(CreateBehavior::Success);
+    create_authorized_rental(&state, "ttl").await;
+    let controller = controller(state.clone(), provider);
+    controller
+        .reconcile_due(NOW_MS)
+        .await
+        .expect("create instance");
+    let terminate_at_ms = state
+        .get_gpu_rental("rental-ttl")
+        .await
+        .expect("load rental")
+        .expect("rental exists")
+        .terminate_at_ms;
+
+    let events = controller
+        .reconcile_due(terminate_at_ms)
+        .await
+        .expect("enforce ttl");
+
+    assert!(
+        matches!(events.as_slice(), [ControllerEvent::Warning { code, .. }] if code == "spend-limit")
+    );
+    let rental = state
+        .get_gpu_rental("rental-ttl")
+        .await
+        .expect("load rental")
+        .expect("rental exists");
+    assert_eq!(rental.desired_state, GpuRentalState::TerminateRequested);
+    assert_eq!(rental.observed_state, GpuRentalState::TerminateRequested);
+}
+
+#[tokio::test]
+async fn retry_backoff_is_stable_jittered_and_honors_retry_after() {
+    let state = state_runtime().await;
+    let provider = FakeProvider::new(CreateBehavior::Success);
+    create_authorized_rental(&state, "retry-jitter").await;
+    let controller = controller(state.clone(), provider);
+    let rental = state
+        .get_gpu_rental("rental-retry-jitter")
+        .await
+        .expect("load rental")
+        .expect("rental exists");
+
+    let first = controller.retry_delay_ms(&rental, None);
+    let replay = controller.retry_delay_ms(&rental, None);
+    assert_eq!(first, replay);
+    assert!((750..=1_250).contains(&first));
+    assert_eq!(controller.retry_delay_ms(&rental, Some(7_777)), 7_777);
+    assert_eq!(controller.retry_delay_ms(&rental, Some(90_000)), 10_000);
 }

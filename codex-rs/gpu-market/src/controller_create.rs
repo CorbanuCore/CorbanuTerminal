@@ -154,12 +154,10 @@ where
                 }])
             }
             Ok(Some(instance)) if instance.state == GpuInstanceState::Failed => {
-                self.state
-                    .request_gpu_rental_termination(lease.rental.rental_id.as_str(), now_ms)
-                    .await?;
                 self.apply_update(
                     &lease,
                     GpuRentalUpdate {
+                        desired_state: Some(GpuRentalState::TerminateRequested),
                         observed_state: Some(GpuRentalState::TerminateRequested),
                         provider_resource_id: Some(instance.resource_id),
                         last_error_code: Some("provider-instance-failed".to_string()),
