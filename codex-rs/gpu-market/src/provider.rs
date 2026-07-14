@@ -29,6 +29,10 @@ pub struct GpuOffer {
     pub gpu_model: String,
     pub gpu_count: u16,
     pub vram_mib_per_gpu: u64,
+    pub host_ram_mib: u64,
+    pub disk_gib: u64,
+    pub high_bandwidth_interconnect: bool,
+    pub cuda_versions: Vec<String>,
     pub region: String,
     pub security_class: String,
     pub reliability_millionths: Option<u32>,
@@ -61,7 +65,22 @@ impl GpuOffer {
         if self.gpu_model != request.hardware.gpu_model
             || self.gpu_count < request.hardware.gpu_count
             || self.vram_mib_per_gpu < request.hardware.minimum_vram_mib_per_gpu
+            || self.host_ram_mib < request.hardware.minimum_host_ram_mib
+            || self.disk_gib < request.hardware.minimum_disk_gib
+            || (request.hardware.requires_high_bandwidth_interconnect
+                && !self.high_bandwidth_interconnect)
+            || (!request.hardware.allowed_cuda_versions.is_empty()
+                && !self.cuda_versions.is_empty()
+                && !self.cuda_versions.iter().any(|available| {
+                    request
+                        .hardware
+                        .allowed_cuda_versions
+                        .iter()
+                        .any(|allowed| allowed == available)
+                }))
             || (self.interruptible && !request.allow_interruptible)
+            || (request.require_verified_or_secure
+                && !matches!(self.security_class.as_str(), "verified" | "secure"))
         {
             return Err(ProviderError::new(
                 ProviderErrorKind::OfferUnavailable,
@@ -166,6 +185,16 @@ impl ProviderError {
                 | ProviderErrorKind::Retryable
                 | ProviderErrorKind::Ambiguous
         )
+    }
+
+    pub fn with_retry_after_ms(mut self, retry_after_ms: i64) -> Self {
+        self.retry_after_ms = Some(retry_after_ms.max(0));
+        self
+    }
+
+    pub fn with_diagnostic_ref(mut self, diagnostic_ref: String) -> Self {
+        self.diagnostic_ref = Some(diagnostic_ref);
+        self
     }
 }
 
