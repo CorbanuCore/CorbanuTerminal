@@ -62,6 +62,7 @@ mod agent_jobs;
 mod backfill;
 mod external_agent_config_imports;
 mod goals;
+mod gpu_rentals;
 mod logs;
 mod memories;
 mod provider_requests;
