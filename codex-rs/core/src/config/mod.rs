@@ -3419,7 +3419,7 @@ impl Config {
         // a role-derived model) would 400/404 at the remote with "Unknown model". Correct the
         // unambiguous cases; see corrected_catalog_provider for what qualifies.
         let corrected_provider = (!model_provider_was_explicit)
-            .then(|| model.as_deref())
+            .then_some(model.as_deref())
             .flatten()
             .and_then(|value| corrected_catalog_provider(value, &model_provider_id));
         let (model_provider_id, model_provider) = match corrected_provider

@@ -2603,7 +2603,7 @@ impl App {
                     Ok((nazgul_thread_id, troll_thread_id)) => {
                         self.open_spawn_status();
                         self.chat_widget.add_info_message(
-                            "Created standard crew: Nazgul + Troll + 2 Orcs.".to_string(),
+                            "Created standard crew: Nazgul + Troll + 3 Orcs.".to_string(),
                             Some(format!(
                                 "Nazgul: {nazgul_thread_id}. Troll: {troll_thread_id}. No task was started. Send work explicitly from /spawn status or by dispatch block."
                             )),
@@ -2641,11 +2641,17 @@ impl App {
                     });
                     return Ok(AppRunControl::Continue);
                 };
-                let Some((turn_id, _)) = self
+                let waiting_turn_id = self
                     .spawn_waiting_for_agents_by_thread
                     .get(&thread_id)
                     .cloned()
-                else {
+                    .map(|(turn_id, _)| turn_id);
+                let turn_id = if waiting_turn_id.is_some() {
+                    waiting_turn_id
+                } else {
+                    self.active_turn_id_for_submission(thread_id).await
+                };
+                let Some(turn_id) = turn_id else {
                     self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
                         thread_id,
                         task,
@@ -2701,7 +2707,7 @@ impl App {
                     tracing::warn!(
                         %thread_id,
                         %error,
-                        "ambiguous wait steer retained for identity reconciliation"
+                        "ambiguous running-turn steer retained for identity reconciliation"
                     );
                     self.contain_ambiguous_spawn_dispatch(&target_node_id);
                 }

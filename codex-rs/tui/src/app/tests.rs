@@ -85,6 +85,8 @@ use codex_app_server_protocol::TurnStatus;
 use codex_app_server_protocol::UserInput;
 use codex_app_server_protocol::UserInput as AppServerUserInput;
 use codex_app_server_protocol::WarningNotification;
+use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
+use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_API_KEY_ENV_VAR;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
@@ -93,7 +95,6 @@ use codex_model_provider_info::VERCEL_API_KEY_ENV_VAR;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
 use codex_model_provider_info::VERCEL_PROVIDER_ID;
 use codex_model_provider_info::ZAI_API_KEY_ENV_VAR;
-use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_models_manager::test_support::construct_model_info_offline_for_tests;
 use codex_models_manager::test_support::get_model_offline_for_tests;
 use codex_otel::SessionTelemetry;
@@ -1773,7 +1774,7 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
             "nazgul".to_string(),
             Some("Angmar".to_string()),
             App::STANDARD_NAZGUL_MODEL.to_string(),
-            Some(ZAI_PROVIDER_ID.to_string()),
+            Some(CLAUDE_PLAN_PROVIDER_ID.to_string()),
             /*reasoning_effort*/ None,
             /*base_instructions*/ None,
         )
@@ -1804,8 +1805,8 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
             "troll".to_string(),
             Some("Burzum".to_string()),
             App::STANDARD_TROLL_MODEL.to_string(),
-            Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID.to_string()),
-            /*reasoning_effort*/ None,
+            Some(OPENAI_PROVIDER_ID.to_string()),
+            Some(ReasoningEffortConfig::XHigh),
             /*base_instructions*/ None,
         )
         .await?;
@@ -1970,7 +1971,7 @@ async fn nazgul_can_be_bound_to_a_codex_agent_pane() {
 }
 
 #[tokio::test]
-async fn codex_main_bound_nazgul_turn_receives_strict_visual_workflow_context() {
+async fn codex_main_bound_nazgul_turn_receives_domain_neutral_hierarchy_context() {
     let mut app = make_test_app().await;
     let main_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000303").expect("valid thread id");
@@ -2001,10 +2002,6 @@ async fn codex_main_bound_nazgul_turn_receives_strict_visual_workflow_context() 
     assert_eq!(entry.kind, AdditionalContextKind::Application);
     assert!(entry.value.contains("Nazgul/root pane"));
     assert!(entry.value.contains("Burzum [troll]"));
-    assert!(entry.value.contains("implementation work is blocked"));
-    assert!(entry.value.contains("first execution dispatch"));
-    assert!(entry.value.contains("exactly matches the starting state"));
-    assert!(entry.value.contains("independent verifier"));
 }
 
 #[tokio::test]
@@ -2573,17 +2570,6 @@ async fn spawn_roster_keeps_context_pressure_out_of_model_context() {
         .spawn_context_for_thread(troll_thread_id)
         .expect("Troll should receive spawn context");
     assert!(!context.contains("context_left="), "got context: {context}");
-    assert!(context.contains("automatic_compaction=enabled"));
-    assert!(context.contains("pfterminal visual-judge"));
-    assert!(context.contains("pointer/action intent"));
-    assert!(context.contains("every supported movement direction"));
-    assert!(context.contains("explicit candidate-ready handoff"));
-    assert!(context.contains("infer readiness"));
-    assert!(context.contains("Storage safety is a post-operation invariant"));
-    assert!(context.contains("current_free - estimated_peak_growth >= reserve"));
-    assert!(context.contains("checking only current_free >= reserve is invalid"));
-    assert!(context.contains("Serialize large disk operations"));
-    assert!(context.contains("reclaim each temporary artifact"));
 }
 
 #[tokio::test]
@@ -2611,8 +2597,6 @@ async fn low_context_telemetry_does_not_manufacture_a_lifecycle_warning() {
         .spawn_context_for_thread(troll_thread_id)
         .expect("Troll should receive spawn context");
     assert!(!context.contains("context_left="));
-    assert!(context.contains("automatic_compaction=enabled"));
-    assert!(context.contains("never inferred from context telemetry"));
 }
 
 #[tokio::test]
@@ -2658,6 +2642,63 @@ async fn spawn_roster_lines_carry_dispatch_and_report_seq() {
     assert!(reports.iter().any(|report| {
         report.contains("child_report; seq=121; as_of=") && report.contains("sequence proof done")
     }));
+}
+
+#[tokio::test]
+async fn troll_checkpoint_block_reaches_busy_nazgul_before_troll_turn_finishes() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let nazgul_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000449").expect("valid thread id");
+    let (troll_thread_id, _orc_thread_id) = register_native_dispatch_pair(&mut app);
+    app.upsert_agent_picker_thread(
+        nazgul_thread_id,
+        Some("Angmar".to_string()),
+        Some("nazgul".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(troll_thread_id, nazgul_thread_id);
+    app.agent_navigation
+        .set_running(nazgul_thread_id, /*is_running*/ true);
+
+    let checkpoint = r#"Still supervising the implementation lanes.
+<pfterminal_report_parent>
+The parser gate passed at artifacts/parser-proof.json; the concurrency gate is still running.
+</pfterminal_report_parent>"#;
+    assert!(app.dispatch_native_spawn_task_blocks_from_text(
+        troll_thread_id,
+        "turn-checkpoint",
+        checkpoint,
+    ));
+    assert!(!app.dispatch_native_spawn_task_blocks_from_text(
+        troll_thread_id,
+        "turn-checkpoint",
+        checkpoint,
+    ));
+
+    let parent_node = thread_node_id(nazgul_thread_id);
+    let reports = app
+        .spawn_parent_reports_by_node
+        .get(&parent_node)
+        .expect("checkpoint should be recorded for the Nazgul");
+    assert_eq!(
+        reports.len(),
+        1,
+        "item replay must not duplicate the report"
+    );
+    assert!(reports[0].contains("status=checkpoint"));
+    assert!(reports[0].contains("artifacts/parser-proof.json"));
+    assert_eq!(
+        app.spawn_pending_reports_by_thread
+            .get(&nazgul_thread_id)
+            .map_or(0, VecDeque::len),
+        1,
+        "a busy parent must retain the checkpoint for its next processing boundary"
+    );
+    assert!(
+        drain_spawn_agent_tasks_for(&mut rx, nazgul_thread_id).is_empty(),
+        "checkpoint delivery must not start a competing parent turn"
+    );
 }
 
 #[tokio::test]
@@ -2733,6 +2774,56 @@ async fn durable_pump_marks_native_delivery_submitting_before_adapter() {
             if id == &delivery_id
     ));
     assert!(!app.spawn_accepted_delivery_ids.contains(&delivery_id));
+}
+
+#[tokio::test]
+async fn durable_pump_steers_work_into_a_running_native_target() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (source, target) = register_native_dispatch_pair(&mut app);
+    app.agent_navigation.set_running(target, true);
+    app.dispatch_spawn_task_blocks(
+        &thread_node_id(source),
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: target.to_string(),
+            task: "Correct the active review and report the changed verdict.".to_string(),
+            seq: Some(502),
+        }],
+    );
+
+    assert!(matches!(rx.try_recv(), Ok(AppEvent::PumpSpawnDispatches)));
+    let crate::spawn_orchestration::SpawnDispatchPumpDelivery::Native {
+        thread_id, steer, ..
+    } = app
+        .select_spawn_dispatch_pump_delivery()
+        .expect("running native target is steerable")
+    else {
+        panic!("expected native adapter");
+    };
+    assert_eq!(thread_id, target);
+    assert!(steer);
+}
+
+#[tokio::test]
+async fn oversized_native_self_dispatch_is_rejected_before_queue_accounting() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (source, _target) = register_native_dispatch_pair(&mut app);
+    let source_node = thread_node_id(source);
+    app.dispatch_spawn_task_blocks(
+        &source_node,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: source.to_string(),
+            task: "x".repeat(crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES + 10_000),
+            seq: Some(503),
+        }],
+    );
+
+    assert!(!app.spawn_pending_dispatches.contains_key(&source_node));
+    while let Ok(event) = rx.try_recv() {
+        assert!(
+            !matches!(event, AppEvent::PumpSpawnDispatches),
+            "a rejected self-dispatch must not schedule the delivery pump"
+        );
+    }
 }
 
 #[tokio::test]
@@ -3804,8 +3895,6 @@ async fn bound_claude_nazgul_context_explains_empty_spawn_hierarchy() {
 
     assert!(context.contains("You are the PFTerminal Nazgul/root pane"));
     assert!(context.contains("Troll and Orc are PFTerminal orchestration roles"));
-    assert!(context.contains("terminal-native AI orchestration app"));
-    assert!(context.contains("Do not describe PFTerminal as a crypto/trading"));
     assert!(context.contains("Trolls: none spawned yet."));
     assert!(context.contains("Orcs: none spawned yet."));
     assert!(context.contains("suggest using /spawn"));
@@ -5799,7 +5888,7 @@ DISPATCH"#;
 }
 
 #[tokio::test]
-async fn bound_nazgul_dispatch_without_workflow_classification_is_rejected_and_corrected() {
+async fn bound_nazgul_freeform_dispatch_routes_without_protocol_headers() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let main_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000638").expect("valid thread id");
@@ -5824,55 +5913,20 @@ Resume implementation from the existing screenshots and gate logs.
 </pfterminal_send_task>"#;
     assert!(app.dispatch_native_spawn_task_blocks_from_text(
         main_thread_id,
-        "turn-missing-workflow-classification",
+        "turn-freeform-work",
         message,
     ));
-    assert!(app.dispatch_native_spawn_task_blocks_from_text(
-        main_thread_id,
-        "turn-missing-workflow-classification",
-        message,
-    ));
-    assert!(
-        app.spawn_pending_dispatches
-            .get(&crate::spawn_orchestration::thread_node_id(troll_thread_id))
-            .is_none_or(VecDeque::is_empty),
-        "rejected implementation must not reach the Troll queue"
-    );
-
-    let mut corrections = Vec::new();
+    let mut pump_scheduled = false;
     while let Ok(event) = rx.try_recv() {
-        match event {
-            AppEvent::SubmitSpawnAgentTask { thread_id, .. } if thread_id == troll_thread_id => {
-                panic!("unclassified dispatch must not route to the Troll");
-            }
-            AppEvent::SubmitSpawnAgentTask {
-                thread_id, task, ..
-            } if thread_id == main_thread_id => corrections.push(task),
-            _ => {}
-        }
+        pump_scheduled |= matches!(event, AppEvent::PumpSpawnDispatches);
     }
-    assert_eq!(corrections.len(), 1);
-    assert!(corrections[0].contains("structured workflow gate"));
-    assert!(corrections[0].contains("visual-baseline"));
-    assert!(corrections[0].contains("visual-implementation"));
-    assert!(corrections[0].contains("nonvisual"));
-
-    let baseline_message = r#"<pfterminal_send_task target="Burzum">
-PFTERMINAL_WORK_KIND: visual-baseline
-Capture a fresh real-input baseline and fail-closed vision verdict only; do not implement.
-</pfterminal_send_task>"#;
-    assert!(app.dispatch_native_spawn_task_blocks_from_text(
-        main_thread_id,
-        "turn-valid-visual-baseline",
-        baseline_message,
-    ));
-    assert!(matches!(rx.try_recv(), Ok(AppEvent::PumpSpawnDispatches)));
+    assert!(pump_scheduled);
     assert_eq!(
         app.spawn_pending_dispatches
             .get(&crate::spawn_orchestration::thread_node_id(troll_thread_id))
             .map_or(0, VecDeque::len),
         1,
-        "classified visual baseline should route exactly once"
+        "natural-language work should route without a workflow mini-language"
     );
 }
 
@@ -6348,8 +6402,8 @@ async fn native_spawn_registration_persists_started_session_model_provider_pair(
 }
 
 #[test]
-#[ignore = "live integration test: spawns real threads and needs ZAI/Vercel/OpenAI provider auth present in the environment"]
-fn spawn_app_path_creates_troll_with_two_named_orcs() -> Result<()> {
+#[ignore = "live integration test: spawns real threads and needs Claude Plan/OpenAI/OpenRouter provider auth present in the environment"]
+fn spawn_app_path_creates_default_heterogeneous_crew() -> Result<()> {
     const WORKER_THREADS: usize = 1;
     const TEST_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
 
@@ -6413,9 +6467,20 @@ fn spawn_app_path_creates_troll_with_two_named_orcs() -> Result<()> {
                     && entry.agent_role.as_deref() == Some("orc")
             })
             .collect::<Vec<_>>();
-        assert_eq!(orcs.len(), 2);
+        assert_eq!(orcs.len(), 3);
         assert_eq!(orcs[0].1.agent_nickname.as_deref(), Some("Snaga"));
         assert_eq!(orcs[1].1.agent_nickname.as_deref(), Some("Ghash"));
+        assert_eq!(orcs[2].1.agent_nickname.as_deref(), Some("Krimp"));
+        assert_eq!(
+            orcs.iter()
+                .map(|(_, entry)| entry.model.as_deref())
+                .collect::<Vec<_>>(),
+            vec![
+                Some(App::STANDARD_ORC_MODEL),
+                Some(App::STANDARD_ORC_2_MODEL),
+                Some(App::STANDARD_ORC_3_MODEL),
+            ]
+        );
         let status_items = app.spawn_tree_items(/*show_task_actions*/ true);
         assert!(
             status_items
@@ -6431,26 +6496,59 @@ fn spawn_app_path_creates_troll_with_two_named_orcs() -> Result<()> {
 #[tokio::test]
 async fn standard_crew_quick_start_uses_the_expected_role_picker_label() {
     // Smoke test: the /spawn quick-start entry is labeled for the standard crew (Nazgul + Troll +
-    // 2 Orcs), without restoring the old demo-task behavior.
+    // 3 Orcs), without restoring the old demo-task behavior.
     let mut app = make_test_app().await;
     app.open_spawn_role_picker();
     // The picker is rendered into the chat widget; assert the role-picker path doesn't error and
     // the standard crew constants resolve to the intended models/providers.
-    assert_eq!(App::STANDARD_NAZGUL_MODEL, "glm-5.2");
-    assert_eq!(App::STANDARD_TROLL_MODEL, "zai/glm-5.2-fast");
-    assert_eq!(App::STANDARD_ORC_MODEL, "gpt-5.6-sol");
+    assert_eq!(App::STANDARD_NAZGUL_MODEL, CLAUDE_FABLE_5_PLAN_MODEL);
+    assert_eq!(App::STANDARD_TROLL_MODEL, "gpt-5.6-sol");
+    assert_eq!(App::STANDARD_ORC_MODEL, "gpt-5.6-luna");
+    assert_eq!(App::STANDARD_ORC_2_MODEL, "gpt-5.6-terra");
+    assert_eq!(App::STANDARD_ORC_3_MODEL, "x-ai/grok-4.5");
+    let orc_runtimes = App::standard_orc_runtimes();
+    assert_eq!(
+        orc_runtimes
+            .iter()
+            .map(|(model, provider, effort)| (
+                *model,
+                *provider,
+                effort
+                    .as_ref()
+                    .map(codex_protocol::openai_models::ReasoningEffort::as_str)
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            ("gpt-5.6-luna", OPENAI_PROVIDER_ID, Some("xhigh")),
+            ("gpt-5.6-terra", OPENAI_PROVIDER_ID, Some("xhigh")),
+            ("x-ai/grok-4.5", OPENROUTER_PROVIDER_ID, None),
+        ]
+    );
     // Provider resolution for each crew model.
     assert_eq!(
-        crate::chatwidget::ChatWidget::model_provider_for_selection("glm-5.2").as_deref(),
-        Some("zai")
+        crate::chatwidget::ChatWidget::model_provider_for_selection(App::STANDARD_NAZGUL_MODEL)
+            .as_deref(),
+        Some(CLAUDE_PLAN_PROVIDER_ID)
     );
     assert_eq!(
-        crate::chatwidget::ChatWidget::model_provider_for_selection("zai/glm-5.2-fast").as_deref(),
-        Some("vercel-anthropic-fast")
+        crate::chatwidget::ChatWidget::model_provider_for_selection(App::STANDARD_TROLL_MODEL)
+            .as_deref(),
+        Some(OPENAI_PROVIDER_ID)
     );
     assert_eq!(
-        crate::chatwidget::ChatWidget::model_provider_for_selection("gpt-5.6-sol").as_deref(),
-        Some("openai")
+        crate::chatwidget::ChatWidget::model_provider_for_selection(App::STANDARD_ORC_MODEL)
+            .as_deref(),
+        Some(OPENAI_PROVIDER_ID)
+    );
+    assert_eq!(
+        crate::chatwidget::ChatWidget::model_provider_for_selection(App::STANDARD_ORC_2_MODEL)
+            .as_deref(),
+        Some(OPENAI_PROVIDER_ID)
+    );
+    assert_eq!(
+        crate::chatwidget::ChatWidget::model_provider_for_selection(App::STANDARD_ORC_3_MODEL)
+            .as_deref(),
+        Some(OPENROUTER_PROVIDER_ID)
     );
 }
 

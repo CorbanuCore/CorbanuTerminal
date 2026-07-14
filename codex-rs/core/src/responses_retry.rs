@@ -88,10 +88,8 @@ pub(crate) async fn handle_retryable_response_stream_error(
         .await;
     }
 
-    if *retries >= effective_max_retries {
-        if long_failure {
-            return Err(err);
-        }
+    if *retries >= effective_max_retries && long_failure {
+        return Err(err);
     }
 
     if *retries >= effective_max_retries

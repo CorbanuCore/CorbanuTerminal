@@ -7,7 +7,6 @@ use crate::tools::context::ExecCommandToolOutput;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
 use crate::tools::context::boxed_tool_output;
-use crate::tools::disk_safety::enforce_hierarchy_worktree_headroom;
 use crate::tools::handlers::apply_granted_turn_permissions;
 use crate::tools::handlers::apply_patch::intercept_apply_patch;
 use crate::tools::handlers::implicit_granted_permissions;
@@ -239,17 +238,6 @@ impl ExecCommandHandler {
         let command = resolved_command.command;
         let shell_type = resolved_command.shell_type;
         let command_for_display = codex_shell_command::parse_command::shlex_join(&command);
-
-        if let Err(err) = enforce_hierarchy_worktree_headroom(
-            &command,
-            turn.session_source.get_agent_role().as_deref(),
-            native_cwd.as_deref().map(AsRef::as_ref),
-        )
-        .await
-        {
-            manager.release_process_id(process_id).await;
-            return Err(FunctionCallError::RespondToModel(err));
-        }
 
         let ExecCommandArgs {
             tty,

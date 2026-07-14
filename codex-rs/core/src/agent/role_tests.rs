@@ -767,38 +767,6 @@ fn hierarchy_managers_keep_evidence_failures_task_local() {
     }
 }
 
-#[test]
-fn hierarchy_roles_require_fail_closed_visual_acceptance() {
-    for role_base in [NAZGUL_BASE, TROLL_BASE, ORC_BASE] {
-        assert!(role_base.contains("pfterminal visual-judge"));
-        assert!(role_base.contains("real user inputs"));
-        assert!(role_base.contains("pointer/action intent"));
-        assert!(role_base.contains("visible defect"));
-        assert!(role_base.contains("every supported movement direction"));
-        assert!(role_base.contains("candidate-ready"));
-        assert!(role_base.contains("infer readiness"));
-        assert!(role_base.contains("exact starting commit/content manifest"));
-        assert!(role_base.contains("implementation"));
-        assert!(role_base.contains("Pre-existing screenshots"));
-        assert!(role_base.contains("independent verifier"));
-    }
-}
-
-#[test]
-fn hierarchy_roles_require_projected_disk_headroom() {
-    for role_base in [NAZGUL_BASE, TROLL_BASE, ORC_BASE] {
-        assert!(role_base.contains("post-operation invariant"));
-        assert!(role_base.contains("current_free - estimated_peak_growth >= reserve"));
-        assert!(role_base.contains("current_free >= reserve` is invalid"));
-        assert!(
-            role_base.contains("Serialize large disk operations")
-                || role_base.contains("one large disk operation at a time")
-        );
-        assert!(role_base.contains("reclaim"));
-        assert!(role_base.contains("peak growth cannot be bounded safely"));
-    }
-}
-
 #[tokio::test]
 async fn no_role_config_keeps_model_default_base_instructions() {
     let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;

@@ -1,28 +1,30 @@
-# PFTerminal 0.1.10
+# PFTerminal 0.1.11
 
 ## Fixed
 
-- Prevented hierarchy-wide termination after routine `turn/start` failures and capacity pressure.
-- Removed the capacity-retry notification flood and hardened zombie/stillborn pane recovery.
-- Added a durable exactly-once dispatch queue with crash-consistent persistence and ordered
-  shutdown that fences headless writers.
-- Agent compaction is no longer treated as agent death, and encrypted task payloads no longer
-  replace readable `/spawn status` task text.
+- Kept the TUI alive when a hierarchy dispatch hits a busy pane or a per-pane `turn/start`
+  request fails; work sent to a running native pane is now steered into that turn.
+- Fixed remote compaction request ordering so `compaction_trigger` remains the final input item,
+  and normalized accidental assistant-prefill requests without rewriting durable history.
+- Added an explicit child-to-parent checkpoint channel so Troll and Orc progress can reach their
+  manager during long-running turns without self-dispatching or starting competing turns.
+- Removed the global single-process state lock so users can run multiple PFTerminal processes.
 
-## Qualified
+## Changed
 
-- Automated gates 16.1–16.4 passed, including the deterministic ten-cut crash matrix and the
-  full-process PTY gate.
-- Free-form stress testing found and fixed two dispatch correctness defects.
-- One clean 1,200-second free-form session passed on the qualified release lineage. The final
-  section-17 45–60 minute qualification was not completed and is not claimed as passing.
+- Removed the game-specific visual workflow, mandatory evidence headers, visual-judge command,
+  and hard-coded hierarchy disk policy. Hierarchy dispatches are domain-neutral again.
+- Changed the standard crew to Claude Fable Plan Nazgul, GPT-5.6-Sol Troll, GPT-5.6-Luna and
+  GPT-5.6-Terra Orcs, plus an OpenRouter Grok 4.5 Orc.
+- Self-dispatch is rejected as a routing error; panes report upward through the checkpoint channel.
 
-## Known issues
+## Qualification status
 
-- The required implementer-blind 45–60 minute free-form session was not run before release.
-- Queued panes can be briefly mislabeled during bootstrap.
-- Grok 4.5 can emit integer tool arguments as JSON floats, causing typed tool-call rejection.
+- Focused regressions cover compaction ordering, assistant-prefill normalization, free-form
+  dispatch, busy-pane steering, parent checkpoints, self-dispatch rejection, and crew creation.
+- This combined emergency patch has not completed extended human stress qualification. The release
+  is being published because the defects in 0.1.10 materially block normal use.
 
-Previous release: New OpenAI models GPT-5.6 Sol/Terra/Luna (ChatGPT plan).
+Previous release: 0.1.10.
 
 The changelog can be found on the [releases page](https://github.com/agtico/PfTerminal/releases).

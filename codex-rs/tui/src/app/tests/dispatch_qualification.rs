@@ -131,7 +131,7 @@ async fn seeded_real_pump_sequences_preserve_dispatch_invariants() {
                 false,
             );
         }
-        let mut targets = vec![
+        let mut targets = [
             qualification_thread(811),
             qualification_thread(812),
             qualification_thread(813),

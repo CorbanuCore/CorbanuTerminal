@@ -15,3 +15,4 @@ Scenario: /responses POST bodies (input only, redacted like other suite snapshot
 02:message/user:first prompt
 03:message/assistant:first answer
 04:agent_message
+05:message/user:Continue.

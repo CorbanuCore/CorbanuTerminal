@@ -204,7 +204,7 @@ pub(crate) enum AppEvent {
         provider: Option<String>,
         effort: Option<ReasoningEffort>,
     },
-    /// Create the standard persistent crew: Nazgul (root) -> Troll -> 2 Orcs. No task is started.
+    /// Create the standard persistent crew: Nazgul (root) -> Troll -> 3 Orcs. No task is started.
     CreateSpawnStandardCrew,
     /// Open a prompt that sends work to an existing spawned-agent pane.
     OpenSpawnAgentTaskPrompt {
@@ -221,7 +221,7 @@ pub(crate) enum AppEvent {
         /// Present only for a delivery selected and durably marked by the pump.
         delivery_id: Option<String>,
     },
-    /// Steer a running spawned-agent turn that is blocked in `wait_agent`.
+    /// Steer a running spawned-agent turn, including one blocked in `wait_agent`.
     SteerWaitingSpawnAgentTask {
         thread_id: codex_protocol::ThreadId,
         task: String,

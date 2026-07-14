@@ -423,6 +423,42 @@ fn items_after_last_model_output(input: &[ResponseItem]) -> Option<Vec<ResponseI
     (!incremental_items.is_empty()).then(|| incremental_items.to_vec())
 }
 
+/// Prevent a completed assistant message from becoming an accidental prefill on the next model
+/// request.
+///
+/// Responses requests can contain tool activity after a visible assistant message. Some upstream
+/// models ignore those non-message items when validating conversation shape and reject the request
+/// because its latest message is still `assistant`. The continuation is request-only: it does not
+/// rewrite the durable conversation history.
+fn ensure_responses_input_ends_with_user_turn(input: &mut Vec<ResponseItem>) {
+    // A compaction trigger is itself the terminal request control. Appending anything after it is
+    // invalid, and it does not need the user-message continuation used for ordinary sampling.
+    if input
+        .iter()
+        .any(|item| matches!(item, ResponseItem::CompactionTrigger { .. }))
+    {
+        return;
+    }
+
+    let latest_message_role = input.iter().rev().find_map(|item| match item {
+        ResponseItem::Message { role, .. } => Some(role.as_str()),
+        _ => None,
+    });
+    if latest_message_role != Some("assistant") {
+        return;
+    }
+
+    input.push(ResponseItem::Message {
+        id: None,
+        role: "user".to_string(),
+        content: vec![ContentItem::InputText {
+            text: "Continue.".to_string(),
+        }],
+        phase: None,
+        metadata: None,
+    });
+}
+
 /// Whether an outbound Responses `input` contains at least one user-role message.
 ///
 /// The Vercel gateway rejects `previous_response_id` continuations whose `input`
@@ -1126,6 +1162,7 @@ impl ModelClient {
         if !self.state.provider.info().is_openai() {
             input.iter_mut().for_each(ResponseItem::clear_metadata);
         }
+        ensure_responses_input_ends_with_user_turn(&mut input);
         let uses_zai_reasoning =
             self.state.provider.info().is_ambient() || self.state.provider.info().is_zai();
         let mut tools = create_tools_json_for_responses_api(&prompt.tools)?;

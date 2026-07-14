@@ -404,6 +404,18 @@ async fn response_item_ids_are_sent_for_all_remote_v2_compaction_requests() -> a
     for (request_index, request) in requests.iter().enumerate() {
         let input = request.input();
         assert!(!input.is_empty(), "request {request_index} input is empty");
+        if input.iter().any(|item| {
+            item.get("type").and_then(serde_json::Value::as_str) == Some("compaction_trigger")
+        }) {
+            assert_eq!(
+                input
+                    .last()
+                    .and_then(|item| item.get("type"))
+                    .and_then(serde_json::Value::as_str),
+                Some("compaction_trigger"),
+                "request {request_index} compaction_trigger must be the final input item"
+            );
+        }
         for item in input {
             if item.get("type").and_then(serde_json::Value::as_str) == Some("compaction_trigger") {
                 continue;

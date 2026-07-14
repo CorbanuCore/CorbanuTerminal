@@ -11,7 +11,6 @@ use crate::session::turn_context::TurnContext;
 use crate::shell::ShellType;
 use crate::tools::context::FunctionToolOutput;
 use crate::tools::context::ToolPayload;
-use crate::tools::disk_safety::enforce_hierarchy_worktree_headroom;
 use crate::tools::events::ToolEmitter;
 use crate::tools::events::ToolEventCtx;
 use crate::tools::handlers::apply_granted_turn_permissions;
@@ -157,14 +156,6 @@ async fn run_exec_like(args: RunExecLikeArgs) -> Result<FunctionToolOutput, Func
     {
         return Ok(output);
     }
-
-    enforce_hierarchy_worktree_headroom(
-        &exec_params.command,
-        turn.session_source.get_agent_role().as_deref(),
-        Some(exec_params.cwd.as_path()),
-    )
-    .await
-    .map_err(FunctionCallError::RespondToModel)?;
 
     let source = ExecCommandSource::Agent;
     let emitter = ToolEmitter::shell(exec_params.command.clone(), exec_params.cwd.clone(), source);

@@ -87,6 +87,61 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 const TEST_INSTALLATION_ID: &str = "11111111-1111-4111-8111-111111111111";
 
+#[test]
+fn responses_input_normalizes_accidental_assistant_prefill_without_changing_user_turns() {
+    let message = |role: &str, text: &str| ResponseItem::Message {
+        id: None,
+        role: role.to_string(),
+        content: vec![ContentItem::InputText {
+            text: text.to_string(),
+        }],
+        phase: None,
+        metadata: None,
+    };
+    let cases = [
+        (
+            vec![
+                message("user", "Dispatch the work."),
+                message("assistant", "The work is queued."),
+                ResponseItem::Other,
+            ],
+            vec![
+                message("user", "Dispatch the work."),
+                message("assistant", "The work is queued."),
+                ResponseItem::Other,
+                message("user", "Continue."),
+            ],
+        ),
+        (
+            vec![
+                message("assistant", "Earlier result."),
+                message("user", "Review the current changes."),
+            ],
+            vec![
+                message("assistant", "Earlier result."),
+                message("user", "Review the current changes."),
+            ],
+        ),
+        (
+            vec![
+                message("user", "Compact this conversation."),
+                message("assistant", "Earlier result."),
+                ResponseItem::CompactionTrigger { metadata: None },
+            ],
+            vec![
+                message("user", "Compact this conversation."),
+                message("assistant", "Earlier result."),
+                ResponseItem::CompactionTrigger { metadata: None },
+            ],
+        ),
+    ];
+
+    for (mut input, expected) in cases {
+        super::ensure_responses_input_ends_with_user_turn(&mut input);
+        assert_eq!(input, expected);
+    }
+}
+
 fn test_model_client(session_source: SessionSource) -> ModelClient {
     let provider = create_oss_provider_with_base_url("https://example.com/v1", WireApi::Responses);
     let thread_id = ThreadId::new();

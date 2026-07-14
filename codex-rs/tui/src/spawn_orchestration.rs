@@ -15,11 +15,10 @@ use codex_app_server_protocol::AdditionalContextKind;
 use codex_app_server_protocol::SessionSource as AppServerSessionSource;
 use codex_app_server_protocol::ThreadStatus;
 use codex_features::Feature;
+use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
+use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
-use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
-use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
-use codex_model_provider_info::ZAI_DEFAULT_MODEL;
-use codex_model_provider_info::ZAI_PROVIDER_ID;
+use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_protocol::ThreadId;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort;
@@ -45,8 +44,9 @@ const SEND_TASK_FENCE_OPEN: &str = "```pfterminal-send-task";
 const SEND_TASK_FENCE_CLOSE: &str = "```";
 const SEND_TASK_OPEN: &str = "<pfterminal_send_task";
 const SEND_TASK_CLOSE: &str = "</pfterminal_send_task>";
+const REPORT_PARENT_OPEN: &str = "<pfterminal_report_parent>";
+const REPORT_PARENT_CLOSE: &str = "</pfterminal_report_parent>";
 const EXEC_WRAPPED_DISPATCH_CORRECTION_TASK: &str = "PFTerminal host correction: you emitted a <pfterminal_send_task> dispatch block inside exec_command/shell text, so it was not routed to the target pane. Re-emit the same dispatch now as plain assistant message text, not inside a shell command, cat, echo, heredoc, markdown fence, or tool call. Do not claim it was sent until the plain-text block appears.";
-const WORKFLOW_CLASSIFICATION_CORRECTION_TASK: &str = "PFTerminal host correction: your Nazgul dispatch was rejected because its task body did not satisfy the structured workflow gate. Re-evaluate the work and re-emit the dispatch with the first nonblank line exactly `PFTERMINAL_WORK_KIND: visual-baseline`, `PFTERMINAL_WORK_KIND: visual-implementation`, or `PFTERMINAL_WORK_KIND: nonvisual`. User-facing visual or interactive behavior is visual work. Use `visual-baseline` only for a baseline-only evidence task: identify the exact starting commit/content manifest, record fresh real-user-input video with required interaction/directional coverage, and run pfterminal visual-judge to produce a failing defect verdict; do not include implementation. Use `visual-implementation` only after that evidence exists, and add non-placeholder `PFTERMINAL_BASELINE_MANIFEST:`, `PFTERMINAL_BASELINE_VIDEO:`, and `PFTERMINAL_BASELINE_VERDICT:` lines. Use `nonvisual` only when the task cannot change user-visible appearance or interactive behavior. Do not claim a rejected dispatch was sent.";
 const SPAWN_PARENT_REPORT_LIMIT: usize = 12;
 #[cfg(test)]
 const SPAWN_PROCESSED_DISPATCH_TURN_LIMIT: usize = 1024;
@@ -81,126 +81,6 @@ pub(crate) struct SpawnTaskDispatch {
     pub(crate) target: String,
     pub(crate) task: String,
     pub(crate) seq: Option<u64>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DispatchWorkKind {
-    VisualBaseline,
-    VisualImplementation,
-    Nonvisual,
-}
-
-fn dispatch_workflow_header<'a>(task: &'a str, name: &str) -> Option<&'a str> {
-    let prefix = format!("{name}:");
-    task.lines()
-        .take(16)
-        .find_map(|line| line.trim().strip_prefix(&prefix).map(str::trim))
-        .filter(|value| !value.is_empty())
-}
-
-fn dispatch_work_kind(task: &str) -> Result<DispatchWorkKind, String> {
-    let first = task
-        .lines()
-        .map(str::trim)
-        .find(|line| !line.is_empty())
-        .ok_or_else(|| "task body is empty".to_string())?;
-    let value = first
-        .strip_prefix("PFTERMINAL_WORK_KIND:")
-        .map(str::trim)
-        .ok_or_else(|| {
-            "first nonblank line must be `PFTERMINAL_WORK_KIND: visual-baseline`, `PFTERMINAL_WORK_KIND: visual-implementation`, or `PFTERMINAL_WORK_KIND: nonvisual`"
-                .to_string()
-        })?;
-    match value {
-        "visual-baseline" => Ok(DispatchWorkKind::VisualBaseline),
-        "visual-implementation" => Ok(DispatchWorkKind::VisualImplementation),
-        "nonvisual" => Ok(DispatchWorkKind::Nonvisual),
-        _ => Err(format!("unknown PFTERMINAL_WORK_KIND `{value}`")),
-    }
-}
-
-fn resolve_dispatch_evidence_path(cwd: &Path, value: &str) -> std::path::PathBuf {
-    let path = Path::new(value);
-    if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        cwd.join(path)
-    }
-}
-
-fn validate_nazgul_dispatch_workflow(task: &str, cwd: &Path) -> Result<DispatchWorkKind, String> {
-    let kind = dispatch_work_kind(task)?;
-    if kind != DispatchWorkKind::VisualImplementation {
-        return Ok(kind);
-    }
-
-    let manifest = dispatch_workflow_header(task, "PFTERMINAL_BASELINE_MANIFEST")
-        .ok_or_else(|| "visual-implementation requires PFTERMINAL_BASELINE_MANIFEST".to_string())?;
-    let video = dispatch_workflow_header(task, "PFTERMINAL_BASELINE_VIDEO")
-        .ok_or_else(|| "visual-implementation requires PFTERMINAL_BASELINE_VIDEO".to_string())?;
-    let verdict = dispatch_workflow_header(task, "PFTERMINAL_BASELINE_VERDICT")
-        .ok_or_else(|| "visual-implementation requires PFTERMINAL_BASELINE_VERDICT".to_string())?;
-    for (name, value) in [
-        ("manifest", manifest),
-        ("video", video),
-        ("verdict", verdict),
-    ] {
-        if matches!(
-            value.to_ascii_lowercase().as_str(),
-            "none" | "n/a" | "pending" | "tbd" | "to-produce" | "unknown"
-        ) {
-            return Err(format!("visual-implementation {name} is a placeholder"));
-        }
-    }
-
-    let video_path = resolve_dispatch_evidence_path(cwd, video);
-    let video_len = std::fs::metadata(&video_path)
-        .map_err(|error| {
-            format!(
-                "baseline video `{}` is unavailable: {error}",
-                video_path.display()
-            )
-        })?
-        .len();
-    if video_len == 0 {
-        return Err(format!(
-            "baseline video `{}` is empty",
-            video_path.display()
-        ));
-    }
-
-    let verdict_path = resolve_dispatch_evidence_path(cwd, verdict);
-    let verdict_bytes = std::fs::read(&verdict_path).map_err(|error| {
-        format!(
-            "baseline verdict `{}` is unavailable: {error}",
-            verdict_path.display()
-        )
-    })?;
-    let verdict_json: serde_json::Value =
-        serde_json::from_slice(&verdict_bytes).map_err(|error| {
-            format!(
-                "baseline verdict `{}` is not valid JSON: {error}",
-                verdict_path.display()
-            )
-        })?;
-    if verdict_json
-        .get("verdict")
-        .and_then(serde_json::Value::as_str)
-        != Some("fail")
-    {
-        return Err("baseline verdict must be fail before implementation".to_string());
-    }
-    if verdict_json
-        .get("defects")
-        .and_then(serde_json::Value::as_array)
-        .is_none_or(Vec::is_empty)
-    {
-        return Err(
-            "baseline verdict must contain at least one visible-behavior defect".to_string(),
-        );
-    }
-
-    Ok(kind)
 }
 
 pub(crate) use crate::dispatch_queue::PendingDispatchEnqueueResult;
@@ -326,9 +206,9 @@ impl App {
         let items = vec![
             section_item("Quick start"),
             SelectionItem {
-                name: "Create standard crew: Nazgul + Troll + 2 Orcs".to_string(),
+                name: "Create standard crew: Nazgul + Troll + 3 Orcs".to_string(),
                 description: Some(
-                    "Create persistent named panes (Nazgul GLM 5.2 Z.AI xhigh, Troll Z.AI Vercel Fast, 2x Codex gpt-5.6-sol xhigh). No task is started."
+                    "Create persistent named panes (Nazgul Claude Fable Plan, Troll GPT-5.6-Sol xhigh, Orcs GPT-5.6-Luna xhigh, GPT-5.6-Terra xhigh, and OpenRouter Grok 4.5). No task is started."
                         .to_string(),
                 ),
                 actions: vec![Box::new(|tx| {
@@ -737,15 +617,11 @@ impl App {
         role: SpawnRole,
     ) -> (&'static str, &'static str, Option<ReasoningEffort>) {
         match role {
-            SpawnRole::Nazgul => (
-                Self::STANDARD_NAZGUL_MODEL,
-                ZAI_PROVIDER_ID,
-                Some(ReasoningEffort::XHigh),
-            ),
+            SpawnRole::Nazgul => (Self::STANDARD_NAZGUL_MODEL, CLAUDE_PLAN_PROVIDER_ID, None),
             SpawnRole::Troll => (
                 Self::STANDARD_TROLL_MODEL,
-                VERCEL_ANTHROPIC_FAST_PROVIDER_ID,
-                None,
+                OPENAI_PROVIDER_ID,
+                Some(ReasoningEffort::XHigh),
             ),
             SpawnRole::Orc => (
                 Self::STANDARD_ORC_MODEL,
@@ -1031,8 +907,8 @@ impl App {
             context,
             "Report Orcs used, what each did, evidence, issues forced back for rework, and remaining risk."
         );
-        write_spawn_product_contract(&mut context);
         write_spawn_dispatch_contract(&mut context);
+        write_spawn_parent_report_contract(&mut context);
         let _ = writeln!(context, "Orcs assigned to you:");
         let (orcs, claude_orcs) = self.spawn_orc_children_for_node(&troll_node_id);
         if orcs.is_empty() && claude_orcs.is_empty() {
@@ -1068,7 +944,6 @@ impl App {
             context,
             "Do exactly what your Troll tells you. Do not expand scope. Execute directly and provide evidence."
         );
-        write_spawn_product_contract(&mut context);
         if let Some(parent_node_id) = self.logical_parent_node_for_thread(thread_id)
             && let Some(parent_title) = self.spawn_node_title(&parent_node_id)
         {
@@ -1303,6 +1178,7 @@ impl App {
             context,
             "You are receiving this task through /spawn as {troll_name}."
         );
+        write_spawn_parent_report_contract(&mut context);
         let troll_node_id = self.logical_native_node_for_thread(thread_id);
         let (orcs, claude_orcs) = self.spawn_orc_children_for_node(&troll_node_id);
         let has_orcs = !orcs.is_empty() || !claude_orcs.is_empty();
@@ -1445,13 +1321,6 @@ impl App {
         let source_title = self
             .spawn_node_title(source_pane_id)
             .unwrap_or_else(|| self.user_pane_title(source_pane_id));
-        let source_native_role = self
-            .spawn_node_backing_thread_id(source_pane_id)
-            .and_then(|thread_id| self.agent_navigation.get(&thread_id))
-            .and_then(|entry| entry.agent_role.as_deref());
-        let enforce_nazgul_workflow = source_pane_id == self.spawn_root_node_id()
-            && !matches!(source_native_role, Some(TROLL_ROLE | ORC_ROLE));
-        let mut workflow_correction_queued = false;
         let mut any_queued = false;
         let mut pending = dispatches
             .into_iter()
@@ -1486,32 +1355,6 @@ impl App {
                     "ignored empty task dispatch",
                     true,
                 );
-                continue;
-            }
-            if attempt == 0
-                && origin_id.is_some()
-                && enforce_nazgul_workflow
-                && let Err(reason) =
-                    validate_nazgul_dispatch_workflow(&dispatch.task, self.config.cwd.as_path())
-            {
-                if let Some(origin_id) = origin_id.as_ref() {
-                    self.spawn_processed_dispatch_origins
-                        .insert(origin_id.clone());
-                    self.persist_pane_state();
-                }
-                let ack = self.make_spawn_dispatch_ack(
-                    source_pane_id,
-                    dispatch.target.trim().to_string(),
-                    dispatch.target.trim().to_string(),
-                    dispatch.seq,
-                );
-                let detail = format!("workflow gate rejected Nazgul dispatch: {reason}");
-                self.record_spawn_dispatch_error(source_pane_id, source_is_active, detail.clone());
-                self.record_spawn_dispatch_acks(&[ack], "failed", &detail, true);
-                if !workflow_correction_queued {
-                    self.queue_spawn_workflow_classification_correction(source_pane_id);
-                    workflow_correction_queued = true;
-                }
                 continue;
             }
             let resolved = self.resolve_spawn_task_target(&dispatch.target);
@@ -1577,6 +1420,23 @@ impl App {
                         dispatch.seq,
                     );
                     ack.attempt = attempt;
+                    if target_node_id == source_pane_id
+                        && !self.is_assignment_holder(source_pane_id)
+                    {
+                        self.record_spawn_dispatch_error(
+                            source_pane_id,
+                            source_is_active,
+                            "A pane cannot dispatch a task to itself. Report progress to its parent or continue the current turn instead."
+                                .to_string(),
+                        );
+                        self.record_spawn_dispatch_acks(
+                            &[ack],
+                            "failed",
+                            "native pane cannot dispatch a task to itself",
+                            true,
+                        );
+                        continue;
+                    }
                     let task = task_with_dispatch_provenance(
                         &dispatch.task,
                         &source_title,
@@ -1735,26 +1595,6 @@ impl App {
         }
     }
 
-    fn queue_spawn_workflow_classification_correction(&self, source_node_id: &str) {
-        if let Some(thread_id) = self.spawn_node_backing_thread_id(source_node_id) {
-            self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
-                thread_id,
-                task: WORKFLOW_CLASSIFICATION_CORRECTION_TASK.to_string(),
-                delivery_id: None,
-            });
-            return;
-        }
-        if let Some(pane_id) = node_id_pane(source_node_id)
-            && pane_id != CODEX_MAIN_PANE_ID
-        {
-            self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
-                pane_id: pane_id.to_string(),
-                task: WORKFLOW_CLASSIFICATION_CORRECTION_TASK.to_string(),
-                delivery_id: None,
-            });
-        }
-    }
-
     pub(crate) fn dispatch_native_spawn_task_blocks_from_turn(
         &mut self,
         source_thread_id: ThreadId,
@@ -1803,9 +1643,14 @@ impl App {
         if assistant_text.trim().is_empty() {
             return false;
         }
+        let reported = self.record_native_spawn_parent_reports_from_item(
+            source_thread_id,
+            turn_id,
+            assistant_text,
+        );
         let (_visible, dispatches) = extract_spawn_task_dispatches(assistant_text);
         if dispatches.is_empty() {
-            return false;
+            return reported;
         }
         let source_node_id = if self.is_codex_main_bound_spawn_root_thread(source_thread_id) {
             self.spawn_root_node_id()
@@ -1837,9 +1682,14 @@ impl App {
         if assistant_text.trim().is_empty() {
             return false;
         }
+        let reported = self.record_native_spawn_parent_reports_from_item(
+            source_thread_id,
+            turn_id,
+            assistant_text,
+        );
         let (_visible, dispatches) = extract_spawn_task_dispatches(assistant_text);
         if dispatches.is_empty() {
-            return false;
+            return reported;
         }
         let source_node_id = if self.is_codex_main_bound_spawn_root_thread(source_thread_id) {
             self.spawn_root_node_id()
@@ -1853,6 +1703,44 @@ impl App {
             dispatches,
         );
         true
+    }
+
+    fn record_native_spawn_parent_reports_from_item(
+        &mut self,
+        source_thread_id: ThreadId,
+        turn_id: &str,
+        assistant_text: &str,
+    ) -> bool {
+        let reports = extract_spawn_parent_reports(assistant_text);
+        if reports.is_empty() {
+            return false;
+        }
+        let source_node_id = self.logical_native_node_for_thread(source_thread_id);
+        let Some(parent_node_id) = self.logical_parent_node_for_thread(source_thread_id) else {
+            return false;
+        };
+        let child_title = self.thread_label(source_thread_id);
+        let mut recorded = false;
+        for (ordinal, value) in reports.into_iter().enumerate() {
+            let origin_id = crate::dispatch_queue::model_payload_dispatch_origin_id(
+                &source_node_id,
+                turn_id,
+                "__parent_report__",
+                &value,
+                ordinal as u32,
+            );
+            if !self.spawn_processed_dispatch_origins.insert(origin_id) {
+                continue;
+            }
+            let (seq, as_of) = self.reserve_spawn_report_seq(&source_node_id);
+            let report = spawn_child_report(&child_title, "checkpoint", Some(&value), seq, &as_of);
+            self.record_spawn_parent_report(parent_node_id.clone(), report);
+            recorded = true;
+        }
+        if recorded {
+            self.persist_pane_state();
+        }
+        recorded
     }
 
     fn correct_exec_wrapped_spawn_task_dispatch(
@@ -2548,7 +2436,8 @@ impl App {
         let (target, adapter) = targets.into_iter().find_map(|target| {
             let adapter = match self.resolve_spawn_task_target(&target).ok()? {
                 SpawnTaskTarget::Native(thread_id)
-                    if self.native_spawn_target_is_waiting_for_agents(thread_id) =>
+                    if self.native_spawn_target_is_waiting_for_agents(thread_id)
+                        || self.native_spawn_target_is_busy(thread_id) =>
                 {
                     SpawnDispatchPumpDelivery::Native {
                         thread_id,
@@ -3138,20 +3027,41 @@ impl App {
     }
 
     /// Standard crew model/effort mapping (all Codex-native):
-    ///   Nazgul: glm-5.2 (Z.AI) @ xhigh
-    ///   Troll:  zai/glm-5.2-fast (Vercel) @ default
-    ///   Orc 1/2: gpt-5.6-sol (OpenAI) @ xhigh
-    pub(crate) const STANDARD_NAZGUL_MODEL: &'static str = ZAI_DEFAULT_MODEL;
-    pub(crate) const STANDARD_TROLL_MODEL: &'static str = VERCEL_GLM_5_2_FAST_MODEL;
-    pub(crate) const STANDARD_ORC_MODEL: &'static str = "gpt-5.6-sol";
+    ///   Nazgul: Claude Fable 5 Plan (Claude Plan) @ provider default
+    ///   Troll: GPT-5.6-Sol (OpenAI) @ xhigh
+    ///   Orc 1: GPT-5.6-Luna (OpenAI) @ xhigh
+    ///   Orc 2: GPT-5.6-Terra (OpenAI) @ xhigh
+    ///   Orc 3: Grok 4.5 (OpenRouter) @ provider default
+    pub(crate) const STANDARD_NAZGUL_MODEL: &'static str = CLAUDE_FABLE_5_PLAN_MODEL;
+    pub(crate) const STANDARD_TROLL_MODEL: &'static str = "gpt-5.6-sol";
+    pub(crate) const STANDARD_ORC_MODEL: &'static str = "gpt-5.6-luna";
+    pub(crate) const STANDARD_ORC_2_MODEL: &'static str = "gpt-5.6-terra";
+    pub(crate) const STANDARD_ORC_3_MODEL: &'static str = "x-ai/grok-4.5";
+
+    pub(crate) fn standard_orc_runtimes()
+    -> [(&'static str, &'static str, Option<ReasoningEffort>); 3] {
+        [
+            (
+                Self::STANDARD_ORC_MODEL,
+                OPENAI_PROVIDER_ID,
+                Some(ReasoningEffort::XHigh),
+            ),
+            (
+                Self::STANDARD_ORC_2_MODEL,
+                OPENAI_PROVIDER_ID,
+                Some(ReasoningEffort::XHigh),
+            ),
+            (Self::STANDARD_ORC_3_MODEL, OPENROUTER_PROVIDER_ID, None),
+        ]
+    }
 
     pub(crate) fn ensure_standard_crew_providers_ready(&self) -> Result<()> {
         // Preflight every provider before creating the root Nazgul. Without this, a missing Troll
         // or Orc credential leaves a half-created crew with only the already-bound Nazgul pane.
         for provider_id in [
-            ZAI_PROVIDER_ID,
-            VERCEL_ANTHROPIC_FAST_PROVIDER_ID,
+            CLAUDE_PLAN_PROVIDER_ID,
             OPENAI_PROVIDER_ID,
+            OPENROUTER_PROVIDER_ID,
         ] {
             self.ensure_native_spawn_provider_ready(Some(provider_id))?;
         }
@@ -3169,7 +3079,7 @@ impl App {
         let spawn_config = self.native_spawn_agent_config()?;
         self.ensure_standard_crew_providers_ready()?;
 
-        // Nazgul — glm-5.2 (Z.AI) @ xhigh, root, loaded through the built-in Nazgul role config.
+        // Nazgul — Claude Fable 5 Plan, root, loaded through the built-in Nazgul role config.
         let nazgul_nickname = self.next_spawn_agent_nickname(SpawnRole::Nazgul);
         let nazgul = app_server
             .spawn_agent_thread(
@@ -3178,8 +3088,8 @@ impl App {
                 NAZGUL_ROLE_NAME.to_string(),
                 nazgul_nickname.clone(),
                 Self::STANDARD_NAZGUL_MODEL.to_string(),
-                Some(ZAI_PROVIDER_ID.to_string()),
-                Some(ReasoningEffort::XHigh),
+                Some(CLAUDE_PLAN_PROVIDER_ID.to_string()),
+                /*effort*/ None,
                 /*base_instructions*/ None,
             )
             .await?;
@@ -3201,7 +3111,7 @@ impl App {
         self.set_spawn_nazgul_pane_binding(thread_node_id(nazgul_thread_id));
         self.persist_bound_nazgul_root_thread_metadata().await;
 
-        // Troll — zai/glm-5.2-fast (Vercel) under the Nazgul.
+        // Troll — GPT-5.6-Sol (OpenAI) @ xhigh under the Nazgul.
         let troll_nickname = self.next_spawn_agent_nickname(SpawnRole::Troll);
         let troll = app_server
             .spawn_agent_thread(
@@ -3210,10 +3120,8 @@ impl App {
                 TROLL_ROLE.to_string(),
                 troll_nickname.clone(),
                 Self::STANDARD_TROLL_MODEL.to_string(),
-                Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID.to_string()),
-                // Vercel-fast GLM does not take a reasoning effort override.
-                /*effort*/
-                None,
+                Some(OPENAI_PROVIDER_ID.to_string()),
+                Some(ReasoningEffort::XHigh),
                 /*base_instructions*/ None,
             )
             .await?;
@@ -3229,8 +3137,9 @@ impl App {
         )
         .await;
 
-        // Two Orcs — gpt-5.6-sol (OpenAI) @ xhigh under the Troll.
-        for _ in 0..2 {
+        // Three heterogeneous Orcs under the Troll. The runtime is persisted per logical node, so
+        // replay/materialization retains each Orc's selected provider and effort.
+        for (model, provider, effort) in Self::standard_orc_runtimes() {
             let orc_nickname = self.next_spawn_agent_nickname(SpawnRole::Orc);
             let orc = app_server
                 .spawn_agent_thread(
@@ -3238,9 +3147,9 @@ impl App {
                     troll_thread_id,
                     ORC_ROLE.to_string(),
                     orc_nickname.clone(),
-                    Self::STANDARD_ORC_MODEL.to_string(),
-                    Some(OPENAI_PROVIDER_ID.to_string()),
-                    Some(ReasoningEffort::XHigh),
+                    model.to_string(),
+                    Some(provider.to_string()),
+                    effort,
                     /*base_instructions*/ None,
                 )
                 .await?;
@@ -5079,8 +4988,8 @@ impl App {
             context,
             "Report Orcs used, what each did, evidence, issues forced back for rework, and remaining risk."
         );
-        write_spawn_product_contract(&mut context);
         write_spawn_dispatch_contract(&mut context);
+        write_spawn_parent_report_contract(&mut context);
         let _ = writeln!(context, "Orcs assigned to you:");
         let (orcs, claude_orcs) = self.spawn_orc_children_for_node(&troll_node_id);
         if orcs.is_empty() && claude_orcs.is_empty() {
@@ -5116,7 +5025,6 @@ impl App {
             context,
             "Do exactly what your Troll tells you. Do not expand scope. Execute directly and provide evidence."
         );
-        write_spawn_product_contract(&mut context);
         if let Some(parent_node_id) = self.logical_parent_node_for_pane(&pane.id)
             && let Some(parent_title) = self.spawn_node_title(&parent_node_id)
         {
@@ -5225,7 +5133,6 @@ impl App {
             context,
             "When asked about Trolls or Orcs, answer from this live hierarchy."
         );
-        write_spawn_product_contract(&mut context);
         write_spawn_dispatch_contract(&mut context);
 
         let trolls = self.spawn_troll_threads();
@@ -5472,41 +5379,6 @@ impl App {
     }
 }
 
-fn write_spawn_product_contract(context: &mut String) {
-    let _ = writeln!(
-        context,
-        "Canonical PFTerminal positioning for orchestration work: PFTerminal is a terminal-native AI orchestration app for spawning, routing, supervising, and auditing agent panes."
-    );
-    let _ = writeln!(
-        context,
-        "Core concept: Sauron/the human is final authority; Nazgul orchestrates as CTO; Trolls supervise as engineering managers; Orcs execute as ICs."
-    );
-    let _ = writeln!(
-        context,
-        "Runtime capability: automatic_compaction=enabled. Pane availability is determined by explicit runtime status and errors, never inferred from context telemetry."
-    );
-    let _ = writeln!(
-        context,
-        "Visual acceptance critical path: for any user-facing visual or interactive product, implementation work is blocked until the exact starting commit/content manifest is identified, a fresh baseline is recorded from that state through real user inputs, and `pfterminal visual-judge --video <capture.mp4> --rubric <rubric.txt> --out <verdict.json>` produces the visible-behavior defect list that becomes acceptance criteria. The first execution dispatch must establish that baseline and verdict. Pre-existing visual artifacts count only when their manifest exactly matches the starting state and their coverage satisfies the current objective."
-    );
-    let _ = writeln!(
-        context,
-        "Both recordings must exercise representative flows, idle/no-command behavior, transitions, and relevant interactions. For products with directional control, both must exercise every supported movement direction; pointer/action intent must be visible so the judge can compare the requested action with the outcome. Screenshots, engine state, logs, pixel samples, and structural tests are supporting evidence only; they never substitute for the recording and vision verdict. Any unresolved visible defect blocks acceptance."
-    );
-    let _ = writeln!(
-        context,
-        "Candidate acceptance starts only after an explicit candidate-ready handoff names the exact commit/content manifest and the author stops modifying those inputs. An independent verifier then records that immutable candidate through the same real-input flows and rubric and compares it with the baseline. Never infer readiness from shared-tree changes. The verifier must compare every verified input before and after the run; any change invalidates the evidence."
-    );
-    let _ = writeln!(
-        context,
-        "Storage safety is a post-operation invariant. Before any disk-expanding operation (including a checkout, worktree, build, capture, archive, or dependency install), determine the required free-space reserve, measure current free space, and conservatively estimate peak additional bytes from the source tree, a comparable prior artifact, or an upper bound. Start only when current_free - estimated_peak_growth >= reserve; checking only current_free >= reserve is invalid. Serialize large disk operations, recheck free space while they run, and reclaim each temporary artifact as soon as its proof completes before starting another. If peak growth cannot be bounded safely, stop and report instead of starting."
-    );
-    let _ = writeln!(
-        context,
-        "Do not describe PFTerminal as a crypto/trading/Hyperliquid/GPU/staking/borrowing product unless Sauron explicitly asks for that legacy positioning."
-    );
-}
-
 fn write_spawn_dispatch_contract(context: &mut String) {
     let _ = writeln!(
         context,
@@ -5514,7 +5386,11 @@ fn write_spawn_dispatch_contract(context: &mut String) {
     );
     let _ = writeln!(
         context,
-        "<pfterminal_send_task target=\"Burzum\">\nTask text here.\n</pfterminal_send_task>"
+        "<pfterminal_send_task target=\"EXACT_LISTED_TARGET\">\nTask text here.\n</pfterminal_send_task>"
+    );
+    let _ = writeln!(
+        context,
+        "Replace EXACT_LISTED_TARGET with an exact target from the live roster. Never target your own pane; this block assigns work to another pane and is not a reporting mechanism."
     );
     let _ = writeln!(
         context,
@@ -5522,19 +5398,7 @@ fn write_spawn_dispatch_contract(context: &mut String) {
     );
     let _ = writeln!(
         context,
-        "Every Nazgul dispatch task body must begin with one structured classification line: `PFTERMINAL_WORK_KIND: visual-baseline`, `PFTERMINAL_WORK_KIND: visual-implementation`, or `PFTERMINAL_WORK_KIND: nonvisual`. Missing or unknown classification is rejected fail-closed and returned for correction. User-facing visual or interactive behavior is visual work; `nonvisual` is only for work that cannot change visible appearance or interactive behavior."
-    );
-    let _ = writeln!(
-        context,
-        "Use `visual-baseline` only for a baseline-only evidence task: establish the exact starting commit/content manifest, fresh real-user-input recording with all required interaction/directional coverage, and a failing visual-judge defect verdict before any implementation. Do not combine implementation into that dispatch."
-    );
-    let _ = writeln!(
-        context,
-        "Use `visual-implementation` only after the baseline exists. Its next header lines must be `PFTERMINAL_BASELINE_MANIFEST: <exact id>`, `PFTERMINAL_BASELINE_VIDEO: <existing nonempty path>`, and `PFTERMINAL_BASELINE_VERDICT: <existing visual-judge JSON path>`; the host rejects missing evidence, a non-fail baseline verdict, or an empty defect list."
-    );
-    let _ = writeln!(
-        context,
-        "If the target pane is busy, PFTerminal queues the dispatch and delivers it as a fresh turn when the target goes idle; do not assume immediate pickup."
+        "If a native target pane is busy, PFTerminal steers the dispatch into its running turn; otherwise it starts a fresh turn."
     );
     let _ = writeln!(
         context,
@@ -5542,7 +5406,7 @@ fn write_spawn_dispatch_contract(context: &mut String) {
     );
     let _ = writeln!(
         context,
-        "If Sauron asks you to dispatch, assign, send, or deploy work to a named pane, emit the pfterminal_send_task block immediately; do not start executing that work yourself, do not read skills first in the root pane, and do not replace dispatch with a plan."
+        "If Sauron asks you to dispatch, assign, send, or deploy work to a named pane, emit the pfterminal_send_task block immediately; do not start executing that work yourself or replace dispatch with a plan."
     );
     let _ = writeln!(
         context,
@@ -5575,6 +5439,21 @@ fn write_spawn_dispatch_contract(context: &mut String) {
     let _ = writeln!(
         context,
         "Never report a child pane as silent or unresponsive until you have checked its roster status and report marker. Managers delegate and review; they do not execute a listed child's assigned task themselves."
+    );
+}
+
+fn write_spawn_parent_report_contract(context: &mut String) {
+    let _ = writeln!(
+        context,
+        "Interim assistant commentary remains local to this pane. To report a checkpoint to your assigned parent before this turn ends, emit:"
+    );
+    let _ = writeln!(
+        context,
+        "<pfterminal_report_parent>\nConcise checkpoint with evidence paths and remaining work.\n</pfterminal_report_parent>"
+    );
+    let _ = writeln!(
+        context,
+        "PFTerminal routes that checkpoint to the assigned parent immediately. Do not use pfterminal_send_task to report to your parent or to yourself. A terminal answer is still reported automatically when the turn ends."
     );
 }
 
@@ -6131,6 +6010,24 @@ pub(crate) fn extract_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTas
     (visible, dispatches)
 }
 
+fn extract_spawn_parent_reports(text: &str) -> Vec<String> {
+    let mut reports = Vec::new();
+    let mut rest = text;
+    while let Some(start_index) = rest.find(REPORT_PARENT_OPEN) {
+        let content_start = start_index + REPORT_PARENT_OPEN.len();
+        let Some(close_index) = rest[content_start..].find(REPORT_PARENT_CLOSE) else {
+            break;
+        };
+        let content_end = content_start + close_index;
+        let content = rest[content_start..content_end].trim();
+        if !content.is_empty() {
+            reports.push(content.to_string());
+        }
+        rest = &rest[content_end + REPORT_PARENT_CLOSE.len()..];
+    }
+    reports
+}
+
 fn turn_contains_exec_wrapped_spawn_task_dispatch(turn: &codex_app_server_protocol::Turn) -> bool {
     turn.items.iter().any(|item| {
         if let codex_app_server_protocol::ThreadItem::CommandExecution { command, .. } = item {
@@ -6567,70 +6464,10 @@ mod tests {
     use codex_model_provider_info::AMBIENT_PROVIDER_ID;
     use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
     use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+    use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
     use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
-
-    #[test]
-    fn nazgul_dispatch_workflow_classification_is_fail_closed() {
-        let cwd = tempfile::tempdir().expect("tempdir");
-        assert!(
-            validate_nazgul_dispatch_workflow("Fix the visible route stall.", cwd.path())
-                .expect_err("missing classification must fail")
-                .contains("first nonblank line")
-        );
-        assert_eq!(
-            validate_nazgul_dispatch_workflow(
-                "PFTERMINAL_WORK_KIND: visual-baseline\nCapture evidence only.",
-                cwd.path(),
-            ),
-            Ok(DispatchWorkKind::VisualBaseline)
-        );
-        assert_eq!(
-            validate_nazgul_dispatch_workflow(
-                "PFTERMINAL_WORK_KIND: nonvisual\nAudit dependency licenses.",
-                cwd.path(),
-            ),
-            Ok(DispatchWorkKind::Nonvisual)
-        );
-        assert!(
-            validate_nazgul_dispatch_workflow(
-                "PFTERMINAL_WORK_KIND: visual-implementation\nPFTERMINAL_BASELINE_MANIFEST: abc123",
-                cwd.path(),
-            )
-            .expect_err("missing evidence paths must fail")
-            .contains("PFTERMINAL_BASELINE_VIDEO")
-        );
-    }
-
-    #[test]
-    fn visual_implementation_requires_real_failing_judge_evidence() {
-        let cwd = tempfile::tempdir().expect("tempdir");
-        std::fs::write(cwd.path().join("baseline.mp4"), b"video").expect("write video");
-        std::fs::write(
-            cwd.path().join("verdict.json"),
-            br#"{"verdict":"fail","defects":[{"category":"clipping"}]}"#,
-        )
-        .expect("write verdict");
-        let task = "PFTERMINAL_WORK_KIND: visual-implementation\n\
-PFTERMINAL_BASELINE_MANIFEST: abc123\n\
-PFTERMINAL_BASELINE_VIDEO: baseline.mp4\n\
-PFTERMINAL_BASELINE_VERDICT: verdict.json\n\
-Implement only the defects in the baseline verdict.";
-        assert_eq!(
-            validate_nazgul_dispatch_workflow(task, cwd.path()),
-            Ok(DispatchWorkKind::VisualImplementation)
-        );
-
-        std::fs::write(
-            cwd.path().join("verdict.json"),
-            br#"{"verdict":"pass","defects":[]}"#,
-        )
-        .expect("rewrite verdict");
-        assert!(
-            validate_nazgul_dispatch_workflow(task, cwd.path())
-                .expect_err("pass verdict cannot authorize implementation")
-                .contains("must be fail")
-        );
-    }
+    use codex_model_provider_info::ZAI_DEFAULT_MODEL;
+    use codex_model_provider_info::ZAI_PROVIDER_ID;
 
     #[test]
     fn corrected_native_spawn_provider_fixes_impossible_pairs_only() {
@@ -6909,9 +6746,9 @@ Done."#;
         let mut context = String::new();
         write_spawn_dispatch_contract(&mut context);
 
-        assert!(context.contains("<pfterminal_send_task target=\"Burzum\">"));
+        assert!(context.contains("<pfterminal_send_task target=\"EXACT_LISTED_TARGET\">"));
+        assert!(context.contains("Never target your own pane"));
         assert!(context.contains("Do not claim you sent a task unless you emit a dispatch block"));
-        assert!(context.contains("do not read skills first in the root pane"));
         assert!(context.contains("Dispatch blocks are plain assistant text"));
         assert!(context.contains("never put the block inside exec_command"));
         assert!(context.contains("Listed Troll/Orc panes are routable"));
@@ -6921,6 +6758,27 @@ Done."#;
         assert!(context.contains("<invoke>"));
         assert!(context.contains("one complete pfterminal_send_task block per target"));
         assert!(context.contains("Do not wrap dispatch payloads in markdown fences"));
+    }
+
+    #[test]
+    fn extracts_multiple_parent_checkpoint_reports_without_literal_routing_rules() {
+        let text = r#"Working through the review.
+<pfterminal_report_parent>
+Phase alpha passed; evidence is artifacts/alpha.json. Phase beta remains.
+</pfterminal_report_parent>
+<pfterminal_report_parent>
+The adjacent verification lane found a retry race; no release claim yet.
+</pfterminal_report_parent>"#;
+
+        assert_eq!(
+            extract_spawn_parent_reports(text),
+            vec![
+                "Phase alpha passed; evidence is artifacts/alpha.json. Phase beta remains."
+                    .to_string(),
+                "The adjacent verification lane found a retry race; no release claim yet."
+                    .to_string(),
+            ]
+        );
     }
 
     #[test]

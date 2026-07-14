@@ -110,7 +110,6 @@ mod color;
 mod config_update;
 pub(crate) mod custom_terminal;
 mod pets;
-mod session_writer_lock;
 pub use custom_terminal::Terminal;
 mod auto_review_denials;
 mod cwd_prompt;
@@ -1333,10 +1332,6 @@ async fn run_ratatui_app(
 ) -> color_eyre::Result<AppExitInfo> {
     let uses_remote_workspace = app_server_target.uses_remote_workspace();
     color_eyre::install()?;
-    #[cfg(target_os = "linux")]
-    let _session_writer_lock =
-        session_writer_lock::SessionWriterLock::acquire(initial_config.codex_home.as_ref())?;
-
     tooltips::announcement::prewarm();
 
     // Forward panic reports through tracing so they appear in the UI status
