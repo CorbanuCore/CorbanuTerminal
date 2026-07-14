@@ -71,7 +71,10 @@ impl GpuRentalState {
     }
 
     pub fn may_be_billable(self) -> bool {
-        !matches!(self, Self::Draft | Self::Quoted | Self::TerminatedConfirmed)
+        !matches!(
+            self,
+            Self::Draft | Self::Quoted | Self::TerminatedConfirmed | Self::Failed
+        )
     }
 }
 

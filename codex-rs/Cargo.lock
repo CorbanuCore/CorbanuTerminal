@@ -3114,6 +3114,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-gpu-market"
+version = "0.1.11"
+dependencies = [
+ "anyhow",
+ "codex-state",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "codex-guardian"
 version = "0.1.11"
 dependencies = [
