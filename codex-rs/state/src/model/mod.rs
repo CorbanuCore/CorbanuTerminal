@@ -1,6 +1,7 @@
 mod agent_job;
 mod backfill_state;
 mod gpu_rental;
+mod gpu_runtime_provider;
 mod graph;
 mod log;
 mod memories;
@@ -23,6 +24,9 @@ pub use gpu_rental::GpuRentalCreateParams;
 pub use gpu_rental::GpuRentalLease;
 pub use gpu_rental::GpuRentalState;
 pub use gpu_rental::GpuRentalUpdate;
+pub use gpu_runtime_provider::GpuProvisionStep;
+pub use gpu_runtime_provider::GpuRuntimeProvider;
+pub use gpu_runtime_provider::GpuRuntimeProviderUpsert;
 pub use graph::DirectionalThreadSpawnEdgeStatus;
 pub use log::LogEntry;
 pub use log::LogQuery;
