@@ -51,7 +51,39 @@ impl App {
             .extend(runtime_providers.clone());
         self.chat_widget
             .replace_gpu_model_providers(&runtime_providers);
+        self.refresh_gpu_notifications().await;
         self.refresh_gpu_spend_indicator().await;
+    }
+
+    async fn refresh_gpu_notifications(&mut self) {
+        let Some(state_db) = self.state_db.clone() else {
+            return;
+        };
+        let Ok(rentals) = state_db.list_gpu_rentals(1_000).await else {
+            return;
+        };
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        for rental in rentals {
+            let Some((kind, message, is_error)) = gpu_notification(&rental) else {
+                continue;
+            };
+            match state_db
+                .record_gpu_notification_once(
+                    rental.rental_id.as_str(),
+                    rental.state_sequence,
+                    kind,
+                    now_ms,
+                )
+                .await
+            {
+                Ok(true) if is_error => self.chat_widget.add_error_message(message),
+                Ok(true) => self.chat_widget.add_info_message(message, None),
+                Ok(false) => {}
+                Err(error) => {
+                    tracing::warn!(%error, "failed to deduplicate GPU rental notification")
+                }
+            }
+        }
     }
 
     fn normalize_pane_display_name(&self, name: &str) -> Result<String> {
@@ -243,6 +275,53 @@ impl App {
                 "failed to persist renamed pane nickname"
             );
         }
+    }
+}
+
+fn gpu_notification(rental: &codex_state::GpuRental) -> Option<(&'static str, String, bool)> {
+    use codex_state::GpuRentalState;
+    match rental.observed_state {
+        GpuRentalState::Ready => Some((
+            "ready",
+            format!(
+                "GPU rental {} is READY and its model is available in the picker.",
+                rental.rental_id
+            ),
+            false,
+        )),
+        GpuRentalState::Degraded => Some((
+            "degraded",
+            format!(
+                "GPU rental {} is DEGRADED and has been disabled for new selections.",
+                rental.rental_id
+            ),
+            true,
+        )),
+        GpuRentalState::Failed => Some((
+            "failed",
+            format!(
+                "GPU rental {} failed before a billable resource was confirmed.",
+                rental.rental_id
+            ),
+            true,
+        )),
+        GpuRentalState::TerminationUnconfirmed => Some((
+            "termination-unconfirmed",
+            format!(
+                "GPU rental {} cleanup is UNCONFIRMED; it remains visible as a billing risk.",
+                rental.rental_id
+            ),
+            true,
+        )),
+        GpuRentalState::TerminatedConfirmed => Some((
+            "terminated",
+            format!(
+                "GPU rental {} termination is provider-confirmed.",
+                rental.rental_id
+            ),
+            false,
+        )),
+        _ => None,
     }
 }
 
