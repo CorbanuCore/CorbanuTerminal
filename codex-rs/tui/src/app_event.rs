@@ -1189,6 +1189,33 @@ pub(crate) enum AppEvent {
     TerminateGpuRental {
         rental_id: String,
     },
+    OpenGpuAuthorizationPrompt {
+        recipe_id: String,
+    },
+    SearchGpuOffers {
+        recipe_id: String,
+        maximum_hourly_microusd: i64,
+        maximum_total_microusd: i64,
+        ttl_minutes: i64,
+    },
+    GpuOffersLoaded {
+        recipe_id: String,
+        authorization: codex_gpu_market::RentalAuthorization,
+        offers: Result<Vec<codex_gpu_market::GpuOffer>, String>,
+    },
+    OpenGpuConfirmation {
+        recipe_id: String,
+        authorization: codex_gpu_market::RentalAuthorization,
+        offer: codex_gpu_market::GpuOffer,
+    },
+    ConfirmGpuRental {
+        recipe_id: String,
+        authorization: codex_gpu_market::RentalAuthorization,
+        offer: codex_gpu_market::GpuOffer,
+    },
+    GpuRentalConfirmationFinished {
+        result: Result<codex_state::GpuRental, String>,
+    },
 
     /// Open masked entry for a provider API key.
     OpenProviderApiKeyAdd {

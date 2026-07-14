@@ -1248,6 +1248,167 @@ impl App {
                         .add_error_message(format!("Unable to terminate GPU rental: {error}")),
                 }
             }
+            AppEvent::OpenGpuAuthorizationPrompt { recipe_id } => {
+                self.chat_widget.open_gpu_authorization_prompt(recipe_id);
+            }
+            AppEvent::SearchGpuOffers {
+                recipe_id,
+                maximum_hourly_microusd,
+                maximum_total_microusd,
+                ttl_minutes,
+            } => {
+                let Some(state_db) = self.state_db.clone() else {
+                    self.chat_widget.add_error_message(
+                        "GPU rental state is unavailable in this session.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
+                let tx = self.app_event_tx.clone();
+                let codex_home = self.config.codex_home.clone();
+                let now_ms = chrono::Utc::now().timestamp_millis();
+                let authorization = codex_gpu_market::RentalAuthorization {
+                    client_operation_id: Uuid::new_v4().to_string(),
+                    maximum_hourly_microusd,
+                    maximum_total_microusd,
+                    terminate_at_ms: now_ms.saturating_add(ttl_minutes.saturating_mul(60_000)),
+                    acknowledged_local_enforcement: true,
+                };
+                self.chat_widget.add_info_message(
+                    format!("Searching verified capacity for {recipe_id}…"),
+                    None,
+                );
+                tokio::spawn(async move {
+                    let result = async {
+                        let installation_id = codex_core::resolve_installation_id(&codex_home)
+                            .await
+                            .map_err(|error| error.to_string())?;
+                        let credentials =
+                            Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
+                                codex_vault::Vault::new(codex_home.to_path_buf()),
+                            )));
+                        let service = codex_gpu_market::GpuMarketService::new(
+                            state_db,
+                            codex_gpu_market::RecipeCatalog::default(),
+                            installation_id,
+                        );
+                        service
+                            .search(
+                                recipe_id.as_str(),
+                                maximum_hourly_microusd,
+                                &codex_gpu_market::VastProvider::new(credentials.clone()),
+                                &codex_gpu_market::RunpodProvider::new(credentials),
+                            )
+                            .await
+                            .map_err(|error| error.safe_message)
+                    }
+                    .await;
+                    tx.send(AppEvent::GpuOffersLoaded {
+                        recipe_id,
+                        authorization,
+                        offers: result,
+                    });
+                });
+            }
+            AppEvent::GpuOffersLoaded {
+                recipe_id,
+                authorization,
+                offers,
+            } => match offers {
+                Ok(offers) => {
+                    self.chat_widget
+                        .open_gpu_offers(recipe_id, authorization, offers);
+                }
+                Err(message) => self.chat_widget.add_error_message(message),
+            },
+            AppEvent::OpenGpuConfirmation {
+                recipe_id,
+                authorization,
+                offer,
+            } => self
+                .chat_widget
+                .open_gpu_confirmation(recipe_id, authorization, offer),
+            AppEvent::ConfirmGpuRental {
+                recipe_id,
+                authorization,
+                offer,
+            } => {
+                let Some(state_db) = self.state_db.clone() else {
+                    self.chat_widget.add_error_message(
+                        "GPU rental state is unavailable in this session.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
+                let tx = self.app_event_tx.clone();
+                let codex_home = self.config.codex_home.clone();
+                tokio::spawn(async move {
+                    let result = async {
+                        let installation_id = codex_core::resolve_installation_id(&codex_home)
+                            .await
+                            .map_err(|error| error.to_string())?;
+                        let credentials =
+                            Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
+                                codex_vault::Vault::new(codex_home.to_path_buf()),
+                            )));
+                        let service = codex_gpu_market::GpuMarketService::new(
+                            state_db,
+                            codex_gpu_market::RecipeCatalog::default(),
+                            installation_id,
+                        );
+                        let now_ms = chrono::Utc::now().timestamp_millis();
+                        match offer.provider.as_str() {
+                            "vast" => {
+                                service
+                                    .confirm(
+                                        recipe_id.as_str(),
+                                        &offer,
+                                        &authorization,
+                                        &codex_gpu_market::VastProvider::new(credentials),
+                                        now_ms,
+                                    )
+                                    .await
+                            }
+                            "runpod" => {
+                                service
+                                    .confirm(
+                                        recipe_id.as_str(),
+                                        &offer,
+                                        &authorization,
+                                        &codex_gpu_market::RunpodProvider::new(credentials),
+                                        now_ms,
+                                    )
+                                    .await
+                            }
+                            _ => Err(codex_gpu_market::ProviderError::new(
+                                codex_gpu_market::ProviderErrorKind::InvalidRequest,
+                                "Unsupported GPU provider.",
+                            )),
+                        }
+                        .map_err(|error| error.safe_message)
+                    }
+                    .await;
+                    tx.send(AppEvent::GpuRentalConfirmationFinished { result });
+                });
+            }
+            AppEvent::GpuRentalConfirmationFinished { result } => match result {
+                Ok(rental) => {
+                    self.chat_widget.add_info_message(
+                        format!(
+                            "GPU rental {} was authorized. The independent controller is starting; /gpu remains authoritative for billing state.",
+                            rental.rental_id
+                        ),
+                        None,
+                    );
+                    if let Ok(executable) = std::env::current_exe() {
+                        let _ = std::process::Command::new(executable)
+                            .arg("internal-gpu-controller")
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
+                            .spawn();
+                    }
+                }
+                Err(message) => self.chat_widget.add_error_message(message),
+            },
             AppEvent::OpenProviderApiKeyAdd {
                 provider_id,
                 provider_name,

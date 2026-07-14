@@ -29,6 +29,7 @@ impl ChatWidget {
 
         for recipe in RecipeCatalog::default().list() {
             let verified = recipe.manifest_verified;
+            let recipe_id = recipe.id.clone();
             let status = if verified {
                 "Select to search compatible capacity"
             } else {
@@ -48,6 +49,16 @@ impl ChatWidget {
                     "Creation is fail-closed: no billable request can use an unverified recipe."
                         .to_string()
                 }),
+                actions: verified
+                    .then(|| {
+                        vec![Box::new(move |tx: &AppEventSender| {
+                            tx.send(AppEvent::OpenGpuAuthorizationPrompt {
+                                recipe_id: recipe_id.clone(),
+                            });
+                        }) as SelectionAction]
+                    })
+                    .unwrap_or_default(),
+                dismiss_on_select: verified,
                 ..Default::default()
             });
         }
@@ -59,6 +70,143 @@ impl ChatWidget {
             ),
             items,
             is_searchable: false,
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn open_gpu_authorization_prompt(&mut self, recipe_id: String) {
+        let submit_recipe_id = recipe_id.clone();
+        let tx = self.app_event_tx.clone();
+        let view = CustomPromptView::new(
+            "Authorize bounded GPU lease".to_string(),
+            "Enter: <max hourly USD> <max total USD> <TTL minutes>".to_string(),
+            String::new(),
+            None,
+            Box::new(move |value| match parse_gpu_authorization(value.as_str()) {
+                Ok((maximum_hourly_microusd, maximum_total_microusd, ttl_minutes)) => {
+                    tx.send(AppEvent::SearchGpuOffers {
+                        recipe_id: submit_recipe_id.clone(),
+                        maximum_hourly_microusd,
+                        maximum_total_microusd,
+                        ttl_minutes,
+                    });
+                }
+                Err(message) => tx.send(AppEvent::GpuOffersLoaded {
+                    recipe_id: submit_recipe_id.clone(),
+                    authorization: codex_gpu_market::RentalAuthorization {
+                        client_operation_id: "invalid".to_string(),
+                        maximum_hourly_microusd: 1,
+                        maximum_total_microusd: 1,
+                        terminate_at_ms: 1,
+                        acknowledged_local_enforcement: false,
+                    },
+                    offers: Err(message),
+                }),
+            }),
+        );
+        self.show_custom_prompt_view(view);
+    }
+
+    pub(crate) fn open_gpu_offers(
+        &mut self,
+        recipe_id: String,
+        authorization: codex_gpu_market::RentalAuthorization,
+        offers: Vec<codex_gpu_market::GpuOffer>,
+    ) {
+        if offers.is_empty() {
+            self.add_info_message(
+                "No compatible verified GPU capacity is currently available.".to_string(),
+                None,
+            );
+            return;
+        }
+        let items = offers
+            .into_iter()
+            .map(|offer| {
+                let offer_for_action = offer.clone();
+                let recipe_for_action = recipe_id.clone();
+                let authorization_for_action = authorization.clone();
+                SelectionItem {
+                    name: format!(
+                        "{} · {}× {} · ${:.4}/hr",
+                        offer.provider,
+                        offer.gpu_count,
+                        offer.gpu_model,
+                        offer.hourly_microusd as f64 / 1_000_000.0
+                    ),
+                    description: Some(format!(
+                        "{} · {} · {} · quote {}",
+                        offer.offer_id,
+                        offer.security_class,
+                        offer.region,
+                        if offer.expires_at_ms.is_some() {
+                            "best-effort/expiring"
+                        } else {
+                            "best-effort"
+                        }
+                    )),
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::OpenGpuConfirmation {
+                            recipe_id: recipe_for_action.clone(),
+                            authorization: authorization_for_action.clone(),
+                            offer: offer_for_action.clone(),
+                        });
+                    })],
+                    dismiss_on_select: false,
+                    ..Default::default()
+                }
+            })
+            .collect();
+        self.show_selection_view(SelectionViewParams {
+            title: Some("Compatible GPU offers".to_string()),
+            subtitle: Some("Hard compatibility and security filters have already run.".to_string()),
+            items,
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn open_gpu_confirmation(
+        &mut self,
+        recipe_id: String,
+        authorization: codex_gpu_market::RentalAuthorization,
+        offer: codex_gpu_market::GpuOffer,
+    ) {
+        let confirm_recipe = recipe_id.clone();
+        let confirm_authorization = authorization.clone();
+        let confirm_offer = offer.clone();
+        self.show_selection_view(SelectionViewParams {
+            title: Some("Confirm billable GPU rental".to_string()),
+            subtitle: Some(format!(
+                "{} · {} · up to ${:.4}/hr · ${:.2} total · local controller enforces TTL/spend",
+                offer.provider,
+                recipe_id,
+                authorization.maximum_hourly_microusd as f64 / 1_000_000.0,
+                authorization.maximum_total_microusd as f64 / 1_000_000.0
+            )),
+            items: vec![
+                SelectionItem {
+                    name: "Confirm and rent".to_string(),
+                    description: Some(
+                        "Revalidate this exact offer, persist authorization, then start the independent controller."
+                            .to_string(),
+                    ),
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::ConfirmGpuRental {
+                            recipe_id: confirm_recipe.clone(),
+                            authorization: confirm_authorization.clone(),
+                            offer: confirm_offer.clone(),
+                        });
+                    })],
+                    dismiss_on_select: true,
+                    ..Default::default()
+                },
+                SelectionItem {
+                    name: "Cancel".to_string(),
+                    actions: vec![Box::new(|tx| tx.send(AppEvent::OpenGpuMenu))],
+                    dismiss_on_select: true,
+                    ..Default::default()
+                },
+            ],
             ..Default::default()
         });
     }
@@ -130,3 +278,35 @@ impl ChatWidget {
         });
     }
 }
+
+fn parse_gpu_authorization(value: &str) -> Result<(i64, i64, i64), String> {
+    let parts = value.split_whitespace().collect::<Vec<_>>();
+    if parts.len() != 3 {
+        return Err("Enter exactly: <max hourly USD> <max total USD> <TTL minutes>.".to_string());
+    }
+    let hourly = parse_positive_usd(parts[0])?;
+    let total = parse_positive_usd(parts[1])?;
+    let ttl_minutes = parts[2]
+        .parse::<i64>()
+        .ok()
+        .filter(|minutes| (1..=10_080).contains(minutes))
+        .ok_or_else(|| "TTL must be an integer from 1 to 10080 minutes.".to_string())?;
+    Ok((hourly, total, ttl_minutes))
+}
+
+fn parse_positive_usd(value: &str) -> Result<i64, String> {
+    let parsed = value
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .ok_or_else(|| "Dollar limits must be positive numbers.".to_string())?;
+    let microusd = parsed * 1_000_000.0;
+    if microusd > i64::MAX as f64 {
+        return Err("Dollar limit is too large.".to_string());
+    }
+    Ok(microusd.round() as i64)
+}
+
+#[cfg(test)]
+#[path = "gpu_menu_tests.rs"]
+mod tests;
