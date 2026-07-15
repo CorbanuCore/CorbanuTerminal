@@ -5,18 +5,20 @@ use codex_state::GpuRental;
 impl ChatWidget {
     pub(crate) fn open_gpu_menu(&mut self, rentals: Vec<GpuRental>) {
         let mut items = Vec::new();
-        for rental in rentals {
+        for rental in rentals
+            .into_iter()
+            .filter(codex_state::GpuRental::may_be_billable)
+        {
             let rental_id = rental.rental_id.clone();
             let hourly = rental.max_hourly_microusd as f64 / 1_000_000.0;
             let accrued = rental.estimated_accrued_microusd as f64 / 1_000_000.0;
-            let billable = rental.may_be_billable();
             items.push(SelectionItem {
                 name: format!("{} · {}", rental.recipe_id, rental.observed_state.as_str()),
                 description: Some(format!(
                     "{} · {} · authorized ${hourly:.4}/hr · estimated ${accrued:.4}",
                     rental.provider, rental_id
                 )),
-                is_current: billable,
+                is_current: true,
                 actions: vec![Box::new(move |tx| {
                     tx.send(AppEvent::OpenGpuRental {
                         rental_id: rental_id.clone(),
@@ -88,7 +90,8 @@ impl ChatWidget {
         self.show_selection_view(SelectionViewParams {
             title: Some("GPU rentals".to_string()),
             subtitle: Some(
-                "Durable rentals remain visible across PFTerminal processes.".to_string(),
+                "Active and potentially billable rentals remain visible across PFTerminal processes."
+                    .to_string(),
             ),
             items,
             is_searchable: false,

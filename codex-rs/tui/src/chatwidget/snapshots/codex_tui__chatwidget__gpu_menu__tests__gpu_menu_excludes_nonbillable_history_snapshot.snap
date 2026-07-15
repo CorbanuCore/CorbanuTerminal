@@ -1,0 +1,46 @@
+---
+source: tui/src/chatwidget/gpu_menu_tests.rs
+expression: rendered
+---
+  GPU rentals
+  Active and potentially billable rentals remain visible across PFTerminal processes.
+
+› 1. deepseek-flash-2xh200 · ready (current)                        vast · active-rental ·
+                                                                    authorized $10.0000/hr ·
+                                                                    estimated $1.2500
+  2. Configure RunPod API key                                       Masked entry stored in the
+                                                                    PFTerminal vault; replacing a
+                                                                    key is supported.
+  3. Configure Vast.ai API key                                      Masked entry stored in the
+                                                                    PFTerminal vault; replacing a
+                                                                    key is supported.
+  4. Rent deepseek-ai/DeepSeek-V4-Flash · 2× NVIDIA H200            deepseek-flash-2xh200 rev
+                                                                    deepseek-v4-flash-sglang-
+                                                                    v0.5.15-post1-2xh200-r2 ·
+                                                                    qualified · 2× NVIDIA H200 ·
+                                                                    Select to search compatible
+                                                                    capacity
+  5. Rent deepseek-ai/DeepSeek-V4-Flash · 4× NVIDIA H200            deepseek-flash-4xh200 rev
+                                                                    deepseek-v4-flash-sglang-
+                                                                    v0.5.12-4xh200-r1 · qualified
+                                                                    · 4× NVIDIA H200 · Select to
+                                                                    search compatible capacity
+  6. Rent zai-org/GLM-5.2-FP8 · 8× NVIDIA H200                      glm-5.2-fp8-8xh200 rev glm-
+                                                                    5.2-fp8-sglang-v0.5.15-post1-
+                                                                    r1 · qualified · 8× NVIDIA
+                                                                    H200 · Select to search
+                                                                    compatible capacity
+  7. Rent huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF … huihui-deepseek-v4-flash-q4k-
+                                                                    2xh200-experimental rev
+                                                                    huihui-deepseek-v4-flash-q4k-
+                                                                    ds4-tp2-r3 · experimental · 2×
+                                                                    NVIDIA H200 · Select to search
+                                                                    compatible capacity
+  8. Rent huihui-ai/Huihui-GLM-5.2-abliterated-GGUF · 2× NVIDIA H2… huihui-glm-5.2-iq1m-2xh200-
+                                                                    experimental rev huihui-glm-
+                                                                    5.2-iq1m-llamacpp-2xh200-r2 ·
+                                                                    experimental · 2× NVIDIA H200
+                                                                    · Select to search compatible
+                                                                    capacity
+
+  Press enter to confirm or esc to go back
