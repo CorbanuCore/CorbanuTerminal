@@ -62,6 +62,21 @@ was then driven through a fresh interactive TUI. It made five repository tool
 turns and correctly verified the TP2/TP4 split and all reasoning mappings. The
 live pane is in tmux session `pft_deepseek_h200` pending user handoff.
 
+The later long-form visual-workflow run exposed two user-visible
+`stream disconnected before completion` errors immediately after completed
+tools. This was a qualification-profile error, not a server crash or a missing
+product retry: the manually written provider block had deliberately set both
+request and stream retries to zero. In both cases the tool output was durably
+recorded, no follow-up POST reached SGLang, the endpoint remained healthy, and
+the next user `continue` completed without repeating the tool. The profile was
+corrected to the product policy (`request_max_retries = 4`,
+`stream_max_retries = 5`) and the exact saved rollout was resumed. It then
+crossed repeated screenshot/image boundaries, automatic context compaction,
+and a deterministic seven-second post-tool keep-alive boundary without a
+visible disconnect or duplicated tool execution. The seven-second tool
+returned `BOUNDARY_PROBE_7S_OK`; the follow-up was accepted on a new connection
+and acknowledged the marker in the same turn.
+
 Follow-up automated qualification:
 
 - `just test -p codex-gpu-market`: 57/57 passed.
@@ -218,8 +233,10 @@ responsive, and no request/compaction loop or crash occurred.
 The final product rental accrued an estimated `$11.741651`. Durable product
 rental estimates total `$35.914201`, including all successful and failed
 lifecycle attempts. Manual provider proofs consumed less than `$40`, so the
-entire implementation run remained below `$76`, safely inside the authorized
-`$200` cap. No paid resource remains active on RunPod or Vast.
+original implementation run remained below `$76`, safely inside the authorized
+`$200` cap. That statement predates the optimization follow-up: Vast resource
+`44980194` is intentionally still active at `$7.297204/h` for the handed-off
+DeepSeek TP2 TUI session. No RunPod resource remains active.
 
 ## Security incident requiring user action
 
