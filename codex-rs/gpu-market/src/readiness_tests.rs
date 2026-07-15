@@ -125,6 +125,64 @@ async fn wrong_model_identity_never_becomes_ready() {
 }
 
 #[tokio::test]
+async fn health_probe_checks_auth_and_identity_without_consuming_generation_capacity() {
+    let server = MockServer::start().await;
+    mount_endpoint(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(503))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    let token = SecretValue::new(TOKEN.to_string()).expect("token");
+    let prober = GpuEndpointProber::new(Duration::from_secs(1), Duration::from_millis(50));
+
+    assert!(
+        prober
+            .probe_health(
+                format!("{}/v1", server.uri()).as_str(),
+                "pinned/model",
+                &token,
+            )
+            .await
+            .expect("health probe")
+    );
+}
+
+#[tokio::test]
+async fn cold_chat_can_outlive_normal_request_timeout_without_retry_injection() {
+    let server = MockServer::start().await;
+    mount_endpoint(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .and(PromptContains("exactly READY"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_millis(100))
+                .set_body_json(serde_json::json!({
+                    "choices": [{"message": {"content": "READY"}}]
+                })),
+        )
+        .with_priority(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    let token = SecretValue::new(TOKEN.to_string()).expect("token");
+
+    let report = GpuEndpointProber::new(Duration::from_millis(50), Duration::from_millis(20))
+        .with_cold_chat_timeout(Duration::from_millis(250))
+        .probe(
+            format!("{}/v1", server.uri()).as_str(),
+            "pinned/model",
+            &token,
+        )
+        .await
+        .expect("cold probe");
+
+    assert!(report.ready(), "{report:?}");
+}
+
+#[tokio::test]
 async fn a_fast_completed_response_does_not_masquerade_as_cancellation() {
     let server = MockServer::start().await;
     mount_endpoint(&server).await;

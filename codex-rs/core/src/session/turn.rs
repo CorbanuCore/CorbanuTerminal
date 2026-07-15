@@ -2190,7 +2190,10 @@ async fn maybe_emit_provider_request_pressure_warning(
     preflight: &ProviderRequestPreflight,
     last_token_usage: Option<&TokenUsage>,
 ) {
-    if turn_context.provider.info().is_openai() {
+    if !provider_uses_request_lease(
+        turn_context.config.model_provider_id.as_str(),
+        turn_context.provider.info().is_openai(),
+    ) {
         return;
     }
     if preflight.input_tokens < THIRD_PARTY_PREFLIGHT_WARNING_INPUT_TOKENS
@@ -2292,12 +2295,22 @@ fn provider_request_active_lease_needed(
     preflight: &ProviderRequestPreflight,
     last_token_usage: Option<&TokenUsage>,
 ) -> bool {
-    if turn_context.provider.info().is_openai() {
+    if !provider_uses_request_lease(
+        turn_context.config.model_provider_id.as_str(),
+        turn_context.provider.info().is_openai(),
+    ) {
         return false;
     }
     let large_request = preflight.input_tokens >= THIRD_PARTY_PREFLIGHT_WARNING_INPUT_TOKENS
         || preflight.request_bytes >= THIRD_PARTY_PREFLIGHT_WARNING_REQUEST_BYTES;
     large_request && !third_party_cache_looks_healthy(last_token_usage)
+}
+
+fn provider_uses_request_lease(provider_id: &str, is_openai: bool) -> bool {
+    // Runtime GPU providers represent user-owned, explicitly capacity-bounded inference.
+    // The cross-process hammer-reduction lease is for metered third-party APIs and would
+    // otherwise serialize GPU tool turns for ten minutes after a process interruption.
+    !is_openai && !provider_id.starts_with("gpu-")
 }
 
 fn cache_hit_rate(last_token_usage: Option<&TokenUsage>) -> Option<f64> {

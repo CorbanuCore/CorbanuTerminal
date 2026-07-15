@@ -99,9 +99,9 @@ WHERE rental_id = ? AND step_id = ? AND status = 'running'
             r#"
 INSERT INTO gpu_runtime_providers (
     rental_id, provider_id, base_url, model_id, wire_api, health,
-    display_hourly_microusd, catalog_sequence, updated_at_ms
+    display_hourly_microusd, maximum_context_tokens, catalog_sequence, updated_at_ms
 )
-SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 WHERE EXISTS (
     SELECT 1 FROM gpu_rentals
     WHERE rental_id = ? AND observed_state IN ('ready', 'degraded')
@@ -111,6 +111,7 @@ ON CONFLICT(rental_id) DO UPDATE SET
     model_id = excluded.model_id, wire_api = excluded.wire_api,
     health = excluded.health,
     display_hourly_microusd = excluded.display_hourly_microusd,
+    maximum_context_tokens = excluded.maximum_context_tokens,
     catalog_sequence = excluded.catalog_sequence,
     updated_at_ms = excluded.updated_at_ms
 WHERE excluded.catalog_sequence >= gpu_runtime_providers.catalog_sequence
@@ -123,6 +124,7 @@ WHERE excluded.catalog_sequence >= gpu_runtime_providers.catalog_sequence
         .bind(provider.wire_api.as_str())
         .bind(provider.health.as_str())
         .bind(provider.display_hourly_microusd)
+        .bind(provider.maximum_context_tokens)
         .bind(provider.catalog_sequence)
         .bind(now_ms)
         .bind(provider.rental_id.as_str())
@@ -134,7 +136,7 @@ WHERE excluded.catalog_sequence >= gpu_runtime_providers.catalog_sequence
     pub async fn list_gpu_runtime_providers(&self) -> anyhow::Result<Vec<GpuRuntimeProvider>> {
         Ok(sqlx::query_as::<_, GpuRuntimeProvider>(
             r#"
-SELECT p.* FROM gpu_runtime_providers p
+SELECT p.*, r.provider AS infrastructure_provider FROM gpu_runtime_providers p
 JOIN gpu_rentals r ON r.rental_id = p.rental_id
 WHERE r.observed_state IN ('ready', 'degraded')
 ORDER BY p.updated_at_ms DESC
@@ -162,6 +164,22 @@ WHERE rental_id = ?
         Ok(result.rows_affected() == 1)
     }
 
+    pub async fn prune_terminal_gpu_runtime_providers(&self) -> anyhow::Result<u64> {
+        let result = sqlx::query(
+            r#"
+DELETE FROM gpu_runtime_providers
+WHERE EXISTS (
+    SELECT 1 FROM gpu_rentals
+    WHERE gpu_rentals.rental_id = gpu_runtime_providers.rental_id
+      AND gpu_rentals.observed_state = 'terminated_confirmed'
+)
+            "#,
+        )
+        .execute(self.pool.as_ref())
+        .await?;
+        Ok(result.rows_affected())
+    }
+
     pub async fn set_gpu_runtime_provider_health(
         &self,
         rental_id: &str,
@@ -179,6 +197,42 @@ WHERE rental_id = ?
             "#,
         )
         .bind(health)
+        .bind(now_ms)
+        .bind(rental_id)
+        .execute(self.pool.as_ref())
+        .await?;
+        Ok(result.rows_affected() == 1)
+    }
+
+    pub async fn set_gpu_runtime_provider_health_and_price(
+        &self,
+        rental_id: &str,
+        health: &str,
+        display_hourly_microusd: i64,
+        maximum_context_tokens: i64,
+        now_ms: i64,
+    ) -> anyhow::Result<bool> {
+        if !matches!(health, "ready" | "degraded") {
+            return Err(anyhow::anyhow!("invalid runtime provider health"));
+        }
+        if display_hourly_microusd <= 0 {
+            return Err(anyhow::anyhow!("invalid runtime provider price"));
+        }
+        if maximum_context_tokens <= 0 {
+            return Err(anyhow::anyhow!("invalid runtime provider context limit"));
+        }
+        let result = sqlx::query(
+            r#"
+UPDATE gpu_runtime_providers
+SET health = ?, display_hourly_microusd = ?,
+    maximum_context_tokens = ?,
+    catalog_sequence = catalog_sequence + 1, updated_at_ms = ?
+WHERE rental_id = ?
+            "#,
+        )
+        .bind(health)
+        .bind(display_hourly_microusd)
+        .bind(maximum_context_tokens)
         .bind(now_ms)
         .bind(rental_id)
         .execute(self.pool.as_ref())
@@ -226,9 +280,12 @@ fn validate_runtime_provider(provider: &GpuRuntimeProviderUpsert) -> anyhow::Res
             "runtime provider endpoint must use HTTPS or loopback"
         ));
     }
-    if provider.display_hourly_microusd <= 0 || provider.catalog_sequence <= 0 {
+    if provider.display_hourly_microusd <= 0
+        || provider.maximum_context_tokens <= 0
+        || provider.catalog_sequence <= 0
+    {
         return Err(anyhow::anyhow!(
-            "invalid runtime provider price or sequence"
+            "invalid runtime provider price, context limit, or sequence"
         ));
     }
     Ok(())

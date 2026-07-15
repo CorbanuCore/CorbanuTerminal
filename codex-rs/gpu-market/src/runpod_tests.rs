@@ -59,6 +59,15 @@ fn offer_response(price: f64) -> Value {
     })
 }
 
+fn offer_response_without_available_counts(price: f64) -> Value {
+    let mut response = offer_response(price);
+    response["data"]["gpuTypes"][0]["lowestPrice"]
+        .as_object_mut()
+        .expect("lowestPrice object")
+        .remove("availableGpuCounts");
+    response
+}
+
 fn provider(server: &MockServer) -> RunpodProvider {
     RunpodProvider::with_endpoints(
         Arc::new(TestCredentials),
@@ -90,6 +99,27 @@ async fn secure_offer_is_normalized_and_secret_stays_in_auth_header() {
     assert!(!offers[0].high_bandwidth_interconnect);
     assert!(offers[0].runtime_topology_verification);
     assert!(!serde_json::to_string(&offers).unwrap().contains(TEST_KEY));
+}
+
+#[tokio::test]
+async fn count_specific_offer_accepts_runpod_response_without_available_counts() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/graphql"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(offer_response_without_available_counts(3.5)),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let offers = provider(&server)
+        .search_offers(requirements())
+        .await
+        .expect("search offers");
+
+    assert_eq!(offers.len(), 1);
+    assert_eq!(offers[0].gpu_count, 2);
 }
 
 #[tokio::test]
@@ -147,7 +177,7 @@ async fn create_revalidates_price_and_uses_owned_secure_pod() {
     assert_eq!(create_body["cloudType"], "SECURE");
     assert_eq!(create_body["interruptible"], false);
     assert_eq!(create_body["name"], "pft-install-lease-1");
-    assert_eq!(create_body["startSsh"], false);
+    assert!(create_body.get("startSsh").is_none());
     assert_eq!(create_body["ports"][0], "8000/http");
     assert_eq!(create_body["dockerStartCmd"][0], "model-id");
     assert_eq!(create_body["env"]["PFT_ENDPOINT_TOKEN"], "endpoint-secret");

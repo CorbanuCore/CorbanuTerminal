@@ -162,6 +162,13 @@ fn third_party_cache_miss_requires_large_recent_usage() {
 }
 
 #[test]
+fn runtime_gpu_providers_do_not_use_third_party_request_leases() {
+    assert!(!provider_uses_request_lease("gpu-rental-123", false));
+    assert!(!provider_uses_request_lease("openai", true));
+    assert!(provider_uses_request_lease("openrouter", false));
+}
+
+#[test]
 fn provider_cache_pressure_warning_labels_partial_hits() {
     let key = ProviderRequestKey {
         provider_id: "vercel".to_string(),

@@ -100,17 +100,30 @@ impl GpuMarketService {
         }
 
         let request = search_request(recipe, authorization.maximum_hourly_microusd)?;
-        let current = provider
-            .search_offers(request)
-            .await?
-            .into_iter()
-            .find(|offer| offer.offer_id == selected_offer.offer_id)
-            .ok_or_else(|| {
+        let current = if provider.create_revalidates_exact_offer_atomically() {
+            selected_offer.clone()
+        } else {
+            let mut current = None;
+            for attempt in 0..3 {
+                current = provider
+                    .search_offers(request.clone())
+                    .await?
+                    .into_iter()
+                    .find(|offer| offer.offer_id == selected_offer.offer_id);
+                if current.is_some() {
+                    break;
+                }
+                if attempt < 2 {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+            }
+            current.ok_or_else(|| {
                 ProviderError::new(
                     ProviderErrorKind::OfferUnavailable,
                     "The selected GPU offer is no longer available.",
                 )
-            })?;
+            })?
+        };
         if current.hourly_microusd != selected_offer.hourly_microusd
             || current.hourly_microusd > authorization.maximum_hourly_microusd
         {

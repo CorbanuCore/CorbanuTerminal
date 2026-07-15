@@ -70,6 +70,10 @@ fn built_in_deepseek_recipe_is_a_validated_runtime_specific_manifest() {
     RecipeCatalog::new(vec![recipe.clone()]).expect("valid built-in DeepSeek manifest");
 
     assert!(recipe.manifest_verified);
+    assert_eq!(
+        recipe.revision,
+        "deepseek-v4-flash-sglang-v0.5.12-2xh200-r1"
+    );
     assert_eq!(recipe.runtime, "sglang");
     assert_eq!(recipe.tensor_parallel_size, 2);
     assert_eq!(recipe.launch_command[0], "bash");
@@ -77,7 +81,43 @@ fn built_in_deepseek_recipe_is_a_validated_runtime_specific_manifest() {
         part.contains("--tool-call-parser deepseekv4")
             && part.contains("--api-key \"$PFT_ENDPOINT_TOKEN\"")
             && part.contains("nvidia-smi topo -m")
+            && part.contains("for (i=2; i<=NF; i++)")
+            && part.contains("PFTERMINAL_RUNTIME_GATE=nvlink-ok")
+            && part.contains("--disable-cuda-graph")
+            && part.contains("--moe-runner-backend marlin")
+            && part.contains("--watchdog-timeout 1200")
+            && part.contains("SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1")
     }));
+}
+
+#[test]
+fn built_in_catalog_contains_only_the_three_curated_proven_topologies() {
+    let catalog = RecipeCatalog::default();
+    let ids = catalog
+        .list()
+        .iter()
+        .map(|recipe| recipe.id.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        ids,
+        [
+            "deepseek-flash-2xh200",
+            "deepseek-flash-4xh200",
+            "glm-5.2-fp8-8xh200"
+        ]
+    );
+    for recipe in catalog.list() {
+        RecipeCatalog::new(vec![recipe.clone()]).expect("valid curated recipe");
+        assert!(recipe.manifest_verified);
+        assert_eq!(recipe.tensor_parallel_size, recipe.hardware.gpu_count);
+        assert!(
+            recipe
+                .launch_command
+                .iter()
+                .any(|part| part.contains("SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1"))
+        );
+    }
 }
 
 #[test]

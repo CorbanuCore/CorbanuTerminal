@@ -1407,7 +1407,13 @@ pub fn gpu_runtime_model_provider(
     provider.auth = Some(ModelProviderAuthInfo {
         command: current_pfterminal_auth_helper(),
         args: vec!["internal-gpu-endpoint-token".to_string(), record.rental_id],
-        timeout_ms: NonZeroU64::new(5_000).expect("constant is non-zero"),
+        // Vault access may briefly serialize with the rental controller in another process.
+        // Leave enough startup time for that lock handoff instead of rejecting a healthy
+        // runtime provider at the generic five-second auth-helper default.
+        timeout_ms: match NonZeroU64::new(30_000) {
+            Some(timeout_ms) => timeout_ms,
+            None => NonZeroU64::MIN,
+        },
         refresh_interval_ms: 60_000,
         cwd: codex_home.clone(),
     });
@@ -1430,6 +1436,16 @@ pub async fn load_gpu_runtime_model_providers(
     sqlite_home: &Path,
     codex_home: &AbsolutePathBuf,
 ) -> HashMap<String, ModelProviderInfo> {
+    load_gpu_runtime_model_provider_records(sqlite_home)
+        .await
+        .into_iter()
+        .filter_map(|record| gpu_runtime_model_provider(record, codex_home))
+        .collect()
+}
+
+pub async fn load_gpu_runtime_model_provider_records(
+    sqlite_home: &Path,
+) -> Vec<codex_state::GpuRuntimeProvider> {
     let runtime = match codex_state::StateRuntime::init(
         sqlite_home.to_path_buf(),
         "gpu-runtime-overlay".to_string(),
@@ -1439,20 +1455,17 @@ pub async fn load_gpu_runtime_model_providers(
         Ok(runtime) => runtime,
         Err(error) => {
             tracing::warn!(%error, "failed to open GPU runtime provider overlay");
-            return HashMap::new();
+            return Vec::new();
         }
     };
     let records = match runtime.list_gpu_runtime_providers().await {
         Ok(records) => records,
         Err(error) => {
             tracing::warn!(%error, "failed to read GPU runtime provider overlay");
-            return HashMap::new();
+            return Vec::new();
         }
     };
     records
-        .into_iter()
-        .filter_map(|record| gpu_runtime_model_provider(record, codex_home))
-        .collect()
 }
 
 impl Config {
@@ -3472,10 +3485,25 @@ impl Config {
             merge_configured_model_providers(built_in_model_providers, cfg.model_providers)
                 .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
 
-        let model_provider_was_explicit = model_provider.is_some() || cfg.model_provider.is_some();
-        let model_provider_id = model_provider
+        let requested_provider_was_explicit =
+            model_provider.is_some() || cfg.model_provider.is_some();
+        let requested_model_provider_id = model_provider
             .or(cfg.model_provider)
             .unwrap_or_else(|| AMBIENT_PROVIDER_ID.to_string());
+        let stale_runtime_provider = requested_model_provider_id.starts_with("gpu-")
+            && !model_providers.contains_key(&requested_model_provider_id);
+        if stale_runtime_provider {
+            startup_warnings.push(format!(
+                "Rented GPU provider `{requested_model_provider_id}` is no longer active; using the default provider."
+            ));
+        }
+        let model_provider_was_explicit =
+            requested_provider_was_explicit && !stale_runtime_provider;
+        let model_provider_id = if stale_runtime_provider {
+            AMBIENT_PROVIDER_ID.to_string()
+        } else {
+            requested_model_provider_id
+        };
         let model_provider = model_providers
             .get(&model_provider_id)
             .ok_or_else(|| {
@@ -3491,6 +3519,7 @@ impl Config {
         let model_without_explicit_provider = !model_provider_was_explicit && cfg.model.is_some();
         let model = match model {
             Some(model_override) => Some(model_override),
+            None if stale_runtime_provider => resolve_model_for_provider(None, &model_provider_id),
             None if model_without_explicit_provider => cfg.model,
             None => resolve_model_for_provider(cfg.model, &model_provider_id),
         };

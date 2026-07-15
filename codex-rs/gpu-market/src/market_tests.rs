@@ -19,7 +19,9 @@ struct QuoteProvider {
     name: &'static str,
     price: i64,
     secure_transport: bool,
+    atomic_create_handle: bool,
     search_calls: Arc<AtomicUsize>,
+    transient_omissions: Arc<AtomicUsize>,
 }
 
 impl QuoteProvider {
@@ -28,12 +30,24 @@ impl QuoteProvider {
             name,
             price,
             secure_transport: true,
+            atomic_create_handle: false,
             search_calls: Arc::new(AtomicUsize::new(0)),
+            transient_omissions: Arc::new(AtomicUsize::new(0)),
         }
     }
 
     fn without_secure_transport(mut self) -> Self {
         self.secure_transport = false;
+        self
+    }
+
+    fn with_transient_omissions(self, count: usize) -> Self {
+        self.transient_omissions.store(count, Ordering::SeqCst);
+        self
+    }
+
+    fn with_atomic_create_handle(mut self) -> Self {
+        self.atomic_create_handle = true;
         self
     }
 }
@@ -51,8 +65,21 @@ impl GpuProvider for QuoteProvider {
         }
     }
 
+    fn create_revalidates_exact_offer_atomically(&self) -> bool {
+        self.atomic_create_handle
+    }
+
     async fn search_offers(&self, request: SearchOffersRequest) -> ProviderResult<Vec<GpuOffer>> {
         self.search_calls.fetch_add(1, Ordering::SeqCst);
+        if self
+            .transient_omissions
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |remaining| {
+                remaining.checked_sub(1)
+            })
+            .is_ok()
+        {
+            return Ok(Vec::new());
+        }
         Ok(vec![offer(self.name, self.price, &request)])
     }
 
@@ -228,6 +255,68 @@ async fn confirmation_is_idempotent_and_never_calls_provider_create() {
     assert_eq!(replay.desired_state, GpuRentalState::CreatePending);
     assert_eq!(replay.observed_state, GpuRentalState::Quoted);
     assert_eq!(provider.search_calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn confirmation_tolerates_bounded_transient_offer_inventory_omissions() {
+    let service = service().await;
+    let provider = QuoteProvider::new("first", 2_000_000).with_transient_omissions(2);
+    let request = SearchOffersRequest {
+        hardware: hardware(),
+        allow_interruptible: false,
+        require_verified_or_secure: true,
+        maximum_hourly_microusd: 3_000_000,
+    };
+    let rental = service
+        .confirm(
+            "test-recipe",
+            &offer("first", 2_000_000, &request),
+            &RentalAuthorization {
+                client_operation_id: "transient-inventory".to_string(),
+                maximum_hourly_microusd: 3_000_000,
+                maximum_total_microusd: 12_000_000,
+                terminate_at_ms: NOW_MS + 3_600_000,
+                acknowledged_local_enforcement: true,
+            },
+            &provider,
+            NOW_MS,
+        )
+        .await
+        .expect("bounded inventory omission should recover");
+
+    assert_eq!(rental.desired_state, GpuRentalState::CreatePending);
+    assert_eq!(provider.search_calls.load(Ordering::SeqCst), 3);
+}
+
+#[tokio::test]
+async fn atomic_offer_handle_skips_rotating_inventory_revalidation() {
+    let service = service().await;
+    let provider = QuoteProvider::new("first", 2_000_000).with_atomic_create_handle();
+    let request = SearchOffersRequest {
+        hardware: hardware(),
+        allow_interruptible: false,
+        require_verified_or_secure: true,
+        maximum_hourly_microusd: 3_000_000,
+    };
+    let rental = service
+        .confirm(
+            "test-recipe",
+            &offer("first", 2_000_000, &request),
+            &RentalAuthorization {
+                client_operation_id: "atomic-offer-handle".to_string(),
+                maximum_hourly_microusd: 3_000_000,
+                maximum_total_microusd: 12_000_000,
+                terminate_at_ms: NOW_MS + 3_600_000,
+                acknowledged_local_enforcement: true,
+            },
+            &provider,
+            NOW_MS,
+        )
+        .await
+        .expect("atomic offer handle should persist without broad re-query");
+
+    assert_eq!(rental.desired_state, GpuRentalState::CreatePending);
+    assert_eq!(provider.search_calls.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]

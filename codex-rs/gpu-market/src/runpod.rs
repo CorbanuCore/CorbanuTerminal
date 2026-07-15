@@ -114,12 +114,19 @@ impl RunpodProvider {
         let available_counts = gpu
             .pointer("/lowestPrice/availableGpuCounts")
             .and_then(Value::as_array)
-            .is_some_and(|counts| {
+            .map(|counts| {
                 counts
                     .iter()
                     .any(|count| count.as_u64() == Some(u64::from(request.hardware.gpu_count)))
             });
-        if !available_counts {
+        let stock_available = gpu
+            .pointer("/lowestPrice/stockStatus")
+            .and_then(Value::as_str)
+            .is_some_and(|status| !matches!(status, "None" | "Unavailable"));
+        // RunPod's count-specific `lowestPrice` query currently returns a price and stock
+        // status while omitting `availableGpuCounts`. An explicit count list remains the
+        // stronger signal when present, but its absence is not an absence-of-capacity signal.
+        if !available_counts.unwrap_or(stock_available) {
             return Err(ProviderError::new(
                 ProviderErrorKind::OfferUnavailable,
                 "RunPod does not have the requested Secure Cloud GPU count.",
@@ -185,7 +192,7 @@ impl GpuProvider for RunpodProvider {
         }
     }
 
-    fn secure_endpoint_base_url(
+    async fn secure_endpoint_base_url(
         &self,
         instance: &GpuInstance,
         inference_port: u16,
@@ -267,7 +274,6 @@ impl GpuProvider for RunpodProvider {
             "containerDiskInGb": request.disk_gib,
             "volumeInGb": 0,
             "supportPublicIp": true,
-            "startSsh": false,
             "ports": [format!("{}/http", request.inference_port)],
             "dockerStartCmd": request.launch_command,
             "env": environment,

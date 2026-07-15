@@ -134,6 +134,7 @@ where
     }
 
     pub async fn reconcile_due(&self, now_ms: i64) -> anyhow::Result<Vec<ControllerEvent>> {
+        self.state.prune_terminal_gpu_runtime_providers().await?;
         let provider = self.provider.capabilities().provider;
         let leases = self
             .state
@@ -154,7 +155,7 @@ where
 
     async fn reconcile_lease(
         &self,
-        lease: GpuRentalLease,
+        mut lease: GpuRentalLease,
         now_ms: i64,
     ) -> anyhow::Result<Vec<ControllerEvent>> {
         let capabilities = self.provider.capabilities();
@@ -171,6 +172,36 @@ where
                     now_ms,
                 )
                 .await;
+        }
+
+        // Cleanup reconciliation must remain able to prove provider absence. A provider may make
+        // point lookup ambiguous after deletion, so do not let a billing refresh intercept the
+        // inventory-backed termination path.
+        if lease.rental.desired_state == GpuRentalState::TerminateRequested
+            || matches!(
+                lease.rental.observed_state,
+                GpuRentalState::TerminateRequested
+                    | GpuRentalState::Terminating
+                    | GpuRentalState::TerminationUnconfirmed
+            )
+        {
+            return self.reconcile_termination(lease, now_ms).await;
+        }
+
+        // Refresh cost before enforcing limits or advancing any other billable rental.
+        // Provisioning can take many minutes for a large model, so waiting until Ready would both
+        // hide spend from the UI and enforce max_total against a stale zero value.
+        if lease.rental.may_be_billable()
+            && let Some(resource_id) = lease.rental.provider_resource_id.clone()
+        {
+            match self.provider.billing_state(resource_id).await {
+                Ok(billing) => {
+                    lease.rental.estimated_accrued_microusd = billing.estimated_accrued_microusd;
+                    lease.rental.provider_reported_cost_microusd =
+                        billing.provider_reported_cost_microusd;
+                }
+                Err(error) => return self.record_retry(lease, error, now_ms).await,
+            }
         }
 
         if lease.rental.may_be_billable()
@@ -196,17 +227,6 @@ where
                     "Rental reached its authorized spend or time limit; termination requested."
                         .to_string(),
             }]);
-        }
-
-        if lease.rental.desired_state == GpuRentalState::TerminateRequested
-            || matches!(
-                lease.rental.observed_state,
-                GpuRentalState::TerminateRequested
-                    | GpuRentalState::Terminating
-                    | GpuRentalState::TerminationUnconfirmed
-            )
-        {
-            return self.reconcile_termination(lease, now_ms).await;
         }
 
         match lease.rental.observed_state {
@@ -397,9 +417,13 @@ where
         let endpoint = match self
             .provider
             .secure_endpoint_base_url(&instance, recipe.inference_port)
+            .await
         {
             Ok(endpoint) => endpoint,
             Err(error) => {
+                if error.retryable() {
+                    return self.record_retry(lease, error, now_ms).await;
+                }
                 let message = error.safe_message.clone();
                 return self
                     .record_terminal_failure(lease, "secure-endpoint-unavailable", &message, now_ms)
@@ -523,7 +547,9 @@ where
                     model_id: recipe.model_id.clone(),
                     wire_api: "chat".to_string(),
                     health: "ready".to_string(),
-                    display_hourly_microusd: lease.rental.max_hourly_microusd,
+                    display_hourly_microusd: quoted_hourly_microusd(&lease.rental),
+                    maximum_context_tokens: i64::try_from(recipe.maximum_context_tokens)
+                        .unwrap_or(i64::MAX),
                     catalog_sequence: lease.rental.state_sequence.saturating_add(1),
                 },
                 now_ms,
@@ -564,9 +590,6 @@ where
                     now_ms,
                 )
                 .await?;
-                self.state
-                    .remove_gpu_runtime_provider(lease.rental.rental_id.as_str())
-                    .await?;
                 return Ok(vec![ControllerEvent::StateChanged {
                     rental_id: lease.rental.rental_id,
                     state: GpuRentalState::TerminatedConfirmed,
@@ -604,10 +627,6 @@ where
             Ok(Some(_)) => {}
             Err(error) => return self.record_retry(lease, error, now_ms).await,
         }
-        let billing = match self.provider.billing_state(resource_id).await {
-            Ok(billing) => billing,
-            Err(error) => return self.record_retry(lease, error, now_ms).await,
-        };
         let recipe = self.recipes.get(lease.rental.recipe_id.as_str());
         let health = match (
             recipe,
@@ -619,6 +638,10 @@ where
                 .resolve(&crate::GpuCredentialKind::RentalEndpointToken {
                     rental_id: lease.rental.rental_id.clone(),
                 }) {
+                Ok(credential) if lease.rental.observed_state == GpuRentalState::Ready => readiness
+                    .probe_health(endpoint, recipe.model_id.as_str(), &credential.secret)
+                    .await
+                    .unwrap_or(false),
                 Ok(credential) => readiness
                     .probe(endpoint, recipe.model_id.as_str(), &credential.secret)
                     .await
@@ -637,8 +660,6 @@ where
             &lease,
             GpuRentalUpdate {
                 observed_state: state_changed.then_some(observed_state),
-                estimated_accrued_microusd: Some(billing.estimated_accrued_microusd),
-                provider_reported_cost_microusd: billing.provider_reported_cost_microusd,
                 last_error_code: (!health).then(|| "endpoint-degraded".to_string()),
                 last_error_message: (!health).then(|| {
                     "The authenticated endpoint failed its readiness contract.".to_string()
@@ -650,13 +671,27 @@ where
             now_ms,
         )
         .await?;
-        self.state
-            .set_gpu_runtime_provider_health(
-                lease.rental.rental_id.as_str(),
-                if health { "ready" } else { "degraded" },
-                now_ms,
-            )
-            .await?;
+        if let Some(maximum_context_tokens) =
+            recipe.and_then(|recipe| i64::try_from(recipe.maximum_context_tokens).ok())
+        {
+            self.state
+                .set_gpu_runtime_provider_health_and_price(
+                    lease.rental.rental_id.as_str(),
+                    if health { "ready" } else { "degraded" },
+                    quoted_hourly_microusd(&lease.rental),
+                    maximum_context_tokens,
+                    now_ms,
+                )
+                .await?;
+        } else {
+            self.state
+                .set_gpu_runtime_provider_health(
+                    lease.rental.rental_id.as_str(),
+                    "degraded",
+                    now_ms,
+                )
+                .await?;
+        }
         if state_changed {
             Ok(vec![ControllerEvent::StateChanged {
                 rental_id: lease.rental.rental_id,
@@ -804,9 +839,21 @@ where
     async fn apply_update(
         &self,
         lease: &GpuRentalLease,
-        update: GpuRentalUpdate,
+        mut update: GpuRentalUpdate,
         now_ms: i64,
     ) -> anyhow::Result<()> {
+        // `reconcile_lease` refreshes these fields in its local lease before routing to the
+        // state-specific handler. Fold them into whichever atomic transition releases the
+        // controller lease so every billable state, including probing, reports current spend.
+        if lease.rental.may_be_billable() {
+            update
+                .estimated_accrued_microusd
+                .get_or_insert(lease.rental.estimated_accrued_microusd);
+            if update.provider_reported_cost_microusd.is_none() {
+                update.provider_reported_cost_microusd =
+                    lease.rental.provider_reported_cost_microusd;
+            }
+        }
         if !self.state.update_gpu_rental(lease, &update, now_ms).await? {
             return Err(anyhow::anyhow!(
                 "GPU rental lease was lost before its state update"
@@ -823,6 +870,14 @@ fn manifest_step_digest(value: &str) -> String {
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
     format!("fnv1a64:{hash:016x}")
+}
+
+fn quoted_hourly_microusd(rental: &GpuRental) -> i64 {
+    serde_json::from_str::<GpuOffer>(rental.offer_snapshot_json.as_str())
+        .ok()
+        .map(|offer| offer.hourly_microusd)
+        .filter(|price| *price > 0 && *price <= rental.max_hourly_microusd)
+        .unwrap_or(rental.max_hourly_microusd)
 }
 
 #[cfg(test)]

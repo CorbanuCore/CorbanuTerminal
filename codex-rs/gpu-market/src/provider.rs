@@ -262,15 +262,23 @@ pub type ProviderResult<T> = Result<T, ProviderError>;
 pub trait GpuProvider: Send + Sync {
     fn capabilities(&self) -> ProviderCapabilities;
 
+    /// True when the provider's create call accepts the selected offer ID as an immutable,
+    /// atomic acceptance handle and rejects an unavailable handle without substitution.
+    fn create_revalidates_exact_offer_atomically(&self) -> bool {
+        false
+    }
+
     fn secure_endpoint_base_url(
         &self,
         _instance: &GpuInstance,
         _inference_port: u16,
-    ) -> ProviderResult<String> {
-        Err(ProviderError::new(
-            ProviderErrorKind::Permanent,
-            "The provider adapter cannot prove a secure inference transport.",
-        ))
+    ) -> impl Future<Output = ProviderResult<String>> + Send {
+        async {
+            Err(ProviderError::new(
+                ProviderErrorKind::Permanent,
+                "The provider adapter cannot prove a secure inference transport.",
+            ))
+        }
     }
 
     fn search_offers(

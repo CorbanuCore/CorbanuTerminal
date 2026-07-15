@@ -56,6 +56,8 @@ pub(crate) struct SessionConfiguration {
     pub(super) multi_agent_mode: Option<MultiAgentMode>,
     pub(super) model_reasoning_summary: Option<ReasoningSummaryConfig>,
     pub(super) service_tier: Option<String>,
+    /// Endpoint-specific context cap for an ephemeral runtime provider.
+    pub(super) runtime_model_context_window: Option<i64>,
 
     /// Developer instructions that supplement the base instructions.
     pub(super) developer_instructions: Option<String>,
@@ -245,6 +247,9 @@ impl SessionConfiguration {
             config.model_provider = provider.clone();
             next_configuration.provider = provider;
             next_configuration.original_config_do_not_use = Arc::new(config);
+        }
+        if let Some(runtime_model_context_window) = updates.runtime_model_context_window {
+            next_configuration.runtime_model_context_window = runtime_model_context_window;
         }
         if let Some(multi_agent_mode) = updates.multi_agent_mode {
             next_configuration.multi_agent_mode = Some(multi_agent_mode);
@@ -444,6 +449,8 @@ pub(crate) struct SessionSettingsUpdate {
     pub(crate) windows_sandbox_level: Option<WindowsSandboxLevel>,
     pub(crate) collaboration_mode: Option<CollaborationMode>,
     pub(crate) model_provider: Option<String>,
+    /// `Some(Some(limit))` installs a runtime endpoint cap; `Some(None)` clears it.
+    pub(crate) runtime_model_context_window: Option<Option<i64>>,
     pub(crate) multi_agent_mode: Option<MultiAgentMode>,
     pub(crate) reasoning_summary: Option<ReasoningSummaryConfig>,
     pub(crate) service_tier: Option<Option<String>>,

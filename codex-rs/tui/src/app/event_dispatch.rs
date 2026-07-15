@@ -326,7 +326,11 @@ fn gpu_notification(rental: &codex_state::GpuRental) -> Option<(&'static str, St
 }
 
 impl App {
-    fn start_gpu_controller(&mut self) {
+    #[cfg(test)]
+    pub(super) fn start_gpu_controller(&mut self) {}
+
+    #[cfg(not(test))]
+    pub(super) fn start_gpu_controller(&mut self) {
         let executable = match std::env::current_exe() {
             Ok(executable) => executable,
             Err(error) => {
@@ -364,7 +368,7 @@ impl App {
             .and_then(|rentals| {
                 let billable = rentals
                     .into_iter()
-                    .filter(|rental| rental.may_be_billable())
+                    .filter(codex_state::GpuRental::may_be_billable)
                     .collect::<Vec<_>>();
                 if billable.is_empty() {
                     return None;

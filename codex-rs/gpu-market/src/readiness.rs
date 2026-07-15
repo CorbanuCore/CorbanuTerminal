@@ -35,12 +35,22 @@ pub trait GpuReadinessProbe: Send + Sync {
         model_id: &'a str,
         token: &'a SecretValue,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<EndpointReadinessReport>> + Send + 'a>>;
+
+    fn probe_health<'a>(
+        &'a self,
+        base_url: &'a str,
+        model_id: &'a str,
+        token: &'a SecretValue,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<bool>> + Send + 'a>> {
+        Box::pin(async move { Ok(self.probe(base_url, model_id, token).await?.ready()) })
+    }
 }
 
 #[derive(Clone)]
 pub struct GpuEndpointProber {
     client: reqwest::Client,
     request_timeout: Duration,
+    cold_chat_timeout: Duration,
     cancellation_deadline: Duration,
 }
 
@@ -48,6 +58,7 @@ impl std::fmt::Debug for GpuEndpointProber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GpuEndpointProber")
             .field("request_timeout", &self.request_timeout)
+            .field("cold_chat_timeout", &self.cold_chat_timeout)
             .field("cancellation_deadline", &self.cancellation_deadline)
             .finish()
     }
@@ -55,7 +66,15 @@ impl std::fmt::Debug for GpuEndpointProber {
 
 impl Default for GpuEndpointProber {
     fn default() -> Self {
-        Self::new(Duration::from_secs(30), Duration::from_millis(500))
+        Self {
+            client: reqwest::Client::new(),
+            request_timeout: Duration::from_secs(30),
+            // Large MoE runtimes can accept HTTP before their first-inference kernels finish
+            // compiling. Keep one cold request alive instead of injecting a new timed-out probe
+            // every controller retry interval.
+            cold_chat_timeout: Duration::from_secs(10 * 60),
+            cancellation_deadline: Duration::from_millis(500),
+        }
     }
 }
 
@@ -64,8 +83,14 @@ impl GpuEndpointProber {
         Self {
             client: reqwest::Client::new(),
             request_timeout,
+            cold_chat_timeout: request_timeout,
             cancellation_deadline,
         }
+    }
+
+    pub fn with_cold_chat_timeout(mut self, cold_chat_timeout: Duration) -> Self {
+        self.cold_chat_timeout = cold_chat_timeout;
+        self
     }
 
     pub async fn probe(
@@ -118,7 +143,7 @@ impl GpuEndpointProber {
             .client
             .post(chat_url.as_str())
             .bearer_auth(token.expose())
-            .timeout(self.request_timeout)
+            .timeout(self.cold_chat_timeout)
             .json(&chat_body(model_id, "Reply with exactly READY.", false))
             .send()
             .await?;
@@ -234,6 +259,50 @@ impl GpuEndpointProber {
             tool_call_ok,
         })
     }
+
+    pub async fn probe_health(
+        &self,
+        base_url: &str,
+        model_id: &str,
+        token: &SecretValue,
+    ) -> anyhow::Result<bool> {
+        let base_url = validate_base_url(base_url)?;
+        let models_url = format!("{base_url}/models");
+        let no_token = self
+            .client
+            .get(models_url.as_str())
+            .timeout(self.request_timeout)
+            .send()
+            .await?;
+        let wrong_token = self
+            .client
+            .get(models_url.as_str())
+            .bearer_auth("pft-intentionally-wrong-token")
+            .timeout(self.request_timeout)
+            .send()
+            .await?;
+        let models = self
+            .client
+            .get(models_url)
+            .bearer_auth(token.expose())
+            .timeout(self.request_timeout)
+            .send()
+            .await?;
+        let model_identity_ok = models.status().is_success()
+            && models
+                .json::<Value>()
+                .await?
+                .get("data")
+                .and_then(Value::as_array)
+                .is_some_and(|models| {
+                    models
+                        .iter()
+                        .any(|model| model.get("id").and_then(Value::as_str) == Some(model_id))
+                });
+        Ok(unauthorized(no_token.status())
+            && unauthorized(wrong_token.status())
+            && model_identity_ok)
+    }
 }
 
 impl GpuReadinessProbe for GpuEndpointProber {
@@ -244,6 +313,17 @@ impl GpuReadinessProbe for GpuEndpointProber {
         token: &'a SecretValue,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<EndpointReadinessReport>> + Send + 'a>> {
         Box::pin(GpuEndpointProber::probe(self, base_url, model_id, token))
+    }
+
+    fn probe_health<'a>(
+        &'a self,
+        base_url: &'a str,
+        model_id: &'a str,
+        token: &'a SecretValue,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<bool>> + Send + 'a>> {
+        Box::pin(GpuEndpointProber::probe_health(
+            self, base_url, model_id, token,
+        ))
     }
 }
 

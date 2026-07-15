@@ -300,6 +300,7 @@ WHERE rental_id = ? AND observed_state != ?
         let desired_state = update.desired_state.map(GpuRentalState::as_str);
         let observed_state = update.observed_state.map(GpuRentalState::as_str);
         let terminated = observed_state == Some(GpuRentalState::TerminatedConfirmed.as_str());
+        let mut transaction = self.pool.begin().await?;
         let result = sqlx::query(
             r#"
 UPDATE gpu_rentals
@@ -356,9 +357,17 @@ WHERE rental_id = ? AND controller_lease_owner = ?
         .bind(now_ms)
         .bind(lease.rental.rental_id.as_str())
         .bind(lease.owner.as_str())
-        .execute(self.pool.as_ref())
+        .execute(&mut *transaction)
         .await?;
-        Ok(result.rows_affected() == 1)
+        let updated = result.rows_affected() == 1;
+        if updated && terminated {
+            sqlx::query("DELETE FROM gpu_runtime_providers WHERE rental_id = ?")
+                .bind(lease.rental.rental_id.as_str())
+                .execute(&mut *transaction)
+                .await?;
+        }
+        transaction.commit().await?;
+        Ok(updated)
     }
 
     pub async fn release_gpu_rental_lease(

@@ -30,6 +30,7 @@ use http::HeaderMap;
 use http::HeaderValue;
 use http::Method;
 use serde::Deserialize;
+use serde::Deserializer;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -232,10 +233,18 @@ struct ChatDelta {
     reasoning: Option<String>,
     /// OpenRouter typed reasoning blocks; may arrive without a plain-text
     /// `reasoning` twin (e.g. encrypted/redacted thinking).
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_default")]
     reasoning_details: Vec<serde_json::Value>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_default")]
     tool_calls: Vec<ChatToolCallDelta>,
+}
+
+fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    Option::<T>::deserialize(deserializer).map(Option::unwrap_or_default)
 }
 
 #[derive(Debug, Deserialize)]
@@ -1419,6 +1428,47 @@ mod tests {
             }) if response_id == "chatcmpl-1"
         );
         assert_eq!(events.len(), 6);
+    }
+
+    #[tokio::test]
+    async fn parses_sglang_text_deltas_with_null_optional_collections() {
+        let events = collect_events(&[
+            br#"data: {"id":"chatcmpl-sglang","model":"deepseek-ai/DeepSeek-V4-Flash","choices":[{"index":0,"delta":{"reasoning_content":null,"reasoning_details":null,"role":"assistant","content":""},"finish_reason":null}]}"#,
+            b"\n\n",
+            br#"data: {"id":"chatcmpl-sglang","choices":[{"index":0,"delta":{"role":null,"content":"RENTED_GPU_OK","reasoning_content":null,"reasoning_details":null,"tool_calls":null},"finish_reason":null}],"usage":null}"#,
+            b"\n\n",
+            br#"data: {"id":"chatcmpl-sglang","choices":[{"index":0,"delta":{"reasoning_content":null},"finish_reason":"stop"}]}"#,
+            b"\n\n",
+            b"data: [DONE]\n\n",
+        ])
+        .await;
+
+        assert_matches!(
+            &events[0],
+            Ok(ResponseEvent::ServerModel(model))
+                if model == "deepseek-ai/DeepSeek-V4-Flash"
+        );
+        assert_matches!(
+            &events[1],
+            Ok(ResponseEvent::OutputItemAdded(ResponseItem::Message { .. }))
+        );
+        assert_matches!(
+            &events[2],
+            Ok(ResponseEvent::OutputTextDelta(delta)) if delta == "RENTED_GPU_OK"
+        );
+        assert_matches!(
+            &events[3],
+            Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { content, .. }))
+                if content == &vec![ContentItem::OutputText {
+                    text: "RENTED_GPU_OK".to_string(),
+                }]
+        );
+        assert_matches!(
+            &events[4],
+            Ok(ResponseEvent::Completed { response_id, .. })
+                if response_id == "chatcmpl-sglang"
+        );
+        assert_eq!(events.len(), 5);
     }
 
     #[tokio::test]

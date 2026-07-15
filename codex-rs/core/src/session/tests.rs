@@ -3363,6 +3363,7 @@ async fn set_rate_limits_retains_previous_credits() {
         developer_instructions: config.developer_instructions.clone(),
         loaded_agents_md: None,
         service_tier: None,
+        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -3470,6 +3471,7 @@ async fn set_rate_limits_updates_plan_type_when_present() {
         developer_instructions: config.developer_instructions.clone(),
         loaded_agents_md: None,
         service_tier: None,
+        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -4006,6 +4008,137 @@ async fn session_update_settings_model_provider_rebuilds_model_client() {
 }
 
 #[tokio::test]
+async fn session_update_settings_loads_runtime_gpu_provider_added_after_startup() {
+    const NOW_MS: i64 = 1_800_000_000_000;
+    let state_home = tempfile::tempdir().expect("state home");
+    let state = codex_state::StateRuntime::init(
+        state_home.path().to_path_buf(),
+        "runtime-provider-test".to_string(),
+    )
+    .await
+    .expect("initialize state");
+    let rental_id = "gpu-runtime-session-test";
+    state
+        .create_gpu_rental(
+            &codex_state::GpuRentalCreateParams {
+                rental_id: rental_id.to_string(),
+                installation_id: "installation-1".to_string(),
+                client_operation_id: "operation-1".to_string(),
+                provider: "vast".to_string(),
+                recipe_id: "deepseek-flash-2xh200".to_string(),
+                recipe_revision: "test-revision".to_string(),
+                offer_snapshot_json: "{\"offer_id\":\"offer-1\"}".to_string(),
+                quote_expires_at_ms: Some(NOW_MS + 60_000),
+                max_hourly_microusd: 8_000_000,
+                max_total_microusd: 20_000_000,
+                terminate_at_ms: NOW_MS + 3_600_000,
+                enforcement_class: codex_state::GpuLimitEnforcement::LocalControllerDependent,
+                ownership_tag: "pft-runtime-session-test".to_string(),
+            },
+            NOW_MS,
+        )
+        .await
+        .expect("create rental");
+    let lease = state
+        .claim_due_gpu_rentals("controller", NOW_MS, 10_000, 1)
+        .await
+        .expect("claim rental")
+        .remove(0);
+    assert!(
+        state
+            .update_gpu_rental(
+                &lease,
+                &codex_state::GpuRentalUpdate {
+                    desired_state: Some(codex_state::GpuRentalState::Ready),
+                    observed_state: Some(codex_state::GpuRentalState::Ready),
+                    next_retry_at_ms: Some(NOW_MS),
+                    ..Default::default()
+                },
+                NOW_MS,
+            )
+            .await
+            .expect("mark rental ready")
+    );
+    let runtime_provider_id = "gpu-runtime-session-test-provider";
+    assert!(
+        state
+            .upsert_gpu_runtime_provider(
+                &codex_state::GpuRuntimeProviderUpsert {
+                    rental_id: rental_id.to_string(),
+                    provider_id: runtime_provider_id.to_string(),
+                    base_url: "https://rental.example.invalid/v1".to_string(),
+                    model_id: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
+                    wire_api: "chat".to_string(),
+                    health: "ready".to_string(),
+                    display_hourly_microusd: 7_000_000,
+                    maximum_context_tokens: 65_536,
+                    catalog_sequence: 1,
+                },
+                NOW_MS,
+            )
+            .await
+            .expect("register runtime provider")
+    );
+
+    let sqlite_home = state_home.path().to_path_buf();
+    let session = make_session_with_config(move |config| {
+        config.sqlite_home = sqlite_home;
+        assert!(!config.model_providers.contains_key(runtime_provider_id));
+    })
+    .await
+    .expect("session should initialize before runtime provider injection");
+
+    let update = SessionSettingsUpdate {
+        model_provider: Some(runtime_provider_id.to_string()),
+        collaboration_mode: Some(CollaborationMode {
+            mode: ModeKind::Default,
+            settings: Settings {
+                model: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
+                reasoning_effort: Some(codex_protocol::openai_models::ReasoningEffort::None),
+                developer_instructions: None,
+            },
+        }),
+        ..Default::default()
+    };
+
+    session
+        .preview_settings(&update)
+        .await
+        .expect("runtime provider should hot-load during settings preview");
+
+    session
+        .update_settings(update)
+        .await
+        .expect("runtime provider should hot-load into the existing session");
+
+    assert_eq!(
+        session.services.model_client().provider_info().base_url,
+        Some("https://rental.example.invalid/v1".to_string())
+    );
+    assert_eq!(
+        session.new_default_turn().await.model_context_window(),
+        Some(62_259),
+        "runtime endpoint cap and the standard 95% safety margin must override broader model-card metadata"
+    );
+
+    session
+        .update_settings(SessionSettingsUpdate {
+            model_provider: Some(AMBIENT_PROVIDER_ID.to_string()),
+            ..Default::default()
+        })
+        .await
+        .expect("switch back to static provider");
+    assert!(
+        session
+            .new_default_turn()
+            .await
+            .model_context_window()
+            .is_some_and(|window| window > 62_259),
+        "leaving a runtime provider must clear its endpoint-specific context cap"
+    );
+}
+
+#[tokio::test]
 async fn session_settings_legacy_fast_service_tier_update_uses_priority_request_value() {
     let session_configuration = make_session_configuration_for_tests().await;
 
@@ -4047,6 +4180,7 @@ pub(crate) async fn make_session_configuration_for_tests() -> SessionConfigurati
         developer_instructions: config.developer_instructions.clone(),
         loaded_agents_md: None,
         service_tier: None,
+        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -4917,6 +5051,7 @@ async fn session_new_fails_when_zsh_fork_enabled_without_packaged_zsh() {
         developer_instructions: config.developer_instructions.clone(),
         loaded_agents_md: None,
         service_tier: None,
+        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -5035,6 +5170,7 @@ async fn make_session_and_context_for_home(codex_home: &Path) -> (Session, TurnC
         developer_instructions: config.developer_instructions.clone(),
         loaded_agents_md: None,
         service_tier: None,
+        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -5299,6 +5435,7 @@ async fn make_session_with_config_and_rx(
         developer_instructions: config.developer_instructions.clone(),
         loaded_agents_md: None,
         service_tier: None,
+        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -5411,6 +5548,7 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
         developer_instructions: config.developer_instructions.clone(),
         loaded_agents_md: None,
         service_tier: None,
+        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -7124,6 +7262,7 @@ where
         developer_instructions: config.developer_instructions.clone(),
         loaded_agents_md: None,
         service_tier: None,
+        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions

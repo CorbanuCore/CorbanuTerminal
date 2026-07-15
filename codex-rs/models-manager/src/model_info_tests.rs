@@ -1,4 +1,18 @@
 use super::*;
+
+#[test]
+fn curated_gpu_models_have_conservative_non_fallback_metadata() {
+    let deepseek = model_info_from_slug("deepseek-ai/DeepSeek-V4-Flash");
+    assert!(!deepseek.used_fallback_model_metadata);
+    assert_eq!(deepseek.context_window, Some(384_000));
+    assert!(deepseek.model_messages.is_some());
+
+    let glm = model_info_from_slug("zai-org/GLM-5.2-FP8");
+    assert!(!glm.used_fallback_model_metadata);
+    assert_eq!(glm.context_window, Some(131_072));
+
+    assert!(model_info_from_slug("unregistered-gpu-model").used_fallback_model_metadata);
+}
 use crate::ModelsManagerConfig;
 use codex_protocol::config_types::Personality;
 use pretty_assertions::assert_eq;

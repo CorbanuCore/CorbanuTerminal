@@ -139,6 +139,7 @@ async fn runtime_overlay_requires_ready_and_https_and_is_sequence_monotonic() {
         wire_api: "chat".to_string(),
         health: "ready".to_string(),
         display_hourly_microusd: 1_000_000,
+        maximum_context_tokens: 65_536,
         catalog_sequence: 2,
     };
     assert!(
@@ -170,6 +171,7 @@ async fn runtime_overlay_requires_ready_and_https_and_is_sequence_monotonic() {
         .expect("providers");
     assert_eq!(providers.len(), 1);
     assert_eq!(providers[0].health, "ready");
+    assert_eq!(providers[0].maximum_context_tokens, Some(65_536));
     assert!(!providers[0].base_url.contains("token"));
 
     assert!(
@@ -210,6 +212,7 @@ async fn plaintext_remote_http_endpoint_is_rejected() {
                 wire_api: "chat".to_string(),
                 health: "ready".to_string(),
                 display_hourly_microusd: 1_000_000,
+                maximum_context_tokens: 65_536,
                 catalog_sequence: 1,
             },
             NOW_MS,

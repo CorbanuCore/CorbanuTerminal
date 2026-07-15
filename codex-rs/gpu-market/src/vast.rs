@@ -20,6 +20,12 @@ use serde_json::Value;
 use std::sync::Arc;
 
 const DEFAULT_API_BASE: &str = "https://console.vast.ai/api";
+const CLOUDFLARED_URL: &str =
+    "https://github.com/cloudflare/cloudflared/releases/download/2026.7.1/cloudflared-linux-amd64";
+const CLOUDFLARED_SHA256: &str = "79a0ade7fc854f62c1aaef48424d9d979e8c2fcd039189d24db82b84cd146be1";
+const TUNNEL_URL_PATH: &str = "/tmp/pfterminal-cloudflared-url";
+const TUNNEL_LOG_PATH: &str = "/tmp/pfterminal-cloudflared.log";
+const LOCAL_QUOTE_CONFIRMATION_WINDOW_MS: i64 = 5 * 60 * 1000;
 
 #[derive(Clone)]
 pub struct VastProvider {
@@ -38,7 +44,11 @@ impl std::fmt::Debug for VastProvider {
 
 impl VastProvider {
     pub fn new(credentials: Arc<dyn GpuCredentialResolver>) -> Self {
-        Self::with_api_base(credentials, DEFAULT_API_BASE)
+        Self {
+            client: reqwest::Client::new(),
+            credentials,
+            api_base: DEFAULT_API_BASE.to_string(),
+        }
     }
 
     pub fn with_api_base(
@@ -65,7 +75,7 @@ impl VastProvider {
         let mut filters = serde_json::json!({
             "verified": {"eq": true},
             "rentable": {"eq": true},
-            "gpu_name": {"eq": request.hardware.gpu_model},
+            "gpu_name": {"eq": vast_gpu_name(request.hardware.gpu_model.as_str())},
             "num_gpus": {"eq": request.hardware.gpu_count},
             "gpu_ram": {"gte": request.hardware.minimum_vram_mib_per_gpu},
             "disk_space": {"gte": request.hardware.minimum_disk_gib},
@@ -98,7 +108,7 @@ impl VastProvider {
         let now_ms = unix_now_ms();
         raw_offers
             .iter()
-            .map(|raw| vast_offer(raw, now_ms))
+            .map(|raw| vast_offer(raw, request, now_ms))
             .filter_map(|result| match result {
                 Ok(offer) if offer.validate_for(request, now_ms).is_ok() => Some(Ok(offer)),
                 Ok(_) => None,
@@ -120,16 +130,153 @@ impl VastProvider {
             return Ok(None);
         }
         let json = decode_json(response).await?;
-        Ok(json
+        let instance = json
             .get("instances")
             .and_then(|instances| {
                 if instances.is_array() {
                     instances.as_array().and_then(|values| values.first())
+                } else if instances.is_null() {
+                    None
                 } else {
                     Some(instances)
                 }
             })
-            .cloned())
+            .cloned();
+        match instance {
+            Some(instance) => Ok(Some(instance)),
+            None => {
+                if let Some(instance) = self.find_raw_instance_in_inventory(resource_id).await? {
+                    return Ok(Some(instance));
+                }
+                Err(ProviderError::new(
+                    ProviderErrorKind::Ambiguous,
+                    "Vast temporarily omitted a known instance from both instance views.",
+                ))
+            }
+        }
+    }
+
+    async fn find_raw_instance_in_inventory(
+        &self,
+        resource_id: &str,
+    ) -> ProviderResult<Option<Value>> {
+        let key = self.api_key()?;
+        let mut after_token: Option<String> = None;
+        for _ in 0..100 {
+            let mut request = self
+                .client
+                .get(format!("{}/v1/instances/", self.api_base))
+                .bearer_auth(key.secret.expose())
+                .query(&[("limit", "25")]);
+            if let Some(token) = after_token.as_deref() {
+                request = request.query(&[("after_token", token)]);
+            }
+            let response = request.send().await.map_err(|_| transport_error())?;
+            let json = decode_json(response).await?;
+            let page = json
+                .get("instances")
+                .and_then(Value::as_array)
+                .ok_or_else(|| {
+                    ProviderError::new(
+                        ProviderErrorKind::Retryable,
+                        "Vast returned incomplete instance inventory.",
+                    )
+                })?;
+            if let Some(instance) = page
+                .iter()
+                .find(|raw| value_id(raw.get("id")).as_deref() == Some(resource_id))
+            {
+                return Ok(Some(instance.clone()));
+            }
+            after_token = json
+                .get("next_token")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            if after_token.is_none() {
+                return Ok(None);
+            }
+        }
+        Err(ProviderError::new(
+            ProviderErrorKind::Permanent,
+            "Vast instance inventory exceeded the reconciliation page bound.",
+        ))
+    }
+
+    async fn discover_tunnel_url(&self, resource_id: &str) -> ProviderResult<String> {
+        let key = self.api_key()?;
+        let response = self
+            .client
+            .put(format!(
+                "{}/v0/instances/request_logs/{resource_id}",
+                self.api_base
+            ))
+            .bearer_auth(key.secret.expose())
+            .json(&serde_json::json!({
+                "tail": "1000",
+                "filter": "PFTERMINAL_TUNNEL_URL="
+            }))
+            .send()
+            .await
+            .map_err(|_| transport_error())?;
+        let json = match decode_json(response).await {
+            Ok(json) => json,
+            Err(error)
+                if matches!(
+                    error.kind,
+                    ProviderErrorKind::InvalidRequest | ProviderErrorKind::OfferUnavailable
+                ) =>
+            {
+                return Err(ProviderError {
+                    kind: ProviderErrorKind::Retryable,
+                    safe_message:
+                        "Vast filtered container logs are not ready for the starting instance."
+                            .to_string(),
+                    retry_after_ms: error.retry_after_ms,
+                    diagnostic_ref: error.diagnostic_ref,
+                });
+            }
+            Err(error) => return Err(error),
+        };
+        // Vast returns an unsigned archival URL and, for private/new logs, a
+        // short-lived signed download URL. Prefer the signed URL when present;
+        // the archival URL can legitimately answer 403 during startup.
+        let result_url = json
+            .get("temp_download_url")
+            .and_then(Value::as_str)
+            .filter(|url| !url.is_empty())
+            .or_else(|| json.get("result_url").and_then(Value::as_str))
+            .ok_or_else(|| {
+                ProviderError::new(
+                    ProviderErrorKind::Retryable,
+                    "Vast secure tunnel discovery is not ready yet.",
+                )
+            })?;
+        validate_vast_result_url(result_url)?;
+
+        for _ in 0..6 {
+            let response = self
+                .client
+                .get(result_url)
+                .send()
+                .await
+                .map_err(|_| transport_error())?;
+            if response.status().is_success() {
+                let output = response.text().await.map_err(|_| {
+                    ProviderError::new(
+                        ProviderErrorKind::Retryable,
+                        "Vast secure tunnel discovery returned unreadable output.",
+                    )
+                })?;
+                if let Some(url) = extract_trycloudflare_url(output.as_str()) {
+                    return Ok(format!("{url}/v1"));
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+        Err(ProviderError::new(
+            ProviderErrorKind::Retryable,
+            "Vast secure tunnel discovery is not ready yet.",
+        ))
     }
 }
 
@@ -139,11 +286,30 @@ impl GpuProvider for VastProvider {
             provider: "vast".to_string(),
             supports_ownership_tags: true,
             supports_inventory: true,
-            supports_secure_endpoint_transport: false,
+            supports_secure_endpoint_transport: true,
             supports_native_ttl: false,
             supports_native_spend_cap: false,
             security_classes: vec!["verified".to_string()],
         }
+    }
+
+    fn create_revalidates_exact_offer_atomically(&self) -> bool {
+        true
+    }
+
+    async fn secure_endpoint_base_url(
+        &self,
+        instance: &GpuInstance,
+        inference_port: u16,
+    ) -> ProviderResult<String> {
+        if instance.resource_id.is_empty() || inference_port == 0 {
+            return Err(ProviderError::new(
+                ProviderErrorKind::Permanent,
+                "Vast endpoint identity is incomplete.",
+            ));
+        }
+        self.discover_tunnel_url(instance.resource_id.as_str())
+            .await
     }
 
     async fn search_offers(&self, request: SearchOffersRequest) -> ProviderResult<Vec<GpuOffer>> {
@@ -166,45 +332,36 @@ impl GpuProvider for VastProvider {
             require_verified_or_secure: true,
             maximum_hourly_microusd: request.offer.hourly_microusd,
         };
-        let current = self
-            .offers(&requirements)
-            .await?
-            .into_iter()
-            .find(|offer| offer.offer_id == request.offer.offer_id)
-            .ok_or_else(|| {
-                ProviderError::new(
-                    ProviderErrorKind::OfferUnavailable,
-                    "Confirmed Vast offer is no longer rentable.",
-                )
-            })?;
-        if current.hourly_microusd != request.offer.hourly_microusd {
-            return Err(ProviderError::new(
-                ProviderErrorKind::PriceDrift,
-                "Vast offer price changed after confirmation; creation was not attempted.",
-            ));
-        }
+        request.offer.validate_for(&requirements, unix_now_ms())?;
 
         let key = self.api_key()?;
-        let mut environment = serde_json::Map::new();
-        environment.insert(
-            "PFT_ENDPOINT_TOKEN".to_string(),
-            Value::String(request.endpoint_token.expose().to_string()),
-        );
+        let mut environment = serde_json::Map::from_iter([
+            (
+                "PFT_ENDPOINT_TOKEN".to_string(),
+                Value::String(request.endpoint_token.expose().to_string()),
+            ),
+            (
+                format!("-p {0}:{0}", request.inference_port),
+                Value::String("1".to_string()),
+            ),
+        ]);
         if let Some(token) = request.huggingface_token.as_ref() {
             environment.insert(
                 "HF_TOKEN".to_string(),
                 Value::String(token.expose().to_string()),
             );
         }
+        let launch_command =
+            vast_secure_launch_command(&request.launch_command, request.inference_port);
         let body = serde_json::json!({
+            "client_id": "me",
             "image": request.image,
             "disk": request.disk_gib,
             "label": request.ownership_tag,
             "cancel_unavail": true,
             "runtype": "args",
-            "args_str": join_shell_arguments(&request.launch_command),
+            "args": launch_command,
             "env": environment,
-            "ports": [format!("{}/tcp", request.inference_port)],
         });
         let response = self
             .client
@@ -345,75 +502,72 @@ impl GpuProvider for VastProvider {
     }
 }
 
-fn join_shell_arguments(arguments: &[String]) -> String {
-    arguments
-        .iter()
-        .map(|argument| {
-            if argument
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || b"_@%+=:,./-".contains(&byte))
-            {
-                argument.clone()
-            } else {
-                format!("'{}'", argument.replace('\'', "'\"'\"'"))
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn vast_offer(raw: &Value, now_ms: i64) -> ProviderResult<GpuOffer> {
+fn vast_offer(raw: &Value, request: &SearchOffersRequest, now_ms: i64) -> ProviderResult<GpuOffer> {
     let id = value_id(raw.get("id")).ok_or_else(|| {
         ProviderError::new(
             ProviderErrorKind::Permanent,
             "Vast offer omitted its ask id.",
         )
     })?;
-    let hourly_microusd = raw
-        .get("dph_total")
-        .or_else(|| raw.pointer("/search/totalHour"))
+    // Vast's search `dph_total` includes only the ask's tiny default disk allocation. Creating
+    // an instance with the recipe's explicit disk size changes the billable total. Quote and
+    // enforce the same full amount Vast will bill: base GPU hourly price plus the requested
+    // disk's monthly storage price amortized over Vast's 30-day billing month.
+    let base_hourly_microusd = raw
+        .get("dph_base")
         .and_then(parse_usd_micros)
         .ok_or_else(|| {
             ProviderError::new(
                 ProviderErrorKind::Permanent,
-                "Vast offer omitted authoritative total hourly price.",
+                "Vast offer omitted authoritative base hourly price.",
+            )
+        })?;
+    let storage_microusd_per_gib_month = raw
+        .get("storage_cost")
+        .and_then(parse_usd_micros)
+        .ok_or_else(|| {
+            ProviderError::new(
+                ProviderErrorKind::Permanent,
+                "Vast offer omitted authoritative storage price.",
+            )
+        })?;
+    let storage_hourly_microusd = i128::from(storage_microusd_per_gib_month)
+        .checked_mul(i128::from(request.hardware.minimum_disk_gib))
+        .and_then(|value| value.checked_add(719))
+        .map(|value| value / 720)
+        .and_then(|value| i64::try_from(value).ok())
+        .ok_or_else(|| {
+            ProviderError::new(
+                ProviderErrorKind::Permanent,
+                "Vast full hourly price exceeded the supported billing range.",
+            )
+        })?;
+    let hourly_microusd = base_hourly_microusd
+        .checked_add(storage_hourly_microusd)
+        .ok_or_else(|| {
+            ProviderError::new(
+                ProviderErrorKind::Permanent,
+                "Vast full hourly price exceeded the supported billing range.",
             )
         })?;
     Ok(GpuOffer {
         provider: "vast".to_string(),
         offer_id: id,
-        gpu_model: raw
-            .get("gpu_name")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown")
-            .to_string(),
+        gpu_model: request.hardware.gpu_model.clone(),
         gpu_count: raw
             .get("num_gpus")
             .and_then(Value::as_u64)
             .and_then(|value| value.try_into().ok())
             .unwrap_or_default(),
-        vram_mib_per_gpu: raw
-            .get("gpu_ram")
-            .and_then(Value::as_u64)
-            .unwrap_or_default(),
-        host_ram_mib: raw
-            .get("cpu_ram")
-            .and_then(Value::as_u64)
-            .unwrap_or_default(),
-        disk_gib: raw
-            .get("disk_space")
-            .and_then(Value::as_u64)
-            .unwrap_or_default(),
+        vram_mib_per_gpu: value_u64_floor(raw.get("gpu_ram")).unwrap_or_default(),
+        host_ram_mib: value_u64_floor(raw.get("cpu_ram")).unwrap_or_default(),
+        disk_gib: value_u64_floor(raw.get("disk_space")).unwrap_or_default(),
         high_bandwidth_interconnect: raw
             .get("bw_nvlink")
             .and_then(Value::as_f64)
             .is_some_and(|bandwidth| bandwidth > 0.0),
         runtime_topology_verification: false,
-        cuda_versions: raw
-            .get("cuda_max_good")
-            .and_then(Value::as_f64)
-            .map(|version| vec![version.to_string()])
-            .unwrap_or_default(),
+        cuda_versions: vast_cuda_versions(raw, request),
         region: raw
             .get("geolocation")
             .and_then(Value::as_str)
@@ -430,9 +584,12 @@ fn vast_offer(raw: &Value, now_ms: i64) -> ProviderResult<GpuOffer> {
             .map(|value| (value.clamp(0.0, 1.0) * 1_000_000.0).round() as u32),
         interruptible: raw.get("is_bid").and_then(Value::as_bool).unwrap_or(false),
         hourly_microusd,
-        storage_microusd_per_gib_month: raw.get("storage_cost").and_then(parse_usd_micros),
+        storage_microusd_per_gib_month: Some(storage_microusd_per_gib_month),
         quoted_at_ms: now_ms,
-        expires_at_ms: Some(now_ms.saturating_add(30_000)),
+        // Vast asks do not carry a provider-guaranteed quote TTL. This local window only
+        // bounds stale UI confirmation; confirmation still re-fetches this exact ask and
+        // rejects disappearance or price drift before any billable create request.
+        expires_at_ms: Some(now_ms.saturating_add(LOCAL_QUOTE_CONFIRMATION_WINDOW_MS)),
         raw_snapshot: raw.clone(),
     })
 }
@@ -466,15 +623,15 @@ fn vast_instance(raw: &Value) -> ProviderResult<GpuInstance> {
         gpu_model: raw
             .get("gpu_name")
             .and_then(Value::as_str)
-            .unwrap_or("unknown")
-            .to_string(),
+            .map(canonical_vast_gpu_name)
+            .unwrap_or_else(|| "unknown".to_string()),
         gpu_count: raw
             .get("num_gpus")
             .and_then(Value::as_u64)
             .and_then(|value| value.try_into().ok())
             .unwrap_or_default(),
-        host_ram_mib: raw.get("cpu_ram").and_then(Value::as_u64),
-        disk_gib: raw.get("disk_space").and_then(Value::as_u64),
+        host_ram_mib: value_u64_floor(raw.get("cpu_ram")),
+        disk_gib: value_u64_floor(raw.get("disk_space")),
         high_bandwidth_interconnect: raw
             .get("bw_nvlink")
             .and_then(Value::as_f64)
@@ -496,6 +653,137 @@ fn vast_instance(raw: &Value) -> ProviderResult<GpuInstance> {
             .and_then(Value::as_u64)
             .and_then(|value| value.try_into().ok()),
     })
+}
+
+fn vast_gpu_name(canonical: &str) -> &str {
+    canonical.strip_prefix("NVIDIA ").unwrap_or(canonical)
+}
+
+fn canonical_vast_gpu_name(provider_name: &str) -> String {
+    if provider_name.starts_with("NVIDIA ") {
+        provider_name.to_string()
+    } else {
+        format!("NVIDIA {provider_name}")
+    }
+}
+
+fn value_u64_floor(value: Option<&Value>) -> Option<u64> {
+    value.and_then(|value| {
+        value.as_u64().or_else(|| {
+            value
+                .as_f64()
+                .filter(|number| *number >= 0.0)
+                .map(|number| number.floor() as u64)
+        })
+    })
+}
+
+fn vast_cuda_versions(raw: &Value, request: &SearchOffersRequest) -> Vec<String> {
+    let Some(maximum) = raw.get("cuda_max_good").and_then(Value::as_f64) else {
+        return Vec::new();
+    };
+    request
+        .hardware
+        .allowed_cuda_versions
+        .iter()
+        .filter(|version| {
+            version
+                .parse::<f64>()
+                .is_ok_and(|required| maximum >= required)
+        })
+        .cloned()
+        .collect()
+}
+
+fn vast_secure_launch_command(command: &[String], inference_port: u16) -> Vec<String> {
+    let bootstrap = format!(
+        concat!(
+            "set -euo pipefail; port=$1; shift; ",
+            "python3 -c 'import hashlib,sys,urllib.request; ",
+            "d=urllib.request.urlopen(sys.argv[1], timeout=120).read(); ",
+            "assert hashlib.sha256(d).hexdigest()==sys.argv[2]; ",
+            "open(sys.argv[3],\"wb\").write(d)' ",
+            "'{}' '{}' /tmp/pfterminal-cloudflared; ",
+            "chmod 700 /tmp/pfterminal-cloudflared; ",
+            "rm -f '{}' '{}'; ",
+            "/tmp/pfterminal-cloudflared tunnel --no-autoupdate ",
+            "--url \"http://127.0.0.1:$port\" --logfile '{}' --loglevel info ",
+            ">/tmp/pfterminal-cloudflared.stdout 2>&1 & ",
+            "for i in $(seq 1 120); do ",
+            "grep -Eo 'https://[a-z0-9-]+\\.trycloudflare\\.com' '{}' | head -1 > '{}' || true; ",
+            "test -s '{}' && break; sleep 1; done; ",
+            "test -s '{}'; printf 'PFTERMINAL_TUNNEL_URL=%s\\n' \"$(cat '{}')\"; ",
+            "exec \"$@\""
+        ),
+        CLOUDFLARED_URL,
+        CLOUDFLARED_SHA256,
+        TUNNEL_URL_PATH,
+        TUNNEL_LOG_PATH,
+        TUNNEL_LOG_PATH,
+        TUNNEL_LOG_PATH,
+        TUNNEL_URL_PATH,
+        TUNNEL_URL_PATH,
+        TUNNEL_URL_PATH,
+        TUNNEL_URL_PATH,
+    );
+    let mut wrapped = vec![
+        "bash".to_string(),
+        "-lc".to_string(),
+        bootstrap,
+        "pfterminal-vast-bootstrap".to_string(),
+        inference_port.to_string(),
+    ];
+    wrapped.extend_from_slice(command);
+    wrapped
+}
+
+fn validate_vast_result_url(result_url: &str) -> ProviderResult<()> {
+    let url = reqwest::Url::parse(result_url).map_err(|_| {
+        ProviderError::new(
+            ProviderErrorKind::Permanent,
+            "Vast command result URL is invalid.",
+        )
+    })?;
+    let trusted_host = url.host_str().is_some_and(|host| {
+        let regional_s3 = host.ends_with(".amazonaws.com")
+            && host.strip_suffix(".amazonaws.com").is_some_and(|prefix| {
+                prefix == "s3"
+                    || prefix.starts_with("s3.")
+                    || prefix.starts_with("s3-")
+                    || prefix.contains(".s3.")
+                    || prefix.contains(".s3-")
+            });
+        host == "s3.amazonaws.com" || host.ends_with(".s3.amazonaws.com") || regional_s3
+    });
+    if url.scheme() != "https" || !trusted_host {
+        return Err(ProviderError::new(
+            ProviderErrorKind::Permanent,
+            "Vast command result URL is not a trusted HTTPS endpoint.",
+        ));
+    }
+    Ok(())
+}
+
+fn extract_trycloudflare_url(output: &str) -> Option<&str> {
+    output
+        .split_whitespace()
+        .filter_map(|value| {
+            let start = value.find("https://")?;
+            Some(value[start..].trim_matches(|character: char| {
+                !character.is_ascii_alphanumeric() && !matches!(character, ':' | '/' | '.' | '-')
+            }))
+        })
+        .rfind(|value| {
+            value.starts_with("https://")
+                && value.ends_with(".trycloudflare.com")
+                && value.strip_prefix("https://").is_some_and(|host| {
+                    host.bytes().all(|byte| {
+                        byte.is_ascii_lowercase()
+                            || byte.is_ascii_digit()
+                            || matches!(byte, b'-' | b'.')
+                    })
+                })
+        })
 }
 
 fn value_id(value: Option<&Value>) -> Option<String> {

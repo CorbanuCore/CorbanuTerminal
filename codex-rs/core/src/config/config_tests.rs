@@ -11847,12 +11847,14 @@ fn gpu_runtime_provider_uses_command_backed_scoped_auth() {
     let (provider_id, provider) = gpu_runtime_model_provider(
         codex_state::GpuRuntimeProvider {
             rental_id: "rental-123".to_string(),
+            infrastructure_provider: "vast".to_string(),
             provider_id: "gpu-rental-123".to_string(),
             base_url: "https://gpu.example.test/v1".to_string(),
             model_id: "pinned-model".to_string(),
             wire_api: "chat".to_string(),
             health: "ready".to_string(),
             display_hourly_microusd: 2_000_000,
+            maximum_context_tokens: Some(65_536),
             catalog_sequence: 4,
             updated_at_ms: 10,
         },
@@ -11864,6 +11866,31 @@ fn gpu_runtime_provider_uses_command_backed_scoped_auth() {
     let auth = provider.auth.as_ref().expect("command-backed auth");
     assert_eq!(auth.command, "pfterminal");
     assert_eq!(auth.args, vec!["internal-gpu-endpoint-token", "rental-123"]);
+    assert_eq!(auth.timeout_ms.get(), 30_000);
     assert!(provider.env_key.is_none());
     assert!(provider.experimental_bearer_token.is_none());
+}
+
+#[tokio::test]
+async fn stale_gpu_runtime_provider_falls_back_without_bricking_startup() -> anyhow::Result<()> {
+    let codex_home = TempDir::new()?;
+    std::fs::write(
+        codex_home.path().join(CONFIG_TOML_FILE),
+        r#"
+model = "deepseek-ai/DeepSeek-V4-Flash"
+model_provider = "gpu-expired-rental"
+"#,
+    )?;
+
+    let config = ConfigBuilder::default()
+        .codex_home(codex_home.path().to_path_buf())
+        .build()
+        .await?;
+
+    assert_eq!(config.model_provider_id, AMBIENT_PROVIDER_ID);
+    assert_eq!(config.model, Some(AMBIENT_DEFAULT_MODEL.to_string()));
+    assert!(config.startup_warnings.iter().any(|warning| {
+        warning.contains("gpu-expired-rental") && warning.contains("no longer active")
+    }));
+    Ok(())
 }

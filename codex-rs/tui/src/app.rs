@@ -876,7 +876,8 @@ fn gpu_runtime_model_preset(provider: &codex_state::GpuRuntimeProvider) -> Optio
         provider_id: Some(provider.provider_id.clone()),
         display_name: provider.model_id.clone(),
         description: format!(
-            "Active GPU rental {} · ${:.4}/hour",
+            "{} · active GPU rental {} · ${:.4}/hour",
+            gpu_infrastructure_provider_label(provider.infrastructure_provider.as_str()),
             provider.rental_id,
             provider.display_hourly_microusd as f64 / 1_000_000.0
         ),
@@ -893,6 +894,14 @@ fn gpu_runtime_model_preset(provider: &codex_state::GpuRuntimeProvider) -> Optio
         supported_in_api: true,
         input_modalities: vec![InputModality::Text],
     })
+}
+
+fn gpu_infrastructure_provider_label(provider: &str) -> &str {
+    match provider {
+        "runpod" => "RunPod",
+        "vast" => "Vast.ai",
+        _ => "GPU marketplace",
+    }
 }
 
 fn spawn_startup_thread_start(
@@ -1553,6 +1562,10 @@ See the PFTerminal keymap documentation for supported actions and examples."
             pending_hook_enabled_writes: HashMap::new(),
         };
         app.refresh_gpu_spend_indicator().await;
+        // A rental outlives the TUI that created it. Reattach the independent reconciler on
+        // every startup; its process lock deduplicates concurrent PFTerminal processes and it
+        // exits immediately when there is no potentially billable work.
+        app.start_gpu_controller();
         if let Some(entry) = startup_hooks_browser {
             app.chat_widget.open_hooks_browser(entry);
         }

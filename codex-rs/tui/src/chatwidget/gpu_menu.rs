@@ -54,7 +54,10 @@ impl ChatWidget {
                 "Unavailable until its immutable deployment manifest is verified"
             };
             items.push(SelectionItem {
-                name: format!("Rent {}", recipe.model_id),
+                name: format!(
+                    "Rent {} · {}× {}",
+                    recipe.model_id, recipe.hardware.gpu_count, recipe.hardware.gpu_model
+                ),
                 description: Some(format!(
                     "{} rev {} · {}× {} · {status}",
                     recipe.id,
@@ -67,15 +70,15 @@ impl ChatWidget {
                     "Creation is fail-closed: no billable request can use an unverified recipe."
                         .to_string()
                 }),
-                actions: verified
-                    .then(|| {
-                        vec![Box::new(move |tx: &AppEventSender| {
-                            tx.send(AppEvent::OpenGpuAuthorizationPrompt {
-                                recipe_id: recipe_id.clone(),
-                            });
-                        }) as SelectionAction]
-                    })
-                    .unwrap_or_default(),
+                actions: if verified {
+                    vec![Box::new(move |tx: &AppEventSender| {
+                        tx.send(AppEvent::OpenGpuAuthorizationPrompt {
+                            recipe_id: recipe_id.clone(),
+                        });
+                    }) as SelectionAction]
+                } else {
+                    Default::default()
+                },
                 dismiss_on_select: verified,
                 ..Default::default()
             });
@@ -117,7 +120,7 @@ impl ChatWidget {
     }
 
     pub(crate) fn open_gpu_authorization_prompt(&mut self, recipe_id: String) {
-        let submit_recipe_id = recipe_id.clone();
+        let submit_recipe_id = recipe_id;
         let tx = self.app_event_tx.clone();
         let view = CustomPromptView::new(
             "Authorize bounded GPU lease".to_string(),
@@ -171,7 +174,7 @@ impl ChatWidget {
                 SelectionItem {
                     name: format!(
                         "{} · {}× {} · ${:.4}/hr",
-                        offer.provider,
+                        gpu_provider_display_name(offer.provider.as_str()),
                         offer.gpu_count,
                         offer.gpu_model,
                         offer.hourly_microusd as f64 / 1_000_000.0
@@ -201,14 +204,20 @@ impl ChatWidget {
                             offer: offer_for_action.clone(),
                         });
                     })],
-                    dismiss_on_select: false,
+                    // The confirmation view owns the next navigation step. Keeping the offer
+                    // list underneath it resurfaces a stale billable action after confirmation
+                    // succeeds and makes an already-created rental look repeatable.
+                    dismiss_on_select: true,
                     ..Default::default()
                 }
             })
             .collect();
         self.show_selection_view(SelectionViewParams {
-            title: Some("Compatible GPU offers".to_string()),
-            subtitle: Some("Hard compatibility and security filters have already run.".to_string()),
+            title: Some("Choose GPU provider and offer".to_string()),
+            subtitle: Some(
+                "Vast.ai and RunPod offers shown here passed the recipe's hard compatibility and security filters."
+                    .to_string(),
+            ),
             items,
             ..Default::default()
         });
@@ -227,7 +236,7 @@ impl ChatWidget {
             title: Some("Confirm billable GPU rental".to_string()),
             subtitle: Some(format!(
                 "{} · {} · up to ${:.4}/hr · ${:.2} total · local controller enforces TTL/spend",
-                offer.provider,
+                gpu_provider_display_name(offer.provider.as_str()),
                 recipe_id,
                 authorization.maximum_hourly_microusd as f64 / 1_000_000.0,
                 authorization.maximum_total_microusd as f64 / 1_000_000.0
@@ -354,6 +363,14 @@ fn parse_positive_usd(value: &str) -> Result<i64, String> {
         return Err("Dollar limit is too large.".to_string());
     }
     Ok(microusd.round() as i64)
+}
+
+fn gpu_provider_display_name(provider: &str) -> &str {
+    match provider {
+        "runpod" => "RunPod",
+        "vast" => "Vast.ai",
+        _ => "GPU marketplace",
+    }
 }
 
 #[cfg(test)]

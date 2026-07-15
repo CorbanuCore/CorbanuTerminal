@@ -548,6 +548,13 @@ impl Session {
         per_turn_config.model_reasoning_effort =
             session_configuration.collaboration_mode.reasoning_effort();
         per_turn_config.model_reasoning_summary = session_configuration.model_reasoning_summary;
+        if let Some(runtime_limit) = session_configuration.runtime_model_context_window {
+            per_turn_config.model_context_window = Some(
+                per_turn_config
+                    .model_context_window
+                    .map_or(runtime_limit, |configured| configured.min(runtime_limit)),
+            );
+        }
         per_turn_config.service_tier = session_configuration.service_tier.clone();
         per_turn_config.personality = session_configuration.personality;
         per_turn_config.approvals_reviewer = session_configuration.approvals_reviewer;

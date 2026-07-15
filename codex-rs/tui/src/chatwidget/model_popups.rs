@@ -613,12 +613,18 @@ impl ChatWidget {
                 provider: provider_for_action.clone(),
             });
             tx.send(AppEvent::UpdateReasoningEffort(effort_for_action.clone()));
-            tx.send(AppEvent::PersistModelSelection {
-                model: model_for_action.clone(),
-                provider: provider_for_action.clone(),
-                effort: effort_for_action.clone(),
-            });
+            if Self::should_persist_model_provider(provider_for_action.as_deref()) {
+                tx.send(AppEvent::PersistModelSelection {
+                    model: model_for_action.clone(),
+                    provider: provider_for_action.clone(),
+                    effort: effort_for_action.clone(),
+                });
+            }
         })]
+    }
+
+    fn should_persist_model_provider(provider: Option<&str>) -> bool {
+        !provider.is_some_and(|provider| provider.starts_with("gpu-"))
     }
 
     fn should_prompt_plan_mode_reasoning_scope(
@@ -707,11 +713,13 @@ impl ChatWidget {
             tx.send(AppEvent::UpdateReasoningEffort(effort.clone()));
             tx.send(AppEvent::UpdatePlanModeReasoningEffort(effort.clone()));
             tx.send(AppEvent::PersistPlanModeReasoningEffort(effort.clone()));
-            tx.send(AppEvent::PersistModelSelection {
-                model: model.clone(),
-                provider: provider.clone(),
-                effort: effort.clone(),
-            });
+            if Self::should_persist_model_provider(provider.as_deref()) {
+                tx.send(AppEvent::PersistModelSelection {
+                    model: model.clone(),
+                    provider: provider.clone(),
+                    effort: effort.clone(),
+                });
+            }
         })];
 
         self.bottom_pane.show_selection_view(SelectionViewParams {
@@ -917,11 +925,13 @@ impl ChatWidget {
                             provider: provider_for_action.clone(),
                         });
                         tx.send(AppEvent::UpdateReasoningEffort(choice_effort.clone()));
-                        tx.send(AppEvent::PersistModelSelection {
-                            model: model_for_action.clone(),
-                            provider: provider_for_action.clone(),
-                            effort: choice_effort.clone(),
-                        });
+                        if Self::should_persist_model_provider(provider_for_action.as_deref()) {
+                            tx.send(AppEvent::PersistModelSelection {
+                                model: model_for_action.clone(),
+                                provider: provider_for_action.clone(),
+                                effort: choice_effort.clone(),
+                            });
+                        }
                     }
                     ModelSelectionPurpose::CodexPane { .. } => {
                         tx.send(AppEvent::OpenCodexPaneNamePrompt {
@@ -1038,17 +1048,46 @@ impl ChatWidget {
     fn apply_model_and_effort(&self, model: String, effort: Option<ReasoningEffortConfig>) {
         self.apply_model_and_effort_without_persist(model.clone(), effort.clone());
         let provider = self.resolved_model_provider(&model);
-        self.app_event_tx.send(AppEvent::PersistModelSelection {
-            model,
-            provider,
-            effort,
-        });
+        if Self::should_persist_model_provider(provider.as_deref()) {
+            self.app_event_tx.send(AppEvent::PersistModelSelection {
+                model,
+                provider,
+                effort,
+            });
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_gpu_model_selection_is_session_only() {
+        let (raw_tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let tx = crate::app_event_sender::AppEventSender::new(raw_tx);
+        let actions = ChatWidget::model_selection_actions(
+            "pinned-model".to_string(),
+            Some("gpu-rental-123".to_string()),
+            None,
+            false,
+        );
+
+        actions[0](&tx);
+        let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            AppEvent::UpdateModelSelection { model, provider }
+                if model == "pinned-model" && provider.as_deref() == Some("gpu-rental-123")
+        )));
+        assert!(
+            events
+                .iter()
+                .all(|event| !matches!(event, AppEvent::PersistModelSelection { .. })),
+            "runtime GPU selection must not mutate the static model configuration: {events:?}"
+        );
+    }
 
     #[test]
     fn model_provider_for_selection_maps_cross_provider_models() {

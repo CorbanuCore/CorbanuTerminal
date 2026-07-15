@@ -624,6 +624,7 @@ impl Codex {
             multi_agent_mode,
             model_reasoning_summary: config.model_reasoning_summary,
             service_tier,
+            runtime_model_context_window: None,
             developer_instructions: config.developer_instructions.clone(),
             loaded_agents_md: None,
             personality: config.personality,
@@ -1517,48 +1518,9 @@ impl Session {
 
     pub(crate) async fn update_settings(
         &self,
-        updates: SessionSettingsUpdate,
+        mut updates: SessionSettingsUpdate,
     ) -> ConstraintResult<()> {
-        if let Some(model_provider_id) = updates
-            .model_provider
-            .as_deref()
-            .filter(|provider_id| provider_id.starts_with("gpu-"))
-        {
-            let runtime_overlay_source = {
-                let state = self.state.lock().await;
-                (!state
-                    .session_configuration
-                    .original_config_do_not_use
-                    .model_providers
-                    .contains_key(model_provider_id))
-                .then(|| {
-                    (
-                        state
-                            .session_configuration
-                            .original_config_do_not_use
-                            .sqlite_home
-                            .clone(),
-                        state
-                            .session_configuration
-                            .original_config_do_not_use
-                            .codex_home
-                            .clone(),
-                    )
-                })
-            };
-            if let Some((sqlite_home, codex_home)) = runtime_overlay_source {
-                let runtime_providers =
-                    crate::config::load_gpu_runtime_model_providers(&sqlite_home, &codex_home)
-                        .await;
-                if runtime_providers.contains_key(model_provider_id) {
-                    let mut state = self.state.lock().await;
-                    let mut config =
-                        (*state.session_configuration.original_config_do_not_use).clone();
-                    config.model_providers.extend(runtime_providers);
-                    state.session_configuration.original_config_do_not_use = Arc::new(config);
-                }
-            }
-        }
+        self.ensure_runtime_model_provider(&mut updates).await;
         let notify_config_contributors = !self.services.extensions.config_contributors().is_empty();
         let (
             previous_config,
@@ -1625,6 +1587,62 @@ impl Session {
         Ok(())
     }
 
+    async fn ensure_runtime_model_provider(&self, updates: &mut SessionSettingsUpdate) {
+        let Some(model_provider_id) = updates.model_provider.clone() else {
+            return;
+        };
+        if !model_provider_id.starts_with("gpu-") {
+            updates.runtime_model_context_window = Some(None);
+            return;
+        }
+        {
+            let runtime_overlay_source = {
+                let state = self.state.lock().await;
+                (
+                    state
+                        .session_configuration
+                        .original_config_do_not_use
+                        .sqlite_home
+                        .clone(),
+                    state
+                        .session_configuration
+                        .original_config_do_not_use
+                        .codex_home
+                        .clone(),
+                    !state
+                        .session_configuration
+                        .original_config_do_not_use
+                        .model_providers
+                        .contains_key(model_provider_id.as_str()),
+                )
+            };
+            let (sqlite_home, codex_home, provider_missing) = runtime_overlay_source;
+            let records =
+                crate::config::load_gpu_runtime_model_provider_records(&sqlite_home).await;
+            updates.runtime_model_context_window = Some(
+                records
+                    .iter()
+                    .find(|record| record.provider_id == model_provider_id)
+                    .and_then(|record| record.maximum_context_tokens),
+            );
+            if provider_missing {
+                let runtime_providers = records
+                    .into_iter()
+                    .filter_map(|record| {
+                        crate::config::gpu_runtime_model_provider(record, &codex_home)
+                    })
+                    .collect::<HashMap<_, _>>();
+                if runtime_providers.contains_key(&model_provider_id) {
+                    let mut state = self.state.lock().await;
+                    let mut config =
+                        (*state.session_configuration.original_config_do_not_use).clone();
+                    config.model_providers.extend(runtime_providers);
+                    state.session_configuration.original_config_do_not_use = Arc::new(config);
+                }
+            }
+        }
+    }
+
     fn build_model_client_for_configuration(
         &self,
         configuration: &SessionConfiguration,
@@ -1655,10 +1673,12 @@ impl Session {
         &self,
         updates: &SessionSettingsUpdate,
     ) -> ConstraintResult<ThreadConfigSnapshot> {
+        let mut updates = updates.clone();
+        self.ensure_runtime_model_provider(&mut updates).await;
         let state = self.state.lock().await;
         state
             .session_configuration
-            .apply(updates)
+            .apply(&updates)
             .map(|configuration| configuration.thread_config_snapshot())
     }
 

@@ -57,6 +57,8 @@ enum CreateBehavior {
 struct FakeState {
     create_behavior: CreateBehavior,
     ambiguous_termination: bool,
+    ambiguous_get: bool,
+    secure_endpoint_error: Option<ProviderError>,
     create_calls: usize,
     terminate_calls: usize,
     instances: HashMap<String, GpuInstance>,
@@ -73,6 +75,8 @@ impl FakeProvider {
             state: Arc::new(Mutex::new(FakeState {
                 create_behavior,
                 ambiguous_termination: false,
+                ambiguous_get: false,
+                secure_endpoint_error: None,
                 create_calls: 0,
                 terminate_calls: 0,
                 instances: HashMap::new(),
@@ -82,6 +86,14 @@ impl FakeProvider {
 
     async fn make_termination_ambiguous(&self) {
         self.state.lock().await.ambiguous_termination = true;
+    }
+
+    async fn make_get_ambiguous(&self) {
+        self.state.lock().await.ambiguous_get = true;
+    }
+
+    async fn set_secure_endpoint_error(&self, error: Option<ProviderError>) {
+        self.state.lock().await.secure_endpoint_error = error;
     }
 
     async fn create_calls(&self) -> usize {
@@ -120,11 +132,14 @@ impl GpuProvider for FakeProvider {
         }
     }
 
-    fn secure_endpoint_base_url(
+    async fn secure_endpoint_base_url(
         &self,
         instance: &GpuInstance,
         _inference_port: u16,
     ) -> ProviderResult<String> {
+        if let Some(error) = self.state.lock().await.secure_endpoint_error.clone() {
+            return Err(error);
+        }
         Ok(format!(
             "https://{}.example.invalid/v1",
             instance.resource_id
@@ -177,7 +192,14 @@ impl GpuProvider for FakeProvider {
     }
 
     async fn get_instance(&self, resource_id: String) -> ProviderResult<Option<GpuInstance>> {
-        Ok(self.state.lock().await.instances.get(&resource_id).cloned())
+        let state = self.state.lock().await;
+        if state.ambiguous_get {
+            return Err(ProviderError::new(
+                ProviderErrorKind::Ambiguous,
+                "instance views are eventually consistent",
+            ));
+        }
+        Ok(state.instances.get(&resource_id).cloned())
     }
 
     async fn list_owned_instances(
@@ -216,6 +238,12 @@ impl GpuProvider for FakeProvider {
 
     async fn billing_state(&self, resource_id: String) -> ProviderResult<BillingState> {
         let state = self.state.lock().await;
+        if state.ambiguous_get {
+            return Err(ProviderError::new(
+                ProviderErrorKind::Ambiguous,
+                "billing lookup is eventually consistent",
+            ));
+        }
         Ok(BillingState {
             resource_id: resource_id.clone(),
             estimated_accrued_microusd: 500_000,
@@ -289,6 +317,42 @@ impl GpuReadinessProbe for SwitchableReadiness {
                 tool_call_ok: ready,
             })
         })
+    }
+}
+
+#[derive(Debug)]
+struct SaturatedReadiness;
+
+impl GpuReadinessProbe for SaturatedReadiness {
+    fn probe<'a>(
+        &'a self,
+        _base_url: &'a str,
+        _model_id: &'a str,
+        _token: &'a SecretValue,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = anyhow::Result<EndpointReadinessReport>> + Send + 'a>,
+    > {
+        Box::pin(async {
+            Ok(EndpointReadinessReport {
+                rejects_missing_token: true,
+                rejects_wrong_token: true,
+                model_identity_ok: true,
+                chat_ok: false,
+                streaming_ok: false,
+                cancellation_ok: false,
+                tool_call_ok: false,
+            })
+        })
+    }
+
+    fn probe_health<'a>(
+        &'a self,
+        _base_url: &'a str,
+        _model_id: &'a str,
+        _token: &'a SecretValue,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<bool>> + Send + 'a>>
+    {
+        Box::pin(async { Ok(true) })
     }
 }
 
@@ -475,6 +539,13 @@ async fn provider_native_bootstrap_reaches_ready_and_registers_runtime_once() {
         .reconcile_due(NOW_MS + 1)
         .await
         .expect("observe running");
+    let bootstrapping = state
+        .get_gpu_rental("rental-ready")
+        .await
+        .expect("load bootstrapping rental")
+        .expect("rental");
+    assert_eq!(bootstrapping.observed_state, GpuRentalState::Bootstrapping);
+    assert_eq!(bootstrapping.estimated_accrued_microusd, 500_000);
     controller
         .reconcile_due(NOW_MS + 2)
         .await
@@ -516,6 +587,53 @@ async fn provider_native_bootstrap_reaches_ready_and_registers_runtime_once() {
     assert_eq!(providers.len(), 1);
     assert_eq!(providers[0].model_id, "deepseek-ai/DeepSeek-V4-Flash");
     assert_eq!(providers[0].health, "ready");
+    assert_eq!(providers[0].display_hourly_microusd, 2_500_000);
+}
+
+#[tokio::test]
+async fn retryable_secure_endpoint_discovery_does_not_destroy_a_live_rental() {
+    let state = state_runtime().await;
+    let provider = FakeProvider::new(CreateBehavior::Success);
+    let controller = controller(state.clone(), provider.clone());
+    create_authorized_rental(&state, "endpoint-retry").await;
+
+    controller.reconcile_due(NOW_MS).await.expect("create");
+    provider
+        .set_instance_state("resource-1", GpuInstanceState::Running)
+        .await;
+    controller
+        .reconcile_due(NOW_MS + 1)
+        .await
+        .expect("observe running");
+    provider
+        .set_secure_endpoint_error(Some(ProviderError::new(
+            ProviderErrorKind::Retryable,
+            "The secure endpoint is still starting.",
+        )))
+        .await;
+
+    controller
+        .reconcile_due(NOW_MS + 2)
+        .await
+        .expect("verify bootstrap");
+    controller
+        .reconcile_due(NOW_MS + 3)
+        .await
+        .expect("retry endpoint discovery");
+
+    let rental = state
+        .get_gpu_rental("rental-endpoint-retry")
+        .await
+        .expect("load rental")
+        .expect("rental exists");
+    assert_ne!(rental.desired_state, GpuRentalState::TerminateRequested);
+    assert_eq!(rental.observed_state, GpuRentalState::Probing);
+    assert_eq!(rental.retry_count, 1);
+    assert_ne!(
+        rental.last_error_code.as_deref(),
+        Some("secure-endpoint-unavailable")
+    );
+    assert_eq!(provider.terminate_calls().await, 0);
 }
 
 #[tokio::test]
@@ -536,6 +654,25 @@ async fn readiness_loss_disables_runtime_until_the_full_contract_recovers() {
         .expect("bootstrap");
     controller.reconcile_due(NOW_MS + 3).await.expect("ready");
 
+    let runtime = state.list_gpu_runtime_providers().await.unwrap()[0].clone();
+    state
+        .upsert_gpu_runtime_provider(
+            &GpuRuntimeProviderUpsert {
+                rental_id: runtime.rental_id,
+                provider_id: runtime.provider_id,
+                base_url: runtime.base_url,
+                model_id: runtime.model_id,
+                wire_api: runtime.wire_api,
+                health: runtime.health,
+                display_hourly_microusd: 3_000_000,
+                maximum_context_tokens: runtime.maximum_context_tokens.unwrap_or(65_536),
+                catalog_sequence: 99,
+            },
+            NOW_MS + 3,
+        )
+        .await
+        .expect("seed stale runtime price");
+
     readiness.set(false);
     let degraded = controller.reconcile_due(NOW_MS + 4).await.expect("degrade");
     assert_eq!(
@@ -549,6 +686,10 @@ async fn readiness_loss_disables_runtime_until_the_full_contract_recovers() {
         state.list_gpu_runtime_providers().await.unwrap()[0].health,
         "degraded"
     );
+    assert_eq!(
+        state.list_gpu_runtime_providers().await.unwrap()[0].display_hourly_microusd,
+        2_500_000
+    );
 
     readiness.set(true);
     let recovered = controller
@@ -561,6 +702,46 @@ async fn readiness_loss_disables_runtime_until_the_full_contract_recovers() {
             rental_id: "rental-health".to_string(),
             state: GpuRentalState::Ready,
         }]
+    );
+    assert_eq!(
+        state.list_gpu_runtime_providers().await.unwrap()[0].health,
+        "ready"
+    );
+    assert_eq!(
+        state.list_gpu_runtime_providers().await.unwrap()[0].display_hourly_microusd,
+        2_500_000
+    );
+}
+
+#[tokio::test]
+async fn ready_health_poll_does_not_consume_saturated_generation_capacity() {
+    let state = state_runtime().await;
+    let provider = FakeProvider::new(CreateBehavior::Success);
+    let initial = controller(state.clone(), provider.clone());
+    create_authorized_rental(&state, "saturated-health").await;
+    initial.reconcile_due(NOW_MS).await.expect("create");
+    provider
+        .set_instance_state("resource-1", GpuInstanceState::Running)
+        .await;
+    initial.reconcile_due(NOW_MS + 1).await.expect("running");
+    initial.reconcile_due(NOW_MS + 2).await.expect("bootstrap");
+    initial.reconcile_due(NOW_MS + 3).await.expect("ready");
+
+    let saturated =
+        controller_with_readiness(state.clone(), provider, Arc::new(SaturatedReadiness));
+    saturated
+        .reconcile_due(NOW_MS + 60_003)
+        .await
+        .expect("lightweight health poll");
+
+    assert_eq!(
+        state
+            .get_gpu_rental("rental-saturated-health")
+            .await
+            .unwrap()
+            .unwrap()
+            .observed_state,
+        GpuRentalState::Ready
     );
     assert_eq!(
         state.list_gpu_runtime_providers().await.unwrap()[0].health,
@@ -698,6 +879,23 @@ async fn termination_is_confirmed_only_after_inventory_absence() {
         .await
         .expect("create instance");
     state
+        .upsert_gpu_runtime_provider(
+            &GpuRuntimeProviderUpsert {
+                rental_id: "rental-terminate".to_string(),
+                provider_id: "gpu-rental-terminate".to_string(),
+                base_url: "https://rental-terminate.example/v1".to_string(),
+                model_id: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
+                wire_api: "chat".to_string(),
+                health: "ready".to_string(),
+                display_hourly_microusd: 2_500_000,
+                maximum_context_tokens: 65_536,
+                catalog_sequence: 2,
+            },
+            NOW_MS,
+        )
+        .await
+        .expect("seed runtime overlay");
+    state
         .request_gpu_rental_termination("rental-terminate", NOW_MS + 1)
         .await
         .expect("request termination");
@@ -726,6 +924,64 @@ async fn termination_is_confirmed_only_after_inventory_absence() {
             .await
             .expect("load rental")
             .expect("rental exists")
+            .observed_state,
+        GpuRentalState::TerminatedConfirmed
+    );
+    assert!(
+        state
+            .list_gpu_runtime_providers()
+            .await
+            .expect("list runtime providers")
+            .is_empty(),
+        "provider-confirmed termination must remove the runtime overlay"
+    );
+    assert!(
+        !state
+            .remove_gpu_runtime_provider("rental-terminate")
+            .await
+            .expect("probe physical runtime row"),
+        "terminal transition must delete the physical runtime row atomically"
+    );
+}
+
+#[tokio::test]
+async fn termination_does_not_require_a_consistent_get_by_id_view() {
+    let state = state_runtime().await;
+    let provider = FakeProvider::new(CreateBehavior::Success);
+    create_authorized_rental(&state, "ambiguous-get-terminate").await;
+    let controller = controller(state.clone(), provider.clone());
+    controller.reconcile_due(NOW_MS).await.expect("create");
+    provider.make_get_ambiguous().await;
+    state
+        .request_gpu_rental_termination("rental-ambiguous-get-terminate", NOW_MS + 1)
+        .await
+        .expect("request termination");
+
+    controller
+        .reconcile_due(NOW_MS + 1)
+        .await
+        .expect("send termination without get preflight");
+    assert_eq!(provider.terminate_calls().await, 1);
+    assert_eq!(
+        state
+            .get_gpu_rental("rental-ambiguous-get-terminate")
+            .await
+            .unwrap()
+            .unwrap()
+            .observed_state,
+        GpuRentalState::Terminating
+    );
+
+    controller
+        .reconcile_due(NOW_MS + 2)
+        .await
+        .expect("confirm through complete owned inventory");
+    assert_eq!(
+        state
+            .get_gpu_rental("rental-ambiguous-get-terminate")
+            .await
+            .unwrap()
+            .unwrap()
             .observed_state,
         GpuRentalState::TerminatedConfirmed
     );
@@ -805,6 +1061,45 @@ async fn provider_failure_with_known_resource_enters_cleanup_instead_of_failed()
     assert_eq!(rental.desired_state, GpuRentalState::TerminateRequested);
     assert_eq!(rental.observed_state, GpuRentalState::TerminateRequested);
     assert!(rental.may_be_billable());
+}
+
+#[tokio::test]
+async fn cleanup_preserves_the_root_provisioning_failure() {
+    let state = state_runtime().await;
+    let provider = FakeProvider::new(CreateBehavior::Success);
+    create_authorized_rental(&state, "preserve-root-cause").await;
+    let controller = controller(state.clone(), provider.clone());
+    controller.reconcile_due(NOW_MS).await.expect("create");
+    provider
+        .set_instance_state("resource-1", GpuInstanceState::Failed)
+        .await;
+    controller
+        .reconcile_due(NOW_MS + 1)
+        .await
+        .expect("observe failure");
+    controller
+        .reconcile_due(NOW_MS + 2)
+        .await
+        .expect("send cleanup");
+    controller
+        .reconcile_due(NOW_MS + 3)
+        .await
+        .expect("confirm cleanup");
+
+    let rental = state
+        .get_gpu_rental("rental-preserve-root-cause")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(rental.observed_state, GpuRentalState::TerminatedConfirmed);
+    assert_eq!(
+        rental.last_error_code.as_deref(),
+        Some("provider-instance-failed")
+    );
+    assert_eq!(
+        rental.last_error_message.as_deref(),
+        Some("Provider reported that the instance failed.")
+    );
 }
 
 #[tokio::test]
