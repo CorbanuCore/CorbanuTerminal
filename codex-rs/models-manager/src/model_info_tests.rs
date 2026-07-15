@@ -6,15 +6,33 @@ fn curated_gpu_models_have_conservative_non_fallback_metadata() {
     assert!(!deepseek.used_fallback_model_metadata);
     assert_eq!(deepseek.context_window, Some(384_000));
     assert!(deepseek.model_messages.is_some());
+    assert_eq!(
+        deepseek.default_reasoning_level,
+        Some(ReasoningEffort::High)
+    );
+    assert_eq!(
+        deepseek
+            .supported_reasoning_levels
+            .iter()
+            .map(|preset| preset.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![ReasoningEffort::High, ReasoningEffort::XHigh]
+    );
 
     let glm = model_info_from_slug("zai-org/GLM-5.2-FP8");
     assert!(!glm.used_fallback_model_metadata);
     assert_eq!(glm.context_window, Some(131_072));
 
     assert!(model_info_from_slug("unregistered-gpu-model").used_fallback_model_metadata);
+    assert_eq!(
+        model_info_from_slug("deepseek-ai/DeepSeek-V4-Pro").default_reasoning_level,
+        None
+    );
 }
+
 use crate::ModelsManagerConfig;
 use codex_protocol::config_types::Personality;
+use codex_protocol::openai_models::ReasoningEffort;
 use pretty_assertions::assert_eq;
 
 #[test]

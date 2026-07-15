@@ -1212,6 +1212,36 @@ fn baseten_reasoning_effort_maps_to_glm52_supported_set() {
 }
 
 #[test]
+fn native_deepseek_v4_reasoning_effort_maps_supported_family_values() {
+    let effort = |s: &str| ReasoningEffortConfig::Custom(s.to_string());
+    let map = |model: &str, value: &str| {
+        super::ModelClient::native_deepseek_v4_reasoning_effort(model, Some(&effort(value)))
+    };
+
+    assert_eq!(
+        super::ModelClient::native_deepseek_v4_reasoning_effort(
+            "deepseek-ai/DeepSeek-V4-Flash",
+            None,
+        )
+        .as_deref(),
+        Some("high")
+    );
+    assert_eq!(
+        map("deepseek-ai/DeepSeek-V4-Flash", "medium").as_deref(),
+        Some("high")
+    );
+    assert_eq!(
+        map("DeepSeek-AI/DeepSeek-V4-Pro", "xhigh").as_deref(),
+        Some("max")
+    );
+    assert_eq!(map("deepseek-v4-custom", "none"), None);
+    assert_eq!(
+        super::ModelClient::native_deepseek_v4_reasoning_effort("zai-org/GLM-5.2", None),
+        None
+    );
+}
+
+#[test]
 fn openrouter_web_plugin_maps_context_size_to_max_results() {
     assert_eq!(
         super::openrouter_web_plugin(Some(WebSearchContextSize::Low)),

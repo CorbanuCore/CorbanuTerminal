@@ -1133,6 +1133,22 @@ impl ModelClient {
         }
     }
 
+    fn native_deepseek_v4_reasoning_effort(
+        upstream_model: &str,
+        effort: Option<&ReasoningEffortConfig>,
+    ) -> Option<String> {
+        let normalized_model = upstream_model.to_ascii_lowercase();
+        if !normalized_model.contains("deepseek-v4-") {
+            return None;
+        }
+        let mapped = match effort.map(ReasoningEffortConfig::as_str) {
+            Some("none") => return None,
+            Some("xhigh" | "max" | "deep" | "extra_high" | "extra-high") => "max",
+            _ => "high",
+        };
+        Some(mapped.to_string())
+    }
+
     fn openrouter_reasoning(
         model_info: &ModelInfo,
         effort: Option<&ReasoningEffortConfig>,
@@ -1360,6 +1376,18 @@ impl ModelClient {
                 )
             })
             .flatten();
+        let native_deepseek_reasoning_effort = (!uses_zai_reasoning
+            && !self.state.provider.info().is_openrouter()
+            && !self.state.provider.info().is_baseten())
+        .then(|| {
+            Self::native_deepseek_v4_reasoning_effort(
+                upstream_model,
+                effort
+                    .as_ref()
+                    .or(model_info.default_reasoning_level.as_ref()),
+            )
+        })
+        .flatten();
 
         Ok(ChatCompletionsRequest {
             model: upstream_model.to_string(),
@@ -1377,7 +1405,9 @@ impl ModelClient {
             response_format,
             emit_usage: uses_zai_reasoning.then_some(true),
             enable_thinking: ambient_enable_thinking,
-            reasoning_effort: ambient_reasoning_effort.or(baseten_reasoning_effort),
+            reasoning_effort: ambient_reasoning_effort
+                .or(baseten_reasoning_effort)
+                .or(native_deepseek_reasoning_effort),
             reasoning: openrouter_reasoning,
             provider: self.state.provider.info().chat_completions_provider.clone(),
             plugins: openrouter_web_plugins,

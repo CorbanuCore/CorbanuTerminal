@@ -72,10 +72,13 @@ fn built_in_deepseek_recipe_is_a_validated_runtime_specific_manifest() {
     assert!(recipe.manifest_verified);
     assert_eq!(
         recipe.revision,
-        "deepseek-v4-flash-sglang-v0.5.12-2xh200-r1"
+        "deepseek-v4-flash-sglang-v0.5.15-post1-2xh200-r2"
     );
     assert_eq!(recipe.runtime, "sglang");
+    assert_eq!(recipe.serving_runtime_version, "0.5.15.post1");
     assert_eq!(recipe.tensor_parallel_size, 2);
+    assert_eq!(recipe.maximum_context_tokens, 131_072);
+    assert_eq!(recipe.maximum_concurrent_requests, 8);
     assert_eq!(recipe.launch_command[0], "bash");
     assert!(recipe.launch_command.iter().any(|part| {
         part.contains("--tool-call-parser deepseekv4")
@@ -83,11 +86,30 @@ fn built_in_deepseek_recipe_is_a_validated_runtime_specific_manifest() {
             && part.contains("nvidia-smi topo -m")
             && part.contains("for (i=2; i<=NF; i++)")
             && part.contains("PFTERMINAL_RUNTIME_GATE=nvlink-ok")
-            && part.contains("--disable-cuda-graph")
+            && !part.contains("--disable-cuda-graph")
             && part.contains("--moe-runner-backend marlin")
             && part.contains("--watchdog-timeout 1200")
             && part.contains("SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1")
+            && part.contains("SGLANG_OPT_DEEPGEMM_HC_PRENORM=1")
+            && part.contains("SGLANG_OPT_USE_TILELANG_MHC_PRE=1")
+            && part.contains("--context-length 131072")
+            && part.contains("--max-running-requests 8")
+            && part.contains("--chunked-prefill-size 16384")
+            && part.contains("--speculative-algorithm EAGLE")
+            && part.contains("--speculative-num-steps 3")
+            && part.contains("--speculative-eagle-topk 1")
+            && part.contains("--speculative-num-draft-tokens 4")
     }));
+
+    let tp4 = catalog
+        .get("deepseek-flash-4xh200")
+        .expect("qualified TP4 recipe");
+    assert_eq!(tp4.revision, "deepseek-v4-flash-sglang-v0.5.12-4xh200-r1");
+    assert!(
+        tp4.launch_command
+            .iter()
+            .any(|part| part.contains("--disable-cuda-graph"))
+    );
 }
 
 #[test]

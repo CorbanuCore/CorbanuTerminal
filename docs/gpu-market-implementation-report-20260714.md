@@ -10,12 +10,73 @@ three curated, pinned recipes:
 - `deepseek-flash-4xh200` on 4×H200;
 - `glm-5.2-fp8-8xh200` on 8×H200.
 
-The exact final candidate binary has SHA-256
+The original GPU-market candidate binary had SHA-256
 `a3aa2bee3fb3d5a4e9ab44a114f84f73ca837ee411a31e1d9c18e4b0af82caaa`.
 The final free-form TUI qualification ran from `2026-07-15T06:48:58Z` through
 `2026-07-15T07:19:09Z`. The rental then reached provider-confirmed termination,
 its runtime-provider overlay was removed, and Vast reported zero active
 instances.
+
+## 2xH200 DeepSeek optimization follow-up — 2026-07-15
+
+The 2xH200 recipe was re-qualified on paid Vast resource `44980194` (verified
+2xH200 with NVLink, 450 GB disk, Japan) at `$7.297204/h`. The selected runtime
+is SGLang `0.5.15.post1`, pinned by image digest
+`sha256:00c53fe4c31bf22d7b37537f28bbdfd924c02de13cdfb4bff7378c9c34d75ab2`.
+Only the TP2 recipe changed; the separately qualified TP4 manifest remains on
+its previous image and conservative flags.
+
+The optimized TP2 launch enables CUDA decode graphs, 16,384-token chunked
+prefill, current DeepSeek V4 MHC warm paths, and EAGLE MTP with the official
+`steps=3, topk=1, draft_tokens=4` tuple. Its product limits are now 131,072
+tokens and eight concurrent requests. The cold instance started at
+`2026-07-15T11:59:27Z`; model download, weight conversion, warm-bucket
+compilation, and graph capture completed at `12:21:45Z`. This 22-minute rental
+startup included the image pull; the server process itself took about 18
+minutes from argument initialization to READY.
+
+Measured live results after warm-up:
+
+| Workload | Result |
+| --- | --- |
+| Single request, 256 output tokens (three runs) | 204.28, 214.50, and 214.71 output tok/s; 0.55–0.59 s TTFT |
+| Two simultaneous 384-token requests | Both completed in 3.40 s or less; 143.43 and 186.44 output tok/s per stream |
+| Eight simultaneous 256-token requests | All completed in 3.27–4.12 s; no rejection, queue failure, or retry loop |
+| 21,191-token repeated prefix | TTFT 4.73 s cold, 1.26 s cached; 195–202 output tok/s |
+| 84,709-token repeated prefix | TTFT 6.08 s cold, 1.72 s cached; 198–209 output tok/s |
+| Protocol seams | Wrong token rejected with HTTP 401; forced structured tool call passed; client cancellation followed by immediate successful recovery |
+
+The published community vLLM W4A16-MTP TP2 result was not promoted: its
+reported H200 batch-one result is 88.35 output tok/s and it requires four
+unmerged patches. The stock pinned SGLang candidate measured more than twice
+that speed here without maintaining a private runtime fork.
+
+The first PfTerminal tool run exposed a separate product boundary: curated
+DeepSeek V4 metadata advertised no reasoning levels, so native runtimes received
+quick-chat requests and the model misread an otherwise valid tool result. The
+client now advertises High and XHigh for DeepSeek V4 Flash, defaults to High,
+maps XHigh to DeepSeek's `max`, and excludes OpenRouter, Z.AI, and Baseten from
+the native mapping. A rebuilt candidate
+(`b3caef953f5d123bd4e064e713df475510c6f59255af389e04a132ee1f0e99e9`)
+was then driven through a fresh interactive TUI. It made five repository tool
+turns and correctly verified the TP2/TP4 split and all reasoning mappings. The
+live pane is in tmux session `pft_deepseek_h200` pending user handoff.
+
+Follow-up automated qualification:
+
+- `just test -p codex-gpu-market`: 57/57 passed.
+- `just test -p codex-models-manager`: 46/46 passed.
+- The focused native DeepSeek reasoning mapping regression passed.
+- Clippy passed for all three changed crates with dependency linting disabled;
+  the ordinary dependency-inclusive run remains blocked by the pre-existing
+  `collapsible_match` warning in `codex-api/src/endpoint/anthropic_messages.rs`.
+- A full `codex-core` run completed 2,793/2,934 passing with 13 additional
+  flaky-pass retries and 141 unrelated failures. The failures were dominated
+  by missing `test_stdio_server`/MCP helpers and broad 5–10 second shell,
+  image, hook, and event timeout failures under full-suite host saturation.
+  The new focused client regression passed both before and during this run;
+  the full-suite result is recorded as non-green rather than being presented
+  as acceptance evidence.
 
 ## Live provider evidence
 

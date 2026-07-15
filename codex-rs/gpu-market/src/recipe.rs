@@ -201,6 +201,47 @@ fn has_image_digest(value: &str) -> bool {
 }
 
 fn deepseek_flash_recipe(gpu_count: u16) -> GpuRecipe {
+    let (
+        recipe_revision,
+        image,
+        serving_runtime_version,
+        runtime_environment,
+        runtime_flags,
+        maximum_context_tokens,
+        maximum_concurrent_requests,
+    ) = match gpu_count {
+        2 => (
+            "deepseek-v4-flash-sglang-v0.5.15-post1-2xh200-r2",
+            "lmsysorg/sglang@sha256:00c53fe4c31bf22d7b37537f28bbdfd924c02de13cdfb4bff7378c9c34d75ab2",
+            "0.5.15.post1",
+            concat!(
+                "SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1 ",
+                "SGLANG_OPT_DEEPGEMM_HC_PRENORM=1 ",
+                "SGLANG_OPT_USE_TILELANG_MHC_PRE=1"
+            ),
+            concat!(
+                "--context-length 131072 --max-running-requests 8 ",
+                "--chunked-prefill-size 16384 --mem-fraction-static 0.82 ",
+                "--speculative-algorithm EAGLE --speculative-num-steps 3 ",
+                "--speculative-eagle-topk 1 --speculative-num-draft-tokens 4"
+            ),
+            131_072,
+            8,
+        ),
+        4 => (
+            "deepseek-v4-flash-sglang-v0.5.12-4xh200-r1",
+            "lmsysorg/sglang@sha256:015f39a45844be5a7b35270c56dc4d9ebcfe9b0c21a3b4f877a4ee22e795bd7a",
+            "0.5.12+127b9e3283f7c2a43234b852ff5c9f1796d53624",
+            "SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1",
+            concat!(
+                "--context-length 65536 --max-running-requests 2 --disable-cuda-graph ",
+                "--chunked-prefill-size 8192 --mem-fraction-static 0.82"
+            ),
+            65_536,
+            2,
+        ),
+        _ => unreachable!("the curated DeepSeek catalog contains only TP2 and TP4 recipes"),
+    };
     let launch = concat!(
         "set -euo pipefail; printf 'PFTERMINAL_RUNTIME_GATE=begin\\n'; ",
         "test \"$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)\" -eq {GPU_COUNT}; ",
@@ -212,26 +253,27 @@ fn deepseek_flash_recipe(gpu_count: u16) -> GpuRecipe {
         "printf 'PFTERMINAL_RUNTIME_GATE=driver-ok\\n'; ",
         "nvidia-smi topo -m | awk '$1 == \"GPU0\" { for (i=2; i<=NF; i++) if ($i ~ /^NV[0-9]+$/) ok=1 } END { exit !ok }'; ",
         "printf 'PFTERMINAL_RUNTIME_GATE=nvlink-ok\\n'; ",
-        "SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1 exec python3 -m sglang.launch_server ",
+        "{RUNTIME_ENVIRONMENT} exec python3 -m sglang.launch_server ",
         "--model-path deepseek-ai/DeepSeek-V4-Flash ",
         "--revision 60d8d70770c6776ff598c94bb586a859a38244f1 ",
         "--served-model-name deepseek-ai/DeepSeek-V4-Flash ",
         "--host 0.0.0.0 --port 8000 --tp {GPU_COUNT} --enable-p2p-check ",
-        "--context-length 65536 --max-running-requests 2 --disable-cuda-graph ",
-        "--chunked-prefill-size 8192 --mem-fraction-static 0.82 ",
+        "{RUNTIME_FLAGS} ",
         "--watchdog-timeout 1200 --trust-remote-code --moe-runner-backend marlin ",
         "--tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 ",
         "--api-key \"$PFT_ENDPOINT_TOKEN\""
     )
-    .replace("{GPU_COUNT}", gpu_count.to_string().as_str());
+    .replace("{GPU_COUNT}", gpu_count.to_string().as_str())
+    .replace("{RUNTIME_ENVIRONMENT}", runtime_environment)
+    .replace("{RUNTIME_FLAGS}", runtime_flags);
     GpuRecipe {
         id: format!("deepseek-flash-{gpu_count}xh200"),
-        revision: format!("deepseek-v4-flash-sglang-v0.5.12-{gpu_count}xh200-r1"),
+        revision: recipe_revision.to_string(),
         model_id: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
         model_revision: "60d8d70770c6776ff598c94bb586a859a38244f1".to_string(),
-        image: "lmsysorg/sglang@sha256:015f39a45844be5a7b35270c56dc4d9ebcfe9b0c21a3b4f877a4ee22e795bd7a".to_string(),
+        image: image.to_string(),
         runtime: "sglang".to_string(),
-        serving_runtime_version: "0.5.12+127b9e3283f7c2a43234b852ff5c9f1796d53624".to_string(),
+        serving_runtime_version: serving_runtime_version.to_string(),
         license_id: "MIT".to_string(),
         requires_huggingface_token: false,
         minimum_driver_version: "570.26".to_string(),
@@ -247,8 +289,8 @@ fn deepseek_flash_recipe(gpu_count: u16) -> GpuRecipe {
             allowed_cuda_versions: vec!["13.0".to_string()],
         },
         tensor_parallel_size: gpu_count,
-        maximum_context_tokens: 65_536,
-        maximum_concurrent_requests: 2,
+        maximum_context_tokens,
+        maximum_concurrent_requests,
         expected_download_bytes: 158_100_000_000,
         model_weight_bytes: 158_069_433_298,
         kv_cache_reserve_bytes: 48_000_000_000,

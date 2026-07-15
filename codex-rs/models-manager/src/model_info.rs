@@ -4,6 +4,8 @@ use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelInstructionsVariables;
 use codex_protocol::openai_models::ModelMessages;
 use codex_protocol::openai_models::ModelVisibility;
+use codex_protocol::openai_models::ReasoningEffort;
+use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_protocol::openai_models::TruncationMode;
 use codex_protocol::openai_models::TruncationPolicyConfig;
 use codex_protocol::openai_models::WebSearchToolType;
@@ -71,6 +73,7 @@ pub fn with_config_overrides(mut model: ModelInfo, config: &ModelsManagerConfig)
 
 /// Build a minimal fallback model descriptor for missing/unknown slugs.
 pub fn model_info_from_slug(slug: &str) -> ModelInfo {
+    let is_deepseek_v4_flash = slug == "deepseek-ai/DeepSeek-V4-Flash";
     let curated_gpu_model = match slug {
         "deepseek-ai/DeepSeek-V4-Flash" => Some(("DeepSeek V4 Flash", 384_000)),
         "zai-org/GLM-5.2-FP8" => Some(("GLM 5.2 FP8", 131_072)),
@@ -88,8 +91,21 @@ pub fn model_info_from_slug(slug: &str) -> ModelInfo {
         slug: slug.to_string(),
         display_name,
         description: None,
-        default_reasoning_level: None,
-        supported_reasoning_levels: Vec::new(),
+        default_reasoning_level: is_deepseek_v4_flash.then_some(ReasoningEffort::High),
+        supported_reasoning_levels: if is_deepseek_v4_flash {
+            vec![
+                ReasoningEffortPreset {
+                    effort: ReasoningEffort::High,
+                    description: "DeepSeek V4 thinking mode".to_string(),
+                },
+                ReasoningEffortPreset {
+                    effort: ReasoningEffort::XHigh,
+                    description: "Maximum DeepSeek V4 reasoning effort".to_string(),
+                },
+            ]
+        } else {
+            Vec::new()
+        },
         shell_type: ConfigShellToolType::Default,
         visibility: ModelVisibility::None,
         supported_in_api: true,
