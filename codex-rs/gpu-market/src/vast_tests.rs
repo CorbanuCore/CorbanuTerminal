@@ -142,13 +142,16 @@ async fn create_is_bound_to_atomic_exact_ask_and_ownership_label() {
     assert_eq!(body["label"], "pft-install-rental-1");
     assert_eq!(body["client_id"], "me");
     assert_eq!(body["cancel_unavail"], true);
-    assert_eq!(body["runtype"], "args");
-    assert_eq!(body["args"][0], "bash");
-    assert_eq!(body["args"][4], "8000");
-    assert_eq!(body["args"][5], "model-id");
+    assert_eq!(body["runtype"], "ssh_direct");
+    assert_eq!(
+        body["onstart"],
+        "nohup 'model-id' 'argument with space' >/tmp/pfterminal-runtime.log 2>&1 &"
+    );
+    assert!(body.get("args").is_none());
     assert_eq!(body["env"]["PFT_ENDPOINT_TOKEN"], "endpoint-secret");
     assert_eq!(body["env"]["HF_TOKEN"], "hf-secret");
-    assert_eq!(body["env"]["-p 8000:8000"], "1");
+    assert!(body["env"].get("-p 8000:8000").is_none());
+    assert!(!body.to_string().contains("cloudflare"));
     assert!(!body.to_string().contains(TEST_KEY));
 }
 
@@ -181,67 +184,87 @@ fn provider_numeric_and_name_normalization_preserve_recipe_contract() {
 }
 
 #[test]
-fn secure_tunnel_output_accepts_only_the_cloudflare_https_shape() {
-    assert_eq!(
-        extract_trycloudflare_url("ok https://alpha-bravo-42.trycloudflare.com\n"),
-        Some("https://alpha-bravo-42.trycloudflare.com")
-    );
-    assert_eq!(
-        extract_trycloudflare_url("http://alpha.trycloudflare.com"),
-        None
-    );
-    assert_eq!(extract_trycloudflare_url("https://example.com"), None);
-    assert_eq!(
-        extract_trycloudflare_url(
-            "PFTERMINAL_TUNNEL_URL=https://old-tunnel.trycloudflare.com\n\
-             PFTERMINAL_TUNNEL_URL=https://current-tunnel.trycloudflare.com\n"
-        ),
-        Some("https://current-tunnel.trycloudflare.com")
-    );
+fn instance_uses_vasts_authoritative_ssh_host_and_port_pair() {
+    let instance = vast_instance(&serde_json::json!({
+        "id": 123,
+        "actual_status": "running",
+        "ssh_host": "ssh.example.vast.ai",
+        "public_ipaddr": "192.0.2.10",
+        "ssh_port": 22022
+    }))
+    .expect("valid instance");
+
+    assert_eq!(instance.public_ip.as_deref(), Some("ssh.example.vast.ai"));
+    assert_eq!(instance.ssh_port, Some(22022));
 }
 
 #[test]
-fn command_results_accept_official_regional_s3_hosts_only() {
-    assert!(validate_vast_result_url("https://s3.us-west-2.amazonaws.com/result").is_ok());
-    assert!(
-        validate_vast_result_url("https://vast-results.s3.eu-west-1.amazonaws.com/result").is_ok()
+fn onstart_preserves_arguments_without_a_shell_injection_or_public_tunnel() {
+    let command = vast_onstart_command(&[
+        "python3".to_string(),
+        "argument with spaces".to_string(),
+        "a'b; touch /tmp/not-run".to_string(),
+    ]);
+    assert_eq!(
+        command,
+        "nohup 'python3' 'argument with spaces' 'a'\\''b; touch /tmp/not-run' >/tmp/pfterminal-runtime.log 2>&1 &"
     );
-    assert!(validate_vast_result_url("https://s3.amazonaws.com.evil.example/result").is_err());
-}
-
-#[test]
-fn signed_vast_log_download_urls_are_accepted() {
-    assert!(
-        validate_vast_result_url(
-            "https://s3.amazonaws.com/public.vast.ai/instance_logs/log?X-Amz-Signature=abc"
-        )
-        .is_ok()
-    );
+    assert!(!command.contains("cloudflare"));
+    assert!(!command.contains("trycloudflare"));
 }
 
 #[tokio::test]
-async fn secure_endpoint_discovery_retries_while_filtered_logs_start() {
+async fn instance_ssh_key_is_attached_once_by_key_identity() {
     let server = MockServer::start().await;
-    Mock::given(method("PUT"))
-        .and(path("/v0/instances/request_logs/12345"))
-        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
-            "success": false,
-            "msg": "instance log channel is starting"
+    Mock::given(method("GET"))
+        .and(path("/v0/instances/12345/ssh/"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "ssh_keys": [{"public_key": "ssh-ed25519 AAAAALREADY another-comment"}]
         })))
+        .expect(1)
         .mount(&server)
         .await;
 
-    let error = provider(&server)
-        .discover_tunnel_url("12345")
+    provider(&server)
+        .ensure_instance_ssh_key("12345", "ssh-ed25519 AAAAALREADY pfterminal")
         .await
-        .expect_err("startup rejection must be retried");
-    assert_eq!(error.kind, ProviderErrorKind::Retryable);
-    assert!(!format!("{error:?}").contains("instance log channel"));
+        .expect("existing identity is accepted");
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn missing_instance_ssh_key_is_attached_without_exposing_credentials() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v0/instances/12345/ssh/"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "ssh_keys": "[]"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v0/instances/12345/ssh/"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "success": true
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    provider(&server)
+        .ensure_instance_ssh_key("12345", "ssh-ed25519 AAAANEW pfterminal")
+        .await
+        .expect("missing identity is attached");
     let requests = server.received_requests().await.unwrap();
-    let body = requests[0].body_json::<Value>().unwrap();
-    assert_eq!(body["filter"], "PFTERMINAL_TUNNEL_URL=");
-    assert_eq!(body["tail"], "1000");
-    assert!(body.get("daemon_logs").is_none());
+    let body = requests
+        .iter()
+        .find(|request| request.method.as_str() == "POST")
+        .unwrap()
+        .body_json::<Value>()
+        .unwrap();
+    assert_eq!(body["ssh_key"], "ssh-ed25519 AAAANEW pfterminal");
+    assert!(!body.to_string().contains(TEST_KEY));
 }
 
 #[tokio::test]

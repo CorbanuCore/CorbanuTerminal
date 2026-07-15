@@ -576,7 +576,7 @@ where
                 )
                 .await;
         };
-        match self.provider.get_instance(resource_id.clone()).await {
+        let instance = match self.provider.get_instance(resource_id.clone()).await {
             Ok(None) => {
                 self.apply_update(
                     &lease,
@@ -624,13 +624,24 @@ where
                         .to_string(),
                 }]);
             }
-            Ok(Some(_)) => {}
+            Ok(Some(instance)) => instance,
             Err(error) => return self.record_retry(lease, error, now_ms).await,
-        }
+        };
         let recipe = self.recipes.get(lease.rental.recipe_id.as_str());
+        // The endpoint transport is controller-owned. Re-resolve it on every health cycle so a
+        // restarted controller recreates its local SSH forward instead of retaining a dead
+        // process-local address in the durable provider catalog.
+        let endpoint = match recipe {
+            Some(recipe) => self
+                .provider
+                .secure_endpoint_base_url(&instance, recipe.inference_port)
+                .await
+                .ok(),
+            None => None,
+        };
         let health = match (
             recipe,
-            lease.rental.endpoint_base_url.as_deref(),
+            endpoint.as_deref(),
             self.credentials.as_ref(),
             self.readiness.as_ref(),
         ) {
@@ -656,10 +667,14 @@ where
             GpuRentalState::Degraded
         };
         let state_changed = observed_state != lease.rental.observed_state;
+        let endpoint_changed = endpoint
+            .as_deref()
+            .is_some_and(|endpoint| lease.rental.endpoint_base_url.as_deref() != Some(endpoint));
         self.apply_update(
             &lease,
             GpuRentalUpdate {
                 observed_state: state_changed.then_some(observed_state),
+                endpoint_base_url: endpoint_changed.then(|| endpoint.clone()).flatten(),
                 last_error_code: (!health).then(|| "endpoint-degraded".to_string()),
                 last_error_message: (!health).then(|| {
                     "The authenticated endpoint failed its readiness contract.".to_string()
@@ -671,7 +686,35 @@ where
             now_ms,
         )
         .await?;
-        if let Some(maximum_context_tokens) =
+        if endpoint_changed {
+            let (Some(recipe), Some(endpoint), Some(maximum_context_tokens)) = (
+                recipe,
+                endpoint,
+                recipe.and_then(|recipe| i64::try_from(recipe.maximum_context_tokens).ok()),
+            ) else {
+                return Ok(Vec::new());
+            };
+            self.state
+                .upsert_gpu_runtime_provider(
+                    &GpuRuntimeProviderUpsert {
+                        rental_id: lease.rental.rental_id.clone(),
+                        provider_id: lease
+                            .rental
+                            .endpoint_provider_id
+                            .clone()
+                            .unwrap_or_else(|| format!("gpu-{}", lease.rental.rental_id)),
+                        base_url: endpoint,
+                        model_id: recipe.served_model_id().to_string(),
+                        wire_api: recipe.wire_api.clone(),
+                        health: if health { "ready" } else { "degraded" }.to_string(),
+                        display_hourly_microusd: quoted_hourly_microusd(&lease.rental),
+                        maximum_context_tokens,
+                        catalog_sequence: lease.rental.state_sequence.saturating_add(1),
+                    },
+                    now_ms,
+                )
+                .await?;
+        } else if let Some(maximum_context_tokens) =
             recipe.and_then(|recipe| i64::try_from(recipe.maximum_context_tokens).ok())
         {
             self.state

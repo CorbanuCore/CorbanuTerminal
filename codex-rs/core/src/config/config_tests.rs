@@ -134,6 +134,7 @@ use codex_config::test_support::CloudConfigBundleFixture;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::Path;
+use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::TempDir;
 
@@ -11869,6 +11870,17 @@ fn gpu_runtime_provider_uses_command_backed_scoped_auth() {
     assert_eq!(auth.timeout_ms.get(), 30_000);
     assert!(provider.env_key.is_none());
     assert!(provider.experimental_bearer_token.is_none());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn replaced_running_binary_keeps_a_self_invocation_path_for_gpu_auth() {
+    assert_eq!(
+        pfterminal_auth_helper_from_executable(PathBuf::from(
+            "/opt/pfterminal/bin/pfterminal (deleted)"
+        )),
+        Some("/proc/self/exe".to_string())
+    );
 }
 
 #[test]

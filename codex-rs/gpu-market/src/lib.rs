@@ -10,6 +10,7 @@ mod readiness;
 mod recipe;
 mod runpod;
 mod vast;
+mod vast_ssh;
 
 pub use controller::ControllerEvent;
 pub use controller::GpuRentalController;

@@ -1435,13 +1435,23 @@ pub fn gpu_runtime_model_provider(
 fn current_pfterminal_auth_helper() -> String {
     std::env::current_exe()
         .ok()
-        .filter(|path| {
-            path.file_stem()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name == "pfterminal")
-        })
-        .map(|path| path.to_string_lossy().into_owned())
+        .and_then(pfterminal_auth_helper_from_executable)
         .unwrap_or_else(|| "pfterminal".to_string())
+}
+
+fn pfterminal_auth_helper_from_executable(path: PathBuf) -> Option<String> {
+    let file_name = path.file_name()?.to_str()?;
+    if file_name == "pfterminal" {
+        return Some(path.to_string_lossy().into_owned());
+    }
+    // Linux marks the procfs target of a running executable as deleted when an update or
+    // development rebuild atomically replaces it. `/proc/self/exe` still resolves the live
+    // executable and can safely self-invoke hidden helper modes for that process.
+    #[cfg(target_os = "linux")]
+    if file_name == "pfterminal (deleted)" {
+        return Some("/proc/self/exe".to_string());
+    }
+    None
 }
 
 pub async fn load_gpu_runtime_model_providers(

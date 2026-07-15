@@ -2,8 +2,8 @@ use crate::GpuRecipe;
 use crate::HardwareRequirements;
 use crate::RecipeStability;
 
-// This already-qualified image supplies Python for Vast's authenticated tunnel
-// bootstrap and the CUDA compiler needed by the pinned source runtimes.
+// This already-qualified image supplies Python for runtime bootstrap and the CUDA compiler
+// needed by the pinned source runtimes.
 const GGUF_BUILD_IMAGE: &str =
     "lmsysorg/sglang@sha256:00c53fe4c31bf22d7b37537f28bbdfd924c02de13cdfb4bff7378c9c34d75ab2";
 const LLAMA_CPP_REVISION: &str = "c3d47e696b1187a27e896aa828d48ff9a33fc679";

@@ -16,15 +16,13 @@ use crate::provider_http::credential_error;
 use crate::provider_http::decode_json;
 use crate::provider_http::parse_usd_micros;
 use crate::provider_http::transport_error;
+use crate::vast_ssh::VastSshTransport;
+use crate::vast_ssh::ssh_public_key_identity;
 use serde_json::Value;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 const DEFAULT_API_BASE: &str = "https://console.vast.ai/api";
-const CLOUDFLARED_URL: &str =
-    "https://github.com/cloudflare/cloudflared/releases/download/2026.7.1/cloudflared-linux-amd64";
-const CLOUDFLARED_SHA256: &str = "79a0ade7fc854f62c1aaef48424d9d979e8c2fcd039189d24db82b84cd146be1";
-const TUNNEL_URL_PATH: &str = "/tmp/pfterminal-cloudflared-url";
-const TUNNEL_LOG_PATH: &str = "/tmp/pfterminal-cloudflared.log";
 const LOCAL_QUOTE_CONFIRMATION_WINDOW_MS: i64 = 5 * 60 * 1000;
 
 #[derive(Clone)]
@@ -32,6 +30,7 @@ pub struct VastProvider {
     client: reqwest::Client,
     credentials: Arc<dyn GpuCredentialResolver>,
     api_base: String,
+    ssh_transport: Option<Arc<VastSshTransport>>,
 }
 
 impl std::fmt::Debug for VastProvider {
@@ -48,6 +47,19 @@ impl VastProvider {
             client: reqwest::Client::new(),
             credentials,
             api_base: DEFAULT_API_BASE.to_string(),
+            ssh_transport: None,
+        }
+    }
+
+    pub fn with_ssh_transport_root(
+        credentials: Arc<dyn GpuCredentialResolver>,
+        root: PathBuf,
+    ) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            credentials,
+            api_base: DEFAULT_API_BASE.to_string(),
+            ssh_transport: Some(Arc::new(VastSshTransport::new(root))),
         }
     }
 
@@ -59,6 +71,7 @@ impl VastProvider {
             client: reqwest::Client::new(),
             credentials,
             api_base: api_base.into().trim_end_matches('/').to_string(),
+            ssh_transport: None,
         }
     }
 
@@ -202,81 +215,67 @@ impl VastProvider {
         ))
     }
 
-    async fn discover_tunnel_url(&self, resource_id: &str) -> ProviderResult<String> {
+    async fn ensure_instance_ssh_key(
+        &self,
+        resource_id: &str,
+        public_key: &str,
+    ) -> ProviderResult<()> {
         let key = self.api_key()?;
         let response = self
             .client
-            .put(format!(
-                "{}/v0/instances/request_logs/{resource_id}",
-                self.api_base
-            ))
+            .get(format!("{}/v0/instances/{resource_id}/ssh/", self.api_base))
             .bearer_auth(key.secret.expose())
-            .json(&serde_json::json!({
-                "tail": "1000",
-                "filter": "PFTERMINAL_TUNNEL_URL="
-            }))
             .send()
             .await
             .map_err(|_| transport_error())?;
-        let json = match decode_json(response).await {
-            Ok(json) => json,
-            Err(error)
-                if matches!(
-                    error.kind,
-                    ProviderErrorKind::InvalidRequest | ProviderErrorKind::OfferUnavailable
-                ) =>
-            {
-                return Err(ProviderError {
-                    kind: ProviderErrorKind::Retryable,
-                    safe_message:
-                        "Vast filtered container logs are not ready for the starting instance."
-                            .to_string(),
-                    retry_after_ms: error.retry_after_ms,
-                    diagnostic_ref: error.diagnostic_ref,
-                });
-            }
-            Err(error) => return Err(error),
-        };
-        // Vast returns an unsigned archival URL and, for private/new logs, a
-        // short-lived signed download URL. Prefer the signed URL when present;
-        // the archival URL can legitimately answer 403 during startup.
-        let result_url = json
-            .get("temp_download_url")
-            .and_then(Value::as_str)
-            .filter(|url| !url.is_empty())
-            .or_else(|| json.get("result_url").and_then(Value::as_str))
-            .ok_or_else(|| {
+        let json = decode_json(response).await?;
+        let raw_keys = json.get("ssh_keys").ok_or_else(|| {
+            ProviderError::new(
+                ProviderErrorKind::Retryable,
+                "Vast has not exposed the instance SSH key inventory yet.",
+            )
+        })?;
+        let keys = if let Some(encoded) = raw_keys.as_str() {
+            serde_json::from_str::<Vec<Value>>(encoded).map_err(|_| {
                 ProviderError::new(
                     ProviderErrorKind::Retryable,
-                    "Vast secure tunnel discovery is not ready yet.",
+                    "Vast returned an unreadable instance SSH key inventory.",
                 )
-            })?;
-        validate_vast_result_url(result_url)?;
-
-        for _ in 0..6 {
-            let response = self
-                .client
-                .get(result_url)
-                .send()
-                .await
-                .map_err(|_| transport_error())?;
-            if response.status().is_success() {
-                let output = response.text().await.map_err(|_| {
-                    ProviderError::new(
-                        ProviderErrorKind::Retryable,
-                        "Vast secure tunnel discovery returned unreadable output.",
-                    )
-                })?;
-                if let Some(url) = extract_trycloudflare_url(output.as_str()) {
-                    return Ok(format!("{url}/v1"));
-                }
-            }
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            })?
+        } else {
+            raw_keys.as_array().cloned().ok_or_else(|| {
+                ProviderError::new(
+                    ProviderErrorKind::Retryable,
+                    "Vast returned an unreadable instance SSH key inventory.",
+                )
+            })?
+        };
+        let wanted = ssh_public_key_identity(public_key).ok_or_else(|| {
+            ProviderError::new(
+                ProviderErrorKind::Permanent,
+                "PfTerminal's Vast SSH public key is invalid.",
+            )
+        })?;
+        let already_attached = keys.iter().any(|entry| {
+            entry
+                .get("public_key")
+                .or_else(|| entry.get("key"))
+                .and_then(Value::as_str)
+                .and_then(ssh_public_key_identity)
+                == Some(wanted)
+        });
+        if already_attached {
+            return Ok(());
         }
-        Err(ProviderError::new(
-            ProviderErrorKind::Retryable,
-            "Vast secure tunnel discovery is not ready yet.",
-        ))
+        let response = self
+            .client
+            .post(format!("{}/v0/instances/{resource_id}/ssh/", self.api_base))
+            .bearer_auth(key.secret.expose())
+            .json(&serde_json::json!({"ssh_key": public_key}))
+            .send()
+            .await
+            .map_err(|_| transport_error())?;
+        decode_json(response).await.map(|_| ())
     }
 }
 
@@ -308,7 +307,17 @@ impl GpuProvider for VastProvider {
                 "Vast endpoint identity is incomplete.",
             ));
         }
-        self.discover_tunnel_url(instance.resource_id.as_str())
+        let transport = self.ssh_transport.as_ref().ok_or_else(|| {
+            ProviderError::new(
+                ProviderErrorKind::Permanent,
+                "The Vast controller has no local SSH transport directory.",
+            )
+        })?;
+        let identity = transport.identity()?;
+        self.ensure_instance_ssh_key(instance.resource_id.as_str(), &identity.public_key)
+            .await?;
+        transport
+            .endpoint(instance, inference_port, &identity.private_key)
             .await
     }
 
@@ -335,32 +344,25 @@ impl GpuProvider for VastProvider {
         request.offer.validate_for(&requirements, unix_now_ms())?;
 
         let key = self.api_key()?;
-        let mut environment = serde_json::Map::from_iter([
-            (
-                "PFT_ENDPOINT_TOKEN".to_string(),
-                Value::String(request.endpoint_token.expose().to_string()),
-            ),
-            (
-                format!("-p {0}:{0}", request.inference_port),
-                Value::String("1".to_string()),
-            ),
-        ]);
+        let mut environment = serde_json::Map::from_iter([(
+            "PFT_ENDPOINT_TOKEN".to_string(),
+            Value::String(request.endpoint_token.expose().to_string()),
+        )]);
         if let Some(token) = request.huggingface_token.as_ref() {
             environment.insert(
                 "HF_TOKEN".to_string(),
                 Value::String(token.expose().to_string()),
             );
         }
-        let launch_command =
-            vast_secure_launch_command(&request.launch_command, request.inference_port);
+        let onstart = vast_onstart_command(&request.launch_command);
         let body = serde_json::json!({
             "client_id": "me",
             "image": request.image,
             "disk": request.disk_gib,
             "label": request.ownership_tag,
             "cancel_unavail": true,
-            "runtype": "args",
-            "args": launch_command,
+            "runtype": "ssh_direct",
+            "onstart": onstart,
             "env": environment,
         });
         let response = self
@@ -464,6 +466,9 @@ impl GpuProvider for VastProvider {
     }
 
     async fn terminate_instance(&self, resource_id: String) -> ProviderResult<()> {
+        if let Some(transport) = self.ssh_transport.as_ref() {
+            transport.stop(resource_id.as_str());
+        }
         let key = self.api_key()?;
         let response = self
             .client
@@ -644,8 +649,11 @@ fn vast_instance(raw: &Value) -> ProviderResult<GpuInstance> {
             .get("start_date")
             .and_then(Value::as_f64)
             .map(|seconds| (seconds * 1_000.0) as i64),
+        // Vast's connection contract is the `ssh_host` + `ssh_port` pair. The host may be a
+        // provider DNS name even when a raw public address is also present, so prefer it.
         public_ip: raw
-            .get("public_ipaddr")
+            .get("ssh_host")
+            .or_else(|| raw.get("public_ipaddr"))
             .and_then(Value::as_str)
             .map(str::to_string),
         ssh_port: raw
@@ -695,95 +703,13 @@ fn vast_cuda_versions(raw: &Value, request: &SearchOffersRequest) -> Vec<String>
         .collect()
 }
 
-fn vast_secure_launch_command(command: &[String], inference_port: u16) -> Vec<String> {
-    let bootstrap = format!(
-        concat!(
-            "set -euo pipefail; port=$1; shift; ",
-            "python3 -c 'import hashlib,sys,urllib.request; ",
-            "d=urllib.request.urlopen(sys.argv[1], timeout=120).read(); ",
-            "assert hashlib.sha256(d).hexdigest()==sys.argv[2]; ",
-            "open(sys.argv[3],\"wb\").write(d)' ",
-            "'{}' '{}' /tmp/pfterminal-cloudflared; ",
-            "chmod 700 /tmp/pfterminal-cloudflared; ",
-            "rm -f '{}' '{}'; ",
-            "/tmp/pfterminal-cloudflared tunnel --no-autoupdate ",
-            "--url \"http://127.0.0.1:$port\" --logfile '{}' --loglevel info ",
-            ">/tmp/pfterminal-cloudflared.stdout 2>&1 & ",
-            "for i in $(seq 1 120); do ",
-            "grep -Eo 'https://[a-z0-9-]+\\.trycloudflare\\.com' '{}' | head -1 > '{}' || true; ",
-            "test -s '{}' && break; sleep 1; done; ",
-            "test -s '{}'; printf 'PFTERMINAL_TUNNEL_URL=%s\\n' \"$(cat '{}')\"; ",
-            "exec \"$@\""
-        ),
-        CLOUDFLARED_URL,
-        CLOUDFLARED_SHA256,
-        TUNNEL_URL_PATH,
-        TUNNEL_LOG_PATH,
-        TUNNEL_LOG_PATH,
-        TUNNEL_LOG_PATH,
-        TUNNEL_URL_PATH,
-        TUNNEL_URL_PATH,
-        TUNNEL_URL_PATH,
-        TUNNEL_URL_PATH,
-    );
-    let mut wrapped = vec![
-        "bash".to_string(),
-        "-lc".to_string(),
-        bootstrap,
-        "pfterminal-vast-bootstrap".to_string(),
-        inference_port.to_string(),
-    ];
-    wrapped.extend_from_slice(command);
-    wrapped
-}
-
-fn validate_vast_result_url(result_url: &str) -> ProviderResult<()> {
-    let url = reqwest::Url::parse(result_url).map_err(|_| {
-        ProviderError::new(
-            ProviderErrorKind::Permanent,
-            "Vast command result URL is invalid.",
-        )
-    })?;
-    let trusted_host = url.host_str().is_some_and(|host| {
-        let regional_s3 = host.ends_with(".amazonaws.com")
-            && host.strip_suffix(".amazonaws.com").is_some_and(|prefix| {
-                prefix == "s3"
-                    || prefix.starts_with("s3.")
-                    || prefix.starts_with("s3-")
-                    || prefix.contains(".s3.")
-                    || prefix.contains(".s3-")
-            });
-        host == "s3.amazonaws.com" || host.ends_with(".s3.amazonaws.com") || regional_s3
-    });
-    if url.scheme() != "https" || !trusted_host {
-        return Err(ProviderError::new(
-            ProviderErrorKind::Permanent,
-            "Vast command result URL is not a trusted HTTPS endpoint.",
-        ));
-    }
-    Ok(())
-}
-
-fn extract_trycloudflare_url(output: &str) -> Option<&str> {
-    output
-        .split_whitespace()
-        .filter_map(|value| {
-            let start = value.find("https://")?;
-            Some(value[start..].trim_matches(|character: char| {
-                !character.is_ascii_alphanumeric() && !matches!(character, ':' | '/' | '.' | '-')
-            }))
-        })
-        .rfind(|value| {
-            value.starts_with("https://")
-                && value.ends_with(".trycloudflare.com")
-                && value.strip_prefix("https://").is_some_and(|host| {
-                    host.bytes().all(|byte| {
-                        byte.is_ascii_lowercase()
-                            || byte.is_ascii_digit()
-                            || matches!(byte, b'-' | b'.')
-                    })
-                })
-        })
+fn vast_onstart_command(command: &[String]) -> String {
+    let command = command
+        .iter()
+        .map(|argument| format!("'{}'", argument.replace('\'', "'\\''")))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!("nohup {command} >/tmp/pfterminal-runtime.log 2>&1 &")
 }
 
 fn value_id(value: Option<&Value>) -> Option<String> {

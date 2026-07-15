@@ -2256,7 +2256,14 @@ async fn run_internal_gpu_controller(command: GpuControllerCommand) -> anyhow::R
     let reconcile_config = codex_gpu_market::ReconcileConfig::default();
     let vast = codex_gpu_market::GpuRentalController::new_with_runtime(
         state.clone(),
-        codex_gpu_market::VastProvider::new(credentials.clone()),
+        codex_gpu_market::VastProvider::with_ssh_transport_root(
+            credentials.clone(),
+            config
+                .codex_home
+                .join("gpu-transport")
+                .join("vast")
+                .to_path_buf(),
+        ),
         codex_gpu_market::RecipeCatalog::default(),
         installation_id.clone(),
         reconcile_config.clone(),

@@ -59,6 +59,7 @@ struct FakeState {
     ambiguous_termination: bool,
     ambiguous_get: bool,
     secure_endpoint_error: Option<ProviderError>,
+    secure_endpoint_override: Option<String>,
     create_calls: usize,
     terminate_calls: usize,
     instances: HashMap<String, GpuInstance>,
@@ -77,6 +78,7 @@ impl FakeProvider {
                 ambiguous_termination: false,
                 ambiguous_get: false,
                 secure_endpoint_error: None,
+                secure_endpoint_override: None,
                 create_calls: 0,
                 terminate_calls: 0,
                 instances: HashMap::new(),
@@ -94,6 +96,10 @@ impl FakeProvider {
 
     async fn set_secure_endpoint_error(&self, error: Option<ProviderError>) {
         self.state.lock().await.secure_endpoint_error = error;
+    }
+
+    async fn set_secure_endpoint_override(&self, endpoint: Option<String>) {
+        self.state.lock().await.secure_endpoint_override = endpoint;
     }
 
     async fn create_calls(&self) -> usize {
@@ -137,8 +143,12 @@ impl GpuProvider for FakeProvider {
         instance: &GpuInstance,
         _inference_port: u16,
     ) -> ProviderResult<String> {
-        if let Some(error) = self.state.lock().await.secure_endpoint_error.clone() {
+        let state = self.state.lock().await;
+        if let Some(error) = state.secure_endpoint_error.clone() {
             return Err(error);
+        }
+        if let Some(endpoint) = state.secure_endpoint_override.clone() {
+            return Ok(endpoint);
         }
         Ok(format!(
             "https://{}.example.invalid/v1",
@@ -594,6 +604,28 @@ async fn provider_native_bootstrap_reaches_ready_and_registers_runtime_once() {
     assert_eq!(providers[0].wire_api, "responses");
     assert_eq!(providers[0].health, "ready");
     assert_eq!(providers[0].display_hourly_microusd, 2_500_000);
+
+    provider
+        .set_secure_endpoint_override(Some("https://replacement.example.invalid/v1".to_string()))
+        .await;
+    controller
+        .reconcile_due(NOW_MS + 60_003)
+        .await
+        .expect("recreate controller-owned endpoint");
+    assert_eq!(
+        state
+            .get_gpu_rental("rental-ready")
+            .await
+            .unwrap()
+            .unwrap()
+            .endpoint_base_url
+            .as_deref(),
+        Some("https://replacement.example.invalid/v1")
+    );
+    assert_eq!(
+        state.list_gpu_runtime_providers().await.unwrap()[0].base_url,
+        "https://replacement.example.invalid/v1"
+    );
 }
 
 #[tokio::test]
