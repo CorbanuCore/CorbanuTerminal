@@ -5,6 +5,8 @@ fn verified_recipe() -> GpuRecipe {
         id: "verified-test".to_string(),
         revision: "manifest-v1".to_string(),
         model_id: "owner/model".to_string(),
+        served_model_id: "owner/model".to_string(),
+        wire_api: "chat".to_string(),
         model_revision: "1111111111111111111111111111111111111111".to_string(),
         image: "registry/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             .to_string(),
@@ -33,7 +35,9 @@ fn verified_recipe() -> GpuRecipe {
         workspace_reserve_bytes: 20_000_000_000,
         launch_command: vec![
             "server".to_string(),
-            "nvidia-smi topo -m --enable-p2p-check".to_string(),
+            "owner/model".to_string(),
+            "1111111111111111111111111111111111111111".to_string(),
+            "nvidia-smi topo -m; printf PFTERMINAL_RUNTIME_GATE=nvlink-ok".to_string(),
             "--api-key".to_string(),
             "$PFT_ENDPOINT_TOKEN".to_string(),
         ],
@@ -44,6 +48,7 @@ fn verified_recipe() -> GpuRecipe {
         inference_port: 8000,
         chat_encoding: "encoding-v1".to_string(),
         probe_contract: "pfterminal-openai-v1".to_string(),
+        stability: RecipeStability::Qualified,
         manifest_verified: true,
     }
 }
@@ -59,6 +64,31 @@ fn verified_recipe_accepts_only_complete_immutable_manifests() {
     let mut mutable_image = verified_recipe();
     mutable_image.image = "registry/runtime:latest".to_string();
     assert!(RecipeCatalog::new(vec![mutable_image]).is_err());
+}
+
+#[test]
+fn legacy_manifests_default_the_served_alias_to_the_source_model() {
+    let mut json = serde_json::to_value(verified_recipe()).expect("serialize recipe");
+    json.as_object_mut()
+        .expect("recipe object")
+        .remove("served_model_id");
+    let recipe: GpuRecipe = serde_json::from_value(json).expect("legacy recipe");
+
+    assert_eq!(recipe.served_model_id(), "owner/model");
+}
+
+#[test]
+fn legacy_manifests_default_to_chat_and_verified_protocols_are_bounded() {
+    let mut json = serde_json::to_value(verified_recipe()).expect("serialize recipe");
+    json.as_object_mut()
+        .expect("recipe object")
+        .remove("wire_api");
+    let recipe: GpuRecipe = serde_json::from_value(json).expect("legacy recipe");
+    assert_eq!(recipe.wire_api, "chat");
+
+    let mut invalid = verified_recipe();
+    invalid.wire_api = "model-name-guessed-protocol".to_string();
+    assert!(RecipeCatalog::new(vec![invalid]).is_err());
 }
 
 #[test]
@@ -113,7 +143,7 @@ fn built_in_deepseek_recipe_is_a_validated_runtime_specific_manifest() {
 }
 
 #[test]
-fn built_in_catalog_contains_only_the_three_curated_proven_topologies() {
+fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
     let catalog = RecipeCatalog::default();
     let ids = catalog
         .list()
@@ -126,19 +156,74 @@ fn built_in_catalog_contains_only_the_three_curated_proven_topologies() {
         [
             "deepseek-flash-2xh200",
             "deepseek-flash-4xh200",
-            "glm-5.2-fp8-8xh200"
+            "glm-5.2-fp8-8xh200",
+            "huihui-deepseek-v4-flash-q4k-2xh200-experimental",
+            "huihui-glm-5.2-iq1m-2xh200-experimental"
         ]
     );
     for recipe in catalog.list() {
         RecipeCatalog::new(vec![recipe.clone()]).expect("valid curated recipe");
         assert!(recipe.manifest_verified);
         assert_eq!(recipe.tensor_parallel_size, recipe.hardware.gpu_count);
+    }
+    assert_eq!(
+        catalog
+            .list()
+            .iter()
+            .map(|recipe| recipe.stability)
+            .collect::<Vec<_>>(),
+        [
+            RecipeStability::Qualified,
+            RecipeStability::Qualified,
+            RecipeStability::Qualified,
+            RecipeStability::Experimental,
+            RecipeStability::Experimental,
+        ]
+    );
+}
+
+#[test]
+fn fine_tune_recipes_pin_source_runtime_artifacts_auth_and_topology() {
+    let catalog = RecipeCatalog::default();
+    for id in [
+        "huihui-deepseek-v4-flash-q4k-2xh200-experimental",
+        "huihui-glm-5.2-iq1m-2xh200-experimental",
+    ] {
+        let recipe = catalog.get(id).expect("fine-tune recipe");
+        let launch = recipe.launch_command.join(" ");
+        assert_eq!(recipe.stability, RecipeStability::Experimental);
+        assert!(launch.contains(recipe.model_revision.as_str()));
+        assert!(launch.contains(recipe.serving_runtime_version.as_str()));
+        assert!(launch.contains("sha256sum -c -"));
+        assert!(launch.contains("huggingface_hub==1.23.0"));
+        assert!(launch.contains("hf-xet==1.5.1"));
+        assert!(launch.contains("HF_XET_HIGH_PERFORMANCE=1 hf download"));
+        assert!(launch.contains(recipe.model_id.as_str()));
+        assert!(launch.contains("PFTERMINAL_RUNTIME_GATE=nvlink-ok"));
+        assert!(!launch.contains("--enable-p2p-check"));
+        assert!(launch.contains("Bearer {$PFT_ENDPOINT_TOKEN}"));
+        assert!(launch.contains("reverse_proxy 127.0.0.1:8001"));
         assert!(
-            recipe
-                .launch_command
-                .iter()
-                .any(|part| part.contains("SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1"))
+            launch.contains("527fbf917c39189a1e3b31d34fa955601680b2d5c8055d2a87b8b9588dec7bb9")
         );
+        if id.contains("deepseek") {
+            assert_eq!(recipe.runtime, "ds4");
+            assert_eq!(recipe.served_model_id(), "deepseek-v4-flash");
+            assert_eq!(recipe.wire_api, "responses");
+            assert!(launch.contains("--tensor-parallel 2"));
+            assert!(launch.contains("--ctx 131072"));
+            assert!(launch.contains("https://github.com/agtico/ds4.git"));
+            assert!(!launch.contains("--kv-disk-dir"));
+        } else {
+            assert_eq!(recipe.runtime, "llama.cpp");
+            assert_eq!(recipe.served_model_id(), recipe.model_id);
+            assert_eq!(recipe.wire_api, "chat");
+            assert!(launch.contains("--alias"));
+            assert!(launch.contains("--api-key \"$PFT_ENDPOINT_TOKEN\""));
+            // Upstream CUDA does not expose split buffers for this GLM IQ1_M
+            // path, so distribute complete layers rather than tensor rows.
+            assert!(launch.contains("--split-mode layer"));
+        }
     }
 }
 

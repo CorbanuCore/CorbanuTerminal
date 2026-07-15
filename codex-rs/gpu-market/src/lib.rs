@@ -2,6 +2,7 @@
 
 mod controller;
 mod credential;
+mod gguf_recipes;
 mod market;
 mod provider;
 mod provider_http;
@@ -41,5 +42,6 @@ pub use readiness::GpuEndpointProber;
 pub use readiness::GpuReadinessProbe;
 pub use recipe::GpuRecipe;
 pub use recipe::RecipeCatalog;
+pub use recipe::RecipeStability;
 pub use runpod::RunpodProvider;
 pub use vast::VastProvider;

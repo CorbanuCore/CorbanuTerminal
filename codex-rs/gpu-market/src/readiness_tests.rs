@@ -220,3 +220,10 @@ fn public_plaintext_endpoint_is_rejected_before_network_access() {
         .expect_err("plaintext public endpoint");
     assert!(error.to_string().contains("HTTPS or loopback"));
 }
+
+#[test]
+fn readiness_chat_budget_allows_reasoning_models_to_reach_final_content() {
+    let body = chat_body("pinned/model", "Reply with exactly READY.", false);
+
+    assert_eq!(body["max_tokens"], 256);
+}

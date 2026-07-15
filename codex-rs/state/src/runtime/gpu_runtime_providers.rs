@@ -265,7 +265,9 @@ fn validate_runtime_provider(provider: &GpuRuntimeProviderUpsert) -> anyhow::Res
             "runtime provider identity must not be empty"
         ));
     }
-    if provider.wire_api != "chat" || !matches!(provider.health.as_str(), "ready" | "degraded") {
+    if !matches!(provider.wire_api.as_str(), "chat" | "responses")
+        || !matches!(provider.health.as_str(), "ready" | "degraded")
+    {
         return Err(anyhow::anyhow!(
             "invalid runtime provider protocol or health"
         ));

@@ -400,6 +400,8 @@ fn recipe() -> GpuRecipe {
         id: "test-recipe".to_string(),
         revision: "manifest-v1".to_string(),
         model_id: "test/model".to_string(),
+        served_model_id: "test/model".to_string(),
+        wire_api: "chat".to_string(),
         model_revision: "1111111111111111111111111111111111111111".to_string(),
         image: "test/image@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             .to_string(),
@@ -420,7 +422,9 @@ fn recipe() -> GpuRecipe {
         workspace_reserve_bytes: 10_000_000_000,
         launch_command: vec![
             "server".to_string(),
-            "nvidia-smi topo -m --enable-p2p-check".to_string(),
+            "test/model".to_string(),
+            "1111111111111111111111111111111111111111".to_string(),
+            "nvidia-smi topo -m; printf PFTERMINAL_RUNTIME_GATE=nvlink-ok".to_string(),
             "--api-key".to_string(),
             "$PFT_ENDPOINT_TOKEN".to_string(),
         ],
@@ -431,6 +435,7 @@ fn recipe() -> GpuRecipe {
         inference_port: 8000,
         chat_encoding: "test-encoding".to_string(),
         probe_contract: "pfterminal-openai-v1".to_string(),
+        stability: crate::RecipeStability::Qualified,
         manifest_verified: true,
     }
 }

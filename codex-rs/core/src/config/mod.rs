@@ -1402,7 +1402,19 @@ pub fn gpu_runtime_model_provider(
         );
         return None;
     }
-    let mut provider = create_oss_provider_with_base_url(record.base_url.as_str(), WireApi::Chat);
+    let wire_api = match record.wire_api.as_str() {
+        "chat" => WireApi::Chat,
+        "responses" => WireApi::Responses,
+        protocol => {
+            tracing::warn!(
+                provider_id = %record.provider_id,
+                %protocol,
+                "ignoring GPU runtime provider with unsupported wire API"
+            );
+            return None;
+        }
+    };
+    let mut provider = create_oss_provider_with_base_url(record.base_url.as_str(), wire_api);
     provider.name = format!("Rented GPU · {}", record.model_id);
     provider.auth = Some(ModelProviderAuthInfo {
         command: current_pfterminal_auth_helper(),
@@ -1458,14 +1470,14 @@ pub async fn load_gpu_runtime_model_provider_records(
             return Vec::new();
         }
     };
-    let records = match runtime.list_gpu_runtime_providers().await {
+
+    match runtime.list_gpu_runtime_providers().await {
         Ok(records) => records,
         Err(error) => {
             tracing::warn!(%error, "failed to read GPU runtime provider overlay");
-            return Vec::new();
+            Vec::new()
         }
-    };
-    records
+    }
 }
 
 impl Config {

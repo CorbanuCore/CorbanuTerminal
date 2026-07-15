@@ -174,6 +174,24 @@ async fn runtime_overlay_requires_ready_and_https_and_is_sequence_monotonic() {
     assert_eq!(providers[0].maximum_context_tokens, Some(65_536));
     assert!(!providers[0].base_url.contains("token"));
 
+    let mut responses = overlay.clone();
+    responses.catalog_sequence = 3;
+    responses.wire_api = "responses".to_string();
+    assert!(
+        runtime
+            .upsert_gpu_runtime_provider(&responses, NOW_MS + 2)
+            .await
+            .expect("responses upsert")
+    );
+    assert_eq!(
+        runtime
+            .list_gpu_runtime_providers()
+            .await
+            .expect("responses provider")[0]
+            .wire_api,
+        "responses"
+    );
+
     assert!(
         runtime
             .set_gpu_runtime_provider_health("rental-overlay", "degraded", NOW_MS + 3)
@@ -185,7 +203,7 @@ async fn runtime_overlay_requires_ready_and_https_and_is_sequence_monotonic() {
         .await
         .expect("providers after disable");
     assert_eq!(providers[0].health, "degraded");
-    assert_eq!(providers[0].catalog_sequence, 3);
+    assert_eq!(providers[0].catalog_sequence, 4);
     assert!(
         runtime
             .set_gpu_runtime_provider_health("rental-overlay", "disabled", NOW_MS + 4)

@@ -397,6 +397,8 @@ fn recipe_catalog() -> RecipeCatalog {
         id: "deepseek-flash-2xh200".to_string(),
         revision: "test-revision".to_string(),
         model_id: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
+        served_model_id: "deepseek-v4-flash".to_string(),
+        wire_api: "responses".to_string(),
         model_revision: "1111111111111111111111111111111111111111".to_string(),
         image:
             "vllm/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -418,7 +420,9 @@ fn recipe_catalog() -> RecipeCatalog {
         workspace_reserve_bytes: 20_000_000_000,
         launch_command: vec![
             "server".to_string(),
-            "nvidia-smi topo -m --enable-p2p-check".to_string(),
+            "deepseek-ai/DeepSeek-V4-Flash".to_string(),
+            "1111111111111111111111111111111111111111".to_string(),
+            "nvidia-smi topo -m; printf PFTERMINAL_RUNTIME_GATE=nvlink-ok".to_string(),
             "--api-key".to_string(),
             "$PFT_ENDPOINT_TOKEN".to_string(),
         ],
@@ -429,6 +433,7 @@ fn recipe_catalog() -> RecipeCatalog {
         inference_port: 8000,
         chat_encoding: "deepseek-v4-encoding".to_string(),
         probe_contract: "pfterminal-openai-v1".to_string(),
+        stability: crate::RecipeStability::Qualified,
         manifest_verified: true,
     }])
     .expect("valid test recipe")
@@ -585,7 +590,8 @@ async fn provider_native_bootstrap_reaches_ready_and_registers_runtime_once() {
         .await
         .expect("runtime providers");
     assert_eq!(providers.len(), 1);
-    assert_eq!(providers[0].model_id, "deepseek-ai/DeepSeek-V4-Flash");
+    assert_eq!(providers[0].model_id, "deepseek-v4-flash");
+    assert_eq!(providers[0].wire_api, "responses");
     assert_eq!(providers[0].health, "ready");
     assert_eq!(providers[0].display_hourly_microusd, 2_500_000);
 }

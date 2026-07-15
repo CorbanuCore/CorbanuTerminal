@@ -59,9 +59,10 @@ impl ChatWidget {
                     recipe.model_id, recipe.hardware.gpu_count, recipe.hardware.gpu_model
                 ),
                 description: Some(format!(
-                    "{} rev {} · {}× {} · {status}",
+                    "{} rev {} · {} · {}× {} · {status}",
                     recipe.id,
                     recipe.revision,
+                    recipe.stability.label(),
                     recipe.hardware.gpu_count,
                     recipe.hardware.gpu_model
                 )),

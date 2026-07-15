@@ -456,7 +456,7 @@ where
             }
         };
         let probe_result = readiness
-            .probe(endpoint.as_str(), recipe.model_id.as_str(), &token)
+            .probe(endpoint.as_str(), recipe.served_model_id(), &token)
             .await;
         let report = match probe_result {
             Ok(report) if report.ready() => report,
@@ -544,8 +544,8 @@ where
                     rental_id: lease.rental.rental_id.clone(),
                     provider_id: endpoint_provider_id,
                     base_url: endpoint,
-                    model_id: recipe.model_id.clone(),
-                    wire_api: "chat".to_string(),
+                    model_id: recipe.served_model_id().to_string(),
+                    wire_api: recipe.wire_api.clone(),
                     health: "ready".to_string(),
                     display_hourly_microusd: quoted_hourly_microusd(&lease.rental),
                     maximum_context_tokens: i64::try_from(recipe.maximum_context_tokens)
@@ -639,11 +639,11 @@ where
                     rental_id: lease.rental.rental_id.clone(),
                 }) {
                 Ok(credential) if lease.rental.observed_state == GpuRentalState::Ready => readiness
-                    .probe_health(endpoint, recipe.model_id.as_str(), &credential.secret)
+                    .probe_health(endpoint, recipe.served_model_id(), &credential.secret)
                     .await
                     .unwrap_or(false),
                 Ok(credential) => readiness
-                    .probe(endpoint, recipe.model_id.as_str(), &credential.secret)
+                    .probe(endpoint, recipe.served_model_id(), &credential.secret)
                     .await
                     .is_ok_and(|report| report.ready()),
                 Err(_) => false,

@@ -2,11 +2,38 @@ use crate::HardwareRequirements;
 use serde::Deserialize;
 use serde::Serialize;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[derive(Default)]
+pub enum RecipeStability {
+    #[default]
+    Qualified,
+    Experimental,
+}
+
+impl RecipeStability {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Qualified => "qualified",
+            Self::Experimental => "experimental",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GpuRecipe {
     pub id: String,
     pub revision: String,
+    /// Immutable artifact source, normally a Hugging Face repository ID.
     pub model_id: String,
+    /// Model identity exposed by the serving runtime. Empty values from older
+    /// manifests retain the source model ID for backward compatibility.
+    #[serde(default)]
+    pub served_model_id: String,
+    /// OpenAI-compatible protocol used by PfTerminal after the runtime is
+    /// registered. Older manifests used chat completions exclusively.
+    #[serde(default = "default_wire_api")]
+    pub wire_api: String,
     pub model_revision: String,
     pub image: String,
     pub runtime: String,
@@ -36,6 +63,11 @@ pub struct GpuRecipe {
     pub inference_port: u16,
     pub chat_encoding: String,
     pub probe_contract: String,
+    /// Deployment maturity, separate from manifest verification. An
+    /// experimental recipe is immutable and safe to launch but has not yet
+    /// earned the product-quality claims of a qualified recipe.
+    #[serde(default)]
+    pub stability: RecipeStability,
     pub manifest_verified: bool,
 }
 
@@ -51,6 +83,8 @@ impl Default for RecipeCatalog {
                 deepseek_flash_recipe(2),
                 deepseek_flash_recipe(4),
                 glm_5_2_recipe(),
+                crate::gguf_recipes::huihui_deepseek_v4_flash_recipe(),
+                crate::gguf_recipes::huihui_glm_5_2_recipe(),
             ],
         }
     }
@@ -82,7 +116,25 @@ impl RecipeCatalog {
     }
 }
 
+impl GpuRecipe {
+    pub fn served_model_id(&self) -> &str {
+        if self.served_model_id.trim().is_empty() {
+            self.model_id.as_str()
+        } else {
+            self.served_model_id.as_str()
+        }
+    }
+}
+
+fn default_wire_api() -> String {
+    "chat".to_string()
+}
+
 fn validate_verified_recipe(recipe: &GpuRecipe) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        matches!(recipe.wire_api.as_str(), "chat" | "responses"),
+        "verified recipe wire API must be chat or responses"
+    );
     anyhow::ensure!(
         recipe.tensor_parallel_size == recipe.hardware.gpu_count,
         "verified recipe tensor parallel size must match its allocated GPU count"
@@ -166,19 +218,33 @@ fn validate_verified_recipe(recipe: &GpuRecipe) -> anyhow::Result<()> {
         "verified recipe environment allowlist is unsafe or incomplete"
     );
     let launch = recipe.launch_command.join(" ");
+    anyhow::ensure!(
+        launch.contains(recipe.model_id.as_str())
+            && launch.contains(recipe.model_revision.as_str()),
+        "verified recipe launch must consume its pinned model source and revision"
+    );
     let scoped_auth = recipe
         .launch_command
         .windows(2)
         .any(|arguments| arguments == ["--api-key", "$PFT_ENDPOINT_TOKEN"])
-        || launch.contains("--api-key \"$PFT_ENDPOINT_TOKEN\"");
+        || launch.contains("--api-key \"$PFT_ENDPOINT_TOKEN\"")
+        || (launch.contains("Bearer {$PFT_ENDPOINT_TOKEN}") && launch.contains("reverse_proxy"));
     anyhow::ensure!(
         !recipe.launch_command.is_empty() && !launch.contains("--api-key=") && scoped_auth,
         "verified recipe must launch an authenticated endpoint using its scoped token"
     );
     if recipe.hardware.requires_high_bandwidth_interconnect {
         anyhow::ensure!(
-            launch.contains("nvidia-smi topo -m") && launch.contains("--enable-p2p-check"),
+            launch.contains("nvidia-smi topo -m")
+                && launch.contains("PFTERMINAL_RUNTIME_GATE=nvlink-ok"),
             "verified multi-GPU recipe must gate serving on allocation-local topology checks"
+        );
+    }
+    if matches!(recipe.runtime.as_str(), "llama.cpp" | "ds4") {
+        anyhow::ensure!(
+            is_immutable_revision(recipe.serving_runtime_version.as_str())
+                && launch.contains(recipe.serving_runtime_version.as_str()),
+            "verified source-built recipes must pin and launch their runtime revision"
         );
     }
     anyhow::ensure!(
@@ -270,6 +336,8 @@ fn deepseek_flash_recipe(gpu_count: u16) -> GpuRecipe {
         id: format!("deepseek-flash-{gpu_count}xh200"),
         revision: recipe_revision.to_string(),
         model_id: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
+        served_model_id: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
+        wire_api: "chat".to_string(),
         model_revision: "60d8d70770c6776ff598c94bb586a859a38244f1".to_string(),
         image: image.to_string(),
         runtime: "sglang".to_string(),
@@ -303,6 +371,7 @@ fn deepseek_flash_recipe(gpu_count: u16) -> GpuRecipe {
         inference_port: 8000,
         chat_encoding: "deepseek-v4-encoding".to_string(),
         probe_contract: "pfterminal-openai-v1".to_string(),
+        stability: RecipeStability::Qualified,
         manifest_verified: true,
     }
 }
@@ -312,6 +381,8 @@ fn glm_5_2_recipe() -> GpuRecipe {
         id: "glm-5.2-fp8-8xh200".to_string(),
         revision: "glm-5.2-fp8-sglang-v0.5.15-post1-r1".to_string(),
         model_id: "zai-org/GLM-5.2-FP8".to_string(),
+        served_model_id: "zai-org/GLM-5.2-FP8".to_string(),
+        wire_api: "chat".to_string(),
         model_revision: "ba978f7d347eaf65d22f1a86833408afdb953541".to_string(),
         image: "lmsysorg/sglang@sha256:00c53fe4c31bf22d7b37537f28bbdfd924c02de13cdfb4bff7378c9c34d75ab2".to_string(),
         runtime: "sglang".to_string(),
@@ -365,6 +436,7 @@ fn glm_5_2_recipe() -> GpuRecipe {
         inference_port: 8000,
         chat_encoding: "glm-5.2-tokenizer-template".to_string(),
         probe_contract: "pfterminal-openai-v1".to_string(),
+        stability: RecipeStability::Qualified,
         manifest_verified: true,
     }
 }

@@ -332,7 +332,10 @@ fn chat_body(model_id: &str, prompt: &str, stream: bool) -> Value {
         "model": model_id,
         "messages": [{"role": "user", "content": prompt}],
         "stream": stream,
-        "max_tokens": 32
+        // Reasoning models can legitimately spend a short budget before
+        // emitting final content. The readiness contract must prove a usable
+        // answer, not mistake a truncated reasoning prefix for incompatibility.
+        "max_tokens": 256
     })
 }
 
