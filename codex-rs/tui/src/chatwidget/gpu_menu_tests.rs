@@ -1,19 +1,19 @@
 use super::*;
 
 #[test]
-fn bounded_authorization_parser_accepts_decimal_limits() {
-    assert_eq!(
-        parse_gpu_authorization("3.25 12 90"),
-        Ok((3_250_000, 12_000_000, 90))
-    );
+fn gpu_limit_inputs_accept_familiar_currency_and_duration_values() {
+    assert_eq!(parse_positive_usd("3.25"), Ok(3_250_000));
+    assert_eq!(parse_positive_usd("$10.50"), Ok(10_500_000));
+    assert_eq!(parse_positive_usd("1,250"), Ok(1_250_000_000));
+    assert_eq!(parse_ttl_minutes(" 120 "), Ok(120));
 }
 
 #[test]
-fn bounded_authorization_parser_rejects_missing_negative_and_unbounded_terms() {
-    assert!(parse_gpu_authorization("3.25 12").is_err());
-    assert!(parse_gpu_authorization("-1 12 90").is_err());
-    assert!(parse_gpu_authorization("3.25 12 0").is_err());
-    assert!(parse_gpu_authorization("3.25 12 10081").is_err());
+fn gpu_limit_inputs_reject_invalid_or_unbounded_values() {
+    assert!(parse_positive_usd("documentation").is_err());
+    assert!(parse_positive_usd("-1").is_err());
+    assert!(parse_ttl_minutes("0").is_err());
+    assert!(parse_ttl_minutes("10081").is_err());
 }
 
 #[test]
@@ -21,6 +21,41 @@ fn gpu_provider_names_are_presented_as_user_facing_marketplaces() {
     assert_eq!(gpu_provider_display_name("runpod"), "RunPod");
     assert_eq!(gpu_provider_display_name("vast"), "Vast.ai");
     assert_eq!(gpu_provider_display_name("unexpected"), "GPU marketplace");
+}
+
+#[tokio::test]
+async fn gpu_authorization_uses_one_labeled_input_and_retries_in_place_snapshot() {
+    let (mut chat, _tx, mut event_rx, _op_rx) =
+        crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+    chat.open_gpu_authorization_prompt(
+        "test-recipe".to_string(),
+        crate::app_event::GpuAuthorizationPromptState::default(),
+    );
+
+    let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 80);
+    assert!(rendered.contains("Maximum hourly price"));
+    assert!(rendered.contains("USD per hour, for example 10"));
+    assert!(!rendered.contains("<max hourly USD>"));
+    insta::assert_snapshot!(rendered);
+
+    while event_rx.try_recv().is_ok() {}
+    chat.handle_paste("documentation".to_string());
+    chat.handle_key_event(crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Enter,
+        crossterm::event::KeyModifiers::NONE,
+    ));
+
+    assert!(matches!(
+        event_rx.try_recv(),
+        Ok(AppEvent::OpenGpuAuthorizationPrompt {
+            recipe_id,
+            state: crate::app_event::GpuAuthorizationPromptState {
+                maximum_hourly_microusd: None,
+                maximum_total_microusd: None,
+                validation_error: Some(_),
+            },
+        }) if recipe_id == "test-recipe"
+    ));
 }
 
 #[tokio::test]

@@ -1,0 +1,10 @@
+---
+source: tui/src/chatwidget/gpu_menu_tests.rs
+expression: rendered
+---
+▌ GPU limits · 1 of 3 · Maximum hourly price
+▌ Only offers at or below this hourly price are shown.
+▌
+▌ USD per hour, for example 10
+
+Press enter to confirm or esc to go back

@@ -72,6 +72,13 @@ pub(crate) struct HistoryLookupResponse {
     pub(crate) entry: Option<String>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub(crate) struct GpuAuthorizationPromptState {
+    pub(crate) maximum_hourly_microusd: Option<i64>,
+    pub(crate) maximum_total_microusd: Option<i64>,
+    pub(crate) validation_error: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ConsolidationScrollbackReflow {
     IfResizeReflowRan,
@@ -1191,6 +1198,7 @@ pub(crate) enum AppEvent {
     },
     OpenGpuAuthorizationPrompt {
         recipe_id: String,
+        state: GpuAuthorizationPromptState,
     },
     SearchGpuOffers {
         recipe_id: String,

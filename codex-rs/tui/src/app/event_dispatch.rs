@@ -1434,9 +1434,9 @@ impl App {
                 }
                 self.refresh_gpu_spend_indicator().await;
             }
-            AppEvent::OpenGpuAuthorizationPrompt { recipe_id } => {
-                self.chat_widget.open_gpu_authorization_prompt(recipe_id);
-            }
+            AppEvent::OpenGpuAuthorizationPrompt { recipe_id, state } => self
+                .chat_widget
+                .open_gpu_authorization_prompt(recipe_id, state),
             AppEvent::SearchGpuOffers {
                 recipe_id,
                 maximum_hourly_microusd,

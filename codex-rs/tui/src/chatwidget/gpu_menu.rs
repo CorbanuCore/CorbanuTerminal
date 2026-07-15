@@ -77,6 +77,7 @@ impl ChatWidget {
                     vec![Box::new(move |tx: &AppEventSender| {
                         tx.send(AppEvent::OpenGpuAuthorizationPrompt {
                             recipe_id: recipe_id.clone(),
+                            state: crate::app_event::GpuAuthorizationPromptState::default(),
                         });
                     }) as SelectionAction]
                 } else {
@@ -123,36 +124,114 @@ impl ChatWidget {
         self.bottom_pane.show_view(Box::new(view));
     }
 
-    pub(crate) fn open_gpu_authorization_prompt(&mut self, recipe_id: String) {
-        let submit_recipe_id = recipe_id;
+    pub(crate) fn open_gpu_authorization_prompt(
+        &mut self,
+        recipe_id: String,
+        state: crate::app_event::GpuAuthorizationPromptState,
+    ) {
         let tx = self.app_event_tx.clone();
-        let view = CustomPromptView::new(
-            "Authorize bounded GPU lease".to_string(),
-            "Enter: <max hourly USD> <max total USD> <TTL minutes>".to_string(),
-            String::new(),
-            None,
-            Box::new(move |value| match parse_gpu_authorization(value.as_str()) {
-                Ok((maximum_hourly_microusd, maximum_total_microusd, ttl_minutes)) => {
-                    tx.send(AppEvent::SearchGpuOffers {
-                        recipe_id: submit_recipe_id.clone(),
+        let validation_context = |guidance: &str| {
+            state
+                .validation_error
+                .as_ref()
+                .map(|error| format!("Try again: {error}"))
+                .unwrap_or_else(|| guidance.to_string())
+        };
+        let view = match (state.maximum_hourly_microusd, state.maximum_total_microusd) {
+            (None, None) => CustomPromptView::new(
+                "GPU limits · 1 of 3 · Maximum hourly price".to_string(),
+                "USD per hour, for example 10".to_string(),
+                String::new(),
+                Some(validation_context(
+                    "Only offers at or below this hourly price are shown.",
+                )),
+                Box::new(move |value| match parse_positive_usd(value.as_str()) {
+                    Ok(maximum_hourly_microusd) => {
+                        tx.send(AppEvent::OpenGpuAuthorizationPrompt {
+                            recipe_id: recipe_id.clone(),
+                            state: crate::app_event::GpuAuthorizationPromptState {
+                                maximum_hourly_microusd: Some(maximum_hourly_microusd),
+                                ..Default::default()
+                            },
+                        });
+                    }
+                    Err(validation_error) => {
+                        tx.send(AppEvent::OpenGpuAuthorizationPrompt {
+                            recipe_id: recipe_id.clone(),
+                            state: crate::app_event::GpuAuthorizationPromptState {
+                                validation_error: Some(validation_error),
+                                ..Default::default()
+                            },
+                        });
+                    }
+                }),
+            ),
+            (Some(maximum_hourly_microusd), None) => CustomPromptView::new(
+                "GPU limits · 2 of 3 · Total spending cap".to_string(),
+                "Total USD, for example 40".to_string(),
+                String::new(),
+                Some(validation_context(&format!(
+                    "Hourly limit: ${:.2}. No offer has been accepted yet.",
+                    maximum_hourly_microusd as f64 / 1_000_000.0
+                ))),
+                Box::new(move |value| match parse_positive_usd(value.as_str()) {
+                    Ok(maximum_total_microusd) => {
+                        tx.send(AppEvent::OpenGpuAuthorizationPrompt {
+                            recipe_id: recipe_id.clone(),
+                            state: crate::app_event::GpuAuthorizationPromptState {
+                                maximum_hourly_microusd: Some(maximum_hourly_microusd),
+                                maximum_total_microusd: Some(maximum_total_microusd),
+                                validation_error: None,
+                            },
+                        });
+                    }
+                    Err(validation_error) => {
+                        tx.send(AppEvent::OpenGpuAuthorizationPrompt {
+                            recipe_id: recipe_id.clone(),
+                            state: crate::app_event::GpuAuthorizationPromptState {
+                                maximum_hourly_microusd: Some(maximum_hourly_microusd),
+                                maximum_total_microusd: None,
+                                validation_error: Some(validation_error),
+                            },
+                        });
+                    }
+                }),
+            ),
+            (Some(maximum_hourly_microusd), Some(maximum_total_microusd)) => CustomPromptView::new(
+                "GPU limits · 3 of 3 · Automatic stop".to_string(),
+                "Whole minutes, for example 120".to_string(),
+                String::new(),
+                Some(validation_context(&format!(
+                    "Limits: ${:.2}/hour · ${:.2} total · maximum 7 days.",
+                    maximum_hourly_microusd as f64 / 1_000_000.0,
+                    maximum_total_microusd as f64 / 1_000_000.0
+                ))),
+                Box::new(move |value| match parse_ttl_minutes(value.as_str()) {
+                    Ok(ttl_minutes) => tx.send(AppEvent::SearchGpuOffers {
+                        recipe_id: recipe_id.clone(),
                         maximum_hourly_microusd,
                         maximum_total_microusd,
                         ttl_minutes,
-                    });
-                }
-                Err(message) => tx.send(AppEvent::GpuOffersLoaded {
-                    recipe_id: submit_recipe_id.clone(),
-                    authorization: codex_gpu_market::RentalAuthorization {
-                        client_operation_id: "invalid".to_string(),
-                        maximum_hourly_microusd: 1,
-                        maximum_total_microusd: 1,
-                        terminate_at_ms: 1,
-                        acknowledged_local_enforcement: false,
-                    },
-                    offers: Err(message),
+                    }),
+                    Err(validation_error) => {
+                        tx.send(AppEvent::OpenGpuAuthorizationPrompt {
+                            recipe_id: recipe_id.clone(),
+                            state: crate::app_event::GpuAuthorizationPromptState {
+                                maximum_hourly_microusd: Some(maximum_hourly_microusd),
+                                maximum_total_microusd: Some(maximum_total_microusd),
+                                validation_error: Some(validation_error),
+                            },
+                        });
+                    }
                 }),
-            }),
-        );
+            ),
+            (None, Some(_)) => {
+                self.add_error_message(
+                    "GPU spending limits became inconsistent; no rental was created.".to_string(),
+                );
+                return;
+            }
+        };
         self.show_custom_prompt_view(view);
     }
 
@@ -341,27 +420,28 @@ impl ChatWidget {
     }
 }
 
-fn parse_gpu_authorization(value: &str) -> Result<(i64, i64, i64), String> {
-    let parts = value.split_whitespace().collect::<Vec<_>>();
-    if parts.len() != 3 {
-        return Err("Enter exactly: <max hourly USD> <max total USD> <TTL minutes>.".to_string());
-    }
-    let hourly = parse_positive_usd(parts[0])?;
-    let total = parse_positive_usd(parts[1])?;
-    let ttl_minutes = parts[2]
+fn parse_ttl_minutes(value: &str) -> Result<i64, String> {
+    value
+        .trim()
         .parse::<i64>()
         .ok()
         .filter(|minutes| (1..=10_080).contains(minutes))
-        .ok_or_else(|| "TTL must be an integer from 1 to 10080 minutes.".to_string())?;
-    Ok((hourly, total, ttl_minutes))
+        .ok_or_else(|| "Enter whole minutes from 1 to 10,080, for example 120.".to_string())
 }
 
 fn parse_positive_usd(value: &str) -> Result<i64, String> {
-    let parsed = value
+    let normalized = value
+        .trim()
+        .strip_prefix('$')
+        .unwrap_or(value.trim())
+        .replace(',', "");
+    let parsed = normalized
         .parse::<f64>()
         .ok()
         .filter(|value| value.is_finite() && *value > 0.0)
-        .ok_or_else(|| "Dollar limits must be positive numbers.".to_string())?;
+        .ok_or_else(|| {
+            "Enter a USD amount greater than 0, for example 10 or $10.50.".to_string()
+        })?;
     let microusd = parsed * 1_000_000.0;
     if microusd > i64::MAX as f64 {
         return Err("Dollar limit is too large.".to_string());
