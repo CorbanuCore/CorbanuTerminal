@@ -200,6 +200,17 @@ fn fine_tune_recipes_pin_source_runtime_artifacts_auth_and_topology() {
         assert!(launch.contains("HF_XET_HIGH_PERFORMANCE=1 hf download"));
         assert!(launch.contains(recipe.model_id.as_str()));
         assert!(launch.contains("PFTERMINAL_RUNTIME_GATE=nvlink-ok"));
+        for phase in [
+            "hardware_check",
+            "runtime_setup",
+            "runtime_build",
+            "model_download",
+            "model_verification",
+            "model_loading",
+            "endpoint_probing",
+        ] {
+            assert!(launch.contains(&format!("pft_phase {phase}")));
+        }
         assert!(!launch.contains("--enable-p2p-check"));
         assert!(launch.contains("Bearer {$PFT_ENDPOINT_TOKEN}"));
         assert!(launch.contains("reverse_proxy 127.0.0.1:8001"));

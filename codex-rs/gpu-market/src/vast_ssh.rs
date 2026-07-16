@@ -1,4 +1,5 @@
 use crate::GpuInstance;
+use crate::GpuProvisionPhase;
 use crate::ProviderError;
 use crate::ProviderErrorKind;
 use crate::ProviderResult;
@@ -19,6 +20,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 const SSH_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const SSH_PROGRESS_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) struct VastSshIdentity {
     pub(crate) private_key: PathBuf,
@@ -185,6 +187,70 @@ impl VastSshTransport {
             let _ = stale.child.wait();
         }
         Ok(endpoint)
+    }
+
+    pub(crate) async fn provision_phase(
+        &self,
+        instance: &GpuInstance,
+        private_key: &Path,
+    ) -> ProviderResult<Option<GpuProvisionPhase>> {
+        let ssh_host = instance.public_ip.as_deref().ok_or_else(|| {
+            ProviderError::new(
+                ProviderErrorKind::Retryable,
+                "Vast has not assigned the direct SSH address yet.",
+            )
+        })?;
+        let ssh_port = instance.ssh_port.ok_or_else(|| {
+            ProviderError::new(
+                ProviderErrorKind::Retryable,
+                "Vast has not assigned the direct SSH port yet.",
+            )
+        })?;
+        let known_hosts = self
+            .root
+            .join(format!("known-hosts-{}", instance.resource_id));
+        let output = tokio::time::timeout(
+            SSH_PROGRESS_TIMEOUT,
+            tokio::process::Command::new("ssh")
+                .arg("-T")
+                .arg("-o")
+                .arg("BatchMode=yes")
+                .arg("-o")
+                .arg("ConnectTimeout=3")
+                .arg("-o")
+                .arg("StrictHostKeyChecking=accept-new")
+                .arg("-o")
+                .arg(format!("UserKnownHostsFile={}", known_hosts.display()))
+                .arg("-i")
+                .arg(private_key)
+                .arg("-p")
+                .arg(ssh_port.to_string())
+                .arg(format!("root@{ssh_host}"))
+                .arg("head -c 64 /tmp/pfterminal-provision-phase 2>/dev/null || true")
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .kill_on_drop(true)
+                .output(),
+        )
+        .await
+        .map_err(|_| {
+            ProviderError::new(
+                ProviderErrorKind::Retryable,
+                "The Vast provisioning progress check timed out.",
+            )
+        })?
+        .map_err(local_transport_error)?;
+        if !output.status.success() {
+            return Err(ProviderError::new(
+                ProviderErrorKind::Retryable,
+                "The Vast provisioning progress check could not connect.",
+            ));
+        }
+        let phase = std::str::from_utf8(&output.stdout)
+            .ok()
+            .and_then(GpuProvisionPhase::parse);
+        Ok(phase)
     }
 
     pub(crate) fn stop(&self, resource_id: &str) {

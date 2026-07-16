@@ -6,6 +6,7 @@ use crate::GpuInstance;
 use crate::GpuInstanceState;
 use crate::GpuOffer;
 use crate::GpuProvider;
+use crate::GpuProvisionPhase;
 use crate::OwnedInstanceQuery;
 use crate::ProviderCapabilities;
 use crate::ProviderError;
@@ -19,8 +20,10 @@ use crate::provider_http::transport_error;
 use crate::vast_ssh::VastSshTransport;
 use crate::vast_ssh::ssh_public_key_identity;
 use serde_json::Value;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::Mutex;
 
 const DEFAULT_API_BASE: &str = "https://console.vast.ai/api";
 const LOCAL_QUOTE_CONFIRMATION_WINDOW_MS: i64 = 5 * 60 * 1000;
@@ -31,6 +34,7 @@ pub struct VastProvider {
     credentials: Arc<dyn GpuCredentialResolver>,
     api_base: String,
     ssh_transport: Option<Arc<VastSshTransport>>,
+    ssh_keyed_resources: Arc<Mutex<HashSet<String>>>,
 }
 
 impl std::fmt::Debug for VastProvider {
@@ -48,6 +52,7 @@ impl VastProvider {
             credentials,
             api_base: DEFAULT_API_BASE.to_string(),
             ssh_transport: None,
+            ssh_keyed_resources: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -60,6 +65,7 @@ impl VastProvider {
             credentials,
             api_base: DEFAULT_API_BASE.to_string(),
             ssh_transport: Some(Arc::new(VastSshTransport::new(root))),
+            ssh_keyed_resources: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -72,6 +78,7 @@ impl VastProvider {
             credentials,
             api_base: api_base.into().trim_end_matches('/').to_string(),
             ssh_transport: None,
+            ssh_keyed_resources: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -112,6 +119,26 @@ impl VastProvider {
                 ProviderErrorKind::InsufficientFunds,
                 "The Vast account has no available credit. Add funds in Vast.ai, then search again from /gpu; no rental was created.",
             ));
+        }
+        Ok(())
+    }
+
+    async fn ensure_cached_instance_ssh_key(
+        &self,
+        resource_id: &str,
+        public_key: &str,
+    ) -> ProviderResult<()> {
+        if self
+            .ssh_keyed_resources
+            .lock()
+            .is_ok_and(|resources| resources.contains(resource_id))
+        {
+            return Ok(());
+        }
+        self.ensure_instance_ssh_key(resource_id, public_key)
+            .await?;
+        if let Ok(mut resources) = self.ssh_keyed_resources.lock() {
+            resources.insert(resource_id.to_string());
         }
         Ok(())
     }
@@ -387,10 +414,28 @@ impl GpuProvider for VastProvider {
             )
         })?;
         let identity = transport.identity()?;
-        self.ensure_instance_ssh_key(instance.resource_id.as_str(), &identity.public_key)
+        self.ensure_cached_instance_ssh_key(instance.resource_id.as_str(), &identity.public_key)
             .await?;
         transport
             .endpoint(instance, inference_port, &identity.private_key)
+            .await
+    }
+
+    async fn provision_phase(
+        &self,
+        instance: &GpuInstance,
+    ) -> ProviderResult<Option<GpuProvisionPhase>> {
+        let transport = self.ssh_transport.as_ref().ok_or_else(|| {
+            ProviderError::new(
+                ProviderErrorKind::CapabilityUnavailable,
+                "The Vast controller cannot inspect provisioning progress.",
+            )
+        })?;
+        let identity = transport.identity()?;
+        self.ensure_cached_instance_ssh_key(instance.resource_id.as_str(), &identity.public_key)
+            .await?;
+        transport
+            .provision_phase(instance, &identity.private_key)
             .await
     }
 

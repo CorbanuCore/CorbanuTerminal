@@ -71,7 +71,7 @@ impl App {
                 .record_gpu_notification_once(
                     rental.rental_id.as_str(),
                     rental.state_sequence,
-                    kind,
+                    kind.as_str(),
                     now_ms,
                 )
                 .await
@@ -278,11 +278,11 @@ impl App {
     }
 }
 
-fn gpu_notification(rental: &codex_state::GpuRental) -> Option<(&'static str, String, bool)> {
+fn gpu_notification(rental: &codex_state::GpuRental) -> Option<(String, String, bool)> {
     use codex_state::GpuRentalState;
     match rental.observed_state {
         GpuRentalState::Ready => Some((
-            "ready",
+            "ready".to_string(),
             format!(
                 "GPU rental {} is READY and its model is available in the picker.",
                 rental.rental_id
@@ -290,7 +290,7 @@ fn gpu_notification(rental: &codex_state::GpuRental) -> Option<(&'static str, St
             false,
         )),
         GpuRentalState::Degraded => Some((
-            "degraded",
+            "degraded".to_string(),
             format!(
                 "GPU rental {} is DEGRADED and has been disabled for new selections.",
                 rental.rental_id
@@ -298,7 +298,7 @@ fn gpu_notification(rental: &codex_state::GpuRental) -> Option<(&'static str, St
             true,
         )),
         GpuRentalState::Failed => Some((
-            "failed",
+            "failed".to_string(),
             failed_gpu_notification(
                 rental.rental_id.as_str(),
                 rental.last_error_message.as_deref(),
@@ -306,7 +306,7 @@ fn gpu_notification(rental: &codex_state::GpuRental) -> Option<(&'static str, St
             true,
         )),
         GpuRentalState::TerminationUnconfirmed => Some((
-            "termination-unconfirmed",
+            "termination-unconfirmed".to_string(),
             format!(
                 "GPU rental {} cleanup is UNCONFIRMED; it remains visible as a billing risk.",
                 rental.rental_id
@@ -314,14 +314,28 @@ fn gpu_notification(rental: &codex_state::GpuRental) -> Option<(&'static str, St
             true,
         )),
         GpuRentalState::TerminatedConfirmed => Some((
-            "terminated",
+            "terminated".to_string(),
             format!(
                 "GPU rental {} termination is provider-confirmed.",
                 rental.rental_id
             ),
             false,
         )),
-        _ => None,
+        _ => rental.provision_step.as_deref().and_then(|step| {
+            crate::chatwidget::gpu_menu::gpu_provision_phase_label(step)?;
+            let progress = crate::chatwidget::gpu_menu::gpu_progress_summary(
+                rental,
+                chrono::Utc::now().timestamp_millis(),
+            );
+            Some((
+                format!("progress-{step}"),
+                format!(
+                    "GPU rental {}: {progress}. Provider billing is active; /gpu shows current spend and termination controls.",
+                    rental.rental_id
+                ),
+                false,
+            ))
+        }),
     }
 }
 

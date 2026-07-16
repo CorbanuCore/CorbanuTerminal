@@ -6,6 +6,7 @@ expression: rendered
   Active and potentially billable rentals remain visible across PFTerminal processes.
 
 › 1. deepseek-flash-2xh200 · ready (current)                        vast · active-rental ·
+                                                                    available in model picker ·
                                                                     authorized $10.0000/hr ·
                                                                     estimated $1.2500
   2. Configure RunPod API key                                       Masked entry stored in the
@@ -33,12 +34,12 @@ expression: rendered
   7. Rent huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF … huihui-deepseek-v4-flash-q4k-
                                                                     2xh200-experimental rev
                                                                     huihui-deepseek-v4-flash-q4k-
-                                                                    ds4-tp2-r3 · experimental · 2×
+                                                                    ds4-tp2-r4 · experimental · 2×
                                                                     NVIDIA H200 · Select to search
                                                                     compatible capacity
   8. Rent huihui-ai/Huihui-GLM-5.2-abliterated-GGUF · 2× NVIDIA H2… huihui-glm-5.2-iq1m-2xh200-
                                                                     experimental rev huihui-glm-
-                                                                    5.2-iq1m-llamacpp-2xh200-r3 ·
+                                                                    5.2-iq1m-llamacpp-2xh200-r5 ·
                                                                     experimental · 2× NVIDIA H200
                                                                     · Select to search compatible
                                                                     capacity

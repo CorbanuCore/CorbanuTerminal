@@ -12,11 +12,12 @@ impl ChatWidget {
             let rental_id = rental.rental_id.clone();
             let hourly = rental.max_hourly_microusd as f64 / 1_000_000.0;
             let accrued = rental.estimated_accrued_microusd as f64 / 1_000_000.0;
+            let progress = gpu_progress_summary(&rental, chrono::Utc::now().timestamp_millis());
             items.push(SelectionItem {
                 name: format!("{} · {}", rental.recipe_id, rental.observed_state.as_str()),
                 description: Some(format!(
-                    "{} · {} · authorized ${hourly:.4}/hr · estimated ${accrued:.4}",
-                    rental.provider, rental_id
+                    "{} · {} · {progress} · authorized ${hourly:.4}/hr · estimated ${accrued:.4}",
+                    rental.provider, rental_id,
                 )),
                 is_current: true,
                 actions: vec![Box::new(move |tx| {
@@ -365,6 +366,7 @@ impl ChatWidget {
         let can_terminate = rental.may_be_billable();
         let stop_id = rental_id.clone();
         let terminate_id = rental_id.clone();
+        let progress = gpu_progress_summary(&rental, chrono::Utc::now().timestamp_millis());
         let items = vec![
             SelectionItem {
                 name: "Stop serving".to_string(),
@@ -411,7 +413,7 @@ impl ChatWidget {
         self.show_selection_view(SelectionViewParams {
             title: Some(format!("GPU rental {rental_id}")),
             subtitle: Some(format!(
-                "desired {} · observed {} · estimated ${:.4} · max ${:.4}",
+                "desired {} · observed {} · {progress} · estimated ${:.4} · max ${:.4}",
                 rental.desired_state.as_str(),
                 rental.observed_state.as_str(),
                 rental.estimated_accrued_microusd as f64 / 1_000_000.0,
@@ -421,6 +423,48 @@ impl ChatWidget {
             is_searchable: false,
             ..Default::default()
         });
+    }
+}
+
+pub(crate) fn gpu_progress_summary(rental: &GpuRental, now_ms: i64) -> String {
+    if rental.observed_state == codex_state::GpuRentalState::Ready {
+        return "available in model picker".to_string();
+    }
+    if rental.observed_state == codex_state::GpuRentalState::Terminating {
+        return "terminating provider resource".to_string();
+    }
+    let elapsed = format_gpu_elapsed(now_ms.saturating_sub(rental.created_at_ms));
+    rental
+        .provision_step
+        .as_deref()
+        .and_then(gpu_provision_phase_label)
+        .map_or_else(
+            || format!("{elapsed} elapsed"),
+            |phase| format!("{phase} · {elapsed} elapsed"),
+        )
+}
+
+pub(crate) fn gpu_provision_phase_label(step: &str) -> Option<&'static str> {
+    match step {
+        "hardware_check" => Some("checking allocated hardware"),
+        "runtime_setup" => Some("installing runtime dependencies"),
+        "runtime_build" => Some("building inference runtime"),
+        "model_download" => Some("downloading model weights"),
+        "model_verification" => Some("verifying model artifacts"),
+        "model_loading" => Some("loading model onto GPUs"),
+        "endpoint_probing" | "02-readiness" => Some("qualifying inference endpoint"),
+        _ => None,
+    }
+}
+
+fn format_gpu_elapsed(elapsed_ms: i64) -> String {
+    let total_minutes = elapsed_ms.max(0).saturating_div(60_000);
+    if total_minutes < 1 {
+        "<1m".to_string()
+    } else if total_minutes < 60 {
+        format!("{total_minutes}m")
+    } else {
+        format!("{}h {:02}m", total_minutes / 60, total_minutes % 60)
     }
 }
 

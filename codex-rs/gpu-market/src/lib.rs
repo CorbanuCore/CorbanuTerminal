@@ -31,6 +31,7 @@ pub use provider::GpuInstance;
 pub use provider::GpuInstanceState;
 pub use provider::GpuOffer;
 pub use provider::GpuProvider;
+pub use provider::GpuProvisionPhase;
 pub use provider::HardwareRequirements;
 pub use provider::OwnedInstanceQuery;
 pub use provider::ProviderCapabilities;

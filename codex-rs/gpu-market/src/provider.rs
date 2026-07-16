@@ -171,6 +171,45 @@ pub struct BillingState {
     pub still_billable: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GpuProvisionPhase {
+    HardwareCheck,
+    RuntimeSetup,
+    RuntimeBuild,
+    ModelDownload,
+    ModelVerification,
+    ModelLoading,
+    EndpointProbing,
+}
+
+impl GpuProvisionPhase {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::HardwareCheck => "hardware_check",
+            Self::RuntimeSetup => "runtime_setup",
+            Self::RuntimeBuild => "runtime_build",
+            Self::ModelDownload => "model_download",
+            Self::ModelVerification => "model_verification",
+            Self::ModelLoading => "model_loading",
+            Self::EndpointProbing => "endpoint_probing",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim() {
+            "hardware_check" => Some(Self::HardwareCheck),
+            "runtime_setup" => Some(Self::RuntimeSetup),
+            "runtime_build" => Some(Self::RuntimeBuild),
+            "model_download" => Some(Self::ModelDownload),
+            "model_verification" => Some(Self::ModelVerification),
+            "model_loading" => Some(Self::ModelLoading),
+            "endpoint_probing" => Some(Self::EndpointProbing),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderCapabilities {
     pub provider: String,
@@ -280,6 +319,13 @@ pub trait GpuProvider: Send + Sync {
                 "The provider adapter cannot prove a secure inference transport.",
             ))
         }
+    }
+
+    fn provision_phase(
+        &self,
+        _instance: &GpuInstance,
+    ) -> impl Future<Output = ProviderResult<Option<GpuProvisionPhase>>> + Send {
+        async { Ok(None) }
     }
 
     fn search_offers(

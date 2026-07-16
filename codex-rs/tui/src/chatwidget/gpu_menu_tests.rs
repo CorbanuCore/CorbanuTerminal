@@ -85,6 +85,33 @@ fn gpu_confirmation_duration_rounds_up_without_hiding_setup_time() {
     assert_eq!(remaining_authorization_minutes(1, 2), 0);
 }
 
+#[test]
+fn gpu_progress_uses_real_phase_names_and_elapsed_time() {
+    let mut rental = rental(
+        "loading-rental",
+        codex_state::GpuRentalState::Starting,
+        Some("vast-loading"),
+    );
+    rental.created_at_ms = 1_000;
+    rental.provision_step = Some("model_loading".to_string());
+
+    assert_eq!(
+        gpu_progress_summary(&rental, 21 * 60_000 + 1_000),
+        "loading model onto GPUs · 21m elapsed"
+    );
+    assert_eq!(
+        gpu_provision_phase_label("model_verification"),
+        Some("verifying model artifacts")
+    );
+    assert_eq!(gpu_provision_phase_label("unknown"), None);
+
+    rental.observed_state = codex_state::GpuRentalState::Ready;
+    assert_eq!(
+        gpu_progress_summary(&rental, 21 * 60_000 + 1_000),
+        "available in model picker"
+    );
+}
+
 #[tokio::test]
 async fn gpu_menu_excludes_nonbillable_history_snapshot() {
     let (mut chat, _tx, _event_rx, _op_rx) =

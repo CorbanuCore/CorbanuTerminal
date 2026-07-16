@@ -94,6 +94,7 @@ struct FakeState {
     ambiguous_get: bool,
     secure_endpoint_error: Option<ProviderError>,
     secure_endpoint_override: Option<String>,
+    provision_phase: Option<GpuProvisionPhase>,
     create_calls: usize,
     terminate_calls: usize,
     instances: HashMap<String, GpuInstance>,
@@ -113,6 +114,7 @@ impl FakeProvider {
                 ambiguous_get: false,
                 secure_endpoint_error: None,
                 secure_endpoint_override: None,
+                provision_phase: None,
                 create_calls: 0,
                 terminate_calls: 0,
                 instances: HashMap::new(),
@@ -134,6 +136,10 @@ impl FakeProvider {
 
     async fn set_secure_endpoint_override(&self, endpoint: Option<String>) {
         self.state.lock().await.secure_endpoint_override = endpoint;
+    }
+
+    async fn set_provision_phase(&self, phase: GpuProvisionPhase) {
+        self.state.lock().await.provision_phase = Some(phase);
     }
 
     async fn create_calls(&self) -> usize {
@@ -188,6 +194,13 @@ impl GpuProvider for FakeProvider {
             "https://{}.example.invalid/v1",
             instance.resource_id
         ))
+    }
+
+    async fn provision_phase(
+        &self,
+        _instance: &GpuInstance,
+    ) -> ProviderResult<Option<GpuProvisionPhase>> {
+        Ok(self.state.lock().await.provision_phase)
     }
 
     async fn search_offers(&self, _request: SearchOffersRequest) -> ProviderResult<Vec<GpuOffer>> {
@@ -772,6 +785,75 @@ async fn provider_native_bootstrap_reaches_ready_and_registers_runtime_once() {
     assert_eq!(
         state.list_gpu_runtime_providers().await.unwrap()[0].base_url,
         "https://replacement.example.invalid/v1"
+    );
+}
+
+#[tokio::test]
+async fn observable_provision_phases_drive_durable_state_before_readiness() {
+    let state = state_runtime().await;
+    let provider = FakeProvider::new(CreateBehavior::Success);
+    let controller = controller(state.clone(), provider.clone());
+    create_authorized_rental(&state, "phase-progress").await;
+
+    controller.reconcile_due(NOW_MS).await.expect("create");
+    provider
+        .set_instance_state("resource-1", GpuInstanceState::Running)
+        .await;
+    controller
+        .reconcile_due(NOW_MS + 1)
+        .await
+        .expect("observe running");
+
+    for (offset, phase, expected_state) in [
+        (
+            2,
+            GpuProvisionPhase::RuntimeBuild,
+            GpuRentalState::Bootstrapping,
+        ),
+        (
+            3,
+            GpuProvisionPhase::ModelDownload,
+            GpuRentalState::Downloading,
+        ),
+        (
+            4,
+            GpuProvisionPhase::ModelVerification,
+            GpuRentalState::Downloading,
+        ),
+        (5, GpuProvisionPhase::ModelLoading, GpuRentalState::Starting),
+        (
+            6,
+            GpuProvisionPhase::EndpointProbing,
+            GpuRentalState::Probing,
+        ),
+    ] {
+        provider.set_provision_phase(phase).await;
+        controller
+            .reconcile_due(NOW_MS + offset)
+            .await
+            .expect("persist observed provision phase");
+        let rental = state
+            .get_gpu_rental("rental-phase-progress")
+            .await
+            .expect("load phase rental")
+            .expect("phase rental exists");
+        assert_eq!(rental.observed_state, expected_state);
+        assert_eq!(rental.provision_step.as_deref(), Some(phase.as_str()));
+        assert_eq!(rental.retry_count, 0);
+    }
+
+    controller
+        .reconcile_due(NOW_MS + 7)
+        .await
+        .expect("run readiness after endpoint starts");
+    assert_eq!(
+        state
+            .get_gpu_rental("rental-phase-progress")
+            .await
+            .expect("load ready rental")
+            .expect("ready rental exists")
+            .observed_state,
+        GpuRentalState::Ready
     );
 }
 

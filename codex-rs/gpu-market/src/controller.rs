@@ -3,6 +3,7 @@ use crate::GpuInstance;
 use crate::GpuInstanceState;
 use crate::GpuOffer;
 use crate::GpuProvider;
+use crate::GpuProvisionPhase;
 use crate::OwnedInstanceQuery;
 use crate::ProviderError;
 use crate::ProviderErrorKind;
@@ -352,7 +353,7 @@ where
                 .await;
         }
 
-        if lease.rental.observed_state != GpuRentalState::Probing {
+        if lease.rental.provision_step.is_none() {
             let digest = manifest_step_digest(recipe.revision.as_str());
             if !self
                 .state
@@ -396,6 +397,47 @@ where
                     now_ms,
                 )
                 .await?;
+        }
+
+        let provision_phase = match self.provider.provision_phase(&instance).await {
+            Ok(phase) => phase,
+            Err(error) => {
+                tracing::debug!(
+                    rental_id = %lease.rental.rental_id,
+                    message = %error.safe_message,
+                    "GPU provisioning phase is not observable yet"
+                );
+                None
+            }
+        };
+        if let Some(phase) = provision_phase {
+            let observed_state = provision_phase_state(phase);
+            let phase_changed = lease.rental.observed_state != observed_state
+                || lease.rental.provision_step.as_deref() != Some(phase.as_str());
+            if phase != GpuProvisionPhase::EndpointProbing || phase_changed {
+                self.apply_update(
+                    &lease,
+                    GpuRentalUpdate {
+                        observed_state: Some(observed_state),
+                        provision_step: Some(phase.as_str().to_string()),
+                        next_retry_at_ms: Some(now_ms.saturating_add(self.config.normal_poll_ms)),
+                        clear_last_error: true,
+                        ..GpuRentalUpdate::default()
+                    },
+                    now_ms,
+                )
+                .await?;
+                return Ok(phase_changed
+                    .then_some(ControllerEvent::StateChanged {
+                        rental_id: lease.rental.rental_id,
+                        state: observed_state,
+                    })
+                    .into_iter()
+                    .collect());
+            }
+        }
+
+        if lease.rental.observed_state != GpuRentalState::Probing {
             self.apply_update(
                 &lease,
                 GpuRentalUpdate {
@@ -932,6 +974,19 @@ fn quoted_hourly_microusd(rental: &GpuRental) -> i64 {
         .map(|offer| offer.hourly_microusd)
         .filter(|price| *price > 0 && *price <= rental.max_hourly_microusd)
         .unwrap_or(rental.max_hourly_microusd)
+}
+
+fn provision_phase_state(phase: GpuProvisionPhase) -> GpuRentalState {
+    match phase {
+        GpuProvisionPhase::HardwareCheck
+        | GpuProvisionPhase::RuntimeSetup
+        | GpuProvisionPhase::RuntimeBuild => GpuRentalState::Bootstrapping,
+        GpuProvisionPhase::ModelDownload | GpuProvisionPhase::ModelVerification => {
+            GpuRentalState::Downloading
+        }
+        GpuProvisionPhase::ModelLoading => GpuRentalState::Starting,
+        GpuProvisionPhase::EndpointProbing => GpuRentalState::Probing,
+    }
 }
 
 #[cfg(test)]
