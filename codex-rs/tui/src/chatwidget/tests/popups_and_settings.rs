@@ -17,6 +17,7 @@ use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
@@ -2597,6 +2598,20 @@ async fn model_selection_popup_openai_provider_snapshot() {
     assert_chatwidget_snapshot!("model_selection_popup_openai_provider", popup);
 }
 
+#[tokio::test]
+async fn model_selection_popup_openrouter_provider_snapshot() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("moonshotai/kimi-k3")).await;
+    chat.thread_id = Some(ThreadId::new());
+    let presets = chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    chat.open_all_models_popup(presets);
+
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 32);
+    assert_chatwidget_snapshot!("model_selection_popup_openrouter_provider", popup);
+}
+
 fn spawn_model_purpose(
     role: SpawnRole,
     parent_node_id: Option<&str>,
@@ -3111,6 +3126,12 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
             && minimax_popup.contains("OpenRouter: Owl Alpha - $0/M input, $0/M output."),
         "expected OpenRouter models to share the OpenRouter tab:\n{minimax_popup}"
     );
+    assert!(
+        minimax_popup.contains("moonshotai/kimi-k3")
+            && minimax_popup.contains("OpenRouter: Kimi K3")
+            && minimax_popup.contains("$3.00/M input, $0.30/M cached input, $15.00/M"),
+        "expected Kimi K3 in the OpenRouter tab:\n{minimax_popup}"
+    );
 
     let (mut openai_chat, _openai_rx, _openai_op_rx) =
         make_chatwidget_manual(Some("gpt-5.6-sol")).await;
@@ -3204,6 +3225,46 @@ async fn model_picker_dismisses_after_selecting_openrouter_model_without_effort_
         !after.contains("Select Model and Effort"),
         "model picker should no longer be visible after selection:\n{after}"
     );
+}
+
+#[tokio::test]
+async fn model_picker_selects_kimi_k3_with_required_max_reasoning() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some(AMBIENT_DEFAULT_MODEL)).await;
+    chat.thread_id = Some(ThreadId::new());
+
+    let presets = chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    chat.open_all_models_popup(presets);
+    move_model_picker_selection_to(&mut chat, "moonshotai/kimi-k3");
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+
+    let mut saw_open_reasoning_popup = false;
+    while let Ok(event) = rx.try_recv() {
+        if let AppEvent::OpenReasoningPopup { model, purpose } = event {
+            assert_eq!(model.model, "moonshotai/kimi-k3");
+            saw_open_reasoning_popup = true;
+            chat.open_reasoning_popup_for_purpose(model, purpose);
+            break;
+        }
+    }
+    assert!(
+        saw_open_reasoning_popup,
+        "expected Kimi K3 selection to use the model apply path"
+    );
+
+    let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+    assert!(events.iter().any(|event| matches!(
+        event,
+        AppEvent::UpdateModelSelection { model, provider }
+            if model == "moonshotai/kimi-k3" && provider.as_deref() == Some(OPENROUTER_PROVIDER_ID)
+    )));
+    assert!(events.iter().any(|event| matches!(
+        event,
+        AppEvent::UpdateReasoningEffort(Some(ReasoningEffortConfig::Custom(effort)))
+            if effort == "max"
+    )));
 }
 
 #[tokio::test]

@@ -1468,7 +1468,33 @@ fn bundled_models_json_contains_openrouter_models() {
             ReasoningEffort::High,
         ]
     );
-    for model in [grok, deepseek, hy3] {
+
+    let kimi = openrouter_model("moonshotai/kimi-k3");
+    assert_eq!(kimi.display_name, "OpenRouter Kimi K3");
+    assert_eq!(kimi.context_window, Some(1_048_576));
+    assert_eq!(
+        kimi.default_reasoning_level,
+        Some(ReasoningEffort::Custom("max".to_string()))
+    );
+    assert_eq!(
+        kimi.supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![ReasoningEffort::Custom("max".to_string())]
+    );
+    assert_eq!(
+        kimi.input_modalities,
+        vec![InputModality::Text, InputModality::Image]
+    );
+    assert!(
+        kimi.description
+            .as_deref()
+            .unwrap_or_default()
+            .contains("$3.00/M input, $0.30/M cached input, $15.00/M output")
+    );
+
+    for model in [grok, deepseek, hy3, kimi] {
         assert_eq!(model.visibility, ModelVisibility::List);
         assert!(!model.supports_parallel_tool_calls);
         assert_standard_base(&model.base_instructions);

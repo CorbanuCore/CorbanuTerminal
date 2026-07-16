@@ -43,6 +43,7 @@ const OPENROUTER_GEMINI_3_5_FLASH_MODEL: &str = "google/gemini-3.5-flash";
 const OPENROUTER_GROK_4_5_MODEL: &str = "x-ai/grok-4.5";
 const OPENROUTER_DEEPSEEK_V4_PRO_MODEL: &str = "deepseek/deepseek-v4-pro";
 const OPENROUTER_TENCENT_HY3_FREE_MODEL: &str = "tencent/hy3:free";
+const OPENROUTER_KIMI_K3_MODEL: &str = "moonshotai/kimi-k3";
 const OPENAI_GPT_5_5_MODEL: &str = "gpt-5.5";
 const OPENAI_GPT_5_6_SOL_MODEL: &str = "gpt-5.6-sol";
 const OPENAI_GPT_5_6_TERRA_MODEL: &str = "gpt-5.6-terra";
@@ -360,6 +361,7 @@ impl ChatWidget {
                 | OPENROUTER_GROK_4_5_MODEL
                 | OPENROUTER_DEEPSEEK_V4_PRO_MODEL
                 | OPENROUTER_TENCENT_HY3_FREE_MODEL
+                | OPENROUTER_KIMI_K3_MODEL
         )
     }
 
@@ -1131,6 +1133,7 @@ mod tests {
             OPENROUTER_GROK_4_5_MODEL,
             OPENROUTER_DEEPSEEK_V4_PRO_MODEL,
             OPENROUTER_TENCENT_HY3_FREE_MODEL,
+            OPENROUTER_KIMI_K3_MODEL,
         ] {
             assert_eq!(
                 ChatWidget::model_provider_for_selection(model).as_deref(),
