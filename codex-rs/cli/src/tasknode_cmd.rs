@@ -270,8 +270,34 @@ enum TaskCommand {
     /// Cancel one accepted task.
     Cancel(TaskIdArgs),
 
-    /// Submit initial evidence or follow-up evidence for one task.
+    /// Submit initial evidence for one accepted task.
     Evidence(TaskEvidenceArgs),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TaskEvidenceMode {
+    InitialSubmission,
+    VerificationResponse,
+}
+
+impl TaskEvidenceMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::InitialSubmission => "initial_submission",
+            Self::VerificationResponse => "verification_response",
+        }
+    }
+
+    fn command(self, task_id: &str) -> String {
+        match self {
+            Self::InitialSubmission => {
+                format!("pfterminal tasknode task evidence {task_id} --body-file <path> --json")
+            }
+            Self::VerificationResponse => format!(
+                "pfterminal tasknode verification respond {task_id} --body-file <path> --json"
+            ),
+        }
+    }
 }
 
 #[derive(Debug, Args)]
@@ -529,7 +555,9 @@ async fn run_task_command(client: &TaskNodeClient, cli: TaskCli) -> anyhow::Resu
         TaskCommand::Cancel(args) => {
             emit_response(task_action(client, &args.task_id, "cancel", None).await?)
         }
-        TaskCommand::Evidence(args) => emit_response(task_evidence(client, args).await?),
+        TaskCommand::Evidence(args) => {
+            emit_response(task_evidence(client, args, TaskEvidenceMode::InitialSubmission).await?)
+        }
     }
 }
 
@@ -538,7 +566,9 @@ async fn run_verification_command(
     cli: VerificationCli,
 ) -> anyhow::Result<i32> {
     match cli.action {
-        VerificationCommand::Respond(args) => emit_response(task_evidence(client, args).await?),
+        VerificationCommand::Respond(args) => emit_response(
+            task_evidence(client, args, TaskEvidenceMode::VerificationResponse).await?,
+        ),
     }
 }
 
@@ -584,15 +614,25 @@ async fn task_action(
 async fn task_evidence(
     client: &TaskNodeClient,
     args: TaskEvidenceArgs,
+    mode: TaskEvidenceMode,
 ) -> anyhow::Result<TaskNodeResponse> {
+    let detail = task_detail(client, &args.task_id).await?;
+    if !response_is_ok(&detail) {
+        return Ok(detail);
+    }
+    if let Some(response) = evidence_mode_preflight(&args.task_id, &detail.body, mode) {
+        return Ok(response);
+    }
+
     let summary = read_text_input(args.summary, args.body_file, "task evidence")?;
     let body = json!({
+        "mode": mode.as_str(),
         "summary": summary,
         "evidence": evidence_items_from_summary_and_artifacts(&summary, &args.artifacts),
         "source": "pfterminal-cli",
-        "idempotencyKey": idempotency_key("evidence"),
+        "idempotencyKey": idempotency_key(mode.as_str()),
     });
-    client
+    let mut response = client
         .post(
             &format!(
                 "/api/terminal/tasknode/tasks/{}/evidence",
@@ -600,7 +640,150 @@ async fn task_evidence(
             ),
             &body,
         )
-        .await
+        .await?;
+    if response_is_ok(&response) {
+        let refreshed_detail = task_detail(client, &args.task_id).await.ok();
+        annotate_evidence_lifecycle(
+            &mut response.body,
+            &args.task_id,
+            mode,
+            refreshed_detail.as_ref(),
+        );
+    }
+    Ok(response)
+}
+
+fn evidence_mode_preflight(
+    task_id: &str,
+    detail: &Value,
+    requested_mode: TaskEvidenceMode,
+) -> Option<TaskNodeResponse> {
+    let actions = detail.get("actions")?;
+    let initial_allowed = actions
+        .get("canSubmitInitialEvidence")
+        .and_then(Value::as_bool);
+    let verification_allowed = actions
+        .get("canSubmitVerificationEvidence")
+        .and_then(Value::as_bool);
+    let requested_allowed = match requested_mode {
+        TaskEvidenceMode::InitialSubmission => initial_allowed,
+        TaskEvidenceMode::VerificationResponse => verification_allowed,
+    };
+    if requested_allowed != Some(false) {
+        return None;
+    }
+
+    let alternate_mode = match requested_mode {
+        TaskEvidenceMode::InitialSubmission if verification_allowed == Some(true) => {
+            Some(TaskEvidenceMode::VerificationResponse)
+        }
+        TaskEvidenceMode::VerificationResponse if initial_allowed == Some(true) => {
+            Some(TaskEvidenceMode::InitialSubmission)
+        }
+        TaskEvidenceMode::InitialSubmission | TaskEvidenceMode::VerificationResponse => None,
+    };
+    let (error, message, next_command) = alternate_mode.map_or_else(
+        || {
+            (
+                "task_evidence_not_available",
+                "This task does not currently accept evidence. Refresh it and follow the server-reported lifecycle action."
+                    .to_string(),
+                format!("pfterminal tasknode task show {task_id} --json"),
+            )
+        },
+        |mode| {
+            (
+                "task_evidence_mode_mismatch",
+                format!(
+                    "This task requires {} evidence, not {} evidence.",
+                    mode.as_str(),
+                    requested_mode.as_str()
+                ),
+                mode.command(task_id),
+            )
+        },
+    );
+    Some(TaskNodeResponse {
+        status: 409,
+        body: json!({
+            "ok": false,
+            "error": error,
+            "message": message,
+            "taskId": task_id,
+            "requestedMode": requested_mode.as_str(),
+            "nextCommand": next_command,
+        }),
+    })
+}
+
+fn annotate_evidence_lifecycle(
+    response: &mut Value,
+    task_id: &str,
+    submitted_mode: TaskEvidenceMode,
+    refreshed_detail: Option<&TaskNodeResponse>,
+) {
+    let Some(response) = response.as_object_mut() else {
+        return;
+    };
+    let detail = refreshed_detail
+        .filter(|detail| response_is_ok(detail))
+        .map(|detail| &detail.body);
+    let status = detail
+        .and_then(|detail| detail.get("task"))
+        .and_then(|task| task.get("statusKey").or_else(|| task.get("status")))
+        .and_then(Value::as_str);
+    let reward_issued = detail
+        .and_then(|detail| detail.get("rewardOutcome"))
+        .is_some_and(|outcome| !outcome.is_null())
+        || status == Some("rewarded");
+    let verification_required = detail
+        .and_then(|detail| detail.get("actions"))
+        .and_then(|actions| actions.get("canSubmitVerificationEvidence"))
+        .and_then(Value::as_bool)
+        == Some(true);
+    let current_verification_request = detail
+        .and_then(|detail| detail.get("currentVerificationRequest"))
+        .filter(|request| !request.is_null())
+        .cloned();
+
+    let (phase, next_command, notice) = if reward_issued {
+        (
+            "reward_issued",
+            "pfterminal tasknode rewards list --json".to_string(),
+            "Task Node reports a terminal rewarded state.",
+        )
+    } else if verification_required {
+        (
+            "verification_required",
+            TaskEvidenceMode::VerificationResponse.command(task_id),
+            "Initial evidence is not completion. Answer the current verification request before expecting a reward.",
+        )
+    } else if submitted_mode == TaskEvidenceMode::VerificationResponse {
+        (
+            "awaiting_reward",
+            format!("pfterminal tasknode task show {task_id} --json"),
+            "The verification response is submitted, but completion is not confirmed until Task Node reports the reward outcome.",
+        )
+    } else {
+        (
+            "awaiting_verification",
+            format!("pfterminal tasknode task show {task_id} --json"),
+            "Initial evidence is submitted, but completion is not confirmed. Recheck for the normal verification request and answer it.",
+        )
+    };
+
+    response.insert(
+        "pfterminalLifecycle".to_string(),
+        json!({
+            "taskId": task_id,
+            "submittedMode": submitted_mode.as_str(),
+            "phase": phase,
+            "completionConfirmed": reward_issued,
+            "nextCommand": next_command,
+            "notice": notice,
+            "currentVerificationRequest": current_verification_request,
+        }),
+    );
 }
 
 #[derive(Debug, Clone)]
@@ -1023,6 +1206,107 @@ fn reqwest_error(err: reqwest::Error) -> anyhow::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn evidence_mode_preflight_routes_verification_to_the_distinct_command() {
+        let detail = json!({
+            "actions": {
+                "canSubmitInitialEvidence": false,
+                "canSubmitVerificationEvidence": true
+            }
+        });
+
+        let response =
+            evidence_mode_preflight("task_test", &detail, TaskEvidenceMode::InitialSubmission)
+                .expect("mode mismatch");
+
+        assert_eq!(
+            response.body,
+            json!({
+                "ok": false,
+                "error": "task_evidence_mode_mismatch",
+                "message": "This task requires verification_response evidence, not initial_submission evidence.",
+                "taskId": "task_test",
+                "requestedMode": "initial_submission",
+                "nextCommand": "pfterminal tasknode verification respond task_test --body-file <path> --json"
+            })
+        );
+    }
+
+    #[test]
+    fn initial_evidence_receipt_exposes_unfinished_verification_stage() {
+        let mut response = json!({ "ok": true, "receiptId": "receipt_test" });
+        let detail = TaskNodeResponse {
+            status: 200,
+            body: json!({
+                "task": { "statusKey": "verification_requested" },
+                "actions": { "canSubmitVerificationEvidence": true },
+                "currentVerificationRequest": {
+                    "body": "Provide the exact test result."
+                }
+            }),
+        };
+
+        annotate_evidence_lifecycle(
+            &mut response,
+            "task_test",
+            TaskEvidenceMode::InitialSubmission,
+            Some(&detail),
+        );
+
+        assert_eq!(
+            response,
+            json!({
+                "ok": true,
+                "receiptId": "receipt_test",
+                "pfterminalLifecycle": {
+                    "taskId": "task_test",
+                    "submittedMode": "initial_submission",
+                    "phase": "verification_required",
+                    "completionConfirmed": false,
+                    "nextCommand": "pfterminal tasknode verification respond task_test --body-file <path> --json",
+                    "notice": "Initial evidence is not completion. Answer the current verification request before expecting a reward.",
+                    "currentVerificationRequest": {
+                        "body": "Provide the exact test result."
+                    }
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn verification_receipt_only_confirms_completion_with_reward_outcome() {
+        let mut response = json!({ "ok": true });
+        let detail = TaskNodeResponse {
+            status: 200,
+            body: json!({
+                "task": { "statusKey": "rewarded" },
+                "actions": {},
+                "rewardOutcome": { "rewardPft": 25 }
+            }),
+        };
+
+        annotate_evidence_lifecycle(
+            &mut response,
+            "task_rewarded",
+            TaskEvidenceMode::VerificationResponse,
+            Some(&detail),
+        );
+
+        assert_eq!(
+            response["pfterminalLifecycle"],
+            json!({
+                "taskId": "task_rewarded",
+                "submittedMode": "verification_response",
+                "phase": "reward_issued",
+                "completionConfirmed": true,
+                "nextCommand": "pfterminal tasknode rewards list --json",
+                "notice": "Task Node reports a terminal rewarded state.",
+                "currentVerificationRequest": null
+            })
+        );
+    }
 
     #[test]
     fn infers_evidence_items_from_summary_urls_and_artifacts() {

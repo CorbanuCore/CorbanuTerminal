@@ -55,6 +55,22 @@ pfterminal tasknode balance --json
 
 The helper reuses the same PFTerminal vault session as the TUI and never prints the bearer token. Non-streaming commands emit one JSON object. Streaming chat emits JSON lines for SSE events when the backend streams; dry-run or preflight responses may return one normal JSON object.
 
+## Evidence Lifecycle Gate
+
+Initial evidence and verification response are different state transitions and use different commands:
+
+```bash
+pfterminal tasknode task show <task-id> --json
+pfterminal tasknode task evidence <task-id> --body-file <path> --json
+pfterminal tasknode task show <task-id> --json
+pfterminal tasknode verification respond <task-id> --body-file <path> --json
+pfterminal tasknode task show <task-id> --json
+```
+
+The evidence commands preflight the server-reported task actions and reject a mode mismatch. Successful receipts include `pfterminalLifecycle` with `completionConfirmed`, the current phase, and `nextCommand`. Always follow that command. After initial evidence, respond when `actions.canSubmitVerificationEvidence` becomes true. After verification, confirm `rewardOutcome` or an explicit `rewarded` state before reporting completion.
+
+If verification has not materialized yet, query `pfterminal tasknode tasks list --tab verification --json`. Keep the task pending rather than treating the initial evidence receipt as completion.
+
 Use `--origin <url>` only for explicit local/dev testing. Production defaults to `https://tasknode.postfiat.org` unless the environment or saved session overrides it.
 
 ## Agent Operation Pattern
