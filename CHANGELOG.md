@@ -8,6 +8,10 @@
   including a 300,000-token Huihui GLM 5.2 configuration for 2×H200 systems.
 - Added authenticated rental endpoints, crash-safe reconciliation, provider-confirmed teardown,
   persistent spend state, and live rented-model availability in the model picker.
+- Added durable provisioning-stage progress in `/gpu` so long model downloads and server startup
+  remain observable instead of looking stalled.
+- Added MoonshotAI Kimi K3 to the OpenRouter model picker with its 1M-token context, multimodal
+  input support, and required maximum-reasoning mode.
 
 ## Fixed
 
@@ -19,6 +23,10 @@
 - Added a per-device CUDA runtime gate so an unusable assigned GPU is rejected before a large model
   download, even when `nvidia-smi` still reports the device as present.
 - Normalized child mail before Claude turns to avoid unsupported assistant-prefill requests.
+- Reconnected recovered GPU endpoints between turns instead of leaving an active session bound to
+  a dead forwarded port.
+- Completed the Task Node submission lifecycle so direct submissions continue through secondary
+  verification and rewards are credited only after terminal success.
 
 ## Qualification status
 
