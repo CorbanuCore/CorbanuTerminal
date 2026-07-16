@@ -61,12 +61,11 @@ where
                 )
                 .await;
         };
-        let endpoint_token = match credentials
-            .ensure_rental_endpoint_token(lease.rental.rental_id.as_str())
-        {
-            Ok(credential) => credential.secret,
-            Err(error) if error.retryable() => {
-                return self
+        let endpoint_token =
+            match credentials.ensure_rental_endpoint_token(lease.rental.rental_id.as_str()) {
+                Ok(credential) => credential.secret,
+                Err(error) if error.retryable() => {
+                    return self
                     .record_retry(
                         lease,
                         ProviderError::new(
@@ -76,18 +75,18 @@ where
                         now_ms,
                     )
                     .await;
-            }
-            Err(_) => {
-                return self
-                    .record_terminal_failure(
-                        lease,
-                        "endpoint-token-unavailable",
-                        "The per-rental endpoint token is unavailable.",
-                        now_ms,
-                    )
-                    .await;
-            }
-        };
+                }
+                Err(_) => {
+                    return self
+                        .record_terminal_failure(
+                            lease,
+                            "endpoint-token-unavailable",
+                            "The per-rental endpoint token is unavailable.",
+                            now_ms,
+                        )
+                        .await;
+                }
+            };
         let huggingface_token = if recipe.requires_huggingface_token {
             match credentials.resolve(&crate::GpuCredentialKind::HuggingFaceToken) {
                 Ok(credential) => Some(credential.secret),

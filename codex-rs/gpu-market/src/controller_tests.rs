@@ -743,6 +743,15 @@ async fn provider_native_bootstrap_reaches_ready_and_registers_runtime_once() {
     assert_eq!(providers[0].health, "ready");
     assert_eq!(providers[0].display_hourly_microusd, 2_500_000);
 
+    // Repeated health publication advances the runtime catalog independently of rental state.
+    // Endpoint replacement must still publish the controller's new process-local address.
+    for offset in 0..5 {
+        state
+            .set_gpu_runtime_provider_health("rental-ready", "ready", NOW_MS + 10 + offset)
+            .await
+            .expect("advance runtime catalog sequence");
+    }
+
     provider
         .set_secure_endpoint_override(Some("https://replacement.example.invalid/v1".to_string()))
         .await;

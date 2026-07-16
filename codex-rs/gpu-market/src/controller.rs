@@ -706,7 +706,7 @@ where
                 return Ok(Vec::new());
             };
             self.state
-                .upsert_gpu_runtime_provider(
+                .refresh_gpu_runtime_provider(
                     &GpuRuntimeProviderUpsert {
                         rental_id: lease.rental.rental_id.clone(),
                         provider_id: lease

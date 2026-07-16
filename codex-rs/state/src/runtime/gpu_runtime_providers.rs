@@ -133,6 +133,55 @@ WHERE excluded.catalog_sequence >= gpu_runtime_providers.catalog_sequence
         Ok(result.rows_affected() == 1)
     }
 
+    /// Publish the endpoint currently owned by the rental controller.
+    ///
+    /// Health polls advance the catalog sequence independently of the rental state sequence.
+    /// A replacement controller-owned transport (for example, a restarted SSH forward) must
+    /// therefore advance from the durable catalog value rather than being rejected as a stale
+    /// generic upsert.
+    pub async fn refresh_gpu_runtime_provider(
+        &self,
+        provider: &GpuRuntimeProviderUpsert,
+        now_ms: i64,
+    ) -> anyhow::Result<bool> {
+        validate_runtime_provider(provider)?;
+        let result = sqlx::query(
+            r#"
+INSERT INTO gpu_runtime_providers (
+    rental_id, provider_id, base_url, model_id, wire_api, health,
+    display_hourly_microusd, maximum_context_tokens, catalog_sequence, updated_at_ms
+)
+SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+WHERE EXISTS (
+    SELECT 1 FROM gpu_rentals
+    WHERE rental_id = ? AND observed_state IN ('ready', 'degraded')
+)
+ON CONFLICT(rental_id) DO UPDATE SET
+    provider_id = excluded.provider_id, base_url = excluded.base_url,
+    model_id = excluded.model_id, wire_api = excluded.wire_api,
+    health = excluded.health,
+    display_hourly_microusd = excluded.display_hourly_microusd,
+    maximum_context_tokens = excluded.maximum_context_tokens,
+    catalog_sequence = gpu_runtime_providers.catalog_sequence + 1,
+    updated_at_ms = excluded.updated_at_ms
+            "#,
+        )
+        .bind(provider.rental_id.as_str())
+        .bind(provider.provider_id.as_str())
+        .bind(provider.base_url.as_str())
+        .bind(provider.model_id.as_str())
+        .bind(provider.wire_api.as_str())
+        .bind(provider.health.as_str())
+        .bind(provider.display_hourly_microusd)
+        .bind(provider.maximum_context_tokens)
+        .bind(provider.catalog_sequence)
+        .bind(now_ms)
+        .bind(provider.rental_id.as_str())
+        .execute(self.pool.as_ref())
+        .await?;
+        Ok(result.rows_affected() == 1)
+    }
+
     pub async fn list_gpu_runtime_providers(&self) -> anyhow::Result<Vec<GpuRuntimeProvider>> {
         Ok(sqlx::query_as::<_, GpuRuntimeProvider>(
             r#"

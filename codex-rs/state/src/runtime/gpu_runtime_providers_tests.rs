@@ -204,6 +204,23 @@ async fn runtime_overlay_requires_ready_and_https_and_is_sequence_monotonic() {
         .expect("providers after disable");
     assert_eq!(providers[0].health, "degraded");
     assert_eq!(providers[0].catalog_sequence, 4);
+
+    let mut controller_refresh = overlay.clone();
+    controller_refresh.base_url = "https://replacement.example.invalid/v1".to_string();
+    controller_refresh.catalog_sequence = 2;
+    assert!(
+        runtime
+            .refresh_gpu_runtime_provider(&controller_refresh, NOW_MS + 4)
+            .await
+            .expect("controller endpoint refresh")
+    );
+    let refreshed = &runtime
+        .list_gpu_runtime_providers()
+        .await
+        .expect("provider after endpoint refresh")[0];
+    assert_eq!(refreshed.base_url, "https://replacement.example.invalid/v1");
+    assert_eq!(refreshed.catalog_sequence, 5);
+
     assert!(
         runtime
             .set_gpu_runtime_provider_health("rental-overlay", "disabled", NOW_MS + 4)
