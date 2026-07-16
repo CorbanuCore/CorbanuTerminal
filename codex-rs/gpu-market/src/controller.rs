@@ -440,10 +440,21 @@ where
                 )
                 .await;
         };
-        let token = match credentials.resolve(&crate::GpuCredentialKind::RentalEndpointToken {
-            rental_id: lease.rental.rental_id.clone(),
-        }) {
+        let token = match credentials.ensure_rental_endpoint_token(lease.rental.rental_id.as_str())
+        {
             Ok(credential) => credential.secret,
+            Err(error) if error.retryable() => {
+                return self
+                    .record_retry(
+                        lease,
+                        ProviderError::new(
+                            ProviderErrorKind::Retryable,
+                            "The per-rental endpoint credential store is temporarily unavailable.",
+                        ),
+                        now_ms,
+                    )
+                    .await;
+            }
             Err(_) => {
                 return self
                     .record_terminal_failure(

@@ -25,6 +25,7 @@ use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use tokio::sync::Mutex;
 
@@ -43,6 +44,39 @@ impl GpuCredentialResolver for FakeCredentials {
             GpuCredentialKind::HuggingFaceToken => Err(GpuCredentialError::Missing),
             GpuCredentialKind::ProviderApiKey { .. } => Err(GpuCredentialError::Missing),
         }
+    }
+}
+
+#[derive(Debug)]
+struct TransientEndpointCredentials {
+    fail_on_call: usize,
+    calls: AtomicUsize,
+}
+
+impl TransientEndpointCredentials {
+    fn unavailable_on_call(fail_on_call: usize) -> Self {
+        Self {
+            fail_on_call,
+            calls: AtomicUsize::new(0),
+        }
+    }
+}
+
+impl GpuCredentialResolver for TransientEndpointCredentials {
+    fn resolve(&self, kind: &GpuCredentialKind) -> Result<GpuCredential, GpuCredentialError> {
+        FakeCredentials.resolve(kind)
+    }
+
+    fn ensure_rental_endpoint_token(
+        &self,
+        rental_id: &str,
+    ) -> Result<GpuCredential, GpuCredentialError> {
+        if self.calls.fetch_add(1, Ordering::SeqCst) + 1 == self.fail_on_call {
+            return Err(GpuCredentialError::StoreUnavailable);
+        }
+        self.resolve(&GpuCredentialKind::RentalEndpointToken {
+            rental_id: rental_id.to_string(),
+        })
     }
 }
 
@@ -486,6 +520,15 @@ fn controller_with_readiness(
     provider: FakeProvider,
     readiness: Arc<dyn GpuReadinessProbe>,
 ) -> GpuRentalController<FakeProvider> {
+    controller_with_dependencies(state, provider, Arc::new(FakeCredentials), readiness)
+}
+
+fn controller_with_dependencies(
+    state: Arc<StateRuntime>,
+    provider: FakeProvider,
+    credentials: Arc<dyn GpuCredentialResolver>,
+    readiness: Arc<dyn GpuReadinessProbe>,
+) -> GpuRentalController<FakeProvider> {
     GpuRentalController::new_with_runtime(
         state,
         provider,
@@ -499,7 +542,7 @@ fn controller_with_readiness(
             health_poll_ms: 60_000,
             batch_size: 4,
         },
-        Arc::new(FakeCredentials),
+        credentials,
         readiness,
     )
 }
@@ -537,6 +580,101 @@ async fn ordinary_create_records_one_provider_resource() {
         .expect("rental exists");
     assert_eq!(rental.observed_state, GpuRentalState::Allocating);
     assert_eq!(rental.provider_resource_id.as_deref(), Some("resource-1"));
+}
+
+#[tokio::test]
+async fn transient_endpoint_store_failure_retries_before_provider_create() {
+    let state = state_runtime().await;
+    let provider = FakeProvider::new(CreateBehavior::Success);
+    create_authorized_rental(&state, "credential-retry").await;
+    let controller = controller_with_dependencies(
+        state.clone(),
+        provider.clone(),
+        Arc::new(TransientEndpointCredentials::unavailable_on_call(1)),
+        Arc::new(FakeReadiness),
+    );
+
+    controller
+        .reconcile_due(NOW_MS)
+        .await
+        .expect("record transient credential failure");
+
+    assert_eq!(provider.create_calls().await, 0);
+    let retry_at_ms = state
+        .get_gpu_rental("rental-credential-retry")
+        .await
+        .expect("load rental")
+        .expect("rental exists")
+        .next_retry_at_ms;
+    controller
+        .reconcile_due(retry_at_ms)
+        .await
+        .expect("retry provider create");
+
+    assert_eq!(provider.create_calls().await, 1);
+    assert_eq!(
+        state
+            .get_gpu_rental("rental-credential-retry")
+            .await
+            .expect("load rental")
+            .expect("rental exists")
+            .observed_state,
+        GpuRentalState::Allocating
+    );
+}
+
+#[tokio::test]
+async fn transient_endpoint_store_failure_during_readiness_preserves_live_instance() {
+    let state = state_runtime().await;
+    let provider = FakeProvider::new(CreateBehavior::Success);
+    let controller = controller_with_dependencies(
+        state.clone(),
+        provider.clone(),
+        Arc::new(TransientEndpointCredentials::unavailable_on_call(2)),
+        Arc::new(FakeReadiness),
+    );
+    create_authorized_rental(&state, "readiness-credential-retry").await;
+
+    controller.reconcile_due(NOW_MS).await.expect("create");
+    provider
+        .set_instance_state("resource-1", GpuInstanceState::Running)
+        .await;
+    controller
+        .reconcile_due(NOW_MS + 1)
+        .await
+        .expect("observe running");
+    controller
+        .reconcile_due(NOW_MS + 2)
+        .await
+        .expect("verify bootstrap");
+    controller
+        .reconcile_due(NOW_MS + 3)
+        .await
+        .expect("record transient readiness credential failure");
+
+    let rental = state
+        .get_gpu_rental("rental-readiness-credential-retry")
+        .await
+        .expect("load rental")
+        .expect("rental exists");
+    assert_eq!(rental.observed_state, GpuRentalState::Probing);
+    assert_ne!(rental.desired_state, GpuRentalState::TerminateRequested);
+    assert_eq!(provider.create_calls().await, 1);
+    assert_eq!(provider.terminate_calls().await, 0);
+
+    controller
+        .reconcile_due(rental.next_retry_at_ms)
+        .await
+        .expect("retry authenticated readiness");
+    assert_eq!(
+        state
+            .get_gpu_rental("rental-readiness-credential-retry")
+            .await
+            .expect("load rental")
+            .expect("rental exists")
+            .observed_state,
+        GpuRentalState::Ready
+    );
 }
 
 #[tokio::test]

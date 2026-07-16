@@ -91,8 +91,28 @@ pub enum GpuCredentialError {
     StoreUnavailable,
 }
 
+impl GpuCredentialError {
+    pub fn retryable(&self) -> bool {
+        matches!(self, Self::Missing | Self::StoreUnavailable)
+    }
+}
+
+/// Resolves the narrowly scoped credentials used by GPU providers and rental endpoints.
+///
+/// Implementations backed by a writable credential store should override
+/// [`GpuCredentialResolver::ensure_rental_endpoint_token`] to create a missing per-rental token
+/// idempotently. Read-only implementations may use the default resolver-only behavior.
 pub trait GpuCredentialResolver: Send + Sync {
     fn resolve(&self, kind: &GpuCredentialKind) -> Result<GpuCredential, GpuCredentialError>;
+
+    fn ensure_rental_endpoint_token(
+        &self,
+        rental_id: &str,
+    ) -> Result<GpuCredential, GpuCredentialError> {
+        self.resolve(&GpuCredentialKind::RentalEndpointToken {
+            rental_id: rental_id.to_string(),
+        })
+    }
 }
 
 #[derive(Clone)]
@@ -160,6 +180,13 @@ impl GpuCredentialResolver for VaultGpuCredentialResolver {
             label,
             secret: SecretValue::new(secret)?,
         })
+    }
+
+    fn ensure_rental_endpoint_token(
+        &self,
+        rental_id: &str,
+    ) -> Result<GpuCredential, GpuCredentialError> {
+        VaultGpuCredentialResolver::ensure_rental_endpoint_token(self, rental_id)
     }
 }
 
