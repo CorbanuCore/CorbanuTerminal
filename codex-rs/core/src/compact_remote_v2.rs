@@ -19,6 +19,7 @@ use crate::responses_metadata::CodexResponsesMetadata;
 use crate::responses_metadata::CodexResponsesRequestKind;
 use crate::responses_metadata::CompactionTurnMetadata;
 use crate::responses_retry::ResponsesStreamRequest;
+use crate::responses_retry::ensure_gpu_runtime_provider_active;
 use crate::responses_retry::handle_retryable_response_stream_error;
 use crate::session::session::Session;
 use crate::session::turn::built_tools;
@@ -348,6 +349,7 @@ async fn run_remote_compaction_request_v2(
         .min(MAX_REMOTE_COMPACTION_V2_STREAM_RETRIES);
     let mut retries = 0;
     loop {
+        ensure_gpu_runtime_provider_active(sess, turn_context).await?;
         let attempt_started_at = std::time::Instant::now();
         let result = match client_session
             .stream_with_same_turn_attempt(

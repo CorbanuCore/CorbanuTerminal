@@ -198,11 +198,11 @@ impl ChatWidget {
                 }),
             ),
             (Some(maximum_hourly_microusd), Some(maximum_total_microusd)) => CustomPromptView::new(
-                "GPU limits · 3 of 3 · Automatic stop".to_string(),
-                "Whole minutes, for example 120".to_string(),
+                "GPU rental duration · 3 of 3 · MINUTES".to_string(),
+                "Enter minutes (not dollars), for example 120 = 2 hours".to_string(),
                 String::new(),
                 Some(validation_context(&format!(
-                    "Limits: ${:.2}/hour · ${:.2} total · maximum 7 days.",
+                    "TIME LIMIT, NOT PRICE: setup and model download count against this duration. Price limits already set: ${:.2}/hour · ${:.2} total. Maximum duration: 10,080 minutes (7 days).",
                     maximum_hourly_microusd as f64 / 1_000_000.0,
                     maximum_total_microusd as f64 / 1_000_000.0
                 ))),
@@ -312,13 +312,17 @@ impl ChatWidget {
         authorization: codex_gpu_market::RentalAuthorization,
         offer: codex_gpu_market::GpuOffer,
     ) {
+        let remaining_minutes = remaining_authorization_minutes(
+            authorization.terminate_at_ms,
+            chrono::Utc::now().timestamp_millis(),
+        );
         let confirm_recipe = recipe_id.clone();
         let confirm_authorization = authorization.clone();
         let confirm_offer = offer.clone();
         self.show_selection_view(SelectionViewParams {
             title: Some("Confirm billable GPU rental".to_string()),
             subtitle: Some(format!(
-                "{} · {} · up to ${:.4}/hr · ${:.2} total · local controller enforces TTL/spend",
+                "{} · {} · up to ${:.4}/hr · ${:.2} total · automatic stop in about {remaining_minutes} minutes; setup time is included",
                 gpu_provider_display_name(offer.provider.as_str()),
                 recipe_id,
                 authorization.maximum_hourly_microusd as f64 / 1_000_000.0,
@@ -418,6 +422,14 @@ impl ChatWidget {
             ..Default::default()
         });
     }
+}
+
+fn remaining_authorization_minutes(terminate_at_ms: i64, now_ms: i64) -> i64 {
+    terminate_at_ms
+        .saturating_sub(now_ms)
+        .max(0)
+        .saturating_add(59_999)
+        .saturating_div(60_000)
 }
 
 fn parse_ttl_minutes(value: &str) -> Result<i64, String> {

@@ -40,6 +40,7 @@ use crate::plugins::build_plugin_injections;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::responses_metadata::CodexResponsesRequestKind;
 use crate::responses_retry::ResponsesStreamRequest;
+use crate::responses_retry::ensure_gpu_runtime_provider_active;
 use crate::responses_retry::guard_same_request_idle_retry;
 use crate::responses_retry::handle_retryable_response_stream_error;
 use crate::session::PreviousTurnSettings;
@@ -1253,6 +1254,7 @@ async fn run_sampling_request(
         );
         trace_turn_timing("after_build_prompt", sampling_started_at);
         let same_turn_attempt_index = retries + 1;
+        ensure_gpu_runtime_provider_active(&sess, &turn_context).await?;
         let attempt_started_at = Instant::now();
         let attempt_result = try_run_sampling_request(
             tool_runtime.clone(),

@@ -59,6 +59,33 @@ async fn gpu_authorization_uses_one_labeled_input_and_retries_in_place_snapshot(
 }
 
 #[tokio::test]
+async fn gpu_duration_input_cannot_be_mistaken_for_another_dollar_limit() {
+    let (mut chat, _tx, _event_rx, _op_rx) =
+        crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+    chat.open_gpu_authorization_prompt(
+        "test-recipe".to_string(),
+        crate::app_event::GpuAuthorizationPromptState {
+            maximum_hourly_microusd: Some(20_000_000),
+            maximum_total_microusd: Some(20_000_000),
+            validation_error: None,
+        },
+    );
+
+    let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 100);
+    assert!(rendered.contains("MINUTES"));
+    assert!(rendered.contains("minutes (not dollars)"));
+    assert!(rendered.contains("TIME LIMIT, NOT PRICE"));
+    assert!(rendered.contains("setup and model download count"));
+}
+
+#[test]
+fn gpu_confirmation_duration_rounds_up_without_hiding_setup_time() {
+    assert_eq!(remaining_authorization_minutes(1_200_000, 1), 20);
+    assert_eq!(remaining_authorization_minutes(60_001, 1), 1);
+    assert_eq!(remaining_authorization_minutes(1, 2), 0);
+}
+
+#[tokio::test]
 async fn gpu_menu_excludes_nonbillable_history_snapshot() {
     let (mut chat, _tx, _event_rx, _op_rx) =
         crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
