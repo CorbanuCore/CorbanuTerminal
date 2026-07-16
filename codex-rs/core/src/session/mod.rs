@@ -1550,7 +1550,8 @@ impl Session {
                 .session_configuration
                 .original_config_do_not_use
                 .model_provider_id
-                != updated.original_config_do_not_use.model_provider_id;
+                != updated.original_config_do_not_use.model_provider_id
+                || state.session_configuration.provider != updated.provider;
             let model_client_configuration = model_provider_changed.then(|| updated.clone());
             let stale_startup_prewarm = if model_provider_changed {
                 state.take_session_startup_prewarm()
@@ -1609,14 +1610,9 @@ impl Session {
                         .original_config_do_not_use
                         .codex_home
                         .clone(),
-                    !state
-                        .session_configuration
-                        .original_config_do_not_use
-                        .model_providers
-                        .contains_key(model_provider_id.as_str()),
                 )
             };
-            let (sqlite_home, codex_home, provider_missing) = runtime_overlay_source;
+            let (sqlite_home, codex_home) = runtime_overlay_source;
             let records =
                 crate::config::load_gpu_runtime_model_provider_records(&sqlite_home).await;
             updates.runtime_model_context_window = Some(
@@ -1625,20 +1621,18 @@ impl Session {
                     .find(|record| record.provider_id == model_provider_id)
                     .and_then(|record| record.maximum_context_tokens),
             );
-            if provider_missing {
-                let runtime_providers = records
-                    .into_iter()
-                    .filter_map(|record| {
-                        crate::config::gpu_runtime_model_provider(record, &codex_home)
-                    })
-                    .collect::<HashMap<_, _>>();
-                if runtime_providers.contains_key(&model_provider_id) {
-                    let mut state = self.state.lock().await;
-                    let mut config =
-                        (*state.session_configuration.original_config_do_not_use).clone();
-                    config.model_providers.extend(runtime_providers);
-                    state.session_configuration.original_config_do_not_use = Arc::new(config);
-                }
+            let runtime_providers = records
+                .into_iter()
+                .filter_map(|record| crate::config::gpu_runtime_model_provider(record, &codex_home))
+                .collect::<HashMap<_, _>>();
+            if runtime_providers.contains_key(&model_provider_id) {
+                let mut state = self.state.lock().await;
+                let mut config = (*state.session_configuration.original_config_do_not_use).clone();
+                // Runtime endpoints are controller-owned process-local transports. Replacing an
+                // existing entry is required after controller or SSH-forward recovery; presence
+                // alone does not mean the cached base URL is still current.
+                config.model_providers.extend(runtime_providers);
+                state.session_configuration.original_config_do_not_use = Arc::new(config);
             }
         }
     }

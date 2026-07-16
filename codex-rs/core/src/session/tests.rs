@@ -4115,6 +4115,46 @@ async fn session_update_settings_loads_runtime_gpu_provider_added_after_startup(
         session.services.model_client().provider_info().base_url,
         Some("https://rental.example.invalid/v1".to_string())
     );
+
+    let mut refreshed_runtime = state
+        .list_gpu_runtime_providers()
+        .await
+        .expect("list runtime providers")
+        .remove(0);
+    refreshed_runtime.base_url = "https://replacement.example.invalid/v1".to_string();
+    assert!(
+        state
+            .refresh_gpu_runtime_provider(
+                &codex_state::GpuRuntimeProviderUpsert {
+                    rental_id: refreshed_runtime.rental_id,
+                    provider_id: refreshed_runtime.provider_id,
+                    base_url: refreshed_runtime.base_url,
+                    model_id: refreshed_runtime.model_id,
+                    wire_api: refreshed_runtime.wire_api,
+                    health: refreshed_runtime.health,
+                    display_hourly_microusd: refreshed_runtime.display_hourly_microusd,
+                    maximum_context_tokens: refreshed_runtime
+                        .maximum_context_tokens
+                        .expect("runtime context window"),
+                    catalog_sequence: refreshed_runtime.catalog_sequence,
+                },
+                NOW_MS + 1,
+            )
+            .await
+            .expect("refresh runtime provider")
+    );
+    session
+        .update_settings(SessionSettingsUpdate {
+            model_provider: Some(runtime_provider_id.to_string()),
+            ..Default::default()
+        })
+        .await
+        .expect("existing runtime provider should refresh from durable overlay");
+    assert_eq!(
+        session.services.model_client().provider_info().base_url,
+        Some("https://replacement.example.invalid/v1".to_string())
+    );
+
     assert_eq!(
         session.new_default_turn().await.model_context_window(),
         Some(62_259),
