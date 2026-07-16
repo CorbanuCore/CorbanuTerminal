@@ -223,6 +223,10 @@ fn fine_tune_recipes_pin_source_runtime_artifacts_auth_and_topology() {
             assert!(launch.contains("--alias"));
             assert!(launch.contains("--api-key \"$PFT_ENDPOINT_TOKEN\""));
             assert!(launch.contains("--ctx-size 300000"));
+            assert!(launch.contains("for gpu in 0 1"));
+            assert!(launch.contains("CUDA_VISIBLE_DEVICES=\"$gpu\""));
+            assert!(launch.contains("$0 !~ /\\(0 MiB, 0 MiB free\\)$/"));
+            assert!(launch.contains("PFTERMINAL_RUNTIME_GATE=cuda-ok"));
             // Upstream CUDA does not expose split buffers for this GLM IQ1_M
             // path, so distribute complete layers rather than tensor rows.
             assert!(launch.contains("--split-mode layer"));

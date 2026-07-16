@@ -114,7 +114,10 @@ pub(crate) fn huihui_glm_5_2_recipe() -> GpuRecipe {
             "test \"$(git rev-parse HEAD)\" = {runtime_revision}; ",
             "cmake -S . -B build -G Ninja -DGGML_CUDA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON -DCMAKE_BUILD_TYPE=Release; ",
             "cmake --build build --target llama-server -j \"$(nproc)\"; ",
-            "printf 'PFTERMINAL_RUNTIME_GATE=build-ok\\n'; mkdir -p /models/glm52; ",
+            "printf 'PFTERMINAL_RUNTIME_GATE=build-ok\\n'; ",
+            "for gpu in 0 1; do device_line=$(CUDA_VISIBLE_DEVICES=\"$gpu\" /opt/llama.cpp/build/bin/llama-server --list-devices 2>&1 | awk '/^  CUDA0:/ {{ print; exit }}'); ",
+            "printf '%s\\n' \"$device_line\" | awk '$0 ~ /^  CUDA0:/ && $0 !~ /\\(0 MiB, 0 MiB free\\)$/ {{ ok=1 }} END {{ exit !ok }}'; done; ",
+            "printf 'PFTERMINAL_RUNTIME_GATE=cuda-ok\\n'; mkdir -p /models/glm52; ",
             "HF_XET_HIGH_PERFORMANCE=1 hf download {model_id} --revision {model_revision} --include 'UD-IQ1_M/*.gguf' --local-dir /models/glm52; ",
             "printf '%s\\n' ",
             "'e16a262199ae650398bd154d7dc108a7bd03da07bfafc51dc410dc0b68d9a258  /models/glm52/UD-IQ1_M/GLM-5.2-UD-IQ1_M-00001-of-00006.gguf' ",
@@ -149,7 +152,7 @@ pub(crate) fn huihui_glm_5_2_recipe() -> GpuRecipe {
     );
     GpuRecipe {
         id: "huihui-glm-5.2-iq1m-2xh200-experimental".to_string(),
-        revision: "huihui-glm-5.2-iq1m-llamacpp-2xh200-r3".to_string(),
+        revision: "huihui-glm-5.2-iq1m-llamacpp-2xh200-r4".to_string(),
         model_id: model_id.to_string(),
         served_model_id: model_id.to_string(),
         wire_api: "chat".to_string(),
