@@ -431,6 +431,13 @@ fn test_create_anthropic_provider() {
 
 #[test]
 fn test_create_claude_plan_provider() {
+    let expected_root = AbsolutePathBuf::current_dir()
+        .expect("current directory should be absolute")
+        .ancestors()
+        .last()
+        .expect("current directory should have a filesystem root");
+    assert!(expected_root.parent().is_none());
+
     assert_eq!(
         ModelProviderInfo::create_claude_plan_provider(),
         ModelProviderInfo {
@@ -444,8 +451,7 @@ fn test_create_claude_plan_provider() {
                 args: vec!["internal-claude-oauth-token".to_string()],
                 timeout_ms: NonZeroU64::new(5_000).expect("timeout should be non-zero"),
                 refresh_interval_ms: 60_000,
-                cwd: AbsolutePathBuf::from_absolute_path_checked("/")
-                    .expect("root path should be absolute"),
+                cwd: expected_root,
             }),
             aws: None,
             wire_api: WireApi::Anthropic,
