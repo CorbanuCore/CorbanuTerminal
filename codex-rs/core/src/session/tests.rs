@@ -4008,7 +4008,7 @@ async fn session_update_settings_model_provider_rebuilds_model_client() {
 }
 
 #[tokio::test]
-async fn session_update_settings_loads_runtime_gpu_provider_added_after_startup() {
+async fn session_new_turn_refreshes_runtime_gpu_provider_endpoint_without_reselection() {
     const NOW_MS: i64 = 1_800_000_000_000;
     let state_home = tempfile::tempdir().expect("state home");
     let state = codex_state::StateRuntime::init(
@@ -4143,15 +4143,19 @@ async fn session_update_settings_loads_runtime_gpu_provider_added_after_startup(
             .await
             .expect("refresh runtime provider")
     );
-    session
-        .update_settings(SessionSettingsUpdate {
-            model_provider: Some(runtime_provider_id.to_string()),
-            ..Default::default()
-        })
+    let next_turn = session
+        .new_turn_with_sub_id(
+            "turn-after-endpoint-recovery".to_string(),
+            SessionSettingsUpdate::default(),
+        )
         .await
-        .expect("existing runtime provider should refresh from durable overlay");
+        .expect("new turn should refresh the selected runtime provider");
     assert_eq!(
         session.services.model_client().provider_info().base_url,
+        Some("https://replacement.example.invalid/v1".to_string())
+    );
+    assert_eq!(
+        next_turn.provider.info().base_url,
         Some("https://replacement.example.invalid/v1".to_string())
     );
 

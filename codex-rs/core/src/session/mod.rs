@@ -1589,8 +1589,23 @@ impl Session {
     }
 
     async fn ensure_runtime_model_provider(&self, updates: &mut SessionSettingsUpdate) {
-        let Some(model_provider_id) = updates.model_provider.clone() else {
-            return;
+        let model_provider_id = match updates.model_provider.clone() {
+            Some(model_provider_id) => model_provider_id,
+            None => {
+                let current_model_provider_id = {
+                    let state = self.state.lock().await;
+                    state
+                        .session_configuration
+                        .original_config_do_not_use
+                        .model_provider_id
+                        .clone()
+                };
+                if !current_model_provider_id.starts_with("gpu-") {
+                    return;
+                }
+                updates.model_provider = Some(current_model_provider_id.clone());
+                current_model_provider_id
+            }
         };
         if !model_provider_id.starts_with("gpu-") {
             updates.runtime_model_context_window = Some(None);

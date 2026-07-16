@@ -708,8 +708,12 @@ impl Session {
     pub(crate) async fn new_turn_with_sub_id(
         &self,
         sub_id: String,
-        updates: SessionSettingsUpdate,
+        mut updates: SessionSettingsUpdate,
     ) -> CodexResult<Arc<TurnContext>> {
+        // GPU endpoints are process-local controller transports and can change while a
+        // session remains open. Refresh the selected runtime provider before every turn so
+        // recovery does not leave the session's ModelClient pinned to a dead local port.
+        self.ensure_runtime_model_provider(&mut updates).await;
         let notify_config_contributors = !self.services.extensions.config_contributors().is_empty();
         let update_result: CodexResult<_> = {
             let mut state = self.state.lock().await;
@@ -725,6 +729,18 @@ impl Session {
                     });
                     let new_config = notify_config_contributors
                         .then(|| Self::build_effective_session_config(&next));
+                    let model_provider_changed = state
+                        .session_configuration
+                        .original_config_do_not_use
+                        .model_provider_id
+                        != next.original_config_do_not_use.model_provider_id
+                        || state.session_configuration.provider != next.provider;
+                    let model_client_configuration = model_provider_changed.then(|| next.clone());
+                    let stale_startup_prewarm = if model_provider_changed {
+                        state.take_session_startup_prewarm()
+                    } else {
+                        None
+                    };
                     if updates.environments.is_some() {
                         self.services
                             .turn_environments
@@ -736,29 +752,45 @@ impl Session {
                         permission_profile_changed,
                         previous_config,
                         new_config,
+                        model_client_configuration,
+                        stale_startup_prewarm,
                     ))
                 }
                 Err(err) => Err(CodexErr::InvalidRequest(err.to_string())),
             }
         };
 
-        let (session_configuration, permission_profile_changed, previous_config, new_config) =
-            match update_result {
-                Ok(update) => update,
-                Err(err) => {
-                    let message = err.to_string();
-                    self.send_event_raw(Event {
-                        id: sub_id.clone(),
-                        msg: EventMsg::Error(ErrorEvent {
-                            message: message.clone(),
-                            codex_error_info: Some(CodexErrorInfo::BadRequest),
-                        }),
-                    })
-                    .await;
-                    return Err(CodexErr::InvalidRequest(message));
-                }
-            };
+        let (
+            session_configuration,
+            permission_profile_changed,
+            previous_config,
+            new_config,
+            model_client_configuration,
+            stale_startup_prewarm,
+        ) = match update_result {
+            Ok(update) => update,
+            Err(err) => {
+                let message = err.to_string();
+                self.send_event_raw(Event {
+                    id: sub_id.clone(),
+                    msg: EventMsg::Error(ErrorEvent {
+                        message: message.clone(),
+                        codex_error_info: Some(CodexErrorInfo::BadRequest),
+                    }),
+                })
+                .await;
+                return Err(CodexErr::InvalidRequest(message));
+            }
+        };
         self.emit_config_changed_contributors(previous_config.as_ref(), new_config.as_ref());
+
+        if let Some(configuration) = model_client_configuration {
+            self.services
+                .replace_model_client(self.build_model_client_for_configuration(&configuration));
+        }
+        if let Some(startup_prewarm) = stale_startup_prewarm {
+            startup_prewarm.abort().await;
+        }
 
         if permission_profile_changed {
             self.refresh_managed_network_proxy_for_current_permission_profile()

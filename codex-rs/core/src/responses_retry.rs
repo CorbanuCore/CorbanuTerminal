@@ -171,22 +171,38 @@ pub(crate) async fn ensure_gpu_runtime_provider_active(
             return Ok(());
         }
     };
-    if gpu_runtime_provider_is_ready(provider_id, &records) {
-        return Ok(());
+    match gpu_runtime_provider_availability(provider_id, &records) {
+        GpuRuntimeProviderAvailability::Ready => Ok(()),
+        GpuRuntimeProviderAvailability::Recovering => Err(CodexErr::InvalidRequest(
+            "The selected rented GPU is temporarily unavailable while its controller reconnects. Wait for the GPU READY notification, then retry this turn; no /model reselection is required. The rental may still be billing, so use /gpu to inspect or terminate it."
+                .to_string(),
+        )),
+        GpuRuntimeProviderAvailability::Gone => Err(CodexErr::InvalidRequest(
+            "The selected rented GPU is no longer active. Select another model with /model or start a new rental from /gpu."
+                .to_string(),
+        )),
     }
-    Err(CodexErr::InvalidRequest(
-        "The selected rented GPU is no longer active. This turn was not reconnected to its dead endpoint; select another model with /model or start a new rental from /gpu."
-            .to_string(),
-    ))
 }
 
-fn gpu_runtime_provider_is_ready(
+#[derive(Debug, PartialEq, Eq)]
+enum GpuRuntimeProviderAvailability {
+    Ready,
+    Recovering,
+    Gone,
+}
+
+fn gpu_runtime_provider_availability(
     provider_id: &str,
     records: &[codex_state::GpuRuntimeProvider],
-) -> bool {
-    records
+) -> GpuRuntimeProviderAvailability {
+    match records
         .iter()
-        .any(|record| record.provider_id == provider_id && record.health == "ready")
+        .find(|record| record.provider_id == provider_id)
+    {
+        Some(record) if record.health == "ready" => GpuRuntimeProviderAvailability::Ready,
+        Some(_) => GpuRuntimeProviderAvailability::Recovering,
+        None => GpuRuntimeProviderAvailability::Gone,
+    }
 }
 
 fn effective_max_stream_retries(
@@ -308,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn gpu_retry_liveness_requires_the_selected_provider_to_remain_ready() {
+    fn gpu_retry_liveness_distinguishes_recovery_from_termination() {
         let record = codex_state::GpuRuntimeProvider {
             rental_id: "gpu-rental".to_string(),
             infrastructure_provider: "vast".to_string(),
@@ -323,20 +339,23 @@ mod tests {
             updated_at_ms: 1,
         };
 
-        assert!(gpu_runtime_provider_is_ready(
-            "gpu-gpu-rental",
-            std::slice::from_ref(&record)
-        ));
-        assert!(!gpu_runtime_provider_is_ready(
-            "gpu-another-rental",
-            std::slice::from_ref(&record)
-        ));
-        assert!(!gpu_runtime_provider_is_ready(
-            "gpu-gpu-rental",
-            &[codex_state::GpuRuntimeProvider {
-                health: "degraded".to_string(),
-                ..record
-            }]
-        ));
+        assert_eq!(
+            gpu_runtime_provider_availability("gpu-gpu-rental", std::slice::from_ref(&record)),
+            GpuRuntimeProviderAvailability::Ready
+        );
+        assert_eq!(
+            gpu_runtime_provider_availability("gpu-another-rental", std::slice::from_ref(&record)),
+            GpuRuntimeProviderAvailability::Gone
+        );
+        assert_eq!(
+            gpu_runtime_provider_availability(
+                "gpu-gpu-rental",
+                &[codex_state::GpuRuntimeProvider {
+                    health: "degraded".to_string(),
+                    ..record
+                }]
+            ),
+            GpuRuntimeProviderAvailability::Recovering
+        );
     }
 }
