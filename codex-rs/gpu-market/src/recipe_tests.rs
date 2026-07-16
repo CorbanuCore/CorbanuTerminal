@@ -218,8 +218,11 @@ fn fine_tune_recipes_pin_source_runtime_artifacts_auth_and_topology() {
             assert_eq!(recipe.runtime, "llama.cpp");
             assert_eq!(recipe.served_model_id(), recipe.model_id);
             assert_eq!(recipe.wire_api, "chat");
+            assert_eq!(recipe.maximum_context_tokens, 300_000);
+            assert_eq!(recipe.kv_cache_reserve_bytes, 28_000_000_000);
             assert!(launch.contains("--alias"));
             assert!(launch.contains("--api-key \"$PFT_ENDPOINT_TOKEN\""));
+            assert!(launch.contains("--ctx-size 300000"));
             // Upstream CUDA does not expose split buffers for this GLM IQ1_M
             // path, so distribute complete layers rather than tensor rows.
             assert!(launch.contains("--split-mode layer"));

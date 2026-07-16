@@ -11,6 +11,8 @@ const DS4_TP_REVISION: &str = "f17f6fe8758bd4d00439546de2e7904c9ee38fb0";
 const CADDY_VERSION: &str = "2.11.4";
 const CADDY_LINUX_AMD64_SHA256: &str =
     "527fbf917c39189a1e3b31d34fa955601680b2d5c8055d2a87b8b9588dec7bb9";
+const GLM_CONTEXT_TOKENS: u64 = 300_000;
+const GLM_KV_CACHE_RESERVE_BYTES: u64 = 28_000_000_000;
 
 pub(crate) fn huihui_deepseek_v4_flash_recipe() -> GpuRecipe {
     let model_id = "huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF";
@@ -71,6 +73,7 @@ pub(crate) fn huihui_deepseek_v4_flash_recipe() -> GpuRecipe {
         gpu_architectures: vec!["sm_90".to_string()],
         weight_format: "q4_k".to_string(),
         hardware: h200_pair(
+            /*minimum_vram_mib_per_gpu*/ 130_000,
             /*minimum_host_ram_mib*/ 384 * 1024,
             /*minimum_disk_gib*/ 350,
         ),
@@ -129,7 +132,7 @@ pub(crate) fn huihui_glm_5_2_recipe() -> GpuRecipe {
             "/opt/llama.cpp/build/bin/llama-server ",
             "--model /models/glm52/UD-IQ1_M/GLM-5.2-UD-IQ1_M-00001-of-00006.gguf ",
             "--alias {model_id} --host 127.0.0.1 --port 8001 ",
-            "--api-key \"$PFT_ENDPOINT_TOKEN\" --ctx-size 32768 --parallel 1 ",
+            "--api-key \"$PFT_ENDPOINT_TOKEN\" --ctx-size {context_tokens} --parallel 1 ",
             "--n-gpu-layers 999 --split-mode layer --tensor-split 1,1 --flash-attn on --jinja ",
             ">/tmp/llama-server.log 2>&1 & server_pid=$!; ",
             "for i in $(seq 1 900); do kill -0 \"$server_pid\"; python3 -c 'import os,urllib.request; r=urllib.request.Request(\"http://127.0.0.1:8001/v1/models\",headers={{\"Authorization\":\"Bearer \"+os.environ[\"PFT_ENDPOINT_TOKEN\"]}}); urllib.request.urlopen(r,timeout=2).read()' >/dev/null 2>&1 && break; sleep 2; done; ",
@@ -140,12 +143,13 @@ pub(crate) fn huihui_glm_5_2_recipe() -> GpuRecipe {
         runtime_revision = LLAMA_CPP_REVISION,
         model_id = model_id,
         model_revision = model_revision,
+        context_tokens = GLM_CONTEXT_TOKENS,
         caddy_version = CADDY_VERSION,
         caddy_sha256 = CADDY_LINUX_AMD64_SHA256,
     );
     GpuRecipe {
         id: "huihui-glm-5.2-iq1m-2xh200-experimental".to_string(),
-        revision: "huihui-glm-5.2-iq1m-llamacpp-2xh200-r2".to_string(),
+        revision: "huihui-glm-5.2-iq1m-llamacpp-2xh200-r3".to_string(),
         model_id: model_id.to_string(),
         served_model_id: model_id.to_string(),
         wire_api: "chat".to_string(),
@@ -159,15 +163,16 @@ pub(crate) fn huihui_glm_5_2_recipe() -> GpuRecipe {
         gpu_architectures: vec!["sm_90".to_string()],
         weight_format: "ud-iq1_m".to_string(),
         hardware: h200_pair(
+            /*minimum_vram_mib_per_gpu*/ 132_000,
             /*minimum_host_ram_mib*/ 480 * 1024,
             /*minimum_disk_gib*/ 500,
         ),
         tensor_parallel_size: 2,
-        maximum_context_tokens: 32_768,
+        maximum_context_tokens: GLM_CONTEXT_TOKENS,
         maximum_concurrent_requests: 1,
         expected_download_bytes: 231_226_309_536,
         model_weight_bytes: 231_226_309_536,
-        kv_cache_reserve_bytes: 24_000_000_000,
+        kv_cache_reserve_bytes: GLM_KV_CACHE_RESERVE_BYTES,
         workspace_reserve_bytes: 16_000_000_000,
         launch_command: vec!["bash".to_string(), "-lc".to_string(), launch],
         environment_allowlist: vec!["PFT_ENDPOINT_TOKEN".to_string()],
@@ -182,11 +187,15 @@ pub(crate) fn huihui_glm_5_2_recipe() -> GpuRecipe {
     }
 }
 
-fn h200_pair(minimum_host_ram_mib: u64, minimum_disk_gib: u64) -> HardwareRequirements {
+fn h200_pair(
+    minimum_vram_mib_per_gpu: u64,
+    minimum_host_ram_mib: u64,
+    minimum_disk_gib: u64,
+) -> HardwareRequirements {
     HardwareRequirements {
         gpu_model: "NVIDIA H200".to_string(),
         gpu_count: 2,
-        minimum_vram_mib_per_gpu: 130_000,
+        minimum_vram_mib_per_gpu,
         minimum_host_ram_mib,
         minimum_disk_gib,
         requires_high_bandwidth_interconnect: true,
