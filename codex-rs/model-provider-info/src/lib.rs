@@ -46,10 +46,13 @@ fn provider_auth_timeout_ms() -> NonZeroU64 {
 }
 
 fn root_absolute_path() -> AbsolutePathBuf {
-    match AbsolutePathBuf::from_absolute_path_checked("/") {
-        Ok(path) => path,
-        Err(err) => panic!("root path must be absolute: {err}"),
-    }
+    let current_dir = AbsolutePathBuf::current_dir().unwrap_or_else(|err| {
+        panic!("current directory must resolve to determine provider auth cwd: {err}")
+    });
+    current_dir
+        .ancestors()
+        .last()
+        .unwrap_or_else(|| panic!("current directory must have a filesystem root"))
 }
 
 const OPENAI_PROVIDER_NAME: &str = "OpenAI";
