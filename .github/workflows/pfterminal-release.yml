@@ -7,7 +7,7 @@ on:
         description: "Release version; must match codex-rs/Cargo.toml."
         required: true
         type: string
-        default: "0.1.12"
+        default: "0.1.13"
       publish_release:
         description: "Create or update the matching GitHub release."
         required: true
@@ -340,6 +340,17 @@ jobs:
         uses: ./.github/actions/setup-msvc-env
         with:
           target: ${{ matrix.target }}
+
+      - name: Test native Windows provider initialization
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LIBSQLITE3_FLAGS=SQLITE_DISABLE_INTRINSIC
+          cargo test \
+            --manifest-path codex-rs/Cargo.toml \
+            --target "$TARGET" \
+            --release \
+            -p codex-model-provider-info
 
       - name: Build pfterminal package binaries
         shell: bash
