@@ -187,6 +187,7 @@ pub enum ProviderErrorKind {
     NotConfigured,
     CapabilityUnavailable,
     Unauthorized,
+    InsufficientFunds,
     InvalidRequest,
     OfferUnavailable,
     PriceDrift,

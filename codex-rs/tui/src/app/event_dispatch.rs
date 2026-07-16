@@ -299,9 +299,9 @@ fn gpu_notification(rental: &codex_state::GpuRental) -> Option<(&'static str, St
         )),
         GpuRentalState::Failed => Some((
             "failed",
-            format!(
-                "GPU rental {} failed before a billable resource was confirmed.",
-                rental.rental_id
+            failed_gpu_notification(
+                rental.rental_id.as_str(),
+                rental.last_error_message.as_deref(),
             ),
             true,
         )),
@@ -323,6 +323,17 @@ fn gpu_notification(rental: &codex_state::GpuRental) -> Option<(&'static str, St
         )),
         _ => None,
     }
+}
+
+fn failed_gpu_notification(rental_id: &str, reason: Option<&str>) -> String {
+    reason.map_or_else(
+        || format!("GPU rental {rental_id} failed before a billable resource was confirmed."),
+        |reason| {
+            format!(
+                "GPU rental {rental_id} failed before a billable resource was confirmed: {reason}"
+            )
+        },
+    )
 }
 
 impl App {
@@ -1472,13 +1483,6 @@ impl App {
                             Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
                                 codex_vault::Vault::new(codex_home.to_path_buf()),
                             )));
-                        let rental_id = format!("gpu-{}", authorization.client_operation_id);
-                        credentials
-                            .ensure_rental_endpoint_token(rental_id.as_str())
-                            .map_err(|_| {
-                                "Could not create the scoped GPU endpoint credential. No rental was started."
-                                    .to_string()
-                            })?;
                         let service = codex_gpu_market::GpuMarketService::new(
                             state_db,
                             codex_gpu_market::RecipeCatalog::default(),
@@ -1542,6 +1546,13 @@ impl App {
                             Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
                                 codex_vault::Vault::new(codex_home.to_path_buf()),
                             )));
+                        let rental_id = format!("gpu-{}", authorization.client_operation_id);
+                        credentials
+                            .ensure_rental_endpoint_token(rental_id.as_str())
+                            .map_err(|_| {
+                                "Could not create the scoped GPU endpoint credential. No rental was started."
+                                    .to_string()
+                            })?;
                         let service = codex_gpu_market::GpuMarketService::new(
                             state_db,
                             codex_gpu_market::RecipeCatalog::default(),
@@ -1584,14 +1595,24 @@ impl App {
             }
             AppEvent::GpuRentalConfirmationFinished { result } => match result {
                 Ok(rental) => {
-                    self.chat_widget.add_info_message(
-                        format!(
-                            "GPU rental {} was authorized. The independent controller is starting; /gpu remains authoritative for billing state.",
+                    if rental.observed_state == codex_state::GpuRentalState::Failed {
+                        let reason = rental.last_error_message.as_deref().unwrap_or(
+                            "The earlier allocation attempt failed before a resource was created.",
+                        );
+                        self.chat_widget.add_error_message(format!(
+                            "That confirmation already produced GPU rental {}, which failed: {reason} Choose another current offer from /gpu.",
                             rental.rental_id
-                        ),
-                        None,
-                    );
-                    self.start_gpu_controller();
+                        ));
+                    } else {
+                        self.chat_widget.add_info_message(
+                            format!(
+                                "GPU rental {} was authorized. The independent controller is starting; /gpu remains authoritative for billing state.",
+                                rental.rental_id
+                            ),
+                            None,
+                        );
+                        self.start_gpu_controller();
+                    }
                     self.refresh_gpu_spend_indicator().await;
                 }
                 Err(message) => self.chat_widget.add_error_message(message),
@@ -4393,5 +4414,21 @@ impl App {
                 AppRunControl::Continue
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod gpu_notification_tests {
+    use super::failed_gpu_notification;
+
+    #[test]
+    fn failed_rental_notification_includes_actionable_provider_reason() {
+        let message = failed_gpu_notification(
+            "gpu-test",
+            Some("The selected capacity was claimed. Search again from /gpu."),
+        );
+
+        assert!(message.contains("selected capacity was claimed"));
+        assert!(message.contains("/gpu"));
     }
 }

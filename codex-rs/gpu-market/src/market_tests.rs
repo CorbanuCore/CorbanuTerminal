@@ -219,6 +219,45 @@ fn two_unconfigured_providers_return_actionable_error() {
     assert!(error.safe_message.contains("/gpu"));
 }
 
+#[test]
+fn unfunded_provider_is_actionable_when_no_other_provider_has_capacity() {
+    let error = merge_search_results(
+        Err(ProviderError::new(
+            ProviderErrorKind::InsufficientFunds,
+            "Fund the configured provider.",
+        )),
+        Err(ProviderError::new(
+            ProviderErrorKind::NotConfigured,
+            "missing second",
+        )),
+    )
+    .expect_err("funding failure must not masquerade as empty inventory");
+
+    assert_eq!(error.kind, ProviderErrorKind::InsufficientFunds);
+    assert!(error.safe_message.contains("Fund"));
+}
+
+#[test]
+fn unfunded_provider_does_not_hide_another_providers_offers() {
+    let request = SearchOffersRequest {
+        hardware: hardware(),
+        allow_interruptible: false,
+        require_verified_or_secure: true,
+        maximum_hourly_microusd: 3_000_000,
+    };
+    let offers = merge_search_results(
+        Err(ProviderError::new(
+            ProviderErrorKind::InsufficientFunds,
+            "Fund the first provider.",
+        )),
+        Ok(vec![offer("second", 2_000_000, &request)]),
+    )
+    .expect("a funded provider remains usable");
+
+    assert_eq!(offers.len(), 1);
+    assert_eq!(offers[0].provider, "second");
+}
+
 #[tokio::test]
 async fn confirmation_is_idempotent_and_never_calls_provider_create() {
     let service = service().await;
@@ -254,7 +293,82 @@ async fn confirmation_is_idempotent_and_never_calls_provider_create() {
     assert_eq!(first.rental_id, replay.rental_id);
     assert_eq!(replay.desired_state, GpuRentalState::CreatePending);
     assert_eq!(replay.observed_state, GpuRentalState::Quoted);
-    assert_eq!(provider.search_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(provider.search_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn recorded_confirmation_replay_survives_expired_authorization() {
+    let service = service().await;
+    let provider = QuoteProvider::new("first", 2_000_000);
+    let request = SearchOffersRequest {
+        hardware: hardware(),
+        allow_interruptible: false,
+        require_verified_or_secure: true,
+        maximum_hourly_microusd: 3_000_000,
+    };
+    let authorization = RentalAuthorization {
+        client_operation_id: "expired-replay".to_string(),
+        maximum_hourly_microusd: 3_000_000,
+        maximum_total_microusd: 12_000_000,
+        terminate_at_ms: NOW_MS + 1_000,
+        acknowledged_local_enforcement: true,
+    };
+    let created = service
+        .confirm(
+            "test-recipe",
+            &offer("first", 2_000_000, &request),
+            &authorization,
+            &provider,
+            NOW_MS,
+        )
+        .await
+        .expect("initial confirmation");
+
+    let replay = service
+        .confirm(
+            "test-recipe",
+            &offer("first", 2_000_000, &request),
+            &authorization,
+            &provider,
+            NOW_MS + 2_000,
+        )
+        .await
+        .expect("durable replay must return the recorded rental");
+
+    assert_eq!(replay.rental_id, created.rental_id);
+    assert_eq!(provider.search_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn new_expired_authorization_has_actionable_recovery() {
+    let service = service().await;
+    let provider = QuoteProvider::new("first", 2_000_000);
+    let request = SearchOffersRequest {
+        hardware: hardware(),
+        allow_interruptible: false,
+        require_verified_or_secure: true,
+        maximum_hourly_microusd: 3_000_000,
+    };
+    let error = service
+        .confirm(
+            "test-recipe",
+            &offer("first", 2_000_000, &request),
+            &RentalAuthorization {
+                client_operation_id: "new-expired".to_string(),
+                maximum_hourly_microusd: 3_000_000,
+                maximum_total_microusd: 12_000_000,
+                terminate_at_ms: NOW_MS,
+                acknowledged_local_enforcement: true,
+            },
+            &provider,
+            NOW_MS,
+        )
+        .await
+        .expect_err("a genuinely new expired authorization must be rejected");
+
+    assert!(error.safe_message.contains("expired before confirmation"));
+    assert!(error.safe_message.contains("/gpu"));
+    assert_eq!(provider.search_calls.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]

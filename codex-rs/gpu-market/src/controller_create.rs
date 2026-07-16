@@ -162,8 +162,15 @@ where
                 if error.retryable() {
                     self.record_retry(lease, error, now_ms).await
                 } else {
+                    let code = match error.kind {
+                        ProviderErrorKind::OfferUnavailable => "offer-unavailable",
+                        ProviderErrorKind::PriceDrift => "price-drift",
+                        ProviderErrorKind::Unauthorized => "provider-unauthorized",
+                        ProviderErrorKind::InsufficientFunds => "insufficient-funds",
+                        _ => "create-rejected",
+                    };
                     let message = error.safe_message.clone();
-                    self.record_terminal_failure(lease, "create-rejected", &message, now_ms)
+                    self.record_terminal_failure(lease, code, &message, now_ms)
                         .await
                 }
             }

@@ -83,7 +83,41 @@ impl VastProvider {
             .map_err(credential_error)
     }
 
+    async fn ensure_account_can_allocate(&self) -> ProviderResult<()> {
+        let key = self.api_key()?;
+        let response = self
+            .client
+            .get(format!("{}/v0/users/current/", self.api_base))
+            .bearer_auth(key.secret.expose())
+            .send()
+            .await
+            .map_err(|_| transport_error())?;
+        let json = decode_json(response).await?;
+        let balance = json.get("balance").and_then(Value::as_f64);
+        let credit = json.get("credit").and_then(Value::as_f64).unwrap_or(0.0);
+        let Some(balance) = balance else {
+            return Err(ProviderError::new(
+                ProviderErrorKind::Permanent,
+                "Vast returned malformed account funding state.",
+            ));
+        };
+        if !balance.is_finite() || !credit.is_finite() {
+            return Err(ProviderError::new(
+                ProviderErrorKind::Permanent,
+                "Vast returned malformed account funding state.",
+            ));
+        }
+        if balance + credit <= 0.0 {
+            return Err(ProviderError::new(
+                ProviderErrorKind::InsufficientFunds,
+                "The Vast account has no available credit. Add funds in Vast.ai, then search again from /gpu; no rental was created.",
+            ));
+        }
+        Ok(())
+    }
+
     async fn offers(&self, request: &SearchOffersRequest) -> ProviderResult<Vec<GpuOffer>> {
+        self.ensure_account_can_allocate().await?;
         let key = self.api_key()?;
         let mut filters = serde_json::json!({
             "verified": {"eq": true},
@@ -167,6 +201,45 @@ impl VastProvider {
                 ))
             }
         }
+    }
+
+    async fn offer_is_still_rentable(&self, offer_id: &str) -> ProviderResult<bool> {
+        let numeric_offer_id = offer_id.parse::<u64>().map_err(|_| {
+            ProviderError::new(
+                ProviderErrorKind::InvalidRequest,
+                "The selected Vast offer identity is invalid.",
+            )
+        })?;
+        let key = self.api_key()?;
+        let response = self
+            .client
+            .post(format!("{}/v0/bundles/", self.api_base))
+            .bearer_auth(key.secret.expose())
+            .json(&serde_json::json!({
+                "id": {"eq": numeric_offer_id},
+                "rentable": {"eq": true},
+                "limit": 1
+            }))
+            .send()
+            .await
+            .map_err(|_| transport_error())?;
+        let json = decode_json(response).await?;
+        let offers = json
+            .get("offers")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                ProviderError::new(
+                    ProviderErrorKind::Permanent,
+                    "Vast returned malformed offer inventory.",
+                )
+            })?;
+        Ok(offers.iter().any(|offer| {
+            offer
+                .get("id")
+                .or_else(|| offer.get("ask_contract_id"))
+                .and_then(Value::as_u64)
+                == Some(numeric_offer_id)
+        }))
     }
 
     async fn find_raw_instance_in_inventory(
@@ -326,6 +399,7 @@ impl GpuProvider for VastProvider {
     }
 
     async fn create_instance(&self, request: CreateInstanceRequest) -> ProviderResult<GpuInstance> {
+        self.ensure_account_can_allocate().await?;
         let requirements = SearchOffersRequest {
             hardware: crate::HardwareRequirements {
                 gpu_model: request.offer.gpu_model.clone(),
@@ -376,7 +450,34 @@ impl GpuProvider for VastProvider {
             .send()
             .await
             .map_err(|_| transport_error())?;
-        let json = decode_json(response).await?;
+        let json = match decode_json(response).await {
+            Ok(json) => json,
+            Err(error) if error.kind == ProviderErrorKind::InvalidRequest => {
+                if let Err(funding_error) = self.ensure_account_can_allocate().await
+                    && funding_error.kind == ProviderErrorKind::InsufficientFunds
+                {
+                    return Err(funding_error);
+                }
+                match self
+                    .offer_is_still_rentable(request.offer.offer_id.as_str())
+                    .await
+                {
+                    Ok(false) => {
+                        return Err(ProviderError::new(
+                            ProviderErrorKind::OfferUnavailable,
+                            "The selected Vast GPU capacity was claimed before allocation. No resource was created; search again from /gpu and choose a current offer.",
+                        )
+                        .with_diagnostic_ref(
+                            error
+                                .diagnostic_ref
+                                .unwrap_or_else(|| "vast-capacity-race".to_string()),
+                        ));
+                    }
+                    Ok(true) | Err(_) => return Err(error),
+                }
+            }
+            Err(error) => return Err(error),
+        };
         let resource_id = json
             .get("new_contract")
             .and_then(|value| {

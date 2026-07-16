@@ -6,6 +6,7 @@ use crate::SecretValue;
 use wiremock::Mock;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
+use wiremock::matchers::body_partial_json;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
@@ -65,9 +66,38 @@ fn provider(server: &MockServer) -> VastProvider {
     VastProvider::with_api_base(Arc::new(TestCredentials), server.uri())
 }
 
+async fn mount_funded_account(server: &MockServer, expected_requests: u64) {
+    Mock::given(method("GET"))
+        .and(path("/v0/users/current/"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "balance": 25.0,
+            "credit": 0.0
+        })))
+        .expect(expected_requests)
+        .mount(server)
+        .await;
+}
+
+fn create_request() -> CreateInstanceRequest {
+    let request = requirements();
+    let raw = offers_response(3.25)["offers"][0].clone();
+    CreateInstanceRequest {
+        offer: vast_offer(&raw, &request, unix_now_ms()).expect("valid test offer"),
+        client_operation_id: "operation-1".to_string(),
+        ownership_tag: "pft-install-rental-1".to_string(),
+        image: "runtime@sha256:abc".to_string(),
+        disk_gib: 400,
+        launch_command: vec!["model-id".to_string(), "argument with space".to_string()],
+        inference_port: 8000,
+        endpoint_token: SecretValue::new("endpoint-secret".to_string()).unwrap(),
+        huggingface_token: Some(SecretValue::new("hf-secret".to_string()).unwrap()),
+    }
+}
+
 #[tokio::test]
 async fn verified_offer_quotes_recipe_disk_in_the_full_hourly_price() {
     let server = MockServer::start().await;
+    mount_funded_account(&server, 1).await;
     Mock::given(method("POST"))
         .and(path("/v0/bundles/"))
         .respond_with(ResponseTemplate::new(200).set_body_json(offers_response(3.25)))
@@ -94,6 +124,7 @@ async fn verified_offer_quotes_recipe_disk_in_the_full_hourly_price() {
 #[tokio::test]
 async fn create_is_bound_to_atomic_exact_ask_and_ownership_label() {
     let server = MockServer::start().await;
+    mount_funded_account(&server, 2).await;
     Mock::given(method("POST"))
         .and(path("/v0/bundles/"))
         .respond_with(ResponseTemplate::new(200).set_body_json(offers_response(3.25)))
@@ -153,6 +184,93 @@ async fn create_is_bound_to_atomic_exact_ask_and_ownership_label() {
     assert!(body["env"].get("-p 8000:8000").is_none());
     assert!(!body.to_string().contains("cloudflare"));
     assert!(!body.to_string().contains(TEST_KEY));
+}
+
+#[tokio::test]
+async fn rejected_create_with_disappeared_offer_is_reported_as_capacity_race() {
+    let server = MockServer::start().await;
+    mount_funded_account(&server, 2).await;
+    Mock::given(method("PUT"))
+        .and(path("/v0/asks/987/"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+            "success": false,
+            "msg": "offer unavailable"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v0/bundles/"))
+        .and(body_partial_json(serde_json::json!({"id": {"eq": 987}})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "offers": []
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let error = provider(&server)
+        .create_instance(create_request())
+        .await
+        .expect_err("vanished exact offer must not look like a malformed request");
+
+    assert_eq!(error.kind, ProviderErrorKind::OfferUnavailable);
+    assert!(error.safe_message.contains("claimed before allocation"));
+    assert!(error.safe_message.contains("/gpu"));
+}
+
+#[tokio::test]
+async fn rejected_create_with_still_rentable_offer_preserves_provider_rejection() {
+    let server = MockServer::start().await;
+    mount_funded_account(&server, 2).await;
+    Mock::given(method("PUT"))
+        .and(path("/v0/asks/987/"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+            "success": false,
+            "msg": "invalid image configuration"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v0/bundles/"))
+        .and(body_partial_json(serde_json::json!({"id": {"eq": 987}})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(offers_response(3.25)))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let error = provider(&server)
+        .create_instance(create_request())
+        .await
+        .expect_err("non-capacity rejection must retain its original classification");
+
+    assert_eq!(error.kind, ProviderErrorKind::InvalidRequest);
+    assert_eq!(error.safe_message, "GPU provider rejected the request.");
+}
+
+#[tokio::test]
+async fn unfunded_account_is_rejected_before_offer_inventory_or_create() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v0/users/current/"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "balance": -0.80,
+            "credit": 0.0
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let error = provider(&server)
+        .search_offers(requirements())
+        .await
+        .expect_err("unfunded account must not advertise unusable inventory");
+
+    assert_eq!(error.kind, ProviderErrorKind::InsufficientFunds);
+    assert!(error.safe_message.contains("Add funds"));
+    assert!(error.safe_message.contains("no rental was created"));
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
 }
 
 #[test]
@@ -362,6 +480,7 @@ async fn null_get_by_id_and_empty_inventory_remain_ambiguous() {
 #[tokio::test]
 async fn malformed_response_is_sanitized() {
     let server = MockServer::start().await;
+    mount_funded_account(&server, 1).await;
     Mock::given(method("POST"))
         .and(path("/v0/bundles/"))
         .respond_with(ResponseTemplate::new(200).set_body_string(TEST_KEY))

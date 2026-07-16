@@ -76,7 +76,17 @@ impl GpuMarketService {
         P: GpuProvider,
     {
         let recipe = self.verified_recipe(recipe_id)?;
-        validate_authorization(authorization, now_ms)?;
+        validate_authorization_identity(authorization)?;
+        let rental_id = format!("gpu-{}", authorization.client_operation_id);
+        if let Some(existing) = self
+            .state
+            .get_gpu_rental(rental_id.as_str())
+            .await
+            .map_err(state_error)?
+        {
+            return Ok(existing);
+        }
+        validate_authorization_limits(authorization, now_ms)?;
         let capabilities = provider.capabilities();
         if capabilities.provider != selected_offer.provider {
             return Err(ProviderError::new(
@@ -137,7 +147,6 @@ impl GpuMarketService {
             now_ms,
         )?;
 
-        let rental_id = format!("gpu-{}", authorization.client_operation_id);
         let rental = self
             .state
             .create_gpu_rental(
@@ -233,9 +242,8 @@ async fn search_secure_provider<P: GpuProvider>(
     provider.search_offers(request).await
 }
 
-fn validate_authorization(
+fn validate_authorization_identity(
     authorization: &RentalAuthorization,
-    now_ms: i64,
 ) -> Result<(), ProviderError> {
     if authorization.client_operation_id.trim().is_empty()
         || authorization.client_operation_id.len() > 100
@@ -243,13 +251,29 @@ fn validate_authorization(
             .client_operation_id
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
-        || authorization.maximum_hourly_microusd <= 0
-        || authorization.maximum_total_microusd <= 0
-        || authorization.terminate_at_ms <= now_ms
     {
         return Err(ProviderError::new(
             ProviderErrorKind::InvalidRequest,
-            "GPU rental authorization is incomplete or expired.",
+            "GPU rental authorization identity is invalid; no rental was created.",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_authorization_limits(
+    authorization: &RentalAuthorization,
+    now_ms: i64,
+) -> Result<(), ProviderError> {
+    if authorization.maximum_hourly_microusd <= 0 || authorization.maximum_total_microusd <= 0 {
+        return Err(ProviderError::new(
+            ProviderErrorKind::InvalidRequest,
+            "GPU rental spending limits are incomplete; no rental was created.",
+        ));
+    }
+    if authorization.terminate_at_ms <= now_ms {
+        return Err(ProviderError::new(
+            ProviderErrorKind::InvalidRequest,
+            "This GPU rental authorization expired before confirmation. No rental was created; search again from /gpu.",
         ));
     }
     Ok(())
@@ -259,6 +283,12 @@ fn merge_search_results(
     first: Result<Vec<GpuOffer>, ProviderError>,
     second: Result<Vec<GpuOffer>, ProviderError>,
 ) -> Result<Vec<GpuOffer>, ProviderError> {
+    let insufficient_funds = [&first, &second]
+        .into_iter()
+        .find_map(|result| match result {
+            Err(error) if error.kind == ProviderErrorKind::InsufficientFunds => Some(error.clone()),
+            _ => None,
+        });
     if matches!(
         (&first, &second),
         (
@@ -317,11 +347,17 @@ fn merge_search_results(
                     error.kind,
                     ProviderErrorKind::NotConfigured
                         | ProviderErrorKind::CapabilityUnavailable
+                        | ProviderErrorKind::InsufficientFunds
                         | ProviderErrorKind::OfferUnavailable
                         | ProviderErrorKind::RateLimited
                 ) => {}
             Err(error) => return Err(error),
         }
+    }
+    if offers.is_empty()
+        && let Some(error) = insufficient_funds
+    {
+        return Err(error);
     }
     Ok(offers)
 }
