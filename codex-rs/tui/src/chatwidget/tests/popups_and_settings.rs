@@ -3117,7 +3117,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     assert!(
         kimi_popup.contains("[Kimi Code]")
             && kimi_popup.contains("Kimi Code K3")
-            && kimi_popup.contains("1M-token context window"),
+            && kimi_popup.contains("up to 1M on Allegretto and above"),
         "expected Kimi Code K3 in its own provider tab:\n{kimi_popup}"
     );
     let (mut vercel_chat, _vercel_rx, _vercel_op_rx) =

@@ -833,6 +833,10 @@ impl ChatStreamState {
             .finish_reason
             .take()
             .map(CompletionFinishReason::from_provider);
+        // A length-limited response is incomplete but recoverable: the turn runner records
+        // the partial assistant output, requests a continuation, and caps consecutive
+        // provider-driven continuations. Filtered and unknown terminal states are left
+        // indeterminate so the turn runner can surface them as explicit errors.
         let end_turn = match finish_reason.as_ref() {
             Some(CompletionFinishReason::Stop) => Some(true),
             Some(CompletionFinishReason::ToolCalls)

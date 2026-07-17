@@ -2628,11 +2628,7 @@ fn provider_auth_reachability_mode_from_auth(
             ProviderAuthReachabilityMode::NotRequired
         };
     }
-    if env_var_present(OPENAI_API_KEY_ENV_VAR)
-        || env_var_present(CODEX_API_KEY_ENV_VAR)
-        || env_var_present(AMBIENT_API_KEY_ENV_VAR)
-        || env_var_present(KIMI_CODE_API_KEY_ENV_VAR)
-    {
+    if env_var_present(OPENAI_API_KEY_ENV_VAR) || env_var_present(CODEX_API_KEY_ENV_VAR) {
         return ProviderAuthReachabilityMode::ApiKey;
     }
     if env_var_present(CODEX_ACCESS_TOKEN_ENV_VAR) {
@@ -3643,24 +3639,18 @@ mod tests {
             ),
             ProviderAuthReachabilityMode::ApiKey
         );
-        assert_eq!(
-            provider_auth_reachability_mode_from_auth(
-                /*requires_openai_auth*/ true,
-                |name| name == AMBIENT_API_KEY_ENV_VAR,
-                /*stored_auth*/ None,
-                /*active_provider_key_present*/ false,
-            ),
-            ProviderAuthReachabilityMode::ApiKey
-        );
-        assert_eq!(
-            provider_auth_reachability_mode_from_auth(
-                /*requires_openai_auth*/ true,
-                |name| name == KIMI_CODE_API_KEY_ENV_VAR,
-                /*stored_auth*/ None,
-                /*active_provider_key_present*/ false,
-            ),
-            ProviderAuthReachabilityMode::ApiKey
-        );
+        for unrelated_provider_key in [AMBIENT_API_KEY_ENV_VAR, KIMI_CODE_API_KEY_ENV_VAR] {
+            assert_eq!(
+                provider_auth_reachability_mode_from_auth(
+                    /*requires_openai_auth*/ true,
+                    |name| name == unrelated_provider_key,
+                    /*stored_auth*/ None,
+                    /*active_provider_key_present*/ false,
+                ),
+                ProviderAuthReachabilityMode::Chatgpt,
+                "an unrelated provider key must not authenticate the OpenAI reachability probe"
+            );
+        }
     }
 
     #[test]

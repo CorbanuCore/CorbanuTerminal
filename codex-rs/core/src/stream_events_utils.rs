@@ -8,7 +8,6 @@ use codex_protocol::config_types::ModeKind;
 use codex_protocol::items::ImageGenerationItem;
 use codex_protocol::items::TurnItem;
 use codex_utils_stream_parser::strip_citations;
-use codex_utils_stream_parser::strip_completion_markers;
 use tokio_util::sync::CancellationToken;
 
 use crate::context::ContextualUserFragment;
@@ -69,8 +68,7 @@ pub fn image_generation_artifact_path(
 }
 
 fn strip_hidden_assistant_markup(text: &str, plan_mode: bool) -> String {
-    let (without_completion_marker, _) = strip_completion_markers(text);
-    let (without_citations, _) = strip_citations(&without_completion_marker);
+    let (without_citations, _) = strip_citations(text);
     if plan_mode {
         strip_proposed_plan_blocks(&without_citations)
     } else {
@@ -85,8 +83,7 @@ fn strip_hidden_assistant_markup_and_parse_memory_citation(
     String,
     Option<codex_protocol::memory_citation::MemoryCitation>,
 ) {
-    let (without_completion_marker, _) = strip_completion_markers(text);
-    let (without_citations, citations) = strip_citations(&without_completion_marker);
+    let (without_citations, citations) = strip_citations(text);
     let visible_text = if plan_mode {
         strip_proposed_plan_blocks(&without_citations)
     } else {
