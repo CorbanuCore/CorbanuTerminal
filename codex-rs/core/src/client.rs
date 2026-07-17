@@ -1420,6 +1420,18 @@ impl ModelClient {
         model_info: &ModelInfo,
         effort: Option<ReasoningEffortConfig>,
     ) -> Result<AnthropicMessagesRequest> {
+        self.build_anthropic_messages_request_with_history_repair(
+            prompt, model_info, effort, /*repair_incomplete_latest_assistant*/ false,
+        )
+    }
+
+    fn build_anthropic_messages_request_with_history_repair(
+        &self,
+        prompt: &Prompt,
+        model_info: &ModelInfo,
+        effort: Option<ReasoningEffortConfig>,
+        repair_incomplete_latest_assistant: bool,
+    ) -> Result<AnthropicMessagesRequest> {
         let mut system = Vec::new();
         let instructions = prompt.base_instructions.text.trim();
         let is_claude_plan = is_claude_plan_model_slug(&model_info.slug);
@@ -1448,6 +1460,9 @@ impl ModelClient {
                 &mut messages,
                 &mut skipped_tool_call_ids,
             );
+        }
+        if repair_incomplete_latest_assistant {
+            remove_latest_signed_thinking_assistant_message(&mut messages);
         }
         ensure_anthropic_messages_end_with_user_turn(&mut messages);
         apply_anthropic_cache_control_to_last_user_messages(&mut messages, &cache_control);
@@ -1851,6 +1866,7 @@ impl ModelClientSession {
     ) -> Result<ResponseStream> {
         let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
+        let mut signed_thinking_history_retry_used = false;
         loop {
             let provider_request_started_at = Instant::now();
             trace_stream_timing(
@@ -1881,9 +1897,14 @@ impl ModelClientSession {
                 "anthropic_http_before_build_request",
                 provider_request_started_at,
             );
-            let request =
-                self.client
-                    .build_anthropic_messages_request(prompt, model_info, effort.clone())?;
+            let request = self
+                .client
+                .build_anthropic_messages_request_with_history_repair(
+                    prompt,
+                    model_info,
+                    effort.clone(),
+                    signed_thinking_history_retry_used,
+                )?;
             trace_stream_timing(
                 "anthropic_http_after_build_request",
                 provider_request_started_at,
@@ -1940,6 +1961,25 @@ impl ModelClientSession {
                         )
                         .await?,
                     );
+                    continue;
+                }
+                Err(err)
+                    if !signed_thinking_history_retry_used
+                        && is_anthropic_signed_thinking_history_rejection(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let mapped_err = map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    warn!(
+                        "Anthropic rejected an incomplete signed-thinking assistant response; \
+                         removing that response from this request and retrying once"
+                    );
+                    signed_thinking_history_retry_used = true;
                     continue;
                 }
                 Err(err) => {
@@ -3393,6 +3433,115 @@ fn push_anthropic_message(messages: &mut Vec<Value>, role: &str, block: Value) {
         "role": role,
         "content": [block],
     }));
+}
+
+/// Removes a partial Anthropic assistant response that cannot be replayed safely.
+///
+/// Anthropic signs extended-thinking blocks and requires the latest assistant response that
+/// contains one to be replayed exactly. If a stream is interrupted after that block is persisted
+/// but before the response reaches its terminal event, the durable history contains only a prefix
+/// of the signed response. Anthropic rejects every subsequent turn until that incomplete response
+/// is omitted. Keep the repair narrow: only the latest assistant message is eligible, it must
+/// contain a signed-thinking protocol block, and tool results tied to tool calls in that same
+/// message are the only user content removed with it.
+fn remove_latest_signed_thinking_assistant_message(messages: &mut Vec<Value>) -> bool {
+    let Some(assistant_index) = messages
+        .iter()
+        .rposition(|message| message.get("role").and_then(Value::as_str) == Some("assistant"))
+    else {
+        return false;
+    };
+
+    let Some(content) = messages[assistant_index]
+        .get("content")
+        .and_then(Value::as_array)
+    else {
+        return false;
+    };
+    let contains_signed_thinking = content.iter().any(|block| {
+        matches!(
+            block.get("type").and_then(Value::as_str),
+            Some("thinking" | "redacted_thinking")
+        )
+    });
+    if !contains_signed_thinking {
+        return false;
+    }
+
+    let removed_tool_use_ids = content
+        .iter()
+        .filter(|block| block.get("type").and_then(Value::as_str) == Some("tool_use"))
+        .filter_map(|block| block.get("id").and_then(Value::as_str))
+        .map(str::to_string)
+        .collect::<HashSet<_>>();
+    messages.remove(assistant_index);
+
+    if !removed_tool_use_ids.is_empty() {
+        for message in messages.iter_mut().skip(assistant_index) {
+            if message.get("role").and_then(Value::as_str) != Some("user") {
+                continue;
+            }
+            if let Some(content) = message.get_mut("content").and_then(Value::as_array_mut) {
+                content.retain(|block| {
+                    block.get("type").and_then(Value::as_str) != Some("tool_result")
+                        || block
+                            .get("tool_use_id")
+                            .and_then(Value::as_str)
+                            .is_none_or(|id| !removed_tool_use_ids.contains(id))
+                });
+            }
+        }
+    }
+
+    messages.retain(|message| {
+        message
+            .get("content")
+            .and_then(Value::as_array)
+            .is_none_or(|content| !content.is_empty())
+    });
+    merge_adjacent_anthropic_messages(messages);
+    true
+}
+
+fn merge_adjacent_anthropic_messages(messages: &mut Vec<Value>) {
+    let unmerged = std::mem::take(messages);
+    for mut message in unmerged {
+        let role = message.get("role").and_then(Value::as_str);
+        if let Some(last) = messages.last_mut()
+            && last.get("role").and_then(Value::as_str) == role
+            && let Some(last_content) = last.get_mut("content").and_then(Value::as_array_mut)
+            && let Some(content) = message.get_mut("content").and_then(Value::as_array_mut)
+        {
+            last_content.append(content);
+        } else {
+            messages.push(message);
+        }
+    }
+}
+
+fn is_anthropic_signed_thinking_history_rejection(error: &ApiError) -> bool {
+    let message = match error {
+        ApiError::Transport(TransportError::Http {
+            status,
+            body: Some(body),
+            ..
+        }) if *status == StatusCode::BAD_REQUEST => serde_json::from_str::<Value>(body)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("error")
+                    .and_then(|error| error.get("message"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| body.clone()),
+        ApiError::InvalidRequest { message } => message.clone(),
+        _ => return false,
+    };
+    let message = message.to_ascii_lowercase();
+    message.contains("latest assistant message")
+        && message.contains("cannot be modified")
+        && (message.contains("thinking") || message.contains("redacted_thinking"))
 }
 
 /// Anthropic rejects assistant-prefill requests for Claude Plan models.

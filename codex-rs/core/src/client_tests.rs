@@ -252,6 +252,106 @@ fn claude_plan_request_normalizes_child_mail_after_completed_assistant_turn() {
     );
 }
 
+#[test]
+fn anthropic_history_repair_removes_only_latest_incomplete_signed_response() {
+    let older_assistant = json!({
+        "role": "assistant",
+        "content": [
+            {"type": "thinking", "thinking": "complete", "signature": "older-signature"},
+            {"type": "text", "text": "older answer"},
+        ],
+    });
+    let mut messages = vec![
+        json!({"role": "user", "content": [{"type": "text", "text": "first task"}]}),
+        older_assistant.clone(),
+        json!({"role": "user", "content": [{"type": "text", "text": "next task"}]}),
+        json!({
+            "role": "assistant",
+            "content": [
+                {"type": "thinking", "thinking": "partial", "signature": "latest-signature"},
+                {"type": "text", "text": "partial answer"},
+                {"type": "tool_use", "id": "toolu_partial", "name": "shell", "input": {}},
+            ],
+        }),
+        json!({
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "toolu_partial", "content": "discard"},
+                {"type": "text", "text": "new child report"},
+                {"type": "tool_result", "tool_use_id": "toolu_unrelated", "content": "keep"},
+            ],
+        }),
+    ];
+
+    assert!(super::remove_latest_signed_thinking_assistant_message(
+        &mut messages
+    ));
+    assert_eq!(
+        messages,
+        vec![
+            json!({"role": "user", "content": [{"type": "text", "text": "first task"}]}),
+            older_assistant,
+            json!({
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "next task"},
+                    {"type": "text", "text": "new child report"},
+                    {"type": "tool_result", "tool_use_id": "toolu_unrelated", "content": "keep"},
+                ],
+            }),
+        ]
+    );
+}
+
+#[test]
+fn anthropic_history_repair_does_not_remove_a_valid_latest_assistant_response() {
+    let mut messages = vec![
+        json!({"role": "user", "content": [{"type": "text", "text": "first task"}]}),
+        json!({
+            "role": "assistant",
+            "content": [{"type": "thinking", "thinking": "older", "signature": "signature"}],
+        }),
+        json!({"role": "user", "content": [{"type": "text", "text": "next task"}]}),
+        json!({"role": "assistant", "content": [{"type": "text", "text": "valid answer"}]}),
+        json!({"role": "user", "content": [{"type": "text", "text": "current task"}]}),
+    ];
+    let original = messages.clone();
+
+    assert!(!super::remove_latest_signed_thinking_assistant_message(
+        &mut messages
+    ));
+    assert_eq!(messages, original);
+}
+
+#[test]
+fn anthropic_history_rejection_classifier_is_narrow_and_structured() {
+    let matching = ApiError::Transport(codex_api::TransportError::Http {
+        status: http::StatusCode::BAD_REQUEST,
+        url: None,
+        headers: None,
+        body: Some(
+            json!({
+                "type": "error",
+                "error": {
+                    "type": "invalid_request_error",
+                    "message": "messages.49.content.1: `thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified."
+                }
+            })
+            .to_string(),
+        ),
+    });
+    let unrelated = ApiError::InvalidRequest {
+        message: "The latest assistant message has invalid tool input.".to_string(),
+    };
+
+    assert!(super::is_anthropic_signed_thinking_history_rejection(
+        &matching
+    ));
+    assert!(!super::is_anthropic_signed_thinking_history_rejection(
+        &unrelated
+    ));
+}
+
 fn test_model_client(session_source: SessionSource) -> ModelClient {
     let provider = create_oss_provider_with_base_url("https://example.com/v1", WireApi::Responses);
     let thread_id = ThreadId::new();
