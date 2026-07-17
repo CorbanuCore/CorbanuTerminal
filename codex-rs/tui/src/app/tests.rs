@@ -9690,6 +9690,7 @@ async fn make_test_app() -> App {
         spawn_next_dispatch_seq: 1,
         spawn_processed_dispatch_seq_ids: HashSet::new(),
         spawn_processed_dispatch_origins: HashSet::new(),
+        spawn_dispatch_corrections_by_thread: HashMap::new(),
         spawn_accepted_delivery_ids: HashSet::new(),
         spawn_processed_terminal_turns: HashSet::new(),
         spawn_auto_loop_state_by_node: HashMap::new(),
@@ -9787,6 +9788,7 @@ async fn make_test_app_with_channels() -> (
             spawn_next_dispatch_seq: 1,
             spawn_processed_dispatch_seq_ids: HashSet::new(),
             spawn_processed_dispatch_origins: HashSet::new(),
+            spawn_dispatch_corrections_by_thread: HashMap::new(),
             spawn_accepted_delivery_ids: HashSet::new(),
             spawn_processed_terminal_turns: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
@@ -12196,4 +12198,99 @@ async fn try_dispatch_slash_input_only_claims_recognized_commands() {
         }
     }
     assert_eq!(picker_events, 2);
+}
+
+#[tokio::test]
+async fn superseded_saved_thread_requires_unique_live_replacement() {
+    // Nicknames recycle once the per-role roster is exhausted; a stale saved thread must not be
+    // superseded by an unrelated live worker that merely shares its nickname and role.
+    let mut app = make_test_app().await;
+    let stale_troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000310").expect("valid thread id");
+    let live_troll_a_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000311").expect("valid thread id");
+    let live_troll_b_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000312").expect("valid thread id");
+
+    app.upsert_agent_picker_thread(
+        stale_troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ true,
+    );
+    app.upsert_agent_picker_thread(
+        live_troll_a_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_node.insert(
+        crate::spawn_orchestration::thread_node_id(live_troll_a_thread_id),
+        "pane:codex-main".to_string(),
+    );
+    app.spawn_parent_by_node.insert(
+        crate::spawn_orchestration::thread_node_id(stale_troll_thread_id),
+        "pane:codex-main".to_string(),
+    );
+
+    let stale_entry = app
+        .agent_navigation
+        .get(&stale_troll_thread_id)
+        .cloned()
+        .expect("stale entry");
+    assert!(
+        app.replacement_for_superseded_saved_native_spawn_thread(
+            stale_troll_thread_id,
+            &stale_entry,
+        ) == Some(live_troll_a_thread_id),
+        "a single live nickname+role match supersedes the stale thread"
+    );
+
+    // A second live thread with the same nickname+role makes the mapping ambiguous.
+    app.upsert_agent_picker_thread(
+        live_troll_b_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_node.insert(
+        crate::spawn_orchestration::thread_node_id(live_troll_b_thread_id),
+        "pane:codex-main".to_string(),
+    );
+    assert_eq!(
+        app.replacement_for_superseded_saved_native_spawn_thread(
+            stale_troll_thread_id,
+            &stale_entry,
+        ),
+        None,
+        "duplicate live replacements must not supersede the stale thread"
+    );
+}
+
+#[tokio::test]
+async fn stale_nazgul_binding_is_cleared_and_dispatch_fails_loudly() {
+    let mut app = make_test_app().await;
+    let missing_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000320").expect("valid thread id");
+    app.spawn_nazgul_pane_id = Some(crate::spawn_orchestration::thread_node_id(
+        missing_thread_id,
+    ));
+    app.spawn_native_endpoint_by_node.insert(
+        crate::spawn_orchestration::thread_node_id(missing_thread_id),
+        missing_thread_id,
+    );
+
+    app.clear_stale_nazgul_binding();
+    assert_eq!(app.spawn_nazgul_pane_id, None);
+
+    // With the binding cleared, "Nazgul" resolves to the Codex Main pane fallback again.
+    let main_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000321").expect("valid thread id");
+    app.primary_thread_id = Some(main_thread_id);
+    let resolved = app
+        .resolve_spawn_task_target("Nazgul")
+        .expect("codex main fallback should resolve");
+    assert!(
+        matches!(resolved, crate::spawn_orchestration::SpawnTaskTarget::Native(thread_id) if thread_id == main_thread_id)
+    );
 }

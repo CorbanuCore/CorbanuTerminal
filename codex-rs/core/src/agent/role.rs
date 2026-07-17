@@ -29,8 +29,92 @@ use toml::Value as TomlValue;
 
 /// The role name used when a caller omits `agent_type`.
 pub const DEFAULT_ROLE_NAME: &str = "default";
+pub(crate) const NAZGUL_ROLE_NAME: &str = "nazgul";
+pub(crate) const TROLL_ROLE_NAME: &str = "troll";
+pub(crate) const ORC_ROLE_NAME: &str = "orc";
 const AGENT_TYPE_UNAVAILABLE_ERROR: &str = "agent type is currently not available";
 const AGENT_NAMES: &str = include_str!("agent_names.txt");
+
+/// Validates a requested thread-spawn role against the Nazgul -> Troll -> Orc role graph.
+///
+/// The spawn-agent tool handler runs this check before building the child `SessionSource`, but
+/// `AgentControl::spawn_agent_internal` also runs it so no caller can stamp a role that bypasses
+/// the depth rules or the worker execution-capacity limiter (which exempts Nazgul control turns).
+/// Two hierarchy shapes are legitimate: the pane flow (root -> Troll at depth 1 -> Orc at
+/// depth 2, with the Nazgul as a pane binding) and the native-crew flow (root -> Nazgul at
+/// depth 1 -> Troll at depth 2 -> Orc at depth 3). Spawns from parents that carry no Mordor
+/// role keep their existing behavior.
+pub(crate) fn validate_thread_spawn_role_graph(
+    parent_role: Option<&str>,
+    requested_role: Option<&str>,
+    child_depth: i32,
+) -> Result<(), String> {
+    let parent_role = parent_role
+        .map(|role| role.trim().to_ascii_lowercase())
+        .filter(|role| !role.is_empty());
+    let Some(target_role) = requested_role
+        .map(|role| role.trim().to_ascii_lowercase())
+        .filter(|role| !role.is_empty())
+    else {
+        return Ok(());
+    };
+
+    // Nazgul can never be requested through the spawn-agent tool: it is a host pane binding.
+    // Native Nazgul threads (root parent, depth 1) are created by the orchestration host
+    // through `AgentControl::spawn_agent_internal`, which bypasses this check deliberately.
+    if target_role == NAZGUL_ROLE_NAME {
+        return Err(
+            "Nazgul is a pane binding, not a spawned worker. Use /spawn to bind an existing pane as Nazgul."
+                .to_string(),
+        );
+    }
+
+    if parent_role.as_deref() == Some(ORC_ROLE_NAME) {
+        return Err("Orcs cannot spawn child agents.".to_string());
+    }
+
+    if parent_role.as_deref() == Some(TROLL_ROLE_NAME) && target_role != ORC_ROLE_NAME {
+        return Err("Trolls may only spawn Orc agents.".to_string());
+    }
+
+    if let Some(parent_role) = parent_role.as_deref()
+        && parent_role != NAZGUL_ROLE_NAME
+        && parent_role != TROLL_ROLE_NAME
+    {
+        // Other roles (default, worker, explorer, user-defined) are not part of the hierarchy.
+        return Ok(());
+    }
+
+    if parent_role.as_deref() == Some(NAZGUL_ROLE_NAME) && target_role != TROLL_ROLE_NAME {
+        return Err("A Nazgul may only spawn Troll agents.".to_string());
+    }
+
+    if target_role == TROLL_ROLE_NAME {
+        let valid_depth = match parent_role.as_deref() {
+            Some(NAZGUL_ROLE_NAME) => child_depth == 2,
+            _ => child_depth == 1,
+        };
+        if !valid_depth {
+            return Err("Trolls must be spawned directly by the Nazgul/root pane.".to_string());
+        }
+    }
+
+    if target_role == ORC_ROLE_NAME {
+        if parent_role.as_deref() != Some(TROLL_ROLE_NAME) {
+            if parent_role.is_none() {
+                // The host assigns the primary thread as the backend parent when an Orc's
+                // logical supervisor is a non-native pane; allow that pane-local shape.
+                return Ok(());
+            }
+            return Err("Orcs must be spawned by a Troll supervisor.".to_string());
+        }
+        if !(2..=3).contains(&child_depth) {
+            return Err("Orcs must run at depth 2 under a Troll supervisor.".to_string());
+        }
+    }
+
+    Ok(())
+}
 
 fn default_agent_nickname_list() -> Vec<&'static str> {
     AGENT_NAMES
@@ -87,8 +171,7 @@ async fn apply_role_to_config_inner(
     let Some(config_file) = role.config_file.as_ref() else {
         return Ok(());
     };
-    let mut role_layer_toml =
-        load_role_layer_toml(config, config_file, is_built_in, role_name).await?;
+    let role_layer_toml = load_role_layer_toml(config, config_file, is_built_in, role_name).await?;
     if role_layer_toml
         .as_table()
         .is_some_and(toml::map::Map::is_empty)
@@ -107,16 +190,6 @@ async fn apply_role_to_config_inner(
         .flatten();
     let preserve_current_provider = role_layer_toml.get("model_provider").is_none();
     let preserve_current_service_tier = role_layer_toml.get("service_tier").is_none();
-    if !role_sets_model_runtime
-        && role_layer_toml.get("model_reasoning_effort").is_none()
-        && let Some(reasoning_effort) = config.model_reasoning_effort.as_ref()
-        && let Some(table) = role_layer_toml.as_table_mut()
-    {
-        table.insert(
-            "model_reasoning_effort".to_string(),
-            TomlValue::String(reasoning_effort.to_string()),
-        );
-    }
     let role_reasoning_effort = role_layer_toml
         .get("model_reasoning_effort")
         .and_then(TomlValue::as_str)

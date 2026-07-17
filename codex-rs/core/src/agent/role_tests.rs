@@ -139,8 +139,25 @@ async fn built_in_hierarchy_roles_preserve_selected_runtime() {
 
         assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
         assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
+        // The caller's explicit reasoning-effort override still applies through config layering;
+        // it is only the runtime fallback injection into the role layer that must not happen.
         assert_eq!(config.model_reasoning_effort, Some(ReasoningEffort::XHigh));
     }
+}
+
+#[tokio::test]
+async fn apply_role_does_not_inherit_runtime_reasoning_effort() {
+    // Regression: when a role pins no model/reasoning effort, the caller's *runtime* effort must
+    // not be injected into the role layer. Otherwise an Orc spawned from an xhigh Troll silently
+    // inherits xhigh even though nothing configured it.
+    let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    config.model_reasoning_effort = Some(ReasoningEffort::XHigh);
+
+    apply_role_to_config(&mut config, Some("orc"))
+        .await
+        .expect("orc role should apply");
+
+    assert_eq!(config.model_reasoning_effort, None);
 }
 
 #[tokio::test]
@@ -820,4 +837,41 @@ fn hierarchy_role_base_files_exclude_gpt55_default_guide_markers() {
             "scored role doctrine should stay below the gpt-5.5 default guide size"
         );
     }
+}
+
+#[test]
+fn thread_spawn_role_graph_blocks_nazgul_below_root() {
+    // Nazgul can never be requested through the spawn-agent tool; it is a host pane binding.
+    // Native Nazgul threads come from the host's crew-creation path, which bypasses this check.
+    for (parent_role, depth) in [(None, 1), (Some("troll"), 2), (Some("orc"), 3)] {
+        let err = super::validate_thread_spawn_role_graph(parent_role, Some("nazgul"), depth)
+            .expect_err("nazgul spawn below root must be rejected");
+        assert!(err.contains("pane binding"), "unexpected error: {err}");
+    }
+}
+
+#[test]
+fn thread_spawn_role_graph_enforces_troll_and_orc_rules() {
+    // Pane flow: root -> Troll (depth 1) -> Orc (depth 2).
+    assert!(super::validate_thread_spawn_role_graph(None, Some("troll"), 1).is_ok());
+    assert!(super::validate_thread_spawn_role_graph(None, Some("troll"), 2).is_err());
+    assert!(super::validate_thread_spawn_role_graph(Some("troll"), Some("orc"), 2).is_ok());
+    // Native-crew flow: root -> Nazgul (1) -> Troll (2) -> Orc (3).
+    assert!(super::validate_thread_spawn_role_graph(Some("nazgul"), Some("troll"), 2).is_ok());
+    assert!(super::validate_thread_spawn_role_graph(Some("nazgul"), Some("troll"), 1).is_err());
+    assert!(super::validate_thread_spawn_role_graph(Some("troll"), Some("orc"), 3).is_ok());
+    assert!(super::validate_thread_spawn_role_graph(Some("troll"), Some("orc"), 4).is_err());
+    // Orcs never spawn; Trolls spawn only Orcs.
+    assert!(super::validate_thread_spawn_role_graph(Some("orc"), Some("orc"), 3).is_err());
+    assert!(super::validate_thread_spawn_role_graph(Some("troll"), Some("troll"), 2).is_err());
+    // A Nazgul delegates to Trolls, never directly to Orcs or other roles.
+    assert!(super::validate_thread_spawn_role_graph(Some("nazgul"), Some("orc"), 2).is_err());
+    assert!(super::validate_thread_spawn_role_graph(Some("nazgul"), Some("worker"), 2).is_err());
+    // Orcs spawned from the root pane are allowed only when the host assigned the primary
+    // thread as backend parent for a non-native supervisor pane.
+    assert!(super::validate_thread_spawn_role_graph(None, Some("orc"), 1).is_ok());
+    // Non-hierarchy roles and role-less spawns are untouched.
+    assert!(super::validate_thread_spawn_role_graph(Some("worker"), Some("default"), 2).is_ok());
+    assert!(super::validate_thread_spawn_role_graph(Some("troll"), None, 2).is_ok());
+    assert!(super::validate_thread_spawn_role_graph(None, None, 1).is_ok());
 }
