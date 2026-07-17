@@ -45,6 +45,14 @@ use crate::responses_retry::guard_same_request_idle_retry;
 use crate::responses_retry::handle_retryable_response_stream_error;
 use crate::session::PreviousTurnSettings;
 use crate::session::TurnInput;
+use crate::session::completion_guard::CompletionAssessment;
+use crate::session::completion_guard::CompletionGuardAction;
+use crate::session::completion_guard::CompletionGuardState;
+use crate::session::completion_guard::MAX_COMPLETION_ASSESSMENT_ATTEMPTS;
+use crate::session::completion_guard::assessment_prompt;
+use crate::session::completion_guard::continuation_message;
+use crate::session::completion_guard::objective_from_turn_input;
+use crate::session::completion_guard::parse_assessment;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::stream_events_utils::HandleOutputCtx;
@@ -86,6 +94,7 @@ use codex_features::Feature;
 use codex_git_utils::get_git_repo_root_with_fs;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
 use codex_protocol::config_types::ModeKind;
+use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
 use codex_protocol::config_types::ServiceTier;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result as CodexResult;
@@ -97,6 +106,7 @@ use codex_protocol::models::ContentItem;
 use codex_protocol::models::MessagePhase;
 use codex_protocol::models::ResponseInputItem;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::AgentMessageContentDeltaEvent;
 use codex_protocol::protocol::AgentReasoningSectionBreakEvent;
 use codex_protocol::protocol::CodexErrorInfo;
@@ -110,6 +120,7 @@ use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TurnDiffEvent;
 use codex_protocol::protocol::WarningEvent;
 use codex_protocol::user_input::UserInput;
+use codex_rollout_trace::InferenceTraceContext;
 use codex_state::ProviderRequestBlock;
 use codex_state::ProviderRequestBlockReason;
 use codex_state::ProviderRequestKey;
@@ -155,6 +166,87 @@ fn trace_turn_timing(label: &str, start: Instant) {
             elapsed_ms = start.elapsed().as_millis(),
             "pfterminal turn timing"
         );
+    }
+}
+
+async fn assess_kimi_completion(
+    sess: &Session,
+    turn_context: &TurnContext,
+    client_session: &mut ModelClientSession,
+    responses_metadata: &CodexResponsesMetadata,
+    objective: &str,
+    assistant_response: &str,
+    cancellation_token: &CancellationToken,
+) -> CodexResult<CompletionAssessment> {
+    let prompt = assessment_prompt(objective, assistant_response);
+    let stream_result = client_session
+        .stream(
+            &prompt,
+            &turn_context.model_info,
+            &turn_context.session_telemetry,
+            Some(ReasoningEffortConfig::Low),
+            ReasoningSummaryConfig::None,
+            turn_context.config.service_tier.clone(),
+            responses_metadata,
+            &InferenceTraceContext::disabled(),
+        )
+        .or_cancel(cancellation_token)
+        .await;
+    let mut stream = match stream_result {
+        Ok(result) => result?,
+        Err(_) => return Err(CodexErr::TurnAborted),
+    };
+    let mut output = None;
+    loop {
+        let event = match stream.next().or_cancel(cancellation_token).await {
+            Ok(Some(event)) => event?,
+            Ok(None) => {
+                return Err(CodexErr::Stream(
+                    "completion assessment stream closed before response.completed".into(),
+                    None,
+                ));
+            }
+            Err(_) => return Err(CodexErr::TurnAborted),
+        };
+        match event {
+            ResponseEvent::OutputItemDone(item) => {
+                if let Some(text) = raw_assistant_output_text_from_item(&item)
+                    && !text.trim().is_empty()
+                {
+                    output = Some(text);
+                }
+            }
+            ResponseEvent::Completed {
+                token_usage,
+                finish_reason,
+                ..
+            } => {
+                sess.update_token_usage_info(turn_context, token_usage.as_ref())
+                    .await?;
+                if !matches!(
+                    finish_reason,
+                    None | Some(codex_api::CompletionFinishReason::Stop)
+                ) {
+                    return Err(CodexErr::InvalidRequest(format!(
+                        "completion assessment ended with finish reason `{}`",
+                        finish_reason
+                            .as_ref()
+                            .map_or("missing", codex_api::CompletionFinishReason::as_str)
+                    )));
+                }
+                let output = output.ok_or_else(|| {
+                    CodexErr::InvalidRequest(
+                        "completion assessment returned no structured output".to_string(),
+                    )
+                })?;
+                return parse_assessment(&output).map_err(|err| {
+                    CodexErr::InvalidRequest(format!(
+                        "completion assessment returned invalid structured output: {err}"
+                    ))
+                });
+            }
+            _ => {}
+        }
     }
 }
 
@@ -241,6 +333,8 @@ pub(crate) async fn run_turn(
     let mut last_agent_message: Option<String> = None;
     let mut stop_hook_active = false;
     let mut consecutive_server_side_model_continuations = 0_u64;
+    let completion_objective = objective_from_turn_input(&input);
+    let mut completion_guard = CompletionGuardState::default();
     // Although from the perspective of codex.rs, TurnDiffTracker has the lifecycle of a Task which contains
     // many turns, from the perspective of the user, it is a single turn.
     let display_roots = turn_diff_display_roots(turn_context.as_ref()).await;
@@ -298,7 +392,7 @@ pub(crate) async fn run_turn(
 
             let responses_metadata = turn_context.turn_metadata_state.to_responses_metadata(
                 sess.installation_id.clone(),
-                window_id,
+                window_id.clone(),
                 CodexResponsesRequestKind::Turn,
             );
             let tokens_before_sampling = sess.get_total_token_usage().await;
@@ -329,7 +423,9 @@ pub(crate) async fn run_turn(
                     last_agent_message: sampling_request_last_agent_message,
                     token_usage: _,
                     server_side_model_continuation,
+                    saw_client_tool_call,
                 } = sampling_request_output;
+                completion_guard.observe_sampling(saw_client_tool_call);
                 if server_side_model_continuation {
                     consecutive_server_side_model_continuations += 1;
                     if consecutive_server_side_model_continuations
@@ -418,6 +514,71 @@ pub(crate) async fn run_turn(
                     }
                     can_drain_pending_input = !model_needs_follow_up;
                     continue;
+                }
+
+                if completion_guard.should_assess(
+                    turn_context.provider.info().is_kimi_code(),
+                    needs_follow_up,
+                    sampling_request_last_agent_message.as_deref(),
+                ) {
+                    let assessment_metadata =
+                        turn_context.turn_metadata_state.to_responses_metadata(
+                            sess.installation_id.clone(),
+                            window_id.clone(),
+                            CodexResponsesRequestKind::Turn,
+                        );
+                    let assessment = match assess_kimi_completion(
+                        sess.as_ref(),
+                        turn_context.as_ref(),
+                        &mut client_session,
+                        &assessment_metadata,
+                        &completion_objective,
+                        sampling_request_last_agent_message
+                            .as_deref()
+                            .unwrap_or_default(),
+                        &cancellation_token,
+                    )
+                    .await
+                    {
+                        Ok(assessment) => assessment,
+                        Err(CodexErr::TurnAborted) => return Err(CodexErr::TurnAborted),
+                        Err(err) => {
+                            warn!(
+                                turn_id = %turn_context.sub_id,
+                                error = %err,
+                                "Kimi completion assessment failed; treating the result as uncertain"
+                            );
+                            CompletionAssessment::Uncertain
+                        }
+                    };
+                    match completion_guard.record_assessment(assessment) {
+                        CompletionGuardAction::Accept => {
+                            trace!(
+                                turn_id = %turn_context.sub_id,
+                                "Kimi completion assessment accepted the final response"
+                            );
+                        }
+                        CompletionGuardAction::Continue => {
+                            trace!(
+                                turn_id = %turn_context.sub_id,
+                                assessment = ?assessment,
+                                attempts = completion_guard.unsuccessful_assessments(),
+                                "Kimi completion assessment requested continuation"
+                            );
+                            let message = continuation_message();
+                            sess.record_conversation_items(
+                                &turn_context,
+                                std::slice::from_ref(&message),
+                            )
+                            .await;
+                            continue;
+                        }
+                        CompletionGuardAction::Fail => {
+                            return Err(CodexErr::InvalidRequest(format!(
+                                "Kimi stopped {MAX_COMPLETION_ASSESSMENT_ATTEMPTS} consecutive times after tool execution without a verifiable final response; retry the turn or select another model"
+                            )));
+                        }
+                    }
                 }
 
                 if !needs_follow_up {
@@ -1458,6 +1619,7 @@ struct SamplingRequestResult {
     last_agent_message: Option<String>,
     token_usage: Option<TokenUsage>,
     server_side_model_continuation: bool,
+    saw_client_tool_call: bool,
 }
 
 /// Ephemeral per-response state for streaming a single proposed plan.
@@ -2958,6 +3120,7 @@ async fn try_run_sampling_request(
                     last_agent_message,
                     token_usage: completed_token_usage,
                     server_side_model_continuation,
+                    saw_client_tool_call,
                 });
             }
             ResponseEvent::OutputTextDelta(delta) => {

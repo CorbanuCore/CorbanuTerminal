@@ -64,6 +64,7 @@ mod hooks_mcp;
 mod image_rollout;
 mod items;
 mod json_result;
+mod kimi_completion_guard;
 mod live_cli;
 mod mcp_tool_exposure;
 mod mcp_turn_metadata;
