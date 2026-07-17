@@ -83,6 +83,7 @@ pub(super) async fn make_test_app() -> App {
         spawn_last_dispatch_seq_by_node: HashMap::new(),
         spawn_last_event_at_by_node: HashMap::new(),
         spawn_nazgul_pane_id: None,
+        spawn_nazgul_rebind_required: false,
         orchestrate_whips: Box::new(HashMap::new()),
         orchestrate_next_whip_seq: 0,
         orchestrate_now_override: None,

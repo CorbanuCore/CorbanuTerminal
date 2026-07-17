@@ -48,7 +48,7 @@ const REPORT_PARENT_OPEN: &str = "<pfterminal_report_parent>";
 const REPORT_PARENT_CLOSE: &str = "</pfterminal_report_parent>";
 const EXEC_WRAPPED_DISPATCH_CORRECTION_TASK: &str = "PFTerminal host correction: you emitted a <pfterminal_send_task> dispatch block inside exec_command/shell text, so it was not routed to the target pane. Re-emit the same dispatch now as plain assistant message text, not inside a shell command, cat, echo, heredoc, markdown fence, or tool call. Do not claim it was sent until the plain-text block appears.";
 const MALFORMED_DISPATCH_CORRECTION_TASK: &str = "PFTerminal host correction: your last turn contained a <pfterminal_send_task> block that could not be routed (missing or empty target, or empty task). Re-emit the dispatch now as a complete plain-text block with a non-empty target from the live roster and a non-empty task body.";
-const SPAWN_DISPATCH_CORRECTION_LIMIT_PER_THREAD: usize = 3;
+pub(crate) const SPAWN_DISPATCH_CORRECTION_LIMIT_PER_THREAD: usize = 3;
 const SPAWN_PARENT_REPORT_LIMIT: usize = 12;
 #[cfg(test)]
 const SPAWN_PROCESSED_DISPATCH_TURN_LIMIT: usize = 1024;
@@ -323,6 +323,7 @@ impl App {
 
     pub(crate) fn set_spawn_nazgul_pane_binding(&mut self, pane_id: String) {
         self.spawn_nazgul_pane_id = Some(pane_id);
+        self.spawn_nazgul_rebind_required = false;
         self.persist_pane_state();
     }
 
@@ -335,23 +336,41 @@ impl App {
         );
     }
 
-    /// Clears the Nazgul root binding when it points at a native thread that no longer exists.
-    /// A stale binding would silently reroute root-level dispatches to whatever pane the target
-    /// resolver falls through to, so fail loudly and force an explicit rebind instead.
+    /// Clears the Nazgul root binding when its main pane, Claude pane, or native thread is no
+    /// longer available. A stale binding would silently reroute root-level dispatches to whatever
+    /// pane the target resolver falls through to, so fail loudly and force an explicit rebind.
     pub(crate) fn clear_stale_nazgul_binding(&mut self) {
-        let Some(bound_thread_id) = self.nazgul_bound_thread_id() else {
+        let Some(stale_target) = self.spawn_nazgul_pane_id.clone() else {
             return;
         };
-        if self.agent_navigation.get(&bound_thread_id).is_some() {
+
+        let bound_native_thread_id = self
+            .spawn_native_endpoint_by_node
+            .get(&stale_target)
+            .copied()
+            .or_else(|| node_id_thread(&stale_target));
+        let binding_is_live = if stale_target == CODEX_MAIN_PANE_ID {
+            self.primary_thread_id.is_some()
+        } else if let Some(thread_id) = bound_native_thread_id {
+            self.agent_navigation
+                .get(&thread_id)
+                .is_some_and(|entry| !entry.is_closed)
+        } else {
+            self.claude_panes
+                .panes()
+                .iter()
+                .any(|pane| pane.id == stale_target)
+        };
+        if binding_is_live {
             return;
         }
-        let stale_target = self.spawn_nazgul_bound_target().to_string();
         tracing::warn!(
             bound_target = stale_target,
-            thread_id = %bound_thread_id,
-            "bound Nazgul root thread is missing; clearing stale binding"
+            thread_id = bound_native_thread_id.map(|thread_id| thread_id.to_string()),
+            "bound Nazgul root is unavailable; clearing stale binding"
         );
         self.spawn_nazgul_pane_id = None;
+        self.spawn_nazgul_rebind_required = true;
         self.persist_pane_state();
         self.chat_widget.add_error_message(format!(
             "Nazgul root binding `{stale_target}` no longer exists and was cleared. Rebind a root pane with /spawn."
@@ -1638,6 +1657,7 @@ impl App {
         if turn.status != codex_app_server_protocol::TurnStatus::Completed {
             return;
         }
+        let correction_eligible = self.is_spawn_orchestration_thread(source_thread_id);
         let mut assistant_text = String::new();
         for item in &turn.items {
             if let codex_app_server_protocol::ThreadItem::AgentMessage { text, .. } = item {
@@ -1656,6 +1676,13 @@ impl App {
         self.dispatch_orchestrate_blocks_from_text(&source_node_id, &assistant_text);
         let (visible, dispatches) = extract_spawn_task_dispatches(&assistant_text);
         if !dispatches.is_empty() {
+            self.spawn_dispatch_corrections_by_thread
+                .remove(&source_thread_id);
+            return;
+        }
+        if !correction_eligible {
+            self.spawn_dispatch_corrections_by_thread
+                .remove(&source_thread_id);
             return;
         }
         if turn_contains_exec_wrapped_spawn_task_dispatch(turn) {
@@ -1670,6 +1697,9 @@ impl App {
                 &turn.id,
                 MALFORMED_DISPATCH_CORRECTION_TASK,
             );
+        } else {
+            self.spawn_dispatch_corrections_by_thread
+                .remove(&source_thread_id);
         }
     }
 
@@ -4670,16 +4700,11 @@ impl App {
         }
 
         if is_nazgul_dispatch_target(target) {
-            if let Some(bound_thread_id) = self.nazgul_bound_thread_id() {
-                if self.agent_navigation.get(&bound_thread_id).is_some() {
-                    return Ok(SpawnTaskTarget::Native(bound_thread_id));
-                }
-                // The binding points at a native thread that no longer exists; the mutable
-                // callers clear it via `clear_stale_nazgul_binding` before reaching this path.
-                let bound_pane_id = self.spawn_nazgul_bound_target().to_string();
-                return Err(format!(
-                    "Cannot dispatch to Nazgul; bound root `{bound_pane_id}` no longer exists. Rebind a root pane with /spawn."
-                ));
+            if self.spawn_nazgul_rebind_required {
+                return Err(
+                    "Cannot dispatch to Nazgul; the previous root is unavailable. Rebind a root pane with /spawn."
+                        .to_string(),
+                );
             }
             let bound_pane_id = self.spawn_nazgul_bound_target();
             if bound_pane_id == CODEX_MAIN_PANE_ID {
@@ -4689,6 +4714,20 @@ impl App {
                     .ok_or_else(|| {
                         "Cannot dispatch to Nazgul; Codex Main is not loaded.".to_string()
                     });
+            }
+            if let Some(bound_thread_id) = self.nazgul_bound_thread_id() {
+                if self
+                    .agent_navigation
+                    .get(&bound_thread_id)
+                    .is_some_and(|entry| !entry.is_closed)
+                {
+                    return Ok(SpawnTaskTarget::Native(bound_thread_id));
+                }
+                // The binding points at a native thread that no longer exists; the mutable
+                // callers clear it via `clear_stale_nazgul_binding` before reaching this path.
+                return Err(format!(
+                    "Cannot dispatch to Nazgul; bound root `{bound_pane_id}` no longer exists. Rebind a root pane with /spawn."
+                ));
             }
             if self
                 .claude_panes

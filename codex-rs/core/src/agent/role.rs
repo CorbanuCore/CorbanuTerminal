@@ -37,13 +37,14 @@ const AGENT_NAMES: &str = include_str!("agent_names.txt");
 
 /// Validates a requested thread-spawn role against the Nazgul -> Troll -> Orc role graph.
 ///
-/// The spawn-agent tool handler runs this check before building the child `SessionSource`, but
-/// `AgentControl::spawn_agent_internal` also runs it so no caller can stamp a role that bypasses
-/// the depth rules or the worker execution-capacity limiter (which exempts Nazgul control turns).
+/// `AgentControl::spawn_agent_internal` runs this check before capacity accounting so no caller can
+/// stamp a role that bypasses the depth rules or the worker execution-capacity limiter (which
+/// exempts Nazgul control turns). Model-facing handlers add the stricter policy that models cannot
+/// create Nazgul panes or use the host-only root-parented Orc shape.
 /// Two hierarchy shapes are legitimate: the pane flow (root -> Troll at depth 1 -> Orc at
 /// depth 2, with the Nazgul as a pane binding) and the native-crew flow (root -> Nazgul at
 /// depth 1 -> Troll at depth 2 -> Orc at depth 3). Spawns from parents that carry no Mordor
-/// role keep their existing behavior.
+/// role keep their existing behavior unless they request one of the hierarchy roles.
 pub(crate) fn validate_thread_spawn_role_graph(
     parent_role: Option<&str>,
     requested_role: Option<&str>,
@@ -52,47 +53,42 @@ pub(crate) fn validate_thread_spawn_role_graph(
     let parent_role = parent_role
         .map(|role| role.trim().to_ascii_lowercase())
         .filter(|role| !role.is_empty());
-    let Some(target_role) = requested_role
+    let target_role = requested_role
         .map(|role| role.trim().to_ascii_lowercase())
-        .filter(|role| !role.is_empty())
-    else {
-        return Ok(());
-    };
-
-    // Nazgul can never be requested through the spawn-agent tool: it is a host pane binding.
-    // Native Nazgul threads (root parent, depth 1) are created by the orchestration host
-    // through `AgentControl::spawn_agent_internal`, which bypasses this check deliberately.
-    if target_role == NAZGUL_ROLE_NAME {
-        return Err(
-            "Nazgul is a pane binding, not a spawned worker. Use /spawn to bind an existing pane as Nazgul."
-                .to_string(),
-        );
-    }
+        .filter(|role| !role.is_empty());
 
     if parent_role.as_deref() == Some(ORC_ROLE_NAME) {
         return Err("Orcs cannot spawn child agents.".to_string());
     }
 
-    if parent_role.as_deref() == Some(TROLL_ROLE_NAME) && target_role != ORC_ROLE_NAME {
+    if parent_role.as_deref() == Some(TROLL_ROLE_NAME)
+        && target_role.as_deref() != Some(ORC_ROLE_NAME)
+    {
         return Err("Trolls may only spawn Orc agents.".to_string());
     }
 
-    if let Some(parent_role) = parent_role.as_deref()
-        && parent_role != NAZGUL_ROLE_NAME
-        && parent_role != TROLL_ROLE_NAME
+    if parent_role.as_deref() == Some(NAZGUL_ROLE_NAME)
+        && target_role.as_deref() != Some(TROLL_ROLE_NAME)
     {
-        // Other roles (default, worker, explorer, user-defined) are not part of the hierarchy.
-        return Ok(());
+        return Err("A Nazgul may only spawn Troll agents.".to_string());
     }
 
-    if parent_role.as_deref() == Some(NAZGUL_ROLE_NAME) && target_role != TROLL_ROLE_NAME {
-        return Err("A Nazgul may only spawn Troll agents.".to_string());
+    let Some(target_role) = target_role else {
+        return Ok(());
+    };
+
+    if target_role == NAZGUL_ROLE_NAME {
+        if parent_role.is_none() && child_depth == 1 {
+            return Ok(());
+        }
+        return Err("Nazgul must be created directly under the root thread.".to_string());
     }
 
     if target_role == TROLL_ROLE_NAME {
         let valid_depth = match parent_role.as_deref() {
             Some(NAZGUL_ROLE_NAME) => child_depth == 2,
-            _ => child_depth == 1,
+            None => child_depth == 1,
+            Some(_) => false,
         };
         if !valid_depth {
             return Err("Trolls must be spawned directly by the Nazgul/root pane.".to_string());
@@ -101,7 +97,7 @@ pub(crate) fn validate_thread_spawn_role_graph(
 
     if target_role == ORC_ROLE_NAME {
         if parent_role.as_deref() != Some(TROLL_ROLE_NAME) {
-            if parent_role.is_none() {
+            if parent_role.is_none() && child_depth == 1 {
                 // The host assigns the primary thread as the backend parent when an Orc's
                 // logical supervisor is a non-native pane; allow that pane-local shape.
                 return Ok(());
@@ -112,6 +108,8 @@ pub(crate) fn validate_thread_spawn_role_graph(
             return Err("Orcs must run at depth 2 under a Troll supervisor.".to_string());
         }
     }
+
+    // Other roles (default, worker, explorer, user-defined) are not part of the hierarchy.
 
     Ok(())
 }

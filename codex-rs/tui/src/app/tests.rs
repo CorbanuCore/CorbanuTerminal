@@ -1866,19 +1866,35 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
             .and_then(|entry| entry.model.as_deref()),
         Some(App::STANDARD_TROLL_MODEL)
     );
-    assert!(!app.spawn_parent_by_node.contains_key(&old_snaga_node_id));
-    assert!(!app.spawn_parent_by_node.contains_key(&old_ghash_node_id));
-
-    let restored_orcs = app
-        .agent_navigation
-        .ordered_threads()
+    // Saved pane ids are durable logical identities. Materialization keeps those parent edges and
+    // routes each logical id to the new live thread through spawn_native_endpoint_by_node.
+    assert_eq!(
+        app.spawn_parent_by_node.get(&old_snaga_node_id),
+        Some(&troll_node_id)
+    );
+    assert_eq!(
+        app.spawn_parent_by_node.get(&old_ghash_node_id),
+        Some(&troll_node_id)
+    );
+    let restored_orc_thread_ids = [&old_snaga_node_id, &old_ghash_node_id]
         .into_iter()
-        .filter(|(thread_id, entry)| {
-            entry.agent_role.as_deref() == Some("orc")
-                && app
-                    .spawn_parent_by_node
-                    .get(&crate::spawn_orchestration::thread_node_id(*thread_id))
-                    == Some(&troll_node_id)
+        .map(|node_id| {
+            *app.spawn_native_endpoint_by_node
+                .get(node_id)
+                .expect("saved Orc has a live endpoint")
+        })
+        .collect::<Vec<_>>();
+    assert!(!restored_orc_thread_ids.contains(&old_snaga_thread_id));
+    assert!(!restored_orc_thread_ids.contains(&old_ghash_thread_id));
+    let restored_orcs = restored_orc_thread_ids
+        .into_iter()
+        .map(|thread_id| {
+            (
+                thread_id,
+                app.agent_navigation
+                    .get(&thread_id)
+                    .expect("materialized Orc is visible"),
+            )
         })
         .collect::<Vec<_>>();
     assert_eq!(restored_orcs.len(), 2);
@@ -1907,6 +1923,42 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
     }));
 
     app_server.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn app_server_spawn_rejects_hierarchy_role_under_general_worker() -> Result<()> {
+    let app = make_test_app().await;
+    let mut app_server = start_config_write_test_app_server(&app).await?;
+    let main = app_server.start_thread(&app.config).await?;
+    let spawn_config = app.native_spawn_agent_config()?;
+    let worker = app_server
+        .spawn_agent_thread(
+            &spawn_config,
+            main.session.thread_id,
+            "worker".to_string(),
+            Some("GeneralWorker".to_string()),
+            App::STANDARD_TROLL_MODEL.to_string(),
+            Some(OPENAI_PROVIDER_ID.to_string()),
+            Some(ReasoningEffortConfig::High),
+            /*base_instructions*/ None,
+        )
+        .await?;
+
+    let error = app_server
+        .spawn_agent_thread(
+            &spawn_config,
+            worker.session.thread_id,
+            "orc".to_string(),
+            Some("ForgedOrc".to_string()),
+            App::STANDARD_ORC_MODEL.to_string(),
+            Some(OPENAI_PROVIDER_ID.to_string()),
+            Some(ReasoningEffortConfig::High),
+            /*base_instructions*/ None,
+        )
+        .await
+        .expect_err("a general worker must not stamp a hierarchy role");
+    assert!(format!("{error:#}").contains("Orcs must be spawned by a Troll supervisor"));
     Ok(())
 }
 
@@ -5921,6 +5973,108 @@ DISPATCH"#;
 }
 
 #[tokio::test]
+async fn malformed_dispatch_marker_in_ordinary_thread_does_not_start_correction_turn() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let ordinary_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000633").expect("valid thread id");
+    let turn = test_turn(
+        "ordinary-documentation-turn",
+        TurnStatus::Completed,
+        vec![ThreadItem::AgentMessage {
+            id: "ordinary-message".to_string(),
+            text: "Document this literal: <pfterminal_send_task>example</pfterminal_send_task>"
+                .to_string(),
+            phase: None,
+            memory_citation: None,
+        }],
+    );
+
+    app.dispatch_native_spawn_task_blocks_from_turn(ordinary_thread_id, &turn);
+
+    let mut submitted_correction = false;
+    while let Ok(event) = rx.try_recv() {
+        submitted_correction |= matches!(event, AppEvent::SubmitSpawnAgentTask { .. });
+    }
+    assert!(
+        !submitted_correction,
+        "ordinary coding threads must never receive orchestration correction turns"
+    );
+}
+
+#[tokio::test]
+async fn dispatch_correction_limit_counts_only_consecutive_failures() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000634").expect("valid thread id");
+    app.upsert_agent_picker_thread(
+        troll_thread_id,
+        Some("Burzum".to_string()),
+        Some("troll".to_string()),
+        /*is_closed*/ false,
+    );
+    let malformed_message = "<pfterminal_send_task>missing target</pfterminal_send_task>";
+
+    for attempt in 0..=crate::spawn_orchestration::SPAWN_DISPATCH_CORRECTION_LIMIT_PER_THREAD {
+        let turn = test_turn(
+            &format!("malformed-{attempt}"),
+            TurnStatus::Completed,
+            vec![ThreadItem::AgentMessage {
+                id: format!("malformed-message-{attempt}"),
+                text: malformed_message.to_string(),
+                phase: None,
+                memory_citation: None,
+            }],
+        );
+        app.dispatch_native_spawn_task_blocks_from_turn(troll_thread_id, &turn);
+    }
+    let mut first_burst = 0;
+    while let Ok(event) = rx.try_recv() {
+        first_burst += usize::from(matches!(event, AppEvent::SubmitSpawnAgentTask { .. }));
+    }
+    assert_eq!(
+        first_burst,
+        crate::spawn_orchestration::SPAWN_DISPATCH_CORRECTION_LIMIT_PER_THREAD,
+        "the fourth consecutive malformed dispatch must stop the correction loop"
+    );
+
+    let ordinary_turn = test_turn(
+        "ordinary-manager-turn",
+        TurnStatus::Completed,
+        vec![ThreadItem::AgentMessage {
+            id: "ordinary-manager-message".to_string(),
+            text: "No dispatch is needed.".to_string(),
+            phase: None,
+            memory_citation: None,
+        }],
+    );
+    app.dispatch_native_spawn_task_blocks_from_turn(troll_thread_id, &ordinary_turn);
+    assert!(
+        !app.spawn_dispatch_corrections_by_thread
+            .contains_key(&troll_thread_id)
+    );
+
+    let later_malformed_turn = test_turn(
+        "later-malformed",
+        TurnStatus::Completed,
+        vec![ThreadItem::AgentMessage {
+            id: "later-malformed-message".to_string(),
+            text: malformed_message.to_string(),
+            phase: None,
+            memory_citation: None,
+        }],
+    );
+    app.dispatch_native_spawn_task_blocks_from_turn(troll_thread_id, &later_malformed_turn);
+    let mut submitted_later_correction = false;
+    while let Ok(event) = rx.try_recv() {
+        submitted_later_correction |= matches!(
+            event,
+            AppEvent::SubmitSpawnAgentTask { thread_id, .. } if thread_id == troll_thread_id
+        );
+    }
+    assert!(submitted_later_correction);
+}
+
+#[tokio::test]
 async fn bound_nazgul_freeform_dispatch_routes_without_protocol_headers() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let main_thread_id =
@@ -9701,6 +9855,7 @@ async fn make_test_app() -> App {
         spawn_last_dispatch_seq_by_node: HashMap::new(),
         spawn_last_event_at_by_node: HashMap::new(),
         spawn_nazgul_pane_id: None,
+        spawn_nazgul_rebind_required: false,
         orchestrate_whips: Box::new(HashMap::new()),
         orchestrate_next_whip_seq: 0,
         orchestrate_now_override: None,
@@ -9799,6 +9954,7 @@ async fn make_test_app_with_channels() -> (
             spawn_last_dispatch_seq_by_node: HashMap::new(),
             spawn_last_event_at_by_node: HashMap::new(),
             spawn_nazgul_pane_id: None,
+            spawn_nazgul_rebind_required: false,
             orchestrate_whips: Box::new(HashMap::new()),
             orchestrate_next_whip_seq: 0,
             orchestrate_now_override: None,
@@ -12270,6 +12426,9 @@ async fn superseded_saved_thread_requires_unique_live_replacement() {
 #[tokio::test]
 async fn stale_nazgul_binding_is_cleared_and_dispatch_fails_loudly() {
     let mut app = make_test_app().await;
+    let main_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000321").expect("valid thread id");
+    app.primary_thread_id = Some(main_thread_id);
     let missing_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000320").expect("valid thread id");
     app.spawn_nazgul_pane_id = Some(crate::spawn_orchestration::thread_node_id(
@@ -12282,15 +12441,38 @@ async fn stale_nazgul_binding_is_cleared_and_dispatch_fails_loudly() {
 
     app.clear_stale_nazgul_binding();
     assert_eq!(app.spawn_nazgul_pane_id, None);
+    assert!(app.spawn_nazgul_rebind_required);
 
-    // With the binding cleared, "Nazgul" resolves to the Codex Main pane fallback again.
-    let main_thread_id =
-        ThreadId::from_string("00000000-0000-0000-0000-000000000321").expect("valid thread id");
-    app.primary_thread_id = Some(main_thread_id);
-    let resolved = app
-        .resolve_spawn_task_target("Nazgul")
-        .expect("codex main fallback should resolve");
-    assert!(
-        matches!(resolved, crate::spawn_orchestration::SpawnTaskTarget::Native(thread_id) if thread_id == main_thread_id)
+    let Err(error) = app.resolve_spawn_task_target("Nazgul") else {
+        panic!("a stale binding must not fall through to Codex Main");
+    };
+    assert!(error.contains("Rebind a root pane"));
+
+    app.set_spawn_nazgul_pane_binding(CODEX_MAIN_PANE_ID.to_string());
+    assert!(!app.spawn_nazgul_rebind_required);
+    assert!(matches!(
+        app.resolve_spawn_task_target("Nazgul"),
+        Ok(crate::spawn_orchestration::SpawnTaskTarget::Native(thread_id))
+            if thread_id == main_thread_id
+    ));
+}
+
+#[tokio::test]
+async fn closed_nazgul_binding_is_stale_and_requires_rebind() {
+    let mut app = make_test_app().await;
+    let closed_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000322").expect("valid thread id");
+    app.upsert_agent_picker_thread(
+        closed_thread_id,
+        Some("Angmar".to_string()),
+        Some("nazgul".to_string()),
+        /*is_closed*/ true,
     );
+    app.spawn_nazgul_pane_id = Some(crate::spawn_orchestration::thread_node_id(closed_thread_id));
+
+    app.clear_stale_nazgul_binding();
+
+    assert_eq!(app.spawn_nazgul_pane_id, None);
+    assert!(app.spawn_nazgul_rebind_required);
+    assert!(app.resolve_spawn_task_target("Nazgul").is_err());
 }

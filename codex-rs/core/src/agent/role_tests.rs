@@ -841,12 +841,12 @@ fn hierarchy_role_base_files_exclude_gpt55_default_guide_markers() {
 
 #[test]
 fn thread_spawn_role_graph_blocks_nazgul_below_root() {
-    // Nazgul can never be requested through the spawn-agent tool; it is a host pane binding.
-    // Native Nazgul threads come from the host's crew-creation path, which bypasses this check.
-    for (parent_role, depth) in [(None, 1), (Some("troll"), 2), (Some("orc"), 3)] {
-        let err = super::validate_thread_spawn_role_graph(parent_role, Some("nazgul"), depth)
-            .expect_err("nazgul spawn below root must be rejected");
-        assert!(err.contains("pane binding"), "unexpected error: {err}");
+    assert!(super::validate_thread_spawn_role_graph(None, Some("nazgul"), 1).is_ok());
+    for (parent_role, depth) in [(None, 2), (Some("troll"), 2), (Some("orc"), 3)] {
+        assert!(
+            super::validate_thread_spawn_role_graph(parent_role, Some("nazgul"), depth).is_err(),
+            "nazgul spawn below root must be rejected"
+        );
     }
 }
 
@@ -870,8 +870,11 @@ fn thread_spawn_role_graph_enforces_troll_and_orc_rules() {
     // Orcs spawned from the root pane are allowed only when the host assigned the primary
     // thread as backend parent for a non-native supervisor pane.
     assert!(super::validate_thread_spawn_role_graph(None, Some("orc"), 1).is_ok());
+    assert!(super::validate_thread_spawn_role_graph(None, Some("orc"), 2).is_err());
+    assert!(super::validate_thread_spawn_role_graph(Some("worker"), Some("troll"), 2).is_err());
+    assert!(super::validate_thread_spawn_role_graph(Some("worker"), Some("orc"), 2).is_err());
     // Non-hierarchy roles and role-less spawns are untouched.
     assert!(super::validate_thread_spawn_role_graph(Some("worker"), Some("default"), 2).is_ok());
-    assert!(super::validate_thread_spawn_role_graph(Some("troll"), None, 2).is_ok());
+    assert!(super::validate_thread_spawn_role_graph(Some("troll"), None, 2).is_err());
     assert!(super::validate_thread_spawn_role_graph(None, None, 1).is_ok());
 }

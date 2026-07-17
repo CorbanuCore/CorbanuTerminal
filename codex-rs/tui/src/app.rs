@@ -804,6 +804,7 @@ pub(crate) struct App {
     pub(crate) spawn_last_dispatch_seq_by_node: HashMap<String, u64>,
     pub(crate) spawn_last_event_at_by_node: HashMap<String, String>,
     pub(crate) spawn_nazgul_pane_id: Option<String>,
+    pub(crate) spawn_nazgul_rebind_required: bool,
     #[allow(clippy::box_collection)]
     pub(crate) orchestrate_whips: Box<HashMap<String, crate::orchestrate::Whip>>,
     pub(crate) orchestrate_next_whip_seq: u64,
@@ -1369,6 +1370,9 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     .iter()
                     .any(|pane| pane.id == *pane_id)
             });
+        let restored_spawn_nazgul_rebind_required = restored_pane_layout
+            .as_ref()
+            .is_some_and(|layout| layout.spawn_nazgul_rebind_required);
         let mut restored_orchestrate_whips: HashMap<_, _> = restored_pane_layout
             .as_ref()
             .map(|layout| {
@@ -1546,6 +1550,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
             spawn_last_dispatch_seq_by_node: HashMap::new(),
             spawn_last_event_at_by_node: HashMap::new(),
             spawn_nazgul_pane_id: restored_spawn_nazgul_pane_id,
+            spawn_nazgul_rebind_required: restored_spawn_nazgul_rebind_required,
             orchestrate_whips: Box::new(restored_orchestrate_whips),
             orchestrate_next_whip_seq: restored_orchestrate_next_whip_seq,
             #[cfg(test)]
