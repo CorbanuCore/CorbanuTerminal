@@ -189,7 +189,23 @@ mod tests {
         );
         assert!(
             paths
+                .binary_search_by(|probe| {
+                    probe.as_str().cmp("postfiat-l1-development/SKILL.md")
+                })
+                .is_ok()
+        );
+        assert!(
+            paths
                 .binary_search_by(|probe| probe.as_str().cmp("pfterminal-help/agents/openai.yaml"))
+                .is_ok()
+        );
+        assert!(
+            paths
+                .binary_search_by(|probe| {
+                    probe
+                        .as_str()
+                        .cmp("postfiat-l1-development/agents/openai.yaml")
+                })
                 .is_ok()
         );
         assert!(
