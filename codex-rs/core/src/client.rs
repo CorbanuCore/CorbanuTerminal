@@ -1376,9 +1376,19 @@ impl ModelClient {
                 )
             })
             .flatten();
+        // Kimi Code currently exposes K3 with one supported reasoning level.
+        // Send the required OpenAI-compatible field even when a stale config
+        // omitted the catalog default.
+        let kimi_code_reasoning_effort = self
+            .state
+            .provider
+            .info()
+            .is_kimi_code()
+            .then(|| "max".to_string());
         let native_deepseek_reasoning_effort = (!uses_zai_reasoning
             && !self.state.provider.info().is_openrouter()
-            && !self.state.provider.info().is_baseten())
+            && !self.state.provider.info().is_baseten()
+            && !self.state.provider.info().is_kimi_code())
         .then(|| {
             Self::native_deepseek_v4_reasoning_effort(
                 upstream_model,
@@ -1407,6 +1417,7 @@ impl ModelClient {
             enable_thinking: ambient_enable_thinking,
             reasoning_effort: ambient_reasoning_effort
                 .or(baseten_reasoning_effort)
+                .or(kimi_code_reasoning_effort)
                 .or(native_deepseek_reasoning_effort),
             reasoning: openrouter_reasoning,
             provider: self.state.provider.info().chat_completions_provider.clone(),

@@ -78,6 +78,8 @@ use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+use codex_model_provider_info::KIMI_CODE_K3_MODEL;
+use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
 use codex_model_provider_info::META_DEFAULT_MODEL;
 use codex_model_provider_info::META_PROVIDER_ID;
@@ -1024,6 +1026,54 @@ model = "zai-org/GLM-5.2"
     assert_eq!(config.model.as_deref(), Some(BASETEN_DEFAULT_MODEL));
     assert_eq!(config.model_provider.wire_api, WireApi::Chat);
     assert_eq!(config.forced_login_method, Some(ForcedLoginMethod::Api));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn load_config_kimi_code_provider_uses_api_login() -> std::io::Result<()> {
+    let cfg = toml::from_str::<ConfigToml>(
+        r#"
+model_provider = "kimi-code"
+model = "k3"
+"#,
+    )
+    .expect("config should deserialize");
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.model_provider_id, KIMI_CODE_PROVIDER_ID);
+    assert_eq!(config.model.as_deref(), Some(KIMI_CODE_K3_MODEL));
+    assert_eq!(config.model_provider.wire_api, WireApi::Chat);
+    assert_eq!(config.forced_login_method, Some(ForcedLoginMethod::Api));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn load_config_k3_without_provider_routes_to_kimi_code() -> std::io::Result<()> {
+    let cfg = toml::from_str::<ConfigToml>(
+        r#"
+model = "k3"
+"#,
+    )
+    .expect("config should deserialize");
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.model_provider_id, KIMI_CODE_PROVIDER_ID);
+    assert_eq!(config.model.as_deref(), Some(KIMI_CODE_K3_MODEL));
+    assert_eq!(config.model_provider.wire_api, WireApi::Chat);
 
     Ok(())
 }

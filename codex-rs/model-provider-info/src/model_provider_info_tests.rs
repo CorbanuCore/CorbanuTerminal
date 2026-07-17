@@ -636,6 +636,34 @@ fn test_built_in_model_providers_include_meta() {
 }
 
 #[test]
+fn kimi_code_provider_is_builtin_and_resolves_k3() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let kimi_code = providers
+        .get(KIMI_CODE_PROVIDER_ID)
+        .expect("Kimi Code provider should be built in");
+
+    assert_eq!(kimi_code.base_url.as_deref(), Some(KIMI_CODE_BASE_URL));
+    assert_eq!(
+        kimi_code.env_key.as_deref(),
+        Some(KIMI_CODE_API_KEY_ENV_VAR)
+    );
+    assert_eq!(kimi_code.wire_api, WireApi::Chat);
+    assert!(kimi_code.is_kimi_code());
+    assert_eq!(
+        resolve_model_for_provider(None, KIMI_CODE_PROVIDER_ID).as_deref(),
+        Some(KIMI_CODE_K3_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(
+            Some("moonshotai/kimi-k3".to_string()),
+            KIMI_CODE_PROVIDER_ID,
+        )
+        .as_deref(),
+        Some(KIMI_CODE_K3_MODEL)
+    );
+}
+
+#[test]
 fn openrouter_preserves_nonempty_model_slugs() {
     for provider in [OPENROUTER_PROVIDER_ID, OPENROUTER_ANTHROPIC_PROVIDER_ID] {
         for model in [
@@ -1070,6 +1098,10 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider("gpt-5.5", AMBIENT_PROVIDER_ID),
         Some(OPENAI_PROVIDER_ID)
     );
+    assert_eq!(
+        corrected_catalog_provider(KIMI_CODE_K3_MODEL, OPENROUTER_PROVIDER_ID),
+        Some(KIMI_CODE_PROVIDER_ID)
+    );
 
     // Consistent pairs and legitimate family variants: untouched.
     assert_eq!(
@@ -1098,6 +1130,10 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
     );
     assert_eq!(
         corrected_catalog_provider("gpt-5.5", OPENAI_PROVIDER_ID),
+        None
+    );
+    assert_eq!(
+        corrected_catalog_provider(KIMI_CODE_K3_MODEL, KIMI_CODE_PROVIDER_ID),
         None
     );
 

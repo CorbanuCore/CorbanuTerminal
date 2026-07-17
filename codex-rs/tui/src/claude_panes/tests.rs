@@ -2746,6 +2746,7 @@ fn allowed_auth_helper_labels_are_provider_scoped() {
     assert!(allowed_provider_vault_label("provider/zai_api_key"));
     assert!(allowed_provider_vault_label("provider/anthropic_api_key"));
     assert!(allowed_provider_vault_label("provider/ambient_api_key"));
+    assert!(allowed_provider_vault_label("provider/kimi_api_key"));
     assert!(allowed_provider_vault_label("provider/baseten_api_key"));
     assert!(allowed_provider_vault_label("provider/openrouter_api_key"));
     assert!(allowed_provider_vault_label("provider/ai_gateway_api_key"));

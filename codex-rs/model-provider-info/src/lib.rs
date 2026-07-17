@@ -83,6 +83,11 @@ pub const AMBIENT_DEFAULT_MODEL: &str = "z-ai/glm-5.2";
 pub const AMBIENT_LEGACY_GLM_5_2_FP8_MODEL: &str = "zai-org/GLM-5.2-FP8";
 pub const AMBIENT_KIMI_K2_7_CODE_MODEL: &str = "moonshotai/kimi-k2.7-code";
 pub const AMBIENT_API_KEY_ENV_VAR: &str = "AMBIENT_API_KEY";
+const KIMI_CODE_PROVIDER_NAME: &str = "Kimi Code";
+pub const KIMI_CODE_PROVIDER_ID: &str = "kimi-code";
+pub const KIMI_CODE_BASE_URL: &str = "https://api.kimi.com/coding/v1";
+pub const KIMI_CODE_K3_MODEL: &str = "k3";
+pub const KIMI_CODE_API_KEY_ENV_VAR: &str = "KIMI_API_KEY";
 const ZAI_PROVIDER_NAME: &str = "Z.AI";
 pub const ZAI_PROVIDER_ID: &str = "zai";
 pub const ZAI_BASE_URL: &str = "https://api.z.ai/api/coding/paas/v4";
@@ -123,11 +128,12 @@ pub const VERCEL_API_KEY_ENV_VAR: &str = "AI_GATEWAY_API_KEY";
 
 /// Built-in catalog providers eligible for impossible-pair correction. User-defined providers
 /// (e.g. a private Azure deployment) are never second-guessed.
-const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 15] = [
+const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 16] = [
     OPENAI_PROVIDER_ID,
     ANTHROPIC_PROVIDER_ID,
     CLAUDE_PLAN_PROVIDER_ID,
     AMBIENT_PROVIDER_ID,
+    KIMI_CODE_PROVIDER_ID,
     ZAI_PROVIDER_ID,
     ZAI_ANTHROPIC_PROVIDER_ID,
     OPENROUTER_PROVIDER_ID,
@@ -157,6 +163,7 @@ const VERCEL_FAMILY_PROVIDERS: [&str; 3] = [
 /// - `zai/…` slugs (Vercel gateway GLM ids) off the Vercel provider family;
 /// - the Claude plan models off `claude-plan`;
 /// - bare `glm-…` slugs (Z.AI-direct ids) off either Z.AI dialect;
+/// - the bare `k3` subscription model off Kimi Code;
 /// - bare `gpt-…` slugs off OpenAI (Bedrock uses `openai.gpt-…` ids).
 ///
 /// Servable-but-unusual pairs (e.g. ambient serving `z-ai/glm-5.2`), unknown models, and
@@ -184,6 +191,9 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     {
         return Some(ZAI_PROVIDER_ID);
     }
+    if model == KIMI_CODE_K3_MODEL && provider != KIMI_CODE_PROVIDER_ID {
+        return Some(KIMI_CODE_PROVIDER_ID);
+    }
     if model.starts_with("gpt-") && provider != OPENAI_PROVIDER_ID {
         return Some(OPENAI_PROVIDER_ID);
     }
@@ -209,6 +219,10 @@ pub fn resolve_model_for_provider(
                 Some(model)
             }
             _ => Some(AMBIENT_DEFAULT_MODEL.to_string()),
+        },
+        KIMI_CODE_PROVIDER_ID => match model {
+            Some(model) if model.trim() == KIMI_CODE_K3_MODEL => Some(model),
+            _ => Some(KIMI_CODE_K3_MODEL.to_string()),
         },
         ZAI_PROVIDER_ID | ZAI_ANTHROPIC_PROVIDER_ID => match model {
             Some(model) if model.trim().starts_with("glm-") => Some(model),
@@ -280,6 +294,7 @@ fn provider_api_key_vault_instructions() -> String {
         "  Search providers",
         "> Provider: Anthropic API Key   Store ANTHROPIC_API_KEY in the vault",
         "  Provider: Ambient API Key     Store AMBIENT_API_KEY in the vault",
+        "  Provider: Kimi Code API Key   Store KIMI_API_KEY in the vault",
         "  Provider: Z.AI API Key        Store ZAI_API_KEY in the vault",
         "  Provider: OpenRouter API Key  Store OPENROUTER_API_KEY in the vault",
         "  Provider: Meta API Key        Store MODEL_API_KEY in the vault",
@@ -300,11 +315,12 @@ const AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_VALUE: &str = "codex";
 pub const LEGACY_OLLAMA_CHAT_PROVIDER_ID: &str = "ollama-chat";
 pub const OLLAMA_CHAT_PROVIDER_REMOVED_ERROR: &str = "`ollama-chat` is no longer supported.\nHow to fix: replace `ollama-chat` with `ollama` in `model_provider`, `oss_provider`, or `--local-provider`.\nMore info: https://github.com/openai/codex/discussions/7782";
 const OSS_PROVIDER_NAME: &str = "gpt-oss";
-pub const BUILT_IN_MODEL_PROVIDER_NAMES: [&str; 14] = [
+pub const BUILT_IN_MODEL_PROVIDER_NAMES: [&str; 15] = [
     OPENAI_PROVIDER_NAME,
     ANTHROPIC_PROVIDER_NAME,
     CLAUDE_PLAN_PROVIDER_NAME,
     AMBIENT_PROVIDER_NAME,
+    KIMI_CODE_PROVIDER_NAME,
     ZAI_PROVIDER_NAME,
     ZAI_ANTHROPIC_PROVIDER_NAME,
     OPENROUTER_PROVIDER_NAME,
@@ -773,6 +789,32 @@ impl ModelProviderInfo {
         }
     }
 
+    pub fn create_kimi_code_provider() -> ModelProviderInfo {
+        ModelProviderInfo {
+            name: KIMI_CODE_PROVIDER_NAME.into(),
+            base_url: Some(KIMI_CODE_BASE_URL.into()),
+            env_key: Some(KIMI_CODE_API_KEY_ENV_VAR.into()),
+            env_key_instructions: Some(provider_api_key_vault_instructions()),
+            experimental_bearer_token: None,
+            auth: None,
+            aws: None,
+            wire_api: WireApi::Chat,
+            query_params: None,
+            http_headers: None,
+            env_http_headers: None,
+            chat_completions_provider: None,
+            request_max_retries: None,
+            stream_max_retries: None,
+            stream_idle_timeout_ms: None,
+            stream_actionable_timeout_ms: None,
+            stream_long_failure_retry_threshold_ms: None,
+            stream_long_failure_max_retries: None,
+            websocket_connect_timeout_ms: None,
+            requires_openai_auth: false,
+            supports_websockets: false,
+        }
+    }
+
     pub fn create_zai_provider() -> ModelProviderInfo {
         ModelProviderInfo {
             name: ZAI_PROVIDER_NAME.into(),
@@ -1089,6 +1131,10 @@ impl ModelProviderInfo {
         self.name == AMBIENT_PROVIDER_NAME
     }
 
+    pub fn is_kimi_code(&self) -> bool {
+        self.name == KIMI_CODE_PROVIDER_NAME
+    }
+
     pub fn is_zai(&self) -> bool {
         self.name == ZAI_PROVIDER_NAME
     }
@@ -1141,6 +1187,7 @@ pub fn built_in_model_providers(
     let anthropic_provider = P::create_anthropic_provider();
     let claude_plan_provider = P::create_claude_plan_provider();
     let ambient_provider = P::create_ambient_provider();
+    let kimi_code_provider = P::create_kimi_code_provider();
     let zai_provider = P::create_zai_provider();
     let zai_anthropic_provider = P::create_zai_anthropic_provider();
     let openrouter_provider = P::create_openrouter_provider();
@@ -1160,6 +1207,7 @@ pub fn built_in_model_providers(
         (ANTHROPIC_PROVIDER_ID, anthropic_provider),
         (CLAUDE_PLAN_PROVIDER_ID, claude_plan_provider),
         (AMBIENT_PROVIDER_ID, ambient_provider),
+        (KIMI_CODE_PROVIDER_ID, kimi_code_provider),
         (ZAI_PROVIDER_ID, zai_provider),
         (ZAI_ANTHROPIC_PROVIDER_ID, zai_anthropic_provider),
         (OPENROUTER_PROVIDER_ID, openrouter_provider),

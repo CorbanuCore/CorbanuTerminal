@@ -286,6 +286,7 @@ fn credential_display_name(label: &str, provider: Option<&str>) -> String {
         .unwrap_or(label);
     match key_id.to_ascii_uppercase().as_str() {
         "AMBIENT_API_KEY" => "Provider: Ambient API Key".to_string(),
+        "KIMI_API_KEY" => "Provider: Kimi Code API Key".to_string(),
         "ZAI_API_KEY" => "Provider: Z.AI API Key".to_string(),
         "OPENROUTER_API_KEY" => "Provider: OpenRouter API Key".to_string(),
         "MODEL_API_KEY" => "Provider: Meta API Key".to_string(),
@@ -421,6 +422,10 @@ mod tests {
         assert_eq!(
             credential_display_name("provider/zai_api_key", None),
             "Provider: Z.AI API Key"
+        );
+        assert_eq!(
+            credential_display_name("provider/kimi_api_key", None),
+            "Provider: Kimi Code API Key"
         );
         assert_eq!(
             credential_display_name("provider/openrouter_api_key", None),

@@ -334,23 +334,19 @@ impl App {
     }
 
     pub(crate) fn spawn_context_for_user_pane(&self, pane_id: &str) -> Option<String> {
-        let bound_pane_id = self
-            .spawn_nazgul_pane_id
-            .as_deref()
-            .unwrap_or(CODEX_MAIN_PANE_ID);
-        if bound_pane_id != pane_id {
-            let pane = self
-                .claude_panes
-                .panes()
-                .iter()
-                .find(|pane| pane.id == pane_id)?;
-            return match pane.spawn_role {
-                Some(SpawnRole::Troll) => Some(self.render_troll_spawn_context(pane)),
-                Some(SpawnRole::Orc) => Some(self.render_orc_spawn_context(pane)),
-                _ => None,
-            };
+        if self.spawn_nazgul_pane_id.as_deref() == Some(pane_id) {
+            return Some(self.render_nazgul_spawn_context(pane_id));
         }
-        Some(self.render_nazgul_spawn_context(bound_pane_id))
+        let pane = self
+            .claude_panes
+            .panes()
+            .iter()
+            .find(|pane| pane.id == pane_id)?;
+        match pane.spawn_role {
+            Some(SpawnRole::Troll) => Some(self.render_troll_spawn_context(pane)),
+            Some(SpawnRole::Orc) => Some(self.render_orc_spawn_context(pane)),
+            _ => None,
+        }
     }
 
     /// Render the live spawn-orchestration context for a native Codex thread (a spawned
@@ -3301,14 +3297,19 @@ impl App {
     }
 
     pub(crate) async fn persist_bound_nazgul_root_thread_metadata(&self) {
-        let root_thread_id = if let Some(bound_thread_id) = self.nazgul_bound_thread_id() {
-            Some(bound_thread_id)
-        } else if self.spawn_nazgul_bound_target() == CODEX_MAIN_PANE_ID {
+        let Some(bound_target) = self.spawn_nazgul_pane_id.as_deref() else {
+            return;
+        };
+        let root_thread_id = if bound_target == CODEX_MAIN_PANE_ID {
             self.primary_thread_id
         } else {
-            None
+            self.spawn_node_backing_thread_id(bound_target)
         };
         let Some(root_thread_id) = root_thread_id else {
+            tracing::warn!(
+                bound_target,
+                "Nazgul root binding has no backing thread; skipping role metadata persistence"
+            );
             return;
         };
         let nickname = self
@@ -4292,20 +4293,7 @@ impl App {
 
     fn is_codex_main_bound_spawn_root_thread(&self, thread_id: ThreadId) -> bool {
         self.primary_thread_id == Some(thread_id)
-            && self.spawn_nazgul_bound_target() == CODEX_MAIN_PANE_ID
-            && self.has_spawn_orchestration_state()
-    }
-
-    fn has_spawn_orchestration_state(&self) -> bool {
-        self.spawn_nazgul_pane_id.is_some()
-            || !self.spawn_status_by_thread.is_empty()
-            || !self.spawn_parent_by_thread.is_empty()
-            || !self.spawn_parent_by_node.is_empty()
-            || self
-                .claude_panes
-                .panes()
-                .iter()
-                .any(|pane| pane.spawn_role.is_some())
+            && self.spawn_nazgul_pane_id.as_deref() == Some(CODEX_MAIN_PANE_ID)
     }
 
     fn nazgul_pane_item(
@@ -4381,7 +4369,9 @@ impl App {
     /// The native Codex thread bound as the Nazgul root, when the binding targets a Codex agent
     /// pane rather than a user pane.
     fn nazgul_bound_thread_id(&self) -> Option<ThreadId> {
-        self.spawn_node_backing_thread_id(self.spawn_nazgul_bound_target())
+        self.spawn_nazgul_pane_id
+            .as_deref()
+            .and_then(|target| self.spawn_node_backing_thread_id(target))
     }
 
     fn spawn_troll_node_items(&self) -> Vec<SelectionItem> {

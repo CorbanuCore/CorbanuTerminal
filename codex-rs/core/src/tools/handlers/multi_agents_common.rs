@@ -435,6 +435,7 @@ fn reject_spawn_agent_model_switch_for_third_party_provider(
 ) -> Result<(), FunctionCallError> {
     let provider_info = turn.provider.info();
     if !(provider_info.is_ambient()
+        || provider_info.is_kimi_code()
         || provider_info.is_zai()
         || provider_info.is_openrouter()
         || provider_info.is_baseten()

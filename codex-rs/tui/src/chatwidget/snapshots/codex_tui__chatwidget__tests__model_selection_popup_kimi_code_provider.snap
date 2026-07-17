@@ -1,0 +1,13 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+expression: popup
+---
+  Select Model and Effort
+  Kimi Code plan
+
+  OpenAI  Ambient  [Kimi Code]  Z.AI  Claude Plan  Anthropic  Meta  Vercel  Baseten  OpenRouter
+
+› 1. Kimi Code K3 (current)  Model: k3. Kimi K3 through your Kimi Code plan, with a 1M-token
+                             context window.
+
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

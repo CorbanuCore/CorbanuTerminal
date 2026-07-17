@@ -1390,6 +1390,33 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
 }
 
 #[test]
+fn bundled_models_json_contains_kimi_code_k3() {
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+    let kimi = response
+        .models
+        .iter()
+        .find(|model| model.slug == "k3")
+        .expect("bundled models.json should include Kimi Code K3");
+
+    assert_eq!(kimi.display_name, "Kimi Code K3");
+    assert_eq!(kimi.context_window, Some(1_048_576));
+    assert_eq!(
+        kimi.default_reasoning_level,
+        Some(ReasoningEffort::Custom("max".to_string()))
+    );
+    assert_eq!(
+        kimi.supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![ReasoningEffort::Custom("max".to_string())]
+    );
+    assert!(kimi.supports_parallel_tool_calls);
+    assert_standard_base(&kimi.base_instructions);
+}
+
+#[test]
 fn bundled_models_json_contains_openrouter_models() {
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));

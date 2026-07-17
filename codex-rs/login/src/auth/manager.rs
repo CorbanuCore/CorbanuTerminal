@@ -57,6 +57,7 @@ use crate::token_data::parse_jwt_expiration;
 use codex_client::CodexHttpClient;
 use codex_config::types::AuthCredentialsStoreMode;
 pub use codex_model_provider_info::AMBIENT_API_KEY_ENV_VAR;
+pub use codex_model_provider_info::KIMI_CODE_API_KEY_ENV_VAR;
 use codex_protocol::account::PlanType as AccountPlanType;
 use codex_protocol::auth::PlanType as InternalPlanType;
 use codex_protocol::auth::RefreshTokenFailedError;

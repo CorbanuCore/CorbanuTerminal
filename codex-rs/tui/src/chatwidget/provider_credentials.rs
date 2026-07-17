@@ -11,6 +11,8 @@ use codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR;
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_API_KEY_ENV_VAR;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
+use codex_model_provider_info::KIMI_CODE_API_KEY_ENV_VAR;
+use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::META_API_KEY_ENV_VAR;
 use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_API_KEY_ENV_VAR;
@@ -58,6 +60,11 @@ const PROVIDER_CREDENTIAL_OPTIONS: &[ProviderCredentialOption] = &[
         provider_id: AMBIENT_PROVIDER_ID,
         provider_name: "Ambient",
         env_key: AMBIENT_API_KEY_ENV_VAR,
+    },
+    ProviderCredentialOption::ProviderApiKey {
+        provider_id: KIMI_CODE_PROVIDER_ID,
+        provider_name: "Kimi Code",
+        env_key: KIMI_CODE_API_KEY_ENV_VAR,
     },
     ProviderCredentialOption::ProviderApiKey {
         provider_id: ZAI_PROVIDER_ID,
@@ -409,6 +416,7 @@ fn provider_credential_display_name(provider_name: &str, env_key: &str) -> Strin
     let key_name = match env_key {
         "ANTHROPIC_API_KEY" => "API Key",
         "AMBIENT_API_KEY" => "API Key",
+        "KIMI_API_KEY" => "API Key",
         "ZAI_API_KEY" => "API Key",
         "OPENROUTER_API_KEY" => "API Key",
         "MODEL_API_KEY" => "API Key",
@@ -581,6 +589,7 @@ mod tests {
                 "Provider: Claude Code Plan",
                 "Provider: Anthropic API Key",
                 "Provider: Ambient API Key",
+                "Provider: Kimi Code API Key",
                 "Provider: Z.AI API Key",
                 "Provider: OpenRouter API Key",
                 "Provider: Meta API Key",
@@ -631,6 +640,15 @@ mod tests {
                 if provider_id == AMBIENT_PROVIDER_ID
                     && provider_name == "Ambient"
                     && env_key == AMBIENT_API_KEY_ENV_VAR
+        ));
+
+        (rows[4].actions[0])(&sender);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::OpenProviderApiKeyAdd { provider_id, provider_name, env_key })
+                if provider_id == KIMI_CODE_PROVIDER_ID
+                    && provider_name == "Kimi Code"
+                    && env_key == KIMI_CODE_API_KEY_ENV_VAR
         ));
     }
 

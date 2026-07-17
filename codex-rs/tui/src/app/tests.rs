@@ -1971,6 +1971,39 @@ async fn nazgul_can_be_bound_to_a_codex_agent_pane() {
 }
 
 #[tokio::test]
+async fn unbound_codex_main_never_receives_nazgul_context() {
+    let mut app = make_test_app().await;
+    let main_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000301").expect("valid thread id");
+    let stale_child_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000302").expect("valid thread id");
+
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+    app.spawn_nazgul_pane_id = None;
+    app.spawn_parent_by_thread
+        .insert(stale_child_thread_id, main_thread_id);
+    app.spawn_status_by_thread.insert(
+        stale_child_thread_id,
+        codex_app_server_protocol::CollabAgentState {
+            status: codex_app_server_protocol::CollabAgentStatus::Completed,
+            message: Some("stale child result".to_string()),
+        },
+    );
+
+    assert!(
+        app.spawn_additional_context_for_thread(main_thread_id)
+            .is_none(),
+        "an unbound primary thread must keep the default prompt"
+    );
+    assert!(
+        app.spawn_context_for_user_pane(CODEX_MAIN_PANE_ID)
+            .is_none(),
+        "an unbound user pane must not be assigned the Nazgul role"
+    );
+}
+
+#[tokio::test]
 async fn codex_main_bound_nazgul_turn_receives_domain_neutral_hierarchy_context() {
     let mut app = make_test_app().await;
     let main_thread_id =
@@ -6311,6 +6344,38 @@ async fn claude_orc_completion_is_reported_to_native_troll_context() {
     assert!(context.contains("Recent child reports delivered to this pane:"));
     assert!(context.contains("Claude Code Snaga [orc] - Opus 4.8 Claude Plan; status=success"));
     assert!(context.contains("result=Finished the latency benchmark table and saved the output."));
+}
+
+#[tokio::test]
+async fn unbound_main_does_not_persist_nazgul_role_metadata() {
+    let mut app = make_test_app().await;
+    let codex_home = tempdir().expect("codex home");
+    app.config.codex_home = codex_home.path().to_path_buf().abs();
+    app.config.sqlite_home = codex_home.path().to_path_buf();
+    let state_db = codex_state::StateRuntime::init(
+        codex_home.path().to_path_buf(),
+        app.config.model_provider_id.clone(),
+    )
+    .await
+    .expect("state db");
+    app.state_db = Some(state_db.clone());
+
+    let root_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000237").expect("valid thread id");
+    app.primary_thread_id = Some(root_thread_id);
+    app.active_thread_id = Some(root_thread_id);
+    app.spawn_nazgul_pane_id = None;
+
+    app.persist_bound_nazgul_root_thread_metadata().await;
+
+    assert!(
+        state_db
+            .get_thread(root_thread_id)
+            .await
+            .expect("read metadata")
+            .is_none(),
+        "an unbound primary thread must not be persisted as Nazgul"
+    );
 }
 
 #[tokio::test]

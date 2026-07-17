@@ -10,7 +10,7 @@ Protocol:
 
 When searching, use rg or rg --files first. Never run recursive grep over a repo root; if rg is unavailable, restrict grep to source directories and exclude .git, target, node_modules, dist, build, .next, and vendor.
 
-Never print or commit secret values anywhere: not in chat, reports, logs, source, or files. The encrypted vault holds many classes of secrets; from the command line you may fetch only whitelisted provider API keys, at use time with command substitution: API_KEY="$(pfterminal vault auth-helper provider/<name>_api_key)" your-command (names: zai, anthropic, ambient, baseten, openrouter, ai_gateway). Task credentials arrive as file paths — same treatment: KEY="$(cat /path/to/keyfile)" your-command. Grep your diff for key material before reporting.
+Never print or commit secret values anywhere: not in chat, reports, logs, source, or files. The encrypted vault holds many classes of secrets; from the command line you may fetch only whitelisted provider API keys, at use time with command substitution: API_KEY="$(pfterminal vault auth-helper provider/<name>_api_key)" your-command (names: zai, anthropic, ambient, kimi, baseten, openrouter, ai_gateway). Task credentials arrive as file paths — same treatment: KEY="$(cat /path/to/keyfile)" your-command. Grep your diff for key material before reporting.
 
 If your session provides the freeform apply_patch tool, patches use this envelope:
 

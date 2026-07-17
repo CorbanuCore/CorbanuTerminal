@@ -65,7 +65,7 @@ rm -rf "${PFTERMINAL_HOME:-$HOME/.pfterminal}"
 ## Key Features
 
 - Ambient GLM 5.2 default model path.
-- Provider choices for Ambient, Z.AI, OpenRouter, Baseten, Vercel, and OpenAI
+- Provider choices for Ambient, Kimi Code, Z.AI, OpenRouter, Baseten, Vercel, and OpenAI
   Codex account auth.
 - Encrypted `/vault` storage for provider API keys and user credentials.
 - Codex-level coding workflows in a local terminal.
@@ -98,7 +98,7 @@ run shell commands.
 
 Use:
 
-- `/providers` to add Ambient, Z.AI, OpenRouter, Baseten, Vercel, or OpenAI
+- `/providers` to add Ambient, Kimi Code, Z.AI, OpenRouter, Baseten, Vercel, or OpenAI
   Codex credentials.
 - `/vault` to manage encrypted credentials.
 - `/model` or `pfterminal -m <model>` to choose a model.
@@ -118,7 +118,7 @@ PFTerminal vault.
 
 Common uses:
 
-- Add an Ambient, Z.AI, OpenRouter, Baseten, Vercel, or Anthropic API key.
+- Add an Ambient, Kimi Code, Z.AI, OpenRouter, Baseten, Vercel, or Anthropic API key.
 - Add or refresh OpenAI Codex account auth.
 - Check which provider key a selected model expects.
 

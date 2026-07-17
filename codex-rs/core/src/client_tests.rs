@@ -2402,6 +2402,68 @@ fn baseten_chat_completions_strips_strict_without_zai_reasoning_fields() {
 }
 
 #[test]
+fn kimi_code_k3_chat_uses_required_max_reasoning_and_standard_tools() {
+    let provider_info = ModelProviderInfo::create_kimi_code_provider();
+    let client = ModelClient::new(
+        /*auth_manager*/ None,
+        ThreadId::new(),
+        provider_info,
+        SessionSource::Cli,
+        /*model_verbosity*/ None,
+        /*enable_request_compression*/ false,
+        /*include_timing_metrics*/ false,
+        /*beta_features_header*/ None,
+        /*item_ids_enabled*/ false,
+        /*attestation_provider*/ None,
+    );
+    let prompt = super::Prompt {
+        input: vec![ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText {
+                text: "Run pwd.".to_string(),
+            }],
+            phase: None,
+            metadata: None,
+        }],
+        tools: vec![ToolSpec::Function(ResponsesApiTool {
+            name: "exec_command".to_string(),
+            description: "Run a command.".to_string(),
+            strict: true,
+            defer_loading: None,
+            parameters: JsonSchema::object(
+                BTreeMap::from([(
+                    "cmd".to_string(),
+                    JsonSchema::string(Some("Command to run.".to_string())),
+                )]),
+                Some(vec!["cmd".to_string()]),
+                Some(false.into()),
+            ),
+            output_schema: None,
+        })],
+        ..Default::default()
+    };
+    let mut model_info = test_model_info();
+    model_info.slug = "k3".to_string();
+
+    let request = client
+        .build_chat_completions_request(&prompt, &model_info, None)
+        .expect("Kimi Code chat request");
+
+    assert_eq!(request.model, "k3");
+    assert_eq!(request.reasoning_effort.as_deref(), Some("max"));
+    assert_eq!(request.enable_thinking, None);
+    assert_eq!(request.emit_usage, None);
+    assert_eq!(request.reasoning, None);
+    assert_eq!(
+        request.tools[0]
+            .pointer("/function/strict")
+            .and_then(serde_json::Value::as_bool),
+        Some(true)
+    );
+}
+
+#[test]
 fn vercel_responses_request_uses_standard_responses_fields() {
     let provider_info = ModelProviderInfo::create_vercel_provider();
     let api_provider = provider_info

@@ -18,6 +18,7 @@ pub use server::ShutdownHandle;
 pub use server::run_login_server;
 
 pub use auth::AMBIENT_API_KEY_ENV_VAR;
+pub use auth::KIMI_CODE_API_KEY_ENV_VAR;
 pub use auth::AgentIdentityAuthPolicy;
 pub use auth::AuthConfig;
 pub use auth::AuthDotJson;

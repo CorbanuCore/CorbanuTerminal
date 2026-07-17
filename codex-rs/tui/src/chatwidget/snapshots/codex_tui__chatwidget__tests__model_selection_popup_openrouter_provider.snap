@@ -1,12 +1,11 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
-assertion_line: 2611
 expression: popup
 ---
   Select Model and Effort
   OpenRouter API key
 
-  OpenAI  Ambient  Z.AI  Claude Plan  Anthropic  Meta  Vercel  Baseten  [OpenRouter]
+  OpenAI  Ambient  Kimi Code  Z.AI  Claude Plan  Anthropic  Meta  Vercel  Baseten  [OpenRouter]
 
   1. OpenRouter MiniMax M3         Model: minimax/minimax-m3. OpenRouter: MiniMax M3 - $0.30/M
                                    input, $1.20/M output.
