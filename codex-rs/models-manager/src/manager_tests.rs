@@ -1400,7 +1400,8 @@ fn bundled_models_json_contains_kimi_code_k3() {
         .expect("bundled models.json should include Kimi Code K3");
 
     assert_eq!(kimi.display_name, "Kimi Code K3");
-    assert_eq!(kimi.context_window, Some(1_048_576));
+    assert_eq!(kimi.context_window, Some(262_144));
+    assert_eq!(kimi.max_context_window, Some(1_048_576));
     assert_eq!(
         kimi.default_reasoning_level,
         Some(ReasoningEffort::Custom("max".to_string()))
@@ -1410,10 +1411,37 @@ fn bundled_models_json_contains_kimi_code_k3() {
             .iter()
             .map(|level| level.effort.clone())
             .collect::<Vec<_>>(),
-        vec![ReasoningEffort::Custom("max".to_string())]
+        vec![
+            ReasoningEffort::Low,
+            ReasoningEffort::High,
+            ReasoningEffort::Custom("max".to_string()),
+        ]
     );
     assert!(kimi.supports_parallel_tool_calls);
     assert_standard_base(&kimi.base_instructions);
+
+    let conservative =
+        crate::model_info::with_config_overrides(kimi.clone(), &ModelsManagerConfig::default());
+    assert_eq!(conservative.context_window, Some(262_144));
+    assert_eq!(conservative.auto_compact_token_limit(), Some(235_929));
+
+    let entitled_config = ModelsManagerConfig {
+        model_context_window: Some(1_048_576),
+        ..Default::default()
+    };
+    let entitled = crate::model_info::with_config_overrides(kimi.clone(), &entitled_config);
+    assert_eq!(entitled.context_window, Some(1_048_576));
+    assert_eq!(entitled.auto_compact_token_limit(), Some(943_718));
+
+    // Resume rebuilds model metadata from the persisted configuration. Applying
+    // the same entitled config must therefore preserve both the effective
+    // window and the compaction boundary.
+    let resumed = crate::model_info::with_config_overrides(kimi.clone(), &entitled_config);
+    assert_eq!(resumed.context_window, entitled.context_window);
+    assert_eq!(
+        resumed.auto_compact_token_limit(),
+        entitled.auto_compact_token_limit()
+    );
 }
 
 #[test]

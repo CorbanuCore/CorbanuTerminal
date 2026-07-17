@@ -882,6 +882,7 @@ impl AnthropicStreamState {
                 response_id,
                 token_usage: self.token_usage.take(),
                 end_turn: self.end_turn,
+                finish_reason: None,
             }))
             .await;
     }
@@ -1097,6 +1098,7 @@ data: {"type":"message_stop"}
                     total_tokens: 23,
                 }),
                 end_turn: Some(true),
+                ..
             }) if response_id == "msg_1"
         );
         assert_eq!(events.len(), 5);

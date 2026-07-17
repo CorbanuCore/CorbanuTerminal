@@ -61,18 +61,26 @@
         "limit": 10000
       },
       "supports_parallel_tool_calls": true,
-      "context_window": 1048576,
+      "context_window": 262144,
       "max_context_window": 1048576,
       "auto_compact_token_limit": null,
       "default_reasoning_summary": "none",
       "slug": "k3",
       "display_name": "Kimi Code K3",
-      "description": "Kimi K3 through your Kimi Code plan, with a 1M-token context window.",
+      "description": "Kimi K3 through your Kimi Code plan. Context is plan-dependent: up to 256K on Moderato (the default assumption) and up to 1M on Allegretto and above. Set model_context_window = 1048576 in config.toml if your plan entitles 1M.",
       "default_reasoning_level": "max",
       "supported_reasoning_levels": [
         {
+          "effort": "low",
+          "description": "Low. Faster, lighter reasoning."
+        },
+        {
+          "effort": "high",
+          "description": "High. Stronger reasoning with more latency."
+        },
+        {
           "effort": "max",
-          "description": "Max. Kimi K3's currently supported reasoning mode."
+          "description": "Max. Kimi K3's deepest reasoning mode (default)."
         }
       ],
       "shell_type": "shell_command",

@@ -34,6 +34,7 @@ pub use crate::common::ChatStreamOptions;
 pub use crate::common::ChatToolCall;
 pub use crate::common::ChatToolFunction;
 pub use crate::common::CompactionInput;
+pub use crate::common::CompletionFinishReason;
 pub use crate::common::MemorySummarizeInput;
 pub use crate::common::MemorySummarizeOutput;
 pub use crate::common::OpenAiVerbosity;

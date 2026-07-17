@@ -1133,6 +1133,32 @@ impl ModelClient {
         }
     }
 
+    /// Kimi Code K3 accepts exactly `low`, `high`, and `max` (default) for
+    /// `reasoning_effort`; anything else is rejected server-side. Map the
+    /// PFTerminal effort ladder onto that set so unsupported values are
+    /// normalized locally instead of producing a remote HTTP 400.
+    fn kimi_code_reasoning_effort(effort: Option<&ReasoningEffortConfig>) -> Result<String> {
+        let mapped = match effort {
+            Some(ReasoningEffortConfig::None)
+            | Some(ReasoningEffortConfig::Minimal)
+            | Some(ReasoningEffortConfig::Low) => "low",
+            Some(ReasoningEffortConfig::Medium) | Some(ReasoningEffortConfig::High) => "high",
+            Some(ReasoningEffortConfig::XHigh) => "max",
+            Some(ReasoningEffortConfig::Custom(value)) => match value.as_str() {
+                "low" | "light" | "minimum" | "min" => "low",
+                "medium" | "high" => "high",
+                "xhigh" | "max" | "ultra" => "max",
+                unsupported => {
+                    return Err(CodexErr::InvalidRequest(format!(
+                        "Kimi Code K3 does not support reasoning effort `{unsupported}`; use low, high, or max"
+                    )));
+                }
+            },
+            None => "max",
+        };
+        Ok(mapped.to_string())
+    }
+
     fn native_deepseek_v4_reasoning_effort(
         upstream_model: &str,
         effort: Option<&ReasoningEffortConfig>,
@@ -1376,15 +1402,19 @@ impl ModelClient {
                 )
             })
             .flatten();
-        // Kimi Code currently exposes K3 with one supported reasoning level.
-        // Send the required OpenAI-compatible field even when a stale config
-        // omitted the catalog default.
-        let kimi_code_reasoning_effort = self
-            .state
-            .provider
-            .info()
-            .is_kimi_code()
-            .then(|| "max".to_string());
+        // Kimi Code K3 accepts exactly {low, high, max} for `reasoning_effort`
+        // (kimi.com/code/docs/en/kimi-code/models.html). Map PFTerminal effort
+        // values onto that set and always send the field so a stale config that
+        // omitted the catalog default still gets K3's default ("max").
+        let kimi_code_reasoning_effort = if self.state.provider.info().is_kimi_code() {
+            Some(Self::kimi_code_reasoning_effort(
+                effort
+                    .as_ref()
+                    .or(model_info.default_reasoning_level.as_ref()),
+            )?)
+        } else {
+            None
+        };
         let native_deepseek_reasoning_effort = (!uses_zai_reasoning
             && !self.state.provider.info().is_openrouter()
             && !self.state.provider.info().is_baseten()
@@ -4118,6 +4148,7 @@ where
                     response_id,
                     token_usage,
                     end_turn,
+                    finish_reason,
                 }) => {
                     trace_stream_timing("response_stream_completed", stream_started_at);
                     feedback_tags!(last_model_response_id = &response_id);
@@ -4159,6 +4190,7 @@ where
                             response_id,
                             token_usage,
                             end_turn,
+                            finish_reason,
                         }))
                         .await
                         .is_err()

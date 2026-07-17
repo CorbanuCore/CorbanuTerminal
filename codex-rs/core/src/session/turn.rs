@@ -124,6 +124,7 @@ use codex_utils_stream_parser::AssistantTextStreamParser;
 use codex_utils_stream_parser::ProposedPlanSegment;
 use codex_utils_stream_parser::extract_proposed_plan_text;
 use codex_utils_stream_parser::strip_citations;
+use codex_utils_stream_parser::strip_completion_markers;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesOrdered;
@@ -147,6 +148,73 @@ const THIRD_PARTY_PREFLIGHT_WARNING_REQUEST_BYTES: i64 = 128 * 1024;
 const THIRD_PARTY_CACHE_HEALTH_MIN_INPUT_TOKENS: i64 = 8_000;
 const THIRD_PARTY_CACHE_HEALTHY_HIT_RATE: f64 = 0.70;
 const MAX_SERVER_SIDE_MODEL_CONTINUATIONS: u64 = 5;
+const MAX_COMPLETION_GUARD_REFUSALS: u64 = 3;
+const COMPLETION_GUARD_INSTRUCTION: &str = "<pfterminal-completion-guard>\
+The preceding assistant response stopped after this turn had executed tools, but it did not make \
+an explicit completion decision. Classify the live task state now. If any requested work remains, \
+call the appropriate tool immediately; do not only announce the next action. If the user's request \
+is fully satisfied, provide the final answer and append the exact protocol marker \
+<pfterminal-task-complete></pfterminal-task-complete>. Never emit that marker while requested work \
+remains.</pfterminal-completion-guard>";
+
+#[derive(Debug, Default)]
+struct ActionCompletionGuard {
+    tool_executed: bool,
+    awaiting_explicit_decision: bool,
+    refusals: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CompletionGuardDecision {
+    Accept,
+    ContinueNormally,
+    RequestExplicitDecision,
+    Refused,
+}
+
+impl ActionCompletionGuard {
+    fn observe(
+        &mut self,
+        chat_wire_api: bool,
+        saw_tool_call: bool,
+        needs_follow_up: bool,
+        explicit_completion: bool,
+    ) -> CompletionGuardDecision {
+        if saw_tool_call {
+            self.tool_executed = true;
+            self.awaiting_explicit_decision = false;
+            self.refusals = 0;
+        }
+        if needs_follow_up || !chat_wire_api || !self.tool_executed {
+            return CompletionGuardDecision::ContinueNormally;
+        }
+        if explicit_completion {
+            self.awaiting_explicit_decision = false;
+            self.refusals = 0;
+            return CompletionGuardDecision::Accept;
+        }
+        if self.awaiting_explicit_decision {
+            self.refusals += 1;
+            if self.refusals >= MAX_COMPLETION_GUARD_REFUSALS {
+                return CompletionGuardDecision::Refused;
+            }
+        }
+        self.awaiting_explicit_decision = true;
+        CompletionGuardDecision::RequestExplicitDecision
+    }
+}
+
+fn completion_guard_message() -> ResponseItem {
+    ResponseItem::Message {
+        id: None,
+        role: "developer".to_string(),
+        content: vec![ContentItem::InputText {
+            text: COMPLETION_GUARD_INSTRUCTION.to_string(),
+        }],
+        phase: None,
+        metadata: None,
+    }
+}
 
 fn trace_turn_timing(label: &str, start: Instant) {
     if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
@@ -242,6 +310,7 @@ pub(crate) async fn run_turn(
     let mut last_agent_message: Option<String> = None;
     let mut stop_hook_active = false;
     let mut consecutive_server_side_model_continuations = 0_u64;
+    let mut completion_guard = ActionCompletionGuard::default();
     // Although from the perspective of codex.rs, TurnDiffTracker has the lifecycle of a Task which contains
     // many turns, from the perspective of the user, it is a single turn.
     let display_roots = turn_diff_display_roots(turn_context.as_ref()).await;
@@ -330,6 +399,8 @@ pub(crate) async fn run_turn(
                     last_agent_message: sampling_request_last_agent_message,
                     token_usage: _,
                     server_side_model_continuation,
+                    saw_client_tool_call,
+                    explicit_completion,
                 } = sampling_request_output;
                 if server_side_model_continuation {
                     consecutive_server_side_model_continuations += 1;
@@ -419,6 +490,41 @@ pub(crate) async fn run_turn(
                     }
                     can_drain_pending_input = !model_needs_follow_up;
                     continue;
+                }
+
+                let chat_wire_api = matches!(
+                    turn_context.provider.info().wire_api,
+                    codex_model_provider_info::WireApi::Chat
+                );
+                match completion_guard.observe(
+                    chat_wire_api,
+                    saw_client_tool_call,
+                    needs_follow_up,
+                    explicit_completion,
+                ) {
+                    CompletionGuardDecision::RequestExplicitDecision => {
+                        trace!(
+                            turn_id = %turn_context.sub_id,
+                            refusals = completion_guard.refusals,
+                            "requesting explicit action-turn completion decision"
+                        );
+                        let message = completion_guard_message();
+                        sess.record_conversation_items(
+                            &turn_context,
+                            std::slice::from_ref(&message),
+                        )
+                        .await;
+                        continue;
+                    }
+                    CompletionGuardDecision::Refused => {
+                        return Err(CodexErr::InvalidRequest(format!(
+                            "the model stopped {MAX_COMPLETION_GUARD_REFUSALS} consecutive times \
+                             after tool execution without either calling another tool or explicitly \
+                             completing the task; retry the turn or select another model"
+                        )));
+                    }
+                    CompletionGuardDecision::Accept | CompletionGuardDecision::ContinueNormally => {
+                    }
                 }
 
                 if !needs_follow_up {
@@ -1459,6 +1565,8 @@ struct SamplingRequestResult {
     last_agent_message: Option<String>,
     token_usage: Option<TokenUsage>,
     server_side_model_continuation: bool,
+    saw_client_tool_call: bool,
+    explicit_completion: bool,
 }
 
 /// Ephemeral per-response state for streaming a single proposed plan.
@@ -2667,6 +2775,7 @@ async fn try_run_sampling_request(
     let mut should_emit_turn_diff = false;
     let mut should_emit_token_count = false;
     let mut saw_client_tool_call = false;
+    let mut explicit_completion = false;
     let reasoning_effort = turn_context.effective_reasoning_effort_for_tracing();
     let plan_mode = turn_context.collaboration_mode.mode == ModeKind::Plan;
     let mut assistant_message_stream_parsers = AssistantMessageStreamParsers::new(plan_mode);
@@ -2719,6 +2828,9 @@ async fn try_run_sampling_request(
         match event {
             ResponseEvent::Created => {}
             ResponseEvent::OutputItemDone(item) => {
+                if let Some(raw_text) = raw_assistant_output_text_from_item(&item) {
+                    explicit_completion |= strip_completion_markers(&raw_text).1 > 0;
+                }
                 if let Some((_, mut consumer)) = active_tool_argument_diff_consumer.take()
                     && let Ok(Some(event)) = consumer.finish()
                 {
@@ -2899,6 +3011,7 @@ async fn try_run_sampling_request(
                 response_id,
                 token_usage,
                 end_turn,
+                finish_reason,
             } => {
                 flush_assistant_text_segments_all(
                     &sess,
@@ -2915,6 +3028,9 @@ async fn try_run_sampling_request(
                             response_id: response_id.clone(),
                             model: turn_context.model_info.slug.clone(),
                             model_provider_id: turn_context.config.model_provider_id.clone(),
+                            finish_reason: finish_reason
+                                .as_ref()
+                                .map(|reason| reason.as_str().to_string()),
                         }),
                     )
                     .await;
@@ -2926,6 +3042,22 @@ async fn try_run_sampling_request(
                 should_emit_turn_diff = true;
                 if let Err(err) = budget_result {
                     break Err(err);
+                }
+                match finish_reason.as_ref() {
+                    Some(codex_api::CompletionFinishReason::ContentFilter) => {
+                        break Err(CodexErr::InvalidRequest(
+                            "the model provider stopped generation because content was filtered; \
+                             the turn was not completed"
+                                .to_string(),
+                        ));
+                    }
+                    Some(codex_api::CompletionFinishReason::Unknown(reason)) => {
+                        break Err(CodexErr::InvalidRequest(format!(
+                            "the model provider returned an unknown completion finish reason \
+                             `{reason}`; the turn was not marked complete"
+                        )));
+                    }
+                    _ => {}
                 }
                 if let Some(false) = end_turn {
                     needs_follow_up = true;
@@ -2939,6 +3071,8 @@ async fn try_run_sampling_request(
                     last_agent_message,
                     token_usage: completed_token_usage,
                     server_side_model_continuation,
+                    saw_client_tool_call,
+                    explicit_completion,
                 });
             }
             ResponseEvent::OutputTextDelta(delta) => {

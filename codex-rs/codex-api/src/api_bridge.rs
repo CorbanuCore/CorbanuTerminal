@@ -78,6 +78,14 @@ pub fn map_api_error(err: ApiError) -> CodexErr {
                     }
                 } else if status == http::StatusCode::INTERNAL_SERVER_ERROR {
                     CodexErr::InternalServerError
+                } else if status == http::StatusCode::UNAUTHORIZED
+                    && indicates_plan_entitlement_rejection(&body_text)
+                {
+                    // Some providers (e.g. Kimi Code) answer requests beyond the
+                    // plan's context entitlement with 401 instead of 4xx/413.
+                    // Classify separately from an invalid credential so users get
+                    // actionable guidance.
+                    CodexErr::PlanEntitlementExceeded(body_text)
                 } else if status == http::StatusCode::TOO_MANY_REQUESTS {
                     if let Ok(err) = serde_json::from_str::<UsageErrorResponse>(&body_text) {
                         if err.error.error_type.as_deref() == Some("usage_limit_reached") {
@@ -151,6 +159,21 @@ const X_ERROR_JSON_HEADER: &str = "x-error-json";
 const CYBER_POLICY_ERROR_CODE: &str = "cyber_policy";
 const CYBER_POLICY_FALLBACK_MESSAGE: &str =
     "This request has been flagged for possible cybersecurity risk.";
+
+/// Heuristic for providers that signal "request exceeds plan entitlement" with a 401.
+/// Matches on semantic phrases (context/token limit combined with plan/quota language),
+/// never on one provider's exact sentence.
+fn indicates_plan_entitlement_rejection(body: &str) -> bool {
+    let lower = body.to_ascii_lowercase();
+    let mentions_context_or_tokens =
+        lower.contains("context") || lower.contains("token limit") || lower.contains("tokens");
+    let mentions_entitlement = lower.contains("plan")
+        || lower.contains("quota")
+        || lower.contains("entitlement")
+        || lower.contains("exceed")
+        || lower.contains("maximum allowed");
+    mentions_context_or_tokens && mentions_entitlement
+}
 
 #[cfg(test)]
 #[path = "api_bridge_tests.rs"]

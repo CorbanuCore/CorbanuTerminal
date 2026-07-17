@@ -2616,7 +2616,7 @@ async fn model_selection_popup_openrouter_provider_snapshot() {
 
 #[tokio::test]
 async fn model_selection_popup_kimi_code_provider_snapshot() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some(KIMI_CODE_K3_MODEL)).await;
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some(KIMI_CODE_K3_MODEL)).await;
     chat.thread_id = Some(ThreadId::new());
     let presets = chat
         .model_catalog
@@ -2628,6 +2628,24 @@ async fn model_selection_popup_kimi_code_provider_snapshot() {
     assert_chatwidget_snapshot!("model_selection_popup_kimi_code_provider", popup);
     assert!(popup.contains("[Kimi Code]"));
     assert!(popup.contains("Kimi Code K3 (current)"));
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    let (model, purpose) = loop {
+        match rx.try_recv().expect("Kimi reasoning event") {
+            AppEvent::OpenReasoningPopup { model, purpose } => break (model, purpose),
+            AppEvent::SettingsSelectionClosed => continue,
+            event => panic!("unexpected event: {event:?}"),
+        }
+    };
+    chat.open_reasoning_popup_for_purpose(model, purpose);
+    let reasoning_popup = render_bottom_popup(&chat, /*width*/ 100);
+    assert_chatwidget_snapshot!("kimi_code_reasoning_popup", reasoning_popup);
+    for label in ["Low", "High", "max (default)"] {
+        assert!(
+            reasoning_popup.contains(label),
+            "expected Kimi reasoning option {label:?} in picker:\n{reasoning_popup}"
+        );
+    }
 }
 
 fn spawn_model_purpose(

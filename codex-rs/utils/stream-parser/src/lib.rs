@@ -8,6 +8,8 @@ mod utf8_stream;
 
 pub use assistant_text::AssistantTextChunk;
 pub use assistant_text::AssistantTextStreamParser;
+pub use assistant_text::COMPLETION_MARKER;
+pub use assistant_text::strip_completion_markers;
 pub use citation::CitationStreamParser;
 pub use citation::strip_citations;
 pub use inline_hidden_tag::ExtractedInlineTag;

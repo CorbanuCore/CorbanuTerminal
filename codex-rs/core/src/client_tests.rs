@@ -2402,7 +2402,7 @@ fn baseten_chat_completions_strips_strict_without_zai_reasoning_fields() {
 }
 
 #[test]
-fn kimi_code_k3_chat_uses_required_max_reasoning_and_standard_tools() {
+fn kimi_code_k3_chat_maps_supported_reasoning_and_rejects_unknown_values() {
     let provider_info = ModelProviderInfo::create_kimi_code_provider();
     let client = ModelClient::new(
         /*auth_manager*/ None,
@@ -2445,6 +2445,7 @@ fn kimi_code_k3_chat_uses_required_max_reasoning_and_standard_tools() {
     };
     let mut model_info = test_model_info();
     model_info.slug = "k3".to_string();
+    model_info.default_reasoning_level = None;
 
     let request = client
         .build_chat_completions_request(&prompt, &model_info, None)
@@ -2460,6 +2461,31 @@ fn kimi_code_k3_chat_uses_required_max_reasoning_and_standard_tools() {
             .pointer("/function/strict")
             .and_then(serde_json::Value::as_bool),
         Some(true)
+    );
+
+    for (effort, expected) in [
+        (ReasoningEffortConfig::Low, "low"),
+        (ReasoningEffortConfig::Medium, "high"),
+        (ReasoningEffortConfig::High, "high"),
+        (ReasoningEffortConfig::XHigh, "max"),
+        (ReasoningEffortConfig::Custom("ultra".to_string()), "max"),
+    ] {
+        let request = client
+            .build_chat_completions_request(&prompt, &model_info, Some(effort))
+            .expect("supported Kimi reasoning effort");
+        assert_eq!(request.reasoning_effort.as_deref(), Some(expected));
+    }
+
+    let err = client
+        .build_chat_completions_request(
+            &prompt,
+            &model_info,
+            Some(ReasoningEffortConfig::Custom("extreme".to_string())),
+        )
+        .expect_err("unsupported Kimi effort should fail locally");
+    assert!(
+        err.to_string().contains("use low, high, or max"),
+        "unexpected error: {err}"
     );
 }
 
@@ -2966,6 +2992,7 @@ async fn response_stream_records_last_model_feedback_ids() {
             response_id: "resp-123".to_string(),
             token_usage: None,
             end_turn: Some(true),
+            finish_reason: None,
         }),
     ]);
     let (mut stream, _) = super::map_response_events(
