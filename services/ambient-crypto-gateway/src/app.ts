@@ -9,6 +9,7 @@ import type { GatewayStore, SubscriptionPeriod } from "./store.js";
 import { hashToken } from "./token.js";
 
 const MAX_PROXY_BODY_BYTES = 2 * 1024 * 1024;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface GatewayAppOptions {
   store: GatewayStore;
@@ -19,6 +20,7 @@ export interface GatewayAppOptions {
   walletAddressFromRequest?: (request: Request) => string | undefined;
   now?: () => Date;
   fetch?: typeof globalThis.fetch;
+  readiness?: () => Promise<void>;
 }
 
 export function createGatewayApp(options: GatewayAppOptions): express.Express {
@@ -30,6 +32,14 @@ export function createGatewayApp(options: GatewayAppOptions): express.Express {
 
   app.disable("x-powered-by");
   app.get("/healthz", (_request, response) => response.json({ status: "ok" }));
+  app.get("/readyz", async (_request, response) => {
+    try {
+      await options.readiness?.();
+      response.json({ status: "ready" });
+    } catch {
+      response.status(503).json({ status: "not_ready" });
+    }
+  });
   app.use(options.paymentMiddleware);
 
   for (const planId of PLAN_IDS) {
@@ -51,7 +61,8 @@ export function createGatewayApp(options: GatewayAppOptions): express.Express {
     response.json({ walletAddress, periods });
   });
 
-  app.post("/v1/keys", async (request, response) => {
+  const accountJson = express.json({ limit: "64kb" });
+  app.post("/v1/keys", accountJson, async (request, response) => {
     const walletAddress = requireWalletAddress(request, response, walletAddressFromRequest);
     if (!walletAddress) return;
     try {
@@ -64,10 +75,15 @@ export function createGatewayApp(options: GatewayAppOptions): express.Express {
     }
   });
 
-  app.delete("/v1/keys/:keyId", async (request, response) => {
+  app.delete("/v1/keys", accountJson, async (request, response) => {
     const walletAddress = requireWalletAddress(request, response, walletAddressFromRequest);
     if (!walletAddress) return;
-    const revoked = await options.store.revokeApiKey(walletAddress, request.params.keyId, now());
+    const keyId = typeof request.body?.keyId === "string" ? request.body.keyId : "";
+    if (!UUID_PATTERN.test(keyId)) {
+      response.status(400).json({ error: "keyId must be a UUID" });
+      return;
+    }
+    const revoked = await options.store.revokeApiKey(walletAddress, keyId, now());
     response.status(revoked ? 204 : 404).end();
   });
 

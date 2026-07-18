@@ -7,16 +7,23 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
+    "key:issue": "tsx src/issue-key.ts",
+    "qualify:live": "tsx src/live-purchase.ts",
     "start": "node dist/index.js",
     "test": "tsx --test tests/*.test.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "wallet:generate": "tsx src/generate-wallet.ts"
   },
   "dependencies": {
     "@x402/core": "2.18.0",
     "@x402/express": "2.18.0",
     "@x402/extensions": "2.18.0",
+    "@x402/fetch": "2.18.0",
     "@x402/svm": "2.18.0",
+    "@noble/curves": "1.9.7",
+    "@scure/base": "1.2.6",
+    "@solana/kit": "5.5.1",
     "express": "5.2.1",
     "pg": "8.16.3"
   },

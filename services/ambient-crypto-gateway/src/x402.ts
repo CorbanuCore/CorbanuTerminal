@@ -18,6 +18,7 @@ export interface X402Config {
   store: GatewayStore;
   network: `${string}:${string}`;
   payTo: string;
+  publicBaseUrl: URL;
   facilitatorUrl: string;
   facilitatorBearerToken?: string;
   now?: () => Date;
@@ -75,15 +76,17 @@ export function createX402Middleware(config: X402Config): RequestHandler {
         },
         description: `One month of PfTerminal Ambient ${planId}`,
         mimeType: "application/json",
+        resource: new URL(purchasePath(planId), config.publicBaseUrl).toString(),
       },
     ]),
-    ...["GET /v1/subscription", "POST /v1/keys", "DELETE /v1/keys/:keyId"].map(
+    ...["GET /v1/subscription", "POST /v1/keys", "DELETE /v1/keys"].map(
       route => [
         route,
         {
           accepts: [] as [],
           description: "Wallet-authenticated PfTerminal account operation",
           mimeType: "application/json",
+          resource: new URL(route.slice(route.indexOf(" ") + 1), config.publicBaseUrl).toString(),
           extensions: declareSIWxExtension({
             network: [config.network],
             statement: "Authenticate this PfTerminal account operation",

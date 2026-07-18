@@ -132,8 +132,9 @@ describe("Ambient crypto gateway", () => {
       .expect(401);
     const issued = await buyAndIssueKey(app);
     await request(app)
-      .delete(`/v1/keys/${issued.id}`)
+      .delete("/v1/keys")
       .set("x-test-wallet", "wallet-1")
+      .send({ keyId: issued.id })
       .expect(204);
     await request(app)
       .post("/v1/chat/completions")

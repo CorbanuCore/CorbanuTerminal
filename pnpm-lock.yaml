@@ -87,6 +87,15 @@ importers:
 
   services/ambient-crypto-gateway:
     dependencies:
+      '@noble/curves':
+        specifier: 1.9.7
+        version: 1.9.7
+      '@scure/base':
+        specifier: 1.2.6
+        version: 1.2.6
+      '@solana/kit':
+        specifier: 5.5.1
+        version: 5.5.1(typescript@5.9.2)
       '@x402/core':
         specifier: 2.18.0
         version: 2.18.0
@@ -96,6 +105,9 @@ importers:
       '@x402/extensions':
         specifier: 2.18.0
         version: 2.18.0(typescript@5.9.2)
+      '@x402/fetch':
+        specifier: 2.18.0
+        version: 2.18.0
       '@x402/svm':
         specifier: 2.18.0
         version: 2.18.0(@solana/kit@5.5.1(typescript@5.9.2))(@solana/sysvars@5.5.1(typescript@5.9.2))
@@ -1376,6 +1388,9 @@ packages:
 
   '@x402/extensions@2.18.0':
     resolution: {integrity: sha512-Hahl0ZhHVyxIyDzNS1xCsDIzwDvkHRapdmH1fJbboEYvgNIeOToMLR+VG8kh1oJSdw/5RRgt3RpMqHnwvxgAGQ==}
+
+  '@x402/fetch@2.18.0':
+    resolution: {integrity: sha512-yuFLM8pIOWUNmbRwQpnO1az4IauW7dJ3yNDJkMkUkMXHLWLMeFwSwsqsRYBG7DEXcQCnb6iKY4Wps/qXUrcYOQ==}
 
   '@x402/svm@2.18.0':
     resolution: {integrity: sha512-MAIYe39k4p19W1Z689/iP3wLuCTjQv7ZTjBxDbt1AmNtjN81JVLSS0N0x/NCrCpAORZHbLgcbNp8M5RttSpZTw==}
@@ -4671,6 +4686,10 @@ snapshots:
       - ethers
       - typescript
       - utf-8-validate
+
+  '@x402/fetch@2.18.0':
+    dependencies:
+      '@x402/core': 2.18.0
 
   '@x402/svm@2.18.0(@solana/kit@5.5.1(typescript@5.9.2))(@solana/sysvars@5.5.1(typescript@5.9.2))':
     dependencies:
