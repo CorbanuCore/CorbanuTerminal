@@ -1,25 +1,34 @@
-# PFTerminal 0.1.14
+# PFTerminal 0.1.15
+
+## Added
+
+- Added a first-party Kimi Code K3 provider for Kimi Code plans, including credential setup,
+  onboarding, model selection, vault status, and doctor diagnostics.
+- Added Kimi-specific action-turn completion handling so the model can continue after tool use
+  without silently ending an unfinished turn.
 
 ## Fixed
 
-- Incoming hierarchy reports now remain queued until the active provider response reaches its
-  terminal event. They no longer interrupt Claude after a signed thinking or commentary block and
-  leave a partial assistant response in durable history.
-- Existing Claude sessions affected by that partial-history failure now perform one bounded,
-  protocol-specific recovery attempt. The retry omits only the incomplete latest assistant
-  response and its matching tool results while preserving newer user input and unrelated history.
+- Centralized hierarchy role-graph validation across native tool, app-server v1/v2, and internal
+  spawn paths, closing routes that could create invalid supervisors or bypass worker limits.
+- Stale Nazgul root bindings now fail closed, surface a visible recovery message, and persist the
+  corrected binding instead of silently rerouting work.
+- Dispatch correction prompts are now confined to orchestration threads and bounded by consecutive
+  failures, preventing unrelated panes from receiving hierarchy protocol instructions.
+- Restored saved native crews without corrupting root-role metadata, and stopped unpinned workers
+  from silently inheriting a supervisor's reasoning effort.
+- Improved chat-stream finish-reason handling and removed hard-coded workflow/persona material from
+  the default role prompts.
 
 ## Qualification status
 
-- Two crash-shaped integration tests cover hierarchy mail arriving after reasoning and commentary;
-  both passed and verify that the complete provider response precedes the follow-up request.
-- Three Anthropic history-recovery tests passed, including preservation of valid history and
-  rejection of unrelated provider errors. Scoped Clippy and a fresh Linux debug build also passed.
-- The complete `codex-core` run was not green in this workspace: 2,795 passed, 145 failed, and 14
-  were skipped. The failures were outside this patch's focused test paths and included missing test
-  helper binaries, stale model-catalog expectations, and command timeouts. This release does not
-  claim a fully green repository suite.
+- Provider/model, Kimi completion, hierarchy role, v1/v2 spawn validation, stale-binding,
+  correction-bound, and native-crew restoration tests passed locally.
+- Pull-request packaging, dependency, spelling, and blob-policy checks passed for both merged PRs.
+- The real-TUI matrix did not complete: its runner lacked `rg` after the product binary built
+  successfully. This release does not claim a completed real-TUI matrix or a fully green workspace
+  suite.
 
-Previous release: 0.1.13.
+Previous release: 0.1.14.
 
 The changelog can be found on the [releases page](https://github.com/agtico/PfTerminal/releases).
