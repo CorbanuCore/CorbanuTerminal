@@ -51,6 +51,11 @@ The service fails at startup when any required value is absent or malformed.
 Mainnet defaults to the PayAI facilitator. Devnet defaults to the x402.org test facilitator. A
 remote Ambient, facilitator, or public gateway URL must use HTTPS.
 
+Before serving purchases, initialize the receiving address's associated token account for the
+network's payment token. The current Solana x402 exact-payment transaction transfers into an
+existing token account; it does not create the receiver account. The purchase client checks this
+condition before signing and reports a setup error instead of submitting a doomed payment.
+
 ```sh
 corepack pnpm --filter @agticorp/ambient-crypto-gateway build
 corepack pnpm --filter @agticorp/ambient-crypto-gateway start
@@ -82,8 +87,9 @@ PFT_AMBIENT_RECEIPT_OUTPUT="$HOME/.pfterminal/ambient-receipt.json" \
   corepack pnpm --filter @agticorp/ambient-crypto-gateway qualify:live
 ```
 
-The purchase command first reads the x402 challenge and checks the payer's token balance. Set
-`PFT_SOLANA_RPC_URL` to use a private Solana RPC endpoint instead of the public network default.
+The purchase command first reads the x402 challenge, checks the payer's token balance, and confirms
+that the receiver has a token account for the challenged asset. Set `PFT_SOLANA_RPC_URL` to use a
+private Solana RPC endpoint instead of the public network default.
 
 An already-subscribed wallet can recover access without paying again:
 

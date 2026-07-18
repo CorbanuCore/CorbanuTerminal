@@ -14,20 +14,23 @@ const challenge = {
   }],
 };
 
-function fakeFetch(balance: string): typeof globalThis.fetch {
-  return async input => {
+function fakeFetch(balance: string, receiverExists = true): typeof globalThis.fetch {
+  return async (input, init) => {
     if (String(input).includes("gateway.test")) {
       return new Response("{}", {
         status: 402,
         headers: { "payment-required": Buffer.from(JSON.stringify(challenge)).toString("base64") },
       });
     }
+    const request = JSON.parse(String(init?.body)) as { params: [string] };
+    const owner = request.params[0];
+    const value = owner === "receiver" && !receiverExists
+      ? []
+      : [{ account: { data: { parsed: { info: { tokenAmount: { amount: balance } } } } } }];
     return Response.json({
       jsonrpc: "2.0",
       id: 1,
-      result: {
-        value: [{ account: { data: { parsed: { info: { tokenAmount: { amount: balance } } } } } }],
-      },
+      result: { value },
     });
   };
 }
@@ -53,6 +56,18 @@ describe("payment preflight", () => {
         fakeFetch("999999"),
       ),
       /requires 1000000/,
+    );
+  });
+
+  test("stops before signing when the receiver token account is not initialized", async () => {
+    await assert.rejects(
+      preflightSubscriptionPayment(
+        new URL("https://gateway.test/v1/subscriptions/starter"),
+        "payer",
+        "https://rpc.test",
+        fakeFetch("1000000", false),
+      ),
+      /receiver .* has no token account/,
     );
   });
 

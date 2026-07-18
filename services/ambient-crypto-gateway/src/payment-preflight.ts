@@ -37,10 +37,20 @@ export async function preflightSubscriptionPayment(
   };
 
   const endpoint = rpcUrl || defaultRpcUrl(requirement.network);
-  const balance = await readTokenBalance(endpoint, payerAddress, requirement.asset, fetchImpl);
-  if (balance < requirement.amount) {
+  const [payerAccounts, receiverAccounts] = await Promise.all([
+    readTokenAccounts(endpoint, payerAddress, requirement.asset, fetchImpl),
+    readTokenAccounts(endpoint, requirement.payTo, requirement.asset, fetchImpl),
+  ]);
+  const payerBalance = payerAccounts.reduce((total, amount) => total + amount, 0n);
+  if (payerBalance < requirement.amount) {
     throw new Error(
-      `payer has ${balance} atomic token units but the subscription requires ${requirement.amount}`,
+      `payer has ${payerBalance} atomic token units but the subscription requires ${requirement.amount}`,
+    );
+  }
+  if (receiverAccounts.length === 0) {
+    throw new Error(
+      `payment receiver ${requirement.payTo} has no token account for ${requirement.asset}; ` +
+        "initialize the receiver token account before accepting payments",
     );
   }
   return requirement;
@@ -68,12 +78,12 @@ function isSolanaPaymentRequirement(value: unknown): value is PaymentOption {
   );
 }
 
-async function readTokenBalance(
+async function readTokenAccounts(
   rpcUrl: string,
   owner: string,
   mint: string,
   fetchImpl: typeof globalThis.fetch,
-): Promise<bigint> {
+): Promise<bigint[]> {
   const response = await fetchImpl(rpcUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -92,10 +102,13 @@ async function readTokenBalance(
   if (body.error || !Array.isArray(body.result?.value)) {
     throw new Error("Solana balance preflight returned an invalid RPC response");
   }
-  return body.result.value.reduce((total, account) => {
+  return body.result.value.map(account => {
     const amount = account.account?.data?.parsed?.info?.tokenAmount?.amount;
-    return total + (typeof amount === "string" && /^\d+$/.test(amount) ? BigInt(amount) : 0n);
-  }, 0n);
+    if (typeof amount !== "string" || !/^\d+$/.test(amount)) {
+      throw new Error("Solana balance preflight returned malformed token-account data");
+    }
+    return BigInt(amount);
+  });
 }
 
 function defaultRpcUrl(network: string): string {
