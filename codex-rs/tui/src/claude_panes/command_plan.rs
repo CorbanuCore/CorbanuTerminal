@@ -45,6 +45,7 @@ pub(crate) fn allowed_provider_vault_label(label: &str) -> bool {
         "provider/zai_api_key"
             | "provider/anthropic_api_key"
             | "provider/ambient_api_key"
+            | "provider/kimi_api_key"
             | "provider/baseten_api_key"
             | "provider/openrouter_api_key"
             | "provider/model_api_key"

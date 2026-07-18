@@ -1,5 +1,6 @@
 use crate::auth::SharedAuthProvider;
 use crate::common::ChatCompletionsRequest;
+use crate::common::CompletionFinishReason;
 use crate::common::ResponseEvent;
 use crate::common::ResponseStream;
 use crate::endpoint::session::EndpointSession;
@@ -47,6 +48,7 @@ use tokio::time::timeout;
 use tracing::debug;
 use tracing::instrument;
 use tracing::trace;
+use tracing::warn;
 
 const REQUEST_ID_HEADER: &str = "x-request-id";
 const GENERATION_ID_HEADERS: [&str; 3] = [
@@ -218,7 +220,6 @@ struct ChatCompletionChunk {
 struct ChatChoice {
     #[serde(default)]
     delta: ChatDelta,
-    #[allow(dead_code)]
     finish_reason: Option<String>,
 }
 
@@ -344,6 +345,7 @@ struct ChatStreamState {
     tool_calls: BTreeMap<usize, PendingToolCall>,
     token_usage: Option<TokenUsage>,
     response_id_hint: Option<String>,
+    finish_reason: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -641,6 +643,7 @@ impl ChatStreamState {
             tool_calls: BTreeMap::new(),
             token_usage: None,
             response_id_hint,
+            finish_reason: None,
         }
     }
 
@@ -669,6 +672,17 @@ impl ChatStreamState {
         }
 
         for choice in chunk.choices {
+            if let Some(finish_reason) = choice.finish_reason.as_deref() {
+                if let Some(previous) = self.finish_reason.as_deref()
+                    && previous != finish_reason
+                {
+                    warn!(
+                        previous,
+                        finish_reason, "chat completion changed finish reason"
+                    );
+                }
+                self.finish_reason = Some(finish_reason.to_string());
+            }
             // Hosts speak one of two reasoning dialects: Z.AI-style
             // `reasoning_content` or OpenRouter-normalized `reasoning`.
             let reasoning_delta = match (choice.delta.reasoning_content, choice.delta.reasoning) {
@@ -815,11 +829,29 @@ impl ChatStreamState {
             }
         }
 
+        let finish_reason = self
+            .finish_reason
+            .take()
+            .map(CompletionFinishReason::from_provider);
+        // A length-limited response is incomplete but recoverable: the turn runner records
+        // the partial assistant output, requests a continuation, and caps consecutive
+        // provider-driven continuations. Filtered and unknown terminal states are left
+        // indeterminate so the turn runner can surface them as explicit errors.
+        let end_turn = match finish_reason.as_ref() {
+            Some(CompletionFinishReason::Stop) => Some(true),
+            Some(CompletionFinishReason::ToolCalls)
+            | Some(CompletionFinishReason::FunctionCall)
+            | Some(CompletionFinishReason::Length) => Some(false),
+            Some(CompletionFinishReason::ContentFilter)
+            | Some(CompletionFinishReason::Unknown(_))
+            | None => None,
+        };
         let _ = tx_event
             .send(Ok(ResponseEvent::Completed {
                 response_id,
                 token_usage,
-                end_turn: None,
+                end_turn,
+                finish_reason,
             }))
             .await;
     }
@@ -1465,10 +1497,49 @@ mod tests {
         );
         assert_matches!(
             &events[4],
-            Ok(ResponseEvent::Completed { response_id, .. })
-                if response_id == "chatcmpl-sglang"
+            Ok(ResponseEvent::Completed {
+                response_id,
+                end_turn: Some(true),
+                finish_reason: Some(CompletionFinishReason::Stop),
+                ..
+            }) if response_id == "chatcmpl-sglang"
         );
         assert_eq!(events.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn preserves_and_classifies_chat_completion_finish_reasons() {
+        let cases = [
+            ("stop", CompletionFinishReason::Stop, Some(true)),
+            ("length", CompletionFinishReason::Length, Some(false)),
+            (
+                "content_filter",
+                CompletionFinishReason::ContentFilter,
+                None,
+            ),
+            ("tool_calls", CompletionFinishReason::ToolCalls, Some(false)),
+            (
+                "provider_new_reason",
+                CompletionFinishReason::Unknown("provider_new_reason".to_string()),
+                None,
+            ),
+        ];
+
+        for (raw, expected_reason, expected_end_turn) in cases {
+            let terminal = format!(
+                "data: {{\"id\":\"chatcmpl-finish\",\"choices\":[{{\"delta\":{{}},\"finish_reason\":\"{raw}\"}}]}}\n\n"
+            );
+            let events = collect_events(&[terminal.as_bytes(), b"data: [DONE]\n\n"]).await;
+            assert_matches!(
+                events.last(),
+                Some(Ok(ResponseEvent::Completed {
+                    finish_reason: Some(reason),
+                    end_turn,
+                    ..
+                })) if reason == &expected_reason && end_turn == &expected_end_turn,
+                "finish reason {raw} was not preserved"
+            );
+        }
     }
 
     #[tokio::test]

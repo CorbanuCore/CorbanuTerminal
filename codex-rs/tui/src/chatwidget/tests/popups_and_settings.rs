@@ -17,6 +17,8 @@ use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+use codex_model_provider_info::KIMI_CODE_K3_MODEL;
+use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
@@ -2612,6 +2614,40 @@ async fn model_selection_popup_openrouter_provider_snapshot() {
     assert_chatwidget_snapshot!("model_selection_popup_openrouter_provider", popup);
 }
 
+#[tokio::test]
+async fn model_selection_popup_kimi_code_provider_snapshot() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some(KIMI_CODE_K3_MODEL)).await;
+    chat.thread_id = Some(ThreadId::new());
+    let presets = chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    chat.open_all_models_popup(presets);
+
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 24);
+    assert_chatwidget_snapshot!("model_selection_popup_kimi_code_provider", popup);
+    assert!(popup.contains("[Kimi Code]"));
+    assert!(popup.contains("Kimi Code K3 (current)"));
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    let (model, purpose) = loop {
+        match rx.try_recv().expect("Kimi reasoning event") {
+            AppEvent::OpenReasoningPopup { model, purpose } => break (model, purpose),
+            AppEvent::SettingsSelectionClosed => continue,
+            event => panic!("unexpected event: {event:?}"),
+        }
+    };
+    chat.open_reasoning_popup_for_purpose(model, purpose);
+    let reasoning_popup = render_bottom_popup(&chat, /*width*/ 100);
+    assert_chatwidget_snapshot!("kimi_code_reasoning_popup", reasoning_popup);
+    for label in ["Low", "High", "max (default)"] {
+        assert!(
+            reasoning_popup.contains(label),
+            "expected Kimi reasoning option {label:?} in picker:\n{reasoning_popup}"
+        );
+    }
+}
+
 fn spawn_model_purpose(
     role: SpawnRole,
     parent_node_id: Option<&str>,
@@ -2976,6 +3012,10 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         "expected provider tabs in /model picker:\n{popup}"
     );
     assert!(
+        popup.contains("Kimi Code"),
+        "expected Kimi Code provider tab in /model picker:\n{popup}"
+    );
+    assert!(
         popup.contains("Ambient's default GLM 5.2 coding model."),
         "expected Ambient model description in /model picker:\n{popup}"
     );
@@ -3059,6 +3099,26 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         baseten_popup
             .contains("Baseten: GLM 5.2 - $1.50/M input, $0.30/M cached input, $4.50/M output."),
         "expected Baseten GLM price description in /model picker:\n{baseten_popup}"
+    );
+    let (mut kimi_chat, _kimi_rx, _kimi_op_rx) =
+        make_chatwidget_manual(Some(KIMI_CODE_K3_MODEL)).await;
+    kimi_chat.thread_id = Some(ThreadId::new());
+    let presets = kimi_chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    kimi_chat.open_all_models_popup(presets);
+    let kimi_popup =
+        render_bottom_popup_with_height(&kimi_chat, /*width*/ 140, /*height*/ 24);
+    assert_eq!(
+        ChatWidget::model_provider_for_selection(KIMI_CODE_K3_MODEL).as_deref(),
+        Some(KIMI_CODE_PROVIDER_ID)
+    );
+    assert!(
+        kimi_popup.contains("[Kimi Code]")
+            && kimi_popup.contains("Kimi Code K3")
+            && kimi_popup.contains("up to 1M on Allegretto and above"),
+        "expected Kimi Code K3 in its own provider tab:\n{kimi_popup}"
     );
     let (mut vercel_chat, _vercel_rx, _vercel_op_rx) =
         make_chatwidget_manual(Some(VERCEL_DEFAULT_MODEL)).await;

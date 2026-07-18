@@ -80,6 +80,7 @@ use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
+use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
 use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
@@ -3701,6 +3702,7 @@ impl Config {
             .filter(|values| !values.is_empty());
 
         let ambient_provider_selected = model_provider_id == AMBIENT_PROVIDER_ID;
+        let kimi_code_provider_selected = model_provider_id == KIMI_CODE_PROVIDER_ID;
         let anthropic_provider_selected = model_provider_id == ANTHROPIC_PROVIDER_ID;
         let meta_provider_selected = model_provider_id == META_PROVIDER_ID;
         let baseten_provider_selected =
@@ -3720,6 +3722,7 @@ impl Config {
             .forced_login_method
             .or_else(|| {
                 (ambient_provider_selected
+                    || kimi_code_provider_selected
                     || anthropic_provider_selected
                     || meta_provider_selected
                     || baseten_provider_selected

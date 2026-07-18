@@ -104,7 +104,10 @@ wait_layout() {
   local layout
   for ((attempt = 0; attempt < attempts; attempt++)); do
     layout=$(layout_file 2>/dev/null || true)
-    if [[ -n "$layout" ]] && jq -e "$filter" "$layout" >/dev/null 2>&1; then
+    # Format v2 wraps the durable pane payload in `{format_version, checksum,
+    # layout}` while older fixtures expose the layout directly. Normalize at
+    # the reader boundary so every row asserts the same logical document.
+    if [[ -n "$layout" ]] && jq -e "(.layout // .) | $filter" "$layout" >/dev/null 2>&1; then
       return 0
     fi
     sleep 0.25
@@ -114,11 +117,11 @@ wait_layout() {
 }
 
 layout_file() {
-  if [[ -f "$CURRENT_HOME/panes/pane-layout.json" ]]; then
-    printf '%s\n' "$CURRENT_HOME/panes/pane-layout.json"
-    return
-  fi
-  find "$CURRENT_HOME/panes/pane-layouts" -type f -name '*.json' -print0 \
+  # Restart/resume can leave the compatibility path behind while the resumed
+  # root writes its per-thread layout. Always inspect the newest durable JSON
+  # across both locations instead of pinning reads to a stale compatibility
+  # copy merely because it exists.
+  find "$CURRENT_HOME/panes" -maxdepth 2 -type f -name '*.json' -print0 \
     | xargs -0 -r ls -1t | head -n 1
 }
 
@@ -294,7 +297,7 @@ row_1() {
   open_panes_capture "panes-after-two-cycles" >/dev/null
   panes=$LAST_CAPTURE_PATH
   grep -Fq "Codex - Worker" "$panes" || fail 1 "Worker vanished from /panes"
-  grep -Fq "managed-by Manager" "$panes" || fail 1 "Worker assignment label missing"
+  screen_contains "$panes" "managed-by Manager" || fail 1 "Worker assignment label missing"
   wait_layout '.orchestrate_whips | to_entries[0].value.fires >= 2' || fail 1 "two mandate cycles did not fire"
   snapshot_layout "final-layout"
   printf 'PASS\t1\tguided prewritten create-Manager\n' >>"$RESULTS"
@@ -338,9 +341,9 @@ row_4() {
   wait_screen "• WHIP_DONE" 100
   wait_layout '.orchestrate_whips | to_entries[0].value.kind.phase == "done"'
   local before after
-  before=$(jq '.orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
+  before=$(jq '(.layout // .) | .orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
   sleep 4
-  after=$(jq '.orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
+  after=$(jq '(.layout // .) | .orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
   [[ "$before" == "$after" ]] || fail 4 "mandates continued after done marker"
   capture "marker-done" >/dev/null
   snapshot_layout "final-layout"
@@ -365,7 +368,7 @@ row_6() {
   start_row 6 900
   guided_prewritten_create_manager
   local worker_node
-  worker_node=$(jq -r '.orchestrate_whips | to_entries[0].value.target' "$(layout_file)")
+  worker_node=$(jq -r '(.layout // .) | .orchestrate_whips | to_entries[0].value.target' "$(layout_file)")
   printf 'unavailable=%s\n' "$worker_node" >"$CONTROL"
   switch_pane "Manager"
   submit_user "QA_BAD_DISPATCH"
@@ -385,7 +388,7 @@ row_7() {
   start_row 7-worker 900
   guided_prewritten_create_manager
   local worker_node worker_evidence
-  worker_node=$(jq -r '.orchestrate_whips | to_entries[0].value.target' "$(layout_file)")
+  worker_node=$(jq -r '(.layout // .) | .orchestrate_whips | to_entries[0].value.target' "$(layout_file)")
   printf 'close=%s\n' "$worker_node" >"$CONTROL"
   wait_layout '.orchestrate_whips | to_entries[0].value.state == "paused"'
   capture "worker-loss-paused" >/dev/null
@@ -395,7 +398,7 @@ row_7() {
   start_row 7-manager 900
   guided_prewritten_create_manager
   local manager_node manager_evidence
-  manager_node=$(jq -r '.orchestrate_whips | to_entries[0].value.holder' "$(layout_file)")
+  manager_node=$(jq -r '(.layout // .) | .orchestrate_whips | to_entries[0].value.holder' "$(layout_file)")
   printf 'close=%s\n' "$manager_node" >"$CONTROL"
   wait_layout '.orchestrate_whips | to_entries[0].value.state == "paused"'
   capture "manager-loss-paused" >/dev/null
@@ -410,8 +413,8 @@ row_8() {
   start_row 8-resume 10
   guided_prewritten_create_manager
   local before after_delay after_cycle restart_evidence root_thread_id
-  before=$(jq '.orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
-  root_thread_id=$(jq -r '.codex_thread_id' "$(layout_file)")
+  before=$(jq '(.layout // .) | .orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
+  root_thread_id=$(jq -r '(.layout // .) | .codex_thread_id' "$(layout_file)")
   restart_current 10 "$root_thread_id"
   wait_screen "restored; the next Manager mandate waits one" 100
   capture "restart-resume-notice" >/dev/null
@@ -419,18 +422,18 @@ row_8() {
   screen_contains "$restart_evidence" "restored; the next Manager mandate" \
     || fail 8 "resume notice missing"
   sleep 3
-  after_delay=$(jq '.orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
+  after_delay=$(jq '(.layout // .) | .orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
   [[ "$after_delay" == "$before" ]] || fail 8 "mandate fired before one cadence elapsed"
   sleep 8
-  after_cycle=$(jq '.orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
+  after_cycle=$(jq '(.layout // .) | .orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
   ((after_cycle > before)) || fail 8 "loop did not continue after restart cadence"
   snapshot_layout "resumed-layout"
 
   start_row 8-missing-worker 900
   guided_prewritten_create_manager
   local worker_node missing_evidence missing_root_thread_id
-  worker_node=$(jq -r '.orchestrate_whips | to_entries[0].value.target' "$(layout_file)")
-  missing_root_thread_id=$(jq -r '.codex_thread_id' "$(layout_file)")
+  worker_node=$(jq -r '(.layout // .) | .orchestrate_whips | to_entries[0].value.target' "$(layout_file)")
+  missing_root_thread_id=$(jq -r '(.layout // .) | .codex_thread_id' "$(layout_file)")
   tmux kill-session -t "$CURRENT_SESSION" 2>/dev/null || true
   printf 'unavailable=%s\n' "$worker_node" >"$CONTROL"
   restart_current 900 "$missing_root_thread_id"
@@ -447,6 +450,11 @@ row_8() {
 row_9() {
   start_row 9 900
   guided_draft_existing_manager
+  # Pause the assignment before exercising pane navigation. Productive Worker
+  # completion is intentionally event-driven, so leaving it executing creates
+  # an unrelated stream of Manager turns that can steal focus from /panes.
+  submit_user "QA_EMIT_BLOCKED"
+  wait_layout '.orchestrate_whips | to_entries[0].value.kind.phase.blocked.reason == "waiting for QA approval"'
   local before after assignment_id
   open_panes_capture "pane-hygiene-before-detach" >/dev/null
   before=$LAST_CAPTURE_PATH
@@ -454,10 +462,11 @@ row_9() {
   grep -Fq "Codex - Worker" "$before" || fail 9 "Worker pane missing"
   grep -Fq "Codex - Manager" "$before" || fail 9 "Manager pane missing"
   tmux send-keys -t "$CURRENT_SESSION":0.0 Esc
+  wait_screen_absent "Search panes and crew"
   switch_pane "Worker"
   switch_pane "Manager"
   switch_main
-  assignment_id=$(jq -r '.orchestrate_whips | keys[0]' "$(layout_file)")
+  assignment_id=$(jq -r '(.layout // .) | .orchestrate_whips | keys[0]' "$(layout_file)")
   submit "/orchestrate detach $assignment_id"
   wait_layout '.orchestrate_whips | length == 0'
   open_panes_capture "pane-hygiene-after-detach" >/dev/null
@@ -492,7 +501,7 @@ row_10() {
   select_down 0
   wait_layout '.orchestrate_whips | to_entries[0].value.kind.phase == "drafting"'
   local root_thread_id
-  root_thread_id=$(jq -r '.codex_thread_id' "$(layout_file)")
+  root_thread_id=$(jq -r '(.layout // .) | .codex_thread_id' "$(layout_file)")
   wait_layout ".orchestrate_whips | to_entries[0].value.target == \"thread:$root_thread_id\""
   submit_slash_wait "/panes" "Panes"
   select_down 1
@@ -509,12 +518,12 @@ row_11() {
   submit_user "QA_USER_PRECEDENCE"
   wait_screen "QA_READY" 100
   local before before_due after_due
-  before=$(jq '.orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
+  before=$(jq '(.layout // .) | .orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
   sleep 6
-  before_due=$(jq '.orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
+  before_due=$(jq '(.layout // .) | .orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
   [[ "$before_due" == "$before" ]] || fail 11 "mandate ignored user-precedence window"
   sleep 6
-  after_due=$(jq '.orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
+  after_due=$(jq '(.layout // .) | .orchestrate_whips | to_entries[0].value.fires' "$(layout_file)")
   ((after_due > before)) || fail 11 "mandate did not resume after base cadence"
   snapshot_layout "final-layout"
   printf 'PASS\t11\tuser precedence uses base cadence\n' >>"$RESULTS"
@@ -530,13 +539,13 @@ row_12() {
   wait_layout '.orchestrate_whips | to_entries[0].value.kind.type == "legacy_nudge"'
   wait_layout '.orchestrate_whips | to_entries[0].value.state == "exhausted" and to_entries[0].value.fires == 2' 160
   local first_id
-  first_id=$(jq -r '.orchestrate_whips | keys[0]' "$(layout_file)")
+  first_id=$(jq -r '(.layout // .) | .orchestrate_whips | keys[0]' "$(layout_file)")
   submit "/orchestrate detach $first_id"
   wait_layout '.orchestrate_whips | length == 0'
   submit "/orchestrate attach $worker_node keep-going --mode auto --holder none --max 5 --cooldown 2s"
   wait_layout '.orchestrate_whips | to_entries[0].value.fires >= 1'
   local second_id
-  second_id=$(jq -r '.orchestrate_whips | keys[0]' "$(layout_file)")
+  second_id=$(jq -r '(.layout // .) | .orchestrate_whips | keys[0]' "$(layout_file)")
   submit "/orchestrate pause $second_id"
   wait_layout '.orchestrate_whips | to_entries[0].value.state == "paused"'
   capture "legacy-capped-and-paused" >/dev/null
@@ -584,7 +593,7 @@ row_13() {
   tmux send-keys -t "$CURRENT_SESSION":0.0 Esc
 
   local worker_node
-  worker_node=$(jq -r '.orchestrate_whips | to_entries[0].value.target' "$(layout_file)")
+  worker_node=$(jq -r '(.layout // .) | .orchestrate_whips | to_entries[0].value.target' "$(layout_file)")
   printf 'close=%s\n' "$worker_node" >"$CONTROL"
   wait_layout '.orchestrate_whips | to_entries[0].value.state == "paused"'
   capture "jargon-notice" >/dev/null
@@ -646,7 +655,7 @@ row_15() {
   local source_layout=${PFTERMINAL_POLLUTED_LAYOUT:-"$ROOT/qa/fixtures/polluted-pane-layout.json"}
   local evidence_dir="$ARTIFACT_ROOT/$CURRENT_SESSION"
   local root_thread_id
-  root_thread_id=$(jq -r '.codex_thread_id' "$(layout_file)")
+  root_thread_id=$(jq -r '(.layout // .) | .codex_thread_id' "$(layout_file)")
   tmux kill-session -t "$CURRENT_SESSION" 2>/dev/null || true
   mkdir -p "$CURRENT_HOME/panes/pane-layouts" "$evidence_dir/read-only-source"
   cp "$source_layout" "$evidence_dir/read-only-source/pane-layout.json"

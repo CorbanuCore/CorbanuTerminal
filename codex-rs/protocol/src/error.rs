@@ -81,6 +81,10 @@ pub enum CodexErr {
         "Codex ran out of room in the model's context window. Start a new thread or clear earlier history before retrying."
     )]
     ContextWindowExceeded,
+    #[error(
+        "The model provider rejected the request because it exceeds your plan's entitlement: {0}. Lower the configured context window (for Kimi Code, Moderato plans support up to 256K; set `model_context_window` accordingly) or upgrade your plan."
+    )]
+    PlanEntitlementExceeded(String),
     #[error("no thread with id: {0}")]
     ThreadNotFound(ThreadId),
     #[error("agent thread limit reached")]
@@ -186,6 +190,7 @@ impl CodexErr {
             | CodexErr::LandlockSandboxExecutableNotProvided
             | CodexErr::RetryLimit(_)
             | CodexErr::ContextWindowExceeded
+            | CodexErr::PlanEntitlementExceeded(_)
             | CodexErr::ThreadNotFound(_)
             | CodexErr::AgentLimitReached { .. }
             | CodexErr::Spawn
@@ -220,6 +225,7 @@ impl CodexErr {
     pub fn to_codex_protocol_error(&self) -> CodexErrorInfo {
         match self {
             CodexErr::ContextWindowExceeded => CodexErrorInfo::ContextWindowExceeded,
+            CodexErr::PlanEntitlementExceeded(_) => CodexErrorInfo::PlanEntitlementExceeded,
             CodexErr::UsageLimitReached(_)
             | CodexErr::QuotaExceeded
             | CodexErr::UsageNotIncluded => CodexErrorInfo::UsageLimitExceeded,

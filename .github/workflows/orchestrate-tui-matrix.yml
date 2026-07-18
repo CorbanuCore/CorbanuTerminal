@@ -35,6 +35,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: codex-rs
+      - name: Install pinned just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just@1.55.1
       - name: Install TUI harness dependencies
         run: sudo apt-get update && sudo apt-get install -y jq tmux
       - name: Run orchestrate TUI matrix

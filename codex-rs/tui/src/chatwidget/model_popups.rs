@@ -20,6 +20,8 @@ use codex_model_provider_info::BASETEN_PROVIDER_ID;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+use codex_model_provider_info::KIMI_CODE_K3_MODEL;
+use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::META_DEFAULT_MODEL;
 use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
@@ -89,7 +91,7 @@ struct ModelPickerProviderGroup {
     subtitle: &'static str,
 }
 
-const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 10] = [
+const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 11] = [
     ModelPickerProviderGroup {
         id: "openai",
         label: "OpenAI",
@@ -99,6 +101,11 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 10] = [
         id: "ambient",
         label: "Ambient",
         subtitle: "Ambient coding plan",
+    },
+    ModelPickerProviderGroup {
+        id: "kimi-code",
+        label: "Kimi Code",
+        subtitle: "Kimi Code plan",
     },
     ModelPickerProviderGroup {
         id: "zai",
@@ -308,6 +315,9 @@ impl ChatWidget {
             || trimmed.starts_with("zai-org/")
         {
             return Some(AMBIENT_PROVIDER_ID.to_string());
+        }
+        if trimmed == KIMI_CODE_K3_MODEL {
+            return Some(KIMI_CODE_PROVIDER_ID.to_string());
         }
         if trimmed == ZAI_DEFAULT_MODEL || trimmed.starts_with("glm-") {
             return Some(ZAI_PROVIDER_ID.to_string());
@@ -550,6 +560,7 @@ impl ChatWidget {
             Some(OPENAI_PROVIDER_ID) => Self::is_openai_coding_plan_model(&preset.model),
             Some(
                 AMBIENT_PROVIDER_ID
+                | KIMI_CODE_PROVIDER_ID
                 | CLAUDE_PLAN_PROVIDER_ID
                 | ANTHROPIC_PROVIDER_ID
                 | ZAI_PROVIDER_ID
@@ -579,6 +590,7 @@ impl ChatWidget {
         let group_id = match provider {
             Some(OPENAI_PROVIDER_ID) => "openai",
             Some(AMBIENT_PROVIDER_ID) => "ambient",
+            Some(KIMI_CODE_PROVIDER_ID) => "kimi-code",
             Some(ZAI_PROVIDER_ID) => "zai",
             Some(CLAUDE_PLAN_PROVIDER_ID) => "claude-plan",
             Some(ANTHROPIC_PROVIDER_ID) => "anthropic",

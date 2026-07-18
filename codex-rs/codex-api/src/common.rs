@@ -125,6 +125,10 @@ pub enum ResponseEvent {
         /// Did the model affirmatively end its turn? Some providers do not set this,
         /// so we rely on fallback logic when this is `None`.
         end_turn: Option<bool>,
+        /// Provider-supplied reason that generation stopped. Chat Completions
+        /// providers use this to distinguish a genuine stop from truncation,
+        /// filtering, tool handoff, and unknown terminal states.
+        finish_reason: Option<CompletionFinishReason>,
     },
     OutputTextDelta(String),
     ToolCallInputDelta {
@@ -145,6 +149,41 @@ pub enum ResponseEvent {
     },
     RateLimits(RateLimitSnapshot),
     ModelsEtag(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CompletionFinishReason {
+    Stop,
+    Length,
+    ContentFilter,
+    ToolCalls,
+    FunctionCall,
+    Unknown(String),
+}
+
+impl CompletionFinishReason {
+    pub fn from_provider(value: impl Into<String>) -> Self {
+        let value = value.into();
+        match value.as_str() {
+            "stop" => Self::Stop,
+            "length" | "max_tokens" => Self::Length,
+            "content_filter" | "content_filtered" => Self::ContentFilter,
+            "tool_calls" => Self::ToolCalls,
+            "function_call" => Self::FunctionCall,
+            _ => Self::Unknown(value),
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Stop => "stop",
+            Self::Length => "length",
+            Self::ContentFilter => "content_filter",
+            Self::ToolCalls => "tool_calls",
+            Self::FunctionCall => "function_call",
+            Self::Unknown(value) => value,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]

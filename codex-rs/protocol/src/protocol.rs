@@ -1691,6 +1691,7 @@ pub enum NonSteerableTurnKind {
 #[ts(rename_all = "snake_case")]
 pub enum CodexErrorInfo {
     ContextWindowExceeded,
+    PlanEntitlementExceeded,
     UsageLimitExceeded,
     ServerOverloaded,
     CyberPolicy,
@@ -1728,6 +1729,7 @@ impl CodexErrorInfo {
         match self {
             Self::ThreadRollbackFailed | Self::ActiveTurnNotSteerable { .. } => false,
             Self::ContextWindowExceeded
+            | Self::PlanEntitlementExceeded
             | Self::UsageLimitExceeded
             | Self::ServerOverloaded
             | Self::CyberPolicy
@@ -1969,6 +1971,11 @@ pub struct ModelResponseCompletedEvent {
     pub response_id: String,
     pub model: String,
     pub model_provider_id: String,
+    /// Provider terminal reason when available (for example `stop`, `length`,
+    /// `content_filter`, or `tool_calls`). Persisted for rollout diagnosis.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub finish_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]

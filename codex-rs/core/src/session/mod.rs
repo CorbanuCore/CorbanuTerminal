@@ -208,6 +208,7 @@ use codex_protocol::error::Result as CodexResult;
 #[cfg(test)]
 use codex_protocol::exec_output::StreamOutput;
 
+mod completion_guard;
 mod config_lock;
 mod handlers;
 mod inject;

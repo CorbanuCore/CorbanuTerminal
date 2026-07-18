@@ -11,6 +11,7 @@ use codex_login::CodexAuth;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+use codex_model_provider_info::KIMI_CODE_K3_MODEL;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
@@ -245,7 +246,11 @@ impl ModelProvider for ConfiguredModelProvider {
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
-        if self.info.is_ambient() || self.info.is_baseten() || self.info.is_vercel() {
+        if self.info.is_ambient()
+            || self.info.is_kimi_code()
+            || self.info.is_baseten()
+            || self.info.is_vercel()
+        {
             ProviderCapabilities {
                 namespace_tools: false,
                 image_generation: false,
@@ -265,6 +270,8 @@ impl ModelProvider for ConfiguredModelProvider {
     fn approval_review_preferred_model(&self) -> &'static str {
         if self.info.is_ambient() {
             AMBIENT_DEFAULT_MODEL
+        } else if self.info.is_kimi_code() {
+            KIMI_CODE_K3_MODEL
         } else if self.info.is_claude_plan() {
             CLAUDE_PLAN_MODEL
         } else if self.info.is_zai() {
@@ -283,6 +290,8 @@ impl ModelProvider for ConfiguredModelProvider {
     fn memory_extraction_preferred_model(&self) -> &'static str {
         if self.info.is_ambient() {
             AMBIENT_DEFAULT_MODEL
+        } else if self.info.is_kimi_code() {
+            KIMI_CODE_K3_MODEL
         } else if self.info.is_claude_plan() {
             CLAUDE_PLAN_MODEL
         } else if self.info.is_zai() {
@@ -301,6 +310,8 @@ impl ModelProvider for ConfiguredModelProvider {
     fn memory_consolidation_preferred_model(&self) -> &'static str {
         if self.info.is_ambient() {
             AMBIENT_DEFAULT_MODEL
+        } else if self.info.is_kimi_code() {
+            KIMI_CODE_K3_MODEL
         } else if self.info.is_claude_plan() {
             CLAUDE_PLAN_MODEL
         } else if self.info.is_zai() {
@@ -747,6 +758,35 @@ mod tests {
         assert_eq!(
             provider.memory_consolidation_preferred_model(),
             BASETEN_DEFAULT_MODEL
+        );
+    }
+
+    #[test]
+    fn kimi_code_provider_disables_hosted_tools_and_uses_k3_defaults() {
+        let provider = create_model_provider(
+            ModelProviderInfo::create_kimi_code_provider(),
+            /*auth_manager*/ None,
+        );
+
+        assert_eq!(
+            provider.capabilities(),
+            ProviderCapabilities {
+                namespace_tools: false,
+                image_generation: false,
+                web_search: false,
+            }
+        );
+        assert_eq!(
+            provider.approval_review_preferred_model(),
+            KIMI_CODE_K3_MODEL
+        );
+        assert_eq!(
+            provider.memory_extraction_preferred_model(),
+            KIMI_CODE_K3_MODEL
+        );
+        assert_eq!(
+            provider.memory_consolidation_preferred_model(),
+            KIMI_CODE_K3_MODEL
         );
     }
 

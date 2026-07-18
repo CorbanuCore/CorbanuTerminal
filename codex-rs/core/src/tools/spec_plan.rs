@@ -1148,6 +1148,7 @@ fn v1_plain_function_subagents_enabled(turn_context: &TurnContext) -> bool {
     let provider_info = turn_context.provider.info();
     !namespace_tools_enabled(turn_context)
         && (provider_info.is_ambient()
+            || provider_info.is_kimi_code()
             || provider_info.is_zai()
             || provider_info.is_openrouter()
             || provider_info.is_baseten()
@@ -1164,6 +1165,7 @@ fn spawn_agent_available_models(turn_context: &TurnContext) -> Vec<ModelPreset> 
 fn third_party_provider_without_spawn_model_switching(turn_context: &TurnContext) -> bool {
     let provider_info = turn_context.provider.info();
     provider_info.is_ambient()
+        || provider_info.is_kimi_code()
         || provider_info.is_zai()
         || provider_info.is_openrouter()
         || provider_info.is_baseten()

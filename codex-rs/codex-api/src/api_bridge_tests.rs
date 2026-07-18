@@ -3,6 +3,45 @@ use base64::Engine;
 use pretty_assertions::assert_eq;
 
 #[test]
+fn map_api_error_classifies_entitlement_401_separately_from_bad_credential() {
+    let entitlement_body = serde_json::json!({
+        "error": {
+            "message": "The request exceeds the maximum context tokens allowed by your current plan.",
+            "type": "invalid_request_error"
+        }
+    })
+    .to_string();
+    let err = map_api_error(ApiError::Transport(TransportError::Http {
+        status: http::StatusCode::UNAUTHORIZED,
+        url: Some("https://api.kimi.com/coding/v1/chat/completions".to_string()),
+        headers: None,
+        body: Some(entitlement_body),
+    }));
+    assert!(
+        matches!(err, CodexErr::PlanEntitlementExceeded(_)),
+        "entitlement 401 must not surface as an invalid API key: {err:?}"
+    );
+
+    let auth_body = serde_json::json!({
+        "error": {
+            "message": "Incorrect API key provided.",
+            "type": "authentication_error"
+        }
+    })
+    .to_string();
+    let err = map_api_error(ApiError::Transport(TransportError::Http {
+        status: http::StatusCode::UNAUTHORIZED,
+        url: Some("https://api.kimi.com/coding/v1/chat/completions".to_string()),
+        headers: None,
+        body: Some(auth_body),
+    }));
+    assert!(
+        matches!(err, CodexErr::UnexpectedStatus(_)),
+        "a genuine auth 401 keeps the invalid-credential path: {err:?}"
+    );
+}
+
+#[test]
 fn map_api_error_maps_server_overloaded() {
     let err = map_api_error(ApiError::ServerOverloaded);
     assert!(matches!(err, CodexErr::ServerOverloaded));
