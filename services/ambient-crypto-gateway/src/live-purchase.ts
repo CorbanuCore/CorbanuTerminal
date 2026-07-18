@@ -5,6 +5,7 @@ import { createSIWxClientHook, type SolanaSigner } from "@x402/extensions/sign-i
 import { ExactSvmScheme } from "@x402/svm/exact/client";
 
 import { parsePlanId } from "./plans.js";
+import { preflightSubscriptionPayment } from "./payment-preflight.js";
 import { loadWalletFile, writeSecretFile } from "./wallet-file.js";
 
 const gatewayUrl = requireEnv("PFT_AMBIENT_GATEWAY_URL");
@@ -20,9 +21,19 @@ const httpClient = new x402HTTPClient(client).onPaymentRequired(
   createSIWxClientHook(signer as unknown as SolanaSigner),
 );
 const paidFetch = wrapFetchWithPayment(fetch, httpClient);
+const purchaseUrl = new URL(`/v1/subscriptions/${planId}`, gatewayUrl);
 
+process.stdout.write(`Checking ${planId} payment requirement and payer balance…\n`);
+const requirement = await preflightSubscriptionPayment(
+  purchaseUrl,
+  signer.address,
+  process.env.PFT_SOLANA_RPC_URL,
+);
+process.stdout.write(
+  `Payer balance covers ${requirement.amount} atomic units; submitting signed payment…\n`,
+);
 const purchaseResponse = await paidFetch(
-  new URL(`/v1/subscriptions/${planId}`, gatewayUrl),
+  purchaseUrl,
   { method: "POST", headers: { Accept: "application/json" } },
 );
 if (!purchaseResponse.ok) throw await responseError("subscription payment", purchaseResponse);
@@ -31,6 +42,7 @@ if (!settlement?.success || !settlement.transaction) {
   throw new Error("subscription response did not contain a successful settlement receipt");
 }
 
+process.stdout.write("Payment settled; proving wallet ownership and creating API key…\n");
 const keyResponse = await paidFetch(new URL("/v1/keys", gatewayUrl), {
   method: "POST",
   headers: { Accept: "application/json", "Content-Type": "application/json" },
