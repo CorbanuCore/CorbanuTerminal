@@ -165,11 +165,14 @@ export class InMemoryGatewayStore implements GatewayStore {
   }
 
   hasUsedNonce(nonce: string): boolean {
-    return this.usedNonces.has(nonce);
+    if (this.usedNonces.has(nonce)) return true;
+    this.usedNonces.add(nonce);
+    return false;
   }
 
-  recordNonce(nonce: string): void {
-    this.usedNonces.add(nonce);
+  recordNonce(): void {
+    // hasUsedNonce reserves the nonce atomically after signature verification,
+    // preventing two concurrent requests from both passing the replay check.
   }
 }
 

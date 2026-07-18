@@ -125,7 +125,6 @@ describe("subscription store", () => {
   test("tracks SIWX nonces to reject replay", () => {
     const store = new InMemoryGatewayStore();
     assert.equal(store.hasUsedNonce("nonce-1"), false);
-    store.recordNonce("nonce-1");
     assert.equal(store.hasUsedNonce("nonce-1"), true);
   });
 });
