@@ -1,5 +1,7 @@
 import { base58 } from "@scure/base";
 
+import { readExclusiveSecret } from "./secret-file.js";
+
 export const SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 export const SOLANA_DEVNET = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
 
@@ -14,6 +16,7 @@ export interface GatewayConfig {
   payTo: string;
   facilitatorUrl: URL;
   publicBaseUrl: URL;
+  solanaRpcUrl: URL;
 }
 
 export function readGatewayConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
@@ -33,7 +36,7 @@ export function readGatewayConfig(env: NodeJS.ProcessEnv = process.env): Gateway
     port: parsePort(env.PFT_AMBIENT_PORT),
     databaseUrl: requireValue(env, "DATABASE_URL"),
     tokenPepper,
-    ambientApiKey: requireValue(env, "AMBIENT_API_KEY"),
+    ambientApiKey: readExclusiveSecret(env, "AMBIENT_API_KEY", "AMBIENT_API_KEY_FILE"),
     ambientBaseUrl: parseHttpUrl(env.AMBIENT_BASE_URL || "https://api.ambient.xyz", "AMBIENT_BASE_URL"),
     network: networkValue,
     payTo,
@@ -47,6 +50,11 @@ export function readGatewayConfig(env: NodeJS.ProcessEnv = process.env): Gateway
     publicBaseUrl: parseHttpUrl(
       requireValue(env, "PFT_AMBIENT_PUBLIC_BASE_URL"),
       "PFT_AMBIENT_PUBLIC_BASE_URL",
+    ),
+    solanaRpcUrl: parseHttpUrl(
+      env.PFT_SOLANA_RPC_URL ||
+        (networkValue === SOLANA_MAINNET ? "https://api.mainnet-beta.solana.com" : "https://api.devnet.solana.com"),
+      "PFT_SOLANA_RPC_URL",
     ),
   };
 }

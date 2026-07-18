@@ -17,7 +17,8 @@ describe("PostgreSQL gateway store", { skip: !DATABASE_URL }, () => {
   before(async () => store.initialize());
   beforeEach(async () => {
     await pool.query(`
-      TRUNCATE ambient_used_siwx_nonces, ambient_api_keys, ambient_subscription_periods;
+      TRUNCATE ambient_used_siwx_nonces, ambient_inference_ledger,
+        ambient_weekly_windows, ambient_api_keys, ambient_subscription_periods;
     `);
   });
   after(async () => pool.end());
@@ -77,6 +78,37 @@ describe("PostgreSQL gateway store", { skip: !DATABASE_URL }, () => {
     assert.ok(await secondProcess.authenticateApiKey(hashToken(created.key, PEPPER), NOW));
     assert.equal(await secondProcess.revokeApiKey("wallet-1", created.id, NOW), true);
     assert.equal(await store.authenticateApiKey(hashToken(created.key, PEPPER), NOW), undefined);
+  });
+
+  test("atomically caps concurrent usage across multiple customer keys", async () => {
+    await store.recordSettlement({
+      transaction: "tx-usage",
+      walletAddress: "wallet-usage",
+      planId: "starter",
+      network: "solana:devnet",
+      amountAtomic: "1000000",
+      settledAt: NOW,
+    });
+    const keys = await Promise.all([
+      store.createApiKey("wallet-usage", NOW, PEPPER),
+      store.createApiKey("wallet-usage", NOW, PEPPER),
+    ]);
+    const hashes = keys.map(key => hashToken(key.key, PEPPER));
+    const authorizations = await Promise.all(
+      Array.from({ length: 20 }, (_, index) =>
+        store.reserveApiKeyUsage(
+          hashes[index % hashes.length]!,
+          `request-${index}`,
+          "z-ai/glm-5.2",
+          25_000,
+          NOW,
+        ),
+      ),
+    );
+    assert.equal(authorizations.filter(value => value?.kind === "authorized").length, 10);
+    const period = (await store.listPeriods("wallet-usage", NOW))[0];
+    assert.equal(period?.monthlyReservedTokens, 250_000);
+    assert.equal(period?.monthlyUsedTokens, 0);
   });
 
   test("atomically rejects concurrent nonce replay", async () => {

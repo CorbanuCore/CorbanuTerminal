@@ -1,0 +1,517 @@
+use std::collections::HashMap;
+use std::fs::File;
+use std::fs::OpenOptions;
+#[cfg(unix)]
+use std::os::fd::AsRawFd;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+use std::time::Instant;
+
+use anyhow::Context;
+use anyhow::Result;
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use codex_uds::UnixListener;
+use codex_uds::prepare_private_socket_directory;
+use codex_wallet::UnlockedWallet;
+use codex_wallet::Wallet;
+use rand::TryRngCore;
+use rand::rngs::OsRng;
+use tokio::io::AsyncBufReadExt;
+use tokio::io::AsyncWriteExt;
+use tokio::io::BufReader;
+use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
+use zeroize::Zeroize;
+
+use crate::client::run_dir;
+use crate::client::socket_path;
+use crate::protocol::DaemonStatus;
+use crate::protocol::Request;
+use crate::protocol::Response;
+
+struct State {
+    wallet: Wallet,
+    unlocked: Option<UnlockedWallet>,
+    expires_at: Option<Instant>,
+    capabilities: HashMap<String, Instant>,
+    failed_unlocks: u32,
+    generation: u64,
+    active_operation: Option<CancellationToken>,
+}
+
+pub async fn run_wallet_daemon(codex_home: PathBuf) -> Result<()> {
+    codex_process_hardening::disable_process_dumping()
+        .context("disable wallet daemon core dumps")?;
+    let wallet_dir = codex_home.join("wallet");
+    tokio::fs::create_dir_all(&wallet_dir).await?;
+    #[cfg(unix)]
+    tokio::fs::set_permissions(
+        &wallet_dir,
+        std::os::unix::fs::PermissionsExt::from_mode(0o700),
+    )
+    .await?;
+    prepare_private_socket_directory(run_dir(&codex_home)).await?;
+    let _ownership = acquire_ownership(&codex_home)?;
+    let socket = socket_path(&codex_home);
+    if tokio::fs::try_exists(&socket).await? {
+        tokio::fs::remove_file(&socket).await?;
+    }
+    let mut listener = UnixListener::bind(&socket).await?;
+    #[cfg(unix)]
+    tokio::fs::set_permissions(&socket, std::os::unix::fs::PermissionsExt::from_mode(0o600))
+        .await?;
+    let state = Arc::new(Mutex::new(State {
+        wallet: Wallet::new(codex_home),
+        unlocked: None,
+        expires_at: None,
+        capabilities: HashMap::new(),
+        failed_unlocks: 0,
+        generation: 0,
+        active_operation: None,
+    }));
+    loop {
+        let stream = listener.accept().await?;
+        #[cfg(unix)]
+        // SAFETY: `geteuid` reads process credentials and has no pointer or lifetime contract.
+        if stream.peer_user_id()? != Some(unsafe { libc::geteuid() }) {
+            continue;
+        }
+        let state = Arc::clone(&state);
+        tokio::spawn(async move {
+            let (read, mut write) = tokio::io::split(stream);
+            let mut line = String::new();
+            let response = match BufReader::new(read).read_line(&mut line).await {
+                Ok(0) => Response::Error {
+                    code: "empty_request".into(),
+                    message: "request was empty".into(),
+                },
+                Ok(_) => match serde_json::from_str::<Request>(&line) {
+                    Ok(request) => handle(state, request).await,
+                    Err(_) => Response::Error {
+                        code: "invalid_request".into(),
+                        message: "request was malformed".into(),
+                    },
+                },
+                Err(_) => return,
+            };
+            if let Ok(mut payload) = serde_json::to_vec(&response) {
+                payload.push(b'\n');
+                let _ = write.write_all(&payload).await;
+            }
+        });
+    }
+}
+
+async fn handle(state: Arc<Mutex<State>>, request: Request) -> Response {
+    match request {
+        Request::Unlock {
+            mut passcode,
+            duration_seconds,
+        } => handle_unlock(state, &mut passcode, duration_seconds).await,
+        Request::ProvisionPlan {
+            mut capability,
+            intent,
+        } => handle_provision_plan(state, &mut capability, intent).await,
+        Request::IssueGatewayKey {
+            mut capability,
+            gateway_origin,
+        } => handle_issue_gateway_key(state, &mut capability, gateway_origin).await,
+        request => handle_immediate(state, request).await,
+    }
+}
+
+async fn handle_immediate(state: Arc<Mutex<State>>, mut request: Request) -> Response {
+    let mut state = state.lock().await;
+    expire(&mut state);
+    match &mut request {
+        Request::Ping => Response::Pong,
+        Request::Status => Response::Status(status(&state)),
+        Request::Lock => {
+            lock(&mut state);
+            Response::Locked
+        }
+        Request::Unlock { .. } => unreachable!("unlock is handled without an await-held lock"),
+        Request::SignOwnership {
+            capability,
+            gateway_origin,
+            challenge,
+        } => {
+            let valid = state
+                .capabilities
+                .remove(capability)
+                .is_some_and(|expiry| expiry > Instant::now());
+            capability.zeroize();
+            if !valid {
+                return Response::Error {
+                    code: "capability_invalid".into(),
+                    message: "signing capability is invalid or expired".into(),
+                };
+            }
+            if !gateway_origin.starts_with("https://")
+                && !gateway_origin.starts_with("http://127.0.0.1:")
+            {
+                return Response::Error {
+                    code: "origin_refused".into(),
+                    message: "gateway origin is not permitted".into(),
+                };
+            }
+            match state.unlocked.as_ref() {
+                Some(wallet) => Response::Signature {
+                    signature: wallet.sign_ownership_challenge(gateway_origin, challenge),
+                },
+                None => Response::Error {
+                    code: "locked".into(),
+                    message: "wallet is locked".into(),
+                },
+            }
+        }
+        Request::ProvisionPlan { .. } | Request::IssueGatewayKey { .. } => {
+            unreachable!("network operations are handled without an await-held lock")
+        }
+    }
+}
+
+async fn handle_unlock(
+    state: Arc<Mutex<State>>,
+    passcode: &mut String,
+    duration_seconds: u64,
+) -> Response {
+    let failed_unlocks = {
+        let mut state = state.lock().await;
+        expire(&mut state);
+        if state.active_operation.is_some() {
+            passcode.zeroize();
+            return operation_busy();
+        }
+        state.failed_unlocks
+    };
+    if failed_unlocks > 0 {
+        tokio::time::sleep(Duration::from_millis(
+            (250_u64 << failed_unlocks.min(4)).min(4000),
+        ))
+        .await;
+    }
+
+    let mut state = state.lock().await;
+    expire(&mut state);
+    if state.active_operation.is_some() {
+        passcode.zeroize();
+        return operation_busy();
+    }
+    let duration = duration_seconds.clamp(60, 8 * 60 * 60);
+    match state.wallet.unlock(passcode) {
+        Ok(wallet) => {
+            passcode.zeroize();
+            let capability = match new_capability() {
+                Ok(value) => value,
+                Err(error) => {
+                    return Response::Error {
+                        code: "entropy_unavailable".into(),
+                        message: error.to_string(),
+                    };
+                }
+            };
+            state.failed_unlocks = 0;
+            state.unlocked = Some(wallet);
+            state.generation = state.generation.wrapping_add(1);
+            let expiry = Instant::now() + Duration::from_secs(duration);
+            state.expires_at = Some(expiry);
+            state.capabilities.insert(capability.clone(), expiry);
+            Response::Unlocked {
+                capability,
+                expires_in_seconds: duration,
+            }
+        }
+        Err(error) => {
+            passcode.zeroize();
+            state.failed_unlocks = state.failed_unlocks.saturating_add(1);
+            Response::Error {
+                code: "unlock_failed".into(),
+                message: error.to_string(),
+            }
+        }
+    }
+}
+
+struct OperationLease {
+    wallet: UnlockedWallet,
+    generation: u64,
+    cancel: CancellationToken,
+}
+
+async fn checkout_wallet(
+    state: &Arc<Mutex<State>>,
+    capability: &mut String,
+    invalid_message: &'static str,
+) -> Result<OperationLease, Response> {
+    let mut state = state.lock().await;
+    expire(&mut state);
+    if state.active_operation.is_some() {
+        capability.zeroize();
+        return Err(operation_busy());
+    }
+    let valid = state
+        .capabilities
+        .remove(capability)
+        .is_some_and(|expiry| expiry > Instant::now());
+    capability.zeroize();
+    if !valid {
+        return Err(Response::Error {
+            code: "capability_invalid".into(),
+            message: invalid_message.into(),
+        });
+    }
+    let Some(wallet) = state.unlocked.take() else {
+        return Err(Response::Error {
+            code: "locked".into(),
+            message: "wallet is locked".into(),
+        });
+    };
+    let cancel = CancellationToken::new();
+    state.active_operation = Some(cancel.clone());
+    Ok(OperationLease {
+        wallet,
+        generation: state.generation,
+        cancel,
+    })
+}
+
+async fn finish_operation(state: &Arc<Mutex<State>>, lease: OperationLease) {
+    let mut state = state.lock().await;
+    let still_current = state.generation == lease.generation
+        && !lease.cancel.is_cancelled()
+        && state
+            .expires_at
+            .is_some_and(|expiry| expiry > Instant::now());
+    state.active_operation = None;
+    if still_current {
+        state.unlocked = Some(lease.wallet);
+    }
+}
+
+async fn handle_provision_plan(
+    state: Arc<Mutex<State>>,
+    capability: &mut String,
+    intent: codex_wallet::PlanPurchaseIntent,
+) -> Response {
+    let lease = match checkout_wallet(
+        &state,
+        capability,
+        "payment capability is invalid or expired",
+    )
+    .await
+    {
+        Ok(lease) => lease,
+        Err(response) => return response,
+    };
+    let result = tokio::select! {
+        _ = lease.cancel.cancelled() => Err("wallet was locked while the purchase was in progress".to_string()),
+        result = lease.wallet.provision_plan(intent) => result.map_err(|error| error.to_string()),
+    };
+    finish_operation(&state, lease).await;
+    match result {
+        Ok(result) => Response::PlanProvisioned(result),
+        Err(message) => Response::Error {
+            code: "purchase_failed".into(),
+            message,
+        },
+    }
+}
+
+async fn handle_issue_gateway_key(
+    state: Arc<Mutex<State>>,
+    capability: &mut String,
+    gateway_origin: String,
+) -> Response {
+    let lease = match checkout_wallet(
+        &state,
+        capability,
+        "key-recovery capability is invalid or expired",
+    )
+    .await
+    {
+        Ok(lease) => lease,
+        Err(response) => return response,
+    };
+    let result = tokio::select! {
+        _ = lease.cancel.cancelled() => Err("wallet was locked while key recovery was in progress".to_string()),
+        result = lease.wallet.issue_gateway_key(gateway_origin) => result.map_err(|error| error.to_string()),
+    };
+    finish_operation(&state, lease).await;
+    match result {
+        Ok(result) => Response::GatewayKeyIssued(result),
+        Err(message) => Response::Error {
+            code: "key_recovery_failed".into(),
+            message,
+        },
+    }
+}
+
+fn operation_busy() -> Response {
+    Response::Error {
+        code: "operation_in_progress".into(),
+        message: "another wallet signing operation is still in progress".into(),
+    }
+}
+
+fn status(state: &State) -> DaemonStatus {
+    let manifest = state.wallet.manifest().ok();
+    DaemonStatus {
+        wallet_exists: state.wallet.exists(),
+        address: manifest.as_ref().map(|m| m.address.clone()),
+        network: manifest.map(|m| format!("{:?}", m.network).to_lowercase()),
+        locked: state.unlocked.is_none()
+            && state
+                .active_operation
+                .as_ref()
+                .is_none_or(CancellationToken::is_cancelled),
+        expires_in_seconds: state
+            .expires_at
+            .map(|expiry| expiry.saturating_duration_since(Instant::now()).as_secs()),
+    }
+}
+fn expire(state: &mut State) {
+    if state
+        .expires_at
+        .is_some_and(|expiry| expiry <= Instant::now())
+    {
+        lock(state);
+    }
+}
+fn lock(state: &mut State) {
+    if let Some(cancel) = &state.active_operation {
+        cancel.cancel();
+    }
+    state.generation = state.generation.wrapping_add(1);
+    state.unlocked = None;
+    state.expires_at = None;
+    state.capabilities.clear();
+}
+fn new_capability() -> Result<String> {
+    let mut bytes = [0_u8; 32];
+    OsRng.try_fill_bytes(&mut bytes)?;
+    let value = URL_SAFE_NO_PAD.encode(bytes);
+    bytes.zeroize();
+    Ok(value)
+}
+
+fn acquire_ownership(home: &std::path::Path) -> Result<File> {
+    let path = run_dir(home).join("walletd.lock");
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let file = options.open(path)?;
+    #[cfg(unix)]
+    file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    #[cfg(unix)]
+    {
+        let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        anyhow::ensure!(
+            result == 0,
+            "another wallet daemon owns this PfTerminal home"
+        );
+    }
+    Ok(file)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::WalletDaemonClient;
+    use codex_wallet::Network;
+
+    #[tokio::test]
+    async fn unlock_capability_is_scoped_one_shot_and_global_lock_is_real() {
+        let home = tempfile::tempdir().expect("tempdir");
+        Wallet::new(home.path().to_path_buf())
+            .create("a sufficiently long test passphrase", Network::Devnet)
+            .expect("create wallet");
+        let daemon_home = home.path().to_path_buf();
+        let server = tokio::spawn(async move { run_wallet_daemon(daemon_home).await });
+        for _ in 0..40 {
+            if tokio::fs::try_exists(socket_path(home.path()))
+                .await
+                .unwrap_or(false)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        let client = WalletDaemonClient::new(home.path().to_path_buf());
+        assert!(client.status().await.expect("status").locked);
+        let (capability, _) = client
+            .unlock("a sufficiently long test passphrase".to_string(), 60)
+            .await
+            .expect("unlock");
+        assert!(!client.status().await.expect("status").locked);
+        assert!(
+            !client
+                .sign_ownership(
+                    capability.clone(),
+                    "https://gateway.example".to_string(),
+                    "challenge".to_string()
+                )
+                .await
+                .expect("sign")
+                .is_empty()
+        );
+        assert!(
+            client
+                .sign_ownership(
+                    capability,
+                    "https://gateway.example".to_string(),
+                    "challenge".to_string()
+                )
+                .await
+                .is_err()
+        );
+        client.lock().await.expect("lock");
+        assert!(client.status().await.expect("status").locked);
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind stalled gateway");
+        let gateway_origin = format!("http://{}", listener.local_addr().expect("gateway address"));
+        let stalled_gateway = tokio::spawn(async move {
+            let (_stream, _) = listener.accept().await.expect("accept gateway request");
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+        let (capability, _) = client
+            .unlock("a sufficiently long test passphrase".to_string(), 60)
+            .await
+            .expect("unlock for cancellation");
+        let issue_client = client.clone();
+        let issue = tokio::spawn(async move {
+            issue_client
+                .issue_gateway_key(capability, gateway_origin)
+                .await
+        });
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::timeout(Duration::from_secs(1), client.lock())
+            .await
+            .expect("lock must not wait for the network operation")
+            .expect("lock active operation");
+        let issue_error = tokio::time::timeout(Duration::from_secs(1), issue)
+            .await
+            .expect("cancelled operation must return promptly")
+            .expect("join issue task")
+            .expect_err("cancelled operation must fail");
+        assert!(issue_error.to_string().contains("wallet was locked"));
+        assert!(
+            client
+                .status()
+                .await
+                .expect("status after cancellation")
+                .locked
+        );
+        stalled_gateway.abort();
+        server.abort();
+    }
+}

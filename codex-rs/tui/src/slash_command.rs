@@ -66,6 +66,7 @@ pub enum SlashCommand {
     Plugins,
     Providers,
     Logout,
+    Wallet,
     Vault,
     Quit,
     Exit,
@@ -153,6 +154,7 @@ impl SlashCommand {
             SlashCommand::Plugins => "browse plugins",
             SlashCommand::Providers => "add provider API keys to the encrypted vault",
             SlashCommand::Vault => "manage the encrypted credential vault (keys, tokens)",
+            SlashCommand::Wallet => "manage SOL, USDC, and PfTerminal inference plans",
             SlashCommand::Logout => "log out of PFTerminal",
             SlashCommand::Rollout => "print the rollout file path",
             SlashCommand::TestApproval => "test approval request",
@@ -188,6 +190,7 @@ impl SlashCommand {
                 | SlashCommand::Orchestrate
                 | SlashCommand::Tasknode
                 | SlashCommand::Vault
+                | SlashCommand::Wallet
                 | SlashCommand::Gpu
         )
     }
@@ -208,6 +211,7 @@ impl SlashCommand {
                 | SlashCommand::Tasknode
                 | SlashCommand::Orchestrate
                 | SlashCommand::Vault
+                | SlashCommand::Wallet
                 | SlashCommand::Gpu
         )
     }
@@ -265,6 +269,7 @@ impl SlashCommand {
             | SlashCommand::Title
             | SlashCommand::Statusline
             | SlashCommand::Vault
+            | SlashCommand::Wallet
             | SlashCommand::AutoReview
             | SlashCommand::Feedback
             | SlashCommand::Ide

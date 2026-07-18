@@ -98,6 +98,36 @@ describe("subscription store", () => {
     assert.equal(await store.authenticateApiKey(hashToken(issued.key, PEPPER), NOW), undefined);
   });
 
+  test("atomically shares one paid allowance across every key for the wallet", async () => {
+    const store = new InMemoryGatewayStore();
+    await store.recordSettlement({
+      transaction: "solana-tx-usage",
+      walletAddress: "wallet-1",
+      planId: "starter",
+      network: "solana:mainnet",
+      amountAtomic: "1000000",
+      settledAt: NOW,
+    });
+    const first = await store.createApiKey("wallet-1", NOW, PEPPER);
+    const second = await store.createApiKey("wallet-1", NOW, PEPPER);
+    const hashes = [hashToken(first.key, PEPPER), hashToken(second.key, PEPPER)];
+    const authorizations = await Promise.all(
+      Array.from({ length: 20 }, (_, index) =>
+        store.reserveApiKeyUsage(
+          hashes[index % hashes.length]!,
+          `request-${index}`,
+          "z-ai/glm-5.2",
+          25_000,
+          NOW,
+        ),
+      ),
+    );
+    assert.equal(authorizations.filter(value => value?.kind === "authorized").length, 10);
+    const period = (await store.listPeriods("wallet-1", NOW))[0];
+    assert.equal(period?.monthlyReservedTokens, 250_000);
+    assert.equal(period?.monthlyUsedTokens, 0);
+  });
+
   test("rejects rebinding a transaction to another wallet or plan", async () => {
     const store = new InMemoryGatewayStore();
     await store.recordSettlement({

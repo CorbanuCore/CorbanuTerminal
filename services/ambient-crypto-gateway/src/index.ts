@@ -4,6 +4,7 @@ import { createGatewayApp } from "./app.js";
 import { readGatewayConfig } from "./config.js";
 import { PostgresGatewayStore } from "./postgres-store.js";
 import { createX402Middleware } from "./x402.js";
+import { SOLANA_USDC_MINT } from "./plans.js";
 
 const config = readGatewayConfig();
 const pool = new Pool({ connectionString: config.databaseUrl });
@@ -23,6 +24,11 @@ const app = createGatewayApp({
   ambientApiKey: config.ambientApiKey,
   ambientBaseUrl: config.ambientBaseUrl.toString(),
   paymentMiddleware,
+  publicBaseUrl: config.publicBaseUrl.toString(),
+  paymentNetwork: config.network,
+  paymentAsset: SOLANA_USDC_MINT,
+  paymentReceiver: config.payTo,
+  solanaRpcUrl: config.solanaRpcUrl.toString(),
   readiness: async () => {
     await pool.query("SELECT 1");
   },

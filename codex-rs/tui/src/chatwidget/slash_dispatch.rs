@@ -524,6 +524,9 @@ impl ChatWidget {
                 // path and still render command output.
                 self.open_vault_menu();
             }
+            SlashCommand::Wallet => {
+                self.open_wallet_menu();
+            }
             SlashCommand::Providers => {
                 self.open_provider_credentials_menu();
             }
@@ -771,6 +774,16 @@ impl ChatWidget {
                     )));
                 });
             }
+            SlashCommand::Wallet => match trimmed.to_ascii_lowercase().as_str() {
+                "status" => self.open_wallet_menu(),
+                "create" => self.open_wallet_create(),
+                "restore" => self.open_wallet_restore(),
+                "lock" => self.lock_wallet(),
+                "unlock" => self.open_wallet_unlock(15 * 60),
+                _ => self.add_error_message(
+                    "Usage: /wallet [status|create|restore|unlock|lock]".to_string(),
+                ),
+            },
             SlashCommand::Gpu => {
                 let mut parts = trimmed.split_whitespace();
                 match (parts.next(), parts.next(), parts.next()) {
@@ -1253,7 +1266,8 @@ impl ChatWidget {
             collaboration_modes_enabled: self.collaboration_modes_enabled(),
             connectors_enabled: self.connectors_enabled(),
             plugins_command_enabled: self.config.features.enabled(Feature::Plugins),
-            token_activity_command_enabled: self.has_codex_backend_auth,
+            token_activity_command_enabled: self.has_codex_backend_auth
+                || self.pfterminal_plan_key_is_linked(),
             goal_command_enabled: self.config.features.enabled(Feature::Goals),
             service_tier_commands_enabled: self.fast_mode_enabled(),
             personality_command_enabled: self.config.features.enabled(Feature::Personality),
@@ -1263,7 +1277,7 @@ impl ChatWidget {
     }
 
     fn ensure_usage_command_available(&mut self) -> bool {
-        if self.has_codex_backend_auth {
+        if self.has_codex_backend_auth || self.pfterminal_plan_key_is_linked() {
             return true;
         }
         self.add_error_message(USAGE_CHATGPT_LOGIN_REQUIRED.to_string());
@@ -1293,6 +1307,7 @@ impl ChatWidget {
             | SlashCommand::Tasknode
             | SlashCommand::Rollout
             | SlashCommand::Vault
+            | SlashCommand::Wallet
             | SlashCommand::Gpu
             | SlashCommand::Copy
             | SlashCommand::Raw

@@ -429,6 +429,7 @@ mod tasknode_menu;
 mod usage;
 mod user_messages;
 mod vault_menu;
+pub(crate) mod wallet_menu;
 use self::user_messages::PendingSteer;
 use self::user_messages::PendingSteerCompareKey;
 use self::user_messages::QueueDrain;
@@ -590,6 +591,9 @@ pub(crate) struct ChatWidget {
     tasknode_active_chat_stream_id: Option<String>,
     /// Holds the platform clipboard lease so copied text remains available while supported.
     clipboard_lease: Option<crate::clipboard_copy::ClipboardLease>,
+    wallet_capability: Option<zeroize::Zeroizing<String>>,
+    wallet_payment_config: Option<crate::chatwidget::wallet_menu::WalletPaymentConfig>,
+    wallet_balances: Option<codex_wallet::WalletBalances>,
     copy_last_response_binding: Vec<KeyBinding>,
     running_commands: HashMap<String, RunningCommand>,
     collab_agent_metadata: HashMap<ThreadId, AgentMetadata>,

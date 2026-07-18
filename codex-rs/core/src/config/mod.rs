@@ -87,6 +87,7 @@ use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OLLAMA_CHAT_PROVIDER_REMOVED_ERROR;
 use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
+use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_PROVIDER_ID;
@@ -3713,7 +3714,10 @@ impl Config {
             })
             .filter(|values| !values.is_empty());
 
-        let ambient_provider_selected = model_provider_id == AMBIENT_PROVIDER_ID;
+        let ambient_provider_selected = matches!(
+            model_provider_id.as_str(),
+            AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID
+        );
         let kimi_code_provider_selected = model_provider_id == KIMI_CODE_PROVIDER_ID;
         let anthropic_provider_selected = model_provider_id == ANTHROPIC_PROVIDER_ID;
         let meta_provider_selected = model_provider_id == META_PROVIDER_ID;

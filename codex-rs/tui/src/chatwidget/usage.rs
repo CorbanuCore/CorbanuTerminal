@@ -25,32 +25,47 @@ impl ChatWidget {
                 (true, _) => (true, "Check reset availability.".to_string()),
                 (false, _) => (false, "No rate-limit resets available.".to_string()),
             };
+        let mut items = Vec::new();
+        if self.pfterminal_plan_key_is_linked() {
+            items.push(SelectionItem {
+                name: "PfTerminal Plan usage".to_string(),
+                description: Some(
+                    "View weekly and monthly tokens, remaining balances, and reset times."
+                        .to_string(),
+                ),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenWallet))],
+                dismiss_on_select: true,
+                ..Default::default()
+            });
+        }
+        items.extend([
+            SelectionItem {
+                name: "Show usage".to_string(),
+                description: Some("View recent account token usage.".to_string()),
+                is_disabled: !self.has_codex_backend_auth,
+                actions: vec![Box::new(|tx| {
+                    tx.send(AppEvent::OpenTokenActivity);
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "Redeem rate limit reset".to_string(),
+                description: Some(reset_description),
+                is_disabled: !reset_action_enabled,
+                actions: vec![Box::new(|tx| {
+                    tx.send(AppEvent::OpenRateLimitResetCredits);
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+        ]);
         self.bottom_pane.show_selection_view(SelectionViewParams {
             view_id: Some(USAGE_MENU_VIEW_ID),
             title: Some("Usage".to_string()),
             subtitle: Some("View account usage or redeem an earned reset.".to_string()),
             footer_hint: Some(standard_popup_hint_line()),
-            items: vec![
-                SelectionItem {
-                    name: "Show usage".to_string(),
-                    description: Some("View recent account token usage.".to_string()),
-                    actions: vec![Box::new(|tx| {
-                        tx.send(AppEvent::OpenTokenActivity);
-                    })],
-                    dismiss_on_select: true,
-                    ..Default::default()
-                },
-                SelectionItem {
-                    name: "Redeem rate limit reset".to_string(),
-                    description: Some(reset_description),
-                    is_disabled: !reset_action_enabled,
-                    actions: vec![Box::new(|tx| {
-                        tx.send(AppEvent::OpenRateLimitResetCredits);
-                    })],
-                    dismiss_on_select: true,
-                    ..Default::default()
-                },
-            ],
+            items,
             ..Default::default()
         });
         self.request_redraw();

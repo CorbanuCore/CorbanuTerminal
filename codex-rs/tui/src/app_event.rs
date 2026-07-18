@@ -52,6 +52,7 @@ use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::config_types::Personality;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::openai_models::ReasoningEffort;
+use zeroize::Zeroize;
 
 use crate::history_cell::HistoryCell;
 use crate::mkdocs_viewer::MkDocsSite;
@@ -155,6 +156,48 @@ impl fmt::Debug for ProviderApiKeySecret {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("<redacted provider API key>")
     }
+}
+
+pub(crate) struct WalletSecret(String);
+
+impl WalletSecret {
+    pub(crate) fn new(value: String) -> Self {
+        Self(value)
+    }
+    pub(crate) fn into_inner(mut self) -> String {
+        std::mem::take(&mut self.0)
+    }
+}
+
+impl Drop for WalletSecret {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl fmt::Debug for WalletSecret {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("<redacted wallet secret>")
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct WalletCreatedResult {
+    pub(crate) address: String,
+    pub(crate) recovery: WalletSecret,
+}
+
+#[derive(Debug)]
+pub(crate) struct WalletUnlockedResult {
+    pub(crate) capability: WalletSecret,
+    pub(crate) expires_in_seconds: u64,
+}
+
+#[derive(Debug)]
+pub(crate) struct WalletPlanProvisionedResult {
+    pub(crate) plan_id: String,
+    pub(crate) key_id: String,
+    pub(crate) api_key: WalletSecret,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1300,6 +1343,40 @@ pub(crate) enum AppEvent {
 
     /// Open the masked vault credential-entry overlay.
     OpenVaultCredentialAdd,
+
+    OpenWallet,
+    OpenWalletCreate,
+    OpenWalletRestore,
+    OpenWalletRestorePasscode {
+        recovery: WalletSecret,
+    },
+    OpenWalletUnlock {
+        duration_seconds: u64,
+    },
+    WalletLockRequested,
+    WalletStatusReady {
+        result: Result<crate::chatwidget::wallet_menu::WalletOverview, String>,
+    },
+    WalletCreateFinished {
+        result: Result<WalletCreatedResult, String>,
+    },
+    WalletUnlockFinished {
+        result: Result<WalletUnlockedResult, String>,
+    },
+    OpenWalletPlans,
+    WalletPlansReady {
+        result: Result<crate::chatwidget::wallet_menu::WalletPlanCatalog, String>,
+    },
+    ConfirmWalletPlanPurchase {
+        plan: crate::chatwidget::wallet_menu::WalletPlanChoice,
+    },
+    WalletPlanPurchaseRequested {
+        plan: crate::chatwidget::wallet_menu::WalletPlanChoice,
+    },
+    WalletPlanProvisioned {
+        result: Result<WalletPlanProvisionedResult, String>,
+    },
+    WalletRecoverPlanRequested,
 
     /// Open the vault credential list.
     OpenVaultCredentialsList,

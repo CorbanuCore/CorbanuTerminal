@@ -105,6 +105,7 @@ mod skill_popup;
 mod skills_toggle_view;
 pub(crate) mod slash_commands;
 pub(crate) mod vault_secret_entry;
+pub(crate) mod wallet_recovery;
 pub(crate) use footer::CollaborationModeIndicator;
 pub(crate) use footer::GoalStatusIndicator;
 #[cfg(test)]

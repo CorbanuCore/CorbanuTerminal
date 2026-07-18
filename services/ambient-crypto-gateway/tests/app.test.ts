@@ -4,6 +4,8 @@ import { describe, test } from "node:test";
 import express from "express";
 import type { RequestHandler } from "express";
 import request from "supertest";
+import { ed25519 } from "@noble/curves/ed25519";
+import { base58 } from "@scure/base";
 
 import { createGatewayApp } from "../src/app.js";
 import { parsePlanId } from "../src/plans.js";
@@ -73,6 +75,39 @@ async function buyAndIssueKey(app: express.Express): Promise<{ id: string; key: 
 }
 
 describe("Ambient crypto gateway", () => {
+  test("issues a key through a replay-safe wallet challenge without browser identity", async () => {
+    const store = new InMemoryGatewayStore();
+    const privateKey = new Uint8Array(32).fill(9);
+    const walletAddress = base58.encode(ed25519.getPublicKey(privateKey));
+    await store.recordSettlement({
+      transaction: "signed-wallet-settlement",
+      walletAddress,
+      planId: "starter",
+      network: "solana:mainnet",
+      amountAtomic: "1000000",
+      settledAt: NOW,
+    });
+    const app = createGatewayApp({
+      store,
+      tokenPepper: PEPPER,
+      ambientApiKey: UPSTREAM_KEY,
+      paymentMiddleware: (_incoming, _response, next) => next(),
+      publicBaseUrl: "https://plans.pfterminal.test",
+      now: () => new Date(NOW),
+    });
+    const challengeResponse = await request(app)
+      .post("/v1/keys/challenge")
+      .send({ walletAddress })
+      .expect(200);
+    const challenge = challengeResponse.body.challenge as string;
+    const message = `pfterminal-plan-ownership-v1\nhttps://plans.pfterminal.test\n${challenge}`;
+    const signature = base58.encode(ed25519.sign(new TextEncoder().encode(message), privateKey));
+    const body = { walletAddress, challenge, signature };
+    const issued = await request(app).post("/v1/keys/wallet").send(body).expect(201);
+    assert.match(issued.body.key, /^pft_amb_/);
+    await request(app).post("/v1/keys/wallet").send(body).expect(401);
+  });
+
   test("does not activate a subscription without verified settlement", async () => {
     const { app } = setup();
     await request(app).post("/v1/subscriptions/starter").expect(402);
@@ -95,7 +130,7 @@ describe("Ambient crypto gateway", () => {
     let observedAuthorization: string | null = null;
     const fetchImpl: typeof globalThis.fetch = async (_url, init) => {
       observedAuthorization = new Headers(init?.headers).get("authorization");
-      return new Response('{"ok":true}', {
+      return new Response('{"ok":true,"usage":{"prompt_tokens":12,"completion_tokens":5}}', {
         status: 200,
         headers: {
           "content-type": "application/json",
@@ -109,13 +144,40 @@ describe("Ambient crypto gateway", () => {
     const response = await request(app)
       .post("/v1/chat/completions")
       .set("Authorization", `Bearer ${issued.key}`)
-      .send({ model: "ambient", messages: [{ role: "user", content: "hello" }] })
+      .send({ model: "z-ai/glm-5.2", messages: [{ role: "user", content: "hello" }] })
       .expect(200);
 
     assert.equal(observedAuthorization, `Bearer ${UPSTREAM_KEY}`);
     assert.equal(response.headers["set-cookie"], undefined);
     assert.equal(response.headers["x-request-id"], "upstream-request-1");
-    assert.deepEqual(response.body, { ok: true });
+    assert.equal(response.headers["x-pfterminal-plan"], "starter");
+    assert.equal(Number(response.headers["x-pfterminal-weekly-remaining-tokens"]), 249_983);
+    assert.deepEqual(response.body, {
+      ok: true,
+      usage: { prompt_tokens: 12, completion_tokens: 5 },
+    });
+  });
+
+  test("stops inference before Ambient when the paid period allowance is exhausted", async () => {
+    let upstreamCalls = 0;
+    const { app } = setup(async () => {
+      upstreamCalls += 1;
+      return new Response("{}");
+    });
+    const issued = await buyAndIssueKey(app);
+    for (let index = 0; index < 7; index += 1) {
+      await request(app)
+        .post("/v1/chat/completions")
+        .set("Authorization", `Bearer ${issued.key}`)
+        .send({ model: "z-ai/glm-5.2", messages: [{ role: "user", content: "bounded request" }], max_tokens: 32_768 })
+        .expect(200);
+    }
+    await request(app)
+      .post("/v1/chat/completions")
+      .set("Authorization", `Bearer ${issued.key}`)
+      .send({ model: "z-ai/glm-5.2", messages: [{ role: "user", content: "over quota" }], max_tokens: 32_768 })
+      .expect(429);
+    assert.equal(upstreamCalls, 7);
   });
 
   test("rejects unknown and revoked keys before reaching Ambient", async () => {
@@ -132,9 +194,8 @@ describe("Ambient crypto gateway", () => {
       .expect(401);
     const issued = await buyAndIssueKey(app);
     await request(app)
-      .delete("/v1/keys")
+      .delete(`/v1/keys/${issued.id}`)
       .set("x-test-wallet", "wallet-1")
-      .send({ keyId: issued.id })
       .expect(204);
     await request(app)
       .post("/v1/chat/completions")
@@ -153,7 +214,7 @@ describe("Ambient crypto gateway", () => {
     const response = await request(app)
       .post("/v1/chat/completions")
       .set("Authorization", `Bearer ${issued.key}`)
-      .send({})
+      .send({ model: "z-ai/glm-5.2", messages: [] })
       .expect(502);
     assert.equal(JSON.stringify(response.body).includes(UPSTREAM_KEY), false);
   });

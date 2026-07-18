@@ -56,6 +56,11 @@ impl UnixStream {
             .await
             .map(|inner| Self { inner })
     }
+
+    /// Returns the authenticated peer user ID where the platform exposes it.
+    pub fn peer_user_id(&self) -> IoResult<Option<u32>> {
+        platform::peer_user_id(&self.inner)
+    }
 }
 
 impl AsyncRead for UnixStream {
@@ -151,6 +156,12 @@ mod platform {
         UnixStream::connect(socket_path).await
     }
 
+    pub(super) fn peer_user_id(stream: &Stream) -> IoResult<Option<u32>> {
+        stream
+            .peer_cred()
+            .map(|credentials| Some(credentials.uid()))
+    }
+
     pub(super) async fn is_stale_socket_path(socket_path: &Path) -> IoResult<bool> {
         Ok(fs::symlink_metadata(socket_path)
             .await?
@@ -213,6 +224,10 @@ mod platform {
         Async::new(WindowsUnixStream::from(stream))
             .map(FuturesAsyncReadCompatExt::compat)
             .map(Stream)
+    }
+
+    pub(super) fn peer_user_id(_stream: &Stream) -> IoResult<Option<u32>> {
+        Ok(None)
     }
 
     pub(super) async fn is_stale_socket_path(socket_path: &Path) -> IoResult<bool> {

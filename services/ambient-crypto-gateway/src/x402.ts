@@ -5,6 +5,7 @@ import {
   x402ResourceServer,
 } from "@x402/express";
 import { HTTPFacilitatorClient } from "@x402/core/server";
+import type { SettlementFailedResponseBody } from "@x402/core/server";
 import { ExactSvmScheme } from "@x402/svm/exact/server";
 import {
   createSIWxResourceServerExtension,
@@ -42,6 +43,12 @@ export function createX402Middleware(config: X402Config): RequestHandler {
   const resourceServer = new x402ResourceServer(facilitatorClient)
     .register(config.network, new ExactSvmScheme())
     .registerExtension(createSIWxResourceServerExtension({ storage: config.store }))
+    .onVerifyFailure(async ({ error }) => {
+      console.warn("x402 payment verification failed:", error.message);
+    })
+    .onSettleFailure(async ({ error }) => {
+      console.warn("x402 payment settlement failed:", error.message);
+    })
     .onAfterSettle(async ({ paymentPayload, requirements, result }) => {
       if (!result.success || !result.payer || !result.transaction) {
         return;
@@ -63,6 +70,16 @@ export function createX402Middleware(config: X402Config): RequestHandler {
         settledAt: now(),
       });
     });
+  const settlementFailureBody: SettlementFailedResponseBody = (_context, result) => ({
+    contentType: "application/json",
+    body: {
+      error: {
+        type: "payment_settlement_failed",
+        reason: result.errorReason,
+        message: result.errorMessage,
+      },
+    },
+  });
 
   const routes = Object.fromEntries([
     ...PLAN_IDS.map(planId => [
@@ -70,16 +87,23 @@ export function createX402Middleware(config: X402Config): RequestHandler {
       {
         accepts: {
           scheme: "exact" as const,
-          price: PLANS[planId].priceUsd,
+          price: `$${PLANS[planId].priceUsdc}`,
           network: config.network,
           payTo: config.payTo,
         },
         description: `One month of PfTerminal Ambient ${planId}`,
         mimeType: "application/json",
         resource: new URL(purchasePath(planId), config.publicBaseUrl).toString(),
+        settlementFailedResponseBody: settlementFailureBody,
       },
     ]),
-    ...["GET /v1/subscription", "POST /v1/keys", "DELETE /v1/keys"].map(
+    ...[
+      "GET /v1/subscription",
+      "POST /v1/keys",
+      "GET /v1/keys",
+      "DELETE /v1/keys",
+      "DELETE /v1/keys/:keyId",
+    ].map(
       route => [
         route,
         {

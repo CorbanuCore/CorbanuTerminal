@@ -518,6 +518,22 @@ fn test_built_in_model_providers_include_ambient() {
 }
 
 #[test]
+fn test_built_in_model_providers_include_pfterminal_plan() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let provider = providers
+        .get(PFTERMINAL_PLAN_PROVIDER_ID)
+        .expect("PfTerminal Plan provider");
+
+    assert!(provider.is_pfterminal_plan());
+    assert_eq!(
+        provider.env_key.as_deref(),
+        Some(PFTERMINAL_PLAN_API_KEY_ENV_VAR)
+    );
+    assert_eq!(provider.wire_api, WireApi::Chat);
+    assert!(!provider.requires_openai_auth);
+}
+
+#[test]
 fn test_built_in_model_providers_include_anthropic() {
     let providers = built_in_model_providers(/*openai_base_url*/ None);
 

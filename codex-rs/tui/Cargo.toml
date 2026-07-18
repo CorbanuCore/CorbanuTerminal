@@ -45,6 +45,8 @@ codex-git-utils = { workspace = true }
 codex-gpu-market = { workspace = true }
 codex-login = { workspace = true }
 codex-vault = { workspace = true }
+codex-wallet = { workspace = true }
+codex-wallet-daemon = { workspace = true }
 codex-message-history = { workspace = true }
 codex-model-provider = { workspace = true }
 codex-model-provider-info = { workspace = true }
@@ -116,6 +118,7 @@ toml = { workspace = true }
 tracing = { workspace = true, features = ["log"] }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+zeroize = { workspace = true }
 syntect = "5"
 two-face = { version = "0.5", default-features = false, features = ["syntect-default-onig"] }
 unicode-segmentation = { workspace = true }

@@ -25,7 +25,14 @@ describe("gateway configuration", () => {
   });
 
   test("fails closed on missing secrets, weak token pepper, and malformed receiver", () => {
-    assert.throws(() => readGatewayConfig({ ...VALID_ENV, AMBIENT_API_KEY: "" }), /required/);
+    assert.throws(
+      () => readGatewayConfig({ ...VALID_ENV, AMBIENT_API_KEY: "", AMBIENT_API_KEY_FILE: "" }),
+      /AMBIENT_API_KEY or AMBIENT_API_KEY_FILE is required/,
+    );
+    assert.throws(
+      () => readGatewayConfig({ ...VALID_ENV, AMBIENT_API_KEY_FILE: "/unused" }),
+      /cannot both be set/,
+    );
     assert.throws(
       () => readGatewayConfig({ ...VALID_ENV, PFT_AMBIENT_TOKEN_PEPPER: "short" }),
       /32 characters/,

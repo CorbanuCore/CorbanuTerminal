@@ -1,0 +1,859 @@
+use super::*;
+use crate::app_event::WalletCreatedResult;
+use crate::app_event::WalletPlanProvisionedResult;
+use crate::app_event::WalletSecret;
+use crate::app_event::WalletUnlockedResult;
+use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
+use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
+use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
+use codex_wallet::BalanceClient;
+use codex_wallet::Network;
+use codex_wallet::PlanPurchaseIntent;
+use codex_wallet::Wallet;
+use codex_wallet::WalletBalances;
+use codex_wallet_daemon::DaemonStatus;
+use codex_wallet_daemon::WalletDaemonClient;
+use zeroize::Zeroize;
+use zeroize::Zeroizing;
+
+const WALLET_MENU_VIEW_ID: &str = "wallet-menu";
+const WALLET_PLANS_VIEW_ID: &str = "wallet-plans";
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WalletPlanChoice {
+    pub(crate) id: String,
+    pub(crate) price_usdc: String,
+    pub(crate) amount_atomic: String,
+    pub(crate) weekly_token_limit: u64,
+    pub(crate) monthly_token_limit: u64,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WalletPaymentConfig {
+    pub(crate) network: String,
+    pub(crate) asset: String,
+    pub(crate) pay_to: String,
+    pub(crate) rpc_url: String,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct WalletPlanCatalog {
+    pub(crate) plans: Vec<WalletPlanChoice>,
+    pub(crate) payment: WalletPaymentConfig,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct WalletOverview {
+    pub(crate) daemon: DaemonStatus,
+    pub(crate) balances: Option<WalletBalances>,
+    pub(crate) balance_error: Option<String>,
+    pub(crate) plan: Option<WalletPlanStatus>,
+    pub(crate) plan_error: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WalletPlanStatus {
+    pub(crate) period: WalletPlanPeriod,
+    pub(crate) weekly: WalletUsageWindow,
+    pub(crate) monthly_remaining_tokens: u64,
+    pub(crate) weekly_remaining_tokens: u64,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WalletPlanPeriod {
+    pub(crate) plan_id: String,
+    pub(crate) ends_at: String,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WalletUsageWindow {
+    pub(crate) ends_at: String,
+}
+
+impl ChatWidget {
+    pub(crate) fn open_wallet_menu(&mut self) {
+        self.show_selection_view(wallet_params(None, self.wallet_capability.is_some()));
+        self.refresh_wallet_status();
+    }
+
+    pub(crate) fn refresh_wallet_status(&self) {
+        let home = self.config.codex_home.as_path().to_path_buf();
+        let plan_key = codex_login::provider_api_key_from_auth_storage(
+            &home,
+            PFTERMINAL_PLAN_API_KEY_ENV_VAR,
+            self.config.cli_auth_credentials_store_mode,
+            self.config.auth_keyring_backend_kind(),
+        )
+        .ok()
+        .flatten()
+        .map(Zeroizing::new);
+        let tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let result = async {
+                let daemon = WalletDaemonClient::new(home)
+                    .status()
+                    .await
+                    .map_err(|error| error.to_string())?;
+                let (balances, balance_error) = if let (Some(address), Some(network)) =
+                    (daemon.address.as_deref(), daemon.network.as_deref())
+                {
+                    let rpc = match network {
+                        "devnet" => "https://api.devnet.solana.com",
+                        _ => "https://api.mainnet-beta.solana.com",
+                    };
+                    match BalanceClient::new(rpc).balances(address).await {
+                        Ok(value) => (Some(value), None),
+                        Err(error) => (None, Some(error.to_string())),
+                    }
+                } else {
+                    (None, None)
+                };
+                let (plan, plan_error) = if let Some(key) = plan_key {
+                    let url = format!(
+                        "{}/v1/account",
+                        wallet_gateway_origin().trim_end_matches('/')
+                    );
+                    match reqwest::Client::new()
+                        .get(url)
+                        .bearer_auth(key.as_str())
+                        .send()
+                        .await
+                    {
+                        Ok(response) if response.status().is_success() => {
+                            match response.json::<WalletPlanStatus>().await {
+                                Ok(status) => (Some(status), None),
+                                Err(error) => {
+                                    (None, Some(format!("plan status was malformed: {error}")))
+                                }
+                            }
+                        }
+                        Ok(response) => (
+                            None,
+                            Some(format!("plan status returned HTTP {}", response.status())),
+                        ),
+                        Err(error) => (None, Some(format!("plan status unavailable: {error}"))),
+                    }
+                } else {
+                    (None, None)
+                };
+                Ok(WalletOverview {
+                    daemon,
+                    balances,
+                    balance_error,
+                    plan,
+                    plan_error,
+                })
+            }
+            .await;
+            tx.send(AppEvent::WalletStatusReady { result });
+        });
+    }
+
+    pub(crate) fn on_wallet_status_ready(&mut self, result: Result<WalletOverview, String>) {
+        if let Ok(overview) = &result {
+            self.wallet_balances = overview.balances;
+        }
+        let selected = self
+            .bottom_pane
+            .selected_index_for_active_view(WALLET_MENU_VIEW_ID);
+        let mut params = wallet_params(Some(result), self.wallet_capability.is_some());
+        params.initial_selected_idx = selected;
+        self.bottom_pane
+            .replace_selection_view_if_present(WALLET_MENU_VIEW_ID, params);
+    }
+
+    pub(crate) fn open_wallet_create(&mut self) {
+        let home = self.config.codex_home.as_path().to_path_buf();
+        let tx = self.app_event_tx.clone();
+        let view =
+            crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_confirmed_secret(
+                "wallet-passcode".to_string(),
+                "Create Solana wallet".to_string(),
+                "Passcode confirmation — masked".to_string(),
+                "Passcode (6+ characters; use 12+ for portable recovery)".to_string(),
+                Box::new(move |_label, mut passcode| {
+                    tokio::spawn(async move {
+                        let result = tokio::task::spawn_blocking(move || {
+                            let result = Wallet::new(home).create(&passcode, Network::Mainnet);
+                            passcode.zeroize();
+                            result
+                                .map(|created| WalletCreatedResult {
+                                    address: created.manifest.address,
+                                    recovery: WalletSecret::new(
+                                        created.recovery_material.to_string(),
+                                    ),
+                                })
+                                .map_err(|error| error.to_string())
+                        })
+                        .await
+                        .map_err(|error| format!("wallet task failed: {error}"))
+                        .and_then(|value| value);
+                        tx.send(AppEvent::WalletCreateFinished { result });
+                    });
+                }),
+            );
+        self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn open_wallet_restore(&mut self) {
+        let tx = self.app_event_tx.clone();
+        let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
+            "wallet-recovery".to_string(),
+            "Restore Solana wallet".to_string(),
+            "Recovery material (masked — never stored in chat)".to_string(),
+            Box::new(move |_label, recovery| {
+                tx.send(AppEvent::OpenWalletRestorePasscode {
+                    recovery: WalletSecret::new(recovery),
+                });
+            }),
+        );
+        self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn open_wallet_restore_passcode(&mut self, recovery: WalletSecret) {
+        let home = self.config.codex_home.as_path().to_path_buf();
+        let tx = self.app_event_tx.clone();
+        let view =
+            crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_confirmed_secret(
+                "wallet-passcode".to_string(),
+                "Protect restored wallet".to_string(),
+                "Passcode confirmation — masked".to_string(),
+                "New passcode (6+ characters; use 12+ for portable recovery)".to_string(),
+                Box::new(move |_label, mut passcode| {
+                    let mut recovery = recovery.into_inner();
+                    tokio::spawn(async move {
+                        let result = tokio::task::spawn_blocking(move || {
+                            let result =
+                                Wallet::new(home).restore(&recovery, &passcode, Network::Mainnet);
+                            recovery.zeroize();
+                            passcode.zeroize();
+                            result
+                                .map(|created| WalletCreatedResult {
+                                    address: created.manifest.address,
+                                    recovery: WalletSecret::new(
+                                        created.recovery_material.to_string(),
+                                    ),
+                                })
+                                .map_err(|error| error.to_string())
+                        })
+                        .await
+                        .map_err(|error| format!("wallet task failed: {error}"))
+                        .and_then(|value| value);
+                        tx.send(AppEvent::WalletCreateFinished { result });
+                    });
+                }),
+            );
+        self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn on_wallet_create_finished(
+        &mut self,
+        result: Result<WalletCreatedResult, String>,
+    ) {
+        match result {
+            Ok(created) => {
+                self.add_info_message(format!("Created Solana wallet {}. The recovery material is shown only in the secure view.", created.address), None);
+                self.bottom_pane.show_view(Box::new(
+                    crate::bottom_pane::wallet_recovery::WalletRecoveryView::new(
+                        created.address,
+                        created.recovery.into_inner(),
+                    ),
+                ));
+            }
+            Err(error) => self.add_error_message(format!("Wallet creation failed: {error}")),
+        }
+    }
+
+    pub(crate) fn open_wallet_unlock(&mut self, duration_seconds: u64) {
+        let home = self.config.codex_home.as_path().to_path_buf();
+        let tx = self.app_event_tx.clone();
+        let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
+            "wallet-passcode".to_string(),
+            "Unlock wallet".to_string(),
+            "Passcode (masked)".to_string(),
+            Box::new(move |_label, mut passcode| {
+                tokio::spawn(async move {
+                    let result = WalletDaemonClient::new(home)
+                        .unlock(std::mem::take(&mut passcode), duration_seconds)
+                        .await
+                        .map(|(capability, expires_in_seconds)| WalletUnlockedResult {
+                            capability: WalletSecret::new(capability),
+                            expires_in_seconds,
+                        })
+                        .map_err(|error| error.to_string());
+                    passcode.zeroize();
+                    tx.send(AppEvent::WalletUnlockFinished { result });
+                });
+            }),
+        );
+        self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn on_wallet_unlock_finished(
+        &mut self,
+        result: Result<WalletUnlockedResult, String>,
+    ) {
+        match result {
+            Ok(unlocked) => {
+                self.wallet_capability = Some(Zeroizing::new(unlocked.capability.into_inner()));
+                self.add_info_message(
+                    format!(
+                        "Wallet unlocked for {} minute(s).",
+                        unlocked.expires_in_seconds / 60
+                    ),
+                    None,
+                );
+                self.open_wallet_menu();
+            }
+            Err(error) => self.add_error_message(format!("Wallet unlock failed: {error}")),
+        }
+    }
+
+    pub(crate) fn lock_wallet(&mut self) {
+        self.wallet_capability = None;
+        let home = self.config.codex_home.as_path().to_path_buf();
+        let tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let result = WalletDaemonClient::new(home).lock().await;
+            let cell: Box<dyn HistoryCell> = match result {
+                Ok(()) => Box::new(history_cell::new_info_event(
+                    "Wallet locked in every PfTerminal process.".to_string(),
+                    None,
+                )),
+                Err(error) => Box::new(history_cell::new_error_event(format!(
+                    "Wallet lock failed: {error}"
+                ))),
+            };
+            tx.send(AppEvent::InsertHistoryCell(cell));
+            tx.send(AppEvent::OpenWallet);
+        });
+    }
+
+    pub(crate) fn open_wallet_plans(&mut self) {
+        let mut header = ColumnRenderable::new();
+        header.push(Line::from("PfTerminal plans".bold()));
+        self.show_selection_view(SelectionViewParams {
+            view_id: Some(WALLET_PLANS_VIEW_ID),
+            header: Box::new(header),
+            items: vec![SelectionItem {
+                name: "Loading plans…".to_string(),
+                is_disabled: true,
+                ..Default::default()
+            }],
+            footer_hint: Some(standard_popup_hint_line()),
+            ..Default::default()
+        });
+        let tx = self.app_event_tx.clone();
+        let url = format!("{}/v1/plans", wallet_gateway_origin().trim_end_matches('/'));
+        tokio::spawn(async move {
+            let result = async {
+                let response = reqwest::Client::new()
+                    .get(url)
+                    .send()
+                    .await
+                    .map_err(|error| error.to_string())?;
+                if !response.status().is_success() {
+                    return Err(format!("plan service returned HTTP {}", response.status()));
+                }
+                response
+                    .json::<WalletPlanCatalog>()
+                    .await
+                    .map_err(|error| error.to_string())
+            }
+            .await;
+            tx.send(AppEvent::WalletPlansReady { result });
+        });
+    }
+
+    pub(crate) fn on_wallet_plans_ready(&mut self, result: Result<WalletPlanCatalog, String>) {
+        match result {
+            Ok(catalog) => {
+                let mut header = ColumnRenderable::new();
+                header.push(Line::from("PfTerminal plans".bold()));
+                header.push(Line::from(
+                    "One month, paid once in Solana USDC. No recurring wallet charge.".dim(),
+                ));
+                let payment = catalog.payment;
+                let items = catalog
+                    .plans
+                    .into_iter()
+                    .map(|plan| {
+                        let selected = plan.clone();
+                        SelectionItem {
+                            name: format!(
+                                "{} — {} USDC",
+                                title_case_plan(&plan.id),
+                                plan.price_usdc
+                            ),
+                            description: Some(format!(
+                                "{} tokens/week · {} tokens/month",
+                                format_token_count(plan.weekly_token_limit),
+                                format_token_count(plan.monthly_token_limit),
+                            )),
+                            actions: vec![Box::new(move |tx| {
+                                tx.send(AppEvent::ConfirmWalletPlanPurchase {
+                                    plan: selected.clone(),
+                                })
+                            })],
+                            ..Default::default()
+                        }
+                    })
+                    .collect();
+                self.bottom_pane.replace_selection_view_if_present(
+                    WALLET_PLANS_VIEW_ID,
+                    SelectionViewParams {
+                        view_id: Some(WALLET_PLANS_VIEW_ID),
+                        header: Box::new(header),
+                        items,
+                        footer_hint: Some(standard_popup_hint_line()),
+                        ..Default::default()
+                    },
+                );
+                self.wallet_payment_config = Some(payment);
+            }
+            Err(error) => self.add_error_message(format!("Could not load plans: {error}")),
+        }
+    }
+
+    pub(crate) fn confirm_wallet_plan_purchase(&mut self, plan: WalletPlanChoice) {
+        let selected = plan.clone();
+        let amount_atomic = plan.amount_atomic.parse::<u64>().ok();
+        let remaining_usdc = self.wallet_balances.and_then(|balance| {
+            amount_atomic
+                .map(|amount| (balance.usdc_atomic, balance.usdc_atomic.checked_sub(amount)))
+        });
+        let mut header = ColumnRenderable::new();
+        header.push(Line::from(
+            format!("Confirm {} plan", title_case_plan(&plan.id)).bold(),
+        ));
+        header.push(Line::from(format!(
+            "Pay exactly {} USDC on Solana",
+            plan.price_usdc
+        )));
+        header.push(Line::from(format!(
+            "Allowance: {} tokens/week and {} tokens/month for one month.",
+            format_token_count(plan.weekly_token_limit),
+            format_token_count(plan.monthly_token_limit),
+        )));
+        header.push(Line::from(
+            "This payment is final and does not recur automatically.".dim(),
+        ));
+        match remaining_usdc {
+            Some((current, Some(remaining))) => header.push(Line::from(format!(
+                "Balance: {:.2} USDC now · {:.2} USDC after payment",
+                current as f64 / 1_000_000.0,
+                remaining as f64 / 1_000_000.0,
+            ))),
+            Some((current, None)) => header.push(Line::from(
+                format!(
+                    "Insufficient balance: {:.2} USDC available",
+                    current as f64 / 1_000_000.0,
+                )
+                .red(),
+            )),
+            None => header.push(Line::from(
+                "Balance is unavailable; refresh /wallet before paying.".red(),
+            )),
+        }
+        if let Some(balance) = self.wallet_balances {
+            header.push(Line::from(format!(
+                "SOL: {:.6} · x402 facilitator sponsors the transaction fee",
+                balance.sol_lamports as f64 / 1_000_000_000.0,
+            )));
+        }
+        self.show_selection_view(SelectionViewParams {
+            view_id: Some("wallet-plan-confirm"),
+            header: Box::new(header),
+            items: vec![SelectionItem {
+                name: format!("Pay {} USDC", plan.price_usdc),
+                description: Some(
+                    "Sign the exact x402 USDC transfer and activate the provider".to_string(),
+                ),
+                is_disabled: remaining_usdc.is_none_or(|(_, remaining)| remaining.is_none()),
+                actions: vec![Box::new(move |tx| {
+                    tx.send(AppEvent::WalletPlanPurchaseRequested {
+                        plan: selected.clone(),
+                    })
+                })],
+                ..Default::default()
+            }],
+            footer_hint: Some(standard_popup_hint_line()),
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn purchase_wallet_plan(&mut self, plan: WalletPlanChoice) {
+        let Some(capability) = self.wallet_capability.take() else {
+            self.add_error_message(
+                "Unlock the wallet from /wallet before confirming a purchase.".to_string(),
+            );
+            return;
+        };
+        let Some(payment) = self.wallet_payment_config.clone() else {
+            self.add_error_message(
+                "Plan payment configuration expired; reopen /wallet and reload plans.".to_string(),
+            );
+            return;
+        };
+        self.add_info_message(
+            format!(
+                "Submitting the exact {} USDC payment for the {} plan…",
+                plan.price_usdc, plan.id
+            ),
+            None,
+        );
+        let home = self.config.codex_home.as_path().to_path_buf();
+        let tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let intent = PlanPurchaseIntent {
+                gateway_origin: wallet_gateway_origin(),
+                plan_id: plan.id,
+                network: payment.network,
+                rpc_url: payment.rpc_url,
+                asset: payment.asset,
+                amount_atomic: plan.amount_atomic,
+                pay_to: payment.pay_to,
+            };
+            let result = WalletDaemonClient::new(home)
+                .provision_plan(capability.to_string(), intent)
+                .await
+                .map(|provisioned| WalletPlanProvisionedResult {
+                    plan_id: provisioned.plan_id,
+                    key_id: provisioned.key_id,
+                    api_key: WalletSecret::new(provisioned.api_key),
+                })
+                .map_err(|error| error.to_string());
+            tx.send(AppEvent::WalletPlanProvisioned { result });
+        });
+    }
+
+    pub(crate) fn on_wallet_plan_provisioned(
+        &mut self,
+        result: Result<WalletPlanProvisionedResult, String>,
+    ) {
+        match result {
+            Ok(provisioned) => {
+                let mut api_key = provisioned.api_key.into_inner();
+                let stored = codex_login::login_with_provider_api_key(
+                    &self.config.codex_home,
+                    PFTERMINAL_PLAN_API_KEY_ENV_VAR,
+                    &api_key,
+                    self.config.cli_auth_credentials_store_mode,
+                    self.config.auth_keyring_backend_kind(),
+                );
+                api_key.zeroize();
+                if let Err(error) = stored {
+                    self.add_error_message(format!(
+                        "Plan was paid, but storing its API key failed: {error}"
+                    ));
+                    return;
+                }
+                self.add_info_message(
+                    format!(
+                        "{} plan activated. API key {} is stored in the credential vault.",
+                        title_case_plan(&provisioned.plan_id),
+                        provisioned.key_id
+                    ),
+                    None,
+                );
+                self.app_event_tx.send(AppEvent::UpdateModelSelection {
+                    model: AMBIENT_DEFAULT_MODEL.to_string(),
+                    provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
+                });
+                self.app_event_tx.send(AppEvent::PersistModelSelection {
+                    model: AMBIENT_DEFAULT_MODEL.to_string(),
+                    provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
+                    effort: None,
+                });
+                self.bottom_pane
+                    .dismiss_view_by_id("wallet-plan-confirm");
+                self.bottom_pane
+                    .dismiss_view_by_id(WALLET_PLANS_VIEW_ID);
+                self.bottom_pane.dismiss_view_by_id(WALLET_MENU_VIEW_ID);
+            }
+            Err(error) => self.add_error_message(format!(
+                "Plan purchase failed: {error}. If payment may have settled, use Recover plan access; do not submit another payment."
+            )),
+        }
+    }
+
+    pub(crate) fn recover_wallet_plan_access(&mut self) {
+        let Some(capability) = self.wallet_capability.take() else {
+            self.add_error_message(
+                "Unlock the wallet from /wallet before recovering plan access.".to_string(),
+            );
+            return;
+        };
+        let home = self.config.codex_home.as_path().to_path_buf();
+        let tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let result = WalletDaemonClient::new(home)
+                .issue_gateway_key(capability.to_string(), wallet_gateway_origin())
+                .await
+                .map(|key| WalletPlanProvisionedResult {
+                    plan_id: "existing".to_string(),
+                    key_id: key.key_id,
+                    api_key: WalletSecret::new(key.api_key),
+                })
+                .map_err(|error| error.to_string());
+            tx.send(AppEvent::WalletPlanProvisioned { result });
+        });
+    }
+}
+
+fn wallet_params(
+    result: Option<Result<WalletOverview, String>>,
+    client_can_sign: bool,
+) -> SelectionViewParams {
+    let mut header = ColumnRenderable::new();
+    header.push(Line::from("Wallet".bold()));
+    let items = match result {
+        None => {
+            header.push(Line::from(
+                "Loading wallet state and Solana balances…".dim(),
+            ));
+            vec![SelectionItem {
+                name: "Loading…".to_string(),
+                is_disabled: true,
+                ..Default::default()
+            }]
+        }
+        Some(Err(error)) => {
+            header.push(Line::from(format!("Unavailable: {error}").red()));
+            vec![SelectionItem {
+                name: "Retry".to_string(),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenWallet))],
+                ..Default::default()
+            }]
+        }
+        Some(Ok(overview)) => wallet_items(&mut header, overview, client_can_sign),
+    };
+    SelectionViewParams {
+        view_id: Some(WALLET_MENU_VIEW_ID),
+        footer_hint: Some(standard_popup_hint_line()),
+        items,
+        header: Box::new(header),
+        ..Default::default()
+    }
+}
+
+fn wallet_items(
+    header: &mut ColumnRenderable,
+    overview: WalletOverview,
+    client_can_sign: bool,
+) -> Vec<SelectionItem> {
+    if !overview.daemon.wallet_exists {
+        header.push(Line::from(
+            "No local wallet. Secrets stay outside chat and model context.".dim(),
+        ));
+        return vec![
+            item(
+                "Create wallet",
+                "Create a new Solana mainnet wallet",
+                AppEvent::OpenWalletCreate,
+            ),
+            item(
+                "Restore wallet",
+                "Restore from recovery material",
+                AppEvent::OpenWalletRestore,
+            ),
+        ];
+    }
+    let address = overview
+        .daemon
+        .address
+        .clone()
+        .unwrap_or_else(|| "unavailable".to_string());
+    let can_sign = client_can_sign && !overview.daemon.locked;
+    let lock = if overview.daemon.locked {
+        "locked"
+    } else if can_sign {
+        "ready to sign in this TUI"
+    } else {
+        "unlocked elsewhere; passcode required here"
+    };
+    header.push(Line::from(
+        format!("{} · {lock}", short_address(&address)).cyan(),
+    ));
+    if let Some(balance) = overview.balances {
+        header.push(Line::from(format!(
+            "{:.6} SOL · {:.2} USDC",
+            balance.sol_lamports as f64 / 1_000_000_000.0,
+            balance.usdc_atomic as f64 / 1_000_000.0
+        )));
+    }
+    if let Some(error) = overview.balance_error {
+        header.push(Line::from(format!("Balance unavailable: {error}").red()));
+    }
+    if let Some(plan) = overview.plan {
+        header.push(Line::from(
+            format!(
+                "{} plan · {} weekly tokens left · {} monthly tokens left",
+                title_case_plan(&plan.period.plan_id),
+                format_token_count(plan.weekly_remaining_tokens),
+                format_token_count(plan.monthly_remaining_tokens),
+            )
+            .green(),
+        ));
+        header.push(Line::from(
+            format!(
+                "Weekly reset {} · period ends {}",
+                plan.weekly.ends_at, plan.period.ends_at,
+            )
+            .dim(),
+        ));
+    }
+    if let Some(error) = overview.plan_error {
+        header.push(Line::from(format!("Plan status: {error}").red()));
+    }
+    let mut items = vec![SelectionItem {
+        name: "Receive".to_string(),
+        description: Some(address.clone()),
+        actions: vec![Box::new(move |tx| {
+            tx.send(AppEvent::InsertHistoryCell(Box::new(
+                history_cell::new_info_event(format!("Solana receive address: {address}"), None),
+            )))
+        })],
+        ..Default::default()
+    }];
+    if !can_sign {
+        for (name, seconds) in [
+            ("Unlock for 5 minutes", 300),
+            ("Unlock for 15 minutes", 900),
+            ("Unlock for 1 hour", 3600),
+        ] {
+            items.push(SelectionItem {
+                name: name.to_string(),
+                description: Some("Signing capability remains only in this TUI".to_string()),
+                actions: vec![Box::new(move |tx| {
+                    tx.send(AppEvent::OpenWalletUnlock {
+                        duration_seconds: seconds,
+                    })
+                })],
+                ..Default::default()
+            });
+        }
+    }
+    if !overview.daemon.locked {
+        items.push(item(
+            "Lock wallet",
+            "Revoke signing from every PfTerminal process",
+            AppEvent::WalletLockRequested,
+        ));
+    }
+    if can_sign {
+        items.push(item(
+            "Buy a PfTerminal plan",
+            "Pay once with USDC and activate metered inference",
+            AppEvent::OpenWalletPlans,
+        ));
+        items.push(item(
+            "Recover plan access",
+            "Issue a replacement key for an already-paid wallet without another payment",
+            AppEvent::WalletRecoverPlanRequested,
+        ));
+    }
+    items.push(item(
+        "Refresh",
+        "Refresh daemon state and balances",
+        AppEvent::OpenWallet,
+    ));
+    items
+}
+
+fn item(name: &str, description: &str, event: AppEvent) -> SelectionItem {
+    let event = std::sync::Mutex::new(Some(event));
+    SelectionItem {
+        name: name.to_string(),
+        description: Some(description.to_string()),
+        actions: vec![Box::new(move |tx| {
+            if let Some(event) = event.lock().ok().and_then(|mut value| value.take()) {
+                tx.send(event);
+            }
+        })],
+        ..Default::default()
+    }
+}
+fn short_address(address: &str) -> String {
+    if address.len() > 14 {
+        format!("{}…{}", &address[..7], &address[address.len() - 6..])
+    } else {
+        address.to_string()
+    }
+}
+fn wallet_gateway_origin() -> String {
+    std::env::var("PFTERMINAL_PLAN_GATEWAY_URL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "http://127.0.0.1:4021".to_string())
+        .trim_end_matches('/')
+        .to_string()
+}
+fn title_case_plan(id: &str) -> String {
+    let mut chars = id.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
+    }
+}
+fn format_token_count(value: u64) -> String {
+    if value.is_multiple_of(1_000_000) {
+        format!("{}M", value / 1_000_000)
+    } else if value.is_multiple_of(1_000) {
+        format!("{}K", value / 1_000)
+    } else {
+        value.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn overview(locked: bool) -> WalletOverview {
+        WalletOverview {
+            daemon: DaemonStatus {
+                wallet_exists: true,
+                address: Some("EpUYgzi88BYbsGoyiNghPppd3J9ASbARq7UjBCCUnk2i".to_string()),
+                network: Some("mainnet".to_string()),
+                locked,
+                expires_in_seconds: (!locked).then_some(300),
+            },
+            balances: Some(WalletBalances {
+                sol_lamports: 100_000_000,
+                usdc_atomic: 5_000_000,
+            }),
+            balance_error: None,
+            plan: None,
+            plan_error: None,
+        }
+    }
+
+    fn names(locked: bool, client_can_sign: bool) -> Vec<String> {
+        let mut header = ColumnRenderable::new();
+        wallet_items(&mut header, overview(locked), client_can_sign)
+            .into_iter()
+            .map(|item| item.name)
+            .collect()
+    }
+
+    #[test]
+    fn unlocked_daemon_without_this_tui_capability_requires_unlock_again() {
+        let items = names(false, false);
+        assert!(items.iter().any(|name| name == "Unlock for 15 minutes"));
+        assert!(!items.iter().any(|name| name == "Buy a PfTerminal plan"));
+    }
+
+    #[test]
+    fn scoped_capability_enables_spending_actions_only_in_owning_tui() {
+        let items = names(false, true);
+        assert!(items.iter().any(|name| name == "Buy a PfTerminal plan"));
+        assert!(items.iter().any(|name| name == "Recover plan access"));
+        assert!(!items.iter().any(|name| name.starts_with("Unlock for")));
+    }
+}

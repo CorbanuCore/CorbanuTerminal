@@ -1844,6 +1844,51 @@ impl App {
             AppEvent::OpenVaultCredentialAdd => {
                 self.chat_widget.open_vault_credential_add();
             }
+            AppEvent::OpenWallet => {
+                self.chat_widget.open_wallet_menu();
+            }
+            AppEvent::OpenWalletCreate => {
+                self.chat_widget.open_wallet_create();
+            }
+            AppEvent::OpenWalletRestore => {
+                self.chat_widget.open_wallet_restore();
+            }
+            AppEvent::OpenWalletRestorePasscode { recovery } => {
+                self.chat_widget.open_wallet_restore_passcode(recovery);
+            }
+            AppEvent::OpenWalletUnlock { duration_seconds } => {
+                self.chat_widget.open_wallet_unlock(duration_seconds);
+            }
+            AppEvent::WalletLockRequested => {
+                self.chat_widget.lock_wallet();
+            }
+            AppEvent::WalletStatusReady { result } => {
+                self.chat_widget.on_wallet_status_ready(result);
+            }
+            AppEvent::WalletCreateFinished { result } => {
+                self.chat_widget.on_wallet_create_finished(result);
+            }
+            AppEvent::WalletUnlockFinished { result } => {
+                self.chat_widget.on_wallet_unlock_finished(result);
+            }
+            AppEvent::OpenWalletPlans => {
+                self.chat_widget.open_wallet_plans();
+            }
+            AppEvent::WalletPlansReady { result } => {
+                self.chat_widget.on_wallet_plans_ready(result);
+            }
+            AppEvent::ConfirmWalletPlanPurchase { plan } => {
+                self.chat_widget.confirm_wallet_plan_purchase(plan);
+            }
+            AppEvent::WalletPlanPurchaseRequested { plan } => {
+                self.chat_widget.purchase_wallet_plan(plan);
+            }
+            AppEvent::WalletPlanProvisioned { result } => {
+                self.chat_widget.on_wallet_plan_provisioned(result);
+            }
+            AppEvent::WalletRecoverPlanRequested => {
+                self.chat_widget.recover_wallet_plan_access();
+            }
             AppEvent::OpenVaultCredentialsList => {
                 self.chat_widget.open_vault_credentials_list();
             }
@@ -3271,7 +3316,9 @@ impl App {
                     }
                     return Ok(AppRunControl::Continue);
                 }
-                let delivery_id = delivery_id.expect("pump delivery identity checked above");
+                let Some(delivery_id) = delivery_id else {
+                    return Ok(AppRunControl::Continue);
+                };
                 let task_preview = task.chars().take(240).collect::<String>();
                 let label = self.thread_label(thread_id);
                 let session = if self.primary_thread_id == Some(thread_id) {
@@ -3547,21 +3594,22 @@ impl App {
                     }
                     return Ok(AppRunControl::Continue);
                 }
+                let Some(delivery_id) = delivery_id.as_deref() else {
+                    return Ok(AppRunControl::Continue);
+                };
                 if self.claude_panes.claude_pane_is_running(&pane_id) {
                     self.defer_spawn_dispatch_for_capacity(
                         &crate::spawn_orchestration::pane_node_id(&pane_id),
-                        delivery_id.as_deref().expect("pump delivery id"),
+                        delivery_id,
                     );
                     return Ok(AppRunControl::Continue);
                 }
                 self.submit_claude_pane_task(pane_id.clone(), task.clone());
-                if let Some(delivery_id) = delivery_id.as_deref() {
-                    self.finish_spawn_dispatch_delivery(
-                        &crate::spawn_orchestration::pane_node_id(&pane_id),
-                        delivery_id,
-                        &task,
-                    );
-                }
+                self.finish_spawn_dispatch_delivery(
+                    &crate::spawn_orchestration::pane_node_id(&pane_id),
+                    delivery_id,
+                    &task,
+                );
             }
             AppEvent::OpenSpawnStatus => {
                 self.open_spawn_status();
