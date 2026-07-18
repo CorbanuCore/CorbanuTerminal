@@ -785,6 +785,10 @@ pub(crate) struct App {
     pub(crate) spawn_next_dispatch_seq: u64,
     pub(crate) spawn_processed_dispatch_seq_ids: HashSet<u64>,
     pub(crate) spawn_processed_dispatch_origins: HashSet<String>,
+    /// Number of host dispatch-correction prompts submitted per source thread. Bounded so a
+    /// model that keeps emitting dispatch blocks inside shell text cannot ping-pong corrections
+    /// forever; each correction starts a fresh turn id, so turn-keyed dedup alone cannot stop it.
+    pub(crate) spawn_dispatch_corrections_by_thread: HashMap<ThreadId, usize>,
     pub(crate) spawn_accepted_delivery_ids: HashSet<String>,
     /// Terminal turn notifications are observed both on receipt and during buffered replay. Keep
     /// orchestration side effects idempotent across those two delivery paths.
@@ -800,6 +804,7 @@ pub(crate) struct App {
     pub(crate) spawn_last_dispatch_seq_by_node: HashMap<String, u64>,
     pub(crate) spawn_last_event_at_by_node: HashMap<String, String>,
     pub(crate) spawn_nazgul_pane_id: Option<String>,
+    pub(crate) spawn_nazgul_rebind_required: bool,
     #[allow(clippy::box_collection)]
     pub(crate) orchestrate_whips: Box<HashMap<String, crate::orchestrate::Whip>>,
     pub(crate) orchestrate_next_whip_seq: u64,
@@ -1365,6 +1370,9 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     .iter()
                     .any(|pane| pane.id == *pane_id)
             });
+        let restored_spawn_nazgul_rebind_required = restored_pane_layout
+            .as_ref()
+            .is_some_and(|layout| layout.spawn_nazgul_rebind_required);
         let mut restored_orchestrate_whips: HashMap<_, _> = restored_pane_layout
             .as_ref()
             .map(|layout| {
@@ -1528,6 +1536,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
             spawn_next_dispatch_seq: restored_spawn_next_dispatch_seq,
             spawn_processed_dispatch_seq_ids: restored_spawn_processed_dispatch_seq_ids,
             spawn_processed_dispatch_origins: restored_spawn_processed_dispatch_origins,
+            spawn_dispatch_corrections_by_thread: HashMap::new(),
             spawn_accepted_delivery_ids: restored_pane_layout
                 .as_ref()
                 .map(|layout| layout.spawn_accepted_delivery_ids.iter().cloned().collect())
@@ -1541,6 +1550,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
             spawn_last_dispatch_seq_by_node: HashMap::new(),
             spawn_last_event_at_by_node: HashMap::new(),
             spawn_nazgul_pane_id: restored_spawn_nazgul_pane_id,
+            spawn_nazgul_rebind_required: restored_spawn_nazgul_rebind_required,
             orchestrate_whips: Box::new(restored_orchestrate_whips),
             orchestrate_next_whip_seq: restored_orchestrate_next_whip_seq,
             #[cfg(test)]

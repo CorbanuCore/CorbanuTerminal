@@ -95,6 +95,9 @@ impl App {
             .as_ref()
             .and_then(|layout| layout.spawn_nazgul_pane_id.clone())
             .filter(|pane_id| self.valid_restored_nazgul_binding(pane_id));
+        self.spawn_nazgul_rebind_required = restored_pane_layout
+            .as_ref()
+            .is_some_and(|layout| layout.spawn_nazgul_rebind_required);
         self.claude_pane_transcript_cells.clear();
         self.seed_restored_claude_pane_transcripts();
         self.restore_native_spawn_panes_from_saved_state(app_server)
@@ -316,6 +319,7 @@ impl App {
             codex_thread_id: Some(codex_thread_id),
             active_user_pane_id: Some(self.claude_panes.active_user_pane_id().to_string()),
             spawn_nazgul_pane_id: self.spawn_nazgul_pane_id.clone(),
+            spawn_nazgul_rebind_required: self.spawn_nazgul_rebind_required,
             claude_pane_ids: self
                 .claude_panes
                 .panes()

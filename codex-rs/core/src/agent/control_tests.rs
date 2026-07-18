@@ -143,6 +143,130 @@ impl AgentControlHarness {
     }
 }
 
+fn role_spawn_source(
+    parent_thread_id: ThreadId,
+    depth: i32,
+    agent_path: &str,
+    agent_role: &str,
+) -> SessionSource {
+    SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id,
+        depth,
+        agent_path: Some(AgentPath::try_from(agent_path).expect("agent path")),
+        agent_nickname: None,
+        agent_role: Some(agent_role.to_string()),
+    })
+}
+
+#[tokio::test]
+async fn spawn_agent_internal_enforces_role_graph_for_every_caller() {
+    let harness = AgentControlHarness::new().await;
+    let (root_thread_id, _) = harness.start_thread().await;
+
+    let nazgul = harness
+        .control
+        .spawn_agent_with_metadata(
+            harness.config.clone(),
+            text_input("lead the crew"),
+            Some(role_spawn_source(
+                root_thread_id,
+                1,
+                "/root/nazgul",
+                "nazgul",
+            )),
+            SpawnAgentOptions {
+                parent_thread_id: Some(root_thread_id),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("root-to-Nazgul is the legitimate native crew shape");
+
+    let direct_orc = harness
+        .control
+        .spawn_agent_with_metadata(
+            harness.config.clone(),
+            text_input("invalid direct worker"),
+            Some(role_spawn_source(
+                nazgul.thread_id,
+                2,
+                "/root/nazgul/orc",
+                "orc",
+            )),
+            SpawnAgentOptions {
+                parent_thread_id: Some(nazgul.thread_id),
+                ..Default::default()
+            },
+        )
+        .await;
+    assert_matches!(
+        direct_orc,
+        Err(CodexErr::InvalidRequest(message)) if message.contains("only spawn Troll")
+    );
+
+    let worker = harness
+        .control
+        .spawn_agent_with_metadata(
+            harness.config.clone(),
+            text_input("general worker"),
+            Some(role_spawn_source(
+                root_thread_id,
+                1,
+                "/root/worker",
+                "worker",
+            )),
+            SpawnAgentOptions {
+                parent_thread_id: Some(root_thread_id),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("non-hierarchy worker should remain supported");
+    let forged_troll = harness
+        .control
+        .spawn_agent_with_metadata(
+            harness.config.clone(),
+            text_input("invalid hierarchy role"),
+            Some(role_spawn_source(
+                worker.thread_id,
+                2,
+                "/root/worker/troll",
+                "troll",
+            )),
+            SpawnAgentOptions {
+                parent_thread_id: Some(worker.thread_id),
+                ..Default::default()
+            },
+        )
+        .await;
+    assert_matches!(
+        forged_troll,
+        Err(CodexErr::InvalidRequest(message)) if message.contains("Nazgul/root pane")
+    );
+
+    let forged_depth = harness
+        .control
+        .spawn_agent_with_metadata(
+            harness.config.clone(),
+            text_input("invalid depth"),
+            Some(role_spawn_source(
+                root_thread_id,
+                2,
+                "/root/depth_forgery",
+                "worker",
+            )),
+            SpawnAgentOptions {
+                parent_thread_id: Some(root_thread_id),
+                ..Default::default()
+            },
+        )
+        .await;
+    assert_matches!(
+        forged_depth,
+        Err(CodexErr::InvalidRequest(message)) if message.contains("does not follow parent depth")
+    );
+}
+
 fn has_subagent_notification(history_items: &[ResponseItem]) -> bool {
     history_items.iter().any(|item| {
         let ResponseItem::Message { role, content, .. } = item else {

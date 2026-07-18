@@ -3449,7 +3449,34 @@ async fn spawn_agent_rejects_invalid_spawn_orchestration_graphs() {
     assert_eq!(
         nazgul_worker_err,
         FunctionCallError::RespondToModel(
-            "Nazgul is a pane binding, not a spawned worker. Use /spawn to bind an existing pane as Nazgul.".to_string()
+            "Nazgul is a host-owned root pane. Use /spawn to create or bind it.".to_string()
+        )
+    );
+}
+
+#[tokio::test]
+async fn multi_agent_v2_spawn_agent_rejects_host_owned_roles() {
+    let (mut session, turn) = make_session_and_context().await;
+    session.services.agent_control = thread_manager().agent_control();
+    let Err(err) = SpawnAgentHandlerV2::default()
+        .handle(invocation(
+            Arc::new(session),
+            Arc::new(turn),
+            "spawn_agent",
+            function_payload(json!({
+                "message": "create a second supervisor",
+                "task_name": "nazgul",
+                "agent_type": "nazgul"
+            })),
+        ))
+        .await
+    else {
+        panic!("v2 model tool must not create the host-owned Nazgul");
+    };
+    assert_eq!(
+        err,
+        FunctionCallError::RespondToModel(
+            "Nazgul is a host-owned root pane. Use /spawn to create or bind it.".to_string()
         )
     );
 }
@@ -3474,10 +3501,33 @@ async fn multi_agent_v2_spawn_agent_ignores_configured_max_depth() {
         .start_thread(config.clone())
         .await
         .expect("root thread should start");
-    session.services.agent_control = manager.agent_control();
-    session.thread_id = root.thread_id;
-    set_turn_config(&mut turn, config);
+    let control = manager.agent_control();
     let parent_path = AgentPath::try_from("/root/parent").expect("agent path");
+    let parent = control
+        .spawn_agent_with_metadata(
+            config.clone(),
+            vec![UserInput::Text {
+                text: "parent task".to_string(),
+                text_elements: Vec::new(),
+            }]
+            .into(),
+            Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id: root.thread_id,
+                depth: 1,
+                agent_path: Some(parent_path.clone()),
+                agent_nickname: None,
+                agent_role: None,
+            })),
+            crate::agent::control::SpawnAgentOptions {
+                parent_thread_id: Some(root.thread_id),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("parent worker should spawn");
+    session.services.agent_control = control;
+    session.thread_id = parent.thread_id;
+    set_turn_config(&mut turn, config);
     turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
         parent_thread_id: root.thread_id,
         depth: 1,

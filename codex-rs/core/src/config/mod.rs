@@ -2276,6 +2276,18 @@ pub async fn apply_agent_role_to_config(
     crate::agent::role::apply_role_to_config(config, role_name).await
 }
 
+/// Validates a thread-spawn role against the Nazgul -> Troll -> Orc hierarchy graph.
+///
+/// App-server thread spawning runs this when a client starts a sub-agent directly instead of
+/// going through the model-facing `spawn_agent` tool handler.
+pub fn validate_thread_spawn_role_graph(
+    parent_role: Option<&str>,
+    requested_role: Option<&str>,
+    child_depth: i32,
+) -> Result<(), String> {
+    crate::agent::role::validate_thread_spawn_role_graph(parent_role, requested_role, child_depth)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CustomPermissionProfileSummary {
     pub id: String,

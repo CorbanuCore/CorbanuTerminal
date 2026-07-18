@@ -151,6 +151,8 @@ pub(crate) struct PaneLayoutState {
     pub(crate) codex_thread_id: Option<String>,
     pub(crate) active_user_pane_id: Option<String>,
     pub(crate) spawn_nazgul_pane_id: Option<String>,
+    #[serde(default)]
+    pub(crate) spawn_nazgul_rebind_required: bool,
     pub(crate) claude_pane_ids: Vec<String>,
     pub(crate) spawn_parent_by_node: BTreeMap<String, String>,
     #[serde(default)]

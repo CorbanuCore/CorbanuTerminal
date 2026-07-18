@@ -47,6 +47,8 @@ const SEND_TASK_CLOSE: &str = "</pfterminal_send_task>";
 const REPORT_PARENT_OPEN: &str = "<pfterminal_report_parent>";
 const REPORT_PARENT_CLOSE: &str = "</pfterminal_report_parent>";
 const EXEC_WRAPPED_DISPATCH_CORRECTION_TASK: &str = "PFTerminal host correction: you emitted a <pfterminal_send_task> dispatch block inside exec_command/shell text, so it was not routed to the target pane. Re-emit the same dispatch now as plain assistant message text, not inside a shell command, cat, echo, heredoc, markdown fence, or tool call. Do not claim it was sent until the plain-text block appears.";
+const MALFORMED_DISPATCH_CORRECTION_TASK: &str = "PFTerminal host correction: your last turn contained a <pfterminal_send_task> block that could not be routed (missing or empty target, or empty task). Re-emit the dispatch now as a complete plain-text block with a non-empty target from the live roster and a non-empty task body.";
+pub(crate) const SPAWN_DISPATCH_CORRECTION_LIMIT_PER_THREAD: usize = 3;
 const SPAWN_PARENT_REPORT_LIMIT: usize = 12;
 #[cfg(test)]
 const SPAWN_PROCESSED_DISPATCH_TURN_LIMIT: usize = 1024;
@@ -321,6 +323,7 @@ impl App {
 
     pub(crate) fn set_spawn_nazgul_pane_binding(&mut self, pane_id: String) {
         self.spawn_nazgul_pane_id = Some(pane_id);
+        self.spawn_nazgul_rebind_required = false;
         self.persist_pane_state();
     }
 
@@ -331,6 +334,47 @@ impl App {
             format!("Bound {title} as Nazgul root."),
             Some("No worker was spawned.".to_string()),
         );
+    }
+
+    /// Clears the Nazgul root binding when its main pane, Claude pane, or native thread is no
+    /// longer available. A stale binding would silently reroute root-level dispatches to whatever
+    /// pane the target resolver falls through to, so fail loudly and force an explicit rebind.
+    pub(crate) fn clear_stale_nazgul_binding(&mut self) {
+        let Some(stale_target) = self.spawn_nazgul_pane_id.clone() else {
+            return;
+        };
+
+        let bound_native_thread_id = self
+            .spawn_native_endpoint_by_node
+            .get(&stale_target)
+            .copied()
+            .or_else(|| node_id_thread(&stale_target));
+        let binding_is_live = if stale_target == CODEX_MAIN_PANE_ID {
+            self.primary_thread_id.is_some()
+        } else if let Some(thread_id) = bound_native_thread_id {
+            self.agent_navigation
+                .get(&thread_id)
+                .is_some_and(|entry| !entry.is_closed)
+        } else {
+            self.claude_panes
+                .panes()
+                .iter()
+                .any(|pane| pane.id == stale_target)
+        };
+        if binding_is_live {
+            return;
+        }
+        tracing::warn!(
+            bound_target = stale_target,
+            thread_id = bound_native_thread_id.map(|thread_id| thread_id.to_string()),
+            "bound Nazgul root is unavailable; clearing stale binding"
+        );
+        self.spawn_nazgul_pane_id = None;
+        self.spawn_nazgul_rebind_required = true;
+        self.persist_pane_state();
+        self.chat_widget.add_error_message(format!(
+            "Nazgul root binding `{stale_target}` no longer exists and was cleared. Rebind a root pane with /spawn."
+        ));
     }
 
     pub(crate) fn spawn_context_for_user_pane(&self, pane_id: &str) -> Option<String> {
@@ -427,7 +471,7 @@ impl App {
                 .any(|parent_thread_id| *parent_thread_id == thread_id)
     }
 
-    fn replacement_for_superseded_saved_native_spawn_thread(
+    pub(crate) fn replacement_for_superseded_saved_native_spawn_thread(
         &self,
         thread_id: ThreadId,
         entry: &crate::multi_agents::AgentPickerThreadEntry,
@@ -440,10 +484,15 @@ impl App {
             .filter(|nickname| !nickname.is_empty())?;
         let role = entry.agent_role.as_deref()?;
 
-        self.agent_navigation
+        // Nicknames recycle once the per-role roster is exhausted, so a single live match is not
+        // enough: two live threads sharing the stale thread's nickname+role means the mapping is
+        // ambiguous and the stale thread must stay dispatchable rather than be silently
+        // superseded by an unrelated worker.
+        let mut replacements = self
+            .agent_navigation
             .ordered_threads()
             .into_iter()
-            .find_map(|(candidate_thread_id, candidate_entry)| {
+            .filter_map(|(candidate_thread_id, candidate_entry)| {
                 if candidate_thread_id == thread_id {
                     return None;
                 }
@@ -459,7 +508,12 @@ impl App {
                     .as_deref()
                     .is_some_and(|candidate| candidate.trim() == nickname);
                 (same_role && same_nickname).then_some(candidate_thread_id)
-            })
+            });
+        let replacement = replacements.next()?;
+        if replacements.next().is_some() {
+            return None;
+        }
+        Some(replacement)
     }
 
     fn is_superseded_saved_native_spawn_thread(
@@ -1308,6 +1362,7 @@ impl App {
         source_pane_id: &str,
         dispatches: Vec<(SpawnTaskDispatch, Option<String>)>,
     ) {
+        self.clear_stale_nazgul_binding();
         let source_thread_id = node_id_thread(source_pane_id);
         let source_is_active = self.claude_panes.active_user_pane_id() == source_pane_id
             || source_thread_id.is_some_and(|thread_id| {
@@ -1602,6 +1657,7 @@ impl App {
         if turn.status != codex_app_server_protocol::TurnStatus::Completed {
             return;
         }
+        let correction_eligible = self.is_spawn_orchestration_thread(source_thread_id);
         let mut assistant_text = String::new();
         for item in &turn.items {
             if let codex_app_server_protocol::ThreadItem::AgentMessage { text, .. } = item {
@@ -1618,9 +1674,32 @@ impl App {
             thread_node_id(source_thread_id)
         };
         self.dispatch_orchestrate_blocks_from_text(&source_node_id, &assistant_text);
-        let saw_assistant_dispatch = !extract_spawn_task_dispatches(&assistant_text).1.is_empty();
-        if !saw_assistant_dispatch && turn_contains_exec_wrapped_spawn_task_dispatch(turn) {
-            self.correct_exec_wrapped_spawn_task_dispatch(source_thread_id, &turn.id);
+        let (visible, dispatches) = extract_spawn_task_dispatches(&assistant_text);
+        if !dispatches.is_empty() {
+            self.spawn_dispatch_corrections_by_thread
+                .remove(&source_thread_id);
+            return;
+        }
+        if !correction_eligible {
+            self.spawn_dispatch_corrections_by_thread
+                .remove(&source_thread_id);
+            return;
+        }
+        if turn_contains_exec_wrapped_spawn_task_dispatch(turn) {
+            self.correct_spawn_task_dispatch(
+                source_thread_id,
+                &turn.id,
+                EXEC_WRAPPED_DISPATCH_CORRECTION_TASK,
+            );
+        } else if turn_mentions_spawn_task_dispatch(&assistant_text, &visible) {
+            self.correct_spawn_task_dispatch(
+                source_thread_id,
+                &turn.id,
+                MALFORMED_DISPATCH_CORRECTION_TASK,
+            );
+        } else {
+            self.spawn_dispatch_corrections_by_thread
+                .remove(&source_thread_id);
         }
     }
 
@@ -1739,24 +1818,49 @@ impl App {
         recorded
     }
 
-    fn correct_exec_wrapped_spawn_task_dispatch(
+    /// Submits a host correction asking the model to re-emit a dispatch it malformed or wrapped
+    /// in shell text. Corrections are bounded per thread: each correction starts a fresh turn
+    /// id, so turn-keyed dedup alone cannot stop a model that keeps repeating the mistake.
+    fn correct_spawn_task_dispatch(
         &mut self,
         source_thread_id: ThreadId,
         turn_id: &str,
+        correction_task: &str,
     ) {
         if !self.mark_spawn_task_dispatch_processed(source_thread_id, turn_id, u32::MAX) {
             return;
         }
+        let corrections = self
+            .spawn_dispatch_corrections_by_thread
+            .entry(source_thread_id)
+            .or_insert(0);
+        if *corrections >= SPAWN_DISPATCH_CORRECTION_LIMIT_PER_THREAD {
+            tracing::warn!(
+                thread_id = %source_thread_id,
+                corrections = *corrections,
+                "spawn dispatch correction limit reached; leaving dispatch unrouted"
+            );
+            if self.claude_panes.active_user_pane_id() == CODEX_MAIN_PANE_ID
+                && self.active_thread_id == Some(source_thread_id)
+            {
+                self.chat_widget.add_error_message(format!(
+                    "Dispatch correction limit reached for {}; re-emit the task manually.",
+                    self.thread_label(source_thread_id)
+                ));
+            }
+            return;
+        }
+        *corrections += 1;
         self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
             thread_id: source_thread_id,
-            task: EXEC_WRAPPED_DISPATCH_CORRECTION_TASK.to_string(),
+            task: correction_task.to_string(),
             delivery_id: None,
         });
         if self.claude_panes.active_user_pane_id() == CODEX_MAIN_PANE_ID
             && self.active_thread_id == Some(source_thread_id)
         {
             self.chat_widget
-                .add_error_message(EXEC_WRAPPED_DISPATCH_CORRECTION_TASK.to_string());
+                .add_error_message(correction_task.to_string());
         }
     }
 
@@ -2410,6 +2514,7 @@ impl App {
     pub(crate) fn select_spawn_dispatch_pump_delivery(
         &mut self,
     ) -> Option<SpawnDispatchPumpDelivery> {
+        self.clear_stale_nazgul_binding();
         self.spawn_dispatch_pump_scheduled = false;
         let mut targets = self
             .spawn_pending_dispatches
@@ -3720,6 +3825,7 @@ impl App {
             .await;
         self.prune_superseded_saved_native_spawn_threads();
         self.prune_duplicate_live_native_spawn_threads();
+        self.clear_stale_nazgul_binding();
         if let Err(error) = self.validate_spawn_restore_invariants() {
             tracing::error!(%error, "spawn restoration invariant rejected");
             self.chat_widget
@@ -4594,14 +4700,11 @@ impl App {
         }
 
         if is_nazgul_dispatch_target(target) {
-            if let Some(bound_thread_id) = self.nazgul_bound_thread_id() {
-                if self.agent_navigation.get(&bound_thread_id).is_some() {
-                    return Ok(SpawnTaskTarget::Native(bound_thread_id));
-                }
-                let bound_pane_id = self.spawn_nazgul_bound_target().to_string();
-                return Err(format!(
-                    "Cannot dispatch to Nazgul; bound Codex pane `{bound_pane_id}` is not loaded."
-                ));
+            if self.spawn_nazgul_rebind_required {
+                return Err(
+                    "Cannot dispatch to Nazgul; the previous root is unavailable. Rebind a root pane with /spawn."
+                        .to_string(),
+                );
             }
             let bound_pane_id = self.spawn_nazgul_bound_target();
             if bound_pane_id == CODEX_MAIN_PANE_ID {
@@ -4611,6 +4714,20 @@ impl App {
                     .ok_or_else(|| {
                         "Cannot dispatch to Nazgul; Codex Main is not loaded.".to_string()
                     });
+            }
+            if let Some(bound_thread_id) = self.nazgul_bound_thread_id() {
+                if self
+                    .agent_navigation
+                    .get(&bound_thread_id)
+                    .is_some_and(|entry| !entry.is_closed)
+                {
+                    return Ok(SpawnTaskTarget::Native(bound_thread_id));
+                }
+                // The binding points at a native thread that no longer exists; the mutable
+                // callers clear it via `clear_stale_nazgul_binding` before reaching this path.
+                return Err(format!(
+                    "Cannot dispatch to Nazgul; bound root `{bound_pane_id}` no longer exists. Rebind a root pane with /spawn."
+                ));
             }
             if self
                 .claude_panes
@@ -4693,7 +4810,6 @@ impl App {
         }
 
         let mut matches = Vec::new();
-        let target_folded = target.to_ascii_lowercase();
         for (thread_id, entry) in self.agent_navigation.ordered_threads() {
             if self.is_superseded_saved_native_spawn_thread(thread_id, entry) {
                 continue;
@@ -4738,7 +4854,6 @@ impl App {
                 .is_some_and(|name| name.eq_ignore_ascii_case(target));
             if nickname_matches
                 || pane.title.eq_ignore_ascii_case(target)
-                || pane.title.to_ascii_lowercase().contains(&target_folded)
                 || pane
                     .spawn_thread_id
                     .is_some_and(|thread_id| thread_id.to_string().eq_ignore_ascii_case(target))
@@ -6029,6 +6144,15 @@ fn turn_contains_exec_wrapped_spawn_task_dispatch(turn: &codex_app_server_protoc
     })
 }
 
+/// True when the assistant text mentions a dispatch marker but extraction produced no routable
+/// dispatch, i.e. the model emitted a block that was too malformed to parse (missing/empty
+/// target or task). The surviving block stays in `visible`, so compare against the original.
+fn turn_mentions_spawn_task_dispatch(original_text: &str, visible_text: &str) -> bool {
+    (original_text.contains(SEND_TASK_OPEN) && visible_text.contains(SEND_TASK_OPEN))
+        || (original_text.contains(SEND_TASK_FENCE_OPEN)
+            && visible_text.contains(SEND_TASK_FENCE_OPEN))
+}
+
 fn extract_fenced_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTaskDispatch>) {
     let mut visible = String::new();
     let mut dispatches = Vec::new();
@@ -6055,6 +6179,10 @@ fn extract_fenced_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTaskDis
 
         if let Some(dispatch) = fenced_dispatch_from_parts(header, content) {
             dispatches.push(dispatch);
+        } else {
+            // Keep malformed blocks visible: silently stripping them makes the model's claimed
+            // dispatch vanish with no host feedback and no chance to correct the format.
+            visible.push_str(&block[..after_close]);
         }
 
         rest = &block[after_close..];
@@ -6096,6 +6224,9 @@ fn extract_xmlish_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTaskDis
                 task: content.to_string(),
                 seq: None,
             });
+        } else {
+            // Keep malformed blocks visible (see the fenced extractor above).
+            visible.push_str(&block[..after_close]);
         }
 
         rest = &block[after_close..];
@@ -7127,5 +7258,44 @@ The adjacent verification lane found a retry race; no release claim yet.
             supported_in_api: true,
             input_modalities: codex_protocol::openai_models::default_input_modalities(),
         }
+    }
+
+    #[test]
+    fn malformed_xmlish_dispatch_block_stays_visible_and_routes_nothing() {
+        // Missing target attribute: previously stripped from the visible transcript with no
+        // dispatch and no error, so the model's claimed send vanished silently.
+        let text = "Sending now. <pfterminal_send_task>\nDo the thing.\n</pfterminal_send_task>";
+        let (visible, dispatches) = extract_spawn_task_dispatches(text);
+        assert!(dispatches.is_empty());
+        assert!(visible.contains(SEND_TASK_OPEN));
+        assert!(turn_mentions_spawn_task_dispatch(text, &visible));
+    }
+
+    #[test]
+    fn malformed_fenced_dispatch_block_stays_visible_and_routes_nothing() {
+        let text = "```pfterminal-send-task\ntarget: Burzum\n```"; // header/body without a task line
+        let (visible, dispatches) = extract_spawn_task_dispatches(text);
+        assert!(dispatches.is_empty());
+        assert!(visible.contains(SEND_TASK_FENCE_OPEN));
+        assert!(turn_mentions_spawn_task_dispatch(text, &visible));
+    }
+
+    #[test]
+    fn wellformed_dispatch_blocks_still_extract_and_leave_no_marker() {
+        let text = "Dispatching. <pfterminal_send_task target=\"Burzum\">\nDo the thing.\n</pfterminal_send_task> Done.";
+        let (visible, dispatches) = extract_spawn_task_dispatches(text);
+        assert_eq!(dispatches.len(), 1);
+        assert_eq!(dispatches[0].target, "Burzum");
+        assert_eq!(dispatches[0].task, "Do the thing.");
+        assert!(!visible.contains(SEND_TASK_OPEN));
+        assert!(!turn_mentions_spawn_task_dispatch(text, &visible));
+    }
+
+    #[test]
+    fn empty_task_xmlish_block_stays_visible() {
+        let text = "<pfterminal_send_task target=\"Burzum\"></pfterminal_send_task>";
+        let (visible, dispatches) = extract_spawn_task_dispatches(text);
+        assert!(dispatches.is_empty());
+        assert!(visible.contains(SEND_TASK_OPEN));
     }
 }

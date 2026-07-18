@@ -487,6 +487,7 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
         codex_thread_id: Some("019f0657-1d67-7103-9d65-89e71587347d".to_string()),
         active_user_pane_id: Some("claude-active".to_string()),
         spawn_nazgul_pane_id: Some("claude-root".to_string()),
+        spawn_nazgul_rebind_required: true,
         claude_pane_ids: vec!["claude-root".to_string(), "claude-active".to_string()],
         spawn_parent_by_node: parents.clone(),
         spawn_native_runtime_by_node: BTreeMap::new(),
@@ -521,6 +522,7 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
         restored.spawn_nazgul_pane_id.as_deref(),
         Some("claude-root")
     );
+    assert!(restored.spawn_nazgul_rebind_required);
     assert_eq!(restored.claude_pane_ids, layout.claude_pane_ids);
     assert_eq!(restored.spawn_parent_by_node, parents);
     assert_eq!(
