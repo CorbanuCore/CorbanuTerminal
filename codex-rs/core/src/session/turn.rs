@@ -573,10 +573,21 @@ pub(crate) async fn run_turn(
                             .await;
                             continue;
                         }
-                        CompletionGuardAction::Fail => {
-                            return Err(CodexErr::InvalidRequest(format!(
-                                "The model stopped {MAX_COMPLETION_ASSESSMENT_ATTEMPTS} consecutive times after tool execution without a verifiable final response; retry the turn or select another model"
-                            )));
+                        CompletionGuardAction::AcceptAfterLimit => {
+                            warn!(
+                                turn_id = %turn_context.sub_id,
+                                attempts = MAX_COMPLETION_ASSESSMENT_ATTEMPTS,
+                                "completion assessment limit reached; accepting the latest response"
+                            );
+                            sess.send_event(
+                                &turn_context,
+                                EventMsg::Warning(WarningEvent {
+                                    message: format!(
+                                        "The completion check could not verify this response after {MAX_COMPLETION_ASSESSMENT_ATTEMPTS} attempts. PfTerminal stopped the automatic continuation loop; review the result before relying on it."
+                                    ),
+                                }),
+                            )
+                            .await;
                         }
                     }
                 }

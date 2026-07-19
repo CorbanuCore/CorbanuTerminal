@@ -38,7 +38,6 @@ impl CompletionGuardState {
     pub(super) fn observe_sampling(&mut self, saw_client_tool_call: bool) {
         if saw_client_tool_call {
             self.tool_executed = true;
-            self.unsuccessful_assessments = 0;
         }
     }
 
@@ -67,7 +66,7 @@ impl CompletionGuardState {
             CompletionAssessment::Incomplete | CompletionAssessment::Uncertain => {
                 self.unsuccessful_assessments += 1;
                 if self.unsuccessful_assessments >= MAX_COMPLETION_ASSESSMENT_ATTEMPTS {
-                    CompletionGuardAction::Fail
+                    CompletionGuardAction::AcceptAfterLimit
                 } else {
                     CompletionGuardAction::Continue
                 }
@@ -84,7 +83,7 @@ impl CompletionGuardState {
 pub(super) enum CompletionGuardAction {
     Accept,
     Continue,
-    Fail,
+    AcceptAfterLimit,
 }
 
 pub(super) fn objective_from_turn_input(input: &[TurnInput]) -> String {
@@ -184,7 +183,7 @@ mod tests {
     }
 
     #[test]
-    fn incomplete_and_uncertain_assessments_are_bounded() {
+    fn incomplete_and_uncertain_assessments_are_bounded_across_tool_calls() {
         let mut state = CompletionGuardState::default();
         assert_eq!(
             state.record_assessment(CompletionAssessment::Incomplete),
@@ -194,12 +193,13 @@ mod tests {
             state.record_assessment(CompletionAssessment::Uncertain),
             CompletionGuardAction::Continue
         );
+        state.observe_sampling(true);
+        assert_eq!(state.unsuccessful_assessments(), 2);
         assert_eq!(
             state.record_assessment(CompletionAssessment::Incomplete),
-            CompletionGuardAction::Fail
+            CompletionGuardAction::AcceptAfterLimit
         );
-        state.observe_sampling(true);
-        assert_eq!(state.unsuccessful_assessments(), 0);
+        assert_eq!(state.unsuccessful_assessments(), 3);
     }
 
     #[test]
