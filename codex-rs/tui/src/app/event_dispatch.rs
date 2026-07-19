@@ -1799,10 +1799,14 @@ impl App {
             }
             AppEvent::ProviderCredentialStatusesReady {
                 claude_status,
+                pfterminal_plan_status,
                 api_key_statuses,
             } => {
-                self.chat_widget
-                    .refresh_provider_credentials_status(claude_status, api_key_statuses);
+                self.chat_widget.refresh_provider_credentials_status(
+                    claude_status,
+                    pfterminal_plan_status,
+                    api_key_statuses,
+                );
             }
             AppEvent::CodexAccountDeviceLoginReady {
                 login_id,
@@ -1861,6 +1865,24 @@ impl App {
             }
             AppEvent::WalletLockRequested => {
                 self.chat_widget.lock_wallet();
+            }
+            AppEvent::ConfirmWalletPlanDisconnect => {
+                self.chat_widget.confirm_wallet_plan_disconnect();
+            }
+            AppEvent::WalletPlanDisconnectRequested => {
+                self.chat_widget.disconnect_wallet_plan();
+            }
+            AppEvent::WalletPlanDisconnected { result } => {
+                self.chat_widget.on_wallet_plan_disconnected(result);
+            }
+            AppEvent::ConfirmWalletRemoval { address } => {
+                self.chat_widget.confirm_wallet_removal(address);
+            }
+            AppEvent::WalletRemoveRequested { address } => {
+                self.chat_widget.remove_wallet_from_device(address);
+            }
+            AppEvent::WalletRemoved { result } => {
+                self.chat_widget.on_wallet_removed(result);
             }
             AppEvent::WalletStatusReady { generation, result } => {
                 self.chat_widget.on_wallet_status_ready(generation, result);

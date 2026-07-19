@@ -52,6 +52,27 @@ fn create_unlock_restore_and_tamper_fail_closed() {
 }
 
 #[test]
+fn remove_from_device_requires_the_current_address_and_removes_local_access() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let wallet = Wallet::new(root.path().to_path_buf());
+    let created = wallet
+        .create("a sufficiently long test passphrase", Network::Mainnet)
+        .expect("create wallet");
+
+    assert!(matches!(
+        wallet.remove_from_device("11111111111111111111111111111111"),
+        Err(WalletError::AddressMismatch)
+    ));
+    assert!(wallet.exists());
+
+    wallet
+        .remove_from_device(&created.manifest.address)
+        .expect("remove wallet");
+    assert!(!wallet.exists());
+    assert!(matches!(wallet.manifest(), Err(WalletError::Missing)));
+}
+
+#[test]
 fn short_passcodes_require_machine_secret_and_secret_never_appears_on_disk() {
     let home = tempfile::tempdir().expect("tempdir");
     let keyring = Arc::new(MockKeyringStore::default());

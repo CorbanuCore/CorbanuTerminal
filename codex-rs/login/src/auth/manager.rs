@@ -944,6 +944,27 @@ pub fn login_with_provider_api_key(
     Ok(())
 }
 
+/// Remove one provider API key from both encrypted and legacy storage.
+///
+/// This is intentionally narrower than logout: account authentication and every other provider
+/// credential remain untouched.
+pub fn delete_provider_api_key(codex_home: &Path, provider_key_id: &str) -> std::io::Result<bool> {
+    let provider_key_id = provider_key_id.trim();
+    if provider_key_id.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "provider key id cannot be empty",
+        ));
+    }
+    let removed_vault =
+        super::provider_key_vault::delete_provider_key(codex_home, provider_key_id)?;
+    let removed_legacy = legacy_delete_provider_key(codex_home, provider_key_id)?;
+    if removed_vault || removed_legacy {
+        mark_provider_api_key_storage_changed();
+    }
+    Ok(removed_vault || removed_legacy)
+}
+
 /// Writes an `auth.json` that contains only the access token.
 pub async fn login_with_access_token(
     codex_home: &Path,

@@ -88,6 +88,17 @@ impl WalletDaemonClient {
         }
     }
 
+    pub async fn remove_wallet(&self, expected_address: String) -> Result<(), WalletDaemonError> {
+        self.ensure_running().await?;
+        match self
+            .call(Request::RemoveWallet { expected_address })
+            .await?
+        {
+            Response::WalletRemoved => Ok(()),
+            other => response_error(other),
+        }
+    }
+
     pub async fn sign_ownership(
         &self,
         capability: String,

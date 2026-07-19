@@ -142,6 +142,8 @@ pub enum WalletError {
     InvalidRecovery,
     #[error("wallet storage failed: {0}")]
     Storage(String),
+    #[error("wallet address confirmation did not match the wallet on this device")]
+    AddressMismatch,
 }
 
 #[derive(Clone)]
@@ -260,6 +262,31 @@ impl Wallet {
             manifest,
             seed: Zeroizing::new(seed),
         })
+    }
+
+    /// Remove the encrypted wallet from this device after confirming its public address.
+    ///
+    /// This does not move funds or affect the on-chain wallet. The caller must present the full
+    /// address shown to the user so a stale UI cannot remove a different wallet.
+    pub fn remove_from_device(&self, expected_address: &str) -> Result<(), WalletError> {
+        let envelope: Envelope = read_json(&self.envelope_path())?;
+        if envelope.address != expected_address {
+            return Err(WalletError::AddressMismatch);
+        }
+        fs::remove_file(self.envelope_path()).map_err(storage)?;
+        match fs::remove_file(self.manifest_path()) {
+            Ok(()) if envelope.machine_bound => {
+                // The encrypted wallet is already gone, so failure to remove this non-wallet
+                // machine binding must not make the destructive operation look retryable.
+                let _ = self
+                    .keyring
+                    .delete(KEYRING_SERVICE, &self.keyring_account());
+            }
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(storage(error)),
+        }
+        Ok(())
     }
 
     fn persist_seed(

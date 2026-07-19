@@ -196,7 +196,6 @@ pub(crate) struct WalletUnlockedResult {
 #[derive(Debug)]
 pub(crate) struct WalletPlanProvisionedResult {
     pub(crate) plan_id: String,
-    pub(crate) key_id: String,
     pub(crate) api_key: WalletSecret,
 }
 
@@ -1318,6 +1317,7 @@ pub(crate) enum AppEvent {
     /// Latest provider credential statuses loaded away from the TUI event thread.
     ProviderCredentialStatusesReady {
         claude_status: crate::chatwidget::claude_code_login::ClaudeCodePlanStatus,
+        pfterminal_plan_status: crate::chatwidget::provider_credentials::PfTerminalPlanStatus,
         api_key_statuses: Vec<(
             String,
             crate::chatwidget::provider_credentials::ProviderApiKeyStatus,
@@ -1354,6 +1354,20 @@ pub(crate) enum AppEvent {
         duration_seconds: u64,
     },
     WalletLockRequested,
+    ConfirmWalletPlanDisconnect,
+    WalletPlanDisconnectRequested,
+    WalletPlanDisconnected {
+        result: Result<bool, String>,
+    },
+    ConfirmWalletRemoval {
+        address: String,
+    },
+    WalletRemoveRequested {
+        address: String,
+    },
+    WalletRemoved {
+        result: Result<(), String>,
+    },
     WalletStatusReady {
         generation: u64,
         result: Result<crate::chatwidget::wallet_menu::WalletOverview, String>,

@@ -14,6 +14,9 @@ pub(crate) enum Request {
         duration_seconds: u64,
     },
     Lock,
+    RemoveWallet {
+        expected_address: String,
+    },
     SignOwnership {
         capability: String,
         gateway_origin: String,
@@ -39,6 +42,7 @@ pub(crate) enum Response {
         expires_in_seconds: u64,
     },
     Locked,
+    WalletRemoved,
     Signature {
         signature: String,
     },

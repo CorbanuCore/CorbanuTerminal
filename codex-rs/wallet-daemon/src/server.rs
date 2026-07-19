@@ -136,6 +136,19 @@ async fn handle_immediate(state: Arc<Mutex<State>>, mut request: Request) -> Res
             lock(&mut state);
             Response::Locked
         }
+        Request::RemoveWallet { expected_address } => {
+            if state.active_operation.is_some() {
+                return operation_busy();
+            }
+            lock(&mut state);
+            match state.wallet.remove_from_device(expected_address) {
+                Ok(()) => Response::WalletRemoved,
+                Err(error) => Response::Error {
+                    code: "wallet_removal_failed".into(),
+                    message: error.to_string(),
+                },
+            }
+        }
         Request::Unlock { .. } => unreachable!("unlock is handled without an await-held lock"),
         Request::SignOwnership {
             capability,
@@ -512,6 +525,50 @@ mod tests {
                 .locked
         );
         stalled_gateway.abort();
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn remove_wallet_requires_the_current_address_and_clears_daemon_state() {
+        let home = tempfile::tempdir().expect("tempdir");
+        let created = Wallet::new(home.path().to_path_buf())
+            .create("a sufficiently long test passphrase", Network::Mainnet)
+            .expect("create wallet");
+        let daemon_home = home.path().to_path_buf();
+        let server = tokio::spawn(async move { run_wallet_daemon(daemon_home).await });
+        for _ in 0..40 {
+            if tokio::fs::try_exists(socket_path(home.path()))
+                .await
+                .unwrap_or(false)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        let client = WalletDaemonClient::new(home.path().to_path_buf());
+
+        assert!(
+            client
+                .remove_wallet("11111111111111111111111111111111".to_string())
+                .await
+                .is_err()
+        );
+        assert!(client.status().await.expect("status").wallet_exists);
+        client
+            .remove_wallet(created.manifest.address)
+            .await
+            .expect("remove wallet");
+        assert_eq!(
+            client.status().await.expect("removed status"),
+            DaemonStatus {
+                wallet_exists: false,
+                address: None,
+                network: None,
+                locked: true,
+                expires_in_seconds: None,
+            }
+        );
+
         server.abort();
     }
 }

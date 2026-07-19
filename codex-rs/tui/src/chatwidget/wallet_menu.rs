@@ -18,6 +18,8 @@ use zeroize::Zeroizing;
 
 const WALLET_MENU_VIEW_ID: &str = "wallet-menu";
 const WALLET_PLANS_VIEW_ID: &str = "wallet-plans";
+pub(super) const WALLET_DISCONNECT_PLAN_VIEW_ID: &str = "wallet-disconnect-plan";
+pub(super) const WALLET_REMOVE_VIEW_ID: &str = "wallet-remove";
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,11 +53,13 @@ pub(crate) struct WalletOverview {
     pub(crate) balance_error: Option<String>,
     pub(crate) plan: Option<WalletPlanStatus>,
     pub(crate) plan_error: Option<String>,
+    pub(crate) plan_credential_present: bool,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WalletPlanStatus {
+    pub(crate) wallet_address: String,
     pub(crate) period: WalletPlanPeriod,
     pub(crate) weekly: WalletUsageWindow,
     pub(crate) monthly_remaining_tokens: u64,
@@ -94,6 +98,7 @@ impl ChatWidget {
         .ok()
         .flatten()
         .map(Zeroizing::new);
+        let plan_credential_present = plan_key.is_some();
         let tx = self.app_event_tx.clone();
         tokio::spawn(async move {
             let result = async {
@@ -149,6 +154,7 @@ impl ChatWidget {
                     balance_error,
                     plan,
                     plan_error,
+                    plan_credential_present,
                 })
             }
             .await;
@@ -536,7 +542,6 @@ impl ChatWidget {
                 .await
                 .map(|provisioned| WalletPlanProvisionedResult {
                     plan_id: provisioned.plan_id,
-                    key_id: provisioned.key_id,
                     api_key: WalletSecret::new(provisioned.api_key),
                 })
                 .map_err(|error| error.to_string());
@@ -567,9 +572,8 @@ impl ChatWidget {
                 }
                 self.add_info_message(
                     format!(
-                        "{} plan activated. API key {} is stored in the credential vault.",
-                        title_case_plan(&provisioned.plan_id),
-                        provisioned.key_id
+                        "{} plan activated. Credential stored securely.",
+                        title_case_plan(&provisioned.plan_id)
                     ),
                     None,
                 );
@@ -609,7 +613,6 @@ impl ChatWidget {
                 .await
                 .map(|key| WalletPlanProvisionedResult {
                     plan_id: "existing".to_string(),
-                    key_id: key.key_id,
                     api_key: WalletSecret::new(key.api_key),
                 })
                 .map_err(|error| error.to_string());
@@ -723,12 +726,16 @@ fn wallet_items(
     if let Some(error) = overview.plan_error {
         header.push(Line::from(format!("Plan status: {error}").red()));
     }
+    let receive_address = address.clone();
     let mut items = vec![SelectionItem {
         name: "Receive".to_string(),
         description: Some(address.clone()),
         actions: vec![Box::new(move |tx| {
             tx.send(AppEvent::InsertHistoryCell(Box::new(
-                history_cell::new_info_event(format!("Solana receive address: {address}"), None),
+                history_cell::new_info_event(
+                    format!("Solana receive address: {receive_address}"),
+                    None,
+                ),
             )))
         })],
         ..Default::default()
@@ -770,6 +777,18 @@ fn wallet_items(
             AppEvent::WalletRecoverPlanRequested,
         ));
     }
+    if overview.plan_credential_present {
+        items.push(item(
+            "Disconnect PfTerminal Plan",
+            "Remove the plan credential; keep the wallet and paid period",
+            AppEvent::ConfirmWalletPlanDisconnect,
+        ));
+    }
+    items.push(item(
+        "Remove wallet from this device",
+        "Requires saved recovery material; does not move funds",
+        AppEvent::ConfirmWalletRemoval { address },
+    ));
     items.push(item(
         "Refresh",
         "Refresh daemon state and balances",
@@ -778,7 +797,7 @@ fn wallet_items(
     items
 }
 
-fn item(name: &str, description: &str, event: AppEvent) -> SelectionItem {
+pub(super) fn item(name: &str, description: &str, event: AppEvent) -> SelectionItem {
     let event = std::sync::Mutex::new(Some(event));
     SelectionItem {
         name: name.to_string(),
@@ -791,14 +810,14 @@ fn item(name: &str, description: &str, event: AppEvent) -> SelectionItem {
         ..Default::default()
     }
 }
-fn short_address(address: &str) -> String {
+pub(crate) fn short_address(address: &str) -> String {
     if address.len() > 14 {
         format!("{}…{}", &address[..7], &address[address.len() - 6..])
     } else {
         address.to_string()
     }
 }
-fn wallet_gateway_origin() -> String {
+pub(crate) fn wallet_gateway_origin() -> String {
     std::env::var("PFTERMINAL_PLAN_GATEWAY_URL")
         .ok()
         .filter(|value| !value.trim().is_empty())
@@ -806,7 +825,7 @@ fn wallet_gateway_origin() -> String {
         .trim_end_matches('/')
         .to_string()
 }
-fn title_case_plan(id: &str) -> String {
+pub(crate) fn title_case_plan(id: &str) -> String {
     let mut chars = id.chars();
     match chars.next() {
         Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
@@ -843,6 +862,7 @@ mod tests {
             balance_error: None,
             plan: None,
             plan_error: None,
+            plan_credential_present: false,
         }
     }
 
@@ -867,6 +887,56 @@ mod tests {
         assert!(items.iter().any(|name| name == "Buy a PfTerminal plan"));
         assert!(items.iter().any(|name| name == "Recover plan access"));
         assert!(!items.iter().any(|name| name.starts_with("Unlock for")));
+    }
+
+    #[test]
+    fn plan_disconnect_and_wallet_removal_are_separate_actions() {
+        let mut overview = overview(true);
+        overview.plan_credential_present = true;
+        let mut header = ColumnRenderable::new();
+        let items = wallet_items(&mut header, overview, false);
+        let names = items
+            .iter()
+            .map(|item| item.name.as_str())
+            .collect::<Vec<_>>();
+        assert!(names.contains(&"Disconnect PfTerminal Plan"));
+        assert!(names.contains(&"Remove wallet from this device"));
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let sender = crate::app_event_sender::AppEventSender::new(tx);
+        let disconnect = items
+            .iter()
+            .position(|item| item.name == "Disconnect PfTerminal Plan")
+            .expect("disconnect action");
+        (items[disconnect].actions[0])(&sender);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::ConfirmWalletPlanDisconnect)
+        ));
+        let remove = items
+            .iter()
+            .position(|item| item.name == "Remove wallet from this device")
+            .expect("remove action");
+        (items[remove].actions[0])(&sender);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::ConfirmWalletRemoval { address })
+                if address == "EpUYgzi88BYbsGoyiNghPppd3J9ASbARq7UjBCCUnk2i"
+        ));
+    }
+
+    #[test]
+    fn wallet_removal_confirmation_copy_snapshot() {
+        let rendered = [
+            "Remove wallet from this device",
+            "Wallet: 3speRmS…JRwV5r",
+            "Funds stay on Solana. PfTerminal cannot recover them without your recovery material.",
+            "This also disconnects the local PfTerminal Plan credential. It does not cancel or refund the paid period.",
+            "Cancel — Keep the wallet on this device",
+            "Remove wallet — I have saved the recovery material",
+        ]
+        .join("\n");
+        insta::assert_snapshot!(rendered);
     }
 
     #[tokio::test]

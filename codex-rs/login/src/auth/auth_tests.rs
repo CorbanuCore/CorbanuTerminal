@@ -2414,3 +2414,31 @@ async fn provider_api_key_login_is_provider_scoped_and_not_primary_auth() {
         None
     );
 }
+
+#[test]
+fn deleting_one_provider_api_key_preserves_other_legacy_credentials() {
+    let codex_home = tempdir().expect("tempdir");
+    for (provider, key) in [
+        ("PFTERMINAL_PLAN_API_KEY", "pft-plan-secret"),
+        (AMBIENT_API_KEY_ENV_VAR, "ambient-secret"),
+    ] {
+        super::legacy_save_provider_key(codex_home.path(), provider, key)
+            .expect("seed legacy provider key");
+    }
+
+    assert!(
+        super::delete_provider_api_key(codex_home.path(), "PFTERMINAL_PLAN_API_KEY")
+            .expect("delete plan key")
+    );
+    assert_eq!(
+        super::legacy_provider_key(codex_home.path(), "PFTERMINAL_PLAN_API_KEY")
+            .expect("deleted plan key"),
+        None
+    );
+    assert_eq!(
+        super::legacy_provider_key(codex_home.path(), AMBIENT_API_KEY_ENV_VAR)
+            .expect("unrelated provider key")
+            .as_deref(),
+        Some("ambient-secret")
+    );
+}
