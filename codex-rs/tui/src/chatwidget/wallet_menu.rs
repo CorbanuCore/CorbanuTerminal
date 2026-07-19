@@ -68,6 +68,7 @@ pub(crate) struct WalletOverview {
     pub(crate) balances: Option<WalletBalances>,
     pub(crate) balance_error: Option<String>,
     pub(crate) plan: Option<WalletPlanStatus>,
+    pub(crate) linked_plan_for_other_wallet: Option<WalletPlanStatus>,
     pub(crate) plan_error: Option<String>,
     pub(crate) plan_credential_present: bool,
     pub(crate) plan_prices_usdc: std::collections::BTreeMap<String, String>,
@@ -222,6 +223,8 @@ impl ChatWidget {
                     }
                 };
                 let ((plan, plan_error), catalog) = tokio::join!(plan_request, catalog_request);
+                let (plan, linked_plan_for_other_wallet) =
+                    separate_plan_for_local_wallet(plan, daemon.address.as_deref());
                 let (balances, balance_error) = if let (Some(address), Some(network)) =
                     (daemon.address.as_deref(), daemon.network.as_deref())
                 {
@@ -247,6 +250,7 @@ impl ChatWidget {
                     balances,
                     balance_error,
                     plan,
+                    linked_plan_for_other_wallet,
                     plan_error,
                     plan_credential_present,
                     plan_prices_usdc,
@@ -845,6 +849,21 @@ impl ChatWidget {
     }
 }
 
+fn separate_plan_for_local_wallet(
+    plan: Option<WalletPlanStatus>,
+    local_wallet_address: Option<&str>,
+) -> (Option<WalletPlanStatus>, Option<WalletPlanStatus>) {
+    match plan {
+        Some(plan)
+            if local_wallet_address.is_some_and(|address| address == plan.wallet_address) =>
+        {
+            (Some(plan), None)
+        }
+        Some(plan) => (None, Some(plan)),
+        None => (None, None),
+    }
+}
+
 fn wallet_params(
     result: Option<Result<WalletOverview, String>>,
     client_can_sign: bool,
@@ -942,6 +961,30 @@ fn wallet_items(
     }
     if let Some(error) = overview.balance_error {
         header.push(Line::from(format!("Balance unavailable: {error}").red()));
+    }
+    if let Some(linked_plan) = &overview.linked_plan_for_other_wallet {
+        let linked_price = overview
+            .plan_prices_usdc
+            .get(&linked_plan.period.plan_id)
+            .map_or_else(String::new, |price| format!(" · {price} USDC prepaid"));
+        push_wallet_line(
+            header,
+            &format!(
+                "Linked PfTerminal Plan: {} plan{linked_price}",
+                title_case_plan(&linked_plan.period.plan_id)
+            ),
+            false,
+        );
+        push_wallet_line(header, &linked_plan_owner_description(linked_plan), false);
+        push_wallet_line(
+            header,
+            &format!(
+                "Linked usage: {} weekly remaining · {} monthly remaining",
+                format_token_count(linked_plan.weekly_remaining_tokens),
+                format_token_count(linked_plan.monthly_remaining_tokens),
+            ),
+            false,
+        );
     }
     let upgrade_mode = overview.plan.as_ref().map(|plan| {
         let (current_plan_id, starts_at) = plan
@@ -1155,6 +1198,13 @@ fn wallet_items(
     items
 }
 
+fn linked_plan_owner_description(plan: &WalletPlanStatus) -> String {
+    format!(
+        "Purchased by {} · not this local wallet",
+        short_address(&plan.wallet_address)
+    )
+}
+
 pub(super) fn item<F>(name: &str, description: &str, event: F) -> SelectionItem
 where
     F: Fn() -> AppEvent + Send + Sync + 'static,
@@ -1292,6 +1342,7 @@ mod tests {
             }),
             balance_error: None,
             plan: None,
+            linked_plan_for_other_wallet: None,
             plan_error: None,
             plan_credential_present: false,
             plan_prices_usdc: std::collections::BTreeMap::new(),
@@ -1329,6 +1380,56 @@ mod tests {
             weekly_remaining_tokens: 229_004,
             queued_periods: Vec::new(),
         }
+    }
+
+    #[test]
+    fn linked_plan_for_another_wallet_is_not_presented_as_local_plan() {
+        let local_address = "EpUYgzi88BYbsGoyiNghPppd3J9ASbARq7UjBCCUnk2i";
+        let mut linked = starter_plan();
+        linked.wallet_address = "2YYwro8tH3LzkwqCyHqZvBZt9KBsQwgtu9E6b1dBhbB5".to_string();
+
+        let (local, other) =
+            separate_plan_for_local_wallet(Some(linked.clone()), Some(local_address));
+        assert!(local.is_none());
+        assert_eq!(
+            other.as_ref().map(|plan| &plan.wallet_address),
+            Some(&linked.wallet_address)
+        );
+
+        let mut overview = overview(false);
+        overview.linked_plan_for_other_wallet = other;
+        overview.plan_credential_present = true;
+        let mut header = ColumnRenderable::new();
+        let names = wallet_items(&mut header, overview, true)
+            .into_iter()
+            .map(|item| item.name)
+            .collect::<Vec<_>>();
+        assert!(names.iter().any(|name| name == "Buy a PfTerminal plan"));
+        assert!(
+            names
+                .iter()
+                .any(|name| name == "Disconnect PfTerminal Plan")
+        );
+        assert!(!names.iter().any(|name| name == "Upgrade PfTerminal Plan"));
+        assert!(!names.iter().any(|name| name == "View latest plan receipt"));
+        assert_eq!(
+            linked_plan_owner_description(&linked),
+            "Purchased by 2YYwro8…dBhbB5 · not this local wallet"
+        );
+    }
+
+    #[test]
+    fn matching_plan_wallet_remains_the_local_upgrade_account() {
+        let linked = starter_plan();
+        let address = linked.wallet_address.clone();
+
+        let (local, other) = separate_plan_for_local_wallet(Some(linked), Some(&address));
+
+        assert_eq!(
+            local.as_ref().map(|plan| plan.period.plan_id.as_str()),
+            Some("starter")
+        );
+        assert!(other.is_none());
     }
 
     #[test]
