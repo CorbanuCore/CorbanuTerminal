@@ -1799,10 +1799,14 @@ impl App {
             }
             AppEvent::ProviderCredentialStatusesReady {
                 claude_status,
+                pfterminal_plan_status,
                 api_key_statuses,
             } => {
-                self.chat_widget
-                    .refresh_provider_credentials_status(claude_status, api_key_statuses);
+                self.chat_widget.refresh_provider_credentials_status(
+                    claude_status,
+                    pfterminal_plan_status,
+                    api_key_statuses,
+                );
             }
             AppEvent::CodexAccountDeviceLoginReady {
                 login_id,
@@ -1843,6 +1847,107 @@ impl App {
             }
             AppEvent::OpenVaultCredentialAdd => {
                 self.chat_widget.open_vault_credential_add();
+            }
+            AppEvent::OpenWallet => {
+                self.chat_widget.open_wallet_menu();
+            }
+            AppEvent::OpenWalletPlanUsage => {
+                self.chat_widget.open_wallet_plan_usage();
+            }
+            AppEvent::WalletPlanUsageReady { result } => {
+                self.chat_widget.on_wallet_plan_usage_ready(result);
+            }
+            AppEvent::OpenWalletCreate => {
+                self.chat_widget.open_wallet_create();
+            }
+            AppEvent::OpenWalletRestore => {
+                self.chat_widget.open_wallet_restore();
+            }
+            AppEvent::OpenWalletRestorePasscode { recovery } => {
+                self.chat_widget.open_wallet_restore_passcode(recovery);
+            }
+            AppEvent::OpenWalletRecoveryBackup => {
+                self.chat_widget.open_wallet_recovery_backup();
+            }
+            AppEvent::WalletRecoveryBackupFinished { result } => {
+                self.chat_widget.on_wallet_recovery_backup_finished(result);
+            }
+            AppEvent::OpenWalletUnlock {
+                policy,
+                continuation,
+            } => {
+                self.chat_widget.open_wallet_unlock(policy, continuation);
+            }
+            AppEvent::OpenWalletCustomUnlock {
+                validation_error,
+                continuation,
+            } => {
+                self.chat_widget
+                    .open_wallet_custom_unlock(validation_error, continuation);
+            }
+            AppEvent::WalletLockRequested => {
+                self.chat_widget.lock_wallet();
+            }
+            AppEvent::ConfirmWalletPlanDisconnect => {
+                self.chat_widget.confirm_wallet_plan_disconnect();
+            }
+            AppEvent::WalletPlanDisconnectRequested => {
+                self.chat_widget.disconnect_wallet_plan();
+            }
+            AppEvent::WalletPlanDisconnected { result } => {
+                self.chat_widget.on_wallet_plan_disconnected(result);
+            }
+            AppEvent::ConfirmWalletRemoval { address } => {
+                self.chat_widget.confirm_wallet_removal(address);
+            }
+            AppEvent::WalletRemoveRequested { address } => {
+                self.chat_widget.remove_wallet_from_device(address);
+            }
+            AppEvent::WalletRemoved { result } => {
+                self.chat_widget.on_wallet_removed(result);
+            }
+            AppEvent::WalletStatusReady { generation, result } => {
+                self.chat_widget.on_wallet_status_ready(generation, result);
+            }
+            AppEvent::WalletCreateFinished { operation, result } => {
+                self.chat_widget
+                    .on_wallet_create_finished(operation, result);
+            }
+            AppEvent::WalletUnlockFinished {
+                policy,
+                continuation,
+                result,
+            } => {
+                self.chat_widget
+                    .on_wallet_unlock_finished(policy, continuation, result);
+            }
+            AppEvent::OpenWalletPlans { mode } => {
+                self.chat_widget.open_wallet_plans(mode);
+            }
+            AppEvent::WalletPlansReady { mode, result } => {
+                self.chat_widget.on_wallet_plans_ready(mode, result);
+            }
+            AppEvent::ConfirmWalletPlanPurchase { plan } => {
+                self.chat_widget.confirm_wallet_plan_purchase(plan);
+            }
+            AppEvent::WalletPlanPurchaseRequested { plan } => {
+                self.chat_widget.purchase_wallet_plan(plan);
+            }
+            AppEvent::WalletPlanProvisioned { operation, result } => {
+                self.chat_widget
+                    .on_wallet_plan_provisioned(operation, result);
+            }
+            AppEvent::WalletPlanReceiptReady { receipt } => {
+                self.chat_widget.on_wallet_plan_receipt_ready(receipt);
+            }
+            AppEvent::OpenWalletPlanReceipt { receipt } => {
+                self.chat_widget.open_wallet_plan_receipt(receipt);
+            }
+            AppEvent::CloseWalletPlanReceipt => {
+                self.chat_widget.close_wallet_plan_receipt();
+            }
+            AppEvent::WalletRecoverPlanRequested => {
+                self.chat_widget.recover_wallet_plan_access();
             }
             AppEvent::OpenVaultCredentialsList => {
                 self.chat_widget.open_vault_credentials_list();
@@ -3271,7 +3376,9 @@ impl App {
                     }
                     return Ok(AppRunControl::Continue);
                 }
-                let delivery_id = delivery_id.expect("pump delivery identity checked above");
+                let Some(delivery_id) = delivery_id else {
+                    return Ok(AppRunControl::Continue);
+                };
                 let task_preview = task.chars().take(240).collect::<String>();
                 let label = self.thread_label(thread_id);
                 let session = if self.primary_thread_id == Some(thread_id) {
@@ -3547,21 +3654,22 @@ impl App {
                     }
                     return Ok(AppRunControl::Continue);
                 }
+                let Some(delivery_id) = delivery_id.as_deref() else {
+                    return Ok(AppRunControl::Continue);
+                };
                 if self.claude_panes.claude_pane_is_running(&pane_id) {
                     self.defer_spawn_dispatch_for_capacity(
                         &crate::spawn_orchestration::pane_node_id(&pane_id),
-                        delivery_id.as_deref().expect("pump delivery id"),
+                        delivery_id,
                     );
                     return Ok(AppRunControl::Continue);
                 }
                 self.submit_claude_pane_task(pane_id.clone(), task.clone());
-                if let Some(delivery_id) = delivery_id.as_deref() {
-                    self.finish_spawn_dispatch_delivery(
-                        &crate::spawn_orchestration::pane_node_id(&pane_id),
-                        delivery_id,
-                        &task,
-                    );
-                }
+                self.finish_spawn_dispatch_delivery(
+                    &crate::spawn_orchestration::pane_node_id(&pane_id),
+                    delivery_id,
+                    &task,
+                );
             }
             AppEvent::OpenSpawnStatus => {
                 self.open_spawn_status();

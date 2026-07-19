@@ -31,8 +31,12 @@ use codex_features::Feature;
 use codex_login::AMBIENT_API_KEY_ENV_VAR;
 use codex_login::CodexAuth;
 use codex_login::login_with_provider_api_key;
+use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
+use codex_model_provider_info::AMBIENT_GLM_5_2_CONTEXT_WINDOW;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
+use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_models_manager::bundled_models_response;
 use codex_models_manager::model_info;
@@ -4196,6 +4200,50 @@ async fn session_settings_legacy_fast_service_tier_update_uses_priority_request_
     assert_eq!(
         updated.service_tier,
         Some(ServiceTier::Fast.request_value().to_string())
+    );
+}
+
+#[tokio::test]
+async fn per_turn_context_ceiling_tracks_static_provider_switches() {
+    let session_configuration = make_session_configuration_for_tests().await;
+    let plan_configuration = session_configuration
+        .apply(&SessionSettingsUpdate {
+            model_provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
+            collaboration_mode: Some(CollaborationMode {
+                mode: ModeKind::Default,
+                settings: Settings {
+                    model: AMBIENT_DEFAULT_MODEL.to_string(),
+                    reasoning_effort: None,
+                    developer_instructions: None,
+                },
+            }),
+            ..Default::default()
+        })
+        .expect("switch to PfTerminal Plan");
+    let plan_turn =
+        Session::build_per_turn_config(&plan_configuration, plan_configuration.cwd().clone());
+    assert_eq!(plan_turn.model.as_deref(), Some(AMBIENT_DEFAULT_MODEL));
+    assert_eq!(
+        plan_turn.to_models_manager_config().model_context_window,
+        Some(AMBIENT_GLM_5_2_CONTEXT_WINDOW)
+    );
+
+    let openrouter_configuration = plan_configuration
+        .apply(&SessionSettingsUpdate {
+            model_provider: Some(OPENROUTER_PROVIDER_ID.to_string()),
+            ..Default::default()
+        })
+        .expect("switch to OpenRouter");
+    let openrouter_turn = Session::build_per_turn_config(
+        &openrouter_configuration,
+        openrouter_configuration.cwd().clone(),
+    );
+    assert_eq!(
+        openrouter_turn
+            .to_models_manager_config()
+            .model_context_window,
+        None,
+        "the Ambient route ceiling must not leak into another provider"
     );
 }
 

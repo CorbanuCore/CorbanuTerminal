@@ -2317,6 +2317,13 @@ impl ModelClientSession {
         inference_trace: &InferenceTraceContext,
         same_turn_attempt_index: u64,
     ) -> Result<ResponseStream> {
+        let plan_request_id = self
+            .client
+            .state
+            .provider
+            .info()
+            .is_pfterminal_plan()
+            .then(|| uuid::Uuid::new_v4().to_string());
         let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
         loop {
@@ -2339,6 +2346,13 @@ impl ModelClientSession {
             let mut options = self
                 .build_chat_completions_options(responses_metadata)
                 .await;
+            if let Some(request_id) = plan_request_id.as_deref()
+                && let Ok(value) = HeaderValue::from_str(request_id)
+            {
+                options
+                    .extra_headers
+                    .insert("x-pfterminal-request-id", value);
+            }
             options.same_turn_attempt_index = Some(same_turn_attempt_index);
             trace_stream_timing(
                 "chat_http_before_build_request",

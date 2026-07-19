@@ -2074,6 +2074,15 @@ fn should_show_login_screen(login_status: LoginStatus, config: &Config) -> bool 
         return true;
     }
 
+    // PfTerminal Plan credentials are provisioned and recovered inside the TUI through
+    // `/wallet`. Sending a disconnected Plan user through the external-provider onboarding
+    // picker makes that recovery path unreachable and falsely suggests that every other
+    // stored account was removed. Keep the terminal available so the wallet can be restored
+    // or its already-paid plan access can be recovered without another provider login.
+    if config.model_provider_id == codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID {
+        return false;
+    }
+
     !has_linked_provider_credentials(config)
 }
 
@@ -2291,6 +2300,44 @@ mod tests {
             r#"{"api_keys":{"OPENROUTER_API_KEY":"openrouter-test-key"}}"#,
         )
         .unwrap();
+
+        assert!(should_show_login_screen(
+            LoginStatus::NotAuthenticated,
+            &config
+        ));
+    }
+
+    #[tokio::test]
+    async fn disconnected_pfterminal_plan_skips_external_provider_onboarding() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::write(
+            temp_dir.path().join("config.toml"),
+            r#"model_provider = "pfterminal-plan""#,
+        )
+        .unwrap();
+        let config = build_config(&temp_dir).await.unwrap();
+        assert_eq!(
+            config.model_provider_id,
+            codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID
+        );
+        assert!(provider_requires_login(&config));
+
+        assert!(!should_show_login_screen(
+            LoginStatus::NotAuthenticated,
+            &config
+        ));
+    }
+
+    #[tokio::test]
+    async fn forced_chatgpt_login_still_precedes_pfterminal_plan_recovery() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::write(
+            temp_dir.path().join("config.toml"),
+            r#"model_provider = "pfterminal-plan""#,
+        )
+        .unwrap();
+        let mut config = build_config(&temp_dir).await.unwrap();
+        config.forced_login_method = Some(ForcedLoginMethod::Chatgpt);
 
         assert!(should_show_login_screen(
             LoginStatus::NotAuthenticated,

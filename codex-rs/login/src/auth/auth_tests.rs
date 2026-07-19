@@ -2414,3 +2414,121 @@ async fn provider_api_key_login_is_provider_scoped_and_not_primary_auth() {
         None
     );
 }
+
+#[test]
+fn deleting_one_provider_api_key_preserves_other_legacy_credentials() {
+    let codex_home = tempdir().expect("tempdir");
+    for (provider, key) in [
+        ("PFTERMINAL_PLAN_API_KEY", "pft-plan-secret"),
+        (AMBIENT_API_KEY_ENV_VAR, "ambient-secret"),
+    ] {
+        super::legacy_save_provider_key(codex_home.path(), provider, key)
+            .expect("seed legacy provider key");
+    }
+
+    assert!(
+        super::delete_provider_api_key(codex_home.path(), "PFTERMINAL_PLAN_API_KEY")
+            .expect("delete plan key")
+    );
+    assert_eq!(
+        super::legacy_provider_key(codex_home.path(), "PFTERMINAL_PLAN_API_KEY")
+            .expect("deleted plan key"),
+        None
+    );
+    assert_eq!(
+        super::legacy_provider_key(codex_home.path(), AMBIENT_API_KEY_ENV_VAR)
+            .expect("unrelated provider key")
+            .as_deref(),
+        Some("ambient-secret")
+    );
+}
+
+#[test]
+fn deleting_provider_key_suppresses_an_unreadable_vault_until_explicit_relogin() {
+    let codex_home = tempdir().expect("tempdir");
+    super::legacy_save_provider_key(
+        codex_home.path(),
+        "PFTERMINAL_PLAN_API_KEY",
+        "legacy-plan-key",
+    )
+    .expect("seed legacy provider key");
+
+    let secrets_dir = codex_home.path().join("secrets");
+    std::fs::create_dir_all(&secrets_dir).expect("create secrets dir");
+    std::fs::write(secrets_dir.join("local.age"), b"not-an-age-file")
+        .expect("write unreadable vault fixture");
+
+    assert!(
+        super::delete_provider_api_key(codex_home.path(), "PFTERMINAL_PLAN_API_KEY")
+            .expect("an unavailable vault must not block effective deletion")
+    );
+    let provider_auth: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(codex_home.path().join("provider_auth.json")).expect("deletion marker file"),
+    )
+    .expect("deletion marker JSON");
+    assert_eq!(
+        provider_auth["deleted_api_keys"],
+        serde_json::json!(["PFTERMINAL_PLAN_API_KEY"]),
+        "vault failure must leave a durable suppression marker"
+    );
+    assert_eq!(
+        super::provider_api_key_from_auth_storage(
+            codex_home.path(),
+            "PFTERMINAL_PLAN_API_KEY",
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::default(),
+        )
+        .expect("deleted key lookup"),
+        None
+    );
+
+    super::login_with_provider_api_key(
+        codex_home.path(),
+        "PFTERMINAL_PLAN_API_KEY",
+        "replacement-plan-key",
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )
+    .expect("explicit login should clear the deletion marker");
+    assert_eq!(
+        super::provider_api_key_from_auth_storage(
+            codex_home.path(),
+            "PFTERMINAL_PLAN_API_KEY",
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::default(),
+        )
+        .expect("replacement key lookup")
+        .as_deref(),
+        Some("replacement-plan-key")
+    );
+}
+
+#[test]
+fn legacy_provider_auth_replacements_are_atomic_and_leave_no_temporary_file() {
+    let codex_home = tempdir().expect("tempdir");
+    super::legacy_save_provider_key(codex_home.path(), "FIRST_API_KEY", "first-secret")
+        .expect("save first key");
+    super::legacy_save_provider_key(codex_home.path(), "SECOND_API_KEY", "second-secret")
+        .expect("replace provider auth atomically");
+
+    assert_eq!(
+        super::legacy_provider_key(codex_home.path(), "FIRST_API_KEY")
+            .expect("read first key")
+            .as_deref(),
+        Some("first-secret")
+    );
+    assert_eq!(
+        super::legacy_provider_key(codex_home.path(), "SECOND_API_KEY")
+            .expect("read second key")
+            .as_deref(),
+        Some("second-secret")
+    );
+    let entries = std::fs::read_dir(codex_home.path())
+        .expect("read codex home")
+        .map(|entry| entry.expect("directory entry").file_name())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        entries,
+        vec![std::ffi::OsString::from("provider_auth.json")]
+    );
+}

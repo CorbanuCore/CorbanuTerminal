@@ -231,6 +231,35 @@ async fn bundled_frontend_design_skill_loads_from_unrelated_cwd() {
 }
 
 #[tokio::test]
+async fn bundled_pfterminal_help_skill_loads_from_unrelated_cwd() {
+    let codex_home = tempfile::tempdir().expect("tempdir");
+    let cwd = tempfile::tempdir().expect("tempdir");
+    let config_layer_stack = config_stack(&codex_home, "");
+    let skills_service = SkillsService::new(
+        codex_home.path().abs(),
+        /*bundled_skills_enabled*/ true,
+    );
+
+    let outcome =
+        skills_for_config_with_stack(&skills_service, &cwd, &config_layer_stack, &[]).await;
+
+    let skill = outcome
+        .skills
+        .iter()
+        .find(|skill| skill.name == "pfterminal-help")
+        .expect("pfterminal-help should be installed as a bundled system skill");
+    assert_eq!(skill.scope, SkillScope::System);
+    assert!(
+        skill
+            .path_to_skills_md
+            .to_string_lossy()
+            .contains("skills/.system/pfterminal-help/SKILL.md"),
+        "unexpected bundled skill path: {}",
+        skill.path_to_skills_md.display()
+    );
+}
+
+#[tokio::test]
 async fn skills_for_config_reuses_cache_for_same_effective_config() {
     let codex_home = tempfile::tempdir().expect("tempdir");
     let cwd = tempfile::tempdir().expect("tempdir");

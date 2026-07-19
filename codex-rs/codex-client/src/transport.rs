@@ -84,12 +84,41 @@ impl ReqwestTransport {
 
 fn request_body_for_trace(req: &Request) -> String {
     match req.body.as_ref() {
-        Some(RequestBody::Json(body)) => body.to_string(),
+        Some(RequestBody::Json(body)) => format!("<json body: {} bytes>", body.to_string().len()),
         Some(RequestBody::EncodedJson(body)) => {
-            String::from_utf8_lossy(body.trace_bytes()).into_owned()
+            format!("<encoded JSON body: {} bytes>", body.as_bytes().len())
         }
         Some(RequestBody::Raw(body)) => format!("<raw body: {} bytes>", body.len()),
         None => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn trace_summary_never_contains_request_content() {
+        let secret = "prompt-and-credential-must-not-appear";
+        let json_request = Request::new(Method::POST, "https://example.test".to_string())
+            .with_json(&json!({ "prompt": secret }));
+        let encoded_request = json_request
+            .clone()
+            .into_prepared()
+            .expect("encode request");
+        let raw_request = Request::new(Method::POST, "https://example.test".to_string())
+            .with_raw_body(secret.as_bytes().to_vec());
+
+        for summary in [
+            request_body_for_trace(&json_request),
+            request_body_for_trace(&encoded_request),
+            request_body_for_trace(&raw_request),
+        ] {
+            assert!(!summary.contains(secret));
+            assert!(summary.contains("body:"));
+            assert!(summary.contains("bytes"));
+        }
     }
 }
 

@@ -38,20 +38,20 @@ impl CompletionGuardState {
     pub(super) fn observe_sampling(&mut self, saw_client_tool_call: bool) {
         if saw_client_tool_call {
             self.tool_executed = true;
-            self.unsuccessful_assessments = 0;
         }
     }
 
     pub(super) fn should_assess(
         &self,
-        is_kimi_code: bool,
+        provider_requires_guard: bool,
         needs_follow_up: bool,
-        assistant_response: Option<&str>,
+        _assistant_response: Option<&str>,
     ) -> bool {
-        is_kimi_code
-            && self.tool_executed
-            && !needs_follow_up
-            && assistant_response.is_some_and(|response| !response.trim().is_empty())
+        // A context-window transition can surface an assistant progress message while the
+        // sampling result carries no `last_agent_message`. Once this turn has performed tool
+        // work, absence of a final-message field is not evidence of completion; the structured
+        // assessment must decide it just like a text response.
+        provider_requires_guard && self.tool_executed && !needs_follow_up
     }
 
     pub(super) fn record_assessment(
@@ -59,14 +59,14 @@ impl CompletionGuardState {
         assessment: CompletionAssessment,
     ) -> CompletionGuardAction {
         match assessment {
-            CompletionAssessment::Complete => {
+            CompletionAssessment::Complete | CompletionAssessment::Uncertain => {
                 self.unsuccessful_assessments = 0;
                 CompletionGuardAction::Accept
             }
-            CompletionAssessment::Incomplete | CompletionAssessment::Uncertain => {
+            CompletionAssessment::Incomplete => {
                 self.unsuccessful_assessments += 1;
                 if self.unsuccessful_assessments >= MAX_COMPLETION_ASSESSMENT_ATTEMPTS {
-                    CompletionGuardAction::Fail
+                    CompletionGuardAction::AcceptAfterLimit
                 } else {
                     CompletionGuardAction::Continue
                 }
@@ -83,7 +83,7 @@ impl CompletionGuardState {
 pub(super) enum CompletionGuardAction {
     Accept,
     Continue,
-    Fail,
+    AcceptAfterLimit,
 }
 
 pub(super) fn objective_from_turn_input(input: &[TurnInput]) -> String {
@@ -142,7 +142,39 @@ pub(super) fn assessment_prompt(objective: &str, assistant_response: &str) -> Pr
 }
 
 pub(super) fn parse_assessment(text: &str) -> Result<CompletionAssessment, serde_json::Error> {
-    serde_json::from_str::<CompletionAssessmentOutput>(text.trim()).map(|output| output.decision)
+    let value = serde_json::from_str::<serde_json::Value>(text.trim())?;
+    if let Ok(output) = serde_json::from_value::<CompletionAssessmentOutput>(value.clone()) {
+        return Ok(output.decision);
+    }
+
+    // Some chat-compatible providers ignore the requested property shape, returning either a
+    // renamed enum (for example {"status":"incomplete"}) or a completion boolean. Accept only
+    // one-field objects with a recognized enum, or boolean fields whose names explicitly mean
+    // completion. Multiple fields, prose, unrelated booleans, and unknown values stay invalid.
+    if let serde_json::Value::Object(object) = &value
+        && object.len() == 1
+        && let Some((key, decision)) = object.iter().next()
+    {
+        if let serde_json::Value::String(decision) = decision {
+            return serde_json::from_value::<CompletionAssessment>(serde_json::Value::String(
+                decision.clone(),
+            ));
+        }
+        if let serde_json::Value::Bool(complete) = decision
+            && matches!(
+                key.as_str(),
+                "complete" | "completed" | "is_complete" | "is_completed" | "done"
+            )
+        {
+            return Ok(if *complete {
+                CompletionAssessment::Complete
+            } else {
+                CompletionAssessment::Incomplete
+            });
+        }
+    }
+
+    serde_json::from_value::<CompletionAssessmentOutput>(value).map(|output| output.decision)
 }
 
 pub(super) fn continuation_message() -> ResponseItem {
@@ -172,17 +204,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn guard_is_kimi_scoped_and_only_activates_after_tool_work() {
+    fn guard_is_provider_scoped_and_only_activates_after_tool_work() {
         let mut state = CompletionGuardState::default();
         assert!(!state.should_assess(true, false, Some("Now I will add tests.")));
         state.observe_sampling(true);
         assert!(!state.should_assess(false, false, Some("Now I will add tests.")));
         assert!(!state.should_assess(true, true, Some("Now I will add tests.")));
         assert!(state.should_assess(true, false, Some("Now I will add tests.")));
+        assert!(state.should_assess(true, false, None));
     }
 
     #[test]
-    fn incomplete_and_uncertain_assessments_are_bounded() {
+    fn only_explicit_incomplete_assessments_request_continuation() {
         let mut state = CompletionGuardState::default();
         assert_eq!(
             state.record_assessment(CompletionAssessment::Incomplete),
@@ -190,14 +223,24 @@ mod tests {
         );
         assert_eq!(
             state.record_assessment(CompletionAssessment::Uncertain),
+            CompletionGuardAction::Accept
+        );
+        assert_eq!(state.unsuccessful_assessments(), 0);
+        assert_eq!(
+            state.record_assessment(CompletionAssessment::Incomplete),
             CompletionGuardAction::Continue
         );
         assert_eq!(
             state.record_assessment(CompletionAssessment::Incomplete),
-            CompletionGuardAction::Fail
+            CompletionGuardAction::Continue
         );
         state.observe_sampling(true);
-        assert_eq!(state.unsuccessful_assessments(), 0);
+        assert_eq!(state.unsuccessful_assessments(), 2);
+        assert_eq!(
+            state.record_assessment(CompletionAssessment::Incomplete),
+            CompletionGuardAction::AcceptAfterLimit
+        );
+        assert_eq!(state.unsuccessful_assessments(), 3);
     }
 
     #[test]
@@ -208,6 +251,20 @@ mod tests {
         );
         assert!(parse_assessment("Now I will continue.").is_err());
         assert!(parse_assessment(r#"{"decision":"yes"}"#).is_err());
+        assert_eq!(
+            parse_assessment(r#"{"status":"incomplete"}"#).unwrap(),
+            CompletionAssessment::Incomplete
+        );
+        assert!(parse_assessment(r#"{"status":"incomplete","confidence":1}"#).is_err());
+        assert_eq!(
+            parse_assessment(r#"{"completed":false}"#).unwrap(),
+            CompletionAssessment::Incomplete
+        );
+        assert_eq!(
+            parse_assessment(r#"{"done":true}"#).unwrap(),
+            CompletionAssessment::Complete
+        );
+        assert!(parse_assessment(r#"{"ready":false}"#).is_err());
     }
 
     #[test]

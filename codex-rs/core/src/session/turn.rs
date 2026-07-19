@@ -169,7 +169,7 @@ fn trace_turn_timing(label: &str, start: Instant) {
     }
 }
 
-async fn assess_kimi_completion(
+async fn assess_turn_completion(
     sess: &Session,
     turn_context: &TurnContext,
     client_session: &mut ModelClientSession,
@@ -517,7 +517,7 @@ pub(crate) async fn run_turn(
                 }
 
                 if completion_guard.should_assess(
-                    turn_context.provider.info().is_kimi_code(),
+                    turn_context.provider.info().requires_completion_guard(),
                     needs_follow_up,
                     sampling_request_last_agent_message.as_deref(),
                 ) {
@@ -527,7 +527,7 @@ pub(crate) async fn run_turn(
                             window_id.clone(),
                             CodexResponsesRequestKind::Turn,
                         );
-                    let assessment = match assess_kimi_completion(
+                    let assessment = match assess_turn_completion(
                         sess.as_ref(),
                         turn_context.as_ref(),
                         &mut client_session,
@@ -540,30 +540,33 @@ pub(crate) async fn run_turn(
                     )
                     .await
                     {
-                        Ok(assessment) => assessment,
+                        Ok(assessment) => Some(assessment),
                         Err(CodexErr::TurnAborted) => return Err(CodexErr::TurnAborted),
                         Err(err) => {
                             warn!(
                                 turn_id = %turn_context.sub_id,
                                 error = %err,
-                                "Kimi completion assessment failed; treating the result as uncertain"
+                                "completion assessment failed; accepting the model response without automatic continuation"
                             );
-                            CompletionAssessment::Uncertain
+                            None
                         }
                     };
-                    match completion_guard.record_assessment(assessment) {
-                        CompletionGuardAction::Accept => {
+                    match assessment.map(|assessment| {
+                        (assessment, completion_guard.record_assessment(assessment))
+                    }) {
+                        None => {}
+                        Some((_, CompletionGuardAction::Accept)) => {
                             trace!(
                                 turn_id = %turn_context.sub_id,
-                                "Kimi completion assessment accepted the final response"
+                                "completion assessment accepted the final response"
                             );
                         }
-                        CompletionGuardAction::Continue => {
+                        Some((assessment, CompletionGuardAction::Continue)) => {
                             trace!(
                                 turn_id = %turn_context.sub_id,
                                 assessment = ?assessment,
                                 attempts = completion_guard.unsuccessful_assessments(),
-                                "Kimi completion assessment requested continuation"
+                                "completion assessment requested continuation"
                             );
                             let message = continuation_message();
                             sess.record_conversation_items(
@@ -573,10 +576,21 @@ pub(crate) async fn run_turn(
                             .await;
                             continue;
                         }
-                        CompletionGuardAction::Fail => {
-                            return Err(CodexErr::InvalidRequest(format!(
-                                "Kimi stopped {MAX_COMPLETION_ASSESSMENT_ATTEMPTS} consecutive times after tool execution without a verifiable final response; retry the turn or select another model"
-                            )));
+                        Some((_, CompletionGuardAction::AcceptAfterLimit)) => {
+                            warn!(
+                                turn_id = %turn_context.sub_id,
+                                attempts = MAX_COMPLETION_ASSESSMENT_ATTEMPTS,
+                                "completion assessment limit reached; accepting the latest response"
+                            );
+                            sess.send_event(
+                                &turn_context,
+                                EventMsg::Warning(WarningEvent {
+                                    message: format!(
+                                        "The completion check could not verify this response after {MAX_COMPLETION_ASSESSMENT_ATTEMPTS} attempts. PfTerminal stopped the automatic continuation loop; review the result before relying on it."
+                                    ),
+                                }),
+                            )
+                            .await;
                         }
                     }
                 }

@@ -28,6 +28,8 @@ use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
+use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
+use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
@@ -91,7 +93,7 @@ struct ModelPickerProviderGroup {
     subtitle: &'static str,
 }
 
-const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 11] = [
+const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 12] = [
     ModelPickerProviderGroup {
         id: "openai",
         label: "OpenAI",
@@ -101,6 +103,11 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 11] = [
         id: "ambient",
         label: "Ambient",
         subtitle: "Ambient coding plan",
+    },
+    ModelPickerProviderGroup {
+        id: "pfterminal-plan",
+        label: "PfTerminal Plan",
+        subtitle: "USDC-funded PfTerminal plan",
     },
     ModelPickerProviderGroup {
         id: "kimi-code",
@@ -356,6 +363,11 @@ impl ChatWidget {
     }
 
     fn resolved_model_provider(&self, model: &str) -> Option<String> {
+        if model == self.current_model()
+            && self.config.model_provider_id == PFTERMINAL_PLAN_PROVIDER_ID
+        {
+            return Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string());
+        }
         self.model_catalog
             .provider_for_model(model)
             .or_else(|| Self::model_provider_for_selection(model))
@@ -397,10 +409,29 @@ impl ChatWidget {
         presets: Vec<ModelPreset>,
         purpose: ModelSelectionPurpose,
     ) {
-        let presets: Vec<ModelPreset> = presets
+        let mut presets: Vec<ModelPreset> = presets
             .into_iter()
             .filter(Self::show_in_pfterminal_model_picker)
             .collect();
+
+        if self.pfterminal_plan_key_is_linked() {
+            let paid_models = presets
+                .iter()
+                .filter(|preset| {
+                    matches!(
+                        preset.model.as_str(),
+                        AMBIENT_DEFAULT_MODEL | AMBIENT_KIMI_K2_7_CODE_MODEL
+                    )
+                })
+                .cloned()
+                .map(|mut preset| {
+                    preset.provider_id = Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string());
+                    preset.is_default = preset.model == AMBIENT_DEFAULT_MODEL;
+                    preset
+                })
+                .collect::<Vec<_>>();
+            presets.extend(paid_models);
+        }
 
         if presets.is_empty() {
             self.add_info_message(
@@ -560,6 +591,7 @@ impl ChatWidget {
             Some(OPENAI_PROVIDER_ID) => Self::is_openai_coding_plan_model(&preset.model),
             Some(
                 AMBIENT_PROVIDER_ID
+                | PFTERMINAL_PLAN_PROVIDER_ID
                 | KIMI_CODE_PROVIDER_ID
                 | CLAUDE_PLAN_PROVIDER_ID
                 | ANTHROPIC_PROVIDER_ID
@@ -590,6 +622,7 @@ impl ChatWidget {
         let group_id = match provider {
             Some(OPENAI_PROVIDER_ID) => "openai",
             Some(AMBIENT_PROVIDER_ID) => "ambient",
+            Some(PFTERMINAL_PLAN_PROVIDER_ID) => "pfterminal-plan",
             Some(KIMI_CODE_PROVIDER_ID) => "kimi-code",
             Some(ZAI_PROVIDER_ID) => "zai",
             Some(CLAUDE_PLAN_PROVIDER_ID) => "claude-plan",
@@ -604,6 +637,16 @@ impl ChatWidget {
         MODEL_PICKER_PROVIDER_GROUPS
             .into_iter()
             .find(|group| group.id == group_id)
+    }
+
+    pub(crate) fn pfterminal_plan_key_is_linked(&self) -> bool {
+        codex_login::provider_api_key_from_auth_storage(
+            &self.config.codex_home,
+            PFTERMINAL_PLAN_API_KEY_ENV_VAR,
+            self.config.cli_auth_credentials_store_mode,
+            self.config.auth_keyring_backend_kind(),
+        )
+        .is_ok_and(|key| key.is_some_and(|value| !value.trim().is_empty()))
     }
 
     fn model_selection_actions(

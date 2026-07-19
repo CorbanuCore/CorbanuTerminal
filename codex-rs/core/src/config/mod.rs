@@ -87,6 +87,7 @@ use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OLLAMA_CHAT_PROVIDER_REMOVED_ERROR;
 use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
+use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_PROVIDER_ID;
@@ -96,6 +97,7 @@ use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_model_provider_info::built_in_model_providers;
 use codex_model_provider_info::corrected_catalog_provider;
 use codex_model_provider_info::create_oss_provider_with_base_url;
+use codex_model_provider_info::default_model_context_window_for_provider;
 use codex_model_provider_info::merge_configured_model_providers;
 use codex_model_provider_info::resolve_model_for_provider;
 use codex_models_manager::ModelsManagerConfig;
@@ -1555,8 +1557,17 @@ impl Config {
     }
 
     pub fn to_models_manager_config(&self) -> ModelsManagerConfig {
+        self.to_models_manager_config_for_model(self.model.as_deref())
+    }
+
+    pub fn to_models_manager_config_for_model(&self, model: Option<&str>) -> ModelsManagerConfig {
+        let model_context_window = self.model_context_window.or_else(|| {
+            model.and_then(|model| {
+                default_model_context_window_for_provider(&self.model_provider_id, model)
+            })
+        });
         ModelsManagerConfig {
-            model_context_window: self.model_context_window,
+            model_context_window,
             model_auto_compact_token_limit: self.model_auto_compact_token_limit,
             tool_output_token_limit: self.tool_output_token_limit,
             base_instructions: self.base_instructions.clone(),
@@ -3583,7 +3594,6 @@ impl Config {
             }
             None => (model_provider_id, model_provider),
         };
-
         let shell_environment_policy = cfg.shell_environment_policy.into();
         let allow_login_shell = cfg.allow_login_shell.unwrap_or(true);
 
@@ -3713,7 +3723,10 @@ impl Config {
             })
             .filter(|values| !values.is_empty());
 
-        let ambient_provider_selected = model_provider_id == AMBIENT_PROVIDER_ID;
+        let ambient_provider_selected = matches!(
+            model_provider_id.as_str(),
+            AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID
+        );
         let kimi_code_provider_selected = model_provider_id == KIMI_CODE_PROVIDER_ID;
         let anthropic_provider_selected = model_provider_id == ANTHROPIC_PROVIDER_ID;
         let meta_provider_selected = model_provider_id == META_PROVIDER_ID;

@@ -56,6 +56,11 @@ impl UnixStream {
             .await
             .map(|inner| Self { inner })
     }
+
+    /// Returns the authenticated peer user ID where the platform exposes it.
+    pub fn peer_user_id(&self) -> IoResult<Option<u32>> {
+        platform::peer_user_id(&self.inner)
+    }
 }
 
 impl AsyncRead for UnixStream {
@@ -151,6 +156,12 @@ mod platform {
         UnixStream::connect(socket_path).await
     }
 
+    pub(super) fn peer_user_id(stream: &Stream) -> IoResult<Option<u32>> {
+        stream
+            .peer_cred()
+            .map(|credentials| Some(credentials.uid()))
+    }
+
     pub(super) async fn is_stale_socket_path(socket_path: &Path) -> IoResult<bool> {
         Ok(fs::symlink_metadata(socket_path)
             .await?
@@ -161,10 +172,13 @@ mod platform {
 
 #[cfg(windows)]
 mod platform {
+    use std::ffi::OsString;
     use std::io;
     use std::io::Result as IoResult;
     use std::net::Shutdown;
     use std::ops::Deref;
+    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::ffi::OsStringExt;
     use std::os::windows::io::AsRawSocket;
     use std::os::windows::io::AsSocket;
     use std::os::windows::io::BorrowedSocket;
@@ -181,11 +195,138 @@ mod platform {
     use tokio::task;
     use tokio_util::compat::Compat;
     use tokio_util::compat::FuturesAsyncReadCompatExt;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Foundation::HANDLE;
+    use windows_sys::Win32::Foundation::HLOCAL;
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
+    use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorW;
+    use windows_sys::Win32::Security::DACL_SECURITY_INFORMATION;
+    use windows_sys::Win32::Security::GetTokenInformation;
+    use windows_sys::Win32::Security::PROTECTED_DACL_SECURITY_INFORMATION;
+    use windows_sys::Win32::Security::PSECURITY_DESCRIPTOR;
+    use windows_sys::Win32::Security::SetFileSecurityW;
+    use windows_sys::Win32::Security::TOKEN_QUERY;
+    use windows_sys::Win32::Security::TOKEN_USER;
+    use windows_sys::Win32::Security::TokenUser;
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+    use windows_sys::Win32::System::Threading::OpenProcessToken;
 
     pub(super) struct Stream(Compat<Async<WindowsUnixStream>>);
 
     pub(super) async fn prepare_private_socket_directory(socket_dir: &Path) -> IoResult<()> {
-        tokio::fs::create_dir_all(socket_dir).await
+        tokio::fs::create_dir_all(socket_dir).await?;
+        apply_current_user_only_acl(socket_dir)
+    }
+
+    /// Windows AF_UNIX does not expose peer credentials. Protect the rendezvous
+    /// directory with a non-inheriting DACL before the listener is bound so only
+    /// this account (and LocalSystem) can reach the socket path.
+    fn apply_current_user_only_acl(path: &Path) -> IoResult<()> {
+        let current_user_sid = current_user_sid_string()?;
+        let sddl = wide_null(format!("D:P(A;;FA;;;SY)(A;;FA;;;{current_user_sid})"));
+        let mut security_descriptor: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
+        let converted = unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl.as_ptr(),
+                1, // SDDL_REVISION_1
+                &mut security_descriptor,
+                std::ptr::null_mut(),
+            )
+        };
+        if converted == 0 {
+            return Err(io::Error::last_os_error());
+        }
+
+        let path = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let applied = unsafe {
+            SetFileSecurityW(
+                path.as_ptr(),
+                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                security_descriptor,
+            )
+        };
+        unsafe {
+            LocalFree(security_descriptor as HLOCAL);
+        }
+        if applied == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    fn current_user_sid_string() -> IoResult<String> {
+        let mut token = 0;
+        if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let token = OwnedHandle(token);
+
+        let mut required = 0;
+        unsafe {
+            GetTokenInformation(token.0, TokenUser, std::ptr::null_mut(), 0, &mut required);
+        }
+        if required == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let mut buffer = vec![0_u8; required as usize];
+        if unsafe {
+            GetTokenInformation(
+                token.0,
+                TokenUser,
+                buffer.as_mut_ptr().cast(),
+                required,
+                &mut required,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        if buffer.len() < std::mem::size_of::<TOKEN_USER>() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "current-user token did not contain TOKEN_USER",
+            ));
+        }
+        let token_user = unsafe { std::ptr::read_unaligned(buffer.as_ptr().cast::<TOKEN_USER>()) };
+        let mut string_sid = std::ptr::null_mut();
+        if unsafe { ConvertSidToStringSidW(token_user.User.Sid, &mut string_sid) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let length = unsafe {
+            let mut length = 0;
+            while *string_sid.add(length) != 0 {
+                length += 1;
+            }
+            length
+        };
+        let sid = unsafe { OsString::from_wide(std::slice::from_raw_parts(string_sid, length)) }
+            .into_string()
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "user SID was not UTF-16"));
+        unsafe {
+            LocalFree(string_sid as HLOCAL);
+        }
+        sid
+    }
+
+    fn wide_null(value: String) -> Vec<u16> {
+        value.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    struct OwnedHandle(HANDLE);
+
+    impl Drop for OwnedHandle {
+        fn drop(&mut self) {
+            if self.0 != 0 {
+                unsafe {
+                    CloseHandle(self.0);
+                }
+            }
+        }
     }
 
     pub(super) struct Listener(Async<WindowsUnixListener>);
@@ -213,6 +354,10 @@ mod platform {
         Async::new(WindowsUnixStream::from(stream))
             .map(FuturesAsyncReadCompatExt::compat)
             .map(Stream)
+    }
+
+    pub(super) fn peer_user_id(_stream: &Stream) -> IoResult<Option<u32>> {
+        Ok(None)
     }
 
     pub(super) async fn is_stale_socket_path(socket_path: &Path) -> IoResult<bool> {
@@ -325,6 +470,99 @@ mod platform {
 
     unsafe impl async_io::IoSafe for WindowsUnixListener {}
     unsafe impl async_io::IoSafe for WindowsUnixStream {}
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use windows_sys::Win32::Security::Authorization::ConvertSecurityDescriptorToStringSecurityDescriptorW;
+        use windows_sys::Win32::Security::GetFileSecurityW;
+
+        #[tokio::test]
+        async fn socket_directory_dacl_is_protected_and_current_user_only() {
+            let temp = tempfile::tempdir().expect("tempdir");
+            let socket_dir = temp.path().join("wallet-run");
+            prepare_private_socket_directory(&socket_dir)
+                .await
+                .expect("apply private socket ACL");
+
+            let sddl = file_dacl_sddl(&socket_dir).expect("read socket ACL");
+            let current_user = current_user_sid_string().expect("current user SID");
+            assert!(sddl.starts_with("D:P"), "DACL must be protected: {sddl}");
+            assert!(
+                sddl.contains(&current_user),
+                "DACL omitted current user: {sddl}"
+            );
+            assert!(sddl.contains(";;;SY"), "DACL omitted LocalSystem: {sddl}");
+            for broad_principal in [";;;WD", ";;;BU", ";;;AU"] {
+                assert!(
+                    !sddl.contains(broad_principal),
+                    "DACL admitted a broad principal {broad_principal}: {sddl}"
+                );
+            }
+        }
+
+        fn file_dacl_sddl(path: &Path) -> IoResult<String> {
+            let path = path
+                .as_os_str()
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect::<Vec<_>>();
+            let mut required = 0;
+            unsafe {
+                GetFileSecurityW(
+                    path.as_ptr(),
+                    DACL_SECURITY_INFORMATION,
+                    std::ptr::null_mut(),
+                    0,
+                    &mut required,
+                );
+            }
+            if required == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            let mut descriptor = vec![0_u8; required as usize];
+            if unsafe {
+                GetFileSecurityW(
+                    path.as_ptr(),
+                    DACL_SECURITY_INFORMATION,
+                    descriptor.as_mut_ptr().cast(),
+                    required,
+                    &mut required,
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+
+            let mut string_descriptor = std::ptr::null_mut();
+            let mut string_length = 0;
+            if unsafe {
+                ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                    descriptor.as_mut_ptr().cast(),
+                    1, // SDDL_REVISION_1
+                    DACL_SECURITY_INFORMATION,
+                    &mut string_descriptor,
+                    &mut string_length,
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            let sddl = unsafe {
+                OsString::from_wide(std::slice::from_raw_parts(
+                    string_descriptor,
+                    string_length as usize,
+                ))
+            }
+            .to_string_lossy()
+            .trim_end_matches('\0')
+            .to_string();
+            unsafe {
+                LocalFree(string_descriptor as HLOCAL);
+            }
+            Ok(sddl)
+        }
+    }
 }
 
 #[cfg(test)]

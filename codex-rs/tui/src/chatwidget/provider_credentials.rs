@@ -4,6 +4,7 @@ use super::*;
 use crate::bottom_pane::BottomPaneView;
 use crate::bottom_pane::ViewCompletion;
 use crate::chatwidget::claude_code_login::ClaudeCodePlanStatus;
+pub(crate) use crate::chatwidget::pfterminal_plan_status::PfTerminalPlanStatus;
 use crate::status::StatusAccountDisplay;
 use codex_model_provider_info::AMBIENT_API_KEY_ENV_VAR;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
@@ -41,6 +42,7 @@ pub(crate) enum ProviderApiKeyStatus {
 enum ProviderCredentialOption {
     CodexAccount,
     ClaudeCodePlan,
+    PfTerminalPlan,
     ProviderApiKey {
         provider_id: &'static str,
         provider_name: &'static str,
@@ -51,6 +53,7 @@ enum ProviderCredentialOption {
 const PROVIDER_CREDENTIAL_OPTIONS: &[ProviderCredentialOption] = &[
     ProviderCredentialOption::CodexAccount,
     ProviderCredentialOption::ClaudeCodePlan,
+    ProviderCredentialOption::PfTerminalPlan,
     ProviderCredentialOption::ProviderApiKey {
         provider_id: ANTHROPIC_PROVIDER_ID,
         provider_name: "Anthropic",
@@ -95,7 +98,11 @@ const PROVIDER_CREDENTIAL_OPTIONS: &[ProviderCredentialOption] = &[
 
 impl ChatWidget {
     pub(crate) fn open_provider_credentials_menu(&mut self) {
-        let params = self.provider_credentials_params(&ClaudeCodePlanStatus::Checking, &[]);
+        let params = self.provider_credentials_params(
+            &ClaudeCodePlanStatus::Checking,
+            &PfTerminalPlanStatus::Checking,
+            &[],
+        );
         self.show_selection_view(params);
         self.refresh_provider_credentials_status_in_background();
     }
@@ -103,12 +110,17 @@ impl ChatWidget {
     pub(crate) fn refresh_provider_credentials_status(
         &mut self,
         claude_status: ClaudeCodePlanStatus,
+        pfterminal_plan_status: PfTerminalPlanStatus,
         api_key_statuses: Vec<(String, ProviderApiKeyStatus)>,
     ) {
         let selected_index = self
             .bottom_pane
             .selected_index_for_active_view(PROVIDER_CREDENTIALS_VIEW_ID);
-        let mut params = self.provider_credentials_params(&claude_status, &api_key_statuses);
+        let mut params = self.provider_credentials_params(
+            &claude_status,
+            &pfterminal_plan_status,
+            &api_key_statuses,
+        );
         params.initial_selected_idx = selected_index;
         self.bottom_pane
             .replace_selection_view_if_present(PROVIDER_CREDENTIALS_VIEW_ID, params);
@@ -116,6 +128,9 @@ impl ChatWidget {
 
     fn refresh_provider_credentials_status_in_background(&self) {
         let codex_home = self.config.codex_home.clone();
+        let plan_home = codex_home.clone();
+        let auth_store_mode = self.config.cli_auth_credentials_store_mode;
+        let keyring_backend_kind = self.config.auth_keyring_backend_kind();
         let app_event_tx = self.app_event_tx.clone();
         tokio::spawn(async move {
             let claude_status = crate::chatwidget::claude_code_login::current_status_with_timeout(
@@ -124,16 +139,25 @@ impl ChatWidget {
             let api_key_statuses = tokio::task::spawn_blocking(move || {
                 provider_api_key_statuses(codex_home.as_path())
             });
-            let (claude_status, api_key_statuses) = tokio::join!(
+            let pfterminal_plan_status = super::pfterminal_plan_status::load(
+                plan_home.to_path_buf(),
+                auth_store_mode,
+                keyring_backend_kind,
+            );
+            let (claude_status, pfterminal_plan_status, api_key_statuses) = tokio::join!(
                 claude_status,
+                tokio::time::timeout(PROVIDER_STATUS_TIMEOUT, pfterminal_plan_status),
                 tokio::time::timeout(PROVIDER_STATUS_TIMEOUT, api_key_statuses)
             );
+            let pfterminal_plan_status =
+                pfterminal_plan_status.unwrap_or(PfTerminalPlanStatus::Unavailable);
             let api_key_statuses = match api_key_statuses {
                 Ok(Ok(statuses)) => statuses,
                 Ok(Err(_)) | Err(_) => provider_api_key_unavailable_statuses(),
             };
             app_event_tx.send(AppEvent::ProviderCredentialStatusesReady {
                 claude_status,
+                pfterminal_plan_status,
                 api_key_statuses,
             });
         });
@@ -142,6 +166,7 @@ impl ChatWidget {
     fn provider_credentials_params(
         &self,
         claude_status: &ClaudeCodePlanStatus,
+        pfterminal_plan_status: &PfTerminalPlanStatus,
         api_key_statuses: &[(String, ProviderApiKeyStatus)],
     ) -> SelectionViewParams {
         let mut header = ColumnRenderable::new();
@@ -158,6 +183,7 @@ impl ChatWidget {
             items: provider_credential_items(
                 &self.codex_account_status_description(),
                 &claude_status_description(claude_status),
+                &super::pfterminal_plan_status::description(pfterminal_plan_status),
                 |env_key| provider_api_key_status_description(env_key, api_key_statuses),
             ),
             header: Box::new(header),
@@ -186,6 +212,7 @@ impl ChatWidget {
         let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
             provider_vault_label(&env_key),
             format!("Add {display_name}"),
+            "API key — masked".to_string(),
             format!("{env_key} (masked - not shown, not stored in chat)"),
             Box::new(move |_label: String, secret: String| {
                 tx.send(AppEvent::SaveProviderApiKey {
@@ -262,12 +289,19 @@ impl ChatWidget {
 fn provider_credential_items(
     codex_account_status: &str,
     claude_status: &str,
+    pfterminal_plan_status: &str,
     api_key_status: impl Fn(&str) -> String,
 ) -> Vec<SelectionItem> {
     PROVIDER_CREDENTIAL_OPTIONS
         .iter()
         .map(|option| {
-            provider_credential_item(option, codex_account_status, claude_status, &api_key_status)
+            provider_credential_item(
+                option,
+                codex_account_status,
+                claude_status,
+                pfterminal_plan_status,
+                &api_key_status,
+            )
         })
         .collect()
 }
@@ -308,9 +342,9 @@ fn provider_api_key_unavailable_statuses() -> Vec<(String, ProviderApiKeyStatus)
             ProviderCredentialOption::ProviderApiKey { env_key, .. } => {
                 Some((env_key.to_string(), ProviderApiKeyStatus::Unavailable))
             }
-            ProviderCredentialOption::CodexAccount | ProviderCredentialOption::ClaudeCodePlan => {
-                None
-            }
+            ProviderCredentialOption::CodexAccount
+            | ProviderCredentialOption::ClaudeCodePlan
+            | ProviderCredentialOption::PfTerminalPlan => None,
         })
         .collect()
 }
@@ -337,6 +371,7 @@ fn provider_credential_item(
     option: &ProviderCredentialOption,
     codex_account_status: &str,
     claude_status: &str,
+    pfterminal_plan_status: &str,
     api_key_status: &impl Fn(&str) -> String,
 ) -> SelectionItem {
     match option {
@@ -355,6 +390,13 @@ fn provider_credential_item(
             actions: vec![Box::new(|tx| {
                 tx.send(AppEvent::OpenClaudeCodePlanLogin);
             })],
+            dismiss_on_select: true,
+            ..Default::default()
+        },
+        ProviderCredentialOption::PfTerminalPlan => SelectionItem {
+            name: "Provider: PfTerminal Plan".to_string(),
+            description: Some(pfterminal_plan_status.to_string()),
+            actions: vec![Box::new(|tx| tx.send(AppEvent::OpenWallet))],
             dismiss_on_select: true,
             ..Default::default()
         },
@@ -574,6 +616,7 @@ mod tests {
         provider_credential_items(
             "Not signed in",
             "Signed in · user@example.com · Max plan",
+            "Active · Starter plan · 3speRmS…JRwV5r",
             |_| "Not configured".to_string(),
         )
     }
@@ -587,6 +630,7 @@ mod tests {
             vec![
                 "Provider: OpenAI Codex Account",
                 "Provider: Claude Code Plan",
+                "Provider: PfTerminal Plan",
                 "Provider: Anthropic API Key",
                 "Provider: Ambient API Key",
                 "Provider: Kimi Code API Key",
@@ -602,8 +646,12 @@ mod tests {
             rows[1].description.as_deref(),
             Some("Signed in · user@example.com · Max plan")
         );
-        assert_eq!(rows[2].description.as_deref(), Some("Not configured"));
+        assert_eq!(
+            rows[2].description.as_deref(),
+            Some("Active · Starter plan · 3speRmS…JRwV5r")
+        );
         assert_eq!(rows[3].description.as_deref(), Some("Not configured"));
+        assert_eq!(rows[4].description.as_deref(), Some("Not configured"));
     }
 
     #[test]
@@ -625,6 +673,9 @@ mod tests {
         ));
 
         (rows[2].actions[0])(&sender);
+        assert!(matches!(rx.try_recv(), Ok(AppEvent::OpenWallet)));
+
+        (rows[3].actions[0])(&sender);
         assert!(matches!(
             rx.try_recv(),
             Ok(AppEvent::OpenProviderApiKeyAdd { provider_id, provider_name, env_key })
@@ -633,7 +684,7 @@ mod tests {
                     && env_key == ANTHROPIC_API_KEY_ENV_VAR
         ));
 
-        (rows[3].actions[0])(&sender);
+        (rows[4].actions[0])(&sender);
         assert!(matches!(
             rx.try_recv(),
             Ok(AppEvent::OpenProviderApiKeyAdd { provider_id, provider_name, env_key })
@@ -642,7 +693,7 @@ mod tests {
                     && env_key == AMBIENT_API_KEY_ENV_VAR
         ));
 
-        (rows[4].actions[0])(&sender);
+        (rows[5].actions[0])(&sender);
         assert!(matches!(
             rx.try_recv(),
             Ok(AppEvent::OpenProviderApiKeyAdd { provider_id, provider_name, env_key })
@@ -668,6 +719,19 @@ mod tests {
         assert_eq!(
             claude_status_description(&ClaudeCodePlanStatus::Unavailable),
             "Claude Code not installed"
+        );
+        assert_eq!(
+            super::pfterminal_plan_status::description(&PfTerminalPlanStatus::Active {
+                plan_id: "starter".to_string(),
+                wallet_address: "3speRmSn2J3fhpxpY2B8eQQB8h9i569TajGifjJRwV5r".to_string(),
+            }),
+            "Active · Starter plan · 3speRmS…JRwV5r"
+        );
+        assert_eq!(
+            super::pfterminal_plan_status::description(&PfTerminalPlanStatus::WalletOnly {
+                wallet_address: "3speRmSn2J3fhpxpY2B8eQQB8h9i569TajGifjJRwV5r".to_string(),
+            }),
+            "Wallet connected · no plan credential · 3speRmS…JRwV5r"
         );
     }
 

@@ -66,6 +66,7 @@ use codex_exec_server::LOCAL_FS;
 use codex_features::Feature;
 use codex_features::FeaturesToml;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
+use codex_model_provider_info::AMBIENT_GLM_5_2_CONTEXT_WINDOW;
 use codex_model_provider_info::AMBIENT_KIMI_K2_7_CODE_MODEL;
 use codex_model_provider_info::AMBIENT_LEGACY_GLM_5_2_FP8_MODEL;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
@@ -87,6 +88,7 @@ use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
+use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
@@ -886,7 +888,67 @@ model = "z-ai/glm-5.2"
     assert_eq!(config.model_provider_id, OPENROUTER_PROVIDER_ID);
     assert_eq!(config.model.as_deref(), Some(OPENROUTER_DEFAULT_MODEL));
     assert_eq!(config.model_provider.wire_api, WireApi::Chat);
+    assert_eq!(config.model_context_window, None);
+    assert_eq!(config.to_models_manager_config().model_context_window, None);
     assert_eq!(config.forced_login_method, Some(ForcedLoginMethod::Api));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn ambient_routes_apply_their_glm_context_ceiling() -> std::io::Result<()> {
+    for provider in [AMBIENT_PROVIDER_ID, PFTERMINAL_PLAN_PROVIDER_ID] {
+        let cfg = toml::from_str::<ConfigToml>(&format!(
+            r#"
+model_provider = "{provider}"
+model = "z-ai/glm-5.2"
+"#
+        ))
+        .expect("config should deserialize");
+
+        let config = Config::load_from_base_config_with_overrides(
+            cfg,
+            ConfigOverrides::default(),
+            tempdir()?.abs(),
+        )
+        .await?;
+
+        assert_eq!(config.model_provider_id, provider);
+        assert_eq!(config.model_context_window, None);
+        assert_eq!(
+            config
+                .to_models_manager_config_for_model(Some(AMBIENT_DEFAULT_MODEL))
+                .model_context_window,
+            Some(AMBIENT_GLM_5_2_CONTEXT_WINDOW)
+        );
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn explicit_context_override_wins_over_ambient_route_default() -> std::io::Result<()> {
+    let cfg = toml::from_str::<ConfigToml>(
+        r#"
+model_provider = "pfterminal-plan"
+model = "z-ai/glm-5.2"
+model_context_window = 90000
+"#,
+    )
+    .expect("config should deserialize");
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.model_context_window, Some(90_000));
+    assert_eq!(
+        config.to_models_manager_config().model_context_window,
+        Some(90_000)
+    );
 
     Ok(())
 }

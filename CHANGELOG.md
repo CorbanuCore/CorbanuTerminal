@@ -1,34 +1,38 @@
-# PFTerminal 0.1.15
+# PFTerminal 0.1.16
 
 ## Added
 
-- Added a first-party Kimi Code K3 provider for Kimi Code plans, including credential setup,
-  onboarding, model selection, vault status, and doctor diagnostics.
-- Added Kimi-specific action-turn completion handling so the model can continue after tool use
-  without silently ending an unfinished turn.
+- Added a locally encrypted Solana wallet with create, restore, recovery backup, SOL and canonical
+  USDC balances, one-action or timed unlocks, explicit locking, and device removal.
+- Added crypto-native PfTerminal Plan purchase, recovery, upgrade, disconnect, receipt, allowance,
+  reset, and usage flows directly in `/wallet`, with plan status exposed through `/providers`.
+- Added a durable PfTerminal Plan gateway with verified USDC settlement, wallet ownership proofs,
+  scoped API keys, weekly and monthly token limits, measured inference accounting, PostgreSQL
+  persistence, and operator revenue classification.
+- Added the bundled `pfterminal-help` skill for concise product guidance across `/wallet`, `/vault`,
+  `/providers`, `/gpu`, `/spawn`, `/orchestrate`, panes, and troubleshooting.
 
 ## Fixed
 
-- Centralized hierarchy role-graph validation across native tool, app-server v1/v2, and internal
-  spawn paths, closing routes that could create invalid supervisors or bypass worker limits.
-- Stale Nazgul root bindings now fail closed, surface a visible recovery message, and persist the
-  corrected binding instead of silently rerouting work.
-- Dispatch correction prompts are now confined to orchestration threads and bounded by consecutive
-  failures, preventing unrelated panes from receiving hierarchy protocol instructions.
-- Restored saved native crews without corrupting root-role metadata, and stopped unpinned workers
-  from silently inheriting a supervisor's reasoning effort.
-- Improved chat-stream finish-reason handling and removed hard-coded workflow/persona material from
-  the default role prompts.
+- Preserved wallet and plan state across creation, restoration, unlock retries, cancellation,
+  credential replacement, process restarts, and ambiguous payment recovery.
+- Prevented duplicate payment confirmations, stale wallet summaries, overlapping wallet surfaces,
+  lost unlock continuations, and misleading recovery or upgrade actions.
+- Settled measured inference usage after long streams and transport closure while recovering orphaned
+  reservations conservatively after gateway restarts.
+- Added explicit native Windows installation guidance so PowerShell users no longer receive the
+  Unix-only `curl -fsSL ... | sh` bootstrap.
 
 ## Qualification status
 
-- Provider/model, Kimi completion, hierarchy role, v1/v2 spawn validation, stale-binding,
-  correction-bound, and native-crew restoration tests passed locally.
-- Pull-request packaging, dependency, spelling, and blob-policy checks passed for both merged PRs.
-- The real-TUI matrix did not complete: its runner lacked `rg` after the product binary built
-  successfully. This release does not claim a completed real-TUI matrix or a fully green workspace
-  suite.
+- Wallet, wallet-daemon, TUI wallet/provider, bundled-skill, and gateway suites are release gates for
+  this version.
+- Seven fresh wallet/plan development sessions exercised create, restore, purchase, recovery,
+  upgrade, disconnect, long-turn inference, and failure recovery. The final deployed-gateway
+  inference completed successfully and its measured usage reconciled in the accounting ledger.
+- The complete multi-platform package matrix is built and smoke-tested by the release workflow; no
+  platform asset is considered published unless that workflow completes successfully.
 
-Previous release: 0.1.14.
+Previous release: 0.1.15.
 
 The changelog can be found on the [releases page](https://github.com/agtico/PfTerminal/releases).

@@ -20,11 +20,101 @@ use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::KIMI_CODE_K3_MODEL;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
+use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 use codex_protocol::openai_models::ReasoningEffort;
 use pretty_assertions::assert_eq;
+
+#[tokio::test]
+async fn wallet_disconnect_wraps_copy_and_dismisses_confirmation_before_replacement() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.config.model_provider_id = PFTERMINAL_PLAN_PROVIDER_ID.to_string();
+
+    chat.confirm_wallet_plan_disconnect();
+    assert_eq!(
+        chat.bottom_pane.active_view_id(),
+        Some(crate::chatwidget::wallet_menu::WALLET_DISCONNECT_PLAN_VIEW_ID)
+    );
+    for width in [67, 94] {
+        let confirmation = render_bottom_popup(&chat, width);
+        let normalized = confirmation
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            normalized.contains("remain unchanged."),
+            "expected complete disconnect warning at width {width}, got:\n{confirmation}"
+        );
+    }
+
+    chat.on_wallet_plan_disconnected(Ok(true));
+
+    assert_ne!(
+        chat.bottom_pane.active_view_id(),
+        Some(crate::chatwidget::wallet_menu::WALLET_DISCONNECT_PLAN_VIEW_ID)
+    );
+    let replacement = render_bottom_popup(&chat, /*width*/ 94);
+    assert!(!replacement.contains("Remove only the metered-inference credential"));
+    assert!(
+        chat.bottom_pane
+            .dismiss_view_by_id(crate::chatwidget::wallet_menu::WALLET_MENU_VIEW_ID)
+    );
+}
+
+#[tokio::test]
+async fn wallet_removal_wraps_copy_and_dismisses_confirmation_before_replacement() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.config.model_provider_id = PFTERMINAL_PLAN_PROVIDER_ID.to_string();
+
+    chat.confirm_wallet_removal("11111111111111111111111111111111".to_string());
+    assert_eq!(
+        chat.bottom_pane.active_view_id(),
+        Some(crate::chatwidget::wallet_menu::WALLET_REMOVE_VIEW_ID)
+    );
+    for width in [67, 94] {
+        let confirmation = render_bottom_popup(&chat, width);
+        let normalized = confirmation
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            normalized.contains("does not cancel or refund the paid period."),
+            "expected complete removal warning at width {width}, got:\n{confirmation}"
+        );
+    }
+
+    chat.on_wallet_removed(Ok(()));
+
+    assert_ne!(
+        chat.bottom_pane.active_view_id(),
+        Some(crate::chatwidget::wallet_menu::WALLET_REMOVE_VIEW_ID)
+    );
+    let replacement = render_bottom_popup(&chat, /*width*/ 94);
+    assert!(!replacement.contains("I have saved the recovery material"));
+    assert!(
+        chat.bottom_pane
+            .dismiss_view_by_id(crate::chatwidget::wallet_menu::WALLET_MENU_VIEW_ID)
+    );
+}
+
+#[tokio::test]
+async fn reopening_wallet_replaces_the_existing_surface_instead_of_stacking() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.open_wallet_menu();
+    chat.open_wallet_menu();
+    assert_eq!(
+        chat.bottom_pane.active_view_id(),
+        Some(crate::chatwidget::wallet_menu::WALLET_MENU_VIEW_ID)
+    );
+
+    chat.bottom_pane
+        .handle_key_event(KeyEvent::from(KeyCode::Esc));
+
+    assert_eq!(chat.bottom_pane.active_view_id(), None);
+}
 
 #[tokio::test]
 async fn experimental_mode_plan_is_ignored_on_startup() {

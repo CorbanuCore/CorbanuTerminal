@@ -80,9 +80,20 @@ const AMBIENT_PROVIDER_NAME: &str = "Ambient";
 pub const AMBIENT_PROVIDER_ID: &str = "ambient";
 pub const AMBIENT_BASE_URL: &str = "https://api.ambient.xyz/v1";
 pub const AMBIENT_DEFAULT_MODEL: &str = "z-ai/glm-5.2";
+/// Input context accepted by Ambient's GLM 5.2 chat route.
+///
+/// The model can have a larger native context on other providers, so this
+/// limit belongs to the provider/model route rather than the shared model
+/// catalog.
+pub const AMBIENT_GLM_5_2_CONTEXT_WINDOW: i64 = 101_376;
 pub const AMBIENT_LEGACY_GLM_5_2_FP8_MODEL: &str = "zai-org/GLM-5.2-FP8";
 pub const AMBIENT_KIMI_K2_7_CODE_MODEL: &str = "moonshotai/kimi-k2.7-code";
 pub const AMBIENT_API_KEY_ENV_VAR: &str = "AMBIENT_API_KEY";
+const PFTERMINAL_PLAN_PROVIDER_NAME: &str = "PfTerminal Plan";
+pub const PFTERMINAL_PLAN_PROVIDER_ID: &str = "pfterminal-plan";
+pub const PFTERMINAL_PLAN_GATEWAY_ORIGIN: &str = "https://pfterminal-plan-gateway.fly.dev";
+pub const PFTERMINAL_PLAN_DEFAULT_BASE_URL: &str = "https://pfterminal-plan-gateway.fly.dev/v1";
+pub const PFTERMINAL_PLAN_API_KEY_ENV_VAR: &str = "PFTERMINAL_PLAN_API_KEY";
 const KIMI_CODE_PROVIDER_NAME: &str = "Kimi Code";
 pub const KIMI_CODE_PROVIDER_ID: &str = "kimi-code";
 pub const KIMI_CODE_BASE_URL: &str = "https://api.kimi.com/coding/v1";
@@ -128,11 +139,12 @@ pub const VERCEL_API_KEY_ENV_VAR: &str = "AI_GATEWAY_API_KEY";
 
 /// Built-in catalog providers eligible for impossible-pair correction. User-defined providers
 /// (e.g. a private Azure deployment) are never second-guessed.
-const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 16] = [
+const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 17] = [
     OPENAI_PROVIDER_ID,
     ANTHROPIC_PROVIDER_ID,
     CLAUDE_PLAN_PROVIDER_ID,
     AMBIENT_PROVIDER_ID,
+    PFTERMINAL_PLAN_PROVIDER_ID,
     KIMI_CODE_PROVIDER_ID,
     ZAI_PROVIDER_ID,
     ZAI_ANTHROPIC_PROVIDER_ID,
@@ -205,7 +217,7 @@ pub fn resolve_model_for_provider(
     model_provider_id: &str,
 ) -> Option<String> {
     match model_provider_id {
-        AMBIENT_PROVIDER_ID => match model {
+        AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID => match model {
             Some(model) if model.trim() == AMBIENT_LEGACY_GLM_5_2_FP8_MODEL => {
                 Some(AMBIENT_DEFAULT_MODEL.to_string())
             }
@@ -281,6 +293,20 @@ pub fn resolve_model_for_provider(
             _ => Some(VERCEL_GLM_5_2_FAST_MODEL.to_string()),
         },
         _ => model,
+    }
+}
+
+/// Return a provider-route context ceiling when it is narrower than the
+/// model's shared catalog capability.
+pub fn default_model_context_window_for_provider(
+    model_provider_id: &str,
+    model: &str,
+) -> Option<i64> {
+    match (model_provider_id, model.trim()) {
+        (AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID, AMBIENT_DEFAULT_MODEL) => {
+            Some(AMBIENT_GLM_5_2_CONTEXT_WINDOW)
+        }
+        _ => None,
     }
 }
 
@@ -789,6 +815,35 @@ impl ModelProviderInfo {
         }
     }
 
+    pub fn create_pfterminal_plan_provider() -> ModelProviderInfo {
+        ModelProviderInfo {
+            name: PFTERMINAL_PLAN_PROVIDER_NAME.into(),
+            base_url: Some(
+                std::env::var("PFTERMINAL_PLAN_BASE_URL")
+                    .unwrap_or_else(|_| PFTERMINAL_PLAN_DEFAULT_BASE_URL.to_string()),
+            ),
+            env_key: Some(PFTERMINAL_PLAN_API_KEY_ENV_VAR.into()),
+            env_key_instructions: Some(provider_api_key_vault_instructions()),
+            experimental_bearer_token: None,
+            auth: None,
+            aws: None,
+            wire_api: WireApi::Chat,
+            query_params: None,
+            http_headers: None,
+            env_http_headers: None,
+            chat_completions_provider: None,
+            request_max_retries: None,
+            stream_max_retries: None,
+            stream_idle_timeout_ms: None,
+            stream_actionable_timeout_ms: None,
+            stream_long_failure_retry_threshold_ms: None,
+            stream_long_failure_max_retries: None,
+            websocket_connect_timeout_ms: None,
+            requires_openai_auth: false,
+            supports_websockets: false,
+        }
+    }
+
     pub fn create_kimi_code_provider() -> ModelProviderInfo {
         ModelProviderInfo {
             name: KIMI_CODE_PROVIDER_NAME.into(),
@@ -1131,8 +1186,19 @@ impl ModelProviderInfo {
         self.name == AMBIENT_PROVIDER_NAME
     }
 
+    pub fn is_pfterminal_plan(&self) -> bool {
+        self.name == PFTERMINAL_PLAN_PROVIDER_NAME
+    }
+
     pub fn is_kimi_code(&self) -> bool {
         self.name == KIMI_CODE_PROVIDER_NAME
+    }
+
+    /// Providers whose coding models have demonstrated text-only premature
+    /// stops after tool work. These routes use the structured completion
+    /// classifier before accepting a turn as finished.
+    pub fn requires_completion_guard(&self) -> bool {
+        self.is_kimi_code() || self.is_ambient() || self.is_pfterminal_plan()
     }
 
     pub fn is_zai(&self) -> bool {
@@ -1187,6 +1253,7 @@ pub fn built_in_model_providers(
     let anthropic_provider = P::create_anthropic_provider();
     let claude_plan_provider = P::create_claude_plan_provider();
     let ambient_provider = P::create_ambient_provider();
+    let pfterminal_plan_provider = P::create_pfterminal_plan_provider();
     let kimi_code_provider = P::create_kimi_code_provider();
     let zai_provider = P::create_zai_provider();
     let zai_anthropic_provider = P::create_zai_anthropic_provider();
@@ -1207,6 +1274,7 @@ pub fn built_in_model_providers(
         (ANTHROPIC_PROVIDER_ID, anthropic_provider),
         (CLAUDE_PLAN_PROVIDER_ID, claude_plan_provider),
         (AMBIENT_PROVIDER_ID, ambient_provider),
+        (PFTERMINAL_PLAN_PROVIDER_ID, pfterminal_plan_provider),
         (KIMI_CODE_PROVIDER_ID, kimi_code_provider),
         (ZAI_PROVIDER_ID, zai_provider),
         (ZAI_ANTHROPIC_PROVIDER_ID, zai_anthropic_provider),
