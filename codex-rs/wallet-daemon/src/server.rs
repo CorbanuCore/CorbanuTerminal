@@ -35,12 +35,21 @@ use crate::client::socket_path;
 use crate::protocol::DaemonStatus;
 use crate::protocol::Request;
 use crate::protocol::Response;
+use crate::protocol::UnlockPolicy;
+
+const ONE_ACTION_STAGING_SECONDS: u64 = 5 * 60;
+
+#[derive(Clone, Copy)]
+struct CapabilityGrant {
+    expiry: Instant,
+    one_action: bool,
+}
 
 struct State {
     wallet: Wallet,
     unlocked: Option<UnlockedWallet>,
     expires_at: Option<Instant>,
-    capabilities: HashMap<String, Instant>,
+    capabilities: HashMap<String, CapabilityGrant>,
     failed_unlocks: u32,
     generation: u64,
     active_operation: Option<CancellationToken>,
@@ -58,6 +67,9 @@ pub async fn run_wallet_daemon(codex_home: PathBuf) -> Result<()> {
     )
     .await?;
     prepare_private_socket_directory(run_dir(&codex_home)).await?;
+    // The non-blocking ownership lock is the proof that no live daemon owns this home. Keep
+    // the guard for the listener's entire lifetime and only then reclaim a stale socket left by
+    // a crashed owner. A second daemon fails here without touching the live socket.
     let _ownership = acquire_ownership(&codex_home)?;
     let socket = socket_path(&codex_home);
     if tokio::fs::try_exists(&socket).await? {
@@ -114,7 +126,15 @@ async fn handle(state: Arc<Mutex<State>>, request: Request) -> Response {
         Request::Unlock {
             mut passcode,
             duration_seconds,
-        } => handle_unlock(state, &mut passcode, duration_seconds).await,
+            one_action,
+        } => {
+            let policy = if one_action {
+                UnlockPolicy::OneAction
+            } else {
+                UnlockPolicy::Timed { duration_seconds }
+            };
+            handle_unlock(state, &mut passcode, policy).await
+        }
         Request::ProvisionPlan {
             mut capability,
             intent,
@@ -157,10 +177,11 @@ async fn handle_immediate(state: Arc<Mutex<State>>, mut request: Request) -> Res
             gateway_origin,
             challenge,
         } => {
-            let valid = state
-                .capabilities
-                .get(capability)
-                .is_some_and(|expiry| *expiry > Instant::now());
+            let grant = state.capabilities.get(capability).copied();
+            let valid = grant.is_some_and(|grant| grant.expiry > Instant::now());
+            if grant.is_some_and(|grant| grant.one_action) {
+                state.capabilities.remove(capability);
+            }
             capability.zeroize();
             if !valid {
                 return Response::Error {
@@ -168,21 +189,26 @@ async fn handle_immediate(state: Arc<Mutex<State>>, mut request: Request) -> Res
                     message: "signing capability is invalid or expired".into(),
                 };
             }
-            if codex_wallet::validate_gateway_origin(gateway_origin).is_err() {
-                return Response::Error {
+            let response = if codex_wallet::validate_gateway_origin(gateway_origin).is_err() {
+                Response::Error {
                     code: "origin_refused".into(),
                     message: "gateway origin is not permitted".into(),
-                };
+                }
+            } else {
+                match state.unlocked.as_ref() {
+                    Some(wallet) => Response::Signature {
+                        signature: wallet.sign_ownership_challenge(gateway_origin, challenge),
+                    },
+                    None => Response::Error {
+                        code: "locked".into(),
+                        message: "wallet is locked".into(),
+                    },
+                }
+            };
+            if grant.is_some_and(|grant| grant.one_action) {
+                lock(&mut state);
             }
-            match state.unlocked.as_ref() {
-                Some(wallet) => Response::Signature {
-                    signature: wallet.sign_ownership_challenge(gateway_origin, challenge),
-                },
-                None => Response::Error {
-                    code: "locked".into(),
-                    message: "wallet is locked".into(),
-                },
-            }
+            response
         }
         Request::ProvisionPlan { .. } | Request::IssueGatewayKey { .. } => {
             unreachable!("network operations are handled without an await-held lock")
@@ -193,7 +219,7 @@ async fn handle_immediate(state: Arc<Mutex<State>>, mut request: Request) -> Res
 async fn handle_unlock(
     state: Arc<Mutex<State>>,
     passcode: &mut String,
-    duration_seconds: u64,
+    policy: UnlockPolicy,
 ) -> Response {
     let failed_unlocks = {
         let mut state = state.lock().await;
@@ -217,7 +243,12 @@ async fn handle_unlock(
         passcode.zeroize();
         return operation_busy();
     }
-    let duration = duration_seconds.clamp(60, 8 * 60 * 60);
+    let (duration, one_action) = match policy {
+        UnlockPolicy::OneAction => (ONE_ACTION_STAGING_SECONDS, true),
+        UnlockPolicy::Timed { duration_seconds } => {
+            (duration_seconds.clamp(60, 8 * 60 * 60), false)
+        }
+    };
     match state.wallet.unlock(passcode) {
         Ok(wallet) => {
             passcode.zeroize();
@@ -235,7 +266,9 @@ async fn handle_unlock(
             state.generation = state.generation.wrapping_add(1);
             let expiry = Instant::now() + Duration::from_secs(duration);
             state.expires_at = Some(expiry);
-            state.capabilities.insert(capability.clone(), expiry);
+            state
+                .capabilities
+                .insert(capability.clone(), CapabilityGrant { expiry, one_action });
             Response::Unlocked {
                 capability,
                 expires_in_seconds: duration,
@@ -256,6 +289,7 @@ struct OperationLease {
     wallet: UnlockedWallet,
     generation: u64,
     cancel: CancellationToken,
+    relock_after_operation: bool,
 }
 
 async fn checkout_wallet(
@@ -269,10 +303,11 @@ async fn checkout_wallet(
         capability.zeroize();
         return Err(operation_busy());
     }
-    let valid = state
-        .capabilities
-        .get(capability)
-        .is_some_and(|expiry| *expiry > Instant::now());
+    let grant = state.capabilities.get(capability).copied();
+    let valid = grant.is_some_and(|grant| grant.expiry > Instant::now());
+    if grant.is_some_and(|grant| grant.one_action) {
+        state.capabilities.remove(capability);
+    }
     capability.zeroize();
     if !valid {
         return Err(Response::Error {
@@ -292,11 +327,17 @@ async fn checkout_wallet(
         wallet,
         generation: state.generation,
         cancel,
+        relock_after_operation: grant.is_some_and(|grant| grant.one_action),
     })
 }
 
 async fn finish_operation(state: &Arc<Mutex<State>>, lease: OperationLease) {
     let mut state = state.lock().await;
+    if lease.relock_after_operation {
+        state.active_operation = None;
+        lock(&mut state);
+        return;
+    }
     let still_current = state.generation == lease.generation
         && !lease.cancel.is_cancelled()
         && state
@@ -465,7 +506,12 @@ mod tests {
         let client = WalletDaemonClient::new(home.path().to_path_buf());
         assert!(client.status().await.expect("status").locked);
         let (capability, _) = client
-            .unlock("a sufficiently long test passphrase".to_string(), 60)
+            .unlock(
+                "a sufficiently long test passphrase".to_string(),
+                UnlockPolicy::Timed {
+                    duration_seconds: 60,
+                },
+            )
             .await
             .expect("unlock");
         assert!(!client.status().await.expect("status").locked);
@@ -534,7 +580,12 @@ mod tests {
             tokio::time::sleep(Duration::from_secs(30)).await;
         });
         let (capability, _) = client
-            .unlock("a sufficiently long test passphrase".to_string(), 60)
+            .unlock(
+                "a sufficiently long test passphrase".to_string(),
+                UnlockPolicy::Timed {
+                    duration_seconds: 60,
+                },
+            )
             .await
             .expect("unlock for cancellation");
         let issue_client = client.clone();
@@ -565,6 +616,90 @@ mod tests {
                 .locked
         );
         stalled_gateway.abort();
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn one_action_capability_locks_after_the_first_signing_attempt() {
+        let home = tempfile::tempdir().expect("tempdir");
+        Wallet::new(home.path().to_path_buf())
+            .create("a sufficiently long test passphrase", Network::Devnet)
+            .expect("create wallet");
+        let daemon_home = home.path().to_path_buf();
+        let server = tokio::spawn(async move { run_wallet_daemon(daemon_home).await });
+        for _ in 0..40 {
+            if tokio::fs::try_exists(socket_path(home.path()))
+                .await
+                .unwrap_or(false)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        let client = WalletDaemonClient::new(home.path().to_path_buf());
+
+        let (capability, expires_in_seconds) = client
+            .unlock(
+                "a sufficiently long test passphrase".to_string(),
+                UnlockPolicy::OneAction,
+            )
+            .await
+            .expect("one-action unlock");
+        assert_eq!(expires_in_seconds, ONE_ACTION_STAGING_SECONDS);
+        assert!(
+            client
+                .sign_ownership(
+                    capability.clone(),
+                    "http://gateway.example".to_string(),
+                    "challenge".to_string(),
+                )
+                .await
+                .is_err()
+        );
+        assert!(client.status().await.expect("status").locked);
+        assert!(
+            client
+                .sign_ownership(
+                    capability,
+                    "https://gateway.example".to_string(),
+                    "challenge".to_string(),
+                )
+                .await
+                .is_err()
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn second_daemon_cannot_remove_the_live_daemon_socket() {
+        let home = tempfile::tempdir().expect("tempdir");
+        let daemon_home = home.path().to_path_buf();
+        let server = tokio::spawn(async move { run_wallet_daemon(daemon_home).await });
+        for _ in 0..40 {
+            if tokio::fs::try_exists(socket_path(home.path()))
+                .await
+                .unwrap_or(false)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+
+        let error = run_wallet_daemon(home.path().to_path_buf())
+            .await
+            .expect_err("ownership lock must reject a second daemon");
+        assert!(error.to_string().contains("another wallet daemon owns"));
+        assert!(
+            tokio::fs::try_exists(socket_path(home.path()))
+                .await
+                .expect("socket probe")
+        );
+        assert!(
+            WalletDaemonClient::new(home.path().to_path_buf())
+                .status()
+                .await
+                .is_ok()
+        );
         server.abort();
     }
 

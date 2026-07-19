@@ -14,6 +14,7 @@ use tokio::io::BufReader;
 use crate::protocol::DaemonStatus;
 use crate::protocol::Request;
 use crate::protocol::Response;
+use crate::protocol::UnlockPolicy;
 use crate::protocol::WalletDaemonError;
 
 const PING_TIMEOUT: Duration = Duration::from_millis(100);
@@ -76,14 +77,19 @@ impl WalletDaemonClient {
     pub async fn unlock(
         &self,
         passcode: String,
-        duration_seconds: u64,
+        policy: UnlockPolicy,
     ) -> Result<(String, u64), WalletDaemonError> {
         self.ensure_running().await?;
+        let (duration_seconds, one_action) = match policy {
+            UnlockPolicy::OneAction => (5 * 60, true),
+            UnlockPolicy::Timed { duration_seconds } => (duration_seconds, false),
+        };
         match self
             .call_with_timeout(
                 Request::Unlock {
                     passcode,
                     duration_seconds,
+                    one_action,
                 },
                 LOCAL_OPERATION_TIMEOUT,
             )

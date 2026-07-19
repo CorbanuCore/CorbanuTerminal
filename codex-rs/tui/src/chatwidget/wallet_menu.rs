@@ -3,7 +3,6 @@ use crate::app_event::WalletCreatedResult;
 use crate::app_event::WalletPlanProvisionedResult;
 use crate::app_event::WalletPlanPurchaseSummary;
 use crate::app_event::WalletSecret;
-use crate::app_event::WalletUnlockedResult;
 use crate::chatwidget::wallet_receipt::latest_plan_receipt;
 use crate::chatwidget::wallet_receipt::reconcile_plan_receipt;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
@@ -15,6 +14,7 @@ use codex_wallet::PlanPurchaseIntent;
 use codex_wallet::Wallet;
 use codex_wallet::WalletBalances;
 use codex_wallet_daemon::DaemonStatus;
+use codex_wallet_daemon::UnlockPolicy;
 use codex_wallet_daemon::WalletDaemonClient;
 use zeroize::Zeroize;
 use zeroize::Zeroizing;
@@ -417,52 +417,6 @@ impl ChatWidget {
             Err(error) => self.add_error_message(format!(
                 "Recovery backup failed: {error}. The wallet and its signing state were unchanged."
             )),
-        }
-    }
-
-    pub(crate) fn open_wallet_unlock(&mut self, duration_seconds: u64) {
-        let home = self.config.codex_home.as_path().to_path_buf();
-        let tx = self.app_event_tx.clone();
-        let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
-            "wallet-passcode".to_string(),
-            "Unlock wallet".to_string(),
-            "Wallet passcode — masked".to_string(),
-            "Passcode (masked)".to_string(),
-            Box::new(move |_label, mut passcode| {
-                tokio::spawn(async move {
-                    let result = WalletDaemonClient::new(home)
-                        .unlock(std::mem::take(&mut passcode), duration_seconds)
-                        .await
-                        .map(|(capability, expires_in_seconds)| WalletUnlockedResult {
-                            capability: WalletSecret::new(capability),
-                            expires_in_seconds,
-                        })
-                        .map_err(|error| error.to_string());
-                    passcode.zeroize();
-                    tx.send(AppEvent::WalletUnlockFinished { result });
-                });
-            }),
-        );
-        self.bottom_pane.show_view(Box::new(view));
-    }
-
-    pub(crate) fn on_wallet_unlock_finished(
-        &mut self,
-        result: Result<WalletUnlockedResult, String>,
-    ) {
-        match result {
-            Ok(unlocked) => {
-                self.wallet_capability = Some(Zeroizing::new(unlocked.capability.into_inner()));
-                self.add_info_message(
-                    format!(
-                        "Wallet unlocked for {} minute(s).",
-                        unlocked.expires_in_seconds / 60
-                    ),
-                    None,
-                );
-                self.open_wallet_menu();
-            }
-            Err(error) => self.add_error_message(format!("Wallet unlock failed: {error}")),
         }
     }
 
@@ -1063,22 +1017,43 @@ fn wallet_items(
         ));
     }
     if !can_sign && !overview.daemon.busy {
-        for (name, seconds) in [
-            ("Unlock for 5 minutes", 300),
-            ("Unlock for 15 minutes", 900),
-            ("Unlock for 1 hour", 3600),
+        for (name, policy) in [
+            ("Unlock for one signing action", UnlockPolicy::OneAction),
+            (
+                "Unlock for 5 minutes",
+                UnlockPolicy::Timed {
+                    duration_seconds: 300,
+                },
+            ),
+            (
+                "Unlock for 15 minutes",
+                UnlockPolicy::Timed {
+                    duration_seconds: 900,
+                },
+            ),
+            (
+                "Unlock for 1 hour",
+                UnlockPolicy::Timed {
+                    duration_seconds: 3_600,
+                },
+            ),
         ] {
             items.push(SelectionItem {
                 name: name.to_string(),
                 description: Some("Signing capability remains only in this TUI".to_string()),
                 actions: vec![Box::new(move |tx| {
-                    tx.send(AppEvent::OpenWalletUnlock {
-                        duration_seconds: seconds,
-                    })
+                    tx.send(AppEvent::OpenWalletUnlock { policy })
                 })],
                 ..Default::default()
             });
         }
+        items.push(item(
+            "Unlock for a custom duration",
+            "Choose 1 minute through 8 hours; access remains only in this TUI",
+            || AppEvent::OpenWalletCustomUnlock {
+                validation_error: None,
+            },
+        ));
     }
     if !overview.daemon.locked {
         items.push(item(
@@ -1117,7 +1092,9 @@ fn wallet_items(
             "Upgrade PfTerminal Plan",
             "Unlock for 5 minutes, then choose a higher tier",
             || AppEvent::OpenWalletUnlock {
-                duration_seconds: 300,
+                policy: UnlockPolicy::Timed {
+                    duration_seconds: 300,
+                },
             },
         ));
     }
@@ -1303,8 +1280,19 @@ mod tests {
     #[test]
     fn unlocked_daemon_without_this_tui_capability_requires_unlock_again() {
         let items = names(false, false);
+        assert!(
+            items
+                .iter()
+                .any(|name| name == "Unlock for one signing action")
+        );
         assert!(items.iter().any(|name| name == "Unlock for 15 minutes"));
+        assert!(
+            items
+                .iter()
+                .any(|name| name == "Unlock for a custom duration")
+        );
         assert!(!items.iter().any(|name| name == "Buy a PfTerminal plan"));
+        insta::assert_snapshot!("wallet_locked_action_names", items.join("\n"));
     }
 
     #[test]
@@ -1347,7 +1335,9 @@ mod tests {
         assert!(matches!(
             rx.try_recv(),
             Ok(AppEvent::OpenWalletUnlock {
-                duration_seconds: 300
+                policy: UnlockPolicy::Timed {
+                    duration_seconds: 300
+                }
             })
         ));
 

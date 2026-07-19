@@ -4,6 +4,13 @@ use codex_wallet::ProvisionedPlan;
 use serde::Deserialize;
 use serde::Serialize;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum UnlockPolicy {
+    OneAction,
+    Timed { duration_seconds: u64 },
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum Request {
@@ -12,6 +19,8 @@ pub(crate) enum Request {
     Unlock {
         passcode: String,
         duration_seconds: u64,
+        #[serde(default)]
+        one_action: bool,
     },
     Lock,
     RemoveWallet {
@@ -74,3 +83,7 @@ pub enum WalletDaemonError {
     #[error("wallet daemon returned an unexpected response")]
     Protocol,
 }
+
+#[cfg(test)]
+#[path = "protocol_tests.rs"]
+mod tests;

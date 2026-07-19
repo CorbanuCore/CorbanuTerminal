@@ -191,6 +191,7 @@ pub(crate) struct WalletCreatedResult {
 pub(crate) struct WalletUnlockedResult {
     pub(crate) capability: WalletSecret,
     pub(crate) expires_in_seconds: u64,
+    pub(crate) policy: codex_wallet_daemon::UnlockPolicy,
 }
 
 #[derive(Debug)]
@@ -1367,7 +1368,10 @@ pub(crate) enum AppEvent {
         result: Result<WalletCreatedResult, String>,
     },
     OpenWalletUnlock {
-        duration_seconds: u64,
+        policy: codex_wallet_daemon::UnlockPolicy,
+    },
+    OpenWalletCustomUnlock {
+        validation_error: Option<String>,
     },
     WalletLockRequested,
     ConfirmWalletPlanDisconnect,
