@@ -1908,6 +1908,12 @@ impl App {
             AppEvent::WalletPlanProvisioned { result } => {
                 self.chat_widget.on_wallet_plan_provisioned(result);
             }
+            AppEvent::WalletPlanReceiptReady { receipt } => {
+                self.chat_widget.on_wallet_plan_receipt_ready(receipt);
+            }
+            AppEvent::OpenWalletPlanReceipt { receipt } => {
+                self.chat_widget.open_wallet_plan_receipt(receipt);
+            }
             AppEvent::WalletRecoverPlanRequested => {
                 self.chat_widget.recover_wallet_plan_access();
             }

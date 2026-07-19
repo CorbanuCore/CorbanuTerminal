@@ -1,8 +1,11 @@
 use super::*;
 use crate::app_event::WalletCreatedResult;
 use crate::app_event::WalletPlanProvisionedResult;
+use crate::app_event::WalletPlanPurchaseSummary;
 use crate::app_event::WalletSecret;
 use crate::app_event::WalletUnlockedResult;
+use crate::chatwidget::wallet_receipt::latest_plan_receipt;
+use crate::chatwidget::wallet_receipt::reconcile_plan_receipt;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
@@ -65,6 +68,7 @@ pub(crate) struct WalletOverview {
     pub(crate) plan: Option<WalletPlanStatus>,
     pub(crate) plan_error: Option<String>,
     pub(crate) plan_credential_present: bool,
+    pub(crate) plan_prices_usdc: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -82,6 +86,7 @@ pub(crate) struct WalletPlanStatus {
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WalletQueuedPlanPeriod {
+    pub(crate) transaction: String,
     pub(crate) plan_id: String,
     pub(crate) starts_at: String,
     pub(crate) ends_at: String,
@@ -90,7 +95,9 @@ pub(crate) struct WalletQueuedPlanPeriod {
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WalletPlanPeriod {
+    pub(crate) transaction: String,
     pub(crate) plan_id: String,
+    pub(crate) starts_at: String,
     pub(crate) ends_at: String,
 }
 
@@ -127,48 +134,77 @@ impl ChatWidget {
                     .status()
                     .await
                     .map_err(|error| error.to_string())?;
-                let (balances, balance_error) = if let (Some(address), Some(network)) =
-                    (daemon.address.as_deref(), daemon.network.as_deref())
-                {
-                    let rpc = match network {
-                        "devnet" => "https://api.devnet.solana.com",
-                        _ => "https://api.mainnet-beta.solana.com",
-                    };
-                    match BalanceClient::new(rpc).balances(address).await {
-                        Ok(value) => (Some(value), None),
-                        Err(error) => (None, Some(error.to_string())),
+                let balance_request = async {
+                    if let (Some(address), Some(network)) =
+                        (daemon.address.as_deref(), daemon.network.as_deref())
+                    {
+                        let rpc = match network {
+                            "devnet" => "https://api.devnet.solana.com",
+                            _ => "https://api.mainnet-beta.solana.com",
+                        };
+                        match BalanceClient::new(rpc).balances(address).await {
+                            Ok(value) => (Some(value), None),
+                            Err(error) => (None, Some(error.to_string())),
+                        }
+                    } else {
+                        (None, None)
                     }
-                } else {
-                    (None, None)
                 };
-                let (plan, plan_error) = if let Some(key) = plan_key {
-                    let url = format!(
-                        "{}/v1/account",
-                        wallet_gateway_origin().trim_end_matches('/')
-                    );
+                let plan_request = async {
+                    if let Some(key) = plan_key {
+                        let url = format!(
+                            "{}/v1/account",
+                            wallet_gateway_origin().trim_end_matches('/')
+                        );
+                        match reqwest::Client::new()
+                            .get(url)
+                            .bearer_auth(key.as_str())
+                            .send()
+                            .await
+                        {
+                            Ok(response) if response.status().is_success() => {
+                                match response.json::<WalletPlanStatus>().await {
+                                    Ok(status) => (Some(status), None),
+                                    Err(error) => {
+                                        (None, Some(format!("plan status was malformed: {error}")))
+                                    }
+                                }
+                            }
+                            Ok(response) => (
+                                None,
+                                Some(format!("plan status returned HTTP {}", response.status())),
+                            ),
+                            Err(error) => (None, Some(format!("plan status unavailable: {error}"))),
+                        }
+                    } else {
+                        (None, None)
+                    }
+                };
+                let prices_request = async {
                     match reqwest::Client::new()
-                        .get(url)
-                        .bearer_auth(key.as_str())
+                        .get(format!(
+                            "{}/v1/plans",
+                            wallet_gateway_origin().trim_end_matches('/')
+                        ))
                         .send()
                         .await
                     {
-                        Ok(response) if response.status().is_success() => {
-                            match response.json::<WalletPlanStatus>().await {
-                                Ok(status) => (Some(status), None),
-                                Err(error) => {
-                                    (None, Some(format!("plan status was malformed: {error}")))
-                                }
-                            }
-                        }
-                        Ok(response) => (
-                            None,
-                            Some(format!("plan status returned HTTP {}", response.status())),
-                        ),
-                        Err(error) => (None, Some(format!("plan status unavailable: {error}"))),
+                        Ok(response) if response.status().is_success() => response
+                            .json::<WalletPlanCatalog>()
+                            .await
+                            .map(|catalog| {
+                                catalog
+                                    .plans
+                                    .into_iter()
+                                    .map(|plan| (plan.id, plan.price_usdc))
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                        _ => std::collections::BTreeMap::new(),
                     }
-                } else {
-                    (None, None)
                 };
+                let ((balances, balance_error), (plan, plan_error), plan_prices_usdc) =
+                    tokio::join!(balance_request, plan_request, prices_request);
                 Ok(WalletOverview {
                     daemon,
                     balances,
@@ -176,6 +212,7 @@ impl ChatWidget {
                     plan,
                     plan_error,
                     plan_credential_present,
+                    plan_prices_usdc,
                 })
             }
             .await;
@@ -598,6 +635,11 @@ impl ChatWidget {
         let home = self.config.codex_home.as_path().to_path_buf();
         let tx = self.app_event_tx.clone();
         tokio::spawn(async move {
+            let purchase = WalletPlanPurchaseSummary {
+                price_usdc: plan.price_usdc.clone(),
+                scheduled_start: plan.scheduled_start.clone(),
+                transaction: None,
+            };
             let intent = PlanPurchaseIntent {
                 gateway_origin: wallet_gateway_origin(),
                 plan_id: plan.id,
@@ -613,6 +655,10 @@ impl ChatWidget {
                 .map(|provisioned| WalletPlanProvisionedResult {
                     plan_id: provisioned.plan_id,
                     api_key: WalletSecret::new(provisioned.api_key),
+                    purchase: Some(WalletPlanPurchaseSummary {
+                        transaction: provisioned.transaction,
+                        ..purchase
+                    }),
                 })
                 .map_err(|error| error.to_string());
             tx.send(AppEvent::WalletPlanProvisioned { result });
@@ -633,34 +679,44 @@ impl ChatWidget {
                     self.config.cli_auth_credentials_store_mode,
                     self.config.auth_keyring_backend_kind(),
                 );
-                api_key.zeroize();
-                if let Err(error) = stored {
-                    self.add_error_message(format!(
-                        "Plan was paid, but storing its API key failed: {error}"
-                    ));
-                    return;
+                if let Some(purchase) = provisioned.purchase {
+                    let credential_error = stored.err().map(|error| error.to_string());
+                    self.add_info_message(
+                        "Payment settled. Verifying the plan schedule and preparing its receipt…"
+                            .to_string(),
+                        None,
+                    );
+                    let home = self.config.codex_home.as_path().to_path_buf();
+                    let tx = self.app_event_tx.clone();
+                    let plan_id = provisioned.plan_id;
+                    tokio::spawn(async move {
+                        let receipt = reconcile_plan_receipt(
+                            home,
+                            Zeroizing::new(api_key),
+                            plan_id,
+                            purchase,
+                            credential_error,
+                        )
+                        .await;
+                        tx.send(AppEvent::WalletPlanReceiptReady { receipt });
+                    });
+                } else {
+                    api_key.zeroize();
+                    match stored {
+                        Ok(()) => {
+                            self.add_info_message(
+                                "PfTerminal Plan access recovered. Credential stored securely."
+                                    .to_string(),
+                                None,
+                            );
+                            self.select_pfterminal_plan_provider();
+                            self.open_wallet_menu();
+                        }
+                        Err(error) => self.add_error_message(format!(
+                            "Plan access was recovered, but storing its API key failed: {error}"
+                        )),
+                    }
                 }
-                self.add_info_message(
-                    format!(
-                        "{} plan activated. Credential stored securely.",
-                        title_case_plan(&provisioned.plan_id)
-                    ),
-                    None,
-                );
-                self.app_event_tx.send(AppEvent::UpdateModelSelection {
-                    model: AMBIENT_DEFAULT_MODEL.to_string(),
-                    provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
-                });
-                self.app_event_tx.send(AppEvent::PersistModelSelection {
-                    model: AMBIENT_DEFAULT_MODEL.to_string(),
-                    provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
-                    effort: None,
-                });
-                self.bottom_pane
-                    .dismiss_view_by_id("wallet-plan-confirm");
-                self.bottom_pane
-                    .dismiss_view_by_id(WALLET_PLANS_VIEW_ID);
-                self.bottom_pane.dismiss_view_by_id(WALLET_MENU_VIEW_ID);
             }
             Err(error) => self.add_error_message(format!(
                 "Plan purchase failed: {error}. If payment may have settled, use Recover plan access; do not submit another payment."
@@ -684,9 +740,22 @@ impl ChatWidget {
                 .map(|key| WalletPlanProvisionedResult {
                     plan_id: "existing".to_string(),
                     api_key: WalletSecret::new(key.api_key),
+                    purchase: None,
                 })
                 .map_err(|error| error.to_string());
             tx.send(AppEvent::WalletPlanProvisioned { result });
+        });
+    }
+
+    pub(super) fn select_pfterminal_plan_provider(&self) {
+        self.app_event_tx.send(AppEvent::UpdateModelSelection {
+            model: AMBIENT_DEFAULT_MODEL.to_string(),
+            provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
+        });
+        self.app_event_tx.send(AppEvent::PersistModelSelection {
+            model: AMBIENT_DEFAULT_MODEL.to_string(),
+            provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
+            effort: None,
         });
     }
 }
@@ -754,6 +823,10 @@ fn wallet_items(
         .address
         .clone()
         .unwrap_or_else(|| "unavailable".to_string());
+    let latest_receipt = overview
+        .plan
+        .as_ref()
+        .map(|status| latest_plan_receipt(status, overview.balances, &overview.plan_prices_usdc));
     let can_sign = client_can_sign && !overview.daemon.locked;
     let lock = if overview.daemon.locked {
         "locked"
@@ -832,6 +905,16 @@ fn wallet_items(
         })],
         ..Default::default()
     }];
+    if let Some(receipt) = latest_receipt {
+        items.push(item(
+            "View latest plan receipt",
+            &format!(
+                "{} plan · Solana payment confirmation",
+                title_case_plan(&receipt.plan_id)
+            ),
+            AppEvent::OpenWalletPlanReceipt { receipt },
+        ));
+    }
     if !can_sign {
         for (name, seconds) in [
             ("Unlock for 5 minutes", 300),
@@ -987,6 +1070,7 @@ mod tests {
             plan: None,
             plan_error: None,
             plan_credential_present: false,
+            plan_prices_usdc: std::collections::BTreeMap::new(),
         }
     }
 
@@ -1002,7 +1086,9 @@ mod tests {
         WalletPlanStatus {
             wallet_address: "EpUYgzi88BYbsGoyiNghPppd3J9ASbARq7UjBCCUnk2i".to_string(),
             period: WalletPlanPeriod {
+                transaction: "starter-transaction".to_string(),
                 plan_id: "starter".to_string(),
+                starts_at: "2026-07-19T00:35:20Z".to_string(),
                 ends_at: "2026-08-19T00:35:20Z".to_string(),
             },
             weekly: WalletUsageWindow {
@@ -1073,6 +1159,7 @@ mod tests {
     fn queued_plan_becomes_the_upgrade_floor_and_schedule_boundary() {
         let mut status = starter_plan();
         status.queued_periods.push(WalletQueuedPlanPeriod {
+            transaction: "basic-transaction".to_string(),
             plan_id: "basic".to_string(),
             starts_at: "2026-08-19T00:35:20Z".to_string(),
             ends_at: "2026-09-19T00:35:20Z".to_string(),
@@ -1115,6 +1202,44 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["studio"]
         );
+    }
+
+    #[test]
+    fn queued_payment_exposes_a_durable_authoritative_receipt() {
+        let mut status = starter_plan();
+        status.queued_periods.push(WalletQueuedPlanPeriod {
+            transaction: "basic-settlement-signature".to_string(),
+            plan_id: "basic".to_string(),
+            starts_at: "2026-08-19T00:35:20Z".to_string(),
+            ends_at: "2026-09-19T00:35:20Z".to_string(),
+        });
+        let mut active = overview(true);
+        active.plan = Some(status);
+        active
+            .plan_prices_usdc
+            .insert("basic".to_string(), "20".to_string());
+        let mut header = ColumnRenderable::new();
+        let items = wallet_items(&mut header, active, false);
+        let receipt = items
+            .iter()
+            .position(|item| item.name == "View latest plan receipt")
+            .expect("receipt action");
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let sender = crate::app_event_sender::AppEventSender::new(tx);
+
+        (items[receipt].actions[0])(&sender);
+
+        let AppEvent::OpenWalletPlanReceipt { receipt } = rx.try_recv().expect("receipt event")
+        else {
+            panic!("unexpected event");
+        };
+        assert_eq!(receipt.plan_id, "basic");
+        assert_eq!(receipt.price_usdc.as_deref(), Some("20"));
+        assert_eq!(
+            receipt.transaction.as_deref(),
+            Some("basic-settlement-signature")
+        );
+        assert_eq!(receipt.active_plan_id.as_deref(), Some("starter"));
     }
 
     #[test]

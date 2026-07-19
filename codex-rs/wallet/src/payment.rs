@@ -66,6 +66,9 @@ pub struct ProvisionedPlan {
     pub key_id: String,
     pub api_key: String,
     pub display_prefix: String,
+    /// Public Solana settlement signature returned by the x402 facilitator.
+    /// This is safe to show as a payment receipt; the encoded payment response is not.
+    pub transaction: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -153,7 +156,7 @@ pub(crate) async fn provision_plan(
         intent.gateway_origin.trim_end_matches('/'),
         intent.plan_id
     );
-    pay(
+    let payment = pay(
         wallet,
         PaymentIntent {
             payment_url,
@@ -166,6 +169,7 @@ pub(crate) async fn provision_plan(
         },
     )
     .await?;
+    let transaction = payment_transaction(&payment);
 
     let gateway_key = issue_gateway_key(wallet, intent.gateway_origin).await?;
     Ok(ProvisionedPlan {
@@ -173,7 +177,28 @@ pub(crate) async fn provision_plan(
         key_id: gateway_key.key_id,
         api_key: gateway_key.api_key,
         display_prefix: gateway_key.display_prefix,
+        transaction,
     })
+}
+
+fn payment_transaction(receipt: &PaymentReceipt) -> Option<String> {
+    receipt
+        .payment_response
+        .as_deref()
+        .and_then(decode_header_json)
+        .and_then(|response| {
+            response
+                .get("transaction")
+                .and_then(serde_json::Value::as_str)
+                .map(ToOwned::to_owned)
+        })
+        .or_else(|| {
+            receipt
+                .body
+                .get("transaction")
+                .and_then(serde_json::Value::as_str)
+                .map(ToOwned::to_owned)
+        })
 }
 
 pub(crate) async fn issue_gateway_key(
@@ -568,6 +593,28 @@ mod tests {
                 .expect("serialize payload")
                 .get("extensions")
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn extracts_public_transaction_from_x402_receipt_without_exposing_header() {
+        let response = STANDARD.encode(
+            serde_json::to_vec(&serde_json::json!({
+                "success": true,
+                "transaction": "5EttlementSignature",
+                "payer": "wallet",
+            }))
+            .expect("json"),
+        );
+        let receipt = PaymentReceipt {
+            status: 200,
+            payment_response: Some(response),
+            body: serde_json::Value::Null,
+        };
+
+        assert_eq!(
+            payment_transaction(&receipt).as_deref(),
+            Some("5EttlementSignature")
         );
     }
 }

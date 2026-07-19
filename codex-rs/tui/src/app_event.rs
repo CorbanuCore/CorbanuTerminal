@@ -197,6 +197,14 @@ pub(crate) struct WalletUnlockedResult {
 pub(crate) struct WalletPlanProvisionedResult {
     pub(crate) plan_id: String,
     pub(crate) api_key: WalletSecret,
+    pub(crate) purchase: Option<WalletPlanPurchaseSummary>,
+}
+
+#[derive(Debug)]
+pub(crate) struct WalletPlanPurchaseSummary {
+    pub(crate) price_usdc: String,
+    pub(crate) scheduled_start: Option<String>,
+    pub(crate) transaction: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1393,6 +1401,12 @@ pub(crate) enum AppEvent {
     },
     WalletPlanProvisioned {
         result: Result<WalletPlanProvisionedResult, String>,
+    },
+    WalletPlanReceiptReady {
+        receipt: crate::chatwidget::wallet_receipt::WalletPlanReceipt,
+    },
+    OpenWalletPlanReceipt {
+        receipt: crate::chatwidget::wallet_receipt::WalletPlanReceipt,
     },
     WalletRecoverPlanRequested,
 
