@@ -10,7 +10,8 @@ The builder creates a canonical package directory inherited from Codex:
 .
 ├── codex-package.json
 ├── bin
-│   └── <entrypoint>[.exe]
+│   ├── <entrypoint>[.exe]
+│   └── <required companion binaries>[.exe]
 ├── codex-resources
 │   ├── bwrap                             # Linux only
 │   ├── zsh/bin/zsh                       # supported Unix targets only
@@ -36,6 +37,11 @@ entrypoint. The `codex` variant remains available for upstream compatibility.
 The `version` field in `codex-package.json` is read from
 `[workspace.package].version` in `codex-rs/Cargo.toml`.
 
+The `pfterminal` variant always includes `pfterminal-walletd` beside the main
+entrypoint. Wallet operations start that companion process from the main
+executable's directory, so package validation treats it as required rather
+than as an optional resource.
+
 ## Source-built artifacts
 
 Artifacts built from this repository are built by the package builder in one
@@ -43,6 +49,8 @@ grouped `cargo build` command per package when they are needed and no prebuilt
 override was provided:
 
 - all targets: the selected entrypoint, unless `--entrypoint-bin` is provided
+- variant-specific companion binaries, unless matching `--extra-bin` values
+  are provided (`pfterminal-walletd` is required by the `pfterminal` variant)
 - Linux targets: `bwrap`, unless `--bwrap-bin` is provided
 - Windows targets: `codex-command-runner` and `codex-windows-sandbox-setup`,
   unless the corresponding prebuilt helper flags are provided

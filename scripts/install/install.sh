@@ -740,6 +740,7 @@ release_dir_is_complete() {
     package)
       [ -f "$release_dir/codex-package.json" ] &&
         [ -x "$release_dir/bin/pfterminal" ] &&
+        [ -x "$release_dir/bin/pfterminal-walletd" ] &&
         [ -x "$release_dir/pfterminal" ] &&
         [ -x "$release_dir/codex-path/rg" ] ||
         return 1

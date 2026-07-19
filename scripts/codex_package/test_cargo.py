@@ -14,6 +14,41 @@ from codex_package.targets import TARGET_SPECS
 
 
 class SourceBinariesForTargetTest(unittest.TestCase):
+    def test_pfterminal_package_builds_required_wallet_daemon(self) -> None:
+        self.assertEqual(
+            source_binaries_for_target(
+                TARGET_SPECS["aarch64-apple-darwin"],
+                PACKAGE_VARIANTS["pfterminal"],
+                build_entrypoint=False,
+                extra_cargo_bins=["pfterminal-walletd"],
+                build_bwrap=False,
+                build_codex_command_runner=False,
+                build_codex_windows_sandbox_setup=False,
+            ),
+            ["pfterminal-walletd"],
+        )
+
+    def test_pfterminal_package_accepts_prebuilt_wallet_daemon(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            entrypoint = touch_file(root / "pfterminal")
+            wallet_daemon = touch_file(root / "pfterminal-walletd")
+
+            outputs = build_source_binaries(
+                TARGET_SPECS["aarch64-apple-darwin"],
+                PACKAGE_VARIANTS["pfterminal"],
+                cargo=str(root / "cargo-that-should-not-run"),
+                profile="release",
+                entrypoint_bin=entrypoint,
+                extra_bins={"pfterminal-walletd": wallet_daemon},
+                bwrap_bin=None,
+                codex_command_runner_bin=None,
+                codex_windows_sandbox_setup_bin=None,
+            )
+
+        self.assertEqual(outputs.entrypoint_bin, entrypoint)
+        self.assertEqual(outputs.extra_bins["pfterminal-walletd"], wallet_daemon)
+
     def test_macos_package_with_prebuilt_entrypoint_builds_nothing(self) -> None:
         self.assertEqual(
             source_binaries_for_target(

@@ -40,6 +40,12 @@ impl WalletDaemonClient {
             return Ok(());
         }
         let executable = daemon_executable().map_err(unavailable)?;
+        if !executable.is_file() {
+            return Err(WalletDaemonError::Unavailable(format!(
+                "required wallet daemon executable is missing from this PFTerminal installation: {}",
+                executable.display()
+            )));
+        }
         tokio::process::Command::new(executable)
             .arg("--codex-home")
             .arg(&self.codex_home)
@@ -235,15 +241,20 @@ pub(crate) fn run_dir(home: &Path) -> PathBuf {
 
 fn daemon_executable() -> std::io::Result<PathBuf> {
     let current = std::env::current_exe()?;
+    let current = current.canonicalize().unwrap_or(current);
+    Ok(daemon_executable_beside(&current))
+}
+
+fn daemon_executable_beside(current: &Path) -> PathBuf {
     let name = if cfg!(windows) {
         "pfterminal-walletd.exe"
     } else {
         "pfterminal-walletd"
     };
-    Ok(current
+    current
         .parent()
         .unwrap_or_else(|| Path::new("."))
-        .join(name))
+        .join(name)
 }
 fn unavailable(error: impl std::fmt::Display) -> WalletDaemonError {
     WalletDaemonError::Unavailable(error.to_string())
@@ -260,6 +271,22 @@ mod tests {
     use super::*;
     use codex_uds::UnixListener;
     use codex_uds::prepare_private_socket_directory;
+
+    #[test]
+    fn wallet_daemon_is_resolved_beside_the_running_executable() {
+        let executable = if cfg!(windows) {
+            Path::new(r"C:\PFTerminal\bin\pfterminal.exe")
+        } else {
+            Path::new("/opt/pfterminal/bin/pfterminal")
+        };
+        let expected = if cfg!(windows) {
+            Path::new(r"C:\PFTerminal\bin\pfterminal-walletd.exe")
+        } else {
+            Path::new("/opt/pfterminal/bin/pfterminal-walletd")
+        };
+
+        assert_eq!(daemon_executable_beside(executable), expected);
+    }
 
     #[tokio::test]
     async fn an_accepted_request_that_never_replies_times_out() {
