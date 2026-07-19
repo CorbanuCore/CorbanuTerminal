@@ -44,11 +44,11 @@ impl CompletionGuardState {
 
     pub(super) fn should_assess(
         &self,
-        is_kimi_code: bool,
+        provider_requires_guard: bool,
         needs_follow_up: bool,
         assistant_response: Option<&str>,
     ) -> bool {
-        is_kimi_code
+        provider_requires_guard
             && self.tool_executed
             && !needs_follow_up
             && assistant_response.is_some_and(|response| !response.trim().is_empty())
@@ -172,7 +172,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn guard_is_kimi_scoped_and_only_activates_after_tool_work() {
+    fn guard_is_provider_scoped_and_only_activates_after_tool_work() {
         let mut state = CompletionGuardState::default();
         assert!(!state.should_assess(true, false, Some("Now I will add tests.")));
         state.observe_sampling(true);

@@ -97,6 +97,7 @@ use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_model_provider_info::built_in_model_providers;
 use codex_model_provider_info::corrected_catalog_provider;
 use codex_model_provider_info::create_oss_provider_with_base_url;
+use codex_model_provider_info::default_model_context_window_for_provider;
 use codex_model_provider_info::merge_configured_model_providers;
 use codex_model_provider_info::resolve_model_for_provider;
 use codex_models_manager::ModelsManagerConfig;
@@ -1556,8 +1557,13 @@ impl Config {
     }
 
     pub fn to_models_manager_config(&self) -> ModelsManagerConfig {
+        let model_context_window = self.model_context_window.or_else(|| {
+            self.model.as_deref().and_then(|model| {
+                default_model_context_window_for_provider(&self.model_provider_id, model)
+            })
+        });
         ModelsManagerConfig {
-            model_context_window: self.model_context_window,
+            model_context_window,
             model_auto_compact_token_limit: self.model_auto_compact_token_limit,
             tool_output_token_limit: self.tool_output_token_limit,
             base_instructions: self.base_instructions.clone(),
@@ -3584,7 +3590,6 @@ impl Config {
             }
             None => (model_provider_id, model_provider),
         };
-
         let shell_environment_policy = cfg.shell_environment_policy.into();
         let allow_login_shell = cfg.allow_login_shell.unwrap_or(true);
 

@@ -169,7 +169,7 @@ fn trace_turn_timing(label: &str, start: Instant) {
     }
 }
 
-async fn assess_kimi_completion(
+async fn assess_turn_completion(
     sess: &Session,
     turn_context: &TurnContext,
     client_session: &mut ModelClientSession,
@@ -517,7 +517,7 @@ pub(crate) async fn run_turn(
                 }
 
                 if completion_guard.should_assess(
-                    turn_context.provider.info().is_kimi_code(),
+                    turn_context.provider.info().requires_completion_guard(),
                     needs_follow_up,
                     sampling_request_last_agent_message.as_deref(),
                 ) {
@@ -527,7 +527,7 @@ pub(crate) async fn run_turn(
                             window_id.clone(),
                             CodexResponsesRequestKind::Turn,
                         );
-                    let assessment = match assess_kimi_completion(
+                    let assessment = match assess_turn_completion(
                         sess.as_ref(),
                         turn_context.as_ref(),
                         &mut client_session,
@@ -546,7 +546,7 @@ pub(crate) async fn run_turn(
                             warn!(
                                 turn_id = %turn_context.sub_id,
                                 error = %err,
-                                "Kimi completion assessment failed; treating the result as uncertain"
+                                "completion assessment failed; treating the result as uncertain"
                             );
                             CompletionAssessment::Uncertain
                         }
@@ -555,7 +555,7 @@ pub(crate) async fn run_turn(
                         CompletionGuardAction::Accept => {
                             trace!(
                                 turn_id = %turn_context.sub_id,
-                                "Kimi completion assessment accepted the final response"
+                                "completion assessment accepted the final response"
                             );
                         }
                         CompletionGuardAction::Continue => {
@@ -563,7 +563,7 @@ pub(crate) async fn run_turn(
                                 turn_id = %turn_context.sub_id,
                                 assessment = ?assessment,
                                 attempts = completion_guard.unsuccessful_assessments(),
-                                "Kimi completion assessment requested continuation"
+                                "completion assessment requested continuation"
                             );
                             let message = continuation_message();
                             sess.record_conversation_items(
@@ -575,7 +575,7 @@ pub(crate) async fn run_turn(
                         }
                         CompletionGuardAction::Fail => {
                             return Err(CodexErr::InvalidRequest(format!(
-                                "Kimi stopped {MAX_COMPLETION_ASSESSMENT_ATTEMPTS} consecutive times after tool execution without a verifiable final response; retry the turn or select another model"
+                                "The model stopped {MAX_COMPLETION_ASSESSMENT_ATTEMPTS} consecutive times after tool execution without a verifiable final response; retry the turn or select another model"
                             )));
                         }
                     }

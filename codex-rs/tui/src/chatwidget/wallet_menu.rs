@@ -256,7 +256,7 @@ impl ChatWidget {
             crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_confirmed_secret(
                 "wallet-passcode".to_string(),
                 "Create Solana wallet".to_string(),
-                "Passcode confirmation — masked".to_string(),
+                "Wallet passcode — masked".to_string(),
                 "Passcode (6+ characters; use 12+ for portable recovery)".to_string(),
                 Box::new(move |_label, mut passcode| {
                     tokio::spawn(async move {
@@ -305,7 +305,7 @@ impl ChatWidget {
             crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_confirmed_secret(
                 "wallet-passcode".to_string(),
                 "Protect restored wallet".to_string(),
-                "Passcode confirmation — masked".to_string(),
+                "New wallet passcode — masked".to_string(),
                 "New passcode (6+ characters; use 12+ for portable recovery)".to_string(),
                 Box::new(move |_label, mut passcode| {
                     let mut recovery = recovery.into_inner();
@@ -638,22 +638,27 @@ impl ChatWidget {
             "Pay exactly {} USDC on Solana",
             plan.price_usdc
         )));
-        header.push(Line::from(format!(
-            "Allowance: {} tokens/week and {} tokens/month for one month.",
-            format_token_count(plan.weekly_token_limit),
-            format_token_count(plan.monthly_token_limit),
-        )));
-        header.push(Line::from(
-            plan.scheduled_start.as_ref().map_or_else(
+        push_wallet_line(
+            &mut header,
+            &format!(
+                "Allowance: {} tokens/week and {} tokens/month for one month.",
+                format_token_count(plan.weekly_token_limit),
+                format_token_count(plan.monthly_token_limit),
+            ),
+            false,
+        );
+        push_wallet_line(
+            &mut header,
+            &plan.scheduled_start.as_ref().map_or_else(
                 || "This payment is final and does not recur automatically.".to_string(),
                 |starts_at| {
                     format!(
                         "This upgrade begins {starts_at}; the current paid period remains active until then."
                     )
                 },
-            )
-            .dim(),
-        ));
+            ),
+            true,
+        );
         match remaining_usdc {
             Some((current, Some(remaining))) => header.push(Line::from(format!(
                 "Balance: {:.2} USDC now · {:.2} USDC after payment",
@@ -699,7 +704,8 @@ impl ChatWidget {
     }
 
     pub(crate) fn purchase_wallet_plan(&mut self, plan: WalletPlanChoice) {
-        let Some(capability) = self.wallet_capability.take() else {
+        let Some(capability) = wallet_capability_for_request(self.wallet_capability.as_ref())
+        else {
             self.add_error_message(
                 "Unlock the wallet from /wallet before confirming a purchase.".to_string(),
             );
@@ -811,7 +817,8 @@ impl ChatWidget {
     }
 
     pub(crate) fn recover_wallet_plan_access(&mut self) {
-        let Some(capability) = self.wallet_capability.take() else {
+        let Some(capability) = wallet_capability_for_request(self.wallet_capability.as_ref())
+        else {
             self.add_error_message(
                 "Unlock the wallet from /wallet before recovering plan access.".to_string(),
             );
@@ -1184,6 +1191,12 @@ fn push_wallet_line(header: &mut ColumnRenderable, text: &str, dimmed: bool) {
     }
 }
 
+fn wallet_capability_for_request(
+    capability: Option<&Zeroizing<String>>,
+) -> Option<Zeroizing<String>> {
+    capability.map(|value| Zeroizing::new(value.to_string()))
+}
+
 fn wallet_wrapped_lines(text: &str) -> Vec<String> {
     let options = textwrap::Options::new(64)
         .break_words(false)
@@ -1478,12 +1491,33 @@ mod tests {
     }
 
     #[test]
+    fn signing_request_does_not_consume_the_tui_unlock_capability() {
+        let held = Some(Zeroizing::new("test-wallet-capability".to_string()));
+        let request = wallet_capability_for_request(held.as_ref()).expect("request capability");
+        assert_eq!(request.as_str(), "test-wallet-capability");
+        assert_eq!(
+            held.as_deref().map(String::as_str),
+            Some("test-wallet-capability")
+        );
+    }
+
+    #[test]
     fn wallet_status_lines_wrap_without_splitting_iso_dates() {
         let text = "Next: Basic plan · 20 USDC prepaid · 2026-08-19T00:35:20.051Z to 2026-09-19T00:35:20.051Z";
         let lines = wallet_wrapped_lines(text);
         assert!(lines.len() > 1);
         assert!(lines.iter().all(|line| line.chars().count() <= 64));
         assert_eq!(lines.join(" "), text);
+        let allowance =
+            "Allowance: 5,000,000 tokens/week and 20,000,000 tokens/month for one month.";
+        let allowance_lines = wallet_wrapped_lines(allowance);
+        assert!(allowance_lines.len() > 1);
+        assert!(
+            allowance_lines
+                .iter()
+                .all(|line| line.chars().count() <= 64)
+        );
+        assert_eq!(allowance_lines.join(" "), allowance);
         assert_eq!(format_token_count(1_000_000), "1,000,000");
         assert_eq!(format_usdc_atomic(4_250_000), "4.25");
     }

@@ -80,6 +80,12 @@ const AMBIENT_PROVIDER_NAME: &str = "Ambient";
 pub const AMBIENT_PROVIDER_ID: &str = "ambient";
 pub const AMBIENT_BASE_URL: &str = "https://api.ambient.xyz/v1";
 pub const AMBIENT_DEFAULT_MODEL: &str = "z-ai/glm-5.2";
+/// Input context accepted by Ambient's GLM 5.2 chat route.
+///
+/// The model can have a larger native context on other providers, so this
+/// limit belongs to the provider/model route rather than the shared model
+/// catalog.
+pub const AMBIENT_GLM_5_2_CONTEXT_WINDOW: i64 = 101_376;
 pub const AMBIENT_LEGACY_GLM_5_2_FP8_MODEL: &str = "zai-org/GLM-5.2-FP8";
 pub const AMBIENT_KIMI_K2_7_CODE_MODEL: &str = "moonshotai/kimi-k2.7-code";
 pub const AMBIENT_API_KEY_ENV_VAR: &str = "AMBIENT_API_KEY";
@@ -286,6 +292,20 @@ pub fn resolve_model_for_provider(
             _ => Some(VERCEL_GLM_5_2_FAST_MODEL.to_string()),
         },
         _ => model,
+    }
+}
+
+/// Return a provider-route context ceiling when it is narrower than the
+/// model's shared catalog capability.
+pub fn default_model_context_window_for_provider(
+    model_provider_id: &str,
+    model: &str,
+) -> Option<i64> {
+    match (model_provider_id, model.trim()) {
+        (AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID, AMBIENT_DEFAULT_MODEL) => {
+            Some(AMBIENT_GLM_5_2_CONTEXT_WINDOW)
+        }
+        _ => None,
     }
 }
 
@@ -1171,6 +1191,13 @@ impl ModelProviderInfo {
 
     pub fn is_kimi_code(&self) -> bool {
         self.name == KIMI_CODE_PROVIDER_NAME
+    }
+
+    /// Providers whose coding models have demonstrated text-only premature
+    /// stops after tool work. These routes use the structured completion
+    /// classifier before accepting a turn as finished.
+    pub fn requires_completion_guard(&self) -> bool {
+        self.is_kimi_code() || self.is_ambient() || self.is_pfterminal_plan()
     }
 
     pub fn is_zai(&self) -> bool {
