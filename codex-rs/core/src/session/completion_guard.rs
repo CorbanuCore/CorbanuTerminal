@@ -143,9 +143,7 @@ pub(super) fn assessment_prompt(objective: &str, assistant_response: &str) -> Pr
 
 pub(super) fn parse_assessment(text: &str) -> Result<CompletionAssessment, serde_json::Error> {
     let value = serde_json::from_str::<serde_json::Value>(text.trim())?;
-    if let Ok(output) =
-        serde_json::from_value::<CompletionAssessmentOutput>(value.clone())
-    {
+    if let Ok(output) = serde_json::from_value::<CompletionAssessmentOutput>(value.clone()) {
         return Ok(output.decision);
     }
 

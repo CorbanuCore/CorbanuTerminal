@@ -84,10 +84,7 @@ impl Respond for AlternateKeyCompletionResponder {
         match self.calls.fetch_add(1, Ordering::SeqCst) {
             0 => sse_response(tool_call_sse()),
             1 => sse_response(chat_completions_sse("k3", PROGRESS_RESPONSE)),
-            2 => sse_response(chat_completions_sse(
-                "k3",
-                r#"{"completed":false}"#,
-            )),
+            2 => sse_response(chat_completions_sse("k3", r#"{"completed":false}"#)),
             3 => sse_response(chat_completions_sse("k3", FINAL_RESPONSE)),
             4 => sse_response(chat_completions_sse("k3", r#"{"done":true}"#)),
             call => panic!("unexpected Kimi request {call}"),
@@ -446,7 +443,10 @@ async fn completion_guard_accepts_single_enum_field_when_provider_renames_schema
 
     let requests = server.received_requests().await.expect("recorded requests");
     assert_eq!(requests.len(), 5);
-    assert!(requests[3].body.windows(CONTINUE_INSTRUCTION_FRAGMENT.len()).any(|window| {
-        window == CONTINUE_INSTRUCTION_FRAGMENT
-    }));
+    assert!(
+        requests[3]
+            .body
+            .windows(CONTINUE_INSTRUCTION_FRAGMENT.len())
+            .any(|window| { window == CONTINUE_INSTRUCTION_FRAGMENT })
+    );
 }
