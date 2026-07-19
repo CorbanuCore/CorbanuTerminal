@@ -153,14 +153,13 @@ impl ChatWidget {
     }
 
     fn choose_replacement_provider_or_reopen_wallet(&mut self) {
+        self.open_wallet_menu();
         if self.config.model_provider_id == PFTERMINAL_PLAN_PROVIDER_ID {
             self.add_info_message(
                 "Choose another provider before starting the next turn.".to_string(),
                 None,
             );
             self.open_model_popup();
-        } else {
-            self.open_wallet_menu();
         }
     }
 }

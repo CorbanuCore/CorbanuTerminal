@@ -48,6 +48,10 @@ async fn wallet_disconnect_wraps_copy_and_dismisses_confirmation_before_replacem
     );
     let replacement = render_bottom_popup(&chat, /*width*/ 94);
     assert!(!replacement.contains("Remove only the metered-inference credential"));
+    assert!(
+        chat.bottom_pane
+            .dismiss_view_by_id(crate::chatwidget::wallet_menu::WALLET_MENU_VIEW_ID)
+    );
 }
 
 #[tokio::test]
@@ -74,6 +78,10 @@ async fn wallet_removal_wraps_copy_and_dismisses_confirmation_before_replacement
     );
     let replacement = render_bottom_popup(&chat, /*width*/ 94);
     assert!(!replacement.contains("I have saved the recovery material"));
+    assert!(
+        chat.bottom_pane
+            .dismiss_view_by_id(crate::chatwidget::wallet_menu::WALLET_MENU_VIEW_ID)
+    );
 }
 
 #[tokio::test]
