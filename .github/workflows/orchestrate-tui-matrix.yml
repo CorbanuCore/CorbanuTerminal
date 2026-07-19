@@ -40,7 +40,7 @@ jobs:
         with:
           tool: just@1.55.1
       - name: Install TUI harness dependencies
-        run: sudo apt-get update && sudo apt-get install -y jq tmux
+        run: sudo apt-get update && sudo apt-get install -y jq ripgrep tmux
       - name: Run orchestrate TUI matrix
         run: just orchestrate-tui-matrix
       - name: Upload matrix evidence
@@ -48,4 +48,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: orchestrate-tui-matrix-${{ github.sha }}
-          path: qa/artifacts/${{ github.sha }}/
+          path: |
+            qa/artifacts/${{ github.sha }}/
+            !qa/artifacts/${{ github.sha }}/**/home/**
