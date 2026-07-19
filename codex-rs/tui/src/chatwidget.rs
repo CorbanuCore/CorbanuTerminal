@@ -592,6 +592,7 @@ pub(crate) struct ChatWidget {
     /// Holds the platform clipboard lease so copied text remains available while supported.
     clipboard_lease: Option<crate::clipboard_copy::ClipboardLease>,
     wallet_capability: Option<zeroize::Zeroizing<String>>,
+    wallet_status_generation: u64,
     wallet_payment_config: Option<crate::chatwidget::wallet_menu::WalletPaymentConfig>,
     wallet_balances: Option<codex_wallet::WalletBalances>,
     copy_last_response_binding: Vec<KeyBinding>,

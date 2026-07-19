@@ -1862,8 +1862,8 @@ impl App {
             AppEvent::WalletLockRequested => {
                 self.chat_widget.lock_wallet();
             }
-            AppEvent::WalletStatusReady { result } => {
-                self.chat_widget.on_wallet_status_ready(result);
+            AppEvent::WalletStatusReady { generation, result } => {
+                self.chat_widget.on_wallet_status_ready(generation, result);
             }
             AppEvent::WalletCreateFinished { result } => {
                 self.chat_widget.on_wallet_create_finished(result);

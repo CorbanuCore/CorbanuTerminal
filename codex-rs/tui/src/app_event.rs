@@ -1355,6 +1355,7 @@ pub(crate) enum AppEvent {
     },
     WalletLockRequested,
     WalletStatusReady {
+        generation: u64,
         result: Result<crate::chatwidget::wallet_menu::WalletOverview, String>,
     },
     WalletCreateFinished {

@@ -81,7 +81,9 @@ impl ChatWidget {
         self.refresh_wallet_status();
     }
 
-    pub(crate) fn refresh_wallet_status(&self) {
+    pub(crate) fn refresh_wallet_status(&mut self) {
+        self.wallet_status_generation = self.wallet_status_generation.wrapping_add(1);
+        let generation = self.wallet_status_generation;
         let home = self.config.codex_home.as_path().to_path_buf();
         let plan_key = codex_login::provider_api_key_from_auth_storage(
             &home,
@@ -150,11 +152,18 @@ impl ChatWidget {
                 })
             }
             .await;
-            tx.send(AppEvent::WalletStatusReady { result });
+            tx.send(AppEvent::WalletStatusReady { generation, result });
         });
     }
 
-    pub(crate) fn on_wallet_status_ready(&mut self, result: Result<WalletOverview, String>) {
+    pub(crate) fn on_wallet_status_ready(
+        &mut self,
+        generation: u64,
+        result: Result<WalletOverview, String>,
+    ) {
+        if generation != self.wallet_status_generation {
+            return;
+        }
         if let Ok(overview) = &result {
             self.wallet_balances = overview.balances;
         }
@@ -264,6 +273,9 @@ impl ChatWidget {
                         created.recovery.into_inner(),
                     ),
                 ));
+                // Replace the pre-create wallet snapshot underneath the recovery view. The
+                // generation guard prevents an older in-flight read from restoring stale state.
+                self.refresh_wallet_status();
             }
             Err(error) => self.add_error_message(format!("Wallet creation failed: {error}")),
         }
@@ -855,5 +867,40 @@ mod tests {
         assert!(items.iter().any(|name| name == "Buy a PfTerminal plan"));
         assert!(items.iter().any(|name| name == "Recover plan access"));
         assert!(!items.iter().any(|name| name.starts_with("Unlock for")));
+    }
+
+    #[tokio::test]
+    async fn successful_create_invalidates_the_pre_create_wallet_snapshot() {
+        let (mut chat, _sender, _events, _ops) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        assert_eq!(chat.wallet_status_generation, 0);
+
+        chat.on_wallet_create_finished(Ok(WalletCreatedResult {
+            address: "new-wallet-address".to_string(),
+            recovery: WalletSecret::new("one-time-recovery".to_string()),
+        }));
+
+        assert_eq!(chat.wallet_status_generation, 1);
+    }
+
+    #[tokio::test]
+    async fn stale_wallet_status_cannot_overwrite_a_newer_refresh() {
+        let (mut chat, _sender, _events, _ops) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        chat.wallet_status_generation = 2;
+        chat.wallet_balances = Some(WalletBalances {
+            sol_lamports: 7,
+            usdc_atomic: 11,
+        });
+
+        chat.on_wallet_status_ready(1, Ok(overview(true)));
+
+        assert_eq!(
+            chat.wallet_balances,
+            Some(WalletBalances {
+                sol_lamports: 7,
+                usdc_atomic: 11,
+            })
+        );
     }
 }
