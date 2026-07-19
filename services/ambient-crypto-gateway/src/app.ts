@@ -359,15 +359,26 @@ function clientRequestId(request: Request): string {
 }
 
 function writeLimitResponse(response: Response, limit: PlanLimitReached): void {
+  const resetSeconds = Math.floor(limit.resetsAt.getTime() / 1_000);
+  const retryAfterSeconds = Math.max(1, Math.ceil((limit.resetsAt.getTime() - Date.now()) / 1_000));
+  const usedPercent = Math.min(100, Math.max(0, (limit.usedTokens / limit.limitTokens) * 100));
+  response.setHeader("Retry-After", String(retryAfterSeconds));
+  response.setHeader("X-Codex-Active-Limit", "pfterminal");
+  response.setHeader("X-PfTerminal-Limit-Name", `PfTerminal Plan ${limit.window} tokens`);
+  response.setHeader("X-PfTerminal-Primary-Used-Percent", usedPercent.toFixed(2));
+  response.setHeader("X-PfTerminal-Primary-Reset-At", String(resetSeconds));
   response.status(429).json({
     error: {
-      type: "plan_limit_reached",
+      type: "usage_limit_reached",
+      resets_at: resetSeconds,
+      provider: "pfterminal-plan",
       window: limit.window,
       limitTokens: limit.limitTokens,
       usedTokens: limit.usedTokens,
       reservedTokens: limit.reservedTokens,
       remainingTokens: limit.remainingTokens,
       resetsAt: limit.resetsAt.toISOString(),
+      action: "Open /wallet to review or upgrade the PfTerminal Plan.",
     },
   });
 }

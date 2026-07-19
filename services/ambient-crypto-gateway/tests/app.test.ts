@@ -172,11 +172,17 @@ describe("Ambient crypto gateway", () => {
         .send({ model: "z-ai/glm-5.2", messages: [{ role: "user", content: "bounded request" }], max_tokens: 32_768 })
         .expect(200);
     }
-    await request(app)
+    const limited = await request(app)
       .post("/v1/chat/completions")
       .set("Authorization", `Bearer ${issued.key}`)
       .send({ model: "z-ai/glm-5.2", messages: [{ role: "user", content: "over quota" }], max_tokens: 32_768 })
       .expect(429);
+    assert.equal(limited.body.error.type, "usage_limit_reached");
+    assert.equal(limited.body.error.provider, "pfterminal-plan");
+    assert.equal(limited.body.error.window, "weekly");
+    assert.equal(limited.headers["x-codex-active-limit"], "pfterminal");
+    assert.equal(limited.headers["x-pfterminal-limit-name"], "PfTerminal Plan weekly tokens");
+    assert.ok(Number(limited.headers["retry-after"]) > 0);
     assert.equal(upstreamCalls, 7);
   });
 

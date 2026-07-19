@@ -231,6 +231,54 @@ fn map_api_error_maps_retry_after_ms_for_generic_429() {
 }
 
 #[test]
+fn map_api_error_preserves_pfterminal_plan_limit_name_and_reset() {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        ACTIVE_LIMIT_HEADER,
+        http::HeaderValue::from_static("pfterminal"),
+    );
+    headers.insert(
+        "x-pfterminal-limit-name",
+        http::HeaderValue::from_static("PfTerminal Plan weekly tokens"),
+    );
+    headers.insert(
+        "x-pfterminal-primary-used-percent",
+        http::HeaderValue::from_static("92.50"),
+    );
+    headers.insert(
+        "x-pfterminal-primary-reset-at",
+        http::HeaderValue::from_static("1784500000"),
+    );
+    let body = serde_json::json!({
+        "error": {
+            "type": "usage_limit_reached",
+            "resets_at": 1784500000,
+            "provider": "pfterminal-plan",
+            "window": "weekly"
+        }
+    })
+    .to_string();
+    let err = map_api_error(ApiError::Transport(TransportError::Http {
+        status: http::StatusCode::TOO_MANY_REQUESTS,
+        url: Some("http://127.0.0.1:4021/v1/chat/completions".to_string()),
+        headers: Some(headers),
+        body: Some(body),
+    }));
+
+    let CodexErr::UsageLimitReached(limit) = &err else {
+        panic!("expected PfTerminal plan usage limit, got {err:?}");
+    };
+    assert_eq!(
+        limit
+            .rate_limits
+            .as_ref()
+            .and_then(|snapshot| snapshot.limit_name.as_deref()),
+        Some("PfTerminal Plan weekly tokens")
+    );
+    assert!(err.to_string().contains("PfTerminal Plan weekly tokens"));
+}
+
+#[test]
 fn map_api_error_does_not_fallback_limit_name_to_limit_id() {
     let mut headers = HeaderMap::new();
     headers.insert(
