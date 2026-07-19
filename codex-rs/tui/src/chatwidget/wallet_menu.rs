@@ -99,12 +99,19 @@ pub(crate) struct WalletPlanPeriod {
     pub(crate) plan_id: String,
     pub(crate) starts_at: String,
     pub(crate) ends_at: String,
+    pub(crate) monthly_limit_tokens: u64,
+    pub(crate) monthly_used_tokens: u64,
+    pub(crate) monthly_reserved_tokens: u64,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WalletUsageWindow {
+    pub(crate) starts_at: String,
     pub(crate) ends_at: String,
+    pub(crate) limit_tokens: u64,
+    pub(crate) used_tokens: u64,
+    pub(crate) reserved_tokens: u64,
 }
 
 impl ChatWidget {
@@ -1090,9 +1097,16 @@ mod tests {
                 plan_id: "starter".to_string(),
                 starts_at: "2026-07-19T00:35:20Z".to_string(),
                 ends_at: "2026-08-19T00:35:20Z".to_string(),
+                monthly_limit_tokens: 1_000_000,
+                monthly_used_tokens: 20_996,
+                monthly_reserved_tokens: 0,
             },
             weekly: WalletUsageWindow {
+                starts_at: "2026-07-19T00:35:20Z".to_string(),
                 ends_at: "2026-07-26T00:35:20Z".to_string(),
+                limit_tokens: 250_000,
+                used_tokens: 20_996,
+                reserved_tokens: 0,
             },
             monthly_remaining_tokens: 979_004,
             weekly_remaining_tokens: 229_004,

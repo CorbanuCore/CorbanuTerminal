@@ -433,6 +433,7 @@ mod vault_menu;
 mod wallet_account_actions;
 pub(crate) mod wallet_menu;
 pub(crate) mod wallet_receipt;
+pub(crate) mod wallet_usage;
 use self::user_messages::PendingSteer;
 use self::user_messages::PendingSteerCompareKey;
 use self::user_messages::QueueDrain;

@@ -1851,6 +1851,12 @@ impl App {
             AppEvent::OpenWallet => {
                 self.chat_widget.open_wallet_menu();
             }
+            AppEvent::OpenWalletPlanUsage => {
+                self.chat_widget.open_wallet_plan_usage();
+            }
+            AppEvent::WalletPlanUsageReady { result } => {
+                self.chat_widget.on_wallet_plan_usage_ready(result);
+            }
             AppEvent::OpenWalletCreate => {
                 self.chat_widget.open_wallet_create();
             }

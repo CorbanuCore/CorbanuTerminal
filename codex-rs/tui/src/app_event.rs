@@ -1353,6 +1353,10 @@ pub(crate) enum AppEvent {
     OpenVaultCredentialAdd,
 
     OpenWallet,
+    OpenWalletPlanUsage,
+    WalletPlanUsageReady {
+        result: Result<crate::chatwidget::wallet_usage::WalletPlanUsageOverview, String>,
+    },
     OpenWalletCreate,
     OpenWalletRestore,
     OpenWalletRestorePasscode {

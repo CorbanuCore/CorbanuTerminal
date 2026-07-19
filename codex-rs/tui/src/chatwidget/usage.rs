@@ -27,16 +27,7 @@ impl ChatWidget {
             };
         let mut items = Vec::new();
         if self.pfterminal_plan_key_is_linked() {
-            items.push(SelectionItem {
-                name: "PfTerminal Plan usage".to_string(),
-                description: Some(
-                    "View weekly and monthly tokens, remaining balances, and reset times."
-                        .to_string(),
-                ),
-                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenWallet))],
-                dismiss_on_select: true,
-                ..Default::default()
-            });
+            items.push(pfterminal_plan_usage_item());
         }
         items.extend([
             SelectionItem {
@@ -393,5 +384,31 @@ fn reset_label(count: i64) -> &'static str {
         "rate-limit reset"
     } else {
         "rate-limit resets"
+    }
+}
+
+fn pfterminal_plan_usage_item() -> SelectionItem {
+    SelectionItem {
+        name: "PfTerminal Plan usage".to_string(),
+        description: Some(
+            "View prepaid spend, used and in-flight tokens, limits, and reset times.".to_string(),
+        ),
+        actions: vec![Box::new(|tx| tx.send(AppEvent::OpenWalletPlanUsage))],
+        dismiss_on_select: true,
+        ..Default::default()
+    }
+}
+
+#[cfg(test)]
+mod pfterminal_plan_tests {
+    use super::*;
+
+    #[test]
+    fn plan_usage_action_opens_dedicated_usage_view() {
+        let item = pfterminal_plan_usage_item();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let sender = crate::app_event_sender::AppEventSender::new(tx);
+        (item.actions[0])(&sender);
+        assert!(matches!(rx.try_recv(), Ok(AppEvent::OpenWalletPlanUsage)));
     }
 }
