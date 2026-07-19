@@ -584,6 +584,123 @@ struct TransactionPayload {
 mod tests {
     use super::*;
 
+    fn unlocked_mainnet_wallet() -> (tempfile::TempDir, UnlockedWallet) {
+        let home = tempfile::tempdir().expect("tempdir");
+        let wallet = crate::Wallet::new(home.path().to_path_buf());
+        wallet
+            .create(
+                "a sufficiently long payment test passphrase",
+                Network::Mainnet,
+            )
+            .expect("create wallet");
+        let unlocked = wallet
+            .unlock("a sufficiently long payment test passphrase")
+            .expect("unlock wallet");
+        (home, unlocked)
+    }
+
+    fn valid_intent() -> PaymentIntent {
+        PaymentIntent {
+            payment_url: "http://127.0.0.1:4021/v1/subscriptions/starter".to_string(),
+            gateway_origin: "http://127.0.0.1:4021".to_string(),
+            network: SOLANA_MAINNET.to_string(),
+            rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
+            asset: crate::SOLANA_MAINNET_USDC_MINT.to_string(),
+            amount_atomic: "1000000".to_string(),
+            pay_to: "G3s13pAE8f72jPPWSvwEfLr6Gg1WRh6Nv7i98HNMoVcd".to_string(),
+        }
+    }
+
+    fn valid_requirement() -> PaymentRequirement {
+        PaymentRequirement {
+            scheme: "exact".to_string(),
+            network: SOLANA_MAINNET.to_string(),
+            amount: "1000000".to_string(),
+            asset: crate::SOLANA_MAINNET_USDC_MINT.to_string(),
+            pay_to: "G3s13pAE8f72jPPWSvwEfLr6Gg1WRh6Nv7i98HNMoVcd".to_string(),
+            max_timeout_seconds: 300,
+            extra: PaymentExtra {
+                fee_payer: "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4".to_string(),
+                memo: None,
+            },
+        }
+    }
+
+    #[test]
+    fn payment_intent_tampering_is_rejected_before_network_or_signing() {
+        let (_home, wallet) = unlocked_mainnet_wallet();
+        let valid = valid_intent();
+        validate_intent(&wallet, &valid).expect("valid confirmed intent");
+
+        let mut cases = Vec::new();
+        let mut changed = valid.clone();
+        changed.gateway_origin = "http://payments.example.com".to_string();
+        changed.payment_url = "http://payments.example.com/v1/subscriptions/starter".to_string();
+        cases.push(("insecure remote origin", changed));
+        let mut changed = valid.clone();
+        changed.payment_url = "https://attacker.example/v1/subscriptions/starter".to_string();
+        cases.push(("cross-origin payment URL", changed));
+        let mut changed = valid.clone();
+        changed.network = SOLANA_DEVNET.to_string();
+        cases.push(("network", changed));
+        let mut changed = valid.clone();
+        changed.asset = crate::SOLANA_DEVNET_USDC_MINT.to_string();
+        cases.push(("asset mint", changed));
+        let mut changed = valid.clone();
+        changed.amount_atomic = "0".to_string();
+        cases.push(("zero amount", changed));
+        let mut changed = valid.clone();
+        changed.amount_atomic = "not-a-number".to_string();
+        cases.push(("malformed amount", changed));
+        let mut changed = valid;
+        changed.pay_to = "not-a-solana-address".to_string();
+        cases.push(("recipient", changed));
+
+        for (field, tampered) in cases {
+            assert!(
+                validate_intent(&wallet, &tampered).is_err(),
+                "tampered {field} must fail before signing"
+            );
+        }
+    }
+
+    #[test]
+    fn x402_requirement_tampering_never_matches_the_confirmed_intent() {
+        let intent = valid_intent();
+        let valid = valid_requirement();
+        assert!(valid.matches(&intent));
+
+        let mut cases = Vec::new();
+        let mut changed = valid.clone();
+        changed.scheme = "upto".to_string();
+        cases.push(("scheme", changed));
+        let mut changed = valid.clone();
+        changed.network = SOLANA_DEVNET.to_string();
+        cases.push(("network", changed));
+        let mut changed = valid.clone();
+        changed.amount = "2000000".to_string();
+        cases.push(("amount", changed));
+        let mut changed = valid.clone();
+        changed.asset = crate::SOLANA_DEVNET_USDC_MINT.to_string();
+        cases.push(("asset mint", changed));
+        let mut changed = valid.clone();
+        changed.pay_to = "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4".to_string();
+        cases.push(("recipient", changed));
+        let mut changed = valid.clone();
+        changed.max_timeout_seconds = 0;
+        cases.push(("timeout", changed));
+        let mut changed = valid;
+        changed.extra.fee_payer.clear();
+        cases.push(("sponsor", changed));
+
+        for (field, tampered) in cases {
+            assert!(
+                !tampered.matches(&intent),
+                "tampered x402 {field} must not match the confirmed intent"
+            );
+        }
+    }
+
     #[test]
     fn v2_requirement_round_trip_preserves_matching_timeout() {
         let value = serde_json::json!({
