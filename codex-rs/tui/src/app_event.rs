@@ -198,6 +198,15 @@ pub(crate) struct WalletUnlockedResult {
     pub(crate) capability: WalletSecret,
     pub(crate) expires_in_seconds: u64,
     pub(crate) policy: codex_wallet_daemon::UnlockPolicy,
+    pub(crate) continuation: WalletUnlockContinuation,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum WalletUnlockContinuation {
+    WalletMenu,
+    OpenPlans {
+        mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
+    },
 }
 
 #[derive(Debug)]
@@ -1381,6 +1390,7 @@ pub(crate) enum AppEvent {
     },
     OpenWalletUnlock {
         policy: codex_wallet_daemon::UnlockPolicy,
+        continuation: WalletUnlockContinuation,
     },
     OpenWalletCustomUnlock {
         validation_error: Option<String>,

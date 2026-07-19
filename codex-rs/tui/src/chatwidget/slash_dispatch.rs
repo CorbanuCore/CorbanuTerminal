@@ -779,9 +779,12 @@ impl ChatWidget {
                 "create" => self.open_wallet_create(),
                 "restore" => self.open_wallet_restore(),
                 "lock" => self.lock_wallet(),
-                "unlock" => self.open_wallet_unlock(codex_wallet_daemon::UnlockPolicy::Timed {
-                    duration_seconds: 15 * 60,
-                }),
+                "unlock" => self.open_wallet_unlock(
+                    codex_wallet_daemon::UnlockPolicy::Timed {
+                        duration_seconds: 15 * 60,
+                    },
+                    crate::app_event::WalletUnlockContinuation::WalletMenu,
+                ),
                 _ => self.add_error_message(
                     "Usage: /wallet [status|create|restore|unlock|lock]".to_string(),
                 ),

@@ -1872,8 +1872,11 @@ impl App {
             AppEvent::WalletRecoveryBackupFinished { result } => {
                 self.chat_widget.on_wallet_recovery_backup_finished(result);
             }
-            AppEvent::OpenWalletUnlock { policy } => {
-                self.chat_widget.open_wallet_unlock(policy);
+            AppEvent::OpenWalletUnlock {
+                policy,
+                continuation,
+            } => {
+                self.chat_widget.open_wallet_unlock(policy, continuation);
             }
             AppEvent::OpenWalletCustomUnlock { validation_error } => {
                 self.chat_widget.open_wallet_custom_unlock(validation_error);

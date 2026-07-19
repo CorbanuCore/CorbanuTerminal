@@ -1061,11 +1061,7 @@ fn wallet_items(
         push_wallet_line(header, &linked_plan_owner_description(linked_plan), false);
     }
     if !overview.plan_credential_present {
-        push_wallet_line(
-            header,
-            "PfTerminal Plan · not connected — recover access to check this wallet",
-            false,
-        );
+        push_wallet_line(header, "PfTerminal Plan · not connected", false);
     }
     let upgrade_mode = overview.plan.as_ref().map(|plan| {
         let (current_plan_id, starts_at) = plan
@@ -1119,9 +1115,31 @@ fn wallet_items(
         ));
     }
     if !overview.plan_credential_present && !overview.daemon.busy {
+        if can_sign {
+            items.push(item(
+                "Buy PfTerminal Plan",
+                "Choose a plan and confirm the exact USDC payment",
+                || AppEvent::OpenWalletPlans {
+                    mode: WalletPlanPurchaseMode::New,
+                },
+            ));
+        } else {
+            items.push(item(
+                "Buy PfTerminal Plan",
+                "Unlock, choose a plan, and confirm the exact USDC payment",
+                || AppEvent::OpenWalletUnlock {
+                    policy: UnlockPolicy::Timed {
+                        duration_seconds: 300,
+                    },
+                    continuation: crate::app_event::WalletUnlockContinuation::OpenPlans {
+                        mode: WalletPlanPurchaseMode::New,
+                    },
+                },
+            ));
+        }
         items.push(item(
-            "Recover PfTerminal Plan",
-            "Verify wallet ownership, restore plan details and usage, and send no USDC",
+            "Recover existing plan",
+            "Only for a wallet that previously purchased a plan; sends no USDC",
             || AppEvent::WalletRecoverPlanRequested,
         ));
     }
@@ -1151,7 +1169,10 @@ fn wallet_items(
                 name: name.to_string(),
                 description: Some("Signing capability remains only in this TUI".to_string()),
                 actions: vec![Box::new(move |tx| {
-                    tx.send(AppEvent::OpenWalletUnlock { policy })
+                    tx.send(AppEvent::OpenWalletUnlock {
+                        policy,
+                        continuation: crate::app_event::WalletUnlockContinuation::WalletMenu,
+                    })
                 })],
                 ..Default::default()
             });
@@ -1182,7 +1203,7 @@ fn wallet_items(
                 &format!("Choose a higher tier for the period starting {starts_at}"),
                 move || AppEvent::OpenWalletPlans { mode: mode.clone() },
             ));
-        } else {
+        } else if overview.plan_credential_present {
             items.push(item(
                 "Buy a PfTerminal plan",
                 "Pay once with USDC and activate metered inference",
@@ -1198,13 +1219,18 @@ fn wallet_items(
                 || AppEvent::WalletRecoverPlanRequested,
             ));
         }
-    } else if upgrade_mode.is_some() && !overview.daemon.busy {
+    } else if !overview.daemon.busy
+        && let Some(mode) = upgrade_mode
+    {
         items.push(item(
             "Upgrade PfTerminal Plan",
             "Unlock for 5 minutes, then choose a higher tier",
-            || AppEvent::OpenWalletUnlock {
+            move || AppEvent::OpenWalletUnlock {
                 policy: UnlockPolicy::Timed {
                     duration_seconds: 300,
+                },
+                continuation: crate::app_event::WalletUnlockContinuation::OpenPlans {
+                    mode: mode.clone(),
                 },
             },
         ));
@@ -1529,7 +1555,8 @@ mod tests {
     #[test]
     fn unlocked_daemon_without_this_tui_capability_requires_unlock_again() {
         let items = names(false, false);
-        assert!(items.iter().any(|name| name == "Recover PfTerminal Plan"));
+        assert!(items.iter().any(|name| name == "Buy PfTerminal Plan"));
+        assert!(items.iter().any(|name| name == "Recover existing plan"));
         assert!(
             items
                 .iter()
@@ -1548,23 +1575,40 @@ mod tests {
     #[test]
     fn scoped_capability_enables_spending_actions_only_in_owning_tui() {
         let items = names(false, true);
-        assert!(items.iter().any(|name| name == "Buy a PfTerminal plan"));
-        assert!(items.iter().any(|name| name == "Recover PfTerminal Plan"));
+        assert!(items.iter().any(|name| name == "Buy PfTerminal Plan"));
+        assert!(items.iter().any(|name| name == "Recover existing plan"));
         assert!(!items.iter().any(|name| name.starts_with("Unlock for")));
     }
 
     #[test]
-    fn disconnected_locked_wallet_can_start_plan_recovery_directly() {
+    fn fresh_locked_wallet_leads_with_purchase_and_keeps_recovery_secondary() {
         let mut header = ColumnRenderable::new();
         let items = wallet_items(&mut header, overview(true), false);
+        let purchase = items
+            .iter()
+            .position(|item| item.name == "Buy PfTerminal Plan")
+            .expect("fresh wallet purchase action");
         let recovery = items
             .iter()
-            .position(|item| item.name == "Recover PfTerminal Plan")
-            .expect("restored wallet recovery action");
-        assert_eq!(recovery, 1, "recovery should follow Receive");
+            .position(|item| item.name == "Recover existing plan")
+            .expect("existing-plan recovery action");
+        assert_eq!(purchase, 1, "purchase should follow Receive");
+        assert_eq!(recovery, 2, "recovery should follow purchase");
 
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = crate::app_event_sender::AppEventSender::new(tx);
+        (items[purchase].actions[0])(&sender);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::OpenWalletUnlock {
+                policy: UnlockPolicy::Timed {
+                    duration_seconds: 300
+                },
+                continuation: crate::app_event::WalletUnlockContinuation::OpenPlans {
+                    mode: WalletPlanPurchaseMode::New
+                }
+            })
+        ));
         (items[recovery].actions[0])(&sender);
         assert!(matches!(
             rx.try_recv(),
@@ -1585,7 +1629,9 @@ mod tests {
         assert!(names.contains(&"Lock wallet"));
         assert!(!names.iter().any(|name| name.starts_with("Unlock for")));
         assert!(!names.contains(&"Buy a PfTerminal plan"));
+        assert!(!names.contains(&"Buy PfTerminal Plan"));
         assert!(!names.contains(&"Recover plan access"));
+        assert!(!names.contains(&"Recover existing plan"));
     }
 
     #[test]
@@ -1606,6 +1652,9 @@ mod tests {
             Ok(AppEvent::OpenWalletUnlock {
                 policy: UnlockPolicy::Timed {
                     duration_seconds: 300
+                },
+                continuation: crate::app_event::WalletUnlockContinuation::OpenPlans {
+                    mode: WalletPlanPurchaseMode::Upgrade { .. }
                 }
             })
         ));

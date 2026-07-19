@@ -1,5 +1,6 @@
 use super::*;
 use crate::app_event::WalletSecret;
+use crate::app_event::WalletUnlockContinuation;
 use crate::app_event::WalletUnlockedResult;
 use codex_wallet_daemon::UnlockPolicy;
 use codex_wallet_daemon::WalletDaemonClient;
@@ -7,7 +8,11 @@ use zeroize::Zeroize;
 use zeroize::Zeroizing;
 
 impl ChatWidget {
-    pub(crate) fn open_wallet_unlock(&mut self, policy: UnlockPolicy) {
+    pub(crate) fn open_wallet_unlock(
+        &mut self,
+        policy: UnlockPolicy,
+        continuation: WalletUnlockContinuation,
+    ) {
         let home = self.config.codex_home.as_path().to_path_buf();
         let tx = self.app_event_tx.clone();
         let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
@@ -24,6 +29,7 @@ impl ChatWidget {
                             capability: WalletSecret::new(capability),
                             expires_in_seconds,
                             policy,
+                            continuation,
                         })
                         .map_err(|error| error.to_string());
                     passcode.zeroize();
@@ -47,7 +53,10 @@ impl ChatWidget {
             String::new(),
             Some(guidance),
             Box::new(move |value| match parse_unlock_minutes(&value) {
-                Ok(policy) => tx.send(AppEvent::OpenWalletUnlock { policy }),
+                Ok(policy) => tx.send(AppEvent::OpenWalletUnlock {
+                    policy,
+                    continuation: WalletUnlockContinuation::WalletMenu,
+                }),
                 Err(validation_error) => tx.send(AppEvent::OpenWalletCustomUnlock {
                     validation_error: Some(validation_error),
                 }),
@@ -67,7 +76,10 @@ impl ChatWidget {
                     unlock_confirmation(unlocked.policy, unlocked.expires_in_seconds),
                     None,
                 );
-                self.open_wallet_menu();
+                match unlocked.continuation {
+                    WalletUnlockContinuation::WalletMenu => self.open_wallet_menu(),
+                    WalletUnlockContinuation::OpenPlans { mode } => self.open_wallet_plans(mode),
+                }
             }
             Err(error) => self.add_error_message(format!("Wallet unlock failed: {error}")),
         }
