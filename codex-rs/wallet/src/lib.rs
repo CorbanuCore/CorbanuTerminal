@@ -19,5 +19,6 @@ pub use payment::PaymentReceipt;
 pub use payment::PlanPurchaseIntent;
 pub use payment::ProvisionedPlan;
 pub use payment::X402PaymentError;
+pub use payment::validate_gateway_origin;
 
 pub const SOLANA_USDC_MINT: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";

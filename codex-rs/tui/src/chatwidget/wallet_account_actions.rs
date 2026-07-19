@@ -7,10 +7,11 @@ impl ChatWidget {
     pub(crate) fn confirm_wallet_plan_disconnect(&mut self) {
         let mut header = ColumnRenderable::new();
         header.push(Line::from("Disconnect PfTerminal Plan".bold()));
-        header.push(Line::from(
-            "This removes the plan credential from this device. Your paid period and wallet remain unchanged."
-                .dim(),
-        ));
+        for line in super::wallet_menu::wallet_wrapped_lines(
+            "This removes the plan credential from this device. Your paid period and wallet remain unchanged.",
+        ) {
+            header.push(Line::from(line.dim()));
+        }
         self.show_selection_view(SelectionViewParams {
             view_id: Some(super::wallet_menu::WALLET_DISCONNECT_PLAN_VIEW_ID),
             header: Box::new(header),
@@ -44,6 +45,8 @@ impl ChatWidget {
     }
 
     pub(crate) fn on_wallet_plan_disconnected(&mut self, result: Result<bool, String>) {
+        self.bottom_pane
+            .dismiss_view_by_id(super::wallet_menu::WALLET_DISCONNECT_PLAN_VIEW_ID);
         match result {
             Ok(true) => self.add_info_message(
                 "PfTerminal Plan disconnected from this device. The paid period and wallet were not changed."
@@ -68,14 +71,16 @@ impl ChatWidget {
         let mut header = ColumnRenderable::new();
         header.push(Line::from("Remove wallet from this device".bold().red()));
         header.push(Line::from(format!("Wallet: {short}")));
-        header.push(Line::from(
-            "Funds stay on Solana. PfTerminal cannot recover them without your recovery material."
-                .red(),
-        ));
-        header.push(Line::from(
-            "This also disconnects the local PfTerminal Plan credential. It does not cancel or refund the paid period."
-                .dim(),
-        ));
+        for line in super::wallet_menu::wallet_wrapped_lines(
+            "Funds stay on Solana. PfTerminal cannot recover them without your recovery material.",
+        ) {
+            header.push(Line::from(line.red()));
+        }
+        for line in super::wallet_menu::wallet_wrapped_lines(
+            "This also disconnects the local PfTerminal Plan credential. It does not cancel or refund the paid period.",
+        ) {
+            header.push(Line::from(line.dim()));
+        }
         self.show_selection_view(SelectionViewParams {
             view_id: Some(super::wallet_menu::WALLET_REMOVE_VIEW_ID),
             header: Box::new(header),
@@ -128,6 +133,8 @@ impl ChatWidget {
     }
 
     pub(crate) fn on_wallet_removed(&mut self, result: Result<(), String>) {
+        self.bottom_pane
+            .dismiss_view_by_id(super::wallet_menu::WALLET_REMOVE_VIEW_ID);
         self.wallet_capability = None;
         self.wallet_balances = None;
         match result {

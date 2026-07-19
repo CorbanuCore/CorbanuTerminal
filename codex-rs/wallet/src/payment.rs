@@ -434,7 +434,7 @@ fn validate_intent(
     Ok(())
 }
 
-fn validate_gateway_origin(value: &str) -> Result<(), X402PaymentError> {
+pub fn validate_gateway_origin(value: &str) -> Result<(), X402PaymentError> {
     let gateway = reqwest::Url::parse(value).map_err(|_| invalid("gateway origin is not a URL"))?;
     if gateway.path() != "/" || gateway.query().is_some() || gateway.fragment().is_some() {
         return Err(invalid(

@@ -1197,7 +1197,7 @@ fn wallet_capability_for_request(
     capability.map(|value| Zeroizing::new(value.to_string()))
 }
 
-fn wallet_wrapped_lines(text: &str) -> Vec<String> {
+pub(super) fn wallet_wrapped_lines(text: &str) -> Vec<String> {
     let options = textwrap::Options::new(64)
         .break_words(false)
         .word_separator(textwrap::WordSeparator::AsciiSpace)

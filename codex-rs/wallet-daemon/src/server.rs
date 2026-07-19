@@ -157,8 +157,8 @@ async fn handle_immediate(state: Arc<Mutex<State>>, mut request: Request) -> Res
         } => {
             let valid = state
                 .capabilities
-                .remove(capability)
-                .is_some_and(|expiry| expiry > Instant::now());
+                .get(capability)
+                .is_some_and(|expiry| *expiry > Instant::now());
             capability.zeroize();
             if !valid {
                 return Response::Error {
@@ -166,9 +166,7 @@ async fn handle_immediate(state: Arc<Mutex<State>>, mut request: Request) -> Res
                     message: "signing capability is invalid or expired".into(),
                 };
             }
-            if !gateway_origin.starts_with("https://")
-                && !gateway_origin.starts_with("http://127.0.0.1:")
-            {
+            if codex_wallet::validate_gateway_origin(gateway_origin).is_err() {
                 return Response::Error {
                     code: "origin_refused".into(),
                     message: "gateway origin is not permitted".into(),
@@ -271,8 +269,8 @@ async fn checkout_wallet(
     }
     let valid = state
         .capabilities
-        .remove(capability)
-        .is_some_and(|expiry| expiry > Instant::now());
+        .get(capability)
+        .is_some_and(|expiry| *expiry > Instant::now());
     capability.zeroize();
     if !valid {
         return Err(Response::Error {
@@ -441,7 +439,7 @@ mod tests {
     use codex_wallet::Network;
 
     #[tokio::test]
-    async fn unlock_capability_is_scoped_one_shot_and_global_lock_is_real() {
+    async fn unlock_capability_remains_scoped_for_its_ttl_and_global_lock_is_real() {
         let home = tempfile::tempdir().expect("tempdir");
         Wallet::new(home.path().to_path_buf())
             .create("a sufficiently long test passphrase", Network::Devnet)
@@ -476,6 +474,40 @@ mod tests {
                 .is_empty()
         );
         assert!(
+            !client
+                .sign_ownership(
+                    capability.clone(),
+                    "http://localhost:4021".to_string(),
+                    "challenge".to_string()
+                )
+                .await
+                .expect("loopback alias accepted consistently")
+                .is_empty()
+        );
+        assert!(
+            client
+                .sign_ownership(
+                    capability.clone(),
+                    "http://gateway.example".to_string(),
+                    "challenge".to_string()
+                )
+                .await
+                .is_err()
+        );
+        assert!(
+            !client
+                .sign_ownership(
+                    capability.clone(),
+                    "https://gateway.example".to_string(),
+                    "challenge".to_string()
+                )
+                .await
+                .expect("second sign during TTL")
+                .is_empty()
+        );
+        client.lock().await.expect("lock");
+        assert!(client.status().await.expect("status").locked);
+        assert!(
             client
                 .sign_ownership(
                     capability,
@@ -485,8 +517,6 @@ mod tests {
                 .await
                 .is_err()
         );
-        client.lock().await.expect("lock");
-        assert!(client.status().await.expect("status").locked);
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
