@@ -77,6 +77,23 @@ async fn wallet_removal_wraps_copy_and_dismisses_confirmation_before_replacement
 }
 
 #[tokio::test]
+async fn reopening_wallet_replaces_the_existing_surface_instead_of_stacking() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.open_wallet_menu();
+    chat.open_wallet_menu();
+    assert_eq!(
+        chat.bottom_pane.active_view_id(),
+        Some(crate::chatwidget::wallet_menu::WALLET_MENU_VIEW_ID)
+    );
+
+    chat.bottom_pane
+        .handle_key_event(KeyEvent::from(KeyCode::Esc));
+
+    assert_eq!(chat.bottom_pane.active_view_id(), None);
+}
+
+#[tokio::test]
 async fn experimental_mode_plan_is_ignored_on_startup() {
     let codex_home = tempdir().expect("tempdir");
     let cfg = ConfigBuilder::default()

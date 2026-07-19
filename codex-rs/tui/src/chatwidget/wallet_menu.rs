@@ -19,7 +19,7 @@ use codex_wallet_daemon::WalletDaemonClient;
 use zeroize::Zeroize;
 use zeroize::Zeroizing;
 
-const WALLET_MENU_VIEW_ID: &str = "wallet-menu";
+pub(super) const WALLET_MENU_VIEW_ID: &str = "wallet-menu";
 const WALLET_PLANS_VIEW_ID: &str = "wallet-plans";
 pub(super) const WALLET_DISCONNECT_PLAN_VIEW_ID: &str = "wallet-disconnect-plan";
 pub(super) const WALLET_REMOVE_VIEW_ID: &str = "wallet-remove";
@@ -116,7 +116,13 @@ pub(crate) struct WalletUsageWindow {
 
 impl ChatWidget {
     pub(crate) fn open_wallet_menu(&mut self) {
-        self.show_selection_view(wallet_params(None, self.wallet_capability.is_some()));
+        let params = wallet_params(None, self.wallet_capability.is_some());
+        if !self
+            .bottom_pane
+            .replace_selection_view_if_present(WALLET_MENU_VIEW_ID, params)
+        {
+            self.show_selection_view(wallet_params(None, self.wallet_capability.is_some()));
+        }
         self.refresh_wallet_status();
     }
 
