@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::Barrier;
 
 use codex_keyring_store::tests::MockKeyringStore;
 
@@ -113,4 +114,56 @@ fn recovery_backup_requires_the_fresh_passcode_and_round_trips() {
         )
         .expect("restore backup");
     assert_eq!(restored.manifest.address, created.manifest.address);
+}
+
+#[test]
+fn concurrent_creates_serialize_without_replacing_the_winner() {
+    let home = tempfile::tempdir().expect("tempdir");
+    let wallet = Wallet::new_with_keyring(
+        home.path().to_path_buf(),
+        Arc::new(MockKeyringStore::default()),
+    );
+    let barrier = Arc::new(Barrier::new(3));
+    let passcodes = ["111111", "222222"];
+    let handles = passcodes
+        .into_iter()
+        .map(|passphrase| {
+            let wallet = wallet.clone();
+            let barrier = Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                barrier.wait();
+                wallet.create(passphrase, Network::Mainnet)
+            })
+        })
+        .collect::<Vec<_>>();
+    barrier.wait();
+    let results = handles
+        .into_iter()
+        .map(|handle| handle.join().expect("create thread"))
+        .collect::<Vec<_>>();
+
+    let (winner, created) = results
+        .iter()
+        .enumerate()
+        .find_map(|(index, result)| result.as_ref().ok().map(|created| (index, created)))
+        .expect("one create should win");
+    assert_eq!(
+        results
+            .iter()
+            .filter(|result| matches!(result, Err(WalletError::AlreadyExists)))
+            .count(),
+        1
+    );
+    assert_eq!(
+        wallet.manifest().expect("surviving manifest").address,
+        created.manifest.address
+    );
+    assert_eq!(
+        wallet
+            .unlock(passcodes[winner])
+            .expect("winner's machine secret must survive")
+            .manifest()
+            .address,
+        created.manifest.address
+    );
 }

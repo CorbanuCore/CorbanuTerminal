@@ -3,9 +3,13 @@ use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Write;
 #[cfg(unix)]
+use std::os::fd::AsRawFd;
+#[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -201,6 +205,7 @@ impl Wallet {
     }
 
     pub fn create(&self, passcode: &str, network: Network) -> Result<CreatedWallet, WalletError> {
+        let _creation_lock = self.acquire_creation_lock()?;
         if self.exists() {
             return Err(WalletError::AlreadyExists);
         }
@@ -215,6 +220,7 @@ impl Wallet {
         passcode: &str,
         network: Network,
     ) -> Result<CreatedWallet, WalletError> {
+        let _creation_lock = self.acquire_creation_lock()?;
         if self.exists() {
             return Err(WalletError::AlreadyExists);
         }
@@ -422,6 +428,48 @@ impl Wallet {
     fn envelope_path(&self) -> PathBuf {
         self.root.join("wallet.json")
     }
+
+    fn acquire_creation_lock(&self) -> Result<File, WalletError> {
+        prepare_private_dir(&self.root)?;
+        let path = self.root.join("creation.lock");
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        let file = options.open(path).map_err(storage)?;
+        #[cfg(unix)]
+        {
+            file.set_permissions(fs::Permissions::from_mode(0o600))
+                .map_err(storage)?;
+            let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
+            if result != 0 {
+                return Err(storage(std::io::Error::last_os_error()));
+            }
+        }
+        #[cfg(windows)]
+        {
+            use windows_sys::Win32::Storage::FileSystem::LOCKFILE_EXCLUSIVE_LOCK;
+            use windows_sys::Win32::Storage::FileSystem::LockFileEx;
+            use windows_sys::Win32::System::IO::OVERLAPPED;
+
+            let mut overlapped: OVERLAPPED = unsafe { std::mem::zeroed() };
+            let locked = unsafe {
+                LockFileEx(
+                    file.as_raw_handle() as isize,
+                    LOCKFILE_EXCLUSIVE_LOCK,
+                    0,
+                    1,
+                    0,
+                    &mut overlapped,
+                )
+            };
+            if locked == 0 {
+                return Err(storage(std::io::Error::last_os_error()));
+            }
+        }
+        Ok(file)
+    }
+
     fn manifest_path(&self) -> PathBuf {
         self.root.join("manifest.json")
     }

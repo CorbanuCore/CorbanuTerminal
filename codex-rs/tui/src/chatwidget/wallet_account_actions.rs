@@ -87,7 +87,7 @@ impl ChatWidget {
                     AppEvent::OpenWallet
                 }),
                 {
-                    let address = address.clone();
+                    let address = address;
                     confirmation_item(
                         "Remove wallet",
                         "I have saved the recovery material",

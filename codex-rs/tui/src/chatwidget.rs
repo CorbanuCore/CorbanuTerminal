@@ -431,6 +431,7 @@ mod usage;
 mod user_messages;
 mod vault_menu;
 mod wallet_account_actions;
+mod wallet_http;
 pub(crate) mod wallet_menu;
 pub(crate) mod wallet_receipt;
 mod wallet_unlock;

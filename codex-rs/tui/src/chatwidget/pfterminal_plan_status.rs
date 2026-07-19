@@ -48,11 +48,12 @@ pub(crate) async fn load(
             PfTerminalPlanStatus::WalletOnly { wallet_address }
         });
     };
-    let response = reqwest::Client::new()
-        .get(format!(
-            "{}/v1/account",
-            super::wallet_menu::wallet_gateway_origin()
-        ))
+    let Ok(gateway) = super::wallet_http::gateway_client() else {
+        return PfTerminalPlanStatus::ConnectedStatusUnavailable { wallet_address };
+    };
+    let response = gateway
+        .client
+        .get(format!("{}/v1/account", gateway.origin))
         .bearer_auth(key.as_str())
         .send()
         .await;

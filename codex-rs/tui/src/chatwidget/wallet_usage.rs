@@ -1,8 +1,8 @@
 use super::*;
+use crate::chatwidget::wallet_http::gateway_client;
 use crate::chatwidget::wallet_menu::WalletPlanCatalog;
 use crate::chatwidget::wallet_menu::WalletPlanStatus;
 use crate::chatwidget::wallet_menu::title_case_plan;
-use crate::chatwidget::wallet_menu::wallet_gateway_origin;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use zeroize::Zeroizing;
 
@@ -55,16 +55,16 @@ async fn load_plan_usage(
     let key = key.ok_or_else(|| {
         "PfTerminal Plan is disconnected. Reconnect it from /wallet to view usage.".to_string()
     })?;
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|error| error.to_string())?;
-    let origin = wallet_gateway_origin();
-    let account_request = client
-        .get(format!("{origin}/v1/account"))
+    let gateway = gateway_client()?;
+    let account_request = gateway
+        .client
+        .get(format!("{}/v1/account", gateway.origin))
         .bearer_auth(key.as_str())
         .send();
-    let catalog_request = client.get(format!("{origin}/v1/plans")).send();
+    let catalog_request = gateway
+        .client
+        .get(format!("{}/v1/plans", gateway.origin))
+        .send();
     let (account, catalog) = tokio::join!(account_request, catalog_request);
     let account = account.map_err(|error| format!("plan usage is unavailable: {error}"))?;
     if !account.status().is_success() {

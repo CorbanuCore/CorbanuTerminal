@@ -3,6 +3,8 @@ use crate::app_event::WalletCreatedResult;
 use crate::app_event::WalletPlanProvisionedResult;
 use crate::app_event::WalletPlanPurchaseSummary;
 use crate::app_event::WalletSecret;
+use crate::chatwidget::wallet_http::gateway_client;
+use crate::chatwidget::wallet_http::gateway_origin;
 use crate::chatwidget::wallet_receipt::latest_plan_receipt;
 use crate::chatwidget::wallet_receipt::reconcile_plan_receipt;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
@@ -172,12 +174,15 @@ impl ChatWidget {
                     .map_err(|error| error.to_string())?;
                 let plan_request = async {
                     if let Some(key) = plan_key {
-                        let url = format!(
-                            "{}/v1/account",
-                            wallet_gateway_origin().trim_end_matches('/')
-                        );
-                        match reqwest::Client::new()
-                            .get(url)
+                        let gateway = match gateway_client() {
+                            Ok(gateway) => gateway,
+                            Err(error) => {
+                                return (None, Some(format!("plan status unavailable: {error}")));
+                            }
+                        };
+                        match gateway
+                            .client
+                            .get(format!("{}/v1/account", gateway.origin))
                             .bearer_auth(key.as_str())
                             .send()
                             .await
@@ -201,11 +206,12 @@ impl ChatWidget {
                     }
                 };
                 let catalog_request = async {
-                    match reqwest::Client::new()
-                        .get(format!(
-                            "{}/v1/plans",
-                            wallet_gateway_origin().trim_end_matches('/')
-                        ))
+                    let Ok(gateway) = gateway_client() else {
+                        return None;
+                    };
+                    match gateway
+                        .client
+                        .get(format!("{}/v1/plans", gateway.origin))
                         .send()
                         .await
                     {
@@ -473,11 +479,12 @@ impl ChatWidget {
             ..Default::default()
         });
         let tx = self.app_event_tx.clone();
-        let url = format!("{}/v1/plans", wallet_gateway_origin().trim_end_matches('/'));
         tokio::spawn(async move {
             let result = async {
-                let response = reqwest::Client::new()
-                    .get(url)
+                let gateway = gateway_client()?;
+                let response = gateway
+                    .client
+                    .get(format!("{}/v1/plans", gateway.origin))
                     .send()
                     .await
                     .map_err(|error| error.to_string())?;
@@ -718,7 +725,7 @@ impl ChatWidget {
                 transaction: None,
             };
             let intent = PlanPurchaseIntent {
-                gateway_origin: wallet_gateway_origin(),
+                gateway_origin: gateway_origin(),
                 plan_id: plan.id,
                 network: payment.network,
                 rpc_url: payment.rpc_url,
@@ -1134,7 +1141,7 @@ fn wallet_items(
         "Requires the fresh wallet passcode; opens only in the secure view",
         || AppEvent::OpenWalletRecoveryBackup,
     ));
-    let removal_address = address.clone();
+    let removal_address = address;
     items.push(item(
         "Remove wallet from this device",
         "Requires saved recovery material; does not move funds",
@@ -1179,12 +1186,7 @@ pub(crate) fn short_address(address: &str) -> String {
     }
 }
 pub(crate) fn wallet_gateway_origin() -> String {
-    std::env::var("PFTERMINAL_PLAN_GATEWAY_URL")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "http://127.0.0.1:4021".to_string())
-        .trim_end_matches('/')
-        .to_string()
+    gateway_origin()
 }
 pub(crate) fn title_case_plan(id: &str) -> String {
     let mut chars = id.chars();
@@ -1216,7 +1218,7 @@ pub(super) fn wallet_wrapped_lines(text: &str) -> Vec<String> {
         .word_splitter(textwrap::WordSplitter::NoHyphenation);
     textwrap::wrap(text, options)
         .into_iter()
-        .map(|line| line.into_owned())
+        .map(std::borrow::Cow::into_owned)
         .collect()
 }
 

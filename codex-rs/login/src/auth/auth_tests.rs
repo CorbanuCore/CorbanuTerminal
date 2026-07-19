@@ -2463,8 +2463,7 @@ fn deleting_provider_key_suppresses_an_unreadable_vault_until_explicit_relogin()
             .expect("an unavailable vault must not block effective deletion")
     );
     let provider_auth: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(codex_home.path().join("provider_auth.json"))
-            .expect("deletion marker file"),
+        &std::fs::read(codex_home.path().join("provider_auth.json")).expect("deletion marker file"),
     )
     .expect("deletion marker JSON");
     assert_eq!(
@@ -2501,5 +2500,35 @@ fn deleting_provider_key_suppresses_an_unreadable_vault_until_explicit_relogin()
         .expect("replacement key lookup")
         .as_deref(),
         Some("replacement-plan-key")
+    );
+}
+
+#[test]
+fn legacy_provider_auth_replacements_are_atomic_and_leave_no_temporary_file() {
+    let codex_home = tempdir().expect("tempdir");
+    super::legacy_save_provider_key(codex_home.path(), "FIRST_API_KEY", "first-secret")
+        .expect("save first key");
+    super::legacy_save_provider_key(codex_home.path(), "SECOND_API_KEY", "second-secret")
+        .expect("replace provider auth atomically");
+
+    assert_eq!(
+        super::legacy_provider_key(codex_home.path(), "FIRST_API_KEY")
+            .expect("read first key")
+            .as_deref(),
+        Some("first-secret")
+    );
+    assert_eq!(
+        super::legacy_provider_key(codex_home.path(), "SECOND_API_KEY")
+            .expect("read second key")
+            .as_deref(),
+        Some("second-secret")
+    );
+    let entries = std::fs::read_dir(codex_home.path())
+        .expect("read codex home")
+        .map(|entry| entry.expect("directory entry").file_name())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        entries,
+        vec![std::ffi::OsString::from("provider_auth.json")]
     );
 }

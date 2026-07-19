@@ -1,8 +1,8 @@
 use super::*;
 use crate::app_event::WalletPlanPurchaseSummary;
+use crate::chatwidget::wallet_http::gateway_client;
 use crate::chatwidget::wallet_menu::WalletPlanStatus;
 use crate::chatwidget::wallet_menu::title_case_plan;
-use crate::chatwidget::wallet_menu::wallet_gateway_origin;
 use codex_wallet::BalanceClient;
 use codex_wallet::WalletBalances;
 use codex_wallet_daemon::WalletDaemonClient;
@@ -40,18 +40,32 @@ pub(super) async fn reconcile_plan_receipt(
     purchase: WalletPlanPurchaseSummary,
     credential_error: Option<String>,
 ) -> WalletPlanReceipt {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .unwrap_or_default();
-    let account = client
-        .get(format!(
-            "{}/v1/account",
-            wallet_gateway_origin().trim_end_matches('/')
-        ))
-        .bearer_auth(api_key.as_str())
-        .send()
-        .await;
+    let account = match gateway_client() {
+        Ok(gateway) => {
+            gateway
+                .client
+                .get(format!("{}/v1/account", gateway.origin))
+                .bearer_auth(api_key.as_str())
+                .send()
+                .await
+        }
+        Err(error) => {
+            return receipt_from_status(
+                None,
+                None,
+                ReceiptSeed {
+                    plan_id,
+                    price_usdc: Some(purchase.price_usdc),
+                    transaction: purchase.transaction,
+                    scheduled_start: purchase.scheduled_start,
+                    reconciliation_error: Some(format!(
+                        "account confirmation was unavailable: {error}"
+                    )),
+                    credential_error,
+                },
+            );
+        }
+    };
     let (status, reconciliation_error) = match account {
         Ok(response) if response.status().is_success() => {
             match response.json::<WalletPlanStatus>().await {

@@ -135,6 +135,7 @@ pub const REVOKE_TOKEN_URL_OVERRIDE_ENV_VAR: &str = "CODEX_REVOKE_TOKEN_URL_OVER
 pub const CLIENT_ID_OVERRIDE_ENV_VAR: &str = "CODEX_APP_SERVER_LOGIN_CLIENT_ID";
 static NEXT_DUMMY_AUTH_ID: AtomicU64 = AtomicU64::new(1);
 static PROVIDER_API_KEY_STORAGE_REVISION: AtomicU64 = AtomicU64::new(1);
+static NEXT_PROVIDER_AUTH_TEMP_ID: AtomicU64 = AtomicU64::new(1);
 
 fn provider_api_key_storage_revision() -> u64 {
     PROVIDER_API_KEY_STORAGE_REVISION.load(Ordering::Acquire)
@@ -1165,17 +1166,32 @@ fn save_provider_auth(
         std::fs::create_dir_all(parent)?;
     }
 
-    let json_data = serde_json::to_string_pretty(provider_auth)?;
+    let mut json_data = serde_json::to_string_pretty(provider_auth)?;
+    json_data.push('\n');
+    let temporary = provider_auth_file.with_file_name(format!(
+        ".provider_auth.json.{}.{}.tmp",
+        std::process::id(),
+        NEXT_PROVIDER_AUTH_TEMP_ID.fetch_add(1, Ordering::Relaxed)
+    ));
     let mut options = std::fs::OpenOptions::new();
-    options.truncate(true).write(true).create(true);
+    options.write(true).create_new(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = options.open(provider_auth_file)?;
+    let mut file = options.open(&temporary)?;
     file.write_all(json_data.as_bytes())?;
-    file.flush()
+    file.sync_all()?;
+    if let Err(error) = std::fs::rename(&temporary, &provider_auth_file) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(error);
+    }
+    #[cfg(unix)]
+    if let Some(parent) = provider_auth_file.parent() {
+        std::fs::File::open(parent)?.sync_all()?;
+    }
+    Ok(())
 }
 
 fn save_provider_api_key(

@@ -19,6 +19,7 @@ chacha20poly1305 = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 codex-keyring-store = { workspace = true }
 ed25519-dalek = { workspace = true }
+libc = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
@@ -37,6 +38,13 @@ solana-signer = { workspace = true }
 solana-transaction = { workspace = true }
 spl-token = { workspace = true }
 zeroize = { workspace = true, features = ["derive"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+] }
 
 [dev-dependencies]
 codex-keyring-store = { workspace = true }
