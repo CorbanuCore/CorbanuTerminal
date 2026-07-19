@@ -5,6 +5,7 @@ use serde::Serialize;
 #[cfg(test)]
 use serial_test::serial;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::env;
 use std::fmt::Debug;
 use std::future::Future;
@@ -956,13 +957,30 @@ pub fn delete_provider_api_key(codex_home: &Path, provider_key_id: &str) -> std:
             "provider key id cannot be empty",
         ));
     }
-    let removed_vault =
-        super::provider_key_vault::delete_provider_key(codex_home, provider_key_id)?;
+    let removed_vault = super::provider_key_vault::delete_provider_key(codex_home, provider_key_id);
     let removed_legacy = legacy_delete_provider_key(codex_home, provider_key_id)?;
-    if removed_vault || removed_legacy {
+    let removed = match removed_vault {
+        Ok(removed_vault) => {
+            legacy_clear_provider_key_tombstone(codex_home, provider_key_id)?;
+            removed_vault || removed_legacy
+        }
+        Err(error) => {
+            // An encrypted vault can become temporarily unavailable (for example after a
+            // copied CODEX_HOME loses its keyring binding). Persist a non-secret tombstone so
+            // the inaccessible copy cannot silently become active again if the vault later
+            // recovers. A subsequent explicit login clears the tombstone.
+            tracing::warn!(
+                provider_key_id,
+                %error,
+                "provider vault was unavailable during credential deletion; suppressing the stale vault entry"
+            );
+            legacy_mark_provider_key_deleted(codex_home, provider_key_id)? || removed_legacy
+        }
+    };
+    if removed {
         mark_provider_api_key_storage_changed();
     }
-    Ok(removed_vault || removed_legacy)
+    Ok(removed)
 }
 
 /// Writes an `auth.json` that contains only the access token.
@@ -1082,6 +1100,9 @@ pub fn provider_api_key_from_auth_storage(
     _auth_credentials_store_mode: AuthCredentialsStoreMode,
     _keyring_backend_kind: AuthKeyringBackendKind,
 ) -> std::io::Result<Option<String>> {
+    if legacy_provider_key_is_deleted(codex_home, provider_key_id)? {
+        return Ok(None);
+    }
     // Prefer the encrypted vault; fall back to the legacy plaintext store for compatibility.
     if let Some(key) = super::provider_key_vault::read_provider_key(codex_home, provider_key_id)? {
         return Ok(Some(key));
@@ -1106,6 +1127,8 @@ pub(super) fn legacy_provider_key(
 struct ProviderAuthDotJson {
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     api_keys: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "HashSet::is_empty")]
+    deleted_api_keys: HashSet<String>,
 }
 
 fn provider_auth_file(codex_home: &Path) -> PathBuf {
@@ -1160,6 +1183,7 @@ fn save_provider_api_key(
     provider_key_id: &str,
     api_key: &str,
 ) -> std::io::Result<()> {
+    legacy_clear_provider_key_tombstone(codex_home, provider_key_id)?;
     super::provider_key_vault::write_provider_key(codex_home, provider_key_id, api_key)
 }
 
@@ -1170,6 +1194,7 @@ pub(super) fn legacy_save_provider_key(
     api_key: &str,
 ) -> std::io::Result<()> {
     let mut provider_auth = load_provider_auth(codex_home)?;
+    provider_auth.deleted_api_keys.remove(provider_key_id);
     provider_auth
         .api_keys
         .insert(provider_key_id.to_string(), api_key.to_string());
@@ -1187,7 +1212,45 @@ pub(super) fn legacy_delete_provider_key(
     let mut provider_auth = load_provider_auth(codex_home)?;
     let removed = provider_auth.api_keys.remove(provider_key_id).is_some();
     if removed {
-        if provider_auth.api_keys.is_empty() {
+        if provider_auth.api_keys.is_empty() && provider_auth.deleted_api_keys.is_empty() {
+            delete_provider_auth_if_exists(codex_home)?;
+        } else {
+            save_provider_auth(codex_home, &provider_auth)?;
+        }
+    }
+    Ok(removed)
+}
+
+fn legacy_provider_key_is_deleted(
+    codex_home: &Path,
+    provider_key_id: &str,
+) -> std::io::Result<bool> {
+    Ok(load_provider_auth(codex_home)?
+        .deleted_api_keys
+        .contains(provider_key_id))
+}
+
+fn legacy_mark_provider_key_deleted(
+    codex_home: &Path,
+    provider_key_id: &str,
+) -> std::io::Result<bool> {
+    let mut provider_auth = load_provider_auth(codex_home)?;
+    provider_auth.api_keys.remove(provider_key_id);
+    let inserted = provider_auth
+        .deleted_api_keys
+        .insert(provider_key_id.to_string());
+    save_provider_auth(codex_home, &provider_auth)?;
+    Ok(inserted)
+}
+
+fn legacy_clear_provider_key_tombstone(
+    codex_home: &Path,
+    provider_key_id: &str,
+) -> std::io::Result<bool> {
+    let mut provider_auth = load_provider_auth(codex_home)?;
+    let removed = provider_auth.deleted_api_keys.remove(provider_key_id);
+    if removed {
+        if provider_auth.api_keys.is_empty() && provider_auth.deleted_api_keys.is_empty() {
             delete_provider_auth_if_exists(codex_home)?;
         } else {
             save_provider_auth(codex_home, &provider_auth)?;

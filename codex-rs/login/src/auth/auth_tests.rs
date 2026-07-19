@@ -2442,3 +2442,64 @@ fn deleting_one_provider_api_key_preserves_other_legacy_credentials() {
         Some("ambient-secret")
     );
 }
+
+#[test]
+fn deleting_provider_key_suppresses_an_unreadable_vault_until_explicit_relogin() {
+    let codex_home = tempdir().expect("tempdir");
+    super::legacy_save_provider_key(
+        codex_home.path(),
+        "PFTERMINAL_PLAN_API_KEY",
+        "legacy-plan-key",
+    )
+    .expect("seed legacy provider key");
+
+    let secrets_dir = codex_home.path().join("secrets");
+    std::fs::create_dir_all(&secrets_dir).expect("create secrets dir");
+    std::fs::write(secrets_dir.join("local.age"), b"not-an-age-file")
+        .expect("write unreadable vault fixture");
+
+    assert!(
+        super::delete_provider_api_key(codex_home.path(), "PFTERMINAL_PLAN_API_KEY")
+            .expect("an unavailable vault must not block effective deletion")
+    );
+    let provider_auth: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(codex_home.path().join("provider_auth.json"))
+            .expect("deletion marker file"),
+    )
+    .expect("deletion marker JSON");
+    assert_eq!(
+        provider_auth["deleted_api_keys"],
+        serde_json::json!(["PFTERMINAL_PLAN_API_KEY"]),
+        "vault failure must leave a durable suppression marker"
+    );
+    assert_eq!(
+        super::provider_api_key_from_auth_storage(
+            codex_home.path(),
+            "PFTERMINAL_PLAN_API_KEY",
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::default(),
+        )
+        .expect("deleted key lookup"),
+        None
+    );
+
+    super::login_with_provider_api_key(
+        codex_home.path(),
+        "PFTERMINAL_PLAN_API_KEY",
+        "replacement-plan-key",
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )
+    .expect("explicit login should clear the deletion marker");
+    assert_eq!(
+        super::provider_api_key_from_auth_storage(
+            codex_home.path(),
+            "PFTERMINAL_PLAN_API_KEY",
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::default(),
+        )
+        .expect("replacement key lookup")
+        .as_deref(),
+        Some("replacement-plan-key")
+    );
+}
