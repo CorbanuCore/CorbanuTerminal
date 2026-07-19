@@ -16,6 +16,18 @@ terminal interface for AI-assisted coding and crypto-native workflows.
 curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install.sh | sh
 ```
 
+### Windows
+
+Run the native installer from PowerShell. Do not use the Linux `curl ... | sh`
+command in PowerShell; Windows PowerShell maps `curl` to `Invoke-WebRequest`,
+which does not support curl's `-fsSL` flags.
+
+```powershell
+Invoke-RestMethod https://github.com/agtico/PfTerminal/releases/latest/download/install.ps1 | Invoke-Expression
+```
+
+If you are working inside WSL2, use the Linux command instead.
+
 ### macOS
 
 Download the latest DMG from
