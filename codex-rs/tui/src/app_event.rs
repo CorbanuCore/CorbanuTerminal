@@ -1378,8 +1378,11 @@ pub(crate) enum AppEvent {
     WalletUnlockFinished {
         result: Result<WalletUnlockedResult, String>,
     },
-    OpenWalletPlans,
+    OpenWalletPlans {
+        mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
+    },
     WalletPlansReady {
+        mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
         result: Result<crate::chatwidget::wallet_menu::WalletPlanCatalog, String>,
     },
     ConfirmWalletPlanPurchase {

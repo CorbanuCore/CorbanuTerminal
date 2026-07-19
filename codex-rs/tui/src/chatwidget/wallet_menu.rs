@@ -29,6 +29,17 @@ pub(crate) struct WalletPlanChoice {
     pub(crate) amount_atomic: String,
     pub(crate) weekly_token_limit: u64,
     pub(crate) monthly_token_limit: u64,
+    #[serde(skip)]
+    pub(crate) scheduled_start: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum WalletPlanPurchaseMode {
+    New,
+    Upgrade {
+        current_plan_id: String,
+        starts_at: String,
+    },
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -64,6 +75,16 @@ pub(crate) struct WalletPlanStatus {
     pub(crate) weekly: WalletUsageWindow,
     pub(crate) monthly_remaining_tokens: u64,
     pub(crate) weekly_remaining_tokens: u64,
+    #[serde(default)]
+    pub(crate) queued_periods: Vec<WalletQueuedPlanPeriod>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WalletQueuedPlanPeriod {
+    pub(crate) plan_id: String,
+    pub(crate) starts_at: String,
+    pub(crate) ends_at: String,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -352,7 +373,7 @@ impl ChatWidget {
         });
     }
 
-    pub(crate) fn open_wallet_plans(&mut self) {
+    pub(crate) fn open_wallet_plans(&mut self, mode: WalletPlanPurchaseMode) {
         let mut header = ColumnRenderable::new();
         header.push(Line::from("PfTerminal plans".bold()));
         self.show_selection_view(SelectionViewParams {
@@ -384,24 +405,54 @@ impl ChatWidget {
                     .map_err(|error| error.to_string())
             }
             .await;
-            tx.send(AppEvent::WalletPlansReady { result });
+            tx.send(AppEvent::WalletPlansReady { mode, result });
         });
     }
 
-    pub(crate) fn on_wallet_plans_ready(&mut self, result: Result<WalletPlanCatalog, String>) {
+    pub(crate) fn on_wallet_plans_ready(
+        &mut self,
+        mode: WalletPlanPurchaseMode,
+        result: Result<WalletPlanCatalog, String>,
+    ) {
         match result {
             Ok(catalog) => {
                 let mut header = ColumnRenderable::new();
-                header.push(Line::from("PfTerminal plans".bold()));
-                header.push(Line::from(
-                    "One month, paid once in Solana USDC. No recurring wallet charge.".dim(),
-                ));
+                match &mode {
+                    WalletPlanPurchaseMode::New => {
+                        header.push(Line::from("PfTerminal plans".bold()));
+                        header.push(Line::from(
+                            "One month, paid once in Solana USDC. No recurring wallet charge."
+                                .dim(),
+                        ));
+                    }
+                    WalletPlanPurchaseMode::Upgrade {
+                        current_plan_id,
+                        starts_at,
+                    } => {
+                        header.push(Line::from("Upgrade PfTerminal Plan".bold()));
+                        header.push(Line::from(format!(
+                            "Choose a tier above {}. It starts {starts_at} after the paid period you already own.",
+                            title_case_plan(current_plan_id)
+                        )));
+                        header.push(Line::from(
+                            "The existing period and its remaining tokens are preserved.".dim(),
+                        ));
+                    }
+                }
                 let payment = catalog.payment;
-                let items = catalog
-                    .plans
+                let plans = match &mode {
+                    WalletPlanPurchaseMode::New => catalog.plans,
+                    WalletPlanPurchaseMode::Upgrade {
+                        current_plan_id, ..
+                    } => higher_tiers_from_catalog(catalog.plans, current_plan_id),
+                };
+                let mut items = plans
                     .into_iter()
                     .map(|plan| {
-                        let selected = plan.clone();
+                        let mut selected = plan.clone();
+                        if let WalletPlanPurchaseMode::Upgrade { starts_at, .. } = &mode {
+                            selected.scheduled_start = Some(starts_at.clone());
+                        }
                         SelectionItem {
                             name: format!(
                                 "{} — {} USDC",
@@ -421,7 +472,18 @@ impl ChatWidget {
                             ..Default::default()
                         }
                     })
-                    .collect();
+                    .collect::<Vec<_>>();
+                if items.is_empty() {
+                    items.push(SelectionItem {
+                        name: "No higher tier available".to_string(),
+                        description: Some(
+                            "The current or already-scheduled plan is the highest tier."
+                                .to_string(),
+                        ),
+                        is_disabled: true,
+                        ..Default::default()
+                    });
+                }
                 self.bottom_pane.replace_selection_view_if_present(
                     WALLET_PLANS_VIEW_ID,
                     SelectionViewParams {
@@ -459,7 +521,15 @@ impl ChatWidget {
             format_token_count(plan.monthly_token_limit),
         )));
         header.push(Line::from(
-            "This payment is final and does not recur automatically.".dim(),
+            plan.scheduled_start.as_ref().map_or_else(
+                || "This payment is final and does not recur automatically.".to_string(),
+                |starts_at| {
+                    format!(
+                        "This upgrade begins {starts_at}; the current paid period remains active until then."
+                    )
+                },
+            )
+            .dim(),
         ));
         match remaining_usdc {
             Some((current, Some(remaining))) => header.push(Line::from(format!(
@@ -705,7 +775,18 @@ fn wallet_items(
     if let Some(error) = overview.balance_error {
         header.push(Line::from(format!("Balance unavailable: {error}").red()));
     }
-    if let Some(plan) = overview.plan {
+    let upgrade_mode = overview.plan.as_ref().map(|plan| {
+        let (current_plan_id, starts_at) = plan
+            .queued_periods
+            .last()
+            .map(|queued| (queued.plan_id.clone(), queued.ends_at.clone()))
+            .unwrap_or_else(|| (plan.period.plan_id.clone(), plan.period.ends_at.clone()));
+        WalletPlanPurchaseMode::Upgrade {
+            current_plan_id,
+            starts_at,
+        }
+    });
+    if let Some(plan) = &overview.plan {
         header.push(Line::from(
             format!(
                 "{} plan · {} weekly tokens left · {} monthly tokens left",
@@ -722,6 +803,17 @@ fn wallet_items(
             )
             .dim(),
         ));
+        if let Some(next) = plan.queued_periods.first() {
+            header.push(Line::from(
+                format!(
+                    "Next: {} plan · {} to {}",
+                    title_case_plan(&next.plan_id),
+                    next.starts_at,
+                    next.ends_at,
+                )
+                .dim(),
+            ));
+        }
     }
     if let Some(error) = overview.plan_error {
         header.push(Line::from(format!("Plan status: {error}").red()));
@@ -766,15 +858,37 @@ fn wallet_items(
         ));
     }
     if can_sign {
-        items.push(item(
-            "Buy a PfTerminal plan",
-            "Pay once with USDC and activate metered inference",
-            AppEvent::OpenWalletPlans,
-        ));
+        if let Some(mode) = upgrade_mode {
+            let starts_at = match &mode {
+                WalletPlanPurchaseMode::Upgrade { starts_at, .. } => starts_at.clone(),
+                WalletPlanPurchaseMode::New => unreachable!(),
+            };
+            items.push(item(
+                "Upgrade PfTerminal Plan",
+                &format!("Choose a higher tier for the period starting {starts_at}"),
+                AppEvent::OpenWalletPlans { mode },
+            ));
+        } else {
+            items.push(item(
+                "Buy a PfTerminal plan",
+                "Pay once with USDC and activate metered inference",
+                AppEvent::OpenWalletPlans {
+                    mode: WalletPlanPurchaseMode::New,
+                },
+            ));
+        }
         items.push(item(
             "Recover plan access",
             "Issue a replacement key for an already-paid wallet without another payment",
             AppEvent::WalletRecoverPlanRequested,
+        ));
+    } else if upgrade_mode.is_some() {
+        items.push(item(
+            "Upgrade PfTerminal Plan",
+            "Unlock for 5 minutes, then choose a higher tier",
+            AppEvent::OpenWalletUnlock {
+                duration_seconds: 300,
+            },
         ));
     }
     if overview.plan_credential_present {
@@ -809,6 +923,16 @@ pub(super) fn item(name: &str, description: &str, event: AppEvent) -> SelectionI
         })],
         ..Default::default()
     }
+}
+
+fn higher_tiers_from_catalog(
+    plans: Vec<WalletPlanChoice>,
+    current_plan_id: &str,
+) -> Vec<WalletPlanChoice> {
+    let Some(current_index) = plans.iter().position(|plan| plan.id == current_plan_id) else {
+        return Vec::new();
+    };
+    plans.into_iter().skip(current_index + 1).collect()
 }
 pub(crate) fn short_address(address: &str) -> String {
     if address.len() > 14 {
@@ -874,6 +998,22 @@ mod tests {
             .collect()
     }
 
+    fn starter_plan() -> WalletPlanStatus {
+        WalletPlanStatus {
+            wallet_address: "EpUYgzi88BYbsGoyiNghPppd3J9ASbARq7UjBCCUnk2i".to_string(),
+            period: WalletPlanPeriod {
+                plan_id: "starter".to_string(),
+                ends_at: "2026-08-19T00:35:20Z".to_string(),
+            },
+            weekly: WalletUsageWindow {
+                ends_at: "2026-07-26T00:35:20Z".to_string(),
+            },
+            monthly_remaining_tokens: 979_004,
+            weekly_remaining_tokens: 229_004,
+            queued_periods: Vec::new(),
+        }
+    }
+
     #[test]
     fn unlocked_daemon_without_this_tui_capability_requires_unlock_again() {
         let items = names(false, false);
@@ -887,6 +1027,94 @@ mod tests {
         assert!(items.iter().any(|name| name == "Buy a PfTerminal plan"));
         assert!(items.iter().any(|name| name == "Recover plan access"));
         assert!(!items.iter().any(|name| name.starts_with("Unlock for")));
+    }
+
+    #[test]
+    fn active_plan_exposes_upgrade_before_and_after_unlock() {
+        let mut locked_overview = overview(true);
+        locked_overview.plan = Some(starter_plan());
+        let mut header = ColumnRenderable::new();
+        let locked_items = wallet_items(&mut header, locked_overview, false);
+        let locked_upgrade = locked_items
+            .iter()
+            .position(|item| item.name == "Upgrade PfTerminal Plan")
+            .expect("locked upgrade action");
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let sender = crate::app_event_sender::AppEventSender::new(tx);
+        (locked_items[locked_upgrade].actions[0])(&sender);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::OpenWalletUnlock {
+                duration_seconds: 300
+            })
+        ));
+
+        let mut unlocked_overview = overview(false);
+        unlocked_overview.plan = Some(starter_plan());
+        let mut header = ColumnRenderable::new();
+        let unlocked_items = wallet_items(&mut header, unlocked_overview, true);
+        let unlocked_upgrade = unlocked_items
+            .iter()
+            .position(|item| item.name == "Upgrade PfTerminal Plan")
+            .expect("unlocked upgrade action");
+        (unlocked_items[unlocked_upgrade].actions[0])(&sender);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::OpenWalletPlans {
+                mode: WalletPlanPurchaseMode::Upgrade {
+                    current_plan_id,
+                    starts_at,
+                }
+            }) if current_plan_id == "starter" && starts_at == "2026-08-19T00:35:20Z"
+        ));
+    }
+
+    #[test]
+    fn queued_plan_becomes_the_upgrade_floor_and_schedule_boundary() {
+        let mut status = starter_plan();
+        status.queued_periods.push(WalletQueuedPlanPeriod {
+            plan_id: "basic".to_string(),
+            starts_at: "2026-08-19T00:35:20Z".to_string(),
+            ends_at: "2026-09-19T00:35:20Z".to_string(),
+        });
+        let mut active = overview(false);
+        active.plan = Some(status);
+        let mut header = ColumnRenderable::new();
+        let items = wallet_items(&mut header, active, true);
+        let upgrade = items
+            .iter()
+            .position(|item| item.name == "Upgrade PfTerminal Plan")
+            .expect("upgrade action");
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let sender = crate::app_event_sender::AppEventSender::new(tx);
+        (items[upgrade].actions[0])(&sender);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::OpenWalletPlans {
+                mode: WalletPlanPurchaseMode::Upgrade {
+                    current_plan_id,
+                    starts_at,
+                }
+            }) if current_plan_id == "basic" && starts_at == "2026-09-19T00:35:20Z"
+        ));
+        let plans = ["entry", "daily", "studio"]
+            .into_iter()
+            .map(|id| WalletPlanChoice {
+                id: id.to_string(),
+                price_usdc: "1".to_string(),
+                amount_atomic: "1000000".to_string(),
+                weekly_token_limit: 1,
+                monthly_token_limit: 1,
+                scheduled_start: None,
+            })
+            .collect();
+        assert_eq!(
+            higher_tiers_from_catalog(plans, "daily")
+                .into_iter()
+                .map(|plan| plan.id)
+                .collect::<Vec<_>>(),
+            vec!["studio"]
+        );
     }
 
     #[test]
@@ -934,6 +1162,20 @@ mod tests {
             "This also disconnects the local PfTerminal Plan credential. It does not cancel or refund the paid period.",
             "Cancel — Keep the wallet on this device",
             "Remove wallet — I have saved the recovery material",
+        ]
+        .join("\n");
+        insta::assert_snapshot!(rendered);
+    }
+
+    #[test]
+    fn wallet_upgrade_flow_copy_snapshot() {
+        let rendered = [
+            "Locked wallet: Upgrade PfTerminal Plan — Unlock for 5 minutes, then choose a higher tier",
+            "Unlocked wallet: Upgrade PfTerminal Plan — Choose a higher tier for the period starting 2026-08-19T00:35:20Z",
+            "Upgrade PfTerminal Plan",
+            "Choose a tier above Starter. It starts 2026-08-19T00:35:20Z after the paid period you already own.",
+            "The existing period and its remaining tokens are preserved.",
+            "Confirmation: This upgrade begins 2026-08-19T00:35:20Z; the current paid period remains active until then.",
         ]
         .join("\n");
         insta::assert_snapshot!(rendered);

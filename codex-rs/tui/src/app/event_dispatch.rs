@@ -1893,11 +1893,11 @@ impl App {
             AppEvent::WalletUnlockFinished { result } => {
                 self.chat_widget.on_wallet_unlock_finished(result);
             }
-            AppEvent::OpenWalletPlans => {
-                self.chat_widget.open_wallet_plans();
+            AppEvent::OpenWalletPlans { mode } => {
+                self.chat_widget.open_wallet_plans(mode);
             }
-            AppEvent::WalletPlansReady { result } => {
-                self.chat_widget.on_wallet_plans_ready(result);
+            AppEvent::WalletPlansReady { mode, result } => {
+                self.chat_widget.on_wallet_plans_ready(mode, result);
             }
             AppEvent::ConfirmWalletPlanPurchase { plan } => {
                 self.chat_widget.confirm_wallet_plan_purchase(plan);
