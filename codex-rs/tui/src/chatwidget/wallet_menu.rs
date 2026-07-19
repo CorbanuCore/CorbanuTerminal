@@ -515,13 +515,19 @@ impl ChatWidget {
                         starts_at,
                     } => {
                         header.push(Line::from("Upgrade PfTerminal Plan".bold()));
-                        header.push(Line::from(format!(
-                            "Choose a tier above {}. It starts {starts_at} after the paid period you already own.",
-                            title_case_plan(current_plan_id)
-                        )));
-                        header.push(Line::from(
-                            "The existing period and its remaining tokens are preserved.".dim(),
-                        ));
+                        push_wallet_line(
+                            &mut header,
+                            &format!(
+                                "Choose a tier above {}. It starts {starts_at} after the paid period you already own.",
+                                title_case_plan(current_plan_id)
+                            ),
+                            /*dimmed*/ false,
+                        );
+                        push_wallet_line(
+                            &mut header,
+                            "The existing period and its remaining tokens are preserved.",
+                            /*dimmed*/ true,
+                        );
                     }
                 }
                 let payment = catalog.payment;
@@ -1613,11 +1619,16 @@ mod tests {
 
     #[test]
     fn wallet_upgrade_flow_copy_snapshot() {
+        let upgrade_intro = "Choose a tier above Starter. It starts 2026-08-19T00:35:20Z after the paid period you already own.";
+        let wrapped_intro = wallet_wrapped_lines(upgrade_intro);
+        assert!(wrapped_intro.len() > 1);
+        assert!(wrapped_intro.iter().all(|line| line.chars().count() <= 64));
+        assert_eq!(wrapped_intro.join(" "), upgrade_intro);
         let rendered = [
             "Locked wallet: Upgrade PfTerminal Plan — Unlock for 5 minutes, then choose a higher tier",
             "Unlocked wallet: Upgrade PfTerminal Plan — Choose a higher tier for the period starting 2026-08-19T00:35:20Z",
             "Upgrade PfTerminal Plan",
-            "Choose a tier above Starter. It starts 2026-08-19T00:35:20Z after the paid period you already own.",
+            upgrade_intro,
             "The existing period and its remaining tokens are preserved.",
             "Confirmation: This upgrade begins 2026-08-19T00:35:20Z; the current paid period remains active until then.",
         ]
