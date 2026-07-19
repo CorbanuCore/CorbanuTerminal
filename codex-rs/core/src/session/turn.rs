@@ -540,25 +540,28 @@ pub(crate) async fn run_turn(
                     )
                     .await
                     {
-                        Ok(assessment) => assessment,
+                        Ok(assessment) => Some(assessment),
                         Err(CodexErr::TurnAborted) => return Err(CodexErr::TurnAborted),
                         Err(err) => {
                             warn!(
                                 turn_id = %turn_context.sub_id,
                                 error = %err,
-                                "completion assessment failed; treating the result as uncertain"
+                                "completion assessment failed; accepting the model response without automatic continuation"
                             );
-                            CompletionAssessment::Uncertain
+                            None
                         }
                     };
-                    match completion_guard.record_assessment(assessment) {
-                        CompletionGuardAction::Accept => {
+                    match assessment.map(|assessment| {
+                        (assessment, completion_guard.record_assessment(assessment))
+                    }) {
+                        None => {}
+                        Some((_, CompletionGuardAction::Accept)) => {
                             trace!(
                                 turn_id = %turn_context.sub_id,
                                 "completion assessment accepted the final response"
                             );
                         }
-                        CompletionGuardAction::Continue => {
+                        Some((assessment, CompletionGuardAction::Continue)) => {
                             trace!(
                                 turn_id = %turn_context.sub_id,
                                 assessment = ?assessment,
@@ -573,7 +576,7 @@ pub(crate) async fn run_turn(
                             .await;
                             continue;
                         }
-                        CompletionGuardAction::AcceptAfterLimit => {
+                        Some((_, CompletionGuardAction::AcceptAfterLimit)) => {
                             warn!(
                                 turn_id = %turn_context.sub_id,
                                 attempts = MAX_COMPLETION_ASSESSMENT_ATTEMPTS,

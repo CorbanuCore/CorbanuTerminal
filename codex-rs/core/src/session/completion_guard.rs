@@ -59,11 +59,11 @@ impl CompletionGuardState {
         assessment: CompletionAssessment,
     ) -> CompletionGuardAction {
         match assessment {
-            CompletionAssessment::Complete => {
+            CompletionAssessment::Complete | CompletionAssessment::Uncertain => {
                 self.unsuccessful_assessments = 0;
                 CompletionGuardAction::Accept
             }
-            CompletionAssessment::Incomplete | CompletionAssessment::Uncertain => {
+            CompletionAssessment::Incomplete => {
                 self.unsuccessful_assessments += 1;
                 if self.unsuccessful_assessments >= MAX_COMPLETION_ASSESSMENT_ATTEMPTS {
                     CompletionGuardAction::AcceptAfterLimit
@@ -183,7 +183,7 @@ mod tests {
     }
 
     #[test]
-    fn incomplete_and_uncertain_assessments_are_bounded_across_tool_calls() {
+    fn only_explicit_incomplete_assessments_request_continuation() {
         let mut state = CompletionGuardState::default();
         assert_eq!(
             state.record_assessment(CompletionAssessment::Incomplete),
@@ -191,6 +191,15 @@ mod tests {
         );
         assert_eq!(
             state.record_assessment(CompletionAssessment::Uncertain),
+            CompletionGuardAction::Accept
+        );
+        assert_eq!(state.unsuccessful_assessments(), 0);
+        assert_eq!(
+            state.record_assessment(CompletionAssessment::Incomplete),
+            CompletionGuardAction::Continue
+        );
+        assert_eq!(
+            state.record_assessment(CompletionAssessment::Incomplete),
             CompletionGuardAction::Continue
         );
         state.observe_sampling(true);
