@@ -1878,8 +1878,12 @@ impl App {
             } => {
                 self.chat_widget.open_wallet_unlock(policy, continuation);
             }
-            AppEvent::OpenWalletCustomUnlock { validation_error } => {
-                self.chat_widget.open_wallet_custom_unlock(validation_error);
+            AppEvent::OpenWalletCustomUnlock {
+                validation_error,
+                continuation,
+            } => {
+                self.chat_widget
+                    .open_wallet_custom_unlock(validation_error, continuation);
             }
             AppEvent::WalletLockRequested => {
                 self.chat_widget.lock_wallet();
@@ -1909,8 +1913,13 @@ impl App {
                 self.chat_widget
                     .on_wallet_create_finished(operation, result);
             }
-            AppEvent::WalletUnlockFinished { result } => {
-                self.chat_widget.on_wallet_unlock_finished(result);
+            AppEvent::WalletUnlockFinished {
+                policy,
+                continuation,
+                result,
+            } => {
+                self.chat_widget
+                    .on_wallet_unlock_finished(policy, continuation, result);
             }
             AppEvent::OpenWalletPlans { mode } => {
                 self.chat_widget.open_wallet_plans(mode);

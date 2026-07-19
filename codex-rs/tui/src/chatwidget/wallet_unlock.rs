@@ -28,19 +28,25 @@ impl ChatWidget {
                         .map(|(capability, expires_in_seconds)| WalletUnlockedResult {
                             capability: WalletSecret::new(capability),
                             expires_in_seconds,
-                            policy,
-                            continuation,
                         })
                         .map_err(|error| error.to_string());
                     passcode.zeroize();
-                    tx.send(AppEvent::WalletUnlockFinished { result });
+                    tx.send(AppEvent::WalletUnlockFinished {
+                        policy,
+                        continuation,
+                        result,
+                    });
                 });
             }),
         );
         self.bottom_pane.show_view(Box::new(view));
     }
 
-    pub(crate) fn open_wallet_custom_unlock(&mut self, validation_error: Option<String>) {
+    pub(crate) fn open_wallet_custom_unlock(
+        &mut self,
+        validation_error: Option<String>,
+        continuation: WalletUnlockContinuation,
+    ) {
         let tx = self.app_event_tx.clone();
         let guidance = validation_error
             .map(|error| format!("Try again: {error}"))
@@ -55,10 +61,11 @@ impl ChatWidget {
             Box::new(move |value| match parse_unlock_minutes(&value) {
                 Ok(policy) => tx.send(AppEvent::OpenWalletUnlock {
                     policy,
-                    continuation: WalletUnlockContinuation::WalletMenu,
+                    continuation: continuation.clone(),
                 }),
                 Err(validation_error) => tx.send(AppEvent::OpenWalletCustomUnlock {
                     validation_error: Some(validation_error),
+                    continuation: continuation.clone(),
                 }),
             }),
         );
@@ -67,21 +74,26 @@ impl ChatWidget {
 
     pub(crate) fn on_wallet_unlock_finished(
         &mut self,
+        policy: UnlockPolicy,
+        continuation: WalletUnlockContinuation,
         result: Result<WalletUnlockedResult, String>,
     ) {
         match result {
             Ok(unlocked) => {
                 self.wallet_capability = Some(Zeroizing::new(unlocked.capability.into_inner()));
                 self.add_info_message(
-                    unlock_confirmation(unlocked.policy, unlocked.expires_in_seconds),
+                    unlock_confirmation(policy, unlocked.expires_in_seconds),
                     None,
                 );
-                match unlocked.continuation {
+                match continuation {
                     WalletUnlockContinuation::WalletMenu => self.open_wallet_menu(),
                     WalletUnlockContinuation::OpenPlans { mode } => self.open_wallet_plans(mode),
                 }
             }
-            Err(error) => self.add_error_message(format!("Wallet unlock failed: {error}")),
+            Err(error) => {
+                self.add_error_message(format!("Wallet unlock failed: {error}. Try again."));
+                self.open_wallet_unlock(policy, continuation);
+            }
         }
     }
 }

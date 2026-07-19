@@ -1182,6 +1182,7 @@ fn wallet_items(
             "Choose 1 minute through 8 hours; access remains only in this TUI",
             || AppEvent::OpenWalletCustomUnlock {
                 validation_error: None,
+                continuation: crate::app_event::WalletUnlockContinuation::WalletMenu,
             },
         ));
     }
