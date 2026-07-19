@@ -25,12 +25,12 @@ atomic and shared by every key for the paying wallet.
 
 ## Plans
 
-| Plan | Payment | Term | Weekly tokens | Monthly tokens |
-| --- | ---: | --- | ---: | ---: |
-| `starter` | 1 USDC | one calendar month | 250,000 | 1,000,000 |
-| `basic` | 20 USDC | one calendar month | 5,000,000 | 20,000,000 |
-| `power` | 50 USDC | one calendar month | 12,500,000 | 50,000,000 |
-| `pro` | 200 USDC | one calendar month | 50,000,000 | 200,000,000 |
+| Plan      |  Payment | Term               | Weekly tokens | Monthly tokens |
+| --------- | -------: | ------------------ | ------------: | -------------: |
+| `starter` |   1 USDC | one calendar month |       250,000 |      1,000,000 |
+| `basic`   |  20 USDC | one calendar month |     5,000,000 |     20,000,000 |
+| `power`   |  50 USDC | one calendar month |    12,500,000 |     50,000,000 |
+| `pro`     | 200 USDC | one calendar month |    50,000,000 |    200,000,000 |
 
 Additional purchases queue consecutive calendar-month periods, with a maximum of 12 months from
 the settlement time. Plan changes therefore never discard an already-paid period.
@@ -39,21 +39,21 @@ the settlement time. Plan changes therefore never discard an already-paid period
 
 The service fails at startup when any required value is absent or malformed.
 
-| Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | PostgreSQL connection URL |
-| `AMBIENT_API_KEY` | operator's upstream credential; mutually exclusive with `AMBIENT_API_KEY_FILE` |
-| `AMBIENT_API_KEY_FILE` | owner-only file containing the operator credential |
-| `AMBIENT_BASE_URL` | optional upstream URL; defaults to `https://api.ambient.xyz` |
-| `PFT_AMBIENT_TOKEN_PEPPER` | at least 32 characters, used to HMAC customer keys; mutually exclusive with `PFT_AMBIENT_TOKEN_PEPPER_FILE` |
-| `PFT_AMBIENT_TOKEN_PEPPER_FILE` | owner-only file containing the durable token pepper |
-| `PFT_AMBIENT_PUBLIC_BASE_URL` | externally visible gateway origin used in signed challenges |
-| `PFT_X402_NETWORK` | exact Solana mainnet or devnet CAIP-2 identifier |
-| `PFT_X402_PAY_TO` | Solana receiving address |
-| `PFT_X402_FACILITATOR_URL` | optional override; defaults by network |
-| `PFT_SOLANA_RPC_URL` | optional Solana RPC override; defaults by network |
-| `PFT_AMBIENT_HOST` | bind address; defaults to loopback |
-| `PFT_AMBIENT_PORT` | port; defaults to `4021` |
+| Variable                        | Purpose                                                                                                     |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                  | PostgreSQL connection URL                                                                                   |
+| `AMBIENT_API_KEY`               | operator's upstream credential; mutually exclusive with `AMBIENT_API_KEY_FILE`                              |
+| `AMBIENT_API_KEY_FILE`          | owner-only file containing the operator credential                                                          |
+| `AMBIENT_BASE_URL`              | optional upstream URL; defaults to `https://api.ambient.xyz`                                                |
+| `PFT_AMBIENT_TOKEN_PEPPER`      | at least 32 characters, used to HMAC customer keys; mutually exclusive with `PFT_AMBIENT_TOKEN_PEPPER_FILE` |
+| `PFT_AMBIENT_TOKEN_PEPPER_FILE` | owner-only file containing the durable token pepper                                                         |
+| `PFT_AMBIENT_PUBLIC_BASE_URL`   | externally visible gateway origin used in signed challenges                                                 |
+| `PFT_X402_NETWORK`              | exact Solana mainnet or devnet CAIP-2 identifier                                                            |
+| `PFT_X402_PAY_TO`               | Solana receiving address                                                                                    |
+| `PFT_X402_FACILITATOR_URL`      | optional override; defaults by network                                                                      |
+| `PFT_SOLANA_RPC_URL`            | optional Solana RPC override; defaults by network                                                           |
+| `PFT_AMBIENT_HOST`              | bind address; defaults to loopback                                                                          |
+| `PFT_AMBIENT_PORT`              | port; defaults to `4021`                                                                                    |
 
 Mainnet defaults to the PayAI facilitator. Devnet defaults to the x402.org test facilitator. A
 remote Ambient, facilitator, or public gateway URL must use HTTPS.
@@ -77,6 +77,25 @@ corepack pnpm --filter @agticorp/ambient-crypto-gateway start
 ```
 
 `GET /healthz` is process liveness. `GET /readyz` also checks PostgreSQL.
+
+## Production deployment
+
+The repository root [`fly.toml`](../../fly.toml) deploys this service as
+`pfterminal-plan-gateway` in `iad`. The application stays awake, exposes only HTTPS, and uses
+`/readyz` for health checks. Its PostgreSQL database is the separately managed
+`pfterminal-plan-db-v2` cluster; application machines contain no durable billing state.
+
+Set `AMBIENT_API_KEY` and `PFT_AMBIENT_TOKEN_PEPPER` with `fly secrets`, attach the managed
+database as `DATABASE_URL`, and deploy from the repository root:
+
+```sh
+fly deploy --app pfterminal-plan-gateway --config fly.toml
+```
+
+Fly's database attachment command can print a connection string. Run it outside recorded output,
+and rotate the database user immediately if its credential is exposed. Before directing clients
+to a new database, migrate the five `ambient_*` tables, compare row counts, verify an existing key
+through streaming inference, and create a post-migration backup.
 
 ## Customer flow
 

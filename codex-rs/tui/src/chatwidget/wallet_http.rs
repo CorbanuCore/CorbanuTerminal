@@ -1,3 +1,4 @@
+use codex_model_provider_info::PFTERMINAL_PLAN_GATEWAY_ORIGIN;
 use std::time::Duration;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -12,7 +13,7 @@ pub(crate) fn gateway_origin() -> String {
     std::env::var("PFTERMINAL_PLAN_GATEWAY_URL")
         .ok()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "http://127.0.0.1:4021".to_string())
+        .unwrap_or_else(|| PFTERMINAL_PLAN_GATEWAY_ORIGIN.to_string())
         .trim_end_matches('/')
         .to_string()
 }

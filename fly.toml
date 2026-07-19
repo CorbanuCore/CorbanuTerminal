@@ -1,0 +1,37 @@
+app = "pfterminal-plan-gateway"
+primary_region = "iad"
+
+[build]
+  dockerfile = "services/ambient-crypto-gateway/Dockerfile"
+
+[env]
+  PFT_AMBIENT_HOST = "0.0.0.0"
+  PFT_AMBIENT_PORT = "8080"
+  PFT_AMBIENT_PUBLIC_BASE_URL = "https://pfterminal-plan-gateway.fly.dev"
+  PFT_X402_NETWORK = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
+  PFT_X402_PAY_TO = "G3s13pAE8f72jPPWSvwEfLr6Gg1WRh6Nv7i98HNMoVcd"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 50
+    hard_limit = 100
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "15s"
+    method = "GET"
+    path = "/readyz"
+    timeout = "5s"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "512mb"
