@@ -9,6 +9,7 @@ pub use balance::WalletBalances;
 pub use envelope::CreatedWallet;
 pub use envelope::Network;
 pub use envelope::PublicManifest;
+pub use envelope::RecoveryBackup;
 pub use envelope::UnlockedWallet;
 pub use envelope::Wallet;
 pub use envelope::WalletError;

@@ -1362,6 +1362,10 @@ pub(crate) enum AppEvent {
     OpenWalletRestorePasscode {
         recovery: WalletSecret,
     },
+    OpenWalletRecoveryBackup,
+    WalletRecoveryBackupFinished {
+        result: Result<WalletCreatedResult, String>,
+    },
     OpenWalletUnlock {
         duration_seconds: u64,
     },

@@ -82,3 +82,35 @@ fn short_passcodes_require_machine_secret_and_secret_never_appears_on_disk() {
     let disk = fs::read_to_string(home.path().join("wallet/wallet.json")).expect("read");
     assert!(!disk.contains(&created.recovery_material[..]));
 }
+
+#[test]
+fn recovery_backup_requires_the_fresh_passcode_and_round_trips() {
+    let home = tempfile::tempdir().expect("tempdir");
+    let wallet = Wallet::new(home.path().to_path_buf());
+    let created = wallet
+        .create("a sufficiently long test passphrase", Network::Mainnet)
+        .expect("create");
+
+    assert!(matches!(
+        wallet.export_recovery("wrong passphrase"),
+        Err(WalletError::UnlockFailed)
+    ));
+    let backup = wallet
+        .export_recovery("a sufficiently long test passphrase")
+        .expect("export recovery");
+    assert_eq!(backup.manifest.address, created.manifest.address);
+    assert_eq!(
+        &backup.recovery_material[..],
+        &created.recovery_material[..]
+    );
+
+    let restored_home = tempfile::tempdir().expect("restored tempdir");
+    let restored = Wallet::new(restored_home.path().to_path_buf())
+        .restore(
+            &backup.recovery_material,
+            "another sufficiently long passphrase",
+            Network::Mainnet,
+        )
+        .expect("restore backup");
+    assert_eq!(restored.manifest.address, created.manifest.address);
+}

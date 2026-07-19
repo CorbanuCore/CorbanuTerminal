@@ -69,6 +69,7 @@ pub(crate) struct WalletOverview {
     pub(crate) plan_error: Option<String>,
     pub(crate) plan_credential_present: bool,
     pub(crate) plan_prices_usdc: std::collections::BTreeMap<String, String>,
+    pub(crate) refreshed_at: String,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -107,7 +108,6 @@ pub(crate) struct WalletPlanPeriod {
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WalletUsageWindow {
-    pub(crate) starts_at: String,
     pub(crate) ends_at: String,
     pub(crate) limit_tokens: u64,
     pub(crate) used_tokens: u64,
@@ -220,6 +220,8 @@ impl ChatWidget {
                     plan_error,
                     plan_credential_present,
                     plan_prices_usdc,
+                    refreshed_at: chrono::Utc::now()
+                        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
                 })
             }
             .await;
@@ -285,6 +287,7 @@ impl ChatWidget {
         let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
             "wallet-recovery".to_string(),
             "Restore Solana wallet".to_string(),
+            "Recovery material — masked".to_string(),
             "Recovery material (masked — never stored in chat)".to_string(),
             Box::new(move |_label, recovery| {
                 tx.send(AppEvent::OpenWalletRestorePasscode {
@@ -352,12 +355,72 @@ impl ChatWidget {
         }
     }
 
+    pub(crate) fn open_wallet_recovery_backup(&mut self) {
+        let home = self.config.codex_home.as_path().to_path_buf();
+        let tx = self.app_event_tx.clone();
+        let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
+            "wallet-passcode".to_string(),
+            "Back up recovery material".to_string(),
+            "Wallet passcode — masked".to_string(),
+            "Fresh wallet passcode (masked)".to_string(),
+            Box::new(move |_label, mut passcode| {
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || {
+                        let result = Wallet::new(home).export_recovery(&passcode);
+                        passcode.zeroize();
+                        result
+                            .map(|backup| WalletCreatedResult {
+                                address: backup.manifest.address,
+                                recovery: WalletSecret::new(backup.recovery_material.to_string()),
+                            })
+                            .map_err(|error| error.to_string())
+                    })
+                    .await
+                    .map_err(|error| format!("wallet task failed: {error}"))
+                    .and_then(|value| value);
+                    tx.send(AppEvent::WalletRecoveryBackupFinished { result });
+                });
+            }),
+        );
+        self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn on_wallet_recovery_backup_finished(
+        &mut self,
+        result: Result<WalletCreatedResult, String>,
+    ) {
+        match result {
+            Ok(backup) => {
+                let tx = self.app_event_tx.clone();
+                self.bottom_pane.show_view(Box::new(
+                    crate::bottom_pane::wallet_recovery::WalletRecoveryView::new(
+                        backup.address,
+                        backup.recovery.into_inner(),
+                    )
+                    .with_confirmation(Box::new(move || {
+                        tx.send(AppEvent::InsertHistoryCell(Box::new(
+                            history_cell::new_info_event(
+                                "Recovery backup acknowledged. The secure view was cleared."
+                                    .to_string(),
+                                None,
+                            ),
+                        )));
+                    })),
+                ));
+            }
+            Err(error) => self.add_error_message(format!(
+                "Recovery backup failed: {error}. The wallet and its signing state were unchanged."
+            )),
+        }
+    }
+
     pub(crate) fn open_wallet_unlock(&mut self, duration_seconds: u64) {
         let home = self.config.codex_home.as_path().to_path_buf();
         let tx = self.app_event_tx.clone();
         let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
             "wallet-passcode".to_string(),
             "Unlock wallet".to_string(),
+            "Wallet passcode — masked".to_string(),
             "Passcode (masked)".to_string(),
             Box::new(move |_label, mut passcode| {
                 tokio::spawn(async move {
@@ -490,6 +553,7 @@ impl ChatWidget {
                         current_plan_id, ..
                     } => higher_tiers_from_catalog(catalog.plans, current_plan_id),
                 };
+                let available_usdc_atomic = self.wallet_balances.map(|value| value.usdc_atomic);
                 let mut items = plans
                     .into_iter()
                     .map(|plan| {
@@ -497,6 +561,17 @@ impl ChatWidget {
                         if let WalletPlanPurchaseMode::Upgrade { starts_at, .. } = &mode {
                             selected.scheduled_start = Some(starts_at.clone());
                         }
+                        let required = plan.amount_atomic.parse::<u64>().ok();
+                        let affordability = match (available_usdc_atomic, required) {
+                            (Some(available), Some(required)) if available >= required => {
+                                format!("affordable with {} USDC", format_usdc_atomic(available))
+                            }
+                            (Some(available), Some(required)) => format!(
+                                "needs {} more USDC",
+                                format_usdc_atomic(required.saturating_sub(available))
+                            ),
+                            _ => "balance unknown; refresh /wallet".to_string(),
+                        };
                         SelectionItem {
                             name: format!(
                                 "{} — {} USDC",
@@ -504,10 +579,14 @@ impl ChatWidget {
                                 plan.price_usdc
                             ),
                             description: Some(format!(
-                                "{} tokens/week · {} tokens/month",
+                                "{} tokens/week · {} tokens/month · {affordability}",
                                 format_token_count(plan.weekly_token_limit),
                                 format_token_count(plan.monthly_token_limit),
                             )),
+                            is_disabled: matches!(
+                                (available_usdc_atomic, required),
+                                (Some(available), Some(required)) if available < required
+                            ),
                             actions: vec![Box::new(move |tx| {
                                 tx.send(AppEvent::ConfirmWalletPlanPurchase {
                                     plan: selected.clone(),
@@ -845,6 +924,16 @@ fn wallet_items(
     header.push(Line::from(
         format!("{} · {lock}", short_address(&address)).cyan(),
     ));
+    let network = match overview.daemon.network.as_deref() {
+        Some("devnet") => "Solana devnet",
+        _ => "Solana mainnet",
+    };
+    push_wallet_line(header, &format!("{network} · canonical USDC + SOL"), false);
+    push_wallet_line(
+        header,
+        "Keep a small SOL balance for network fees; plan checkout states when fees are sponsored.",
+        true,
+    );
     if let Some(balance) = overview.balances {
         header.push(Line::from(format!(
             "{:.6} SOL · {:.2} USDC",
@@ -867,37 +956,71 @@ fn wallet_items(
         }
     });
     if let Some(plan) = &overview.plan {
-        header.push(Line::from(
-            format!(
-                "{} plan · {} weekly tokens left · {} monthly tokens left",
-                title_case_plan(&plan.period.plan_id),
+        let current_price = overview
+            .plan_prices_usdc
+            .get(&plan.period.plan_id)
+            .map_or_else(String::new, |price| format!(" · {price} USDC prepaid"));
+        push_wallet_line(
+            header,
+            &format!(
+                "{} plan{current_price}",
+                title_case_plan(&plan.period.plan_id)
+            ),
+            false,
+        );
+        push_wallet_line(
+            header,
+            &format!(
+                "Weekly: {} / {} used · {} remaining",
+                format_token_count(plan.weekly.used_tokens),
+                format_token_count(plan.weekly.limit_tokens),
                 format_token_count(plan.weekly_remaining_tokens),
+            ),
+            false,
+        );
+        push_wallet_line(
+            header,
+            &format!(
+                "Monthly: {} / {} used · {} remaining",
+                format_token_count(plan.period.monthly_used_tokens),
+                format_token_count(plan.period.monthly_limit_tokens),
                 format_token_count(plan.monthly_remaining_tokens),
-            )
-            .green(),
-        ));
-        header.push(Line::from(
-            format!(
+            ),
+            false,
+        );
+        push_wallet_line(
+            header,
+            &format!(
                 "Weekly reset {} · period ends {}",
                 plan.weekly.ends_at, plan.period.ends_at,
-            )
-            .dim(),
-        ));
+            ),
+            true,
+        );
         if let Some(next) = plan.queued_periods.first() {
-            header.push(Line::from(
-                format!(
-                    "Next: {} plan · {} to {}",
+            let next_price = overview
+                .plan_prices_usdc
+                .get(&next.plan_id)
+                .map_or_else(String::new, |price| format!(" · {price} USDC prepaid"));
+            push_wallet_line(
+                header,
+                &format!(
+                    "Next: {} plan{next_price} · {} to {}",
                     title_case_plan(&next.plan_id),
                     next.starts_at,
                     next.ends_at,
-                )
-                .dim(),
-            ));
+                ),
+                true,
+            );
         }
     }
     if let Some(error) = overview.plan_error {
         header.push(Line::from(format!("Plan status: {error}").red()));
     }
+    push_wallet_line(
+        header,
+        &format!("Refreshed {}", overview.refreshed_at),
+        true,
+    );
     let receive_address = address.clone();
     let mut items = vec![SelectionItem {
         name: "Receive".to_string(),
@@ -989,6 +1112,11 @@ fn wallet_items(
         ));
     }
     items.push(item(
+        "Back up recovery material",
+        "Requires the fresh wallet passcode; opens only in the secure view",
+        AppEvent::OpenWalletRecoveryBackup,
+    ));
+    items.push(item(
         "Remove wallet from this device",
         "Requires saved recovery material; does not move funds",
         AppEvent::ConfirmWalletRemoval { address },
@@ -1046,14 +1174,47 @@ pub(crate) fn title_case_plan(id: &str) -> String {
         None => String::new(),
     }
 }
-fn format_token_count(value: u64) -> String {
-    if value.is_multiple_of(1_000_000) {
-        format!("{}M", value / 1_000_000)
-    } else if value.is_multiple_of(1_000) {
-        format!("{}K", value / 1_000)
-    } else {
-        value.to_string()
+fn push_wallet_line(header: &mut ColumnRenderable, text: &str, dimmed: bool) {
+    for line in wallet_wrapped_lines(text) {
+        if dimmed {
+            header.push(Line::from(line.dim()));
+        } else {
+            header.push(Line::from(line));
+        }
     }
+}
+
+fn wallet_wrapped_lines(text: &str) -> Vec<String> {
+    let options = textwrap::Options::new(64)
+        .break_words(false)
+        .word_separator(textwrap::WordSeparator::AsciiSpace)
+        .word_splitter(textwrap::WordSplitter::NoHyphenation);
+    textwrap::wrap(text, options)
+        .into_iter()
+        .map(|line| line.into_owned())
+        .collect()
+}
+
+fn format_token_count(value: u64) -> String {
+    let digits = value.to_string();
+    let mut output = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, character) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            output.push(',');
+        }
+        output.push(character);
+    }
+    output
+}
+
+fn format_usdc_atomic(value: u64) -> String {
+    let whole = value / 1_000_000;
+    let fraction = value % 1_000_000;
+    if fraction == 0 {
+        return whole.to_string();
+    }
+    let fraction = format!("{fraction:06}").trim_end_matches('0').to_string();
+    format!("{whole}.{fraction}")
 }
 
 #[cfg(test)]
@@ -1078,6 +1239,7 @@ mod tests {
             plan_error: None,
             plan_credential_present: false,
             plan_prices_usdc: std::collections::BTreeMap::new(),
+            refreshed_at: "2026-07-19T04:00:00Z".to_string(),
         }
     }
 
@@ -1102,7 +1264,6 @@ mod tests {
                 monthly_reserved_tokens: 0,
             },
             weekly: WalletUsageWindow {
-                starts_at: "2026-07-19T00:35:20Z".to_string(),
                 ends_at: "2026-07-26T00:35:20Z".to_string(),
                 limit_tokens: 250_000,
                 used_tokens: 20_996,
@@ -1290,6 +1451,41 @@ mod tests {
             Ok(AppEvent::ConfirmWalletRemoval { address })
                 if address == "EpUYgzi88BYbsGoyiNghPppd3J9ASbARq7UjBCCUnk2i"
         ));
+    }
+
+    #[test]
+    fn recovery_backup_is_available_while_locked_and_requires_fresh_passcode_flow() {
+        let overview = overview(true);
+        let mut header = ColumnRenderable::new();
+        let items = wallet_items(&mut header, overview, false);
+        let backup = items
+            .iter()
+            .position(|item| item.name == "Back up recovery material")
+            .expect("backup action");
+        assert!(
+            items[backup]
+                .description
+                .as_deref()
+                .is_some_and(|text| text.contains("fresh wallet passcode"))
+        );
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let sender = crate::app_event_sender::AppEventSender::new(tx);
+        (items[backup].actions[0])(&sender);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::OpenWalletRecoveryBackup)
+        ));
+    }
+
+    #[test]
+    fn wallet_status_lines_wrap_without_splitting_iso_dates() {
+        let text = "Next: Basic plan · 20 USDC prepaid · 2026-08-19T00:35:20.051Z to 2026-09-19T00:35:20.051Z";
+        let lines = wallet_wrapped_lines(text);
+        assert!(lines.len() > 1);
+        assert!(lines.iter().all(|line| line.chars().count() <= 64));
+        assert_eq!(lines.join(" "), text);
+        assert_eq!(format_token_count(1_000_000), "1,000,000");
+        assert_eq!(format_usdc_atomic(4_250_000), "4.25");
     }
 
     #[test]

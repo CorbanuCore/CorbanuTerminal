@@ -1866,6 +1866,12 @@ impl App {
             AppEvent::OpenWalletRestorePasscode { recovery } => {
                 self.chat_widget.open_wallet_restore_passcode(recovery);
             }
+            AppEvent::OpenWalletRecoveryBackup => {
+                self.chat_widget.open_wallet_recovery_backup();
+            }
+            AppEvent::WalletRecoveryBackupFinished { result } => {
+                self.chat_widget.on_wallet_recovery_backup_finished(result);
+            }
             AppEvent::OpenWalletUnlock { duration_seconds } => {
                 self.chat_widget.open_wallet_unlock(duration_seconds);
             }

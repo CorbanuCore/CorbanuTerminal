@@ -157,6 +157,7 @@ fn fixed_secret_mode_submits_known_label_without_label_step() {
     let mut view = VaultSecretEntryView::new_fixed_secret(
         "provider/zai_api_key".to_string(),
         "Add Provider: Z.AI API Key".to_string(),
+        "API key — masked".to_string(),
         "ZAI_API_KEY (masked)".to_string(),
         capture.clone().callback(),
     );

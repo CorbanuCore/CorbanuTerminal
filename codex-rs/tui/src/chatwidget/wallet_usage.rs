@@ -12,6 +12,7 @@ const WALLET_PLAN_USAGE_VIEW_ID: &str = "wallet-plan-usage";
 pub(crate) struct WalletPlanUsageOverview {
     status: WalletPlanStatus,
     price_usdc: Option<String>,
+    refreshed_at: String,
 }
 
 impl ChatWidget {
@@ -87,7 +88,11 @@ async fn load_plan_usage(
             }),
         _ => None,
     };
-    Ok(WalletPlanUsageOverview { status, price_usdc })
+    Ok(WalletPlanUsageOverview {
+        status,
+        price_usdc,
+        refreshed_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+    })
 }
 
 fn plan_usage_loading_params() -> SelectionViewParams {
@@ -145,6 +150,7 @@ fn plan_usage_params(result: Result<WalletPlanUsageOverview, String>) -> Selecti
 
 fn push_usage_summary(header: &mut ColumnRenderable, overview: &WalletPlanUsageOverview) {
     let status = &overview.status;
+    let now = chrono::Utc::now();
     let plan = title_case_plan(&status.period.plan_id);
     header.push(Line::from(format!("{plan} plan").green().bold()));
     if let Some(price) = &overview.price_usdc {
@@ -170,8 +176,9 @@ fn push_usage_summary(header: &mut ColumnRenderable, overview: &WalletPlanUsageO
         status.weekly.limit_tokens,
         status.weekly_remaining_tokens,
         &format!(
-            "window {} to {}",
-            status.weekly.starts_at, status.weekly.ends_at
+            "resets {} · {}",
+            countdown_at(&status.weekly.ends_at, now),
+            status.weekly.ends_at
         ),
     );
     push_window(
@@ -181,7 +188,11 @@ fn push_usage_summary(header: &mut ColumnRenderable, overview: &WalletPlanUsageO
         status.period.monthly_reserved_tokens,
         status.period.monthly_limit_tokens,
         status.monthly_remaining_tokens,
-        &format!("period ends {}", status.period.ends_at),
+        &format!(
+            "period ends {} · {}",
+            countdown_at(&status.period.ends_at, now),
+            status.period.ends_at
+        ),
     );
     if let Some(next) = status.queued_periods.first() {
         push_wrapped(
@@ -194,6 +205,31 @@ fn push_usage_summary(header: &mut ColumnRenderable, overview: &WalletPlanUsageO
             ),
             true,
         );
+    }
+    push_wrapped(
+        header,
+        &format!("Refreshed {}", overview.refreshed_at),
+        true,
+    );
+}
+
+fn countdown_at(value: &str, now: chrono::DateTime<chrono::Utc>) -> String {
+    let Ok(end) = chrono::DateTime::parse_from_rfc3339(value) else {
+        return "at the timestamp shown".to_string();
+    };
+    let seconds = (end.with_timezone(&chrono::Utc) - now).num_seconds();
+    if seconds <= 0 {
+        return "already ended".to_string();
+    }
+    let days = seconds / 86_400;
+    let hours = (seconds % 86_400) / 3_600;
+    let minutes = (seconds % 3_600) / 60;
+    if days > 0 {
+        format!("in {days}d {hours}h")
+    } else if hours > 0 {
+        format!("in {hours}h {minutes}m")
+    } else {
+        format!("in {}m", minutes.max(1))
     }
 }
 
@@ -230,7 +266,7 @@ fn wrapped_lines(text: &str) -> Vec<String> {
             .word_splitter(textwrap::WordSplitter::NoHyphenation),
     )
     .into_iter()
-    .map(|line| line.into_owned())
+    .map(std::borrow::Cow::into_owned)
     .collect()
 }
 
@@ -291,7 +327,6 @@ mod tests {
                     monthly_reserved_tokens: 500,
                 },
                 weekly: WalletUsageWindow {
-                    starts_at: "2026-07-19T00:35:20Z".to_string(),
                     ends_at: "2026-07-26T00:35:20Z".to_string(),
                     limit_tokens: 250_000,
                     used_tokens: 20_996,
@@ -307,6 +342,7 @@ mod tests {
                 }],
             },
             price_usdc: Some("1".to_string()),
+            refreshed_at: "2026-07-19T04:00:00Z".to_string(),
         }
     }
 
@@ -364,5 +400,14 @@ mod tests {
             lines.join(" "),
             "Next: Basic plan · 2026-08-19T00:35:20.051Z to 2026-09-19T00:35:20.051Z"
         );
+    }
+
+    #[test]
+    fn reset_countdown_is_human_readable_and_keeps_exact_time_separate() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-07-19T00:35:20Z")
+            .expect("now")
+            .with_timezone(&chrono::Utc);
+        assert_eq!(countdown_at("2026-07-26T03:05:20Z", now), "in 7d 2h");
+        assert_eq!(countdown_at("2026-07-18T00:00:00Z", now), "already ended");
     }
 }

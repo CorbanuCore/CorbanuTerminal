@@ -212,6 +212,7 @@ impl ChatWidget {
         let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
             provider_vault_label(&env_key),
             format!("Add {display_name}"),
+            "API key — masked".to_string(),
             format!("{env_key} (masked - not shown, not stored in chat)"),
             Box::new(move |_label: String, secret: String| {
                 tx.send(AppEvent::SaveProviderApiKey {

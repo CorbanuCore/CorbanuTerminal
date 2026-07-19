@@ -73,6 +73,12 @@ pub struct CreatedWallet {
 }
 
 #[derive(Debug)]
+pub struct RecoveryBackup {
+    pub manifest: PublicManifest,
+    pub recovery_material: Zeroizing<String>,
+}
+
+#[derive(Debug)]
 pub struct UnlockedWallet {
     manifest: PublicManifest,
     seed: Zeroizing<[u8; 32]>,
@@ -261,6 +267,17 @@ impl Wallet {
         Ok(UnlockedWallet {
             manifest,
             seed: Zeroizing::new(seed),
+        })
+    }
+
+    /// Decrypt the existing wallet with a freshly supplied passcode and return portable
+    /// recovery material. Callers must keep the result in a host-owned secure view and must not
+    /// persist or log it.
+    pub fn export_recovery(&self, passcode: &str) -> Result<RecoveryBackup, WalletError> {
+        let unlocked = self.unlock(passcode)?;
+        Ok(RecoveryBackup {
+            manifest: unlocked.manifest.clone(),
+            recovery_material: Zeroizing::new(bs58::encode(unlocked.seed.as_ref()).into_string()),
         })
     }
 

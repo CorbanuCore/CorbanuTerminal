@@ -99,6 +99,7 @@ impl VaultSecretEntryView {
     pub(crate) fn new_fixed_secret(
         label: String,
         title: String,
+        status: String,
         secret_prompt: String,
         on_submit: VaultSecretSubmitted,
     ) -> Self {
@@ -109,7 +110,7 @@ impl VaultSecretEntryView {
             label,
             label_prompt: LABEL_PROMPT.to_string(),
             secret_prompt,
-            fixed_status: Some("API key — masked".to_string()),
+            fixed_status: Some(status),
             confirm_secret: false,
             first_secret: String::new(),
             on_submit,
