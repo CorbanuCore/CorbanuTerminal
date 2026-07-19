@@ -72,6 +72,29 @@ pub(crate) struct WalletOverview {
     pub(crate) refreshed_at: String,
 }
 
+fn wallet_balance_endpoint(
+    wallet_network: &str,
+    catalog: Option<&WalletPlanCatalog>,
+) -> (String, codex_wallet::Network) {
+    let (caip_network, fallback_rpc, network) = match wallet_network {
+        "devnet" => (
+            "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+            "https://api.devnet.solana.com",
+            codex_wallet::Network::Devnet,
+        ),
+        _ => (
+            "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+            "https://api.mainnet-beta.solana.com",
+            codex_wallet::Network::Mainnet,
+        ),
+    };
+    let rpc = catalog
+        .filter(|catalog| catalog.payment.network == caip_network)
+        .map(|catalog| catalog.payment.rpc_url.clone())
+        .unwrap_or_else(|| fallback_rpc.to_string());
+    (rpc, network)
+}
+
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WalletPlanStatus {
@@ -147,28 +170,6 @@ impl ChatWidget {
                     .status()
                     .await
                     .map_err(|error| error.to_string())?;
-                let balance_request = async {
-                    if let (Some(address), Some(network)) =
-                        (daemon.address.as_deref(), daemon.network.as_deref())
-                    {
-                        let (rpc, network) = match network {
-                            "devnet" => (
-                                "https://api.devnet.solana.com",
-                                codex_wallet::Network::Devnet,
-                            ),
-                            _ => (
-                                "https://api.mainnet-beta.solana.com",
-                                codex_wallet::Network::Mainnet,
-                            ),
-                        };
-                        match BalanceClient::new(rpc, network).balances(address).await {
-                            Ok(value) => (Some(value), None),
-                            Err(error) => (None, Some(error.to_string())),
-                        }
-                    } else {
-                        (None, None)
-                    }
-                };
                 let plan_request = async {
                     if let Some(key) = plan_key {
                         let url = format!(
@@ -199,7 +200,7 @@ impl ChatWidget {
                         (None, None)
                     }
                 };
-                let prices_request = async {
+                let catalog_request = async {
                     match reqwest::Client::new()
                         .get(format!(
                             "{}/v1/plans",
@@ -208,22 +209,33 @@ impl ChatWidget {
                         .send()
                         .await
                     {
-                        Ok(response) if response.status().is_success() => response
-                            .json::<WalletPlanCatalog>()
-                            .await
-                            .map(|catalog| {
-                                catalog
-                                    .plans
-                                    .into_iter()
-                                    .map(|plan| (plan.id, plan.price_usdc))
-                                    .collect()
-                            })
-                            .unwrap_or_default(),
-                        _ => std::collections::BTreeMap::new(),
+                        Ok(response) if response.status().is_success() => {
+                            response.json::<WalletPlanCatalog>().await.ok()
+                        }
+                        _ => None,
                     }
                 };
-                let ((balances, balance_error), (plan, plan_error), plan_prices_usdc) =
-                    tokio::join!(balance_request, plan_request, prices_request);
+                let ((plan, plan_error), catalog) = tokio::join!(plan_request, catalog_request);
+                let (balances, balance_error) = if let (Some(address), Some(network)) =
+                    (daemon.address.as_deref(), daemon.network.as_deref())
+                {
+                    let (rpc, network) = wallet_balance_endpoint(network, catalog.as_ref());
+                    match BalanceClient::new(rpc, network).balances(address).await {
+                        Ok(value) => (Some(value), None),
+                        Err(error) => (None, Some(error.to_string())),
+                    }
+                } else {
+                    (None, None)
+                };
+                let plan_prices_usdc = catalog
+                    .map(|catalog| {
+                        catalog
+                            .plans
+                            .into_iter()
+                            .map(|plan| (plan.id, plan.price_usdc))
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 Ok(WalletOverview {
                     daemon,
                     balances,
@@ -1227,6 +1239,34 @@ fn format_usdc_atomic(value: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn balance_reads_use_the_gateway_rpc_only_for_the_wallet_network() {
+        let catalog = WalletPlanCatalog {
+            plans: Vec::new(),
+            payment: WalletPaymentConfig {
+                network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp".to_string(),
+                asset: codex_wallet::SOLANA_MAINNET_USDC_MINT.to_string(),
+                pay_to: "receiver".to_string(),
+                rpc_url: "https://rpc.example.test".to_string(),
+            },
+        };
+
+        assert_eq!(
+            wallet_balance_endpoint("mainnet", Some(&catalog)),
+            (
+                "https://rpc.example.test".to_string(),
+                codex_wallet::Network::Mainnet,
+            )
+        );
+        assert_eq!(
+            wallet_balance_endpoint("devnet", Some(&catalog)),
+            (
+                "https://api.devnet.solana.com".to_string(),
+                codex_wallet::Network::Devnet,
+            )
+        );
+    }
 
     fn overview(locked: bool) -> WalletOverview {
         WalletOverview {

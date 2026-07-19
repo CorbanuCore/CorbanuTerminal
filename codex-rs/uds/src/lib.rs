@@ -470,6 +470,99 @@ mod platform {
 
     unsafe impl async_io::IoSafe for WindowsUnixListener {}
     unsafe impl async_io::IoSafe for WindowsUnixStream {}
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use windows_sys::Win32::Security::Authorization::ConvertSecurityDescriptorToStringSecurityDescriptorW;
+        use windows_sys::Win32::Security::GetFileSecurityW;
+
+        #[tokio::test]
+        async fn socket_directory_dacl_is_protected_and_current_user_only() {
+            let temp = tempfile::tempdir().expect("tempdir");
+            let socket_dir = temp.path().join("wallet-run");
+            prepare_private_socket_directory(&socket_dir)
+                .await
+                .expect("apply private socket ACL");
+
+            let sddl = file_dacl_sddl(&socket_dir).expect("read socket ACL");
+            let current_user = current_user_sid_string().expect("current user SID");
+            assert!(sddl.starts_with("D:P"), "DACL must be protected: {sddl}");
+            assert!(
+                sddl.contains(&current_user),
+                "DACL omitted current user: {sddl}"
+            );
+            assert!(sddl.contains(";;;SY"), "DACL omitted LocalSystem: {sddl}");
+            for broad_principal in [";;;WD", ";;;BU", ";;;AU"] {
+                assert!(
+                    !sddl.contains(broad_principal),
+                    "DACL admitted a broad principal {broad_principal}: {sddl}"
+                );
+            }
+        }
+
+        fn file_dacl_sddl(path: &Path) -> IoResult<String> {
+            let path = path
+                .as_os_str()
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect::<Vec<_>>();
+            let mut required = 0;
+            unsafe {
+                GetFileSecurityW(
+                    path.as_ptr(),
+                    DACL_SECURITY_INFORMATION,
+                    std::ptr::null_mut(),
+                    0,
+                    &mut required,
+                );
+            }
+            if required == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            let mut descriptor = vec![0_u8; required as usize];
+            if unsafe {
+                GetFileSecurityW(
+                    path.as_ptr(),
+                    DACL_SECURITY_INFORMATION,
+                    descriptor.as_mut_ptr().cast(),
+                    required,
+                    &mut required,
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+
+            let mut string_descriptor = std::ptr::null_mut();
+            let mut string_length = 0;
+            if unsafe {
+                ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                    descriptor.as_mut_ptr().cast(),
+                    1, // SDDL_REVISION_1
+                    DACL_SECURITY_INFORMATION,
+                    &mut string_descriptor,
+                    &mut string_length,
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            let sddl = unsafe {
+                OsString::from_wide(std::slice::from_raw_parts(
+                    string_descriptor,
+                    string_length as usize,
+                ))
+            }
+            .to_string_lossy()
+            .trim_end_matches('\0')
+            .to_string();
+            unsafe {
+                LocalFree(string_descriptor as HLOCAL);
+            }
+            Ok(sddl)
+        }
+    }
 }
 
 #[cfg(test)]
