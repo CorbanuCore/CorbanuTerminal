@@ -142,7 +142,27 @@ pub(super) fn assessment_prompt(objective: &str, assistant_response: &str) -> Pr
 }
 
 pub(super) fn parse_assessment(text: &str) -> Result<CompletionAssessment, serde_json::Error> {
-    serde_json::from_str::<CompletionAssessmentOutput>(text.trim()).map(|output| output.decision)
+    let value = serde_json::from_str::<serde_json::Value>(text.trim())?;
+    if let Ok(output) =
+        serde_json::from_value::<CompletionAssessmentOutput>(value.clone())
+    {
+        return Ok(output.decision);
+    }
+
+    // Some chat-compatible providers honor the enum but ignore the requested property name,
+    // returning (for example) {"status":"incomplete"}. Treat a one-field object containing a
+    // recognized enum as the same structured decision. Booleans, multiple fields, prose, and
+    // unknown values remain invalid and therefore cannot trigger paid continuation.
+    if let serde_json::Value::Object(object) = &value
+        && object.len() == 1
+        && let Some(serde_json::Value::String(decision)) = object.values().next()
+    {
+        return serde_json::from_value::<CompletionAssessment>(serde_json::Value::String(
+            decision.clone(),
+        ));
+    }
+
+    serde_json::from_value::<CompletionAssessmentOutput>(value).map(|output| output.decision)
 }
 
 pub(super) fn continuation_message() -> ResponseItem {
@@ -219,6 +239,12 @@ mod tests {
         );
         assert!(parse_assessment("Now I will continue.").is_err());
         assert!(parse_assessment(r#"{"decision":"yes"}"#).is_err());
+        assert_eq!(
+            parse_assessment(r#"{"status":"incomplete"}"#).unwrap(),
+            CompletionAssessment::Incomplete
+        );
+        assert!(parse_assessment(r#"{"status":"incomplete","confidence":1}"#).is_err());
+        assert!(parse_assessment(r#"{"completed":false}"#).is_err());
     }
 
     #[test]
