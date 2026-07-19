@@ -100,6 +100,7 @@ export class StreamUsageParser {
   private pending = "";
   private usage?: ActualUsage;
   private generatedBytes = 0;
+  private completionObserved = false;
 
   push(chunk: Uint8Array): void {
     this.pending += Buffer.from(chunk).toString("utf8");
@@ -116,11 +117,25 @@ export class StreamUsageParser {
       : estimatedUsage(estimatedInputTokens, this.generatedBytes));
   }
 
+  hasCompletionSignal(): boolean {
+    return this.completionObserved;
+  }
+
   private inspectLine(line: string): void {
     const payload = line.startsWith("data:") ? line.slice(5).trim() : "";
-    if (!payload || payload === "[DONE]") return;
+    if (!payload) return;
+    if (payload === "[DONE]") {
+      this.completionObserved = true;
+      return;
+    }
     try {
       const parsed = JSON.parse(payload);
+      if (
+        parsed?.type === "response.completed" ||
+        parsed?.type === "message_stop"
+      ) {
+        this.completionObserved = true;
+      }
       this.usage = extractActualUsage(parsed) ?? this.usage;
       this.generatedBytes += generatedResponseBytes(parsed) ?? 0;
     } catch {

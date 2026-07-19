@@ -207,6 +207,41 @@ describe("Ambient crypto gateway", () => {
     assert.equal(account.body.period.monthlyReservedTokens, 0);
   });
 
+  test("settles an SSE response when transport errors after the completion marker", async () => {
+    const encoder = new TextEncoder();
+    let deliveredCompletion = false;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (!deliveredCompletion) {
+          deliveredCompletion = true;
+          controller.enqueue(encoder.encode(
+            'data: {"choices":[{"delta":{"content":"completed answer"}}]}\n\ndata: [DONE]\n\n',
+          ));
+          return;
+        }
+        controller.error(new Error("transport closed after protocol completion"));
+      },
+    });
+    const { app } = setup(async () => new Response(stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }));
+    const issued = await buyAndIssueKey(app);
+
+    await request(app)
+      .post("/v1/chat/completions")
+      .set("Authorization", `Bearer ${issued.key}`)
+      .send({ model: "z-ai/glm-5.2", messages: [{ role: "user", content: "hello" }] })
+      .expect(200);
+
+    const account = await request(app)
+      .get("/v1/account")
+      .set("Authorization", `Bearer ${issued.key}`)
+      .expect(200);
+    assert.ok(account.body.period.monthlyUsedTokens > 0);
+    assert.equal(account.body.period.monthlyReservedTokens, 0);
+  });
+
   test("rejects unknown and revoked keys before reaching Ambient", async () => {
     let upstreamCalls = 0;
     const fetchImpl: typeof globalThis.fetch = async () => {

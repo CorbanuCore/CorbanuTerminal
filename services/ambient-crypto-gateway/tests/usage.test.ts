@@ -52,7 +52,18 @@ describe("inference usage authorization", () => {
     const parser = new StreamUsageParser();
     parser.push(Buffer.from('data: {"choices":[{"delta":{"content":"x"}}]}\n\ndata: {"usage":{"input_tokens":'));
     parser.push(Buffer.from('8,"output_tokens":5}}\n\ndata: [DONE]\n\n'));
+    assert.equal(parser.hasCompletionSignal(), true);
     assert.equal(parser.finish()?.totalTokens, 13);
+  });
+
+  test("distinguishes a protocol-complete stream from a transport-only close", () => {
+    const complete = new StreamUsageParser();
+    complete.push(Buffer.from('data: {"choices":[{"delta":{"content":"done"}}]}\n\ndata: [DONE]\n\n'));
+    assert.equal(complete.hasCompletionSignal(), true);
+
+    const partial = new StreamUsageParser();
+    partial.push(Buffer.from('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'));
+    assert.equal(partial.hasCompletionSignal(), false);
   });
 
   test("meters only generated fields when a completed response omits usage", () => {

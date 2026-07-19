@@ -278,6 +278,7 @@ async function proxyAmbientRequest(
 ): Promise<void> {
   const controller = new AbortController();
   let upstreamStarted = false;
+  let streamParser: StreamUsageParser | undefined;
   let settled = false;
   const settle = async (
     disposition: "completed" | "rejected" | "ambiguous",
@@ -332,6 +333,7 @@ async function proxyAmbientRequest(
       return;
     }
     const parser = new StreamUsageParser();
+    streamParser = parser;
     const reader = upstream.body.getReader();
     for (;;) {
       const { done, value } = await reader.read();
@@ -343,6 +345,11 @@ async function proxyAmbientRequest(
     await settle(upstream.ok ? "completed" : "rejected", usage);
     response.end();
   } catch (error) {
+    if (upstreamStarted && streamParser?.hasCompletionSignal()) {
+      await settle("completed", streamParser.finish(estimatedInputTokens));
+      if (!response.writableEnded) response.end();
+      return;
+    }
     await settle(upstreamStarted ? "ambiguous" : "rejected");
     if (!response.headersSent) {
       response.status(502).json({ error: "Ambient upstream request failed" });
