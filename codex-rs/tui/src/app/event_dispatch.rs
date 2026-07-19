@@ -1921,8 +1921,9 @@ impl App {
             AppEvent::WalletPlanPurchaseRequested { plan } => {
                 self.chat_widget.purchase_wallet_plan(plan);
             }
-            AppEvent::WalletPlanProvisioned { result } => {
-                self.chat_widget.on_wallet_plan_provisioned(result);
+            AppEvent::WalletPlanProvisioned { operation, result } => {
+                self.chat_widget
+                    .on_wallet_plan_provisioned(operation, result);
             }
             AppEvent::WalletPlanReceiptReady { receipt } => {
                 self.chat_widget.on_wallet_plan_receipt_ready(receipt);

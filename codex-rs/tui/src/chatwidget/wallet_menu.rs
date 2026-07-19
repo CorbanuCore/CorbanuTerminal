@@ -2,6 +2,7 @@ use super::*;
 use crate::app_event::WalletCreatedResult;
 use crate::app_event::WalletPersistenceOperation;
 use crate::app_event::WalletPlanProvisionedResult;
+use crate::app_event::WalletPlanProvisioningOperation;
 use crate::app_event::WalletPlanPurchaseSummary;
 use crate::app_event::WalletSecret;
 use crate::chatwidget::wallet_http::gateway_client;
@@ -765,12 +766,16 @@ impl ChatWidget {
                     }),
                 })
                 .map_err(|error| error.to_string());
-            tx.send(AppEvent::WalletPlanProvisioned { result });
+            tx.send(AppEvent::WalletPlanProvisioned {
+                operation: WalletPlanProvisioningOperation::Purchase,
+                result,
+            });
         });
     }
 
     pub(crate) fn on_wallet_plan_provisioned(
         &mut self,
+        operation: WalletPlanProvisioningOperation,
         result: Result<WalletPlanProvisionedResult, String>,
     ) {
         match result {
@@ -822,9 +827,7 @@ impl ChatWidget {
                     }
                 }
             }
-            Err(error) => self.add_error_message(format!(
-                "Plan purchase failed: {error}. If payment may have settled, use Recover plan access; do not submit another payment."
-            )),
+            Err(error) => self.add_error_message(wallet_plan_provisioning_error(operation, &error)),
         }
     }
 
@@ -864,7 +867,10 @@ impl ChatWidget {
                         Err(error) => Err(error.to_string()),
                     };
                     passcode.zeroize();
-                    tx.send(AppEvent::WalletPlanProvisioned { result });
+                    tx.send(AppEvent::WalletPlanProvisioned {
+                        operation: WalletPlanProvisioningOperation::Recovery,
+                        result,
+                    });
                 });
             }),
         );
@@ -884,7 +890,10 @@ impl ChatWidget {
                     purchase: None,
                 })
                 .map_err(|error| error.to_string());
-            tx.send(AppEvent::WalletPlanProvisioned { result });
+            tx.send(AppEvent::WalletPlanProvisioned {
+                operation: WalletPlanProvisioningOperation::Recovery,
+                result,
+            });
         });
     }
 
@@ -913,6 +922,20 @@ fn separate_plan_for_local_wallet(
         }
         Some(plan) => (None, Some(plan)),
         None => (None, None),
+    }
+}
+
+fn wallet_plan_provisioning_error(
+    operation: WalletPlanProvisioningOperation,
+    error: &str,
+) -> String {
+    match operation {
+        WalletPlanProvisioningOperation::Purchase => format!(
+            "Plan purchase failed: {error}. If payment may have settled, use Recover plan access; do not submit another payment."
+        ),
+        WalletPlanProvisioningOperation::Recovery => {
+            format!("Plan access recovery failed: {error}. No USDC was sent.")
+        }
     }
 }
 
@@ -1405,6 +1428,30 @@ mod tests {
                 codex_wallet::Network::Devnet,
             )
         );
+    }
+
+    #[test]
+    fn recovery_failure_never_uses_purchase_or_settlement_language() {
+        let message = wallet_plan_provisioning_error(
+            WalletPlanProvisioningOperation::Recovery,
+            "wallet passcode was incorrect",
+        );
+        assert_eq!(
+            message,
+            "Plan access recovery failed: wallet passcode was incorrect. No USDC was sent."
+        );
+        assert!(!message.contains("purchase"));
+        assert!(!message.contains("settled"));
+    }
+
+    #[test]
+    fn purchase_failure_retains_ambiguous_settlement_guidance() {
+        let message = wallet_plan_provisioning_error(
+            WalletPlanProvisioningOperation::Purchase,
+            "connection closed",
+        );
+        assert!(message.contains("Plan purchase failed"));
+        assert!(message.contains("payment may have settled"));
     }
 
     fn overview(locked: bool) -> WalletOverview {

@@ -207,6 +207,12 @@ pub(crate) struct WalletPlanProvisionedResult {
     pub(crate) purchase: Option<WalletPlanPurchaseSummary>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WalletPlanProvisioningOperation {
+    Purchase,
+    Recovery,
+}
+
 #[derive(Debug)]
 pub(crate) struct WalletPlanPurchaseSummary {
     pub(crate) price_usdc: String,
@@ -1419,6 +1425,7 @@ pub(crate) enum AppEvent {
         plan: crate::chatwidget::wallet_menu::WalletPlanChoice,
     },
     WalletPlanProvisioned {
+        operation: WalletPlanProvisioningOperation,
         result: Result<WalletPlanProvisionedResult, String>,
     },
     WalletPlanReceiptReady {
