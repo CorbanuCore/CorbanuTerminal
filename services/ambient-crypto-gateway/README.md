@@ -97,6 +97,30 @@ and rotate the database user immediately if its credential is exposed. Before di
 to a new database, migrate the five `ambient_*` tables, compare row counts, verify an existing key
 through streaming inference, and create a post-migration backup.
 
+### Operator accounting
+
+Accounting is an operator-only command run through Fly SSH; it is not exposed as a public HTTP
+route. The report reconciles the receiver's live canonical-USDC balance with recorded settlement
+volume, active and queued plans, and token consumption:
+
+```sh
+fly ssh console --app pfterminal-plan-gateway --command "node dist/accounting.js report"
+```
+
+New payer wallets are deliberately `unclassified`, so their payments are excluded from recognized
+customer revenue until an operator labels them. Mark customer and internal qualification wallets
+explicitly:
+
+```sh
+fly ssh console --app pfterminal-plan-gateway \
+  --command "node dist/accounting.js classify <wallet> customer <short label>"
+fly ssh console --app pfterminal-plan-gateway \
+  --command "node dist/accounting.js classify <wallet> internal <short label>"
+```
+
+Use `unclassified` to remove a prior classification. Classification changes never alter settlement
+records, plan access, or usage.
+
 ## Customer flow
 
 Generate a dedicated Solana payer wallet without printing its secret:

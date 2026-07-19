@@ -7,11 +7,12 @@
     "node": ">=20"
   },
   "scripts": {
+    "accounting": "node dist/accounting.js",
     "build": "tsc -p tsconfig.build.json",
     "key:issue": "tsx src/issue-key.ts",
     "qualify:live": "tsx src/live-purchase.ts",
     "start": "node dist/index.js",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "wallet:generate": "tsx src/generate-wallet.ts"
   },
