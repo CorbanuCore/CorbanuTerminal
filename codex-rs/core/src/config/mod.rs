@@ -1557,8 +1557,12 @@ impl Config {
     }
 
     pub fn to_models_manager_config(&self) -> ModelsManagerConfig {
+        self.to_models_manager_config_for_model(self.model.as_deref())
+    }
+
+    pub fn to_models_manager_config_for_model(&self, model: Option<&str>) -> ModelsManagerConfig {
         let model_context_window = self.model_context_window.or_else(|| {
-            self.model.as_deref().and_then(|model| {
+            model.and_then(|model| {
                 default_model_context_window_for_provider(&self.model_provider_id, model)
             })
         });

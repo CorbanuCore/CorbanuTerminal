@@ -916,7 +916,9 @@ model = "z-ai/glm-5.2"
         assert_eq!(config.model_provider_id, provider);
         assert_eq!(config.model_context_window, None);
         assert_eq!(
-            config.to_models_manager_config().model_context_window,
+            config
+                .to_models_manager_config_for_model(Some(AMBIENT_DEFAULT_MODEL))
+                .model_context_window,
             Some(AMBIENT_GLM_5_2_CONTEXT_WINDOW)
         );
     }
