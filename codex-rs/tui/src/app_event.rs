@@ -1408,6 +1408,7 @@ pub(crate) enum AppEvent {
     OpenWalletPlanReceipt {
         receipt: crate::chatwidget::wallet_receipt::WalletPlanReceipt,
     },
+    CloseWalletPlanReceipt,
     WalletRecoverPlanRequested,
 
     /// Open the vault credential list.

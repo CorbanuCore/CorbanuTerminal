@@ -1914,6 +1914,9 @@ impl App {
             AppEvent::OpenWalletPlanReceipt { receipt } => {
                 self.chat_widget.open_wallet_plan_receipt(receipt);
             }
+            AppEvent::CloseWalletPlanReceipt => {
+                self.chat_widget.close_wallet_plan_receipt();
+            }
             AppEvent::WalletRecoverPlanRequested => {
                 self.chat_widget.recover_wallet_plan_access();
             }

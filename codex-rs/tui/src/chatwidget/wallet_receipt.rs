@@ -252,11 +252,17 @@ impl ChatWidget {
             items: vec![wallet_menu::item(
                 "Done",
                 "Return to the authoritative wallet and plan status",
-                AppEvent::OpenWallet,
+                AppEvent::CloseWalletPlanReceipt,
             )],
             footer_hint: Some(standard_popup_hint_line()),
             ..Default::default()
         });
+    }
+
+    pub(crate) fn close_wallet_plan_receipt(&mut self) {
+        self.bottom_pane
+            .dismiss_view_by_id(WALLET_PLAN_RECEIPT_VIEW_ID);
+        self.open_wallet_menu();
     }
 }
 
@@ -333,6 +339,37 @@ mod tests {
                 &history,
             ]
             .join("\n")
+        );
+    }
+
+    #[tokio::test]
+    async fn receipt_done_dismisses_the_receipt_before_opening_wallet() {
+        let (mut chat, _sender, _events, _ops) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        chat.open_wallet_plan_receipt(WalletPlanReceipt {
+            plan_id: "basic".to_string(),
+            price_usdc: Some("20".to_string()),
+            transaction: Some("settlement".to_string()),
+            starts_at: None,
+            ends_at: None,
+            active_plan_id: Some("starter".to_string()),
+            active_ends_at: None,
+            remaining_usdc_atomic: None,
+            reconciliation_error: None,
+            credential_error: None,
+        });
+        assert!(
+            chat.bottom_pane
+                .selected_index_for_active_view(WALLET_PLAN_RECEIPT_VIEW_ID)
+                .is_some()
+        );
+
+        chat.close_wallet_plan_receipt();
+
+        assert!(
+            chat.bottom_pane
+                .selected_index_for_active_view(WALLET_PLAN_RECEIPT_VIEW_ID)
+                .is_none()
         );
     }
 }
