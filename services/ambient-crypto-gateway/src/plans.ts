@@ -15,7 +15,14 @@ export interface Plan {
 }
 
 export const PLAN_MODELS = ["z-ai/glm-5.2", "moonshotai/kimi-k2.7-code"] as const;
-export const SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+export const SOLANA_MAINNET_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+export const SOLANA_DEVNET_USDC_MINT = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
+
+export function solanaUsdcMint(network: string): string {
+  return network === "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
+    ? SOLANA_DEVNET_USDC_MINT
+    : SOLANA_MAINNET_USDC_MINT;
+}
 
 export const PLANS: Readonly<Record<PlanId, Plan>> = {
   starter: plan("starter", "1", 250_000, 1_000_000),

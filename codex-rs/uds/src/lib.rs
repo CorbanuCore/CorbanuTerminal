@@ -172,10 +172,13 @@ mod platform {
 
 #[cfg(windows)]
 mod platform {
+    use std::ffi::OsString;
     use std::io;
     use std::io::Result as IoResult;
     use std::net::Shutdown;
     use std::ops::Deref;
+    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::ffi::OsStringExt;
     use std::os::windows::io::AsRawSocket;
     use std::os::windows::io::AsSocket;
     use std::os::windows::io::BorrowedSocket;
@@ -192,11 +195,138 @@ mod platform {
     use tokio::task;
     use tokio_util::compat::Compat;
     use tokio_util::compat::FuturesAsyncReadCompatExt;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Foundation::HANDLE;
+    use windows_sys::Win32::Foundation::HLOCAL;
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
+    use windows_sys::Win32::Security::Authorization::ConvertStringSecurityDescriptorToSecurityDescriptorW;
+    use windows_sys::Win32::Security::DACL_SECURITY_INFORMATION;
+    use windows_sys::Win32::Security::GetTokenInformation;
+    use windows_sys::Win32::Security::PROTECTED_DACL_SECURITY_INFORMATION;
+    use windows_sys::Win32::Security::PSECURITY_DESCRIPTOR;
+    use windows_sys::Win32::Security::SetFileSecurityW;
+    use windows_sys::Win32::Security::TOKEN_QUERY;
+    use windows_sys::Win32::Security::TOKEN_USER;
+    use windows_sys::Win32::Security::TokenUser;
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+    use windows_sys::Win32::System::Threading::OpenProcessToken;
 
     pub(super) struct Stream(Compat<Async<WindowsUnixStream>>);
 
     pub(super) async fn prepare_private_socket_directory(socket_dir: &Path) -> IoResult<()> {
-        tokio::fs::create_dir_all(socket_dir).await
+        tokio::fs::create_dir_all(socket_dir).await?;
+        apply_current_user_only_acl(socket_dir)
+    }
+
+    /// Windows AF_UNIX does not expose peer credentials. Protect the rendezvous
+    /// directory with a non-inheriting DACL before the listener is bound so only
+    /// this account (and LocalSystem) can reach the socket path.
+    fn apply_current_user_only_acl(path: &Path) -> IoResult<()> {
+        let current_user_sid = current_user_sid_string()?;
+        let sddl = wide_null(format!("D:P(A;;FA;;;SY)(A;;FA;;;{current_user_sid})"));
+        let mut security_descriptor: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
+        let converted = unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl.as_ptr(),
+                1, // SDDL_REVISION_1
+                &mut security_descriptor,
+                std::ptr::null_mut(),
+            )
+        };
+        if converted == 0 {
+            return Err(io::Error::last_os_error());
+        }
+
+        let path = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let applied = unsafe {
+            SetFileSecurityW(
+                path.as_ptr(),
+                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                security_descriptor,
+            )
+        };
+        unsafe {
+            LocalFree(security_descriptor as HLOCAL);
+        }
+        if applied == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    fn current_user_sid_string() -> IoResult<String> {
+        let mut token = 0;
+        if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let token = OwnedHandle(token);
+
+        let mut required = 0;
+        unsafe {
+            GetTokenInformation(token.0, TokenUser, std::ptr::null_mut(), 0, &mut required);
+        }
+        if required == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let mut buffer = vec![0_u8; required as usize];
+        if unsafe {
+            GetTokenInformation(
+                token.0,
+                TokenUser,
+                buffer.as_mut_ptr().cast(),
+                required,
+                &mut required,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        if buffer.len() < std::mem::size_of::<TOKEN_USER>() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "current-user token did not contain TOKEN_USER",
+            ));
+        }
+        let token_user = unsafe { std::ptr::read_unaligned(buffer.as_ptr().cast::<TOKEN_USER>()) };
+        let mut string_sid = std::ptr::null_mut();
+        if unsafe { ConvertSidToStringSidW(token_user.User.Sid, &mut string_sid) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let length = unsafe {
+            let mut length = 0;
+            while *string_sid.add(length) != 0 {
+                length += 1;
+            }
+            length
+        };
+        let sid = unsafe { OsString::from_wide(std::slice::from_raw_parts(string_sid, length)) }
+            .into_string()
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "user SID was not UTF-16"));
+        unsafe {
+            LocalFree(string_sid as HLOCAL);
+        }
+        sid
+    }
+
+    fn wide_null(value: String) -> Vec<u16> {
+        value.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    struct OwnedHandle(HANDLE);
+
+    impl Drop for OwnedHandle {
+        fn drop(&mut self) {
+            if self.0 != 0 {
+                unsafe {
+                    CloseHandle(self.0);
+                }
+            }
+        }
     }
 
     pub(super) struct Listener(Async<WindowsUnixListener>);

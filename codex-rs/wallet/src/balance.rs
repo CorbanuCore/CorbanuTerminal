@@ -4,7 +4,8 @@ use serde::Deserialize;
 use serde_json::json;
 use std::time::Duration;
 
-use crate::SOLANA_USDC_MINT;
+use crate::Network;
+use crate::solana_usdc_mint;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WalletBalances {
@@ -15,13 +16,15 @@ pub struct WalletBalances {
 #[derive(Clone)]
 pub struct BalanceClient {
     rpc_url: String,
+    usdc_mint: &'static str,
     client: reqwest::Client,
 }
 
 impl BalanceClient {
-    pub fn new(rpc_url: impl Into<String>) -> Self {
+    pub fn new(rpc_url: impl Into<String>, network: Network) -> Self {
         Self {
             rpc_url: rpc_url.into(),
+            usdc_mint: solana_usdc_mint(network),
             client: reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(10))
                 .timeout(Duration::from_secs(15))
@@ -36,7 +39,7 @@ impl BalanceClient {
             .await?;
         let tokens: RpcResponse<TokenAccounts> = self.rpc(
             "getTokenAccountsByOwner",
-            json!([address,{"mint":SOLANA_USDC_MINT},{"encoding":"jsonParsed","commitment":"confirmed"}]),
+            json!([address,{"mint":self.usdc_mint},{"encoding":"jsonParsed","commitment":"confirmed"}]),
         ).await?;
         let usdc_atomic = tokens.value.into_iter().try_fold(0_u64, |sum, account| {
             let amount = account

@@ -21,4 +21,12 @@ pub use payment::ProvisionedPlan;
 pub use payment::X402PaymentError;
 pub use payment::validate_gateway_origin;
 
-pub const SOLANA_USDC_MINT: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+pub const SOLANA_MAINNET_USDC_MINT: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+pub const SOLANA_DEVNET_USDC_MINT: &str = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
+
+pub fn solana_usdc_mint(network: Network) -> &'static str {
+    match network {
+        Network::Mainnet => SOLANA_MAINNET_USDC_MINT,
+        Network::Devnet => SOLANA_DEVNET_USDC_MINT,
+    }
+}

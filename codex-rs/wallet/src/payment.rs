@@ -23,8 +23,8 @@ use solana_transaction::versioned::VersionedTransaction;
 use thiserror::Error;
 
 use crate::Network;
-use crate::SOLANA_USDC_MINT;
 use crate::UnlockedWallet;
+use crate::solana_usdc_mint;
 
 const SOLANA_MAINNET: &str = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 const SOLANA_DEVNET: &str = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
@@ -125,6 +125,7 @@ pub(crate) async fn pay(
         .iter()
         .find(|candidate| candidate.matches(&intent))
         .ok_or_else(|| invalid("gateway offered no exact match for the confirmed payment"))?;
+    accepted.validate_fee_payer(wallet)?;
     let transaction = build_transaction(wallet, &intent, accepted).await?;
     let payment = PaymentPayload {
         x402_version: 2,
@@ -432,7 +433,7 @@ fn validate_intent(
     if intent.network != expected_network {
         return Err(invalid("payment network does not match the wallet network"));
     }
-    if intent.asset != SOLANA_USDC_MINT {
+    if intent.asset != solana_usdc_mint(wallet.manifest().network) {
         return Err(invalid("payment asset is not canonical Solana USDC"));
     }
     if intent.amount_atomic.parse::<u64>().is_err() || intent.amount_atomic == "0" {
@@ -542,6 +543,17 @@ impl PaymentRequirement {
             && self.max_timeout_seconds > 0
             && !self.extra.fee_payer.is_empty()
     }
+
+    fn validate_fee_payer(&self, wallet: &UnlockedWallet) -> Result<(), X402PaymentError> {
+        let fee_payer = pubkey(&self.extra.fee_payer, "fee payer")?;
+        let owner = pubkey(&wallet.manifest().address, "wallet owner")?;
+        if fee_payer == owner {
+            return Err(invalid(
+                "payment fee payer must be sponsored and cannot be the wallet owner",
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -578,7 +590,7 @@ mod tests {
             "scheme": "exact",
             "network": SOLANA_MAINNET,
             "amount": "1000000",
-            "asset": SOLANA_USDC_MINT,
+            "asset": crate::SOLANA_MAINNET_USDC_MINT,
             "payTo": "G3s13pAE8f72jPPWSvwEfLr6Gg1WRh6Nv7i98HNMoVcd",
             "maxTimeoutSeconds": 300,
             "extra": { "feePayer": "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4" }
@@ -626,5 +638,37 @@ mod tests {
             payment_transaction(&receipt).as_deref(),
             Some("5EttlementSignature")
         );
+    }
+
+    #[test]
+    fn rejects_a_challenge_that_makes_the_wallet_owner_pay_network_fees() {
+        let home = tempfile::tempdir().expect("tempdir");
+        let wallet = crate::Wallet::new(home.path().to_path_buf());
+        let created = wallet
+            .create(
+                "a sufficiently long payment test passphrase",
+                Network::Mainnet,
+            )
+            .expect("create wallet");
+        let unlocked = wallet
+            .unlock("a sufficiently long payment test passphrase")
+            .expect("unlock wallet");
+        let requirement = PaymentRequirement {
+            scheme: "exact".to_string(),
+            network: SOLANA_MAINNET.to_string(),
+            amount: "1000000".to_string(),
+            asset: crate::SOLANA_MAINNET_USDC_MINT.to_string(),
+            pay_to: "G3s13pAE8f72jPPWSvwEfLr6Gg1WRh6Nv7i98HNMoVcd".to_string(),
+            max_timeout_seconds: 300,
+            extra: PaymentExtra {
+                fee_payer: created.manifest.address,
+                memo: None,
+            },
+        };
+
+        let error = requirement
+            .validate_fee_payer(&unlocked)
+            .expect_err("the wallet must not silently become the fee payer");
+        assert!(error.to_string().contains("must be sponsored"));
     }
 }

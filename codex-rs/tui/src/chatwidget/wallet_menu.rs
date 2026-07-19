@@ -151,11 +151,17 @@ impl ChatWidget {
                     if let (Some(address), Some(network)) =
                         (daemon.address.as_deref(), daemon.network.as_deref())
                     {
-                        let rpc = match network {
-                            "devnet" => "https://api.devnet.solana.com",
-                            _ => "https://api.mainnet-beta.solana.com",
+                        let (rpc, network) = match network {
+                            "devnet" => (
+                                "https://api.devnet.solana.com",
+                                codex_wallet::Network::Devnet,
+                            ),
+                            _ => (
+                                "https://api.mainnet-beta.solana.com",
+                                codex_wallet::Network::Mainnet,
+                            ),
                         };
-                        match BalanceClient::new(rpc).balances(address).await {
+                        match BalanceClient::new(rpc, network).balances(address).await {
                             Ok(value) => (Some(value), None),
                             Err(error) => (None, Some(error.to_string())),
                         }

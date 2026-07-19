@@ -76,12 +76,21 @@ pub(super) async fn reconcile_plan_receipt(
     };
     let balances = match WalletDaemonClient::new(home).status().await {
         Ok(daemon) => {
-            let rpc = match daemon.network.as_deref() {
-                Some("devnet") => "https://api.devnet.solana.com",
-                _ => "https://api.mainnet-beta.solana.com",
+            let (rpc, network) = match daemon.network.as_deref() {
+                Some("devnet") => (
+                    "https://api.devnet.solana.com",
+                    codex_wallet::Network::Devnet,
+                ),
+                _ => (
+                    "https://api.mainnet-beta.solana.com",
+                    codex_wallet::Network::Mainnet,
+                ),
             };
             match daemon.address.as_deref() {
-                Some(address) => BalanceClient::new(rpc).balances(address).await.ok(),
+                Some(address) => BalanceClient::new(rpc, network)
+                    .balances(address)
+                    .await
+                    .ok(),
                 None => None,
             }
         }

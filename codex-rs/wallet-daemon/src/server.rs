@@ -7,11 +7,14 @@ use std::os::fd::AsRawFd;
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
+#[cfg(target_os = "linux")]
 use anyhow::Context;
 use anyhow::Result;
 use base64::Engine;
@@ -56,6 +59,7 @@ struct State {
 }
 
 pub async fn run_wallet_daemon(codex_home: PathBuf) -> Result<()> {
+    #[cfg(target_os = "linux")]
     codex_process_hardening::disable_process_dumping()
         .context("disable wallet daemon core dumps")?;
     let wallet_dir = codex_home.join("wallet");
@@ -474,6 +478,29 @@ fn acquire_ownership(home: &std::path::Path) -> Result<File> {
         let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
         anyhow::ensure!(
             result == 0,
+            "another wallet daemon owns this PfTerminal home"
+        );
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Storage::FileSystem::LOCKFILE_EXCLUSIVE_LOCK;
+        use windows_sys::Win32::Storage::FileSystem::LOCKFILE_FAIL_IMMEDIATELY;
+        use windows_sys::Win32::Storage::FileSystem::LockFileEx;
+        use windows_sys::Win32::System::IO::OVERLAPPED;
+
+        let mut overlapped: OVERLAPPED = unsafe { std::mem::zeroed() };
+        let locked = unsafe {
+            LockFileEx(
+                file.as_raw_handle() as isize,
+                LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+                0,
+                1,
+                0,
+                &mut overlapped,
+            )
+        };
+        anyhow::ensure!(
+            locked != 0,
             "another wallet daemon owns this PfTerminal home"
         );
     }
