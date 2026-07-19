@@ -831,11 +831,47 @@ impl ChatWidget {
     pub(crate) fn recover_wallet_plan_access(&mut self) {
         let Some(capability) = wallet_capability_for_request(self.wallet_capability.as_ref())
         else {
-            self.add_error_message(
-                "Unlock the wallet from /wallet before recovering plan access.".to_string(),
-            );
+            self.open_wallet_plan_recovery_unlock();
             return;
         };
+        self.request_wallet_plan_recovery(capability);
+    }
+
+    fn open_wallet_plan_recovery_unlock(&mut self) {
+        let home = self.config.codex_home.as_path().to_path_buf();
+        let tx = self.app_event_tx.clone();
+        let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
+            "wallet-passcode".to_string(),
+            "Recover PfTerminal Plan".to_string(),
+            "Wallet passcode — masked".to_string(),
+            "Verify wallet ownership and restore plan access. No USDC will be sent.".to_string(),
+            Box::new(move |_label, mut passcode| {
+                tokio::spawn(async move {
+                    let daemon = WalletDaemonClient::new(home);
+                    let result = match daemon
+                        .unlock(std::mem::take(&mut passcode), UnlockPolicy::OneAction)
+                        .await
+                    {
+                        Ok((capability, _expires_in_seconds)) => daemon
+                            .issue_gateway_key(capability, wallet_gateway_origin())
+                            .await
+                            .map(|key| WalletPlanProvisionedResult {
+                                plan_id: "existing".to_string(),
+                                api_key: WalletSecret::new(key.api_key),
+                                purchase: None,
+                            })
+                            .map_err(|error| error.to_string()),
+                        Err(error) => Err(error.to_string()),
+                    };
+                    passcode.zeroize();
+                    tx.send(AppEvent::WalletPlanProvisioned { result });
+                });
+            }),
+        );
+        self.bottom_pane.show_view(Box::new(view));
+    }
+
+    fn request_wallet_plan_recovery(&self, capability: Zeroizing<String>) {
         let home = self.config.codex_home.as_path().to_path_buf();
         let tx = self.app_event_tx.clone();
         tokio::spawn(async move {
@@ -1022,6 +1058,18 @@ fn wallet_items(
             false,
         );
     }
+    if !overview.plan_credential_present {
+        push_wallet_line(
+            header,
+            "PfTerminal Plan: not connected on this device.",
+            false,
+        );
+        push_wallet_line(
+            header,
+            "Recover plan access to check this wallet for an existing paid plan. Recovery sends no USDC.",
+            true,
+        );
+    }
     let upgrade_mode = overview.plan.as_ref().map(|plan| {
         let (current_plan_id, starts_at) = plan
             .queued_periods
@@ -1126,6 +1174,13 @@ fn wallet_items(
             },
         ));
     }
+    if !overview.plan_credential_present && !overview.daemon.busy {
+        items.push(item(
+            "Recover PfTerminal Plan",
+            "Verify wallet ownership, restore plan details and usage, and send no USDC",
+            || AppEvent::WalletRecoverPlanRequested,
+        ));
+    }
     if !can_sign && !overview.daemon.busy {
         for (name, policy) in [
             ("Unlock for one signing action", UnlockPolicy::OneAction),
@@ -1192,11 +1247,13 @@ fn wallet_items(
                 },
             ));
         }
-        items.push(item(
-            "Recover plan access",
-            "Issue a replacement key for an already-paid wallet without another payment",
-            || AppEvent::WalletRecoverPlanRequested,
-        ));
+        if overview.plan_credential_present {
+            items.push(item(
+                "Recover plan access",
+                "Issue a replacement key for an already-paid wallet without another payment",
+                || AppEvent::WalletRecoverPlanRequested,
+            ));
+        }
     } else if upgrade_mode.is_some() && !overview.daemon.busy {
         items.push(item(
             "Upgrade PfTerminal Plan",
@@ -1459,6 +1516,7 @@ mod tests {
     #[test]
     fn unlocked_daemon_without_this_tui_capability_requires_unlock_again() {
         let items = names(false, false);
+        assert!(items.iter().any(|name| name == "Recover PfTerminal Plan"));
         assert!(
             items
                 .iter()
@@ -1478,8 +1536,27 @@ mod tests {
     fn scoped_capability_enables_spending_actions_only_in_owning_tui() {
         let items = names(false, true);
         assert!(items.iter().any(|name| name == "Buy a PfTerminal plan"));
-        assert!(items.iter().any(|name| name == "Recover plan access"));
+        assert!(items.iter().any(|name| name == "Recover PfTerminal Plan"));
         assert!(!items.iter().any(|name| name.starts_with("Unlock for")));
+    }
+
+    #[test]
+    fn disconnected_locked_wallet_can_start_plan_recovery_directly() {
+        let mut header = ColumnRenderable::new();
+        let items = wallet_items(&mut header, overview(true), false);
+        let recovery = items
+            .iter()
+            .position(|item| item.name == "Recover PfTerminal Plan")
+            .expect("restored wallet recovery action");
+        assert_eq!(recovery, 1, "recovery should follow Receive");
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let sender = crate::app_event_sender::AppEventSender::new(tx);
+        (items[recovery].actions[0])(&sender);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::WalletRecoverPlanRequested)
+        ));
     }
 
     #[test]

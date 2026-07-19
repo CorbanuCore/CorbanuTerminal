@@ -3,6 +3,7 @@ source: tui/src/chatwidget/wallet_menu.rs
 expression: "items.join(\"\\n\")"
 ---
 Receive
+Recover PfTerminal Plan
 Unlock for one signing action
 Unlock for 5 minutes
 Unlock for 15 minutes
