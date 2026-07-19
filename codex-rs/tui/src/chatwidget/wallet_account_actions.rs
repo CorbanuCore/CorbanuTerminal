@@ -1,4 +1,6 @@
 use super::*;
+use crate::chatwidget::wallet_render::WalletTextStyle;
+use crate::chatwidget::wallet_render::push_wallet_text;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_wallet_daemon::WalletDaemonClient;
@@ -7,11 +9,11 @@ impl ChatWidget {
     pub(crate) fn confirm_wallet_plan_disconnect(&mut self) {
         let mut header = ColumnRenderable::new();
         header.push(Line::from("Disconnect PfTerminal Plan".bold()));
-        for line in super::wallet_menu::wallet_wrapped_lines(
+        push_wallet_text(
+            &mut header,
             "This removes the plan credential from this device. Your paid period and wallet remain unchanged.",
-        ) {
-            header.push(Line::from(line.dim()));
-        }
+            WalletTextStyle::Dimmed,
+        );
         self.show_selection_view(SelectionViewParams {
             view_id: Some(super::wallet_menu::WALLET_DISCONNECT_PLAN_VIEW_ID),
             header: Box::new(header),
@@ -69,16 +71,16 @@ impl ChatWidget {
         let mut header = ColumnRenderable::new();
         header.push(Line::from("Remove wallet from this device".bold().red()));
         header.push(Line::from(format!("Wallet: {short}")));
-        for line in super::wallet_menu::wallet_wrapped_lines(
+        push_wallet_text(
+            &mut header,
             "Funds stay on Solana. PfTerminal cannot recover them without your recovery material.",
-        ) {
-            header.push(Line::from(line.red()));
-        }
-        for line in super::wallet_menu::wallet_wrapped_lines(
+            WalletTextStyle::Danger,
+        );
+        push_wallet_text(
+            &mut header,
             "This also disconnects the local PfTerminal Plan credential. It does not cancel or refund the paid period.",
-        ) {
-            header.push(Line::from(line.dim()));
-        }
+            WalletTextStyle::Dimmed,
+        );
         self.show_selection_view(SelectionViewParams {
             view_id: Some(super::wallet_menu::WALLET_REMOVE_VIEW_ID),
             header: Box::new(header),

@@ -8,6 +8,8 @@ use crate::chatwidget::wallet_http::gateway_client;
 use crate::chatwidget::wallet_http::gateway_origin;
 use crate::chatwidget::wallet_receipt::latest_plan_receipt;
 use crate::chatwidget::wallet_receipt::reconcile_plan_receipt;
+use crate::chatwidget::wallet_render::WalletTextStyle;
+use crate::chatwidget::wallet_render::push_wallet_text;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
@@ -1280,30 +1282,18 @@ pub(crate) fn title_case_plan(id: &str) -> String {
     }
 }
 fn push_wallet_line(header: &mut ColumnRenderable, text: &str, dimmed: bool) {
-    for line in wallet_wrapped_lines(text) {
-        if dimmed {
-            header.push(Line::from(line.dim()));
-        } else {
-            header.push(Line::from(line));
-        }
-    }
+    let style = if dimmed {
+        WalletTextStyle::Dimmed
+    } else {
+        WalletTextStyle::Normal
+    };
+    push_wallet_text(header, text, style);
 }
 
 fn wallet_capability_for_request(
     capability: Option<&Zeroizing<String>>,
 ) -> Option<Zeroizing<String>> {
     capability.map(|value| Zeroizing::new(value.to_string()))
-}
-
-pub(super) fn wallet_wrapped_lines(text: &str) -> Vec<String> {
-    let options = textwrap::Options::new(64)
-        .break_words(false)
-        .word_separator(textwrap::WordSeparator::AsciiSpace)
-        .word_splitter(textwrap::WordSplitter::NoHyphenation);
-    textwrap::wrap(text, options)
-        .into_iter()
-        .map(std::borrow::Cow::into_owned)
-        .collect()
 }
 
 fn format_token_count(value: u64) -> String {
@@ -1720,22 +1710,7 @@ mod tests {
     }
 
     #[test]
-    fn wallet_status_lines_wrap_without_splitting_iso_dates() {
-        let text = "Next: Basic plan · 20 USDC prepaid · 2026-08-19T00:35:20.051Z to 2026-09-19T00:35:20.051Z";
-        let lines = wallet_wrapped_lines(text);
-        assert!(lines.len() > 1);
-        assert!(lines.iter().all(|line| line.chars().count() <= 64));
-        assert_eq!(lines.join(" "), text);
-        let allowance =
-            "Allowance: 5,000,000 tokens/week and 20,000,000 tokens/month for one month.";
-        let allowance_lines = wallet_wrapped_lines(allowance);
-        assert!(allowance_lines.len() > 1);
-        assert!(
-            allowance_lines
-                .iter()
-                .all(|line| line.chars().count() <= 64)
-        );
-        assert_eq!(allowance_lines.join(" "), allowance);
+    fn wallet_counts_format_for_status_and_allowance_copy() {
         assert_eq!(format_token_count(1_000_000), "1,000,000");
         assert_eq!(format_usdc_atomic(4_250_000), "4.25");
     }
@@ -1757,10 +1732,6 @@ mod tests {
     #[test]
     fn wallet_upgrade_flow_copy_snapshot() {
         let upgrade_intro = "Choose a tier above Starter. It starts 2026-08-19T00:35:20Z after the paid period you already own.";
-        let wrapped_intro = wallet_wrapped_lines(upgrade_intro);
-        assert!(wrapped_intro.len() > 1);
-        assert!(wrapped_intro.iter().all(|line| line.chars().count() <= 64));
-        assert_eq!(wrapped_intro.join(" "), upgrade_intro);
         let rendered = [
             "Locked wallet: Upgrade PfTerminal Plan — Unlock for 5 minutes, then choose a higher tier",
             "Unlocked wallet: Upgrade PfTerminal Plan — Choose a higher tier for the period starting 2026-08-19T00:35:20Z",

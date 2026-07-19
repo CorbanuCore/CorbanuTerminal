@@ -3,6 +3,8 @@ use crate::chatwidget::wallet_http::gateway_client;
 use crate::chatwidget::wallet_menu::WalletPlanCatalog;
 use crate::chatwidget::wallet_menu::WalletPlanStatus;
 use crate::chatwidget::wallet_menu::title_case_plan;
+use crate::chatwidget::wallet_render::WalletTextStyle;
+use crate::chatwidget::wallet_render::push_wallet_text;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use zeroize::Zeroizing;
 
@@ -248,26 +250,12 @@ fn push_window(
 }
 
 fn push_wrapped(header: &mut ColumnRenderable, text: &str, dimmed: bool) {
-    for line in wrapped_lines(text) {
-        if dimmed {
-            header.push(Line::from(line.dim()));
-        } else {
-            header.push(Line::from(line));
-        }
-    }
-}
-
-fn wrapped_lines(text: &str) -> Vec<String> {
-    textwrap::wrap(
-        text,
-        textwrap::Options::new(64)
-            .break_words(false)
-            .word_separator(textwrap::WordSeparator::AsciiSpace)
-            .word_splitter(textwrap::WordSplitter::NoHyphenation),
-    )
-    .into_iter()
-    .map(std::borrow::Cow::into_owned)
-    .collect()
+    let style = if dimmed {
+        WalletTextStyle::Dimmed
+    } else {
+        WalletTextStyle::Normal
+    };
+    push_wallet_text(header, text, style);
 }
 
 fn window_lines(
@@ -387,19 +375,6 @@ mod tests {
         assert_eq!(commas(999), "999");
         assert_eq!(commas(1_000), "1,000");
         assert_eq!(commas(12_345_678), "12,345,678");
-    }
-
-    #[test]
-    fn long_usage_fields_wrap_without_clipping() {
-        let lines = wrapped_lines(
-            "Next: Basic plan · 2026-08-19T00:35:20.051Z to 2026-09-19T00:35:20.051Z",
-        );
-        assert!(lines.len() > 1);
-        assert!(lines.iter().all(|line| line.chars().count() <= 64));
-        assert_eq!(
-            lines.join(" "),
-            "Next: Basic plan · 2026-08-19T00:35:20.051Z to 2026-09-19T00:35:20.051Z"
-        );
     }
 
     #[test]

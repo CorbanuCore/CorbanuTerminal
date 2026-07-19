@@ -37,8 +37,17 @@ async fn wallet_disconnect_wraps_copy_and_dismisses_confirmation_before_replacem
         chat.bottom_pane.active_view_id(),
         Some(crate::chatwidget::wallet_menu::WALLET_DISCONNECT_PLAN_VIEW_ID)
     );
-    let confirmation = render_bottom_popup(&chat, /*width*/ 94);
-    assert!(confirmation.contains("remain unchanged."));
+    for width in [67, 94] {
+        let confirmation = render_bottom_popup(&chat, width);
+        let normalized = confirmation
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            normalized.contains("remain unchanged."),
+            "expected complete disconnect warning at width {width}, got:\n{confirmation}"
+        );
+    }
 
     chat.on_wallet_plan_disconnected(Ok(true));
 
@@ -64,11 +73,17 @@ async fn wallet_removal_wraps_copy_and_dismisses_confirmation_before_replacement
         chat.bottom_pane.active_view_id(),
         Some(crate::chatwidget::wallet_menu::WALLET_REMOVE_VIEW_ID)
     );
-    let confirmation = render_bottom_popup(&chat, /*width*/ 94);
-    assert!(
-        confirmation.contains("does not cancel or refund the paid period."),
-        "expected wrapped removal warning, got:\n{confirmation}"
-    );
+    for width in [67, 94] {
+        let confirmation = render_bottom_popup(&chat, width);
+        let normalized = confirmation
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            normalized.contains("does not cancel or refund the paid period."),
+            "expected complete removal warning at width {width}, got:\n{confirmation}"
+        );
+    }
 
     chat.on_wallet_removed(Ok(()));
 

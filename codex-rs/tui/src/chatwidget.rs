@@ -434,6 +434,7 @@ mod wallet_account_actions;
 mod wallet_http;
 pub(crate) mod wallet_menu;
 pub(crate) mod wallet_receipt;
+mod wallet_render;
 mod wallet_unlock;
 pub(crate) mod wallet_usage;
 use self::user_messages::PendingSteer;
