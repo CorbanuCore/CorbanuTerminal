@@ -702,6 +702,7 @@ impl ChatWidget {
                         plan: selected.clone(),
                     })
                 })],
+                dismiss_on_select: true,
                 ..Default::default()
             }],
             footer_hint: Some(standard_popup_hint_line()),

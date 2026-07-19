@@ -951,6 +951,9 @@ impl ListSelectionView {
 
 impl BottomPaneView for ListSelectionView {
     fn handle_key_event(&mut self, key_event: KeyEvent) {
+        if self.completion.is_some() {
+            return;
+        }
         // Searchable lists reserve printable characters for query input. This
         // keeps vim-style plain j/k/h/l useful in non-search lists without
         // making those letters impossible to type into a filter.
@@ -2127,6 +2130,34 @@ mod tests {
             Ok(other) => panic!("expected OpenApprovalsPopup cancel event, got {other:?}"),
             Err(err) => panic!("expected cancel callback event, got {err}"),
         }
+    }
+
+    #[test]
+    fn completed_selection_ignores_repeated_accept_keys() {
+        let (tx_raw, mut rx) = unbounded_channel::<AppEvent>();
+        let tx = AppEventSender::new(tx_raw);
+        let mut view = new_view(
+            SelectionViewParams {
+                items: vec![SelectionItem {
+                    name: "Confirm once".to_string(),
+                    actions: vec![Box::new(|tx| tx.send(AppEvent::OpenWallet))],
+                    dismiss_on_select: true,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            tx,
+        );
+
+        view.handle_key_event(KeyEvent::from(KeyCode::Enter));
+        view.handle_key_event(KeyEvent::from(KeyCode::Enter));
+
+        assert!(view.is_complete());
+        assert!(matches!(rx.try_recv(), Ok(AppEvent::OpenWallet)));
+        assert!(
+            rx.try_recv().is_err(),
+            "confirmation dispatched more than once"
+        );
     }
 
     #[test]

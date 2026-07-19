@@ -20,6 +20,7 @@ use codex_uds::UnixListener;
 use codex_uds::prepare_private_socket_directory;
 use codex_wallet::UnlockedWallet;
 use codex_wallet::Wallet;
+use codex_wallet::WalletError;
 use rand::TryRngCore;
 use rand::rngs::OsRng;
 use tokio::io::AsyncBufReadExt;
@@ -143,6 +144,7 @@ async fn handle_immediate(state: Arc<Mutex<State>>, mut request: Request) -> Res
             lock(&mut state);
             match state.wallet.remove_from_device(expected_address) {
                 Ok(()) => Response::WalletRemoved,
+                Err(WalletError::Missing) => Response::WalletRemoved,
                 Err(error) => Response::Error {
                     code: "wallet_removal_failed".into(),
                     message: error.to_string(),
@@ -596,6 +598,10 @@ mod tests {
             .remove_wallet(created.manifest.address)
             .await
             .expect("remove wallet");
+        client
+            .remove_wallet("11111111111111111111111111111111".to_string())
+            .await
+            .expect("removing an already-absent wallet is idempotent");
         assert_eq!(
             client.status().await.expect("removed status"),
             DaemonStatus {

@@ -16,10 +16,10 @@ impl ChatWidget {
             view_id: Some(super::wallet_menu::WALLET_DISCONNECT_PLAN_VIEW_ID),
             header: Box::new(header),
             items: vec![
-                super::wallet_menu::item("Cancel", "Keep this device connected", || {
+                confirmation_item("Cancel", "Keep this device connected", || {
                     AppEvent::OpenWallet
                 }),
-                super::wallet_menu::item(
+                confirmation_item(
                     "Disconnect plan",
                     "Remove only the metered-inference credential",
                     || AppEvent::WalletPlanDisconnectRequested,
@@ -83,12 +83,12 @@ impl ChatWidget {
             view_id: Some(super::wallet_menu::WALLET_REMOVE_VIEW_ID),
             header: Box::new(header),
             items: vec![
-                super::wallet_menu::item("Cancel", "Keep the wallet on this device", || {
+                confirmation_item("Cancel", "Keep the wallet on this device", || {
                     AppEvent::OpenWallet
                 }),
                 {
                     let address = address.clone();
-                    super::wallet_menu::item(
+                    confirmation_item(
                         "Remove wallet",
                         "I have saved the recovery material",
                         move || AppEvent::WalletRemoveRequested {
@@ -163,4 +163,13 @@ impl ChatWidget {
             self.open_model_popup();
         }
     }
+}
+
+fn confirmation_item<F>(name: &str, description: &str, event: F) -> SelectionItem
+where
+    F: Fn() -> AppEvent + Send + Sync + 'static,
+{
+    let mut item = super::wallet_menu::item(name, description, event);
+    item.dismiss_on_select = true;
+    item
 }
