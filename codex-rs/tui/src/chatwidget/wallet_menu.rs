@@ -1,5 +1,6 @@
 use super::*;
 use crate::app_event::WalletCreatedResult;
+use crate::app_event::WalletPersistenceOperation;
 use crate::app_event::WalletPlanProvisionedResult;
 use crate::app_event::WalletPlanPurchaseSummary;
 use crate::app_event::WalletSecret;
@@ -309,7 +310,10 @@ impl ChatWidget {
                         .await
                         .map_err(|error| format!("wallet task failed: {error}"))
                         .and_then(|value| value);
-                        tx.send(AppEvent::WalletCreateFinished { result });
+                        tx.send(AppEvent::WalletCreateFinished {
+                            operation: WalletPersistenceOperation::Create,
+                            result,
+                        });
                     });
                 }),
             );
@@ -361,7 +365,10 @@ impl ChatWidget {
                         .await
                         .map_err(|error| format!("wallet task failed: {error}"))
                         .and_then(|value| value);
-                        tx.send(AppEvent::WalletCreateFinished { result });
+                        tx.send(AppEvent::WalletCreateFinished {
+                            operation: WalletPersistenceOperation::Restore,
+                            result,
+                        });
                     });
                 }),
             );
@@ -370,11 +377,15 @@ impl ChatWidget {
 
     pub(crate) fn on_wallet_create_finished(
         &mut self,
+        operation: WalletPersistenceOperation,
         result: Result<WalletCreatedResult, String>,
     ) {
         match result {
             Ok(created) => {
-                self.add_info_message(format!("Created Solana wallet {}. The recovery material is shown only in the secure view.", created.address), None);
+                self.add_info_message(
+                    wallet_persistence_success_message(operation, &created.address),
+                    None,
+                );
                 self.bottom_pane.show_view(Box::new(
                     crate::bottom_pane::wallet_recovery::WalletRecoveryView::new(
                         created.address,
@@ -385,7 +396,10 @@ impl ChatWidget {
                 // generation guard prevents an older in-flight read from restoring stale state.
                 self.refresh_wallet_status();
             }
-            Err(error) => self.add_error_message(format!("Wallet creation failed: {error}")),
+            Err(error) => self.add_error_message(format!(
+                "{} failed: {error}",
+                wallet_persistence_action_label(operation)
+            )),
         }
     }
 
@@ -862,6 +876,26 @@ fn separate_plan_for_local_wallet(
         Some(plan) => (None, Some(plan)),
         None => (None, None),
     }
+}
+
+fn wallet_persistence_action_label(operation: WalletPersistenceOperation) -> &'static str {
+    match operation {
+        WalletPersistenceOperation::Create => "Wallet creation",
+        WalletPersistenceOperation::Restore => "Wallet restoration",
+    }
+}
+
+fn wallet_persistence_success_message(
+    operation: WalletPersistenceOperation,
+    address: &str,
+) -> String {
+    let verb = match operation {
+        WalletPersistenceOperation::Create => "Created",
+        WalletPersistenceOperation::Restore => "Restored",
+    };
+    format!(
+        "{verb} Solana wallet {address}. The recovery material is shown only in the secure view."
+    )
 }
 
 fn wallet_params(
@@ -1745,12 +1779,31 @@ mod tests {
             crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
         assert_eq!(chat.wallet_status_generation, 0);
 
-        chat.on_wallet_create_finished(Ok(WalletCreatedResult {
-            address: "new-wallet-address".to_string(),
-            recovery: WalletSecret::new("one-time-recovery".to_string()),
-        }));
+        chat.on_wallet_create_finished(
+            WalletPersistenceOperation::Create,
+            Ok(WalletCreatedResult {
+                address: "new-wallet-address".to_string(),
+                recovery: WalletSecret::new("one-time-recovery".to_string()),
+            }),
+        );
 
         assert_eq!(chat.wallet_status_generation, 1);
+    }
+
+    #[test]
+    fn wallet_persistence_messages_preserve_create_and_restore_identity() {
+        assert_eq!(
+            wallet_persistence_success_message(WalletPersistenceOperation::Create, "address"),
+            "Created Solana wallet address. The recovery material is shown only in the secure view."
+        );
+        assert_eq!(
+            wallet_persistence_success_message(WalletPersistenceOperation::Restore, "address"),
+            "Restored Solana wallet address. The recovery material is shown only in the secure view."
+        );
+        assert_eq!(
+            wallet_persistence_action_label(WalletPersistenceOperation::Restore),
+            "Wallet restoration"
+        );
     }
 
     #[tokio::test]

@@ -187,6 +187,12 @@ pub(crate) struct WalletCreatedResult {
     pub(crate) recovery: WalletSecret,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WalletPersistenceOperation {
+    Create,
+    Restore,
+}
+
 #[derive(Debug)]
 pub(crate) struct WalletUnlockedResult {
     pub(crate) capability: WalletSecret,
@@ -1393,6 +1399,7 @@ pub(crate) enum AppEvent {
         result: Result<crate::chatwidget::wallet_menu::WalletOverview, String>,
     },
     WalletCreateFinished {
+        operation: WalletPersistenceOperation,
         result: Result<WalletCreatedResult, String>,
     },
     WalletUnlockFinished {

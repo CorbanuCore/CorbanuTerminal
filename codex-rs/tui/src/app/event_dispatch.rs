@@ -1902,8 +1902,9 @@ impl App {
             AppEvent::WalletStatusReady { generation, result } => {
                 self.chat_widget.on_wallet_status_ready(generation, result);
             }
-            AppEvent::WalletCreateFinished { result } => {
-                self.chat_widget.on_wallet_create_finished(result);
+            AppEvent::WalletCreateFinished { operation, result } => {
+                self.chat_widget
+                    .on_wallet_create_finished(operation, result);
             }
             AppEvent::WalletUnlockFinished { result } => {
                 self.chat_widget.on_wallet_unlock_finished(result);
