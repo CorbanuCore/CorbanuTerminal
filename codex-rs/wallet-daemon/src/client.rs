@@ -16,6 +16,11 @@ use crate::protocol::Request;
 use crate::protocol::Response;
 use crate::protocol::WalletDaemonError;
 
+const PING_TIMEOUT: Duration = Duration::from_millis(100);
+const STATUS_TIMEOUT: Duration = Duration::from_secs(5);
+const LOCAL_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
+const NETWORK_OPERATION_TIMEOUT: Duration = Duration::from_secs(180);
+
 #[derive(Clone)]
 pub struct WalletDaemonClient {
     codex_home: PathBuf,
@@ -27,7 +32,10 @@ impl WalletDaemonClient {
     }
 
     pub async fn ensure_running(&self) -> Result<(), WalletDaemonError> {
-        if matches!(self.call(Request::Ping).await, Ok(Response::Pong)) {
+        if matches!(
+            self.call_with_timeout(Request::Ping, PING_TIMEOUT).await,
+            Ok(Response::Pong)
+        ) {
             return Ok(());
         }
         let executable = daemon_executable().map_err(unavailable)?;
@@ -42,7 +50,10 @@ impl WalletDaemonClient {
             .map_err(unavailable)?;
         for _ in 0..40 {
             tokio::time::sleep(Duration::from_millis(50)).await;
-            if matches!(self.call(Request::Ping).await, Ok(Response::Pong)) {
+            if matches!(
+                self.call_with_timeout(Request::Ping, PING_TIMEOUT).await,
+                Ok(Response::Pong)
+            ) {
                 return Ok(());
             }
         }
@@ -53,7 +64,10 @@ impl WalletDaemonClient {
 
     pub async fn status(&self) -> Result<DaemonStatus, WalletDaemonError> {
         self.ensure_running().await?;
-        match self.call(Request::Status).await? {
+        match self
+            .call_with_timeout(Request::Status, STATUS_TIMEOUT)
+            .await?
+        {
             Response::Status(status) => Ok(status),
             other => response_error(other),
         }
@@ -66,10 +80,13 @@ impl WalletDaemonClient {
     ) -> Result<(String, u64), WalletDaemonError> {
         self.ensure_running().await?;
         match self
-            .call(Request::Unlock {
-                passcode,
-                duration_seconds,
-            })
+            .call_with_timeout(
+                Request::Unlock {
+                    passcode,
+                    duration_seconds,
+                },
+                LOCAL_OPERATION_TIMEOUT,
+            )
             .await?
         {
             Response::Unlocked {
@@ -82,7 +99,10 @@ impl WalletDaemonClient {
 
     pub async fn lock(&self) -> Result<(), WalletDaemonError> {
         self.ensure_running().await?;
-        match self.call(Request::Lock).await? {
+        match self
+            .call_with_timeout(Request::Lock, STATUS_TIMEOUT)
+            .await?
+        {
             Response::Locked => Ok(()),
             other => response_error(other),
         }
@@ -91,7 +111,10 @@ impl WalletDaemonClient {
     pub async fn remove_wallet(&self, expected_address: String) -> Result<(), WalletDaemonError> {
         self.ensure_running().await?;
         match self
-            .call(Request::RemoveWallet { expected_address })
+            .call_with_timeout(
+                Request::RemoveWallet { expected_address },
+                LOCAL_OPERATION_TIMEOUT,
+            )
             .await?
         {
             Response::WalletRemoved => Ok(()),
@@ -106,11 +129,14 @@ impl WalletDaemonClient {
         challenge: String,
     ) -> Result<String, WalletDaemonError> {
         match self
-            .call(Request::SignOwnership {
-                capability,
-                gateway_origin,
-                challenge,
-            })
+            .call_with_timeout(
+                Request::SignOwnership {
+                    capability,
+                    gateway_origin,
+                    challenge,
+                },
+                LOCAL_OPERATION_TIMEOUT,
+            )
             .await?
         {
             Response::Signature { signature } => Ok(signature),
@@ -124,7 +150,10 @@ impl WalletDaemonClient {
         intent: PlanPurchaseIntent,
     ) -> Result<ProvisionedPlan, WalletDaemonError> {
         match self
-            .call(Request::ProvisionPlan { capability, intent })
+            .call_with_timeout(
+                Request::ProvisionPlan { capability, intent },
+                NETWORK_OPERATION_TIMEOUT,
+            )
             .await?
         {
             Response::PlanProvisioned(result) => Ok(result),
@@ -138,10 +167,13 @@ impl WalletDaemonClient {
         gateway_origin: String,
     ) -> Result<GatewayKey, WalletDaemonError> {
         match self
-            .call(Request::IssueGatewayKey {
-                capability,
-                gateway_origin,
-            })
+            .call_with_timeout(
+                Request::IssueGatewayKey {
+                    capability,
+                    gateway_origin,
+                },
+                NETWORK_OPERATION_TIMEOUT,
+            )
             .await?
         {
             Response::GatewayKeyIssued(result) => Ok(result),
@@ -149,7 +181,22 @@ impl WalletDaemonClient {
         }
     }
 
-    async fn call(&self, request: Request) -> Result<Response, WalletDaemonError> {
+    async fn call_with_timeout(
+        &self,
+        request: Request,
+        timeout: Duration,
+    ) -> Result<Response, WalletDaemonError> {
+        tokio::time::timeout(timeout, self.call_unbounded(request))
+            .await
+            .map_err(|_| {
+                WalletDaemonError::Unavailable(format!(
+                    "request timed out after {} second(s)",
+                    timeout.as_secs_f64()
+                ))
+            })?
+    }
+
+    async fn call_unbounded(&self, request: Request) -> Result<Response, WalletDaemonError> {
         let mut stream = UnixStream::connect(socket_path(&self.codex_home))
             .await
             .map_err(unavailable)?;
@@ -196,5 +243,37 @@ fn response_error<T>(response: Response) -> Result<T, WalletDaemonError> {
     match response {
         Response::Error { code, message } => Err(WalletDaemonError::Refused { code, message }),
         _ => Err(WalletDaemonError::Protocol),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use codex_uds::UnixListener;
+    use codex_uds::prepare_private_socket_directory;
+
+    #[tokio::test]
+    async fn an_accepted_request_that_never_replies_times_out() {
+        let home = tempfile::tempdir().expect("home");
+        tokio::fs::create_dir_all(home.path().join("wallet"))
+            .await
+            .expect("wallet directory");
+        prepare_private_socket_directory(run_dir(home.path()))
+            .await
+            .expect("private run directory");
+        let mut listener = UnixListener::bind(socket_path(home.path()))
+            .await
+            .expect("bind socket");
+        let stalled_server = tokio::spawn(async move {
+            let _stream = listener.accept().await.expect("accept client");
+            std::future::pending::<()>().await;
+        });
+        let client = WalletDaemonClient::new(home.path().to_path_buf());
+        let error = client
+            .call_with_timeout(Request::Ping, Duration::from_millis(25))
+            .await
+            .expect_err("stalled daemon must time out");
+        assert!(error.to_string().contains("timed out"));
+        stalled_server.abort();
     }
 }

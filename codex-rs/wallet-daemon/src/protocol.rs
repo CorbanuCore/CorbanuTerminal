@@ -60,6 +60,8 @@ pub struct DaemonStatus {
     pub address: Option<String>,
     pub network: Option<String>,
     pub locked: bool,
+    #[serde(default)]
+    pub busy: bool,
     pub expires_in_seconds: Option<u64>,
 }
 

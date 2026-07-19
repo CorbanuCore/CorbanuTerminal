@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::time::Duration;
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
@@ -30,6 +31,9 @@ const SOLANA_DEVNET: &str = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
 const ATA_PROGRAM: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 const MEMO_PROGRAM: &str = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
 const COMPUTE_UNIT_LIMIT: u32 = 20_000;
+const NETWORK_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const PAYMENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PaymentIntent {
@@ -339,7 +343,11 @@ async fn build_transaction(
 }
 
 async fn latest_blockhash(rpc_url: &str) -> Result<Hash, X402PaymentError> {
-    let response = Client::new()
+    let response = Client::builder()
+        .connect_timeout(NETWORK_CONNECT_TIMEOUT)
+        .timeout(RPC_REQUEST_TIMEOUT)
+        .build()
+        .map_err(transport)?
         .post(rpc_url)
         .json(&serde_json::json!({
             "jsonrpc": "2.0",
@@ -450,6 +458,8 @@ pub fn validate_gateway_origin(value: &str) -> Result<(), X402PaymentError> {
 fn secure_client(origin: &str) -> Result<Client, X402PaymentError> {
     Client::builder()
         .https_only(!is_loopback_origin(origin))
+        .connect_timeout(NETWORK_CONNECT_TIMEOUT)
+        .timeout(PAYMENT_REQUEST_TIMEOUT)
         .build()
         .map_err(transport)
 }

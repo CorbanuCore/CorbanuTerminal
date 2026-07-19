@@ -373,6 +373,10 @@ fn operation_busy() -> Response {
 
 fn status(state: &State) -> DaemonStatus {
     let manifest = state.wallet.manifest().ok();
+    let busy = state
+        .active_operation
+        .as_ref()
+        .is_some_and(|operation| !operation.is_cancelled());
     DaemonStatus {
         wallet_exists: state.wallet.exists(),
         address: manifest.as_ref().map(|m| m.address.clone()),
@@ -382,6 +386,7 @@ fn status(state: &State) -> DaemonStatus {
                 .active_operation
                 .as_ref()
                 .is_none_or(CancellationToken::is_cancelled),
+        busy,
         expires_in_seconds: state
             .expires_at
             .map(|expiry| expiry.saturating_duration_since(Instant::now()).as_secs()),
@@ -537,6 +542,9 @@ mod tests {
                 .await
         });
         tokio::time::sleep(Duration::from_millis(100)).await;
+        let busy = client.status().await.expect("status during operation");
+        assert!(busy.busy);
+        assert!(!busy.locked);
         tokio::time::timeout(Duration::from_secs(1), client.lock())
             .await
             .expect("lock must not wait for the network operation")
@@ -595,6 +603,7 @@ mod tests {
                 address: None,
                 network: None,
                 locked: true,
+                busy: false,
                 expires_in_seconds: None,
             }
         );

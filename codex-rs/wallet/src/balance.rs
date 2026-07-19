@@ -2,6 +2,7 @@ use anyhow::Context;
 use anyhow::Result;
 use serde::Deserialize;
 use serde_json::json;
+use std::time::Duration;
 
 use crate::SOLANA_USDC_MINT;
 
@@ -21,7 +22,11 @@ impl BalanceClient {
     pub fn new(rpc_url: impl Into<String>) -> Self {
         Self {
             rpc_url: rpc_url.into(),
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(10))
+                .timeout(Duration::from_secs(15))
+                .build()
+                .expect("wallet balance HTTP client configuration is static"),
         }
     }
 

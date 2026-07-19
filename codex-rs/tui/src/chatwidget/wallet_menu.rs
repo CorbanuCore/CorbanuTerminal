@@ -924,8 +924,10 @@ fn wallet_items(
         .plan
         .as_ref()
         .map(|status| latest_plan_receipt(status, overview.balances, &overview.plan_prices_usdc));
-    let can_sign = client_can_sign && !overview.daemon.locked;
-    let lock = if overview.daemon.locked {
+    let can_sign = client_can_sign && !overview.daemon.locked && !overview.daemon.busy;
+    let lock = if overview.daemon.busy {
+        "signing operation in progress"
+    } else if overview.daemon.locked {
         "locked"
     } else if can_sign {
         "ready to sign in this TUI"
@@ -1059,7 +1061,7 @@ fn wallet_items(
             },
         ));
     }
-    if !can_sign {
+    if !can_sign && !overview.daemon.busy {
         for (name, seconds) in [
             ("Unlock for 5 minutes", 300),
             ("Unlock for 15 minutes", 900),
@@ -1109,7 +1111,7 @@ fn wallet_items(
             "Issue a replacement key for an already-paid wallet without another payment",
             || AppEvent::WalletRecoverPlanRequested,
         ));
-    } else if upgrade_mode.is_some() {
+    } else if upgrade_mode.is_some() && !overview.daemon.busy {
         items.push(item(
             "Upgrade PfTerminal Plan",
             "Unlock for 5 minutes, then choose a higher tier",
@@ -1249,6 +1251,7 @@ mod tests {
                 address: Some("EpUYgzi88BYbsGoyiNghPppd3J9ASbARq7UjBCCUnk2i".to_string()),
                 network: Some("mainnet".to_string()),
                 locked,
+                busy: false,
                 expires_in_seconds: (!locked).then_some(300),
             },
             balances: Some(WalletBalances {
@@ -1309,6 +1312,22 @@ mod tests {
         assert!(items.iter().any(|name| name == "Buy a PfTerminal plan"));
         assert!(items.iter().any(|name| name == "Recover plan access"));
         assert!(!items.iter().any(|name| name.starts_with("Unlock for")));
+    }
+
+    #[test]
+    fn active_signing_operation_is_busy_without_offering_conflicting_actions() {
+        let mut busy = overview(false);
+        busy.daemon.busy = true;
+        let mut header = ColumnRenderable::new();
+        let items = wallet_items(&mut header, busy, true);
+        let names = items
+            .iter()
+            .map(|item| item.name.as_str())
+            .collect::<Vec<_>>();
+        assert!(names.contains(&"Lock wallet"));
+        assert!(!names.iter().any(|name| name.starts_with("Unlock for")));
+        assert!(!names.contains(&"Buy a PfTerminal plan"));
+        assert!(!names.contains(&"Recover plan access"));
     }
 
     #[test]
