@@ -39,7 +39,7 @@ impl ChatWidget {
         let guidance = validation_error
             .map(|error| format!("Try again: {error}"))
             .unwrap_or_else(|| {
-                "Signing access expires at the selected time and is scoped to this TUI.".to_string()
+                "Signing access stays in this TUI and expires on schedule.".to_string()
             });
         let view = CustomPromptView::new(
             "Custom wallet unlock".to_string(),

@@ -30,3 +30,15 @@ fn unlock_confirmation_distinguishes_single_action_from_timed_access() {
         "Wallet unlocked for 15 minute(s)."
     );
 }
+
+#[tokio::test]
+async fn custom_unlock_guidance_is_complete_in_the_narrow_qualification_terminal() {
+    let (mut chat, _tx, _event_rx, _op_rx) =
+        crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+    chat.open_wallet_custom_unlock(None);
+
+    let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 69);
+    assert!(rendered.contains("Custom wallet unlock"));
+    assert!(rendered.contains("Whole minutes from 1 to 480"));
+    assert!(rendered.contains("Signing access stays in this TUI and expires on schedule."));
+}
