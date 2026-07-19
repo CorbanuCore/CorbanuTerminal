@@ -128,6 +128,26 @@ describe("subscription store", () => {
     assert.equal(period?.monthlyUsedTokens, 0);
   });
 
+  test("releases ambiguous reservations instead of converting capacity into spend", async () => {
+    const store = new InMemoryGatewayStore();
+    await store.recordSettlement({
+      transaction: "solana-tx-ambiguous", walletAddress: "wallet-1", planId: "starter",
+      network: "solana:mainnet", amountAtomic: "1000000", settledAt: NOW,
+    });
+    const key = await store.createApiKey("wallet-1", NOW, PEPPER);
+    const reserved = await store.reserveApiKeyUsage(
+      hashToken(key.key, PEPPER), "ambiguous-request", "z-ai/glm-5.2", 32_768, NOW,
+    );
+    assert.equal(reserved?.kind, "authorized");
+    if (reserved?.kind !== "authorized") throw new Error("reservation failed");
+    const settled = await store.settleApiKeyUsage(reserved.reservation.id, "ambiguous", undefined, NOW);
+    assert.equal(settled?.state, "released");
+    assert.equal(settled?.chargedTokens, 0);
+    const period = (await store.listPeriods("wallet-1", NOW))[0];
+    assert.equal(period?.monthlyUsedTokens, 0);
+    assert.equal(period?.monthlyReservedTokens, 0);
+  });
+
   test("rejects rebinding a transaction to another wallet or plan", async () => {
     const store = new InMemoryGatewayStore();
     await store.recordSettlement({

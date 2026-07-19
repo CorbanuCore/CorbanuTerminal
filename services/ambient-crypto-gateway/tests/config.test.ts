@@ -38,6 +38,13 @@ describe("gateway configuration", () => {
       /32 characters/,
     );
     assert.throws(
+      () => readGatewayConfig({
+        ...VALID_ENV,
+        PFT_AMBIENT_TOKEN_PEPPER_FILE: "/unused",
+      }),
+      /cannot both be set/,
+    );
+    assert.throws(
       () => readGatewayConfig({ ...VALID_ENV, PFT_X402_PAY_TO: "not-a-wallet" }),
       /Solana address/,
     );

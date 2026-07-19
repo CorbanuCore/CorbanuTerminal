@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   estimateRequestUsage,
+  estimateSuccessfulUsage,
   extractActualUsage,
   StreamUsageParser,
 } from "../src/usage.js";
@@ -42,7 +43,7 @@ describe("inference usage authorization", () => {
           completion_tokens_details: { reasoning_tokens: 3 },
         },
       }),
-      { inputTokens: 20, outputTokens: 7, cachedInputTokens: 4, reasoningTokens: 3, totalTokens: 27 },
+      { source: "upstream", inputTokens: 20, outputTokens: 7, cachedInputTokens: 4, reasoningTokens: 3, totalTokens: 27 },
     );
     assert.equal(extractActualUsage({ usage: { total_tokens: 99 } }), undefined);
   });
@@ -52,5 +53,25 @@ describe("inference usage authorization", () => {
     parser.push(Buffer.from('data: {"choices":[{"delta":{"content":"x"}}]}\n\ndata: {"usage":{"input_tokens":'));
     parser.push(Buffer.from('8,"output_tokens":5}}\n\ndata: [DONE]\n\n'));
     assert.equal(parser.finish()?.totalTokens, 13);
+  });
+
+  test("meters only generated fields when a completed response omits usage", () => {
+    const usage = estimateSuccessfulUsage({
+      choices: [{ message: { content: "hello", tool_calls: [{ function: { name: "read", arguments: "{}" } }] } }],
+      id: "protocol-metadata-is-not-output",
+    }, 11);
+    assert.equal(usage.source, "estimated");
+    assert.equal(usage.inputTokens, 11);
+    assert.equal(usage.outputTokens, Math.ceil(Buffer.byteLength("helloread{}") / 3));
+    assert.equal(usage.totalTokens, usage.inputTokens + usage.outputTokens);
+  });
+
+  test("meters streamed tool calls without charging the output reservation", () => {
+    const parser = new StreamUsageParser();
+    parser.push(Buffer.from('data: {"choices":[{"delta":{"tool_calls":[{"function":{"name":"shell","arguments":"{\\"cmd\\":\\"pwd\\"}"}}]}}]}\n\n'));
+    const usage = parser.finish(19);
+    assert.equal(usage?.source, "estimated");
+    assert.equal(usage?.inputTokens, 19);
+    assert.ok((usage?.outputTokens ?? 0) < 32_768);
   });
 });

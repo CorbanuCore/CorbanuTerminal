@@ -162,7 +162,7 @@ describe("Ambient crypto gateway", () => {
     let upstreamCalls = 0;
     const { app } = setup(async () => {
       upstreamCalls += 1;
-      return new Response("{}");
+      return new Response('{"usage":{"prompt_tokens":0,"completion_tokens":32768}}');
     });
     const issued = await buyAndIssueKey(app);
     for (let index = 0; index < 7; index += 1) {
@@ -178,6 +178,27 @@ describe("Ambient crypto gateway", () => {
       .send({ model: "z-ai/glm-5.2", messages: [{ role: "user", content: "over quota" }], max_tokens: 32_768 })
       .expect(429);
     assert.equal(upstreamCalls, 7);
+  });
+
+  test("does not bill the maximum reservation when successful output omits usage", async () => {
+    const responseBody = { choices: [{ message: { content: "small answer" } }] };
+    const { app } = setup(async () => new Response(JSON.stringify(responseBody), {
+      headers: { "content-type": "application/json" },
+    }));
+    const issued = await buyAndIssueKey(app);
+    const inference = await request(app)
+      .post("/v1/chat/completions")
+      .set("Authorization", `Bearer ${issued.key}`)
+      .send({ model: "z-ai/glm-5.2", messages: [{ role: "user", content: "hello" }], max_tokens: 32_768 })
+      .expect(200);
+    assert.deepEqual(inference.body, responseBody);
+    const account = await request(app)
+      .get("/v1/account")
+      .set("Authorization", `Bearer ${issued.key}`)
+      .expect(200);
+    assert.ok(account.body.period.monthlyUsedTokens > 0);
+    assert.ok(account.body.period.monthlyUsedTokens < 100);
+    assert.equal(account.body.period.monthlyReservedTokens, 0);
   });
 
   test("rejects unknown and revoked keys before reaching Ambient", async () => {

@@ -14,7 +14,14 @@ describe("PostgreSQL gateway store", { skip: !DATABASE_URL }, () => {
   const pool = new Pool({ connectionString: DATABASE_URL });
   const store = new PostgresGatewayStore(pool);
 
-  before(async () => store.initialize());
+  before(async () => {
+    const identity = await pool.query<{ database: string }>("SELECT current_database() AS database");
+    const database = identity.rows[0]?.database ?? "";
+    if (!database.endsWith("_test")) {
+      throw new Error(`refusing destructive PostgreSQL tests against non-test database: ${database}`);
+    }
+    await store.initialize();
+  });
   beforeEach(async () => {
     await pool.query(`
       TRUNCATE ambient_used_siwx_nonces, ambient_inference_ledger,
@@ -109,6 +116,41 @@ describe("PostgreSQL gateway store", { skip: !DATABASE_URL }, () => {
     const period = (await store.listPeriods("wallet-usage", NOW))[0];
     assert.equal(period?.monthlyReservedTokens, 250_000);
     assert.equal(period?.monthlyUsedTokens, 0);
+  });
+
+  test("refunds legacy full-reservation charges exactly once during initialization", async () => {
+    await store.recordSettlement({
+      transaction: "tx-legacy-refund", walletAddress: "wallet-refund", planId: "starter",
+      network: "solana:devnet", amountAtomic: "1000000", settledAt: NOW,
+    });
+    const key = await store.createApiKey("wallet-refund", NOW, PEPPER);
+    const authorization = await store.reserveApiKeyUsage(
+      hashToken(key.key, PEPPER), "legacy-request", "z-ai/glm-5.2", 32_768, NOW,
+    );
+    assert.equal(authorization?.kind, "authorized");
+    await pool.query(
+      "UPDATE ambient_subscription_periods SET monthly_reserved_tokens=0,monthly_used_tokens=32768 WHERE transaction='tx-legacy-refund'",
+    );
+    await pool.query(
+      "UPDATE ambient_weekly_windows SET reserved_tokens=0,used_tokens=32768 WHERE period_transaction='tx-legacy-refund'",
+    );
+    await pool.query(
+      "UPDATE ambient_inference_ledger SET state='settled',charged_tokens=reserved_tokens,settled_at=$1,usage_source=NULL WHERE request_id='legacy-request'",
+      [NOW],
+    );
+
+    await store.initialize();
+    await store.initialize();
+
+    const account = await store.accountForApiKey(hashToken(key.key, PEPPER), NOW);
+    assert.equal(account?.period.monthlyUsedTokens, 0);
+    assert.equal(account?.weekly.usedTokens, 0);
+    const ledger = await pool.query(
+      "SELECT state,charged_tokens,usage_source FROM ambient_inference_ledger WHERE request_id='legacy-request'",
+    );
+    assert.deepEqual(ledger.rows[0], {
+      state: "released", charged_tokens: "0", usage_source: "legacy_unmetered",
+    });
   });
 
   test("atomically rejects concurrent nonce replay", async () => {

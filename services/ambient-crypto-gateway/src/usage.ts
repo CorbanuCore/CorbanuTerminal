@@ -9,6 +9,7 @@ export interface EstimatedUsage {
 }
 
 export interface ActualUsage {
+  source: "upstream" | "estimated";
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
@@ -60,6 +61,7 @@ export function extractActualUsage(value: unknown): ActualUsage | undefined {
     nestedInteger(fields.completion_tokens_details, "reasoning_tokens") ??
     0;
   return {
+    source: "upstream",
     inputTokens,
     outputTokens,
     cachedInputTokens,
@@ -68,10 +70,36 @@ export function extractActualUsage(value: unknown): ActualUsage | undefined {
   };
 }
 
+/**
+ * Produces a bounded fallback for a response that completed successfully but
+ * omitted provider usage metadata. Reservations protect concurrency; they are
+ * never a substitute for metering. The fallback charges the estimated request
+ * input plus only model-generated response fields that were actually received.
+ */
+export function estimateSuccessfulUsage(
+  value: unknown,
+  estimatedInputTokens: number,
+  rawResponseBytes?: number,
+): ActualUsage {
+  const generatedBytes = generatedResponseBytes(value);
+  const outputTokens = Math.ceil(
+    (generatedBytes ?? (rawResponseBytes === undefined ? 0 : rawResponseBytes)) / 3,
+  );
+  return {
+    source: "estimated",
+    inputTokens: estimatedInputTokens,
+    outputTokens,
+    cachedInputTokens: 0,
+    reasoningTokens: 0,
+    totalTokens: estimatedInputTokens + outputTokens,
+  };
+}
+
 /** Incrementally extracts the last authoritative usage object from SSE data lines. */
 export class StreamUsageParser {
   private pending = "";
   private usage?: ActualUsage;
+  private generatedBytes = 0;
 
   push(chunk: Uint8Array): void {
     this.pending += Buffer.from(chunk).toString("utf8");
@@ -80,21 +108,62 @@ export class StreamUsageParser {
     for (const line of lines) this.inspectLine(line);
   }
 
-  finish(): ActualUsage | undefined {
+  finish(estimatedInputTokens?: number): ActualUsage | undefined {
     if (this.pending) this.inspectLine(this.pending);
     this.pending = "";
-    return this.usage;
+    return this.usage ?? (estimatedInputTokens === undefined
+      ? undefined
+      : estimatedUsage(estimatedInputTokens, this.generatedBytes));
   }
 
   private inspectLine(line: string): void {
     const payload = line.startsWith("data:") ? line.slice(5).trim() : "";
     if (!payload || payload === "[DONE]") return;
     try {
-      this.usage = extractActualUsage(JSON.parse(payload)) ?? this.usage;
+      const parsed = JSON.parse(payload);
+      this.usage = extractActualUsage(parsed) ?? this.usage;
+      this.generatedBytes += generatedResponseBytes(parsed) ?? 0;
     } catch {
       // Partial and non-JSON SSE events do not carry authoritative usage.
     }
   }
+}
+
+function estimatedUsage(inputTokens: number, generatedBytes: number): ActualUsage {
+  const outputTokens = Math.ceil(generatedBytes / 3);
+  return {
+    source: "estimated",
+    inputTokens,
+    outputTokens,
+    cachedInputTokens: 0,
+    reasoningTokens: 0,
+    totalTokens: inputTokens + outputTokens,
+  };
+}
+
+function generatedResponseBytes(value: unknown): number | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const root = value as Record<string, unknown>;
+  const candidates = [root.choices, root.content, root.output, root.completion];
+  if (candidates.every(candidate => candidate === undefined)) return 0;
+  return candidates.reduce<number>((sum, candidate) => sum + generatedValueBytes(candidate), 0);
+}
+
+function generatedValueBytes(value: unknown): number {
+  if (typeof value === "string") return Buffer.byteLength(value);
+  if (Array.isArray(value)) {
+    return value.reduce<number>((sum, item) => sum + generatedValueBytes(item), 0);
+  }
+  if (!value || typeof value !== "object") return 0;
+  const record = value as Record<string, unknown>;
+  let bytes = 0;
+  for (const key of [
+    "delta", "message", "content", "text", "thinking", "reasoning_content",
+    "tool_calls", "function_call", "function", "name", "arguments", "input",
+  ]) {
+    if (record[key] !== undefined) bytes += generatedValueBytes(record[key]);
+  }
+  return bytes;
 }
 
 function parseRequest(body: unknown): Record<string, unknown> {

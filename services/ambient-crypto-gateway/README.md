@@ -18,7 +18,9 @@ multiple keys cannot exceed it.
 Usage is reserved conservatively as `ceil(JSON bytes / 3) + max output tokens`. Missing output
 limits default to 4,096 tokens; requests above 32,768 are rejected. A successful response settles
 the reservation from the provider's authoritative token counts, a provider rejection releases it,
-and an ambiguous disconnect charges the full reservation. Weekly and monthly reservations are
+and an ambiguous disconnect releases the reservation. Successful responses without provider
+usage metadata are billed from the estimated request input plus model output actually received,
+never from the maximum output reservation. Weekly and monthly reservations are
 atomic and shared by every key for the paying wallet.
 
 ## Plans
@@ -43,7 +45,8 @@ The service fails at startup when any required value is absent or malformed.
 | `AMBIENT_API_KEY` | operator's upstream credential; mutually exclusive with `AMBIENT_API_KEY_FILE` |
 | `AMBIENT_API_KEY_FILE` | owner-only file containing the operator credential |
 | `AMBIENT_BASE_URL` | optional upstream URL; defaults to `https://api.ambient.xyz` |
-| `PFT_AMBIENT_TOKEN_PEPPER` | at least 32 characters, used to HMAC customer keys |
+| `PFT_AMBIENT_TOKEN_PEPPER` | at least 32 characters, used to HMAC customer keys; mutually exclusive with `PFT_AMBIENT_TOKEN_PEPPER_FILE` |
+| `PFT_AMBIENT_TOKEN_PEPPER_FILE` | owner-only file containing the durable token pepper |
 | `PFT_AMBIENT_PUBLIC_BASE_URL` | externally visible gateway origin used in signed challenges |
 | `PFT_X402_NETWORK` | exact Solana mainnet or devnet CAIP-2 identifier |
 | `PFT_X402_PAY_TO` | Solana receiving address |
@@ -60,6 +63,7 @@ For a file-backed operator credential, keep the file outside the repository and 
 ```sh
 chmod 600 /path/to/ambientsuper.txt
 export AMBIENT_API_KEY_FILE=/path/to/ambientsuper.txt
+export PFT_AMBIENT_TOKEN_PEPPER_FILE=/path/to/pfterminal-plan-pepper
 ```
 
 Before serving purchases, initialize the receiving address's associated token account for the

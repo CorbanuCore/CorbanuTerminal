@@ -26,9 +26,13 @@ export function readGatewayConfig(env: NodeJS.ProcessEnv = process.env): Gateway
   }
   const payTo = requireValue(env, "PFT_X402_PAY_TO");
   assertSolanaAddress(payTo);
-  const tokenPepper = requireValue(env, "PFT_AMBIENT_TOKEN_PEPPER");
+  const tokenPepper = readExclusiveSecret(
+    env,
+    "PFT_AMBIENT_TOKEN_PEPPER",
+    "PFT_AMBIENT_TOKEN_PEPPER_FILE",
+  );
   if (tokenPepper.length < 32) {
-    throw new Error("PFT_AMBIENT_TOKEN_PEPPER must contain at least 32 characters");
+    throw new Error("the PfTerminal plan token pepper must contain at least 32 characters");
   }
 
   return {

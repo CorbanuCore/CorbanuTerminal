@@ -7,7 +7,12 @@ import { parseSIWxHeader } from "@x402/extensions/sign-in-with-x";
 import { PLAN_IDS, PLANS, PLAN_MODELS, purchasePath } from "./plans.js";
 import type { GatewayStore, PlanLimitReached, SubscriptionPeriod, UsageReservation } from "./store.js";
 import { hashToken } from "./token.js";
-import { estimateRequestUsage, extractActualUsage, StreamUsageParser } from "./usage.js";
+import {
+  estimateRequestUsage,
+  estimateSuccessfulUsage,
+  extractActualUsage,
+  StreamUsageParser,
+} from "./usage.js";
 import { createWalletChallenge, verifyWalletChallenge } from "./wallet-auth.js";
 
 const MAX_PROXY_BODY_BYTES = 2 * 1024 * 1024;
@@ -217,6 +222,7 @@ export function createGatewayApp(options: GatewayAppOptions): express.Express {
         options.ambientApiKey,
         options.store,
         authorization.reservation,
+        estimatedUsage.estimatedInputTokens,
         now,
       );
     });
@@ -267,6 +273,7 @@ async function proxyAmbientRequest(
   ambientApiKey: string,
   store: GatewayStore,
   reservation: UsageReservation,
+  estimatedInputTokens: number,
   now: () => Date,
 ): Promise<void> {
   const controller = new AbortController();
@@ -303,7 +310,8 @@ async function proxyAmbientRequest(
     }
     response.setHeader("Cache-Control", "no-store");
     if (!upstream.body) {
-      await settle(upstream.ok ? "ambiguous" : "rejected");
+      await settle(upstream.ok ? "completed" : "rejected",
+        upstream.ok ? estimateSuccessfulUsage({}, estimatedInputTokens) : undefined);
       response.end();
       return;
     }
@@ -311,8 +319,15 @@ async function proxyAmbientRequest(
     if (!contentType.includes("text/event-stream")) {
       const bytes = new Uint8Array(await upstream.arrayBuffer());
       let usage;
-      try { usage = extractActualUsage(JSON.parse(Buffer.from(bytes).toString("utf8"))); } catch {}
-      await settle(upstream.ok ? (usage ? "completed" : "ambiguous") : "rejected", usage);
+      if (upstream.ok) {
+        try {
+          const parsed = JSON.parse(Buffer.from(bytes).toString("utf8"));
+          usage = extractActualUsage(parsed) ?? estimateSuccessfulUsage(parsed, estimatedInputTokens, bytes.byteLength);
+        } catch {
+          usage = estimateSuccessfulUsage(undefined, estimatedInputTokens, bytes.byteLength);
+        }
+      }
+      await settle(upstream.ok ? "completed" : "rejected", usage);
       response.end(bytes);
       return;
     }
@@ -324,8 +339,8 @@ async function proxyAmbientRequest(
       parser.push(value);
       if (!response.write(value)) await new Promise<void>(resolve => response.once("drain", resolve));
     }
-    const usage = parser.finish();
-    await settle(upstream.ok ? (usage ? "completed" : "ambiguous") : "rejected", usage);
+    const usage = parser.finish(upstream.ok ? estimatedInputTokens : undefined);
+    await settle(upstream.ok ? "completed" : "rejected", usage);
     response.end();
   } catch (error) {
     await settle(upstreamStarted ? "ambiguous" : "rejected");

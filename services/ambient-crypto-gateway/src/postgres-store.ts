@@ -38,6 +38,7 @@ interface ReservationRow extends PeriodRow, WeeklyRow {
   state: "reserved" | "settled" | "released"; input_tokens: string | null;
   output_tokens: string | null; cached_input_tokens: string | null;
   reasoning_tokens: string | null; charged_tokens: string | null;
+  usage_source: "upstream" | "estimated" | "legacy_unmetered" | null;
 }
 
 export class PostgresGatewayStore implements GatewayStore {
@@ -93,6 +94,7 @@ export class PostgresGatewayStore implements GatewayStore {
         weekly_sequence INTEGER NOT NULL, request_id TEXT NOT NULL, model TEXT NOT NULL,
         reserved_tokens BIGINT NOT NULL, input_tokens BIGINT, output_tokens BIGINT,
         cached_input_tokens BIGINT, reasoning_tokens BIGINT, charged_tokens BIGINT,
+        usage_source TEXT,
         state TEXT NOT NULL CHECK (state IN ('reserved', 'settled', 'released')),
         created_at TIMESTAMPTZ NOT NULL, settled_at TIMESTAMPTZ,
         UNIQUE (wallet_address, request_id),
@@ -102,6 +104,41 @@ export class PostgresGatewayStore implements GatewayStore {
       CREATE TABLE IF NOT EXISTS ambient_used_siwx_nonces (
         nonce TEXT PRIMARY KEY, used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      ALTER TABLE ambient_inference_ledger ADD COLUMN IF NOT EXISTS usage_source TEXT;
+      UPDATE ambient_inference_ledger SET usage_source='upstream'
+        WHERE usage_source IS NULL AND input_tokens IS NOT NULL AND output_tokens IS NOT NULL;
+
+      BEGIN;
+      WITH refunds AS (
+        SELECT period_transaction, SUM(charged_tokens)::BIGINT AS tokens
+        FROM ambient_inference_ledger
+        WHERE state='settled' AND usage_source IS NULL
+          AND input_tokens IS NULL AND output_tokens IS NULL
+          AND charged_tokens=reserved_tokens
+        GROUP BY period_transaction
+      )
+      UPDATE ambient_subscription_periods p
+        SET monthly_used_tokens=GREATEST(0,p.monthly_used_tokens-refunds.tokens)
+        FROM refunds WHERE p.transaction=refunds.period_transaction;
+      WITH refunds AS (
+        SELECT period_transaction, weekly_sequence, SUM(charged_tokens)::BIGINT AS tokens
+        FROM ambient_inference_ledger
+        WHERE state='settled' AND usage_source IS NULL
+          AND input_tokens IS NULL AND output_tokens IS NULL
+          AND charged_tokens=reserved_tokens
+        GROUP BY period_transaction,weekly_sequence
+      )
+      UPDATE ambient_weekly_windows w
+        SET used_tokens=GREATEST(0,w.used_tokens-refunds.tokens)
+        FROM refunds
+        WHERE w.period_transaction=refunds.period_transaction
+          AND w.sequence=refunds.weekly_sequence;
+      UPDATE ambient_inference_ledger
+        SET state='released',charged_tokens=0,usage_source='legacy_unmetered'
+        WHERE state='settled' AND usage_source IS NULL
+          AND input_tokens IS NULL AND output_tokens IS NULL
+          AND charged_tokens=reserved_tokens;
+      COMMIT;
     `);
   }
 
@@ -269,8 +306,9 @@ export class PostgresGatewayStore implements GatewayStore {
       if (!existing) { await client.query("ROLLBACK"); return undefined; }
       if (existing.state !== "reserved") { await client.query("COMMIT"); return reservationFromRow(existing); }
       const reserved = units(existing.reserved_tokens_request);
-      const charged = disposition === "rejected" ? 0 : usage?.totalTokens ?? reserved;
-      const state = disposition === "rejected" ? "released" : "settled";
+      const completed = disposition === "completed" && usage !== undefined;
+      const charged = completed ? usage.totalTokens : 0;
+      const state = completed ? "settled" : "released";
       await client.query(
         `UPDATE ambient_subscription_periods SET monthly_reserved_tokens=monthly_reserved_tokens-$2,
           monthly_used_tokens=monthly_used_tokens+$3 WHERE transaction=$1`,
@@ -283,9 +321,10 @@ export class PostgresGatewayStore implements GatewayStore {
       );
       await client.query(
         `UPDATE ambient_inference_ledger SET state=$2,input_tokens=$3,output_tokens=$4,
-          cached_input_tokens=$5,reasoning_tokens=$6,charged_tokens=$7,settled_at=$8 WHERE id=$1`,
+          cached_input_tokens=$5,reasoning_tokens=$6,charged_tokens=$7,settled_at=$8,
+          usage_source=$9 WHERE id=$1`,
         [reservationId,state,usage?.inputTokens,usage?.outputTokens,usage?.cachedInputTokens,
-         usage?.reasoningTokens,charged,now],
+         usage?.reasoningTokens,charged,now,usage?.source],
       );
       const saved = await findReservationById(client, reservationId);
       await client.query("COMMIT");
@@ -346,7 +385,7 @@ async function findTransaction(client: PoolClient, transaction: string): Promise
 }
 
 const RESERVATION_SELECT = `SELECT l.id,l.request_id,l.model,l.reserved_tokens reserved_tokens_request,l.state,
- l.input_tokens,l.output_tokens,l.cached_input_tokens,l.reasoning_tokens,l.charged_tokens,
+ l.input_tokens,l.output_tokens,l.cached_input_tokens,l.reasoning_tokens,l.charged_tokens,l.usage_source,
  ${prefixColumns("p")},w.sequence,w.starts_at,w.ends_at,w.limit_tokens,w.used_tokens,w.reserved_tokens
  FROM ambient_inference_ledger l JOIN ambient_subscription_periods p ON p.transaction=l.period_transaction
  JOIN ambient_weekly_windows w ON w.period_transaction=l.period_transaction AND w.sequence=l.weekly_sequence`;
@@ -372,7 +411,7 @@ function snapshot(period:SubscriptionPeriod,weeklyRow:WeeklyRow):UsageSnapshot {
 function reservationFromRow(row:ReservationRow):UsageReservation { const snap=snapshot(rowToPeriod(row),row); const input=nullableUnits(row.input_tokens);
   const output=nullableUnits(row.output_tokens); return {id:row.id,requestId:row.request_id,model:row.model,
     reservedTokens:units(row.reserved_tokens_request),state:row.state,chargedTokens:nullableUnits(row.charged_tokens),...snap,
-    actualUsage:input===undefined||output===undefined?undefined:{inputTokens:input,outputTokens:output,
+    actualUsage:input===undefined||output===undefined?undefined:{source:row.usage_source==="estimated"?"estimated":"upstream",inputTokens:input,outputTokens:output,
       cachedInputTokens:nullableUnits(row.cached_input_tokens)??0,reasoningTokens:nullableUnits(row.reasoning_tokens)??0,totalTokens:input+output}}; }
 function units(value:string|number):number { const parsed=Number(value); if(!Number.isSafeInteger(parsed)||parsed<0) throw new Error("database contains invalid token units"); return parsed; }
 function nullableUnits(value:string|null):number|undefined { return value===null?undefined:units(value); }
