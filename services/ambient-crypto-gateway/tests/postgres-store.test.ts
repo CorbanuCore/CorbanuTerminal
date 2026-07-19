@@ -153,6 +153,32 @@ describe("PostgreSQL gateway store", { skip: !DATABASE_URL }, () => {
     });
   });
 
+  test("releases orphaned reservations and restores capacity during initialization", async () => {
+    await store.recordSettlement({
+      transaction: "tx-restart-recovery", walletAddress: "wallet-restart", planId: "starter",
+      network: "solana:devnet", amountAtomic: "1000000", settledAt: NOW,
+    });
+    const key = await store.createApiKey("wallet-restart", NOW, PEPPER);
+    const authorization = await store.reserveApiKeyUsage(
+      hashToken(key.key, PEPPER), "interrupted-request", "z-ai/glm-5.2", 32_768, NOW,
+    );
+    assert.equal(authorization?.kind, "authorized");
+
+    const before = await store.accountForApiKey(hashToken(key.key, PEPPER), NOW);
+    assert.equal(before?.period.monthlyReservedTokens, 32_768);
+    assert.equal(before?.weekly.reservedTokens, 32_768);
+
+    await new PostgresGatewayStore(pool).initialize();
+
+    const after = await store.accountForApiKey(hashToken(key.key, PEPPER), NOW);
+    assert.equal(after?.period.monthlyReservedTokens, 0);
+    assert.equal(after?.weekly.reservedTokens, 0);
+    const ledger = await pool.query(
+      "SELECT state,charged_tokens FROM ambient_inference_ledger WHERE request_id='interrupted-request'",
+    );
+    assert.deepEqual(ledger.rows[0], { state: "released", charged_tokens: "0" });
+  });
+
   test("atomically rejects concurrent nonce replay", async () => {
     const results = await Promise.all(
       Array.from({ length: 10 }, () => store.hasUsedNonce("one-nonce")),

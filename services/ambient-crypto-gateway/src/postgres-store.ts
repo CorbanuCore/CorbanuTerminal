@@ -138,6 +138,33 @@ export class PostgresGatewayStore implements GatewayStore {
         WHERE state='settled' AND usage_source IS NULL
           AND input_tokens IS NULL AND output_tokens IS NULL
           AND charged_tokens=reserved_tokens;
+
+      -- The gateway does not begin accepting traffic until initialize completes. Any
+      -- reservation still open at process startup belongs to a request whose owner can no
+      -- longer settle it, so restore both allowance counters before serving new requests.
+      WITH orphaned AS (
+        SELECT period_transaction, SUM(reserved_tokens)::BIGINT AS tokens
+        FROM ambient_inference_ledger
+        WHERE state='reserved'
+        GROUP BY period_transaction
+      )
+      UPDATE ambient_subscription_periods p
+        SET monthly_reserved_tokens=GREATEST(0,p.monthly_reserved_tokens-orphaned.tokens)
+        FROM orphaned WHERE p.transaction=orphaned.period_transaction;
+      WITH orphaned AS (
+        SELECT period_transaction, weekly_sequence, SUM(reserved_tokens)::BIGINT AS tokens
+        FROM ambient_inference_ledger
+        WHERE state='reserved'
+        GROUP BY period_transaction,weekly_sequence
+      )
+      UPDATE ambient_weekly_windows w
+        SET reserved_tokens=GREATEST(0,w.reserved_tokens-orphaned.tokens)
+        FROM orphaned
+        WHERE w.period_transaction=orphaned.period_transaction
+          AND w.sequence=orphaned.weekly_sequence;
+      UPDATE ambient_inference_ledger
+        SET state='released',charged_tokens=0,settled_at=NOW()
+        WHERE state='reserved';
       COMMIT;
     `);
   }
