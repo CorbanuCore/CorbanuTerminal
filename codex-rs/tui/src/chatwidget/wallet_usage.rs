@@ -13,7 +13,7 @@ const WALLET_PLAN_USAGE_VIEW_ID: &str = "wallet-plan-usage";
 #[derive(Debug)]
 pub(crate) struct WalletPlanUsageOverview {
     status: WalletPlanStatus,
-    price_usdc: Option<String>,
+    plan_prices_usdc: std::collections::BTreeMap<String, String>,
     refreshed_at: String,
 }
 
@@ -76,23 +76,24 @@ async fn load_plan_usage(
         .json::<WalletPlanStatus>()
         .await
         .map_err(|error| format!("plan usage was malformed: {error}"))?;
-    let price_usdc = match catalog {
+    let plan_prices_usdc = match catalog {
         Ok(response) if response.status().is_success() => response
             .json::<WalletPlanCatalog>()
             .await
             .ok()
-            .and_then(|catalog| {
+            .map(|catalog| {
                 catalog
                     .plans
                     .into_iter()
-                    .find(|plan| plan.id == status.period.plan_id)
-                    .map(|plan| plan.price_usdc)
-            }),
-        _ => None,
+                    .map(|plan| (plan.id, plan.price_usdc))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        _ => std::collections::BTreeMap::new(),
     };
     Ok(WalletPlanUsageOverview {
         status,
-        price_usdc,
+        plan_prices_usdc,
         refreshed_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
     })
 }
@@ -155,7 +156,7 @@ fn push_usage_summary(header: &mut ColumnRenderable, overview: &WalletPlanUsageO
     let now = chrono::Utc::now();
     let plan = title_case_plan(&status.period.plan_id);
     header.push(Line::from(format!("{plan} plan").green().bold()));
-    if let Some(price) = &overview.price_usdc {
+    if let Some(price) = overview.plan_prices_usdc.get(&status.period.plan_id) {
         push_wrapped(
             header,
             &format!("Spend: {price} USDC prepaid for this period · no recurring wallet charge"),
@@ -197,10 +198,14 @@ fn push_usage_summary(header: &mut ColumnRenderable, overview: &WalletPlanUsageO
         ),
     );
     if let Some(next) = status.queued_periods.first() {
+        let next_price = overview
+            .plan_prices_usdc
+            .get(&next.plan_id)
+            .map_or_else(String::new, |price| format!(" · {price} USDC prepaid"));
         push_wrapped(
             header,
             &format!(
-                "Next: {} plan · {} to {}",
+                "Next: {} plan{next_price} · {} to {}",
                 title_case_plan(&next.plan_id),
                 next.starts_at,
                 next.ends_at
@@ -329,7 +334,10 @@ mod tests {
                     ends_at: "2026-09-19T00:35:20Z".to_string(),
                 }],
             },
-            price_usdc: Some("1".to_string()),
+            plan_prices_usdc: std::collections::BTreeMap::from([
+                ("starter".to_string(), "1".to_string()),
+                ("basic".to_string(), "20".to_string()),
+            ]),
             refreshed_at: "2026-07-19T04:00:00Z".to_string(),
         }
     }
@@ -337,7 +345,14 @@ mod tests {
     #[test]
     fn usage_summary_exposes_spend_used_reserved_limits_and_resets() {
         let value = overview();
-        assert_eq!(value.price_usdc.as_deref(), Some("1"));
+        assert_eq!(
+            value.plan_prices_usdc.get("starter").map(String::as_str),
+            Some("1")
+        );
+        assert_eq!(
+            value.plan_prices_usdc.get("basic").map(String::as_str),
+            Some("20")
+        );
         assert_eq!(value.status.queued_periods[0].plan_id, "basic");
         let weekly = window_lines(
             "Weekly",

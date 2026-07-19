@@ -76,7 +76,6 @@ pub(crate) struct WalletOverview {
     pub(crate) plan_error: Option<String>,
     pub(crate) plan_credential_present: bool,
     pub(crate) plan_prices_usdc: std::collections::BTreeMap<String, String>,
-    pub(crate) refreshed_at: String,
 }
 
 fn wallet_balance_endpoint(
@@ -258,8 +257,6 @@ impl ChatWidget {
                     plan_error,
                     plan_credential_present,
                     plan_prices_usdc,
-                    refreshed_at: chrono::Utc::now()
-                        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
                 })
             }
             .await;
@@ -1041,12 +1038,7 @@ fn wallet_items(
         Some("devnet") => "Solana devnet",
         _ => "Solana mainnet",
     };
-    push_wallet_line(header, &format!("{network} · canonical USDC + SOL"), false);
-    push_wallet_line(
-        header,
-        "Keep a small SOL balance for network fees; plan checkout states when fees are sponsored.",
-        true,
-    );
+    push_wallet_line(header, network, true);
     if let Some(balance) = overview.balances {
         header.push(Line::from(format!(
             "{:.6} SOL · {:.2} USDC",
@@ -1058,39 +1050,21 @@ fn wallet_items(
         header.push(Line::from(format!("Balance unavailable: {error}").red()));
     }
     if let Some(linked_plan) = &overview.linked_plan_for_other_wallet {
-        let linked_price = overview
-            .plan_prices_usdc
-            .get(&linked_plan.period.plan_id)
-            .map_or_else(String::new, |price| format!(" · {price} USDC prepaid"));
         push_wallet_line(
             header,
             &format!(
-                "Linked PfTerminal Plan: {} plan{linked_price}",
-                title_case_plan(&linked_plan.period.plan_id)
+                "PfTerminal Plan · {} linked to another wallet",
+                title_case_plan(&linked_plan.period.plan_id),
             ),
             false,
         );
         push_wallet_line(header, &linked_plan_owner_description(linked_plan), false);
-        push_wallet_line(
-            header,
-            &format!(
-                "Linked usage: {} weekly remaining · {} monthly remaining",
-                format_token_count(linked_plan.weekly_remaining_tokens),
-                format_token_count(linked_plan.monthly_remaining_tokens),
-            ),
-            false,
-        );
     }
     if !overview.plan_credential_present {
         push_wallet_line(
             header,
-            "PfTerminal Plan: not connected on this device.",
+            "PfTerminal Plan · not connected — recover access to check this wallet",
             false,
-        );
-        push_wallet_line(
-            header,
-            "Recover plan access to check this wallet for an existing paid plan. Recovery sends no USDC.",
-            true,
         );
     }
     let upgrade_mode = overview.plan.as_ref().map(|plan| {
@@ -1105,71 +1079,11 @@ fn wallet_items(
         }
     });
     if let Some(plan) = &overview.plan {
-        let current_price = overview
-            .plan_prices_usdc
-            .get(&plan.period.plan_id)
-            .map_or_else(String::new, |price| format!(" · {price} USDC prepaid"));
-        push_wallet_line(
-            header,
-            &format!(
-                "{} plan{current_price}",
-                title_case_plan(&plan.period.plan_id)
-            ),
-            false,
-        );
-        push_wallet_line(
-            header,
-            &format!(
-                "Weekly: {} / {} used · {} remaining",
-                format_token_count(plan.weekly.used_tokens),
-                format_token_count(plan.weekly.limit_tokens),
-                format_token_count(plan.weekly_remaining_tokens),
-            ),
-            false,
-        );
-        push_wallet_line(
-            header,
-            &format!(
-                "Monthly: {} / {} used · {} remaining",
-                format_token_count(plan.period.monthly_used_tokens),
-                format_token_count(plan.period.monthly_limit_tokens),
-                format_token_count(plan.monthly_remaining_tokens),
-            ),
-            false,
-        );
-        push_wallet_line(
-            header,
-            &format!(
-                "Weekly reset {} · period ends {}",
-                plan.weekly.ends_at, plan.period.ends_at,
-            ),
-            true,
-        );
-        if let Some(next) = plan.queued_periods.first() {
-            let next_price = overview
-                .plan_prices_usdc
-                .get(&next.plan_id)
-                .map_or_else(String::new, |price| format!(" · {price} USDC prepaid"));
-            push_wallet_line(
-                header,
-                &format!(
-                    "Next: {} plan{next_price} · {} to {}",
-                    title_case_plan(&next.plan_id),
-                    next.starts_at,
-                    next.ends_at,
-                ),
-                true,
-            );
-        }
+        push_wallet_line(header, &wallet_plan_summary(plan), false);
     }
     if let Some(error) = overview.plan_error {
         header.push(Line::from(format!("Plan status: {error}").red()));
     }
-    push_wallet_line(
-        header,
-        &format!("Refreshed {}", overview.refreshed_at),
-        true,
-    );
     let receive_address = address.clone();
     let mut items = vec![SelectionItem {
         name: "Receive".to_string(),
@@ -1184,6 +1098,13 @@ fn wallet_items(
         })],
         ..Default::default()
     }];
+    if overview.plan_credential_present {
+        items.push(item(
+            "Plan details",
+            "View prepaid spend, token usage, limits, reset dates, and queued periods",
+            || AppEvent::OpenWalletPlanUsage,
+        ));
+    }
     if let Some(receipt) = latest_receipt {
         let receipt_for_action = receipt.clone();
         items.push(item(
@@ -1319,6 +1240,17 @@ fn linked_plan_owner_description(plan: &WalletPlanStatus) -> String {
         "Purchased by {} · not this local wallet",
         short_address(&plan.wallet_address)
     )
+}
+
+fn wallet_plan_summary(plan: &WalletPlanStatus) -> String {
+    let mut summary = format!(
+        "PfTerminal Plan · {} active",
+        title_case_plan(&plan.period.plan_id)
+    );
+    if let Some(next) = plan.queued_periods.first() {
+        summary.push_str(&format!(" · {} next", title_case_plan(&next.plan_id)));
+    }
+    summary
 }
 
 pub(super) fn item<F>(name: &str, description: &str, event: F) -> SelectionItem
@@ -1474,7 +1406,6 @@ mod tests {
             plan_error: None,
             plan_credential_present: false,
             plan_prices_usdc: std::collections::BTreeMap::new(),
-            refreshed_at: "2026-07-19T04:00:00Z".to_string(),
         }
     }
 
@@ -1508,6 +1439,41 @@ mod tests {
             weekly_remaining_tokens: 229_004,
             queued_periods: Vec::new(),
         }
+    }
+
+    #[test]
+    fn wallet_summary_keeps_usage_and_dates_out_of_the_header() {
+        let mut plan = starter_plan();
+        plan.queued_periods.push(WalletQueuedPlanPeriod {
+            transaction: "basic-transaction".to_string(),
+            plan_id: "basic".to_string(),
+            starts_at: "2026-08-19T00:35:20Z".to_string(),
+            ends_at: "2026-09-19T00:35:20Z".to_string(),
+        });
+
+        let summary = wallet_plan_summary(&plan);
+        assert_eq!(summary, "PfTerminal Plan · Starter active · Basic next");
+        assert!(!summary.contains("token"));
+        assert!(!summary.contains("2026-"));
+        assert!(!summary.contains("USDC"));
+    }
+
+    #[test]
+    fn connected_plan_exposes_dedicated_details_view() {
+        let mut active = overview(true);
+        active.plan = Some(starter_plan());
+        active.plan_credential_present = true;
+        let mut header = ColumnRenderable::new();
+        let items = wallet_items(&mut header, active, false);
+        let details = items
+            .iter()
+            .position(|item| item.name == "Plan details")
+            .expect("plan details action");
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let sender = crate::app_event_sender::AppEventSender::new(tx);
+        (items[details].actions[0])(&sender);
+        assert!(matches!(rx.try_recv(), Ok(AppEvent::OpenWalletPlanUsage)));
     }
 
     #[test]
