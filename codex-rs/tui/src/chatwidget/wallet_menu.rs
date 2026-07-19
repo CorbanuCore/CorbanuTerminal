@@ -908,13 +908,11 @@ fn wallet_items(
             item(
                 "Create wallet",
                 "Create a new Solana mainnet wallet",
-                AppEvent::OpenWalletCreate,
+                || AppEvent::OpenWalletCreate,
             ),
-            item(
-                "Restore wallet",
-                "Restore from recovery material",
-                AppEvent::OpenWalletRestore,
-            ),
+            item("Restore wallet", "Restore from recovery material", || {
+                AppEvent::OpenWalletRestore
+            }),
         ];
     }
     let address = overview
@@ -1049,13 +1047,16 @@ fn wallet_items(
         ..Default::default()
     }];
     if let Some(receipt) = latest_receipt {
+        let receipt_for_action = receipt.clone();
         items.push(item(
             "View latest plan receipt",
             &format!(
                 "{} plan · Solana payment confirmation",
                 title_case_plan(&receipt.plan_id)
             ),
-            AppEvent::OpenWalletPlanReceipt { receipt },
+            move || AppEvent::OpenWalletPlanReceipt {
+                receipt: receipt_for_action.clone(),
+            },
         ));
     }
     if !can_sign {
@@ -1080,7 +1081,7 @@ fn wallet_items(
         items.push(item(
             "Lock wallet",
             "Revoke signing from every PfTerminal process",
-            AppEvent::WalletLockRequested,
+            || AppEvent::WalletLockRequested,
         ));
     }
     if can_sign {
@@ -1092,13 +1093,13 @@ fn wallet_items(
             items.push(item(
                 "Upgrade PfTerminal Plan",
                 &format!("Choose a higher tier for the period starting {starts_at}"),
-                AppEvent::OpenWalletPlans { mode },
+                move || AppEvent::OpenWalletPlans { mode: mode.clone() },
             ));
         } else {
             items.push(item(
                 "Buy a PfTerminal plan",
                 "Pay once with USDC and activate metered inference",
-                AppEvent::OpenWalletPlans {
+                || AppEvent::OpenWalletPlans {
                     mode: WalletPlanPurchaseMode::New,
                 },
             ));
@@ -1106,13 +1107,13 @@ fn wallet_items(
         items.push(item(
             "Recover plan access",
             "Issue a replacement key for an already-paid wallet without another payment",
-            AppEvent::WalletRecoverPlanRequested,
+            || AppEvent::WalletRecoverPlanRequested,
         ));
     } else if upgrade_mode.is_some() {
         items.push(item(
             "Upgrade PfTerminal Plan",
             "Unlock for 5 minutes, then choose a higher tier",
-            AppEvent::OpenWalletUnlock {
+            || AppEvent::OpenWalletUnlock {
                 duration_seconds: 300,
             },
         ));
@@ -1121,36 +1122,37 @@ fn wallet_items(
         items.push(item(
             "Disconnect PfTerminal Plan",
             "Remove the plan credential; keep the wallet and paid period",
-            AppEvent::ConfirmWalletPlanDisconnect,
+            || AppEvent::ConfirmWalletPlanDisconnect,
         ));
     }
     items.push(item(
         "Back up recovery material",
         "Requires the fresh wallet passcode; opens only in the secure view",
-        AppEvent::OpenWalletRecoveryBackup,
+        || AppEvent::OpenWalletRecoveryBackup,
     ));
+    let removal_address = address.clone();
     items.push(item(
         "Remove wallet from this device",
         "Requires saved recovery material; does not move funds",
-        AppEvent::ConfirmWalletRemoval { address },
+        move || AppEvent::ConfirmWalletRemoval {
+            address: removal_address.clone(),
+        },
     ));
-    items.push(item(
-        "Refresh",
-        "Refresh daemon state and balances",
-        AppEvent::OpenWallet,
-    ));
+    items.push(item("Refresh", "Refresh daemon state and balances", || {
+        AppEvent::OpenWallet
+    }));
     items
 }
 
-pub(super) fn item(name: &str, description: &str, event: AppEvent) -> SelectionItem {
-    let event = std::sync::Mutex::new(Some(event));
+pub(super) fn item<F>(name: &str, description: &str, event: F) -> SelectionItem
+where
+    F: Fn() -> AppEvent + Send + Sync + 'static,
+{
     SelectionItem {
         name: name.to_string(),
         description: Some(description.to_string()),
         actions: vec![Box::new(move |tx| {
-            if let Some(event) = event.lock().ok().and_then(|mut value| value.take()) {
-                tx.send(event);
-            }
+            tx.send(event());
         })],
         ..Default::default()
     }
@@ -1460,10 +1462,21 @@ mod tests {
             rx.try_recv(),
             Ok(AppEvent::ConfirmWalletPlanDisconnect)
         ));
+        (items[disconnect].actions[0])(&sender);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::ConfirmWalletPlanDisconnect)
+        ));
         let remove = items
             .iter()
             .position(|item| item.name == "Remove wallet from this device")
             .expect("remove action");
+        (items[remove].actions[0])(&sender);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::ConfirmWalletRemoval { address })
+                if address == "EpUYgzi88BYbsGoyiNghPppd3J9ASbARq7UjBCCUnk2i"
+        ));
         (items[remove].actions[0])(&sender);
         assert!(matches!(
             rx.try_recv(),

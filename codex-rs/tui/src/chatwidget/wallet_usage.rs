@@ -121,12 +121,12 @@ fn plan_usage_params(result: Result<WalletPlanUsageOverview, String>) -> Selecti
                 crate::chatwidget::wallet_menu::item(
                     "Refresh usage",
                     "Fetch current settled and in-flight token usage",
-                    AppEvent::OpenWalletPlanUsage,
+                    || AppEvent::OpenWalletPlanUsage,
                 ),
                 crate::chatwidget::wallet_menu::item(
                     "Open wallet",
                     "Manage funds, receipts, plan upgrades, or disconnection",
-                    AppEvent::OpenWallet,
+                    || AppEvent::OpenWallet,
                 ),
             ]
         }
@@ -135,7 +135,7 @@ fn plan_usage_params(result: Result<WalletPlanUsageOverview, String>) -> Selecti
             vec![crate::chatwidget::wallet_menu::item(
                 "Retry",
                 "Fetch PfTerminal Plan usage again",
-                AppEvent::OpenWalletPlanUsage,
+                || AppEvent::OpenWalletPlanUsage,
             )]
         }
     };

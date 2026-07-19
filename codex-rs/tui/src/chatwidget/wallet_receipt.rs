@@ -10,7 +10,7 @@ use zeroize::Zeroizing;
 
 pub(super) const WALLET_PLAN_RECEIPT_VIEW_ID: &str = "wallet-plan-receipt";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct WalletPlanReceipt {
     pub(crate) plan_id: String,
     pub(crate) price_usdc: Option<String>,
@@ -252,7 +252,7 @@ impl ChatWidget {
             items: vec![wallet_menu::item(
                 "Done",
                 "Return to the authoritative wallet and plan status",
-                AppEvent::CloseWalletPlanReceipt,
+                || AppEvent::CloseWalletPlanReceipt,
             )],
             footer_hint: Some(standard_popup_hint_line()),
             ..Default::default()

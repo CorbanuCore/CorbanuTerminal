@@ -16,15 +16,13 @@ impl ChatWidget {
             view_id: Some(super::wallet_menu::WALLET_DISCONNECT_PLAN_VIEW_ID),
             header: Box::new(header),
             items: vec![
-                super::wallet_menu::item(
-                    "Cancel",
-                    "Keep this device connected",
-                    AppEvent::OpenWallet,
-                ),
+                super::wallet_menu::item("Cancel", "Keep this device connected", || {
+                    AppEvent::OpenWallet
+                }),
                 super::wallet_menu::item(
                     "Disconnect plan",
                     "Remove only the metered-inference credential",
-                    AppEvent::WalletPlanDisconnectRequested,
+                    || AppEvent::WalletPlanDisconnectRequested,
                 ),
             ],
             initial_selected_idx: Some(0),
@@ -85,16 +83,19 @@ impl ChatWidget {
             view_id: Some(super::wallet_menu::WALLET_REMOVE_VIEW_ID),
             header: Box::new(header),
             items: vec![
-                super::wallet_menu::item(
-                    "Cancel",
-                    "Keep the wallet on this device",
-                    AppEvent::OpenWallet,
-                ),
-                super::wallet_menu::item(
-                    "Remove wallet",
-                    "I have saved the recovery material",
-                    AppEvent::WalletRemoveRequested { address },
-                ),
+                super::wallet_menu::item("Cancel", "Keep the wallet on this device", || {
+                    AppEvent::OpenWallet
+                }),
+                {
+                    let address = address.clone();
+                    super::wallet_menu::item(
+                        "Remove wallet",
+                        "I have saved the recovery material",
+                        move || AppEvent::WalletRemoveRequested {
+                            address: address.clone(),
+                        },
+                    )
+                },
             ],
             initial_selected_idx: Some(0),
             footer_hint: Some(standard_popup_hint_line()),
