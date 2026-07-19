@@ -46,12 +46,13 @@ impl CompletionGuardState {
         &self,
         provider_requires_guard: bool,
         needs_follow_up: bool,
-        assistant_response: Option<&str>,
+        _assistant_response: Option<&str>,
     ) -> bool {
-        provider_requires_guard
-            && self.tool_executed
-            && !needs_follow_up
-            && assistant_response.is_some_and(|response| !response.trim().is_empty())
+        // A context-window transition can surface an assistant progress message while the
+        // sampling result carries no `last_agent_message`. Once this turn has performed tool
+        // work, absence of a final-message field is not evidence of completion; the structured
+        // assessment must decide it just like a text response.
+        provider_requires_guard && self.tool_executed && !needs_follow_up
     }
 
     pub(super) fn record_assessment(
@@ -179,6 +180,7 @@ mod tests {
         assert!(!state.should_assess(false, false, Some("Now I will add tests.")));
         assert!(!state.should_assess(true, true, Some("Now I will add tests.")));
         assert!(state.should_assess(true, false, Some("Now I will add tests.")));
+        assert!(state.should_assess(true, false, None));
     }
 
     #[test]

@@ -128,6 +128,7 @@ impl WalletDaemonClient {
         gateway_origin: String,
         challenge: String,
     ) -> Result<String, WalletDaemonError> {
+        self.ensure_running().await?;
         match self
             .call_with_timeout(
                 Request::SignOwnership {
@@ -149,6 +150,7 @@ impl WalletDaemonClient {
         capability: String,
         intent: PlanPurchaseIntent,
     ) -> Result<ProvisionedPlan, WalletDaemonError> {
+        self.ensure_running().await?;
         match self
             .call_with_timeout(
                 Request::ProvisionPlan { capability, intent },
@@ -166,6 +168,7 @@ impl WalletDaemonClient {
         capability: String,
         gateway_origin: String,
     ) -> Result<GatewayKey, WalletDaemonError> {
+        self.ensure_running().await?;
         match self
             .call_with_timeout(
                 Request::IssueGatewayKey {

@@ -88,7 +88,10 @@ pub fn map_api_error(err: ApiError) -> CodexErr {
                     CodexErr::PlanEntitlementExceeded(body_text)
                 } else if status == http::StatusCode::TOO_MANY_REQUESTS {
                     if let Ok(err) = serde_json::from_str::<UsageErrorResponse>(&body_text) {
-                        if err.error.error_type.as_deref() == Some("usage_limit_reached") {
+                        if matches!(
+                            err.error.error_type.as_deref(),
+                            Some("usage_limit_reached" | "plan_limit_reached")
+                        ) {
                             let limit_id = extract_header(headers.as_ref(), ACTIVE_LIMIT_HEADER);
                             let rate_limits = headers.as_ref().and_then(|map| {
                                 parse_rate_limit_for_limit(map, limit_id.as_deref())

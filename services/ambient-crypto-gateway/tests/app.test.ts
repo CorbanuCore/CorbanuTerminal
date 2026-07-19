@@ -46,7 +46,7 @@ function testPaymentMiddleware(store: InMemoryGatewayStore): RequestHandler {
   };
 }
 
-function setup(fetchImpl?: typeof globalThis.fetch) {
+function setup(fetchImpl?: typeof globalThis.fetch, upstreamRequestTimeoutMs?: number) {
   const store = new InMemoryGatewayStore();
   const app = createGatewayApp({
     store,
@@ -57,6 +57,7 @@ function setup(fetchImpl?: typeof globalThis.fetch) {
     walletAddressFromRequest: incoming => incoming.header("x-test-wallet"),
     now: () => new Date(NOW),
     fetch: fetchImpl,
+    upstreamRequestTimeoutMs,
   });
   return { app, store };
 }
@@ -177,7 +178,7 @@ describe("Ambient crypto gateway", () => {
       .set("Authorization", `Bearer ${issued.key}`)
       .send({ model: "z-ai/glm-5.2", messages: [{ role: "user", content: "over quota" }], max_tokens: 32_768 })
       .expect(429);
-    assert.equal(limited.body.error.type, "usage_limit_reached");
+    assert.equal(limited.body.error.type, "plan_limit_reached");
     assert.equal(limited.body.error.provider, "pfterminal-plan");
     assert.equal(limited.body.error.window, "weekly");
     assert.equal(limited.headers["x-codex-active-limit"], "pfterminal");
@@ -242,6 +243,37 @@ describe("Ambient crypto gateway", () => {
     assert.equal(account.body.period.monthlyReservedTokens, 0);
   });
 
+  test("bounds an unfinished upstream stream and conservatively settles its reservation", async () => {
+    const fetchImpl: typeof globalThis.fetch = async (_input, init) => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          init?.signal?.addEventListener("abort", () => {
+            controller.error(new Error("test upstream timed out"));
+          });
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    };
+    const { app } = setup(fetchImpl, 20);
+    const issued = await buyAndIssueKey(app);
+
+    await request(app)
+      .post("/v1/chat/completions")
+      .set("Authorization", `Bearer ${issued.key}`)
+      .send({ model: "z-ai/glm-5.2", messages: [{ role: "user", content: "hello" }] })
+      .expect(502);
+
+    const account = await request(app)
+      .get("/v1/account")
+      .set("Authorization", `Bearer ${issued.key}`)
+      .expect(200);
+    assert.equal(account.body.period.monthlyReservedTokens, 0);
+    assert.ok(account.body.period.monthlyUsedTokens > 0);
+  });
+
   test("rejects unknown and revoked keys before reaching Ambient", async () => {
     let upstreamCalls = 0;
     const fetchImpl: typeof globalThis.fetch = async () => {
@@ -264,6 +296,29 @@ describe("Ambient crypto gateway", () => {
       .set("Authorization", `Bearer ${issued.key}`)
       .send({})
       .expect(401);
+    assert.equal(upstreamCalls, 0);
+  });
+
+  test("bounds repeated API-key authentication failures per client", async () => {
+    let upstreamCalls = 0;
+    const { app } = setup(async () => {
+      upstreamCalls += 1;
+      return new Response("{}");
+    });
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await request(app)
+        .post("/v1/chat/completions")
+        .set("Authorization", "Bearer invalid")
+        .send({})
+        .expect(401);
+    }
+    const blocked = await request(app)
+      .post("/v1/chat/completions")
+      .set("Authorization", "Bearer invalid")
+      .send({})
+      .expect(429);
+    assert.equal(blocked.body.error.type, "authentication_rate_limited");
+    assert.ok(Number(blocked.headers["retry-after"]) > 0);
     assert.equal(upstreamCalls, 0);
   });
 

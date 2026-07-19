@@ -153,7 +153,7 @@ describe("PostgreSQL gateway store", { skip: !DATABASE_URL }, () => {
     });
   });
 
-  test("releases orphaned reservations and restores capacity during initialization", async () => {
+  test("conservatively settles orphaned reservations during initialization", async () => {
     await store.recordSettlement({
       transaction: "tx-restart-recovery", walletAddress: "wallet-restart", planId: "starter",
       network: "solana:devnet", amountAtomic: "1000000", settledAt: NOW,
@@ -173,10 +173,14 @@ describe("PostgreSQL gateway store", { skip: !DATABASE_URL }, () => {
     const after = await store.accountForApiKey(hashToken(key.key, PEPPER), NOW);
     assert.equal(after?.period.monthlyReservedTokens, 0);
     assert.equal(after?.weekly.reservedTokens, 0);
+    assert.equal(after?.period.monthlyUsedTokens, 32_768);
+    assert.equal(after?.weekly.usedTokens, 32_768);
     const ledger = await pool.query(
-      "SELECT state,charged_tokens FROM ambient_inference_ledger WHERE request_id='interrupted-request'",
+      "SELECT state,charged_tokens,usage_source FROM ambient_inference_ledger WHERE request_id='interrupted-request'",
     );
-    assert.deepEqual(ledger.rows[0], { state: "released", charged_tokens: "0" });
+    assert.deepEqual(ledger.rows[0], {
+      state: "settled", charged_tokens: "32768", usage_source: "reservation",
+    });
   });
 
   test("atomically rejects concurrent nonce replay", async () => {

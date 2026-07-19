@@ -38,7 +38,7 @@ interface ReservationRow extends PeriodRow, WeeklyRow {
   state: "reserved" | "settled" | "released"; input_tokens: string | null;
   output_tokens: string | null; cached_input_tokens: string | null;
   reasoning_tokens: string | null; charged_tokens: string | null;
-  usage_source: "upstream" | "estimated" | "legacy_unmetered" | null;
+  usage_source: "upstream" | "estimated" | "reservation" | "legacy_unmetered" | null;
 }
 
 export class PostgresGatewayStore implements GatewayStore {
@@ -140,8 +140,9 @@ export class PostgresGatewayStore implements GatewayStore {
           AND charged_tokens=reserved_tokens;
 
       -- The gateway does not begin accepting traffic until initialize completes. Any
-      -- reservation still open at process startup belongs to a request whose owner can no
-      -- longer settle it, so restore both allowance counters before serving new requests.
+      -- reservation still open at process startup belongs to an ambiguously interrupted
+      -- request whose owner can no longer settle it. Move the reservation to used capacity
+      -- before serving traffic; releasing it would permit free generated output.
       WITH orphaned AS (
         SELECT period_transaction, SUM(reserved_tokens)::BIGINT AS tokens
         FROM ambient_inference_ledger
@@ -149,7 +150,8 @@ export class PostgresGatewayStore implements GatewayStore {
         GROUP BY period_transaction
       )
       UPDATE ambient_subscription_periods p
-        SET monthly_reserved_tokens=GREATEST(0,p.monthly_reserved_tokens-orphaned.tokens)
+        SET monthly_reserved_tokens=GREATEST(0,p.monthly_reserved_tokens-orphaned.tokens),
+            monthly_used_tokens=p.monthly_used_tokens+orphaned.tokens
         FROM orphaned WHERE p.transaction=orphaned.period_transaction;
       WITH orphaned AS (
         SELECT period_transaction, weekly_sequence, SUM(reserved_tokens)::BIGINT AS tokens
@@ -158,12 +160,13 @@ export class PostgresGatewayStore implements GatewayStore {
         GROUP BY period_transaction,weekly_sequence
       )
       UPDATE ambient_weekly_windows w
-        SET reserved_tokens=GREATEST(0,w.reserved_tokens-orphaned.tokens)
+        SET reserved_tokens=GREATEST(0,w.reserved_tokens-orphaned.tokens),
+            used_tokens=w.used_tokens+orphaned.tokens
         FROM orphaned
         WHERE w.period_transaction=orphaned.period_transaction
           AND w.sequence=orphaned.weekly_sequence;
       UPDATE ambient_inference_ledger
-        SET state='released',charged_tokens=0,settled_at=NOW()
+        SET state='settled',charged_tokens=reserved_tokens,usage_source='reservation',settled_at=NOW()
         WHERE state='reserved';
       COMMIT;
     `);
@@ -334,8 +337,10 @@ export class PostgresGatewayStore implements GatewayStore {
       if (existing.state !== "reserved") { await client.query("COMMIT"); return reservationFromRow(existing); }
       const reserved = units(existing.reserved_tokens_request);
       const completed = disposition === "completed" && usage !== undefined;
-      const charged = completed ? usage.totalTokens : 0;
-      const state = completed ? "settled" : "released";
+      const ambiguous = disposition === "ambiguous";
+      const charged = completed ? usage.totalTokens : ambiguous ? reserved : 0;
+      const state = completed || ambiguous ? "settled" : "released";
+      const usageSource = usage?.source ?? (ambiguous ? "reservation" : undefined);
       await client.query(
         `UPDATE ambient_subscription_periods SET monthly_reserved_tokens=monthly_reserved_tokens-$2,
           monthly_used_tokens=monthly_used_tokens+$3 WHERE transaction=$1`,
@@ -351,7 +356,7 @@ export class PostgresGatewayStore implements GatewayStore {
           cached_input_tokens=$5,reasoning_tokens=$6,charged_tokens=$7,settled_at=$8,
           usage_source=$9 WHERE id=$1`,
         [reservationId,state,usage?.inputTokens,usage?.outputTokens,usage?.cachedInputTokens,
-         usage?.reasoningTokens,charged,now,usage?.source],
+         usage?.reasoningTokens,charged,now,usageSource],
       );
       const saved = await findReservationById(client, reservationId);
       await client.query("COMMIT");

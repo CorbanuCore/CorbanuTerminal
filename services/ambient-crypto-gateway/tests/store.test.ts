@@ -128,7 +128,7 @@ describe("subscription store", () => {
     assert.equal(period?.monthlyUsedTokens, 0);
   });
 
-  test("releases ambiguous reservations instead of converting capacity into spend", async () => {
+  test("conservatively charges the reservation after an ambiguous upstream result", async () => {
     const store = new InMemoryGatewayStore();
     await store.recordSettlement({
       transaction: "solana-tx-ambiguous", walletAddress: "wallet-1", planId: "starter",
@@ -141,11 +141,39 @@ describe("subscription store", () => {
     assert.equal(reserved?.kind, "authorized");
     if (reserved?.kind !== "authorized") throw new Error("reservation failed");
     const settled = await store.settleApiKeyUsage(reserved.reservation.id, "ambiguous", undefined, NOW);
-    assert.equal(settled?.state, "released");
-    assert.equal(settled?.chargedTokens, 0);
+    assert.equal(settled?.state, "settled");
+    assert.equal(settled?.chargedTokens, 32_768);
     const period = (await store.listPeriods("wallet-1", NOW))[0];
-    assert.equal(period?.monthlyUsedTokens, 0);
+    assert.equal(period?.monthlyUsedTokens, 32_768);
     assert.equal(period?.monthlyReservedTokens, 0);
+  });
+
+  test("records actual overage and refuses subsequent work", async () => {
+    const store = new InMemoryGatewayStore();
+    await store.recordSettlement({
+      transaction: "solana-tx-overage", walletAddress: "wallet-1", planId: "starter",
+      network: "solana:mainnet", amountAtomic: "1000000", settledAt: NOW,
+    });
+    const key = await store.createApiKey("wallet-1", NOW, PEPPER);
+    const first = await store.reserveApiKeyUsage(
+      hashToken(key.key, PEPPER), "overage-request", "z-ai/glm-5.2", 100, NOW,
+    );
+    assert.equal(first?.kind, "authorized");
+    if (first?.kind !== "authorized") throw new Error("reservation failed");
+    const settled = await store.settleApiKeyUsage(first.reservation.id, "completed", {
+      source: "upstream",
+      inputTokens: 200_000,
+      outputTokens: 100_000,
+      cachedInputTokens: 0,
+      reasoningTokens: 0,
+      totalTokens: 300_000,
+    }, NOW);
+    assert.equal(settled?.chargedTokens, 300_000);
+    const next = await store.reserveApiKeyUsage(
+      hashToken(key.key, PEPPER), "after-overage", "z-ai/glm-5.2", 1, NOW,
+    );
+    assert.equal(next?.kind, "limit");
+    if (next?.kind === "limit") assert.equal(next.window, "weekly");
   });
 
   test("rejects rebinding a transaction to another wallet or plan", async () => {

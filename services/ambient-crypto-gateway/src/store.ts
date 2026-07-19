@@ -298,9 +298,14 @@ export class InMemoryGatewayStore implements GatewayStore {
     if (!period) throw new Error("usage reservation lost its subscription period");
     period.monthlyReservedTokens -= reservation.reservedTokens;
     const completed = disposition === "completed" && usage !== undefined;
-    const chargedTokens = completed ? usage.totalTokens : 0;
+    const ambiguous = disposition === "ambiguous";
+    const chargedTokens = completed
+      ? usage.totalTokens
+      : ambiguous
+        ? reservation.reservedTokens
+        : 0;
     period.monthlyUsedTokens += chargedTokens;
-    reservation.state = completed ? "settled" : "released";
+    reservation.state = completed || ambiguous ? "settled" : "released";
     reservation.actualUsage = usage;
     reservation.chargedTokens = chargedTokens;
     Object.assign(reservation, this.snapshot(period, now));

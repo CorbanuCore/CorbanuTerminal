@@ -16,6 +16,10 @@ import {
 import { createWalletChallenge, verifyWalletChallenge } from "./wallet-auth.js";
 
 const MAX_PROXY_BODY_BYTES = 2 * 1024 * 1024;
+const UPSTREAM_REQUEST_TIMEOUT_MS = 180_000;
+const AUTH_FAILURE_LIMIT = 10;
+const AUTH_FAILURE_WINDOW_MS = 60_000;
+const MAX_AUTH_FAILURE_SUBJECTS = 10_000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface GatewayAppOptions {
@@ -33,6 +37,7 @@ export interface GatewayAppOptions {
   paymentAsset?: string;
   paymentReceiver?: string;
   solanaRpcUrl?: string;
+  upstreamRequestTimeoutMs?: number;
 }
 
 export function createGatewayApp(options: GatewayAppOptions): express.Express {
@@ -42,6 +47,7 @@ export function createGatewayApp(options: GatewayAppOptions): express.Express {
   const ambientBaseUrl = new URL(options.ambientBaseUrl ?? "https://api.ambient.xyz");
   const walletAddressFromRequest = options.walletAddressFromRequest ?? siwxWalletAddress;
   const gatewayOrigin = new URL(options.publicBaseUrl ?? "http://127.0.0.1:4021").origin;
+  const authFailures = new AuthFailureLimiter(now);
 
   app.disable("x-powered-by");
   app.get("/healthz", (_request, response) => response.json({ status: "ok" }));
@@ -88,16 +94,19 @@ export function createGatewayApp(options: GatewayAppOptions): express.Express {
 
   const accountJson = express.json({ limit: "64kb" });
   app.post("/v1/keys/challenge", accountJson, (request, response) => {
+    if (authFailures.rejectIfBlocked(request, response)) return;
     const walletAddress = typeof request.body?.walletAddress === "string" ? request.body.walletAddress : "";
     try {
       response.setHeader("Cache-Control", "no-store");
       response.json(createWalletChallenge(walletAddress, options.tokenPepper, now()));
     } catch (error) {
+      authFailures.recordFailure(request);
       response.status(400).json({ error: error instanceof Error ? error.message : "invalid wallet" });
     }
   });
 
   app.post("/v1/keys/wallet", accountJson, async (request, response) => {
+    if (authFailures.rejectIfBlocked(request, response)) return;
     const walletAddress = typeof request.body?.walletAddress === "string" ? request.body.walletAddress : "";
     try {
       await verifyWalletChallenge({
@@ -110,6 +119,7 @@ export function createGatewayApp(options: GatewayAppOptions): express.Express {
         consumeNonce: nonce => options.store.hasUsedNonce(nonce),
       });
     } catch (error) {
+      authFailures.recordFailure(request);
       response.status(401).json({ error: error instanceof Error ? error.message : "wallet signature is invalid" });
       return;
     }
@@ -161,7 +171,7 @@ export function createGatewayApp(options: GatewayAppOptions): express.Express {
   app.delete("/v1/keys/:keyId", revokeKey);
   app.delete("/v1/keys", accountJson, revokeKey);
 
-  const authenticateApiKey = createApiKeyAuth(options.store, options.tokenPepper, now);
+  const authenticateApiKey = createApiKeyAuth(options.store, options.tokenPepper, now, authFailures);
   app.get("/v1/account", authenticateApiKey, async (_request, response) => {
     const account = await options.store.accountForApiKey(response.locals.apiKeyHash as string, now());
     if (!account) {
@@ -224,6 +234,7 @@ export function createGatewayApp(options: GatewayAppOptions): express.Express {
         authorization.reservation,
         estimatedUsage.estimatedInputTokens,
         now,
+        options.upstreamRequestTimeoutMs ?? UPSTREAM_REQUEST_TIMEOUT_MS,
       );
     });
   }
@@ -246,16 +257,20 @@ function createApiKeyAuth(
   store: GatewayStore,
   pepper: string,
   now: () => Date,
+  authFailures: AuthFailureLimiter,
 ): RequestHandler {
   return async (request, response, next) => {
+    if (authFailures.rejectIfBlocked(request, response)) return;
     const authorization = request.header("authorization");
     const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
     if (!token || token.length > 256) {
+      authFailures.recordFailure(request);
       response.status(401).json({ error: "a valid PfTerminal API key is required" });
       return;
     }
     const period = await store.authenticateApiKey(hashToken(token, pepper), now());
     if (!period) {
+      authFailures.recordFailure(request);
       response.status(401).json({ error: "API key is invalid, revoked, or expired" });
       return;
     }
@@ -275,8 +290,10 @@ async function proxyAmbientRequest(
   reservation: UsageReservation,
   estimatedInputTokens: number,
   now: () => Date,
+  upstreamRequestTimeoutMs: number,
 ): Promise<void> {
   const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), upstreamRequestTimeoutMs);
   let upstreamStarted = false;
   let streamParser: StreamUsageParser | undefined;
   let settled = false;
@@ -287,6 +304,9 @@ async function proxyAmbientRequest(
     if (settled) return;
     settled = true;
     const result = await store.settleApiKeyUsage(reservation.id, disposition, usage, now());
+    if ((result?.chargedTokens ?? 0) > reservation.reservedTokens) {
+      console.warn("PfTerminal Plan usage exceeded its reservation; subsequent requests will remain exhausted until reset");
+    }
     if (result && !response.headersSent) writePlanHeaders(response, result);
   };
   response.on("close", () => {
@@ -339,7 +359,7 @@ async function proxyAmbientRequest(
       const { done, value } = await reader.read();
       if (done) break;
       parser.push(value);
-      if (!response.write(value)) await new Promise<void>(resolve => response.once("drain", resolve));
+      if (!response.write(value)) await waitForDownstreamDrain(response, controller.signal);
     }
     const usage = parser.finish(upstream.ok ? estimatedInputTokens : undefined);
     await settle(upstream.ok ? "completed" : "rejected", usage);
@@ -356,7 +376,26 @@ async function proxyAmbientRequest(
     } else {
       response.destroy(error instanceof Error ? error : undefined);
     }
+  } finally {
+    clearTimeout(timeout);
   }
+}
+
+function waitForDownstreamDrain(response: Response, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      response.off("drain", onDrain);
+      response.off("close", onClose);
+      signal.removeEventListener("abort", onAbort);
+    };
+    const onDrain = () => { cleanup(); resolve(); };
+    const onClose = () => { cleanup(); reject(new Error("downstream response closed")); };
+    const onAbort = () => { cleanup(); reject(new Error("upstream request aborted")); };
+    response.once("drain", onDrain);
+    response.once("close", onClose);
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
 }
 
 function clientRequestId(request: Request): string {
@@ -376,7 +415,7 @@ function writeLimitResponse(response: Response, limit: PlanLimitReached): void {
   response.setHeader("X-PfTerminal-Primary-Reset-At", String(resetSeconds));
   response.status(429).json({
     error: {
-      type: "usage_limit_reached",
+      type: "plan_limit_reached",
       resets_at: resetSeconds,
       provider: "pfterminal-plan",
       window: limit.window,
@@ -388,6 +427,56 @@ function writeLimitResponse(response: Response, limit: PlanLimitReached): void {
       action: "Open /wallet to review or upgrade the PfTerminal Plan.",
     },
   });
+}
+
+interface AuthFailureWindow {
+  count: number;
+  resetsAtMs: number;
+}
+
+class AuthFailureLimiter {
+  private readonly failures = new Map<string, AuthFailureWindow>();
+
+  constructor(private readonly now: () => Date) {}
+
+  rejectIfBlocked(request: Request, response: Response): boolean {
+    const timestamp = this.now().getTime();
+    this.prune(timestamp);
+    const window = this.failures.get(authFailureSubject(request));
+    if (!window || window.resetsAtMs <= timestamp || window.count < AUTH_FAILURE_LIMIT) {
+      return false;
+    }
+    response.setHeader("Retry-After", String(Math.max(1, Math.ceil((window.resetsAtMs - timestamp) / 1_000))));
+    response.status(429).json({ error: { type: "authentication_rate_limited" } });
+    return true;
+  }
+
+  recordFailure(request: Request): void {
+    const timestamp = this.now().getTime();
+    this.prune(timestamp);
+    const subject = authFailureSubject(request);
+    const existing = this.failures.get(subject);
+    if (!existing || existing.resetsAtMs <= timestamp) {
+      this.failures.set(subject, { count: 1, resetsAtMs: timestamp + AUTH_FAILURE_WINDOW_MS });
+      return;
+    }
+    existing.count += 1;
+  }
+
+  private prune(timestamp: number): void {
+    for (const [subject, window] of this.failures) {
+      if (window.resetsAtMs <= timestamp) this.failures.delete(subject);
+    }
+    while (this.failures.size >= MAX_AUTH_FAILURE_SUBJECTS) {
+      const oldest = this.failures.keys().next().value as string | undefined;
+      if (!oldest) break;
+      this.failures.delete(oldest);
+    }
+  }
+}
+
+function authFailureSubject(request: Request): string {
+  return request.ip || request.socket.remoteAddress || "unknown";
 }
 
 function writePlanHeaders(response: Response, usage: UsageReservation): void {

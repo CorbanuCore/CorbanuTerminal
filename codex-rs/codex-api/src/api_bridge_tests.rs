@@ -201,6 +201,44 @@ fn map_api_error_maps_usage_limit_limit_name_header() {
 }
 
 #[test]
+fn map_api_error_maps_pfterminal_plan_limit_contract() {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        ACTIVE_LIMIT_HEADER,
+        http::HeaderValue::from_static("pfterminal"),
+    );
+    headers.insert(
+        "x-pfterminal-limit-name",
+        http::HeaderValue::from_static("PfTerminal Plan weekly tokens"),
+    );
+    let body = serde_json::json!({
+        "error": {
+            "type": "plan_limit_reached",
+            "resets_at": 1785000000,
+        }
+    })
+    .to_string();
+    let err = map_api_error(ApiError::Transport(TransportError::Http {
+        status: http::StatusCode::TOO_MANY_REQUESTS,
+        url: Some("http://127.0.0.1:4021/v1/chat/completions".to_string()),
+        headers: Some(headers),
+        body: Some(body),
+    }));
+
+    let CodexErr::UsageLimitReached(usage_limit) = err else {
+        panic!("expected CodexErr::UsageLimitReached, got {err:?}");
+    };
+    assert_eq!(
+        usage_limit
+            .rate_limits
+            .as_ref()
+            .and_then(|snapshot| snapshot.limit_name.as_deref()),
+        Some("PfTerminal Plan weekly tokens")
+    );
+    assert!(usage_limit.resets_at.is_some());
+}
+
+#[test]
 fn map_api_error_maps_retry_after_ms_for_generic_429() {
     let mut headers = HeaderMap::new();
     headers.insert(
