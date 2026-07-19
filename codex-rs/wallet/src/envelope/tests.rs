@@ -74,6 +74,43 @@ fn remove_from_device_requires_the_current_address_and_removes_local_access() {
 }
 
 #[test]
+fn removed_wallet_can_be_restored_once_in_the_same_home() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let wallet = Wallet::new(root.path().to_path_buf());
+    let created = wallet
+        .create("original sufficiently long passphrase", Network::Mainnet)
+        .expect("create wallet");
+    let recovery = created.recovery_material.to_string();
+    let address = created.manifest.address;
+
+    wallet.remove_from_device(&address).expect("remove wallet");
+    assert!(!wallet.exists());
+
+    let restored = wallet
+        .restore(
+            &recovery,
+            "replacement sufficiently long passphrase",
+            Network::Mainnet,
+        )
+        .expect("restore removed wallet");
+    assert_eq!(restored.manifest.address, address);
+    assert!(wallet.exists());
+    assert!(
+        wallet
+            .unlock("replacement sufficiently long passphrase")
+            .is_ok()
+    );
+    assert!(matches!(
+        wallet.restore(
+            &recovery,
+            "third sufficiently long passphrase",
+            Network::Mainnet,
+        ),
+        Err(WalletError::AlreadyExists)
+    ));
+}
+
+#[test]
 fn short_passcodes_require_machine_secret_and_secret_never_appears_on_disk() {
     let home = tempfile::tempdir().expect("tempdir");
     let keyring = Arc::new(MockKeyringStore::default());

@@ -64,6 +64,7 @@ pub(crate) struct VaultSecretEntryView {
     fixed_status: Option<String>,
     confirm_secret: bool,
     first_secret: String,
+    validation_error: Option<String>,
     on_submit: VaultSecretSubmitted,
     on_cancel: Option<VaultSecretCancelled>,
     textarea: TextArea,
@@ -86,6 +87,7 @@ impl VaultSecretEntryView {
             fixed_status: None,
             confirm_secret: false,
             first_secret: String::new(),
+            validation_error: None,
             on_submit,
             on_cancel: None,
             textarea: TextArea::new(),
@@ -113,6 +115,7 @@ impl VaultSecretEntryView {
             fixed_status: Some(status),
             confirm_secret: false,
             first_secret: String::new(),
+            validation_error: None,
             on_submit,
             on_cancel: None,
             textarea: TextArea::new(),
@@ -141,6 +144,7 @@ impl VaultSecretEntryView {
             fixed_status: Some(status),
             confirm_secret: false,
             first_secret: String::new(),
+            validation_error: None,
             on_submit,
             on_cancel: Some(on_cancel),
             textarea: TextArea::new(),
@@ -168,6 +172,7 @@ impl VaultSecretEntryView {
             fixed_status: Some(status),
             confirm_secret: true,
             first_secret: String::new(),
+            validation_error: None,
             on_submit,
             on_cancel: None,
             textarea: TextArea::new(),
@@ -194,6 +199,7 @@ impl VaultSecretEntryView {
                 modifiers,
                 ..
             } if !has_ctrl_or_alt(modifiers) && self.textarea.allows_paste_burst() => {
+                self.validation_error = None;
                 let paste_like_burst = self.paste_burst.on_plain_char_no_hold(now).is_some();
                 self.textarea.input(key_event);
                 if paste_like_burst {
@@ -229,6 +235,7 @@ impl VaultSecretEntryView {
                 if self.confirm_secret {
                     self.first_secret = raw;
                     self.field = Field::SecretConfirm;
+                    self.validation_error = None;
                     self.reset_textarea();
                     return;
                 }
@@ -242,6 +249,8 @@ impl VaultSecretEntryView {
                 if raw != self.first_secret {
                     self.first_secret.zeroize();
                     self.field = Field::Secret;
+                    self.validation_error =
+                        Some("Values did not match. Enter the value twice again.".to_string());
                     self.reset_textarea();
                     return;
                 }
@@ -308,6 +317,7 @@ impl super::bottom_pane_view::BottomPaneView for VaultSecretEntryView {
         if pasted.is_empty() {
             return false;
         }
+        self.validation_error = None;
         self.textarea.insert_str(&pasted);
         self.paste_burst.clear_after_explicit_paste();
         true
@@ -316,8 +326,12 @@ impl super::bottom_pane_view::BottomPaneView for VaultSecretEntryView {
 
 impl Renderable for VaultSecretEntryView {
     fn desired_height(&self, width: u16) -> u16 {
-        // title + status line + input + spacer + hint
-        1u16 + 1u16 + self.input_height(width) + 1u16 + 1u16
+        // title + status line + optional validation + input + spacer + hint
+        1u16 + 1u16
+            + u16::from(self.validation_error.is_some())
+            + self.input_height(width)
+            + 1u16
+            + 1u16
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
@@ -340,12 +354,13 @@ impl Renderable for VaultSecretEntryView {
         let status_y = area.y.saturating_add(1);
         let status = match self.field {
             Field::Label => "1/2 — label",
+            Field::Secret if self.confirm_secret => "Step 1 of 2 — masked",
             Field::Secret if self.fixed_label => self
                 .fixed_status
                 .as_deref()
                 .unwrap_or("Secret value — masked"),
             Field::Secret => "2/2 — secret (masked)",
-            Field::SecretConfirm => "Confirm — masked",
+            Field::SecretConfirm => "Step 2 of 2 — re-enter the same value (masked)",
         };
         Paragraph::new(Line::from(vec![gutter(), Span::from(status).cyan()])).render(
             Rect {
@@ -357,8 +372,21 @@ impl Renderable for VaultSecretEntryView {
             buf,
         );
 
+        let validation_height = u16::from(self.validation_error.is_some());
+        if let Some(error) = &self.validation_error {
+            Paragraph::new(Line::from(vec![gutter(), Span::from(error.as_str()).red()])).render(
+                Rect {
+                    x: area.x,
+                    y: status_y.saturating_add(1),
+                    width: area.width,
+                    height: 1,
+                },
+                buf,
+            );
+        }
+
         // Input area
-        let input_y = status_y.saturating_add(1);
+        let input_y = status_y.saturating_add(1).saturating_add(validation_height);
         let input_height = self.input_height(area.width);
         let input_area = Rect {
             x: area.x,
@@ -446,8 +474,8 @@ impl Renderable for VaultSecretEntryView {
         if text_area_height == 0 {
             return None;
         }
-        // title + status + spacer => top offset of textarea
-        let top_offset = 1u16 + 1u16 + 1u16;
+        // title + status + optional validation + spacer => top offset of textarea
+        let top_offset = 1u16 + 1u16 + u16::from(self.validation_error.is_some()) + 1u16;
         let textarea_rect = Rect {
             x: area.x.saturating_add(2),
             y: area.y.saturating_add(top_offset),
