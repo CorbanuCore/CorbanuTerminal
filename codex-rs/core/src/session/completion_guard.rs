@@ -149,17 +149,31 @@ pub(super) fn parse_assessment(text: &str) -> Result<CompletionAssessment, serde
         return Ok(output.decision);
     }
 
-    // Some chat-compatible providers honor the enum but ignore the requested property name,
-    // returning (for example) {"status":"incomplete"}. Treat a one-field object containing a
-    // recognized enum as the same structured decision. Booleans, multiple fields, prose, and
-    // unknown values remain invalid and therefore cannot trigger paid continuation.
+    // Some chat-compatible providers ignore the requested property shape, returning either a
+    // renamed enum (for example {"status":"incomplete"}) or a completion boolean. Accept only
+    // one-field objects with a recognized enum, or boolean fields whose names explicitly mean
+    // completion. Multiple fields, prose, unrelated booleans, and unknown values stay invalid.
     if let serde_json::Value::Object(object) = &value
         && object.len() == 1
-        && let Some(serde_json::Value::String(decision)) = object.values().next()
+        && let Some((key, decision)) = object.iter().next()
     {
-        return serde_json::from_value::<CompletionAssessment>(serde_json::Value::String(
-            decision.clone(),
-        ));
+        if let serde_json::Value::String(decision) = decision {
+            return serde_json::from_value::<CompletionAssessment>(serde_json::Value::String(
+                decision.clone(),
+            ));
+        }
+        if let serde_json::Value::Bool(complete) = decision
+            && matches!(
+                key.as_str(),
+                "complete" | "completed" | "is_complete" | "is_completed" | "done"
+            )
+        {
+            return Ok(if *complete {
+                CompletionAssessment::Complete
+            } else {
+                CompletionAssessment::Incomplete
+            });
+        }
     }
 
     serde_json::from_value::<CompletionAssessmentOutput>(value).map(|output| output.decision)
@@ -244,7 +258,15 @@ mod tests {
             CompletionAssessment::Incomplete
         );
         assert!(parse_assessment(r#"{"status":"incomplete","confidence":1}"#).is_err());
-        assert!(parse_assessment(r#"{"completed":false}"#).is_err());
+        assert_eq!(
+            parse_assessment(r#"{"completed":false}"#).unwrap(),
+            CompletionAssessment::Incomplete
+        );
+        assert_eq!(
+            parse_assessment(r#"{"done":true}"#).unwrap(),
+            CompletionAssessment::Complete
+        );
+        assert!(parse_assessment(r#"{"ready":false}"#).is_err());
     }
 
     #[test]

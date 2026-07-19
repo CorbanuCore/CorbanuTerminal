@@ -86,10 +86,10 @@ impl Respond for AlternateKeyCompletionResponder {
             1 => sse_response(chat_completions_sse("k3", PROGRESS_RESPONSE)),
             2 => sse_response(chat_completions_sse(
                 "k3",
-                r#"{"status":"incomplete"}"#,
+                r#"{"completed":false}"#,
             )),
             3 => sse_response(chat_completions_sse("k3", FINAL_RESPONSE)),
-            4 => sse_response(chat_completions_sse("k3", r#"{"status":"complete"}"#)),
+            4 => sse_response(chat_completions_sse("k3", r#"{"done":true}"#)),
             call => panic!("unexpected Kimi request {call}"),
         }
     }
