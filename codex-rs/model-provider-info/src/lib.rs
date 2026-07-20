@@ -1195,7 +1195,7 @@ impl ModelProviderInfo {
     }
 
     /// Providers whose coding models have demonstrated text-only premature
-    /// stops after tool work. These routes use the structured completion
+    /// stops before or after tool work. These routes use the structured completion
     /// classifier before accepting a turn as finished.
     pub fn requires_completion_guard(&self) -> bool {
         self.is_kimi_code() || self.is_ambient() || self.is_pfterminal_plan()

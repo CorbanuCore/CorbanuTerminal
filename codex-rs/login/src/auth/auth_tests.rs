@@ -2504,6 +2504,54 @@ fn deleting_provider_key_suppresses_an_unreadable_vault_until_explicit_relogin()
 }
 
 #[test]
+fn suppressing_provider_key_is_immediate_and_explicit_relogin_clears_it() {
+    let codex_home = tempdir().expect("codex home");
+    super::login_with_provider_api_key(
+        codex_home.path(),
+        "PFTERMINAL_PLAN_API_KEY",
+        "plan-key",
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )
+    .expect("store provider key");
+
+    assert!(
+        super::suppress_provider_api_key(codex_home.path(), "PFTERMINAL_PLAN_API_KEY")
+            .expect("suppress provider key")
+    );
+    assert_eq!(
+        super::provider_api_key_from_auth_storage(
+            codex_home.path(),
+            "PFTERMINAL_PLAN_API_KEY",
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::default(),
+        )
+        .expect("read suppressed provider key"),
+        None
+    );
+
+    super::login_with_provider_api_key(
+        codex_home.path(),
+        "PFTERMINAL_PLAN_API_KEY",
+        "replacement-plan-key",
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )
+    .expect("replace provider key");
+    assert_eq!(
+        super::provider_api_key_from_auth_storage(
+            codex_home.path(),
+            "PFTERMINAL_PLAN_API_KEY",
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::default(),
+        )
+        .expect("read replacement provider key")
+        .as_deref(),
+        Some("replacement-plan-key")
+    );
+}
+
+#[test]
 fn legacy_provider_auth_replacements_are_atomic_and_leave_no_temporary_file() {
     let codex_home = tempdir().expect("tempdir");
     super::legacy_save_provider_key(codex_home.path(), "FIRST_API_KEY", "first-secret")

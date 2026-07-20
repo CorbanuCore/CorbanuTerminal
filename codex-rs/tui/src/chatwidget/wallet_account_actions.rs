@@ -114,24 +114,45 @@ impl ChatWidget {
                 .await
                 .map_err(|error| error.to_string());
             let result = match result {
-                Ok(()) => tokio::task::spawn_blocking(move || {
-                    codex_login::delete_provider_api_key(
-                        &home,
-                        PFTERMINAL_PLAN_API_KEY_ENV_VAR,
-                    )
-                    .map(|_| ())
-                    .map_err(|error| {
-                        format!(
-                            "wallet was removed, but its plan credential could not be disconnected: {error}"
+                Ok(()) => {
+                    let suppress_home = home.clone();
+                    tokio::task::spawn_blocking(move || {
+                        codex_login::suppress_provider_api_key(
+                            &suppress_home,
+                            PFTERMINAL_PLAN_API_KEY_ENV_VAR,
                         )
+                        .map(|_| ())
+                        .map_err(|error| {
+                            format!(
+                                "wallet was removed, but its plan credential could not be disabled: {error}"
+                            )
+                        })
                     })
-                })
-                .await
-                .map_err(|error| format!("credential cleanup task failed: {error}"))
-                .and_then(|value| value),
+                    .await
+                    .map_err(|error| format!("credential suppression task failed: {error}"))
+                    .and_then(|value| value)
+                }
                 Err(error) => Err(error),
             };
+            let removal_committed = result.is_ok();
             tx.send(AppEvent::WalletRemoved { result });
+            if removal_committed {
+                let cleanup_result = tokio::task::spawn_blocking(move || {
+                    codex_login::delete_provider_api_key(&home, PFTERMINAL_PLAN_API_KEY_ENV_VAR)
+                })
+                .await;
+                match cleanup_result {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(error)) => tracing::warn!(
+                        %error,
+                        "wallet was removed and its plan credential suppressed, but vault cleanup failed"
+                    ),
+                    Err(error) => tracing::warn!(
+                        %error,
+                        "wallet was removed and its plan credential suppressed, but vault cleanup task failed"
+                    ),
+                }
+            }
         });
     }
 

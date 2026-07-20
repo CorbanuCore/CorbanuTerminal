@@ -423,9 +423,7 @@ pub(crate) async fn run_turn(
                     last_agent_message: sampling_request_last_agent_message,
                     token_usage: _,
                     server_side_model_continuation,
-                    saw_client_tool_call,
                 } = sampling_request_output;
-                completion_guard.observe_sampling(saw_client_tool_call);
                 if server_side_model_continuation {
                     consecutive_server_side_model_continuations += 1;
                     if consecutive_server_side_model_continuations
@@ -527,41 +525,47 @@ pub(crate) async fn run_turn(
                             window_id.clone(),
                             CodexResponsesRequestKind::Turn,
                         );
-                    let assessment = match assess_turn_completion(
-                        sess.as_ref(),
-                        turn_context.as_ref(),
-                        &mut client_session,
-                        &assessment_metadata,
-                        &completion_objective,
-                        sampling_request_last_agent_message
-                            .as_deref()
-                            .unwrap_or_default(),
-                        &cancellation_token,
-                    )
-                    .await
-                    {
-                        Ok(assessment) => Some(assessment),
-                        Err(CodexErr::TurnAborted) => return Err(CodexErr::TurnAborted),
-                        Err(err) => {
-                            warn!(
-                                turn_id = %turn_context.sub_id,
-                                error = %err,
-                                "completion assessment failed; accepting the model response without automatic continuation"
-                            );
-                            None
+                    let assistant_response = sampling_request_last_agent_message
+                        .as_deref()
+                        .filter(|response| !response.trim().is_empty());
+                    let assessment = if let Some(assistant_response) = assistant_response {
+                        match assess_turn_completion(
+                            sess.as_ref(),
+                            turn_context.as_ref(),
+                            &mut client_session,
+                            &assessment_metadata,
+                            &completion_objective,
+                            assistant_response,
+                            &cancellation_token,
+                        )
+                        .await
+                        {
+                            Ok(assessment) => assessment,
+                            Err(CodexErr::TurnAborted) => return Err(CodexErr::TurnAborted),
+                            Err(err) => {
+                                warn!(
+                                    turn_id = %turn_context.sub_id,
+                                    error = %err,
+                                    "completion assessment failed; requesting bounded automatic continuation"
+                                );
+                                CompletionAssessment::Uncertain
+                            }
                         }
+                    } else {
+                        trace!(
+                            turn_id = %turn_context.sub_id,
+                            "provider stopped without a final assistant response; requesting bounded automatic continuation"
+                        );
+                        CompletionAssessment::Incomplete
                     };
-                    match assessment.map(|assessment| {
-                        (assessment, completion_guard.record_assessment(assessment))
-                    }) {
-                        None => {}
-                        Some((_, CompletionGuardAction::Accept)) => {
+                    match completion_guard.record_assessment(assessment) {
+                        CompletionGuardAction::Accept => {
                             trace!(
                                 turn_id = %turn_context.sub_id,
                                 "completion assessment accepted the final response"
                             );
                         }
-                        Some((assessment, CompletionGuardAction::Continue)) => {
+                        CompletionGuardAction::Continue => {
                             trace!(
                                 turn_id = %turn_context.sub_id,
                                 assessment = ?assessment,
@@ -576,7 +580,7 @@ pub(crate) async fn run_turn(
                             .await;
                             continue;
                         }
-                        Some((_, CompletionGuardAction::AcceptAfterLimit)) => {
+                        CompletionGuardAction::AcceptAfterLimit => {
                             warn!(
                                 turn_id = %turn_context.sub_id,
                                 attempts = MAX_COMPLETION_ASSESSMENT_ATTEMPTS,
@@ -1633,7 +1637,6 @@ struct SamplingRequestResult {
     last_agent_message: Option<String>,
     token_usage: Option<TokenUsage>,
     server_side_model_continuation: bool,
-    saw_client_tool_call: bool,
 }
 
 /// Ephemeral per-response state for streaming a single proposed plan.
@@ -3134,7 +3137,6 @@ async fn try_run_sampling_request(
                     last_agent_message,
                     token_usage: completed_token_usage,
                     server_side_model_continuation,
-                    saw_client_tool_call,
                 });
             }
             ResponseEvent::OutputTextDelta(delta) => {

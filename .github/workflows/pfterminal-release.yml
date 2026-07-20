@@ -7,7 +7,7 @@ on:
         description: "Release version; must match codex-rs/Cargo.toml."
         required: true
         type: string
-        default: "0.1.17"
+        default: "0.1.18"
       publish_release:
         description: "Create or update the matching GitHub release."
         required: true
@@ -222,7 +222,8 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            runner: ubuntu-24.04
+            # Keep the portable GNU/Linux artifact compatible with glibc 2.35.
+            runner: ubuntu-22.04
           - target: aarch64-unknown-linux-musl
             runner: ubuntu-24.04-arm
     steps:

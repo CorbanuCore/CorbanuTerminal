@@ -1,21 +1,25 @@
-# PFTerminal 0.1.17
+# PFTerminal 0.1.18
 
 ## Fixed
 
-- Restored `/wallet` in standalone installations by shipping the required
-  `pfterminal-walletd` companion executable on macOS, Linux, and Windows.
-- Made the wallet daemon a mandatory part of the canonical PFTerminal package
-  contract, so package validation fails when the runtime dependency is absent.
-- Extended every platform release smoke test to verify that the packaged wallet
-  daemon exists and starts successfully.
+- Prevented Kimi Code from silently pausing after a complete response or
+  remaining in a false `Working` state after it had already answered.
+- Made wallet removal update the visible wallet state before credential cleanup,
+  eliminating the stale-wallet screen and restore-loop behavior.
+- Built the Linux release package on Ubuntu 22.04 so the downloadable binary
+  runs on the supported glibc baseline instead of requiring a newer build host.
 
 ## Qualification status
 
-- The release package is unpacked into a fresh standalone installation and the
-  packaged `pfterminal` process starts its packaged wallet daemon before the
-  release is published.
-- The complete multi-platform package matrix remains a release gate.
+- The exact release candidate completed a native Apple Silicon `/wallet` flow:
+  create a Solana wallet, receive SOL and USDC, purchase the 1-USDC Starter
+  plan, run paid inference, restart PFTerminal, and recover the active plan,
+  receipt, and authoritative usage.
+- Funding and purchase transactions finalized on Solana mainnet with no chain
+  errors, and the post-payment wallet reconciled to 0.005 SOL and 0 USDC.
+- The release workflow continues to require the packaged `pfterminal-walletd`
+  companion process and package launch smoke tests on every platform.
 
-Previous release: 0.1.16.
+Previous release: 0.1.17.
 
 The changelog can be found on the [releases page](https://github.com/agtico/PfTerminal/releases).

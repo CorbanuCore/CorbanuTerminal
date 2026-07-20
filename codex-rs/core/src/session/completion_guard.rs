@@ -30,28 +30,23 @@ struct CompletionAssessmentOutput {
 
 #[derive(Debug, Default)]
 pub(super) struct CompletionGuardState {
-    tool_executed: bool,
     unsuccessful_assessments: u64,
 }
 
 impl CompletionGuardState {
-    pub(super) fn observe_sampling(&mut self, saw_client_tool_call: bool) {
-        if saw_client_tool_call {
-            self.tool_executed = true;
-        }
-    }
-
     pub(super) fn should_assess(
         &self,
         provider_requires_guard: bool,
         needs_follow_up: bool,
-        _assistant_response: Option<&str>,
+        assistant_response: Option<&str>,
     ) -> bool {
-        // A context-window transition can surface an assistant progress message while the
-        // sampling result carries no `last_agent_message`. Once this turn has performed tool
-        // work, absence of a final-message field is not evidence of completion; the structured
-        // assessment must decide it just like a text response.
-        provider_requires_guard && self.tool_executed && !needs_follow_up
+        // Do not put every ordinary reply through another provider round trip. The chat wire's
+        // `stop` value is ambiguous for these providers, but premature stops consistently expose
+        // an open progress boundary. Use that cheap structural signal to route only ambiguous
+        // responses to the semantic classifier. An empty stop is always ambiguous.
+        provider_requires_guard
+            && !needs_follow_up
+            && assistant_response.is_none_or(response_may_be_progress_update)
     }
 
     pub(super) fn record_assessment(
@@ -59,11 +54,11 @@ impl CompletionGuardState {
         assessment: CompletionAssessment,
     ) -> CompletionGuardAction {
         match assessment {
-            CompletionAssessment::Complete | CompletionAssessment::Uncertain => {
+            CompletionAssessment::Complete => {
                 self.unsuccessful_assessments = 0;
                 CompletionGuardAction::Accept
             }
-            CompletionAssessment::Incomplete => {
+            CompletionAssessment::Incomplete | CompletionAssessment::Uncertain => {
                 self.unsuccessful_assessments += 1;
                 if self.unsuccessful_assessments >= MAX_COMPLETION_ASSESSMENT_ATTEMPTS {
                     CompletionGuardAction::AcceptAfterLimit
@@ -77,6 +72,49 @@ impl CompletionGuardState {
     pub(super) fn unsuccessful_assessments(&self) -> u64 {
         self.unsuccessful_assessments
     }
+}
+
+fn response_may_be_progress_update(response: &str) -> bool {
+    let response = response.trim();
+    if response.is_empty() {
+        return true;
+    }
+
+    if response.ends_with(':') || response.ends_with("...") || response.ends_with('…') {
+        return true;
+    }
+
+    let normalized = response.replace('’', "'").to_lowercase();
+    let Some(last_clause) = normalized
+        .rsplit(['.', '?', '!', ';', '\n'])
+        .map(str::trim)
+        .find(|clause| !clause.is_empty())
+    else {
+        return false;
+    };
+
+    // This is a routing prefilter, not the completion decision. When the last clause announces
+    // another action, the structured model assessment below remains the semantic authority.
+    const PROGRESS_OPENERS: &[&str] = &[
+        "i'll ",
+        "i will ",
+        "we'll ",
+        "we will ",
+        "let me ",
+        "next ",
+        "next,",
+        "first ",
+        "first,",
+        "now i ",
+        "now we ",
+        "continuing ",
+        "proceeding ",
+        "on it",
+    ];
+
+    PROGRESS_OPENERS
+        .iter()
+        .any(|opener| last_clause.starts_with(opener))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -204,18 +242,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn guard_is_provider_scoped_and_only_activates_after_tool_work() {
-        let mut state = CompletionGuardState::default();
-        assert!(!state.should_assess(true, false, Some("Now I will add tests.")));
-        state.observe_sampling(true);
-        assert!(!state.should_assess(false, false, Some("Now I will add tests.")));
-        assert!(!state.should_assess(true, true, Some("Now I will add tests.")));
-        assert!(state.should_assess(true, false, Some("Now I will add tests.")));
+    fn guard_is_provider_scoped_and_activates_before_tool_work() {
+        let state = CompletionGuardState::default();
+        assert!(!state.should_assess(false, false, Some("I'll inspect this next.")));
+        assert!(!state.should_assess(true, true, Some("I'll inspect this next.")));
+        assert!(state.should_assess(true, false, Some("I'll inspect this next.")));
         assert!(state.should_assess(true, false, None));
     }
 
     #[test]
-    fn only_explicit_incomplete_assessments_request_continuation() {
+    fn completion_prefilter_skips_finished_replies_and_routes_progress_shapes() {
+        let state = CompletionGuardState::default();
+
+        for finished in [
+            "Yes, I'm here and working. What can I help you with?",
+            "Done. The regression tests pass.",
+            "Run `pfterminal-debug --yolo` to test it.",
+        ] {
+            assert!(!state.should_assess(true, false, Some(finished)));
+        }
+
+        for progress in [
+            "I found the boundary. Next I will add the regression tests.",
+            "Let me verify that against the live logs…",
+            "The remaining work is straightforward:",
+            "The PTY works; proceeding with the repository inspection.",
+        ] {
+            assert!(state.should_assess(true, false, Some(progress)));
+        }
+    }
+
+    #[test]
+    fn incomplete_and_uncertain_assessments_request_bounded_continuation() {
         let mut state = CompletionGuardState::default();
         assert_eq!(
             state.record_assessment(CompletionAssessment::Incomplete),
@@ -223,18 +281,8 @@ mod tests {
         );
         assert_eq!(
             state.record_assessment(CompletionAssessment::Uncertain),
-            CompletionGuardAction::Accept
-        );
-        assert_eq!(state.unsuccessful_assessments(), 0);
-        assert_eq!(
-            state.record_assessment(CompletionAssessment::Incomplete),
             CompletionGuardAction::Continue
         );
-        assert_eq!(
-            state.record_assessment(CompletionAssessment::Incomplete),
-            CompletionGuardAction::Continue
-        );
-        state.observe_sampling(true);
         assert_eq!(state.unsuccessful_assessments(), 2);
         assert_eq!(
             state.record_assessment(CompletionAssessment::Incomplete),
