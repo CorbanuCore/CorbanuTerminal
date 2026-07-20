@@ -38,11 +38,15 @@ impl CompletionGuardState {
         &self,
         provider_requires_guard: bool,
         needs_follow_up: bool,
+        assistant_response: Option<&str>,
     ) -> bool {
-        // These providers have demonstrated premature `stop` responses both before their first
-        // tool call and after tool work. A provider stop is therefore only a transport signal;
-        // the structured assessment decides whether the user-visible action turn is complete.
-        provider_requires_guard && !needs_follow_up
+        // Do not put every ordinary reply through another provider round trip. The chat wire's
+        // `stop` value is ambiguous for these providers, but premature stops consistently expose
+        // an open progress boundary. Use that cheap structural signal to route only ambiguous
+        // responses to the semantic classifier. An empty stop is always ambiguous.
+        provider_requires_guard
+            && !needs_follow_up
+            && assistant_response.is_none_or(response_may_be_progress_update)
     }
 
     pub(super) fn record_assessment(
@@ -68,6 +72,49 @@ impl CompletionGuardState {
     pub(super) fn unsuccessful_assessments(&self) -> u64 {
         self.unsuccessful_assessments
     }
+}
+
+fn response_may_be_progress_update(response: &str) -> bool {
+    let response = response.trim();
+    if response.is_empty() {
+        return true;
+    }
+
+    if response.ends_with(':') || response.ends_with("...") || response.ends_with('…') {
+        return true;
+    }
+
+    let normalized = response.replace('’', "'").to_lowercase();
+    let Some(last_clause) = normalized
+        .rsplit(['.', '?', '!', ';', '\n'])
+        .map(str::trim)
+        .find(|clause| !clause.is_empty())
+    else {
+        return false;
+    };
+
+    // This is a routing prefilter, not the completion decision. When the last clause announces
+    // another action, the structured model assessment below remains the semantic authority.
+    const PROGRESS_OPENERS: &[&str] = &[
+        "i'll ",
+        "i will ",
+        "we'll ",
+        "we will ",
+        "let me ",
+        "next ",
+        "next,",
+        "first ",
+        "first,",
+        "now i ",
+        "now we ",
+        "continuing ",
+        "proceeding ",
+        "on it",
+    ];
+
+    PROGRESS_OPENERS
+        .iter()
+        .any(|opener| last_clause.starts_with(opener))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -197,9 +244,32 @@ mod tests {
     #[test]
     fn guard_is_provider_scoped_and_activates_before_tool_work() {
         let state = CompletionGuardState::default();
-        assert!(!state.should_assess(false, false));
-        assert!(!state.should_assess(true, true));
-        assert!(state.should_assess(true, false));
+        assert!(!state.should_assess(false, false, Some("I'll inspect this next.")));
+        assert!(!state.should_assess(true, true, Some("I'll inspect this next.")));
+        assert!(state.should_assess(true, false, Some("I'll inspect this next.")));
+        assert!(state.should_assess(true, false, None));
+    }
+
+    #[test]
+    fn completion_prefilter_skips_finished_replies_and_routes_progress_shapes() {
+        let state = CompletionGuardState::default();
+
+        for finished in [
+            "Yes, I'm here and working. What can I help you with?",
+            "Done. The regression tests pass.",
+            "Run `pfterminal-debug --yolo` to test it.",
+        ] {
+            assert!(!state.should_assess(true, false, Some(finished)));
+        }
+
+        for progress in [
+            "I found the boundary. Next I will add the regression tests.",
+            "Let me verify that against the live logs…",
+            "The remaining work is straightforward:",
+            "The PTY works; proceeding with the repository inspection.",
+        ] {
+            assert!(state.should_assess(true, false, Some(progress)));
+        }
     }
 
     #[test]

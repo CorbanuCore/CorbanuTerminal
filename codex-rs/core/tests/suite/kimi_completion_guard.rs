@@ -52,6 +52,11 @@ struct EmptyAfterToolResponder {
     calls: AtomicUsize,
 }
 
+#[derive(Default)]
+struct ConversationalCompletionResponder {
+    calls: AtomicUsize,
+}
+
 impl Respond for KimiCompletionResponder {
     fn respond(&self, _request: &Request) -> ResponseTemplate {
         match self.calls.fetch_add(1, Ordering::SeqCst) {
@@ -59,7 +64,6 @@ impl Respond for KimiCompletionResponder {
             1 => sse_response(chat_completions_sse("k3", PROGRESS_RESPONSE)),
             2 => sse_response(chat_completions_sse("k3", r#"{"decision":"incomplete"}"#)),
             3 => sse_response(chat_completions_sse("k3", FINAL_RESPONSE)),
-            4 => sse_response(chat_completions_sse("k3", r#"{"decision":"complete"}"#)),
             call => panic!("unexpected Kimi request {call}"),
         }
     }
@@ -69,7 +73,7 @@ impl Respond for AlwaysIncompleteCompletionResponder {
     fn respond(&self, _request: &Request) -> ResponseTemplate {
         match self.calls.fetch_add(1, Ordering::SeqCst) {
             0 => sse_response(tool_call_sse()),
-            1 | 4 | 7 => sse_response(chat_completions_sse("k3", FINAL_RESPONSE)),
+            1 | 4 | 7 => sse_response(chat_completions_sse("k3", PROGRESS_RESPONSE)),
             2 | 5 | 8 => sse_response(chat_completions_sse("k3", r#"{"decision":"incomplete"}"#)),
             3 => sse_response(tool_call_sse_with_id("call-guard-2")),
             6 => sse_response(tool_call_sse_with_id("call-guard-3")),
@@ -84,7 +88,6 @@ impl Respond for MalformedCompletionResponder {
             0 => sse_response(chat_completions_sse("k3", PROGRESS_RESPONSE)),
             1 => sse_response(chat_completions_sse("k3", "not-json")),
             2 => sse_response(chat_completions_sse("k3", FINAL_RESPONSE)),
-            3 => sse_response(chat_completions_sse("k3", r#"{"decision":"complete"}"#)),
             call => panic!("unexpected Kimi request {call}"),
         }
     }
@@ -97,7 +100,6 @@ impl Respond for AlternateKeyCompletionResponder {
             1 => sse_response(chat_completions_sse("k3", PROGRESS_RESPONSE)),
             2 => sse_response(chat_completions_sse("k3", r#"{"completed":false}"#)),
             3 => sse_response(chat_completions_sse("k3", FINAL_RESPONSE)),
-            4 => sse_response(chat_completions_sse("k3", r#"{"done":true}"#)),
             call => panic!("unexpected Kimi request {call}"),
         }
     }
@@ -110,7 +112,6 @@ impl Respond for ProgressBeforeToolResponder {
             1 => sse_response(chat_completions_sse("k3", r#"{"decision":"incomplete"}"#)),
             2 => sse_response(tool_call_sse()),
             3 => sse_response(chat_completions_sse("k3", FINAL_RESPONSE)),
-            4 => sse_response(chat_completions_sse("k3", r#"{"decision":"complete"}"#)),
             call => panic!("unexpected Kimi request {call}"),
         }
     }
@@ -122,7 +123,18 @@ impl Respond for EmptyAfterToolResponder {
             0 => sse_response(tool_call_sse()),
             1 => sse_response(chat_completions_sse("k3", "")),
             2 => sse_response(chat_completions_sse("k3", FINAL_RESPONSE)),
-            3 => sse_response(chat_completions_sse("k3", r#"{"decision":"complete"}"#)),
+            call => panic!("unexpected Kimi request {call}"),
+        }
+    }
+}
+
+impl Respond for ConversationalCompletionResponder {
+    fn respond(&self, _request: &Request) -> ResponseTemplate {
+        match self.calls.fetch_add(1, Ordering::SeqCst) {
+            0 => sse_response(chat_completions_sse(
+                "k3",
+                "Yes, I'm here and working. What can I help you with?",
+            )),
             call => panic!("unexpected Kimi request {call}"),
         }
     }
@@ -180,14 +192,14 @@ fn kimi_provider(server: &wiremock::MockServer) -> ModelProviderInfo {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn kimi_progress_stop_before_first_tool_is_classified_and_continued() {
+async fn kimi_conversational_completion_does_not_start_a_classifier_request() {
     skip_if_no_network!();
 
     let server = wiremock::MockServer::start().await;
     Mock::given(method("POST"))
         .and(path_regex(".*/chat/completions$"))
-        .respond_with(ProgressBeforeToolResponder::default())
-        .expect(5)
+        .respond_with(ConversationalCompletionResponder::default())
+        .expect(1)
         .mount(&server)
         .await;
 
@@ -205,7 +217,7 @@ async fn kimi_progress_stop_before_first_tool_is_classified_and_continued() {
     test.codex
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
-                text: OBJECTIVE.to_string(),
+                text: "Is this working?".to_string(),
                 text_elements: Vec::new(),
             }],
             final_output_json_schema: None,
@@ -226,29 +238,17 @@ async fn kimi_progress_stop_before_first_tool_is_classified_and_continued() {
     }
 
     let requests = server.received_requests().await.expect("recorded requests");
-    assert_eq!(requests.len(), 5);
-    let bodies = requests
-        .iter()
-        .map(|request| serde_json::from_slice::<Value>(&request.body).expect("request body"))
-        .collect::<Vec<_>>();
-    assert!(bodies[1].get("response_format").is_some());
-    assert!(bodies[1].to_string().contains(PROGRESS_RESPONSE));
-    assert!(
-        bodies[2]
-            .to_string()
-            .contains("did not finish the requested work")
-    );
-    assert!(bodies[4].to_string().contains(FINAL_RESPONSE));
+    assert_eq!(requests.len(), 1);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn kimi_empty_stop_after_tool_work_continues_without_classifier_call() {
+async fn kimi_progress_stop_before_first_tool_is_classified_and_continued() {
     skip_if_no_network!();
 
     let server = wiremock::MockServer::start().await;
     Mock::given(method("POST"))
         .and(path_regex(".*/chat/completions$"))
-        .respond_with(EmptyAfterToolResponder::default())
+        .respond_with(ProgressBeforeToolResponder::default())
         .expect(4)
         .mount(&server)
         .await;
@@ -293,6 +293,67 @@ async fn kimi_empty_stop_after_tool_work_continues_without_classifier_call() {
         .iter()
         .map(|request| serde_json::from_slice::<Value>(&request.body).expect("request body"))
         .collect::<Vec<_>>();
+    assert!(bodies[1].get("response_format").is_some());
+    assert!(bodies[1].to_string().contains(PROGRESS_RESPONSE));
+    assert!(
+        bodies[2]
+            .to_string()
+            .contains("did not finish the requested work")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn kimi_empty_stop_after_tool_work_continues_without_classifier_call() {
+    skip_if_no_network!();
+
+    let server = wiremock::MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path_regex(".*/chat/completions$"))
+        .respond_with(EmptyAfterToolResponder::default())
+        .expect(3)
+        .mount(&server)
+        .await;
+
+    let provider = kimi_provider(&server);
+    let test = test_codex()
+        .with_config(move |config| {
+            config.model = Some("k3".to_string());
+            config.model_provider_id = "kimi-code".to_string();
+            config.model_provider = provider;
+        })
+        .build(&server)
+        .await
+        .expect("build test session");
+
+    test.codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: OBJECTIVE.to_string(),
+                text_elements: Vec::new(),
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        })
+        .await
+        .expect("submit turn");
+
+    loop {
+        let event = test.codex.next_event().await.expect("next event");
+        match event.msg {
+            EventMsg::TurnComplete(_) => break,
+            EventMsg::Error(error) => panic!("turn failed: {error:?}"),
+            _ => {}
+        }
+    }
+
+    let requests = server.received_requests().await.expect("recorded requests");
+    assert_eq!(requests.len(), 3);
+    let bodies = requests
+        .iter()
+        .map(|request| serde_json::from_slice::<Value>(&request.body).expect("request body"))
+        .collect::<Vec<_>>();
     assert!(
         bodies[2]
             .to_string()
@@ -303,9 +364,8 @@ async fn kimi_empty_stop_after_tool_work_continues_without_classifier_call() {
             .iter()
             .filter(|body| body.get("response_format").is_some())
             .count(),
-        1
+        0
     );
-    assert!(bodies[3].to_string().contains(FINAL_RESPONSE));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -316,7 +376,7 @@ async fn kimi_progress_stop_after_tool_work_is_classified_and_continued() {
     Mock::given(method("POST"))
         .and(path_regex(".*/chat/completions$"))
         .respond_with(KimiCompletionResponder::default())
-        .expect(5)
+        .expect(4)
         .mount(&server)
         .await;
 
@@ -378,7 +438,7 @@ async fn kimi_progress_stop_after_tool_work_is_classified_and_continued() {
     }
 
     let requests = server.received_requests().await.expect("recorded requests");
-    assert_eq!(requests.len(), 5);
+    assert_eq!(requests.len(), 4);
     let bodies = requests
         .iter()
         .map(|request| serde_json::from_slice::<Value>(&request.body).expect("request body"))
@@ -390,7 +450,6 @@ async fn kimi_progress_stop_after_tool_work_is_classified_and_continued() {
             .to_string()
             .contains("did not finish the requested work")
     );
-    assert!(bodies[4].to_string().contains(FINAL_RESPONSE));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -491,7 +550,7 @@ async fn malformed_completion_assessment_requests_bounded_continuation() {
     Mock::given(method("POST"))
         .and(path_regex(".*/chat/completions$"))
         .respond_with(MalformedCompletionResponder::default())
-        .expect(4)
+        .expect(3)
         .mount(&server)
         .await;
 
@@ -554,18 +613,12 @@ async fn malformed_completion_assessment_requests_bounded_continuation() {
     }
 
     let requests = server.received_requests().await.expect("recorded requests");
-    assert_eq!(requests.len(), 4);
+    assert_eq!(requests.len(), 3);
     assert!(
         requests[2]
             .body
             .windows(CONTINUE_INSTRUCTION_FRAGMENT.len())
             .any(|window| window == CONTINUE_INSTRUCTION_FRAGMENT)
-    );
-    assert!(
-        requests[3]
-            .body
-            .windows(FINAL_RESPONSE.len())
-            .any(|window| window == FINAL_RESPONSE.as_bytes())
     );
 }
 
@@ -577,7 +630,7 @@ async fn completion_guard_accepts_single_enum_field_when_provider_renames_schema
     Mock::given(method("POST"))
         .and(path_regex(".*/chat/completions$"))
         .respond_with(AlternateKeyCompletionResponder::default())
-        .expect(5)
+        .expect(4)
         .mount(&server)
         .await;
 
@@ -639,7 +692,7 @@ async fn completion_guard_accepts_single_enum_field_when_provider_renames_schema
     }
 
     let requests = server.received_requests().await.expect("recorded requests");
-    assert_eq!(requests.len(), 5);
+    assert_eq!(requests.len(), 4);
     assert!(
         requests[3]
             .body

@@ -517,6 +517,7 @@ pub(crate) async fn run_turn(
                 if completion_guard.should_assess(
                     turn_context.provider.info().requires_completion_guard(),
                     needs_follow_up,
+                    sampling_request_last_agent_message.as_deref(),
                 ) {
                     let assessment_metadata =
                         turn_context.turn_metadata_state.to_responses_metadata(
