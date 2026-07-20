@@ -1,25 +1,23 @@
-# PFTerminal 0.1.18
+# PFTerminal 0.1.19
 
 ## Fixed
 
-- Prevented Kimi Code from silently pausing after a complete response or
-  remaining in a false `Working` state after it had already answered.
-- Made wallet removal update the visible wallet state before credential cleanup,
-  eliminating the stale-wallet screen and restore-loop behavior.
-- Built the Linux release package on Ubuntu 22.04 so the downloadable binary
-  runs on the supported glibc baseline instead of requiring a newer build host.
+- Prevented updates and headless launches from making an existing encrypted
+  credential vault unreadable when the OS keyring is temporarily unavailable.
+- Existing vaults now validate every available key source against their
+  ciphertext and never generate or overwrite a key during recovery.
+- Stale file-fallback keys can no longer shadow a valid OS-keyring key, while a
+  valid fallback still recovers a vault when the OS-keyring entry is stale.
 
 ## Qualification status
 
-- The exact release candidate completed a native Apple Silicon `/wallet` flow:
-  create a Solana wallet, receive SOL and USDC, purchase the 1-USDC Starter
-  plan, run paid inference, restart PFTerminal, and recover the active plan,
-  receipt, and authoritative usage.
-- Funding and purchase transactions finalized on Solana mainnet with no chain
-  errors, and the post-payment wallet reconciled to 0.005 SOL and 0 USDC.
-- The release workflow continues to require the packaged `pfterminal-walletd`
-  companion process and package launch smoke tests on every platform.
+- Regression coverage reproduces the update-shaped macOS failure: an existing
+  vault plus an unavailable OS keyring cannot create a replacement fallback.
+- Candidate-key tests cover stale fallback, stale primary, missing key, and two
+  conflicting wrong keys; every failure path preserves ciphertext and keys.
+- The secrets, vault, and provider-key integration suites pass, along with
+  warnings-as-errors linting for the changed crate.
 
-Previous release: 0.1.17.
+Previous release: 0.1.18.
 
 The changelog can be found on the [releases page](https://github.com/agtico/PfTerminal/releases).
