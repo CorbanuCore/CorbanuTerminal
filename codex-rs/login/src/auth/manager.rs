@@ -984,6 +984,29 @@ pub fn delete_provider_api_key(codex_home: &Path, provider_key_id: &str) -> std:
     Ok(removed)
 }
 
+/// Immediately suppress one stored provider key without waiting for encrypted-vault cleanup.
+///
+/// This durable tombstone is useful at destructive UI boundaries: readers stop returning the
+/// credential as soon as this function succeeds, while the potentially slower encrypted-vault
+/// deletion can finish in the background. A later explicit provider login clears the tombstone.
+pub fn suppress_provider_api_key(
+    codex_home: &Path,
+    provider_key_id: &str,
+) -> std::io::Result<bool> {
+    let provider_key_id = provider_key_id.trim();
+    if provider_key_id.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "provider key id cannot be empty",
+        ));
+    }
+    let inserted = legacy_mark_provider_key_deleted(codex_home, provider_key_id)?;
+    if inserted {
+        mark_provider_api_key_storage_changed();
+    }
+    Ok(inserted)
+}
+
 /// Writes an `auth.json` that contains only the access token.
 pub async fn login_with_access_token(
     codex_home: &Path,
