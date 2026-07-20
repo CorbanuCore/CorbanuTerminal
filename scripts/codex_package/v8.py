@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import urlopen
 
+from .cargo_lock import package_versions
 from .targets import REPO_ROOT
 from .targets import TargetSpec
 
@@ -87,16 +88,7 @@ def fetch_codex_v8_artifacts(
 
 
 def resolved_v8_crate_version() -> str:
-    import tomllib
-
-    cargo_lock = tomllib.loads((REPO_ROOT / "codex-rs" / "Cargo.lock").read_text())
-    versions = sorted(
-        {
-            package["version"]
-            for package in cargo_lock["package"]
-            if package["name"] == "v8"
-        }
-    )
+    versions = package_versions(REPO_ROOT / "codex-rs" / "Cargo.lock", "v8")
     if len(versions) != 1:
         raise RuntimeError(
             f"Expected exactly one resolved v8 version, found: {versions}"
