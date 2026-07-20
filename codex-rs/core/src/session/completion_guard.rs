@@ -30,28 +30,19 @@ struct CompletionAssessmentOutput {
 
 #[derive(Debug, Default)]
 pub(super) struct CompletionGuardState {
-    tool_executed: bool,
     unsuccessful_assessments: u64,
 }
 
 impl CompletionGuardState {
-    pub(super) fn observe_sampling(&mut self, saw_client_tool_call: bool) {
-        if saw_client_tool_call {
-            self.tool_executed = true;
-        }
-    }
-
     pub(super) fn should_assess(
         &self,
         provider_requires_guard: bool,
         needs_follow_up: bool,
-        _assistant_response: Option<&str>,
     ) -> bool {
-        // A context-window transition can surface an assistant progress message while the
-        // sampling result carries no `last_agent_message`. Once this turn has performed tool
-        // work, absence of a final-message field is not evidence of completion; the structured
-        // assessment must decide it just like a text response.
-        provider_requires_guard && self.tool_executed && !needs_follow_up
+        // These providers have demonstrated premature `stop` responses both before their first
+        // tool call and after tool work. A provider stop is therefore only a transport signal;
+        // the structured assessment decides whether the user-visible action turn is complete.
+        provider_requires_guard && !needs_follow_up
     }
 
     pub(super) fn record_assessment(
@@ -59,11 +50,11 @@ impl CompletionGuardState {
         assessment: CompletionAssessment,
     ) -> CompletionGuardAction {
         match assessment {
-            CompletionAssessment::Complete | CompletionAssessment::Uncertain => {
+            CompletionAssessment::Complete => {
                 self.unsuccessful_assessments = 0;
                 CompletionGuardAction::Accept
             }
-            CompletionAssessment::Incomplete => {
+            CompletionAssessment::Incomplete | CompletionAssessment::Uncertain => {
                 self.unsuccessful_assessments += 1;
                 if self.unsuccessful_assessments >= MAX_COMPLETION_ASSESSMENT_ATTEMPTS {
                     CompletionGuardAction::AcceptAfterLimit
@@ -204,18 +195,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn guard_is_provider_scoped_and_only_activates_after_tool_work() {
-        let mut state = CompletionGuardState::default();
-        assert!(!state.should_assess(true, false, Some("Now I will add tests.")));
-        state.observe_sampling(true);
-        assert!(!state.should_assess(false, false, Some("Now I will add tests.")));
-        assert!(!state.should_assess(true, true, Some("Now I will add tests.")));
-        assert!(state.should_assess(true, false, Some("Now I will add tests.")));
-        assert!(state.should_assess(true, false, None));
+    fn guard_is_provider_scoped_and_activates_before_tool_work() {
+        let state = CompletionGuardState::default();
+        assert!(!state.should_assess(false, false));
+        assert!(!state.should_assess(true, true));
+        assert!(state.should_assess(true, false));
     }
 
     #[test]
-    fn only_explicit_incomplete_assessments_request_continuation() {
+    fn incomplete_and_uncertain_assessments_request_bounded_continuation() {
         let mut state = CompletionGuardState::default();
         assert_eq!(
             state.record_assessment(CompletionAssessment::Incomplete),
@@ -223,18 +211,8 @@ mod tests {
         );
         assert_eq!(
             state.record_assessment(CompletionAssessment::Uncertain),
-            CompletionGuardAction::Accept
-        );
-        assert_eq!(state.unsuccessful_assessments(), 0);
-        assert_eq!(
-            state.record_assessment(CompletionAssessment::Incomplete),
             CompletionGuardAction::Continue
         );
-        assert_eq!(
-            state.record_assessment(CompletionAssessment::Incomplete),
-            CompletionGuardAction::Continue
-        );
-        state.observe_sampling(true);
         assert_eq!(state.unsuccessful_assessments(), 2);
         assert_eq!(
             state.record_assessment(CompletionAssessment::Incomplete),
