@@ -1,12 +1,13 @@
 ---
-source: tui/src/chatwidget/tests.rs
+source: tui/src/chatwidget/tests/app_server.rs
 expression: combined
 ---
 • Waiting for 2 agents
   └ Robie [explorer]
     Ada [reviewer]
+    Wakes on a child report/message, follow-up task, human steering, or timeout.
 
 
-• Finished waiting
+• Wait ended — child status update
   └ Robie [explorer]: Completed - Done
     Ada [reviewer]: Running

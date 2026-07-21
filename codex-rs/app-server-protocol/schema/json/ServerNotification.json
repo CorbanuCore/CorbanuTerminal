@@ -4338,6 +4338,12 @@
             "kind": {
               "$ref": "#/definitions/SubAgentActivityKind"
             },
+            "taskPreview": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "type": {
               "enum": [
                 "subAgentActivity"

@@ -151,8 +151,39 @@ pub(crate) struct PaneLayoutState {
     pub(crate) codex_thread_id: Option<String>,
     pub(crate) active_user_pane_id: Option<String>,
     pub(crate) spawn_nazgul_pane_id: Option<String>,
+    #[serde(default)]
+    pub(crate) spawn_nazgul_rebind_required: bool,
     pub(crate) claude_pane_ids: Vec<String>,
     pub(crate) spawn_parent_by_node: BTreeMap<String, String>,
+    #[serde(default)]
+    pub(crate) spawn_native_runtime_by_node:
+        BTreeMap<String, crate::dispatch_queue::SavedNativeSpawnRuntime>,
+    #[serde(default)]
+    pub(crate) spawn_native_endpoint_by_node: BTreeMap<String, String>,
+    #[serde(default)]
+    pub(crate) orchestrate_whips: BTreeMap<String, crate::orchestrate::Whip>,
+    #[serde(default)]
+    pub(crate) orchestrate_next_whip_seq: u64,
+    #[serde(default)]
+    pub(crate) spawn_pending_dispatches:
+        BTreeMap<String, Vec<crate::spawn_orchestration::PendingSpawnDispatch>>,
+    /// Version-1 compatibility input. Migration moves these records into
+    /// `spawn_pending_dispatches`; version-2 writers never emit this field.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) spawn_pending_dispatches_by_thread:
+        BTreeMap<String, Vec<crate::spawn_orchestration::PendingSpawnDispatch>>,
+    /// Version-1 compatibility input; see `spawn_pending_dispatches_by_thread`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) spawn_pending_dispatches_by_pane:
+        BTreeMap<String, Vec<crate::spawn_orchestration::PendingSpawnDispatch>>,
+    #[serde(default)]
+    pub(crate) spawn_next_dispatch_seq: u64,
+    #[serde(default)]
+    pub(crate) spawn_processed_dispatch_seq_ids: Vec<u64>,
+    #[serde(default)]
+    pub(crate) spawn_processed_dispatch_origin_ids: Vec<String>,
+    #[serde(default)]
+    pub(crate) spawn_accepted_delivery_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

@@ -80,24 +80,31 @@ use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
+use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
+use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OLLAMA_CHAT_PROVIDER_REMOVED_ERROR;
 use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
+use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_PROVIDER_ID;
+use codex_model_provider_info::WireApi;
 use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_model_provider_info::built_in_model_providers;
 use codex_model_provider_info::corrected_catalog_provider;
+use codex_model_provider_info::create_oss_provider_with_base_url;
+use codex_model_provider_info::default_model_context_window_for_provider;
 use codex_model_provider_info::merge_configured_model_providers;
 use codex_model_provider_info::resolve_model_for_provider;
 use codex_models_manager::ModelsManagerConfig;
 use codex_protocol::config_types::AltScreenMode;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
 use codex_protocol::config_types::ForcedLoginMethod;
+use codex_protocol::config_types::ModelProviderAuthInfo;
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
@@ -132,6 +139,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::ErrorKind;
+use std::num::NonZeroU64;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -208,7 +216,10 @@ impl Default for GhostSnapshotConfig {
 /// the context window.
 pub(crate) const AGENTS_MD_MAX_BYTES: usize = DEFAULT_PROJECT_DOC_MAX_BYTES; // 32 KiB
 pub(crate) const DEFAULT_AGENT_MAX_THREADS: Option<usize> = Some(6);
-pub(crate) const DEFAULT_MULTI_AGENT_V2_MAX_CONCURRENT_THREADS_PER_SESSION: usize = 4;
+// Root + Nazgul + Troll + three Orcs is the canonical hierarchy. Nazgul turns are exempt from the
+// worker execution limiter so the human control path cannot be starved, while five resident child
+// slots keep the entire hierarchy addressable without unload/reload churn.
+pub(crate) const DEFAULT_MULTI_AGENT_V2_MAX_CONCURRENT_THREADS_PER_SESSION: usize = 6;
 pub(crate) const DEFAULT_MULTI_AGENT_V2_MIN_WAIT_TIMEOUT_MS: i64 = 10_000;
 pub(crate) const DEFAULT_MULTI_AGENT_V2_MAX_WAIT_TIMEOUT_MS: i64 = 3600 * 1000;
 pub(crate) const DEFAULT_MULTI_AGENT_V2_DEFAULT_WAIT_TIMEOUT_MS: i64 = 30_000;
@@ -1380,6 +1391,108 @@ impl ConfigBuilder {
     }
 }
 
+pub fn gpu_runtime_model_provider(
+    record: codex_state::GpuRuntimeProvider,
+    codex_home: &AbsolutePathBuf,
+) -> Option<(String, ModelProviderInfo)> {
+    if record.health != "ready" {
+        return None;
+    }
+    if !record.provider_id.starts_with("gpu-") {
+        tracing::warn!(
+            provider_id = %record.provider_id,
+            "ignoring invalid GPU runtime provider id"
+        );
+        return None;
+    }
+    let wire_api = match record.wire_api.as_str() {
+        "chat" => WireApi::Chat,
+        "responses" => WireApi::Responses,
+        protocol => {
+            tracing::warn!(
+                provider_id = %record.provider_id,
+                %protocol,
+                "ignoring GPU runtime provider with unsupported wire API"
+            );
+            return None;
+        }
+    };
+    let mut provider = create_oss_provider_with_base_url(record.base_url.as_str(), wire_api);
+    provider.name = format!("Rented GPU · {}", record.model_id);
+    provider.auth = Some(ModelProviderAuthInfo {
+        command: current_pfterminal_auth_helper(),
+        args: vec!["internal-gpu-endpoint-token".to_string(), record.rental_id],
+        // Vault access may briefly serialize with the rental controller in another process.
+        // Leave enough startup time for that lock handoff instead of rejecting a healthy
+        // runtime provider at the generic five-second auth-helper default.
+        timeout_ms: match NonZeroU64::new(30_000) {
+            Some(timeout_ms) => timeout_ms,
+            None => NonZeroU64::MIN,
+        },
+        refresh_interval_ms: 60_000,
+        cwd: codex_home.clone(),
+    });
+    Some((record.provider_id, provider))
+}
+
+fn current_pfterminal_auth_helper() -> String {
+    std::env::current_exe()
+        .ok()
+        .and_then(pfterminal_auth_helper_from_executable)
+        .unwrap_or_else(|| "pfterminal".to_string())
+}
+
+fn pfterminal_auth_helper_from_executable(path: PathBuf) -> Option<String> {
+    let file_name = path.file_name()?.to_str()?;
+    if file_name == "pfterminal" {
+        return Some(path.to_string_lossy().into_owned());
+    }
+    // Linux marks the procfs target of a running executable as deleted when an update or
+    // development rebuild atomically replaces it. `/proc/self/exe` still resolves the live
+    // executable and can safely self-invoke hidden helper modes for that process.
+    #[cfg(target_os = "linux")]
+    if file_name == "pfterminal (deleted)" {
+        return Some("/proc/self/exe".to_string());
+    }
+    None
+}
+
+pub async fn load_gpu_runtime_model_providers(
+    sqlite_home: &Path,
+    codex_home: &AbsolutePathBuf,
+) -> HashMap<String, ModelProviderInfo> {
+    load_gpu_runtime_model_provider_records(sqlite_home)
+        .await
+        .into_iter()
+        .filter_map(|record| gpu_runtime_model_provider(record, codex_home))
+        .collect()
+}
+
+pub async fn load_gpu_runtime_model_provider_records(
+    sqlite_home: &Path,
+) -> Vec<codex_state::GpuRuntimeProvider> {
+    let runtime = match codex_state::StateRuntime::init(
+        sqlite_home.to_path_buf(),
+        "gpu-runtime-overlay".to_string(),
+    )
+    .await
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            tracing::warn!(%error, "failed to open GPU runtime provider overlay");
+            return Vec::new();
+        }
+    };
+
+    match runtime.list_gpu_runtime_providers().await {
+        Ok(records) => records,
+        Err(error) => {
+            tracing::warn!(%error, "failed to read GPU runtime provider overlay");
+            Vec::new()
+        }
+    }
+}
+
 impl Config {
     pub(crate) fn multi_agent_version_from_features(&self) -> MultiAgentVersion {
         if self.features.enabled(Feature::MultiAgentV2) {
@@ -1444,8 +1557,17 @@ impl Config {
     }
 
     pub fn to_models_manager_config(&self) -> ModelsManagerConfig {
+        self.to_models_manager_config_for_model(self.model.as_deref())
+    }
+
+    pub fn to_models_manager_config_for_model(&self, model: Option<&str>) -> ModelsManagerConfig {
+        let model_context_window = self.model_context_window.or_else(|| {
+            model.and_then(|model| {
+                default_model_context_window_for_provider(&self.model_provider_id, model)
+            })
+        });
         ModelsManagerConfig {
-            model_context_window: self.model_context_window,
+            model_context_window,
             model_auto_compact_token_limit: self.model_auto_compact_token_limit,
             tool_output_token_limit: self.tool_output_token_limit,
             base_instructions: self.base_instructions.clone(),
@@ -2163,6 +2285,18 @@ pub async fn apply_agent_role_to_config(
     role_name: Option<&str>,
 ) -> Result<(), String> {
     crate::agent::role::apply_role_to_config(config, role_name).await
+}
+
+/// Validates a thread-spawn role against the Nazgul -> Troll -> Orc hierarchy graph.
+///
+/// App-server thread spawning runs this when a client starts a sub-agent directly instead of
+/// going through the model-facing `spawn_agent` tool handler.
+pub fn validate_thread_spawn_role_graph(
+    parent_role: Option<&str>,
+    requested_role: Option<&str>,
+    child_depth: i32,
+) -> Result<(), String> {
+    crate::agent::role::validate_thread_spawn_role_graph(parent_role, requested_role, child_depth)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -3376,7 +3510,16 @@ impl Config {
             .clone()
             .filter(|value| !value.is_empty());
 
+        let sqlite_home = cfg
+            .sqlite_home
+            .as_ref()
+            .map(AbsolutePathBuf::to_path_buf)
+            .or_else(|| resolve_sqlite_home_env(&resolved_cwd))
+            .unwrap_or_else(|| codex_home.to_path_buf());
+
         let mut built_in_model_providers = built_in_model_providers(openai_base_url);
+        built_in_model_providers
+            .extend(load_gpu_runtime_model_providers(&sqlite_home, &codex_home).await);
         if let Some(openrouter_provider) =
             openrouter_provider_body_provider(cfg.openrouter_provider.clone())?
             && let Some(provider) = built_in_model_providers.get_mut(OPENROUTER_PROVIDER_ID)
@@ -3388,10 +3531,25 @@ impl Config {
             merge_configured_model_providers(built_in_model_providers, cfg.model_providers)
                 .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
 
-        let model_provider_was_explicit = model_provider.is_some() || cfg.model_provider.is_some();
-        let model_provider_id = model_provider
+        let requested_provider_was_explicit =
+            model_provider.is_some() || cfg.model_provider.is_some();
+        let requested_model_provider_id = model_provider
             .or(cfg.model_provider)
             .unwrap_or_else(|| AMBIENT_PROVIDER_ID.to_string());
+        let stale_runtime_provider = requested_model_provider_id.starts_with("gpu-")
+            && !model_providers.contains_key(&requested_model_provider_id);
+        if stale_runtime_provider {
+            startup_warnings.push(format!(
+                "Rented GPU provider `{requested_model_provider_id}` is no longer active; using the default provider."
+            ));
+        }
+        let model_provider_was_explicit =
+            requested_provider_was_explicit && !stale_runtime_provider;
+        let model_provider_id = if stale_runtime_provider {
+            AMBIENT_PROVIDER_ID.to_string()
+        } else {
+            requested_model_provider_id
+        };
         let model_provider = model_providers
             .get(&model_provider_id)
             .ok_or_else(|| {
@@ -3407,6 +3565,7 @@ impl Config {
         let model_without_explicit_provider = !model_provider_was_explicit && cfg.model.is_some();
         let model = match model {
             Some(model_override) => Some(model_override),
+            None if stale_runtime_provider => resolve_model_for_provider(None, &model_provider_id),
             None if model_without_explicit_provider => cfg.model,
             None => resolve_model_for_provider(cfg.model, &model_provider_id),
         };
@@ -3414,9 +3573,11 @@ impl Config {
         // model (stale thread metadata, dropped spawn override, config default recorded next to
         // a role-derived model) would 400/404 at the remote with "Unknown model". Correct the
         // unambiguous cases; see corrected_catalog_provider for what qualifies.
-        let (model_provider_id, model_provider) = match model
-            .as_deref()
-            .and_then(|value| corrected_catalog_provider(value, &model_provider_id))
+        let corrected_provider = (!model_provider_was_explicit)
+            .then_some(model.as_deref())
+            .flatten()
+            .and_then(|value| corrected_catalog_provider(value, &model_provider_id));
+        let (model_provider_id, model_provider) = match corrected_provider
             .and_then(|corrected| {
                 model_providers
                     .get(corrected)
@@ -3433,7 +3594,6 @@ impl Config {
             }
             None => (model_provider_id, model_provider),
         };
-
         let shell_environment_policy = cfg.shell_environment_policy.into();
         let allow_login_shell = cfg.allow_login_shell.unwrap_or(true);
 
@@ -3563,8 +3723,13 @@ impl Config {
             })
             .filter(|values| !values.is_empty());
 
-        let ambient_provider_selected = model_provider_id == AMBIENT_PROVIDER_ID;
+        let ambient_provider_selected = matches!(
+            model_provider_id.as_str(),
+            AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID
+        );
+        let kimi_code_provider_selected = model_provider_id == KIMI_CODE_PROVIDER_ID;
         let anthropic_provider_selected = model_provider_id == ANTHROPIC_PROVIDER_ID;
+        let meta_provider_selected = model_provider_id == META_PROVIDER_ID;
         let baseten_provider_selected =
             matches!(model_provider_id.as_str(), BASETEN_PROVIDER_ID | BASETEN_ANTHROPIC_PROVIDER_ID);
         let openrouter_provider_selected = matches!(
@@ -3582,7 +3747,9 @@ impl Config {
             .forced_login_method
             .or_else(|| {
                 (ambient_provider_selected
+                    || kimi_code_provider_selected
                     || anthropic_provider_selected
+                    || meta_provider_selected
                     || baseten_provider_selected
                     || openrouter_provider_selected
                     || vercel_provider_selected
@@ -3686,12 +3853,6 @@ impl Config {
             .as_ref()
             .map(AbsolutePathBuf::to_path_buf)
             .unwrap_or_else(|| codex_home.join("log").to_path_buf());
-        let sqlite_home = cfg
-            .sqlite_home
-            .as_ref()
-            .map(AbsolutePathBuf::to_path_buf)
-            .or_else(|| resolve_sqlite_home_env(&resolved_cwd))
-            .unwrap_or_else(|| codex_home.to_path_buf());
         let original_permission_profile = permission_profile.clone();
         apply_requirement_constrained_value(
             "approval_policy",

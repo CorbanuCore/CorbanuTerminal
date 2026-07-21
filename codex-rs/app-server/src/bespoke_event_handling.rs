@@ -3442,6 +3442,8 @@ mod tests {
                     agent_thread_id: child_thread_id,
                     agent_path: AgentPath::try_from("/root/worker")
                         .expect("agent path should parse"),
+                    agent_nickname: None,
+                    agent_role: None,
                     task_preview: None,
                     kind: SubAgentActivityKind::Interrupted,
                 }),
@@ -3478,6 +3480,8 @@ mod tests {
                     kind: codex_app_server_protocol::SubAgentActivityKind::Interrupted,
                     agent_thread_id: child_thread_id_string,
                     agent_path: "/root/worker".to_string(),
+                    agent_nickname: None,
+                    agent_role: None,
                     task_preview: None,
                 },
                 thread_id: conversation_id.to_string(),

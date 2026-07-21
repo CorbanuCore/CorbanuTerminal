@@ -293,6 +293,9 @@ impl ChatWidget {
                 self.open_model_popup();
                 self.defer_input_until_settings_applied();
             }
+            SlashCommand::Gpu => {
+                self.app_event_tx.send(AppEvent::OpenGpuMenu);
+            }
             SlashCommand::Personality => {
                 self.open_personality_popup();
                 self.defer_input_until_settings_applied();
@@ -323,6 +326,11 @@ impl ChatWidget {
             }
             SlashCommand::Spawn => {
                 self.app_event_tx.send(AppEvent::OpenSpawnRolePicker);
+            }
+            SlashCommand::Orchestrate => {
+                self.app_event_tx.send(AppEvent::HandleOrchestrateCommand {
+                    args: String::new(),
+                });
             }
             SlashCommand::Tasknode => {
                 self.app_event_tx.send(AppEvent::OpenTaskNodeMenu);
@@ -515,6 +523,9 @@ impl ChatWidget {
                 // Bare `/vault` opens the action menu. Subcommands flow through the inline-args
                 // path and still render command output.
                 self.open_vault_menu();
+            }
+            SlashCommand::Wallet => {
+                self.open_wallet_menu();
             }
             SlashCommand::Providers => {
                 self.open_provider_credentials_menu();
@@ -744,9 +755,60 @@ impl ChatWidget {
                     self.open_vault_credential_add();
                     return;
                 }
-                let lines =
-                    crate::vault_command::handle_vault_command(&self.config.codex_home, trimmed);
-                self.add_plain_history_lines(lines);
+                let codex_home = self.config.codex_home.clone();
+                let args = trimmed.to_string();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let task = tokio::task::spawn_blocking(move || {
+                        crate::vault_command::handle_vault_command(&codex_home, &args)
+                    });
+                    let lines = match tokio::time::timeout(std::time::Duration::from_secs(10), task)
+                        .await
+                    {
+                        Ok(Ok(lines)) => lines,
+                        Ok(Err(err)) => vec![Line::from(format!("Vault task failed: {err}"))],
+                        Err(_) => vec![Line::from("Vault operation timed out.")],
+                    };
+                    tx.send(AppEvent::InsertHistoryCell(Box::new(
+                        PlainHistoryCell::new(lines),
+                    )));
+                });
+            }
+            SlashCommand::Wallet => match trimmed.to_ascii_lowercase().as_str() {
+                "status" => self.open_wallet_menu(),
+                "create" => self.open_wallet_create(),
+                "restore" => self.open_wallet_restore(),
+                "lock" => self.lock_wallet(),
+                "unlock" => self.open_wallet_unlock(
+                    codex_wallet_daemon::UnlockPolicy::Timed {
+                        duration_seconds: 15 * 60,
+                    },
+                    crate::app_event::WalletUnlockContinuation::WalletMenu,
+                ),
+                _ => self.add_error_message(
+                    "Usage: /wallet [status|create|restore|unlock|lock]".to_string(),
+                ),
+            },
+            SlashCommand::Gpu => {
+                let mut parts = trimmed.split_whitespace();
+                match (parts.next(), parts.next(), parts.next()) {
+                    (None | Some("status"), None, None) => {
+                        self.app_event_tx.send(AppEvent::OpenGpuMenu);
+                    }
+                    (Some("stop"), Some(rental_id), None) => {
+                        self.app_event_tx.send(AppEvent::DisableGpuServing {
+                            rental_id: rental_id.to_string(),
+                        });
+                    }
+                    (Some("terminate"), Some(rental_id), None) => {
+                        self.app_event_tx.send(AppEvent::TerminateGpuRental {
+                            rental_id: rental_id.to_string(),
+                        });
+                    }
+                    _ => self.add_error_message(
+                        "Usage: /gpu [status|stop <rental-id>|terminate <rental-id>]".to_string(),
+                    ),
+                }
             }
             SlashCommand::Spawn => {
                 let mut parts = trimmed.splitn(2, ' ');
@@ -765,6 +827,11 @@ impl ChatWidget {
                     _ => self
                         .add_error_message("Usage: /spawn [status|nazgul|troll|orc]".to_string()),
                 }
+            }
+            SlashCommand::Orchestrate => {
+                self.app_event_tx.send(AppEvent::HandleOrchestrateCommand {
+                    args: trimmed.to_string(),
+                });
             }
             SlashCommand::Tasknode => {
                 let mut parts = trimmed.splitn(2, ' ');
@@ -870,7 +937,7 @@ impl ChatWidget {
                     self.add_error_message("Thread name cannot be empty.".to_string());
                     return;
                 };
-                self.app_event_tx.set_thread_name(name);
+                self.app_event_tx.rename_current_pane(name);
             }
             SlashCommand::Plan if !trimmed.is_empty() => {
                 if !self.apply_plan_slash_command() {
@@ -1204,7 +1271,8 @@ impl ChatWidget {
             collaboration_modes_enabled: self.collaboration_modes_enabled(),
             connectors_enabled: self.connectors_enabled(),
             plugins_command_enabled: self.config.features.enabled(Feature::Plugins),
-            token_activity_command_enabled: self.has_codex_backend_auth,
+            token_activity_command_enabled: self.has_codex_backend_auth
+                || self.pfterminal_plan_key_is_linked(),
             goal_command_enabled: self.config.features.enabled(Feature::Goals),
             service_tier_commands_enabled: self.fast_mode_enabled(),
             personality_command_enabled: self.config.features.enabled(Feature::Personality),
@@ -1214,7 +1282,7 @@ impl ChatWidget {
     }
 
     fn ensure_usage_command_available(&mut self) -> bool {
-        if self.has_codex_backend_auth {
+        if self.has_codex_backend_auth || self.pfterminal_plan_key_is_linked() {
             return true;
         }
         self.add_error_message(USAGE_CHATGPT_LOGIN_REQUIRED.to_string());
@@ -1240,9 +1308,12 @@ impl ChatWidget {
             | SlashCommand::Providers
             | SlashCommand::Panes
             | SlashCommand::Spawn
+            | SlashCommand::Orchestrate
             | SlashCommand::Tasknode
             | SlashCommand::Rollout
             | SlashCommand::Vault
+            | SlashCommand::Wallet
+            | SlashCommand::Gpu
             | SlashCommand::Copy
             | SlashCommand::Raw
             | SlashCommand::Vim

@@ -15,7 +15,8 @@ env:
 jobs:
   deploy-smoke:
     name: Build and package PFTerminal
-    runs-on: ubuntu-24.04
+    # Match the oldest supported GNU/Linux release baseline (glibc 2.35).
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -52,8 +53,10 @@ jobs:
             --manifest-path codex-rs/Cargo.toml \
             --profile dev-small \
             --bin codex \
-            --bin pfterminal
+            --bin pfterminal \
+            --bin pfterminal-walletd
           codex-rs/target/dev-small/pfterminal --version
+          codex-rs/target/dev-small/pfterminal-walletd --help >/dev/null
 
       - name: Build and smoke-test PFTerminal package
         shell: bash
@@ -64,7 +67,7 @@ jobs:
             --target x86_64-unknown-linux-gnu \
             --variant pfterminal \
             --entrypoint-bin codex-rs/target/dev-small/pfterminal \
-            --extra-bin codex=codex-rs/target/dev-small/codex \
+            --extra-bin "pfterminal-walletd=codex-rs/target/dev-small/pfterminal-walletd" \
             --cargo-profile dev-small \
             --package-dir "${RUNNER_TEMP}/pfterminal-package-x86_64-unknown-linux-gnu" \
             --archive-output "dist/pfterminal-package-x86_64-unknown-linux-gnu.tar.gz" \
@@ -74,7 +77,22 @@ jobs:
           mkdir -p "$package_dir"
           tar -xzf "dist/pfterminal-package-x86_64-unknown-linux-gnu.tar.gz" -C "$package_dir"
           "$package_dir/bin/pfterminal" --version
-          test -x "$package_dir/bin/codex"
+          test -x "$package_dir/bin/pfterminal-walletd"
+          "$package_dir/bin/pfterminal-walletd" --help >/dev/null
+          wallet_home="${RUNNER_TEMP}/wallet-smoke-x86_64-unknown-linux-gnu"
+          "$package_dir/bin/pfterminal-walletd" --codex-home "$wallet_home" &
+          walletd_pid=$!
+          trap 'kill "$walletd_pid" 2>/dev/null || true; wait "$walletd_pid" 2>/dev/null || true' EXIT
+          for _ in {1..100}; do
+            test -S "$wallet_home/wallet/run/walletd.sock" && break
+            kill -0 "$walletd_pid" 2>/dev/null
+            sleep 0.05
+          done
+          test -S "$wallet_home/wallet/run/walletd.sock"
+          kill "$walletd_pid"
+          wait "$walletd_pid" || true
+          trap - EXIT
+          ! find "$package_dir" -type f -o -type l | grep -E '/codex([^/-]*)(\.exe)?$'
           test -x "$package_dir/codex-path/rg"
 
       - name: Upload package smoke artifact

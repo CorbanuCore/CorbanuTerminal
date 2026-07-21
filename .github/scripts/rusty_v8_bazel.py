@@ -9,11 +9,14 @@ import re
 import shutil
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
-from run_bazel_with_buildbuddy import bazel_command
-from rusty_v8_module_bazel import (
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from codex_package.cargo_lock import package_versions  # noqa: E402
+from run_bazel_with_buildbuddy import bazel_command  # noqa: E402
+from rusty_v8_module_bazel import (  # noqa: E402
     RustyV8ChecksumError,
     check_module_bazel,
     rusty_v8_http_file_versions,
@@ -21,7 +24,6 @@ from rusty_v8_module_bazel import (
 )
 
 
-ROOT = Path(__file__).resolve().parents[2]
 MODULE_BAZEL = ROOT / "MODULE.bazel"
 RUSTY_V8_CHECKSUMS_DIR = ROOT / "third_party" / "v8"
 RELEASE_ARTIFACT_PROFILE = "release"
@@ -140,14 +142,7 @@ def release_pair_label(target: str, sandbox: bool = False) -> str:
 
 
 def resolved_v8_crate_version() -> str:
-    cargo_lock = tomllib.loads((ROOT / "codex-rs" / "Cargo.lock").read_text())
-    versions = sorted(
-        {
-            package["version"]
-            for package in cargo_lock["package"]
-            if package["name"] == "v8"
-        }
-    )
+    versions = package_versions(ROOT / "codex-rs" / "Cargo.lock", "v8")
     if len(versions) == 1:
         return versions[0]
     if len(versions) > 1:

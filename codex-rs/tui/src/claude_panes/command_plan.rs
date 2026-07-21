@@ -23,19 +23,9 @@ use super::provider::ClaudeProviderTransport;
 use super::turn_types::ClaudeBridgeKind;
 use super::turn_types::ClaudeBridgePlan;
 use super::turn_types::ClaudeCommandPlan;
+use super::turn_types::DeferredVaultSecret;
 
 const ANTHROPIC_AUTH_ENV_KEYS: [&str; 2] = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
-
-pub(crate) fn ensure_vault_label_exists(codex_home: &Path, label: &str) -> Result<()> {
-    let vault = Vault::new(codex_home.to_path_buf());
-    match vault.exists(label) {
-        Ok(true) => Ok(()),
-        Ok(false) => Err(anyhow!(
-            "Missing vault credential `{label}`. Add it from /providers before creating this Claude pane."
-        )),
-        Err(err) => Err(anyhow!("Could not read vault credential `{label}`: {err}")),
-    }
-}
 
 pub(crate) fn reveal_provider_secret(codex_home: &Path, label: &str) -> Result<String> {
     if !allowed_provider_vault_label(label) {
@@ -55,8 +45,10 @@ pub(crate) fn allowed_provider_vault_label(label: &str) -> bool {
         "provider/zai_api_key"
             | "provider/anthropic_api_key"
             | "provider/ambient_api_key"
+            | "provider/kimi_api_key"
             | "provider/baseten_api_key"
             | "provider/openrouter_api_key"
+            | "provider/model_api_key"
             | "provider/ai_gateway_api_key"
     )
 }
@@ -85,7 +77,6 @@ pub(crate) fn build_claude_command_plan(
         let Some(label) = profile.vault_label else {
             return Err(anyhow!("Claude bridge requires a provider vault label"));
         };
-        let secret = reveal_provider_secret(codex_home, label)?;
         let listener = StdTcpListener::bind("127.0.0.1:0")
             .context("failed to bind Claude bridge loopback listener")?;
         listener
@@ -119,7 +110,11 @@ pub(crate) fn build_claude_command_plan(
             listener,
             bind_addr,
             upstream_base_url,
-            upstream_api_key: secret,
+            upstream_api_key: None,
+            deferred_vault_secret: Some(DeferredVaultSecret {
+                codex_home: codex_home.to_path_buf(),
+                label: label.to_string(),
+            }),
             upstream_model,
         });
     }
@@ -151,8 +146,7 @@ pub(crate) fn build_claude_command_plan(
             "ANTHROPIC_AUTH_TOKEN".to_string(),
             "pfterminal-local-bridge".to_string(),
         );
-    } else if let Some(label) = profile.vault_label {
-        ensure_vault_label_exists(codex_home, label)?;
+    } else if profile.vault_label.is_some() {
         env_remove.extend(ANTHROPIC_AUTH_ENV_KEYS.map(ToString::to_string));
         env.insert("ANTHROPIC_API_KEY".to_string(), String::new());
     }

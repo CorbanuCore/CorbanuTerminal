@@ -65,21 +65,36 @@ Task Node work usually follows this path:
 3. The task is accepted or refused.
 4. Accepted work appears as outstanding accepted work.
 5. Initial evidence is submitted after real work is done.
-6. A verification request may arrive.
+6. The task is re-read and the normal verification request is collected.
 7. The verification response is submitted honestly and thoroughly.
-8. A reward is issued.
+8. The task is re-read until Task Node reports a reward outcome or another explicit state.
 
 When requesting a task, include enough relevant context to let Task Node scope it well. Do not submit a vague request unless the user explicitly asks for open-ended task generation.
 
 When accepting a task, inspect the full card before acting. Confirm objective, steps, reward, deadline, verification criteria, and current status.
 
+When submitting initial evidence for an accepted task, first inspect the task with `pfterminal tasknode task show <task-id> --json` and confirm `actions.canSubmitInitialEvidence` is true. Draft the response from the Initial Evidence template, save it to a temporary file, and submit it with `pfterminal tasknode task evidence <task-id> --body-file <path> --json`. Do not use the verification response command for this state.
+
+Initial evidence is not completion. After every initial evidence receipt:
+
+1. Read `pfterminalLifecycle` in the receipt and run its `nextCommand`.
+2. Re-read the task with `pfterminal tasknode task show <task-id> --json`.
+3. If `actions.canSubmitVerificationEvidence` is true, answer `currentVerificationRequest` using the Verification Response template and submit it with `pfterminal tasknode verification respond <task-id> --body-file <path> --json`.
+4. Re-read the task after the verification response. Claim completion only when `rewardOutcome` exists or the task is explicitly `rewarded`.
+
+Verification generation can be asynchronous. If the task is still submitted but has no verification request yet, keep it classified as awaiting verification, check `pfterminal tasknode tasks list --tab verification --json` before ending the Task Node work cycle, and do not report it as complete. At the beginning of later Task Node work, drain any pending verification requests before starting new submissions.
+
 When submitting evidence, make it easy for the verifier to prove the work happened. Include artifacts, exact commands, test output summaries, PRs, commits, screenshots, route probes, or file references as applicable.
 
-When responding to verification, answer the specific verifier request. If the verifier asks for a complete generated text, a pass/fail summary, a missing artifact, or a clearer proof point, provide exactly that. Do not dodge, summarize away required detail, or claim success if the work failed.
+The submission parser scans evidence prose for URLs and registers each one it finds as a formal evidence item. Because of this, only cite durable, reviewable artifacts in the evidence body: real file paths, commit hashes, task IDs, event IDs, or production URLs. Never embed transient or non-reviewable endpoints — localhost, 127.0.0.1, deliberately-broken origins (for example an invalid host used to trigger a failure), or throwaway stub-server URLs. Describe test setup by the exact command run and the observed output, not by citing the throwaway endpoint. A localhost URL registered as an evidence item is worthless to a reviewer and cannot be removed after submission.
+
+When responding to verification, first confirm `actions.canSubmitVerificationEvidence` is true. Answer the specific verifier request with `pfterminal tasknode verification respond <task-id> --body-file <path> --json`. If the verifier asks for a complete generated text, a pass/fail summary, a missing artifact, or a clearer proof point, provide exactly that. Do not dodge, summarize away required detail, or claim success if the work failed.
 
 ## Reward Standard
 
 The goal is the highest honest reward. A partial or missing reward usually means the evidence did not prove completion, the task requirements were not fully satisfied, or shortcuts were taken.
+
+An evidence receipt or verification-response receipt proves only that a lifecycle write was accepted. It is not a reward receipt. Treat `rewardOutcome` or an explicit `rewarded` task state as the completion boundary.
 
 Evidence and verification responses should be concise but complete:
 

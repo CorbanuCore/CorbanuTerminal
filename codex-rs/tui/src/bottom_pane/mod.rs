@@ -105,6 +105,7 @@ mod skill_popup;
 mod skills_toggle_view;
 pub(crate) mod slash_commands;
 pub(crate) mod vault_secret_entry;
+pub(crate) mod wallet_recovery;
 pub(crate) use footer::CollaborationModeIndicator;
 pub(crate) use footer::GoalStatusIndicator;
 #[cfg(test)]
@@ -193,6 +194,7 @@ pub(crate) use experimental_features_view::ExperimentalFeatureItem;
 pub(crate) use experimental_features_view::ExperimentalFeaturesView;
 pub(crate) use list_selection_view::SelectionAction;
 pub(crate) use list_selection_view::SelectionItem;
+pub(crate) use list_selection_view::SelectionShortcutAction;
 
 struct DelayedApprovalRequest {
     request: ApprovalRequest,

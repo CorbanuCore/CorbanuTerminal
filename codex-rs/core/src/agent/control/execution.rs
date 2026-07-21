@@ -95,6 +95,7 @@ impl AgentExecutionLimiter {
 fn op_starts_turn(op: &Op) -> bool {
     matches!(op, Op::UserInput { .. })
         || matches!(op, Op::InterAgentCommunication { communication } if communication.trigger_turn)
+        || matches!(op, Op::WakePendingWork)
 }
 
 fn is_execution_limited(
@@ -103,6 +104,13 @@ fn is_execution_limited(
 ) -> bool {
     multi_agent_version == MultiAgentVersion::V2
         && matches!(session_source, SessionSource::SubAgent(_))
+        && !matches!(
+            session_source,
+            SessionSource::SubAgent(codex_protocol::protocol::SubAgentSource::ThreadSpawn {
+                agent_role: Some(agent_role),
+                ..
+            }) if agent_role == "nazgul"
+        )
 }
 
 #[cfg(test)]

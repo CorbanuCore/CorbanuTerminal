@@ -52,6 +52,7 @@ use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::config_types::Personality;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::openai_models::ReasoningEffort;
+use zeroize::Zeroize;
 
 use crate::history_cell::HistoryCell;
 use crate::mkdocs_viewer::MkDocsSite;
@@ -70,6 +71,13 @@ pub(crate) struct HistoryLookupResponse {
     pub(crate) offset: usize,
     pub(crate) log_id: u64,
     pub(crate) entry: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct GpuAuthorizationPromptState {
+    pub(crate) maximum_hourly_microusd: Option<i64>,
+    pub(crate) maximum_total_microusd: Option<i64>,
+    pub(crate) validation_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -150,6 +158,75 @@ impl fmt::Debug for ProviderApiKeySecret {
     }
 }
 
+pub(crate) struct WalletSecret(String);
+
+impl WalletSecret {
+    pub(crate) fn new(value: String) -> Self {
+        Self(value)
+    }
+    pub(crate) fn into_inner(mut self) -> String {
+        std::mem::take(&mut self.0)
+    }
+}
+
+impl Drop for WalletSecret {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl fmt::Debug for WalletSecret {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("<redacted wallet secret>")
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct WalletCreatedResult {
+    pub(crate) address: String,
+    pub(crate) recovery: WalletSecret,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WalletPersistenceOperation {
+    Create,
+    Restore,
+}
+
+#[derive(Debug)]
+pub(crate) struct WalletUnlockedResult {
+    pub(crate) capability: WalletSecret,
+    pub(crate) expires_in_seconds: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum WalletUnlockContinuation {
+    WalletMenu,
+    OpenPlans {
+        mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
+    },
+}
+
+#[derive(Debug)]
+pub(crate) struct WalletPlanProvisionedResult {
+    pub(crate) plan_id: String,
+    pub(crate) api_key: WalletSecret,
+    pub(crate) purchase: Option<WalletPlanPurchaseSummary>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WalletPlanProvisioningOperation {
+    Purchase,
+    Recovery,
+}
+
+#[derive(Debug)]
+pub(crate) struct WalletPlanPurchaseSummary {
+    pub(crate) price_usdc: String,
+    pub(crate) scheduled_start: Option<String>,
+    pub(crate) transaction: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum KeymapEditIntent {
     ReplaceAll,
@@ -204,7 +281,7 @@ pub(crate) enum AppEvent {
         provider: Option<String>,
         effort: Option<ReasoningEffort>,
     },
-    /// Create the standard persistent crew: Nazgul (root) -> Troll -> 2 Orcs. No task is started.
+    /// Create the standard persistent crew: Nazgul (root) -> Troll -> 3 Orcs. No task is started.
     CreateSpawnStandardCrew,
     /// Open a prompt that sends work to an existing spawned-agent pane.
     OpenSpawnAgentTaskPrompt {
@@ -218,14 +295,128 @@ pub(crate) enum AppEvent {
     SubmitSpawnAgentTask {
         thread_id: codex_protocol::ThreadId,
         task: String,
+        /// Present only for a delivery selected and durably marked by the pump.
+        delivery_id: Option<String>,
+    },
+    /// Steer a running spawned-agent turn, including one blocked in `wait_agent`.
+    SteerWaitingSpawnAgentTask {
+        thread_id: codex_protocol::ThreadId,
+        task: String,
+        delivery_id: Option<String>,
+    },
+    NativeSpawnSteerCompleted {
+        thread_id: codex_protocol::ThreadId,
+        target_node_id: String,
+        task: String,
+        delivery_id: String,
+        result: Result<(), String>,
+    },
+    /// Run one coalesced step of the durable dispatch delivery pump.
+    PumpSpawnDispatches,
+    /// Completion of a supervised native turn/start adapter call.
+    NativeSpawnDeliveryCompleted {
+        thread_id: codex_protocol::ThreadId,
+        target_node_id: String,
+        task: String,
+        delivery_id: String,
+        task_preview: String,
+        label: String,
+        result: Result<crate::app_server_session::TurnStartOutcome, String>,
+    },
+    NativeSpawnReconciliationCompleted {
+        thread_id: codex_protocol::ThreadId,
+        target_node_id: String,
+        task: String,
+        delivery_id: String,
+        result: Result<Option<String>, String>,
     },
     /// Start a normal turn in an existing Claude spawn pane.
     SubmitSpawnClaudePaneTask {
         pane_id: String,
         task: String,
+        delivery_id: Option<String>,
     },
     /// Show the current orchestration tree.
     OpenSpawnStatus,
+    /// Handle a native `/orchestrate` whip command.
+    HandleOrchestrateCommand {
+        args: String,
+    },
+    /// Start the guided `/orchestrate attach` flow.
+    OpenOrchestrateTargetPicker,
+    /// Start the two-choice `/orchestrate` fast path.
+    OpenOrchestrateFastTargetPicker,
+    /// Choose a Manager for the two-choice `/orchestrate` fast path.
+    OpenOrchestrateFastManagerPicker {
+        target: String,
+    },
+    /// Bind an existing Manager using the fast-path defaults.
+    AttachOrchestrateFastManager {
+        target: String,
+        manager_node_id: String,
+    },
+    /// Choose how long a guided whip should stay armed.
+    OpenOrchestrateDurationPicker {
+        target: String,
+    },
+    /// Choose the instruction document for a guided whip.
+    OpenOrchestrateWhipPicker {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+    },
+    /// Compose a new global whip instruction document from the guided flow.
+    OpenOrchestrateWriteWhipPrompt {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+    },
+    /// Prompt for the slug to save a composed global whip instruction document.
+    OpenOrchestrateSaveWhipPrompt {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        instructions: String,
+    },
+    /// Save a composed global whip and continue to guided confirm.
+    SaveOrchestrateWhipAndConfirm {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        requested_name: String,
+        instructions: String,
+    },
+    /// Choose the conversational Manager for a guided assignment.
+    OpenOrchestrateManagerPicker {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        whip_name: String,
+    },
+    /// Create a native Codex Manager pane and attach the guided assignment to it.
+    CreateOrchestrateManager {
+        target: String,
+        duration_arg: String,
+        whip_name: String,
+    },
+    /// Confirm the guided whip attach command.
+    OpenOrchestrateConfirm {
+        target: String,
+        duration_arg: String,
+        duration_label: String,
+        whip_name: String,
+        manager_node_id: String,
+    },
+    /// Show actions/details for one whip row.
+    OpenOrchestrateWhipDetails {
+        whip_id: String,
+    },
+    /// Open a duration picker for extending one whip.
+    OpenOrchestrateExtendDurationPicker {
+        whip_id: String,
+    },
+    /// Periodic native whip sweep; intentionally low priority and no-op when no whips are armed.
+    WhipSweepTick,
     /// Switch the active user pane.
     SelectUserPane {
         pane_id: String,
@@ -237,12 +428,46 @@ pub(crate) enum AppEvent {
         model: String,
         provider: Option<String>,
         effort: Option<ReasoningEffort>,
+        display_name: Option<String>,
+    },
+    /// Prompt for the display name of a native Codex pane before creation.
+    OpenCodexPaneNamePrompt {
+        model: String,
+        provider: Option<String>,
+        effort: Option<ReasoningEffort>,
     },
     /// Open the Claude Code provider picker.
     OpenClaudePaneProfilePicker,
     /// Create and switch to a Claude Code headless pane.
     CreateClaudePane {
         profile: crate::claude_panes::ClaudeProviderProfileKind,
+        display_name: Option<String>,
+    },
+    /// Prompt for the display name of a Claude Code pane before creation.
+    OpenClaudePaneNamePrompt {
+        profile: crate::claude_panes::ClaudeProviderProfileKind,
+    },
+    /// Rename the currently visible pane display name.
+    RenameCurrentPane {
+        name: String,
+    },
+    /// Open a rename prompt for a native Codex pane row.
+    OpenRenameCodexPanePrompt {
+        thread_id: codex_protocol::ThreadId,
+    },
+    /// Open a rename prompt for a Claude Code pane row.
+    OpenRenameClaudePanePrompt {
+        pane_id: String,
+    },
+    /// Rename a specific native Codex pane row.
+    RenameCodexPane {
+        thread_id: codex_protocol::ThreadId,
+        name: String,
+    },
+    /// Rename a specific Claude Code pane row.
+    RenameClaudePane {
+        pane_id: String,
+        name: String,
     },
     /// Create and switch to a Claude Code headless pane for a spawn role.
     CreateSpawnClaudePane {
@@ -1015,17 +1240,66 @@ pub(crate) enum AppEvent {
     /// Open the reasoning selection popup after picking a model.
     OpenReasoningPopup {
         model: ModelPreset,
+        purpose: crate::chatwidget::ModelSelectionPurpose,
     },
 
     /// Open the Plan-mode reasoning scope prompt for the selected model/effort.
     OpenPlanReasoningScopePrompt {
         model: String,
+        provider: Option<String>,
         effort: Option<ReasoningEffort>,
     },
 
     /// Open the full model picker (non-auto models).
     OpenAllModelsPopup {
         models: Vec<ModelPreset>,
+    },
+
+    /// Open the durable GPU rental and recipe surface.
+    OpenGpuMenu,
+    OpenGpuRental {
+        rental_id: String,
+    },
+    DisableGpuServing {
+        rental_id: String,
+    },
+    TerminateGpuRental {
+        rental_id: String,
+    },
+    OpenGpuAuthorizationPrompt {
+        recipe_id: String,
+        state: GpuAuthorizationPromptState,
+    },
+    SearchGpuOffers {
+        recipe_id: String,
+        maximum_hourly_microusd: i64,
+        maximum_total_microusd: i64,
+        ttl_minutes: i64,
+    },
+    GpuOffersLoaded {
+        recipe_id: String,
+        authorization: codex_gpu_market::RentalAuthorization,
+        offers: Result<Vec<codex_gpu_market::GpuOffer>, String>,
+    },
+    OpenGpuConfirmation {
+        recipe_id: String,
+        authorization: codex_gpu_market::RentalAuthorization,
+        offer: codex_gpu_market::GpuOffer,
+    },
+    ConfirmGpuRental {
+        recipe_id: String,
+        authorization: codex_gpu_market::RentalAuthorization,
+        offer: codex_gpu_market::GpuOffer,
+    },
+    GpuRentalConfirmationFinished {
+        result: Result<codex_state::GpuRental, String>,
+    },
+    OpenGpuProviderCredential {
+        provider: String,
+    },
+    SaveGpuProviderCredential {
+        provider: String,
+        api_key: ProviderApiKeySecret,
     },
 
     /// Open masked entry for a provider API key.
@@ -1044,6 +1318,39 @@ pub(crate) enum AppEvent {
 
     /// Start OpenAI Codex account device-code login from the Providers screen.
     OpenCodexAccountDeviceLogin,
+
+    /// Start Claude Code's subscription OAuth flow from the Providers screen.
+    OpenClaudeCodePlanLogin,
+
+    /// Claude Code opened a browser login URL and is waiting for its authorization code.
+    ClaudeCodePlanLoginReady {
+        verification_url: String,
+        input_tx: tokio::sync::mpsc::UnboundedSender<
+            crate::chatwidget::claude_code_login::ClaudeCodeLoginInput,
+        >,
+    },
+
+    /// Open masked entry for the Claude Code OAuth authorization code.
+    OpenClaudeCodePlanLoginCodeEntry {
+        input_tx: tokio::sync::mpsc::UnboundedSender<
+            crate::chatwidget::claude_code_login::ClaudeCodeLoginInput,
+        >,
+    },
+
+    /// Claude Code's login subprocess completed or failed.
+    ClaudeCodePlanLoginFinished {
+        result: Option<Result<String, String>>,
+    },
+
+    /// Latest provider credential statuses loaded away from the TUI event thread.
+    ProviderCredentialStatusesReady {
+        claude_status: crate::chatwidget::claude_code_login::ClaudeCodePlanStatus,
+        pfterminal_plan_status: crate::chatwidget::provider_credentials::PfTerminalPlanStatus,
+        api_key_statuses: Vec<(
+            String,
+            crate::chatwidget::provider_credentials::ProviderApiKeyStatus,
+        )>,
+    },
 
     /// Device-code login data returned by account/login/start.
     CodexAccountDeviceLoginReady {
@@ -1065,6 +1372,82 @@ pub(crate) enum AppEvent {
     /// Open the masked vault credential-entry overlay.
     OpenVaultCredentialAdd,
 
+    OpenWallet,
+    OpenWalletPlanUsage,
+    WalletPlanUsageReady {
+        result: Result<crate::chatwidget::wallet_usage::WalletPlanUsageOverview, String>,
+    },
+    OpenWalletCreate,
+    OpenWalletRestore,
+    OpenWalletRestorePasscode {
+        recovery: WalletSecret,
+    },
+    OpenWalletRecoveryBackup,
+    WalletRecoveryBackupFinished {
+        result: Result<WalletCreatedResult, String>,
+    },
+    OpenWalletUnlock {
+        policy: codex_wallet_daemon::UnlockPolicy,
+        continuation: WalletUnlockContinuation,
+    },
+    OpenWalletCustomUnlock {
+        validation_error: Option<String>,
+        continuation: WalletUnlockContinuation,
+    },
+    WalletLockRequested,
+    ConfirmWalletPlanDisconnect,
+    WalletPlanDisconnectRequested,
+    WalletPlanDisconnected {
+        result: Result<bool, String>,
+    },
+    ConfirmWalletRemoval {
+        address: String,
+    },
+    WalletRemoveRequested {
+        address: String,
+    },
+    WalletRemoved {
+        result: Result<(), String>,
+    },
+    WalletStatusReady {
+        generation: u64,
+        result: Result<crate::chatwidget::wallet_menu::WalletOverview, String>,
+    },
+    WalletCreateFinished {
+        operation: WalletPersistenceOperation,
+        result: Result<WalletCreatedResult, String>,
+    },
+    WalletUnlockFinished {
+        policy: codex_wallet_daemon::UnlockPolicy,
+        continuation: WalletUnlockContinuation,
+        result: Result<WalletUnlockedResult, String>,
+    },
+    OpenWalletPlans {
+        mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
+    },
+    WalletPlansReady {
+        mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
+        result: Result<crate::chatwidget::wallet_menu::WalletPlanCatalog, String>,
+    },
+    ConfirmWalletPlanPurchase {
+        plan: crate::chatwidget::wallet_menu::WalletPlanChoice,
+    },
+    WalletPlanPurchaseRequested {
+        plan: crate::chatwidget::wallet_menu::WalletPlanChoice,
+    },
+    WalletPlanProvisioned {
+        operation: WalletPlanProvisioningOperation,
+        result: Result<WalletPlanProvisionedResult, String>,
+    },
+    WalletPlanReceiptReady {
+        receipt: crate::chatwidget::wallet_receipt::WalletPlanReceipt,
+    },
+    OpenWalletPlanReceipt {
+        receipt: crate::chatwidget::wallet_receipt::WalletPlanReceipt,
+    },
+    CloseWalletPlanReceipt,
+    WalletRecoverPlanRequested,
+
     /// Open the vault credential list.
     OpenVaultCredentialsList,
 
@@ -1076,6 +1459,19 @@ pub(crate) enum AppEvent {
     /// Copy a vault credential secret to the clipboard without writing it to history.
     OpenVaultCopySecret {
         label: String,
+    },
+
+    VaultMenuCredentialsReady {
+        result: Result<Vec<codex_vault::VaultCredentialMeta>, String>,
+    },
+
+    VaultCredentialsReady {
+        result: Result<Vec<codex_vault::VaultCredentialMeta>, String>,
+    },
+
+    VaultCopySecretFinished {
+        label: String,
+        result: Result<Option<crate::clipboard_copy::ClipboardLease>, String>,
     },
 
     /// Open the confirmation prompt before enabling full access mode.

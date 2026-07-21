@@ -38,6 +38,8 @@ pub(crate) struct AgentPickerThreadEntry {
     pub(crate) agent_role: Option<String>,
     /// Canonical v2 agent path, when the thread was observed through v2 activity.
     pub(crate) agent_path: Option<String>,
+    /// Model selected for this thread, cached for pane-picker status rendering.
+    pub(crate) model: Option<String>,
     /// Latest task sent to this agent, if one was observed locally.
     pub(crate) last_task_message: Option<String>,
     /// Latest final result or terminal error preview, if one was observed locally.
@@ -52,6 +54,8 @@ pub(crate) struct AgentPickerThreadEntry {
 pub(crate) struct SubAgentActivityDisplay {
     pub(crate) thread_id: ThreadId,
     pub(crate) agent_path: String,
+    pub(crate) agent_nickname: Option<String>,
+    pub(crate) agent_role: Option<String>,
     pub(crate) task_preview: Option<String>,
     pub(crate) is_running_hint: bool,
 }
@@ -288,6 +292,8 @@ pub(crate) fn sub_agent_activity_display(item: &ThreadItem) -> Option<SubAgentAc
         kind,
         agent_thread_id,
         agent_path,
+        agent_nickname,
+        agent_role,
         task_preview,
         ..
     } = item
@@ -297,6 +303,8 @@ pub(crate) fn sub_agent_activity_display(item: &ThreadItem) -> Option<SubAgentAc
     Some(SubAgentActivityDisplay {
         thread_id: parse_thread_id(agent_thread_id)?,
         agent_path: agent_path.clone(),
+        agent_nickname: agent_nickname.clone(),
+        agent_role: agent_role.clone(),
         task_preview: task_preview.clone(),
         is_running_hint: !matches!(kind, SubAgentActivityKind::Interrupted),
     })
@@ -304,15 +312,46 @@ pub(crate) fn sub_agent_activity_display(item: &ThreadItem) -> Option<SubAgentAc
 
 pub(crate) fn sub_agent_activity_history_cell(item: &ThreadItem) -> Option<PlainHistoryCell> {
     let ThreadItem::SubAgentActivity {
-        kind, agent_path, ..
+        kind,
+        agent_path,
+        agent_nickname,
+        agent_role,
+        task_preview,
+        ..
     } = item
     else {
         return None;
     };
+    let identity = activity_identity(agent_path, agent_nickname.as_deref(), agent_role.as_deref());
+    let detail = task_preview
+        .as_deref()
+        .filter(|preview| !preview.trim().is_empty())
+        .map(|preview| {
+            Line::from(vec![
+                "  Instruction: ".dim(),
+                truncate_text(preview, COLLAB_PROMPT_PREVIEW_GRAPHEMES).into(),
+            ])
+        })
+        .into_iter()
+        .collect();
     Some(collab_event(
-        sub_agent_activity_title(*kind, agent_path),
-        Vec::new(),
+        sub_agent_activity_title(*kind, &identity),
+        detail,
     ))
+}
+
+fn activity_identity(
+    agent_path: &str,
+    agent_nickname: Option<&str>,
+    agent_role: Option<&str>,
+) -> String {
+    let label =
+        format_agent_picker_item_name(agent_nickname, agent_role, /*is_primary*/ false);
+    if label == "Agent" {
+        agent_path.to_string()
+    } else {
+        format!("{label} · {agent_path}")
+    }
 }
 
 pub(crate) fn sub_agent_activity_summary(kind: SubAgentActivityKind, agent_path: &str) -> String {
@@ -391,11 +430,11 @@ fn waiting_begin(
             agent_label(*thread_id, metadata),
             /*spawn_request*/ None,
         ),
-        [] => title_text("Waiting for agents"),
+        [] => title_text("Waiting for child-agent mailbox activity"),
         _ => title_text(format!("Waiting for {} agents", receiver_agents.len())),
     };
 
-    let details = if receiver_agents.len() > 1 {
+    let mut details = if receiver_agents.len() > 1 {
         receiver_agents
             .iter()
             .map(|(thread_id, metadata)| agent_label_line(agent_label(*thread_id, metadata)))
@@ -403,6 +442,9 @@ fn waiting_begin(
     } else {
         Vec::new()
     };
+    details.push(Line::from(
+        "Wakes on a child report/message, follow-up task, human steering, or timeout.",
+    ));
 
     collab_event(title, details)
 }
@@ -412,8 +454,18 @@ fn waiting_end(
     agents_states: &std::collections::HashMap<String, CollabAgentState>,
     agent_metadata: &mut impl FnMut(ThreadId) -> AgentMetadata,
 ) -> PlainHistoryCell {
-    let details = wait_complete_lines(receiver_thread_ids, agents_states, agent_metadata);
-    collab_event(title_text("Finished waiting"), details)
+    let mut details = wait_complete_lines(receiver_thread_ids, agents_states, agent_metadata);
+    let title = if details.is_empty() {
+        title_text("Wait ended — no child completion reported")
+    } else {
+        title_text("Wait ended — child status update")
+    };
+    if details.is_empty() {
+        details.push(Line::from(
+            "Ended by mailbox activity, steering, or timeout; no child completion was attached.",
+        ));
+    }
+    collab_event(title, details)
 }
 
 fn close_end(
@@ -589,7 +641,7 @@ fn wait_complete_lines(
     entries.extend(extras);
 
     if entries.is_empty() {
-        vec![Line::from(Span::from("No agents completed yet"))]
+        Vec::new()
     } else {
         entries
             .into_iter()
@@ -917,6 +969,26 @@ mod tests {
         .expect("resume item renders");
 
         assert_snapshot!("collab_resume_interrupted", cell_to_text(&cell));
+    }
+
+    #[test]
+    fn named_sub_agent_activity_snapshot() {
+        let thread_id =
+            ThreadId::from_string("00000000-0000-0000-0000-000000000002").expect("valid thread id");
+        let cell = sub_agent_activity_history_cell(&ThreadItem::SubAgentActivity {
+            id: "call-send".to_string(),
+            kind: SubAgentActivityKind::Interacted,
+            agent_thread_id: thread_id.to_string(),
+            agent_path: "/root/troll_burzum".to_string(),
+            agent_nickname: Some("Burzum".to_string()),
+            agent_role: Some("troll".to_string()),
+            task_preview: Some(
+                "Close the M2 verification gap from committed SHA 6a78c394.".to_string(),
+            ),
+        })
+        .expect("activity item renders");
+
+        assert_snapshot!("named_sub_agent_activity", cell_to_text(&cell));
     }
 
     fn agent_state(status: CollabAgentStatus, message: Option<&str>) -> CollabAgentState {

@@ -148,6 +148,11 @@ impl ChatWidget {
     /// separated by newlines rather than auto-submitting the next one.
     pub(super) fn on_interrupted_turn(&mut self, reason: TurnAbortReason) {
         let cancelled_prompt = self.take_armed_cancel_edit_prompt(reason);
+        for process in &mut self.unified_exec_processes {
+            process.interrupt_notes.push(format!(
+                "model turn interrupted ({reason:?}); durable process preserved"
+            ));
+        }
         // Finalize, log a gentle prompt, and clear running state.
         self.finalize_turn();
         let send_pending_steers_immediately =

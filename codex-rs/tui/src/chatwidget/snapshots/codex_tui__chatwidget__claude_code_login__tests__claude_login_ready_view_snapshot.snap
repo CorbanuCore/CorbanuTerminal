@@ -1,0 +1,11 @@
+---
+source: tui/src/chatwidget/claude_code_login_tests.rs
+expression: rendered
+---
+Claude Code Plan
+
+Sign in with your Claude subscription in the browser:
+
+https://claude.com/oauth/authorize?code=true&state=example
+
+Press Enter to paste the one-time code, or Esc to cancel

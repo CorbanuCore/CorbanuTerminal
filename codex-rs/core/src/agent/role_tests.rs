@@ -139,8 +139,25 @@ async fn built_in_hierarchy_roles_preserve_selected_runtime() {
 
         assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
         assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
+        // The caller's explicit reasoning-effort override still applies through config layering;
+        // it is only the runtime fallback injection into the role layer that must not happen.
         assert_eq!(config.model_reasoning_effort, Some(ReasoningEffort::XHigh));
     }
+}
+
+#[tokio::test]
+async fn apply_role_does_not_inherit_runtime_reasoning_effort() {
+    // Regression: when a role pins no model/reasoning effort, the caller's *runtime* effort must
+    // not be injected into the role layer. Otherwise an Orc spawned from an xhigh Troll silently
+    // inherits xhigh even though nothing configured it.
+    let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    config.model_reasoning_effort = Some(ReasoningEffort::XHigh);
+
+    apply_role_to_config(&mut config, Some("orc"))
+        .await
+        .expect("orc role should apply");
+
+    assert_eq!(config.model_reasoning_effort, None);
 }
 
 #[tokio::test]
@@ -223,7 +240,8 @@ name = "archivist"
 description = "Role metadata"
 nickname_candidates = ["Hypatia"]
 developer_instructions = "Stay focused"
-model = "role-model"
+model = "gpt-5.5"
+model_provider = "openai"
 "#,
     )
     .await;
@@ -240,15 +258,22 @@ model = "role-model"
         .await
         .expect("custom role should apply");
 
-    assert_eq!(config.model.as_deref(), Some("role-model"));
+    assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
+    assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
 }
 
 #[tokio::test]
 async fn apply_role_preserves_unspecified_keys() {
-    let (home, mut config) = test_config_with_cli_overrides(vec![(
-        "model".to_string(),
-        TomlValue::String("base-model".to_string()),
-    )])
+    let (home, mut config) = test_config_with_cli_overrides(vec![
+        (
+            "model".to_string(),
+            TomlValue::String("gpt-5.5".to_string()),
+        ),
+        (
+            "model_provider".to_string(),
+            TomlValue::String(OPENAI_PROVIDER_ID.to_string()),
+        ),
+    ])
     .await;
     config.codex_linux_sandbox_exe = Some(PathBuf::from("/tmp/codex-linux-sandbox"));
     config.main_execve_wrapper_exe = Some(PathBuf::from("/tmp/codex-execve-wrapper"));
@@ -271,7 +296,8 @@ async fn apply_role_preserves_unspecified_keys() {
         .await
         .expect("custom role should apply");
 
-    assert_eq!(config.model.as_deref(), Some("base-model"));
+    assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
+    assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
     assert_eq!(config.model_reasoning_effort, Some(ReasoningEffort::High));
     assert_eq!(
         config.codex_linux_sandbox_exe,
@@ -427,7 +453,7 @@ async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() 
     let role_path = write_role_config(
         &home,
         "model-role.toml",
-        "developer_instructions = \"Stay focused\"\nmodel = \"role-model\"",
+        "developer_instructions = \"Stay focused\"\nmodel = \"gpt-5.5\"\nmodel_provider = \"openai\"",
     )
     .await;
     config.agent_roles.insert(
@@ -443,7 +469,8 @@ async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() 
         .await
         .expect("custom role should apply");
 
-    assert_eq!(config.model.as_deref(), Some("role-model"));
+    assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
+    assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
     assert_eq!(session_flags_layer_count(&config), before_layers + 1);
 }
 
@@ -726,6 +753,37 @@ async fn hierarchy_role_base_precedence_over_standard_model_defaults_is_determin
     );
 }
 
+#[test]
+fn nazgul_prompt_keeps_troll_as_middle_management_boundary() {
+    assert!(NAZGUL_BASE.contains("do not micromanage Orc ICs"));
+    assert!(NAZGUL_BASE.contains("Target Trolls for execution milestones"));
+    assert!(NAZGUL_BASE.contains("direct Orc dispatch is only for"));
+    assert!(NAZGUL_BASE.contains("delegate to Trolls, inspect, and verify"));
+}
+
+#[test]
+fn hierarchy_managers_treat_low_context_as_compaction_pressure_not_worker_death() {
+    for manager_base in [NAZGUL_BASE, TROLL_BASE] {
+        assert!(manager_base.contains("automatic_compaction=enabled"));
+        assert!(manager_base.contains("explicit runtime status or errors"));
+        assert!(manager_base.contains("context telemetry never authorizes checkpointing"));
+        assert!(!manager_base.contains("context percentage"));
+    }
+}
+
+#[test]
+fn hierarchy_managers_keep_evidence_failures_task_local() {
+    for manager_base in [NAZGUL_BASE, TROLL_BASE] {
+        assert!(manager_base.contains("Never bench, unbench, suspend, blacklist"));
+        assert!(manager_base.contains("put on probation"));
+        assert!(manager_base.contains("invalidate the evidence"));
+        assert!(manager_base.contains("reassigning the current task"));
+        assert!(manager_base.contains("remains eligible for later assignment"));
+        assert!(manager_base.contains("explicit runtime unavailability"));
+        assert!(manager_base.contains("direct instruction from Sauron"));
+    }
+}
+
 #[tokio::test]
 async fn no_role_config_keeps_model_default_base_instructions() {
     let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
@@ -779,4 +837,44 @@ fn hierarchy_role_base_files_exclude_gpt55_default_guide_markers() {
             "scored role doctrine should stay below the gpt-5.5 default guide size"
         );
     }
+}
+
+#[test]
+fn thread_spawn_role_graph_blocks_nazgul_below_root() {
+    assert!(super::validate_thread_spawn_role_graph(None, Some("nazgul"), 1).is_ok());
+    for (parent_role, depth) in [(None, 2), (Some("troll"), 2), (Some("orc"), 3)] {
+        assert!(
+            super::validate_thread_spawn_role_graph(parent_role, Some("nazgul"), depth).is_err(),
+            "nazgul spawn below root must be rejected"
+        );
+    }
+}
+
+#[test]
+fn thread_spawn_role_graph_enforces_troll_and_orc_rules() {
+    // Pane flow: root -> Troll (depth 1) -> Orc (depth 2).
+    assert!(super::validate_thread_spawn_role_graph(None, Some("troll"), 1).is_ok());
+    assert!(super::validate_thread_spawn_role_graph(None, Some("troll"), 2).is_err());
+    assert!(super::validate_thread_spawn_role_graph(Some("troll"), Some("orc"), 2).is_ok());
+    // Native-crew flow: root -> Nazgul (1) -> Troll (2) -> Orc (3).
+    assert!(super::validate_thread_spawn_role_graph(Some("nazgul"), Some("troll"), 2).is_ok());
+    assert!(super::validate_thread_spawn_role_graph(Some("nazgul"), Some("troll"), 1).is_err());
+    assert!(super::validate_thread_spawn_role_graph(Some("troll"), Some("orc"), 3).is_ok());
+    assert!(super::validate_thread_spawn_role_graph(Some("troll"), Some("orc"), 4).is_err());
+    // Orcs never spawn; Trolls spawn only Orcs.
+    assert!(super::validate_thread_spawn_role_graph(Some("orc"), Some("orc"), 3).is_err());
+    assert!(super::validate_thread_spawn_role_graph(Some("troll"), Some("troll"), 2).is_err());
+    // A Nazgul delegates to Trolls, never directly to Orcs or other roles.
+    assert!(super::validate_thread_spawn_role_graph(Some("nazgul"), Some("orc"), 2).is_err());
+    assert!(super::validate_thread_spawn_role_graph(Some("nazgul"), Some("worker"), 2).is_err());
+    // Orcs spawned from the root pane are allowed only when the host assigned the primary
+    // thread as backend parent for a non-native supervisor pane.
+    assert!(super::validate_thread_spawn_role_graph(None, Some("orc"), 1).is_ok());
+    assert!(super::validate_thread_spawn_role_graph(None, Some("orc"), 2).is_err());
+    assert!(super::validate_thread_spawn_role_graph(Some("worker"), Some("troll"), 2).is_err());
+    assert!(super::validate_thread_spawn_role_graph(Some("worker"), Some("orc"), 2).is_err());
+    // Non-hierarchy roles and role-less spawns are untouched.
+    assert!(super::validate_thread_spawn_role_graph(Some("worker"), Some("default"), 2).is_ok());
+    assert!(super::validate_thread_spawn_role_graph(Some("troll"), None, 2).is_err());
+    assert!(super::validate_thread_spawn_role_graph(None, None, 1).is_ok());
 }

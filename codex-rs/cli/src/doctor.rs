@@ -49,10 +49,12 @@ use codex_login::AuthManager;
 use codex_login::CODEX_ACCESS_TOKEN_ENV_VAR;
 use codex_login::CODEX_API_KEY_ENV_VAR;
 use codex_login::CodexAuth;
+use codex_login::KIMI_CODE_API_KEY_ENV_VAR;
 use codex_login::OPENAI_API_KEY_ENV_VAR;
 use codex_login::default_client::build_reqwest_client;
 use codex_login::default_client::default_headers;
 use codex_login::load_auth_dot_json;
+use codex_login::provider_api_key_from_auth_storage;
 use codex_model_provider::create_model_provider;
 use codex_protocol::protocol::AskForApproval;
 use codex_terminal_detection::Multiplexer;
@@ -1177,6 +1179,7 @@ fn auth_check(config: &Config) -> DoctorCheck {
         OPENAI_API_KEY_ENV_VAR,
         CODEX_API_KEY_ENV_VAR,
         AMBIENT_API_KEY_ENV_VAR,
+        KIMI_CODE_API_KEY_ENV_VAR,
         CODEX_ACCESS_TOKEN_ENV_VAR,
     ]
     .into_iter()
@@ -1192,6 +1195,7 @@ fn auth_check(config: &Config) -> DoctorCheck {
         config.model_provider.requires_openai_auth,
         config.model_provider.env_key.as_deref(),
         config.model_provider.env_key_instructions.as_deref(),
+        config,
         details.clone(),
         env_var_present,
     ) {
@@ -1274,6 +1278,7 @@ fn provider_specific_auth_check(
     requires_openai_auth: bool,
     provider_env_key: Option<&str>,
     provider_env_key_instructions: Option<&str>,
+    config: &Config,
     mut details: Vec<String>,
     env_var_present: impl Fn(&str) -> bool,
 ) -> Option<DoctorCheck> {
@@ -1287,6 +1292,20 @@ fn provider_specific_auth_check(
     match provider_env_key {
         Some(env_key) if env_var_present(env_key) => {
             details.push(format!("provider auth env var: {env_key} (present)"));
+            Some(
+                DoctorCheck::new(
+                    "auth.credentials",
+                    "auth",
+                    CheckStatus::Ok,
+                    "auth is provided by the active model provider",
+                )
+                .details(details),
+            )
+        }
+        Some(env_key) if provider_key_stored(config, env_key) => {
+            details.push(format!(
+                "provider auth credential: {env_key} (stored in the encrypted provider vault)"
+            ));
             Some(
                 DoctorCheck::new(
                     "auth.credentials",
@@ -1323,6 +1342,20 @@ fn provider_specific_auth_check(
             .details(details),
         ),
     }
+}
+
+/// Presence-only check for a provider credential in the encrypted vault or the legacy
+/// provider-key store. The resolved secret value is never read into the doctor report.
+fn provider_key_stored(config: &Config, provider_key_id: &str) -> bool {
+    provider_api_key_from_auth_storage(
+        &config.codex_home,
+        provider_key_id,
+        config.cli_auth_credentials_store_mode,
+        config.auth_keyring_backend_kind(),
+    )
+    .ok()
+    .flatten()
+    .is_some_and(|key| !key.trim().is_empty())
 }
 
 fn stored_auth_mode(auth: &codex_login::AuthDotJson) -> &'static str {
@@ -1364,7 +1397,8 @@ fn stored_auth_issues(
                 .is_some_and(|key| !key.trim().is_empty());
             let env_key_present = env_var_present(OPENAI_API_KEY_ENV_VAR)
                 || env_var_present(CODEX_API_KEY_ENV_VAR)
-                || env_var_present(AMBIENT_API_KEY_ENV_VAR);
+                || env_var_present(AMBIENT_API_KEY_ENV_VAR)
+                || env_var_present(KIMI_CODE_API_KEY_ENV_VAR);
             if !stored_key_present && !env_key_present {
                 issues.push("API key auth is missing an API key");
             }
@@ -2544,10 +2578,19 @@ fn provider_reachability_plan(config: &Config) -> ReachabilityPlan {
     )
     .ok()
     .flatten();
+    // The active provider's own credential — environment or encrypted vault — determines
+    // API-key reachability for providers that do not require OpenAI auth. Unrelated
+    // providers' env vars must not substitute for it.
+    let active_provider_key_present = config
+        .model_provider
+        .env_key
+        .as_deref()
+        .is_some_and(|env_key| env_var_present(env_key) || provider_key_stored(config, env_key));
     let mode = provider_auth_reachability_mode_from_auth(
         config.model_provider.requires_openai_auth,
         env_var_present,
         stored_auth.as_ref(),
+        active_provider_key_present,
     );
     provider_reachability_plan_from_parts(
         mode,
@@ -2576,14 +2619,16 @@ fn provider_auth_reachability_mode_from_auth(
     requires_openai_auth: bool,
     env_var_present: impl Fn(&str) -> bool,
     stored_auth: Option<&AuthDotJson>,
+    active_provider_key_present: bool,
 ) -> ProviderAuthReachabilityMode {
     if !requires_openai_auth {
-        return ProviderAuthReachabilityMode::NotRequired;
+        return if active_provider_key_present {
+            ProviderAuthReachabilityMode::ApiKey
+        } else {
+            ProviderAuthReachabilityMode::NotRequired
+        };
     }
-    if env_var_present(OPENAI_API_KEY_ENV_VAR)
-        || env_var_present(CODEX_API_KEY_ENV_VAR)
-        || env_var_present(AMBIENT_API_KEY_ENV_VAR)
-    {
+    if env_var_present(OPENAI_API_KEY_ENV_VAR) || env_var_present(CODEX_API_KEY_ENV_VAR) {
         return ProviderAuthReachabilityMode::ApiKey;
     }
     if env_var_present(CODEX_ACCESS_TOKEN_ENV_VAR) {
@@ -3451,14 +3496,19 @@ mod tests {
 
     #[test]
     fn provider_specific_auth_allows_non_openai_provider_without_env_key() {
-        let check = provider_specific_auth_check(
-            /*requires_openai_auth*/ false,
-            /*provider_env_key*/ None,
-            /*provider_env_key_instructions*/ None,
-            Vec::new(),
-            |_| false,
-        )
-        .expect("non-OpenAI provider should produce a provider-specific check");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        let check = runtime.block_on(async {
+            let (_temp, config) = kimi_code_config_with_vault_key(/*store_key*/ false).await;
+            provider_specific_auth_check(
+                /*requires_openai_auth*/ false,
+                /*provider_env_key*/ None,
+                /*provider_env_key_instructions*/ None,
+                &config,
+                Vec::new(),
+                |_| false,
+            )
+            .expect("non-OpenAI provider should produce a provider-specific check")
+        });
 
         assert_eq!(check.status, CheckStatus::Ok);
         assert_eq!(
@@ -3469,14 +3519,19 @@ mod tests {
 
     #[test]
     fn provider_specific_auth_fails_when_provider_env_key_is_missing() {
-        let check = provider_specific_auth_check(
-            /*requires_openai_auth*/ false,
-            Some("PROVIDER_API_KEY"),
-            Some("Set PROVIDER_API_KEY before running PFTerminal."),
-            Vec::new(),
-            |_| false,
-        )
-        .expect("non-OpenAI provider should produce a provider-specific check");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        let check = runtime.block_on(async {
+            let (_temp, config) = kimi_code_config_with_vault_key(/*store_key*/ false).await;
+            provider_specific_auth_check(
+                /*requires_openai_auth*/ false,
+                Some("PROVIDER_API_KEY"),
+                Some("Set PROVIDER_API_KEY before running PFTerminal."),
+                &config,
+                Vec::new(),
+                |_| false,
+            )
+            .expect("non-OpenAI provider should produce a provider-specific check")
+        });
 
         assert_eq!(check.status, CheckStatus::Fail);
         assert_eq!(
@@ -3507,6 +3562,7 @@ mod tests {
         );
         assert!(stored_auth_issues(&auth, |name| name == OPENAI_API_KEY_ENV_VAR).is_empty());
         assert!(stored_auth_issues(&auth, |name| name == AMBIENT_API_KEY_ENV_VAR).is_empty());
+        assert!(stored_auth_issues(&auth, |name| name == KIMI_CODE_API_KEY_ENV_VAR).is_empty());
     }
 
     #[test]
@@ -3570,6 +3626,7 @@ mod tests {
                 /*requires_openai_auth*/ true,
                 |_| false,
                 Some(&api_key_auth),
+                /*active_provider_key_present*/ false,
             ),
             ProviderAuthReachabilityMode::ApiKey
         );
@@ -3578,17 +3635,121 @@ mod tests {
                 /*requires_openai_auth*/ true,
                 |name| name == OPENAI_API_KEY_ENV_VAR,
                 /*stored_auth*/ None,
+                /*active_provider_key_present*/ false,
             ),
             ProviderAuthReachabilityMode::ApiKey
         );
+        for unrelated_provider_key in [AMBIENT_API_KEY_ENV_VAR, KIMI_CODE_API_KEY_ENV_VAR] {
+            assert_eq!(
+                provider_auth_reachability_mode_from_auth(
+                    /*requires_openai_auth*/ true,
+                    |name| name == unrelated_provider_key,
+                    /*stored_auth*/ None,
+                    /*active_provider_key_present*/ false,
+                ),
+                ProviderAuthReachabilityMode::Chatgpt,
+                "an unrelated provider key must not authenticate the OpenAI reachability probe"
+            );
+        }
+    }
+
+    #[test]
+    fn provider_reachability_mode_uses_active_provider_stored_key() {
+        // A resolved credential for the active provider (env or vault) drives API-key
+        // reachability even when OpenAI auth is not required.
         assert_eq!(
             provider_auth_reachability_mode_from_auth(
-                /*requires_openai_auth*/ true,
-                |name| name == AMBIENT_API_KEY_ENV_VAR,
+                /*requires_openai_auth*/ false,
+                |_| false,
                 /*stored_auth*/ None,
+                /*active_provider_key_present*/ true,
             ),
             ProviderAuthReachabilityMode::ApiKey
         );
+        // Without any active-provider credential the probe remains unauthenticated.
+        assert_eq!(
+            provider_auth_reachability_mode_from_auth(
+                /*requires_openai_auth*/ false,
+                |_| false,
+                /*stored_auth*/ None,
+                /*active_provider_key_present*/ false,
+            ),
+            ProviderAuthReachabilityMode::NotRequired
+        );
+    }
+
+    /// Builds a Config rooted at a temporary home with the given provider selected, after
+    /// optionally storing a provider credential through the real provider-key storage path
+    /// (encrypted vault with legacy fallback).
+    async fn kimi_code_config_with_vault_key(store_key: bool) -> (tempfile::TempDir, Config) {
+        let temp = tempfile::tempdir().expect("create temp dir");
+        let codex_home = temp.path().join("home");
+        std::fs::create_dir_all(&codex_home).expect("create codex home");
+        std::fs::write(
+            codex_home.join("config.toml"),
+            "model_provider = \"kimi-code\"\nmodel = \"k3\"\n",
+        )
+        .expect("write config.toml");
+        if store_key {
+            codex_login::login_with_provider_api_key(
+                &codex_home,
+                KIMI_CODE_API_KEY_ENV_VAR,
+                "kimi-doctor-test-credential",
+                codex_config::types::AuthCredentialsStoreMode::File,
+                codex_login::AuthKeyringBackendKind::default(),
+            )
+            .expect("store provider key");
+        }
+        let config = ConfigBuilder::default()
+            .codex_home(codex_home)
+            .build()
+            .await
+            .expect("build config");
+        (temp, config)
+    }
+
+    fn auth_check_status_and_summary(config: &Config) -> (CheckStatus, String) {
+        let check = auth_check(config);
+        let summary = check.summary.clone();
+        let rendered = format!("{check:?}");
+        assert!(
+            !rendered.contains("kimi-doctor-test-credential"),
+            "doctor output must never contain the credential value"
+        );
+        (check.status, summary)
+    }
+
+    #[tokio::test]
+    async fn doctor_auth_passes_with_vault_only_kimi_credential() {
+        let (_temp, config) = kimi_code_config_with_vault_key(/*store_key*/ true).await;
+        assert_eq!(config.model_provider_id, "kimi-code");
+        let (status, _summary) = auth_check_status_and_summary(&config);
+        assert_eq!(
+            status,
+            CheckStatus::Ok,
+            "vault-stored Kimi credential must satisfy doctor auth"
+        );
+    }
+
+    #[tokio::test]
+    async fn doctor_auth_fails_actionably_without_kimi_credential() {
+        let (_temp, config) = kimi_code_config_with_vault_key(/*store_key*/ false).await;
+        let check = auth_check(&config);
+        assert_eq!(check.status, CheckStatus::Fail);
+        let remediation = check.remediation.clone().unwrap_or_default();
+        assert!(
+            remediation.contains("vault") || remediation.contains("KIMI_API_KEY"),
+            "remediation should point at /vault or the env var, got: {remediation}"
+        );
+    }
+
+    #[tokio::test]
+    async fn doctor_kimi_credential_does_not_satisfy_openai_provider() {
+        let (_temp, config) = kimi_code_config_with_vault_key(/*store_key*/ true).await;
+        // The stored Kimi key exists, but must not register for a different env-key id.
+        assert!(provider_key_stored(&config, KIMI_CODE_API_KEY_ENV_VAR));
+        assert!(!provider_key_stored(&config, OPENAI_API_KEY_ENV_VAR));
+        assert!(!provider_key_stored(&config, AMBIENT_API_KEY_ENV_VAR));
     }
 
     #[test]

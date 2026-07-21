@@ -13,6 +13,7 @@ pub enum SlashCommand {
     // DO NOT ALPHA-SORT! Enum order is presentation order in the popup, so
     // more frequently used commands should be listed first.
     Model,
+    Gpu,
     Ide,
     Permissions,
     Keymap,
@@ -42,6 +43,7 @@ pub enum SlashCommand {
     Goal,
     Agent,
     Spawn,
+    Orchestrate,
     Tasknode,
     Panes,
     Side,
@@ -64,6 +66,7 @@ pub enum SlashCommand {
     Plugins,
     Providers,
     Logout,
+    Wallet,
     Vault,
     Quit,
     Exit,
@@ -121,6 +124,7 @@ impl SlashCommand {
             SlashCommand::MemoryDrop => "DO NOT USE",
             SlashCommand::MemoryUpdate => "DO NOT USE",
             SlashCommand::Model => "choose what model and reasoning effort to use",
+            SlashCommand::Gpu => "rent, inspect, or terminate GPU capacity",
             SlashCommand::Ide => {
                 "include current selection, open files, and other context from your IDE"
             }
@@ -129,6 +133,7 @@ impl SlashCommand {
             SlashCommand::Goal => "set or view the goal for a long-running task",
             SlashCommand::Agent | SlashCommand::MultiAgents => "switch the active agent thread",
             SlashCommand::Spawn => "orchestrate Nazgul, Troll, and Orc agent roles",
+            SlashCommand::Orchestrate => "attach and manage native pane whips",
             SlashCommand::Tasknode => "interact with Task Node tasks and rewards",
             SlashCommand::Panes => "switch PFTerminal, Claude Code, or agent panes",
             SlashCommand::Side | SlashCommand::Btw => {
@@ -149,6 +154,7 @@ impl SlashCommand {
             SlashCommand::Plugins => "browse plugins",
             SlashCommand::Providers => "add provider API keys to the encrypted vault",
             SlashCommand::Vault => "manage the encrypted credential vault (keys, tokens)",
+            SlashCommand::Wallet => "manage SOL, USDC, and PfTerminal inference plans",
             SlashCommand::Logout => "log out of PFTerminal",
             SlashCommand::Rollout => "print the rollout file path",
             SlashCommand::TestApproval => "test approval request",
@@ -181,8 +187,11 @@ impl SlashCommand {
                 | SlashCommand::Resume
                 | SlashCommand::SandboxReadRoot
                 | SlashCommand::Spawn
+                | SlashCommand::Orchestrate
                 | SlashCommand::Tasknode
                 | SlashCommand::Vault
+                | SlashCommand::Wallet
+                | SlashCommand::Gpu
         )
     }
 
@@ -200,7 +209,10 @@ impl SlashCommand {
                 | SlashCommand::Ide
                 | SlashCommand::Providers
                 | SlashCommand::Tasknode
+                | SlashCommand::Orchestrate
                 | SlashCommand::Vault
+                | SlashCommand::Wallet
+                | SlashCommand::Gpu
         )
     }
 
@@ -230,6 +242,7 @@ impl SlashCommand {
             | SlashCommand::Docs
             | SlashCommand::Resume
             | SlashCommand::Model
+            | SlashCommand::Gpu
             | SlashCommand::Personality
             | SlashCommand::Permissions
             | SlashCommand::Copy
@@ -251,10 +264,12 @@ impl SlashCommand {
             | SlashCommand::Providers
             | SlashCommand::Panes
             | SlashCommand::Spawn
+            | SlashCommand::Orchestrate
             | SlashCommand::Tasknode
             | SlashCommand::Title
             | SlashCommand::Statusline
             | SlashCommand::Vault
+            | SlashCommand::Wallet
             | SlashCommand::AutoReview
             | SlashCommand::Feedback
             | SlashCommand::Ide

@@ -1045,14 +1045,13 @@ pub fn chat_completions_sse(model: &str, text: &str) -> String {
         },
     });
     format!(
-        "data: {}
+        "data: {delta}
 
-data: {}
+data: {usage}
 
 data: [DONE]
 
-",
-        delta, usage
+"
     )
 }
 

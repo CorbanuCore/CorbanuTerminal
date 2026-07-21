@@ -1345,7 +1345,9 @@ impl MessageProcessor {
                 self.turn_processor.thread_inject_items(params).await
             }
             ClientRequest::TurnSteer { params, .. } => {
-                self.turn_processor.turn_steer(&request_id, params).await
+                self.turn_processor
+                    .turn_steer(&request_id, params, app_server_client_name.as_deref())
+                    .await
             }
             ClientRequest::TurnInterrupt { params, .. } => {
                 self.turn_processor

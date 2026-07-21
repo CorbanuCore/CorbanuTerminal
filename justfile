@@ -136,6 +136,13 @@ bazel-argument-comment-lint:
 build-for-release:
     bazel build //codex-rs/cli:release_binaries
 
+# Build and qualify Manager/Worker pane injection through the real tmux-driven TUI.
+[no-cd]
+[unix]
+orchestrate-tui-matrix:
+    cd {{ justfile_directory() }}/codex-rs && cargo build -p codex-cli
+    {{ justfile_directory() }}/qa/orchestrate_tui_matrix.sh
+
 # Run the MCP server
 mcp-server-run *args:
     cargo run -p codex-mcp-server -- {args}

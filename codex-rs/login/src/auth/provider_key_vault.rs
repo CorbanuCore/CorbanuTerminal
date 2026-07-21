@@ -93,6 +93,20 @@ pub(crate) fn write_provider_key(
     write_provider_key_with_vault(codex_home, provider_key_id, api_key, vault)
 }
 
+/// Remove one provider key from the encrypted vault.
+///
+/// Legacy plaintext cleanup is owned by the manager so callers can remove both copies as one
+/// operation.
+pub(crate) fn delete_provider_key(
+    codex_home: &Path,
+    provider_key_id: &str,
+) -> std::io::Result<bool> {
+    let vault = Vault::new(codex_home.to_path_buf());
+    vault
+        .delete(&provider_label(provider_key_id))
+        .map_err(std::io::Error::other)
+}
+
 #[cfg(test)]
 fn write_provider_key_with_store(
     codex_home: &Path,

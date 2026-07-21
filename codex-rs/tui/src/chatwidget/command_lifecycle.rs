@@ -179,12 +179,14 @@ impl ChatWidget {
             existing.call_id = call_id.to_string();
             existing.command_display = command_display;
             existing.recent_chunks.clear();
+            existing.interrupt_notes.clear();
         } else {
             self.unified_exec_processes.push(UnifiedExecProcessSummary {
                 key,
                 call_id: call_id.to_string(),
                 command_display,
                 recent_chunks: Vec::new(),
+                interrupt_notes: Vec::new(),
             });
         }
         self.sync_unified_exec_footer();

@@ -14,9 +14,11 @@ const THREAD_LIST_MAX_LIMIT: usize = 100;
 
 fn trace_thread_processor_timing(label: &str, start: std::time::Instant) {
     if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
-        eprintln!(
-            "[pfterminal-thread-processor] {label} elapsed_ms={}",
-            start.elapsed().as_millis()
+        tracing::debug!(
+            target: "pfterminal_thread_processor",
+            label,
+            elapsed_ms = start.elapsed().as_millis(),
+            "pfterminal thread processor timing"
         );
     }
 }
@@ -1220,6 +1222,13 @@ impl ThreadRequestProcessor {
                         config.agent_max_depth
                     )));
                 }
+                let parent_role = parent_snapshot.session_source.get_agent_role();
+                codex_core::config::validate_thread_spawn_role_graph(
+                    parent_role.as_deref(),
+                    agent_role.as_deref(),
+                    depth,
+                )
+                .map_err(invalid_request)?;
                 Some(CoreSessionSource::SubAgent(
                     CoreSubAgentSource::ThreadSpawn {
                         parent_thread_id,

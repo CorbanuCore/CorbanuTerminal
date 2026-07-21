@@ -146,6 +146,7 @@ pub(super) async fn spawn_review_thread(
             crate::session::turn_context::ExplicitToolBudgetState::default(),
         ),
         server_model_warning_emitted: AtomicBool::new(false),
+        provider_cache_pressure_warning_emitted: AtomicBool::new(false),
         model_verification_emitted: AtomicBool::new(false),
     };
 

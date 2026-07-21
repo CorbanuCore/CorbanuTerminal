@@ -89,6 +89,8 @@ pub enum CodexErrorInfo {
     BadRequest,
     ThreadRollbackFailed,
     SandboxError,
+    /// The request exceeded the provider plan's entitlement (e.g. context size).
+    PlanEntitlementExceeded,
     /// The response SSE stream disconnected in the middle of a turn before completion.
     ResponseStreamDisconnected {
         #[serde(rename = "httpStatusCode")]
@@ -115,6 +117,7 @@ impl From<CoreCodexErrorInfo> for CodexErrorInfo {
     fn from(value: CoreCodexErrorInfo) -> Self {
         match value {
             CoreCodexErrorInfo::ContextWindowExceeded => CodexErrorInfo::ContextWindowExceeded,
+            CoreCodexErrorInfo::PlanEntitlementExceeded => CodexErrorInfo::PlanEntitlementExceeded,
             CoreCodexErrorInfo::UsageLimitExceeded => CodexErrorInfo::UsageLimitExceeded,
             CoreCodexErrorInfo::ServerOverloaded => CodexErrorInfo::ServerOverloaded,
             CoreCodexErrorInfo::CyberPolicy => CodexErrorInfo::CyberPolicy,

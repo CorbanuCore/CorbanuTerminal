@@ -1,0 +1,16 @@
+---
+source: tui/src/chatwidget/wallet_menu.rs
+expression: "items.join(\"\\n\")"
+---
+Receive
+Buy PfTerminal Plan
+Recover existing plan
+Unlock for one signing action
+Unlock for 5 minutes
+Unlock for 15 minutes
+Unlock for 1 hour
+Unlock for a custom duration
+Lock wallet
+Back up recovery material
+Remove wallet from this device
+Refresh

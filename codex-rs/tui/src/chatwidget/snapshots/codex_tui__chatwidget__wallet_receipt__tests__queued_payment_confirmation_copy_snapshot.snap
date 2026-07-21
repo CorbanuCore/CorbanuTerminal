@@ -1,0 +1,13 @@
+---
+source: tui/src/chatwidget/wallet_receipt.rs
+expression: "[\"Payment confirmed\", \"20 USDC paid · Basic plan\", \"Solana transaction\",\n\"basic-settlement-signature\",\n\"Scheduled 2026-08-19T00:35:20Z through 2026-09-19T00:35:20Z\",\n\"Starter remains active through 2026-08-19T00:35:20Z\",\n\"Wallet balance after payment: 4.00 USDC\",\n\"Done — Return to the authoritative wallet and plan status\",\n&history,].join(\"\\n\")"
+---
+Payment confirmed
+20 USDC paid · Basic plan
+Solana transaction
+basic-settlement-signature
+Scheduled 2026-08-19T00:35:20Z through 2026-09-19T00:35:20Z
+Starter remains active through 2026-08-19T00:35:20Z
+Wallet balance after payment: 4.00 USDC
+Done — Return to the authoritative wallet and plan status
+Payment confirmed: 20 USDC for the Basic plan; scheduled 2026-08-19T00:35:20Z through 2026-09-19T00:35:20Z. Solana transaction: basic-settlement-signature.

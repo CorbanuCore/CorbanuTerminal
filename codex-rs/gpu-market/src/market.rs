@@ -1,0 +1,375 @@
+use crate::GpuOffer;
+use crate::GpuProvider;
+use crate::GpuRecipe;
+use crate::ProviderError;
+use crate::ProviderErrorKind;
+use crate::RecipeCatalog;
+use crate::SearchOffersRequest;
+use codex_state::GpuLimitEnforcement;
+use codex_state::GpuRental;
+use codex_state::GpuRentalCreateParams;
+use codex_state::StateRuntime;
+use std::sync::Arc;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RentalAuthorization {
+    pub client_operation_id: String,
+    pub maximum_hourly_microusd: i64,
+    pub maximum_total_microusd: i64,
+    pub terminate_at_ms: i64,
+    pub acknowledged_local_enforcement: bool,
+}
+
+pub struct GpuMarketService {
+    state: Arc<StateRuntime>,
+    recipes: RecipeCatalog,
+    installation_id: String,
+}
+
+impl GpuMarketService {
+    pub fn new(state: Arc<StateRuntime>, recipes: RecipeCatalog, installation_id: String) -> Self {
+        Self {
+            state,
+            recipes,
+            installation_id,
+        }
+    }
+
+    pub async fn search<P1, P2>(
+        &self,
+        recipe_id: &str,
+        maximum_hourly_microusd: i64,
+        first: &P1,
+        second: &P2,
+    ) -> Result<Vec<GpuOffer>, ProviderError>
+    where
+        P1: GpuProvider,
+        P2: GpuProvider,
+    {
+        let recipe = self.verified_recipe(recipe_id)?;
+        let request = search_request(recipe, maximum_hourly_microusd)?;
+        let (first_result, second_result) = tokio::join!(
+            search_secure_provider(first, request.clone()),
+            search_secure_provider(second, request)
+        );
+        let mut offers = merge_search_results(first_result, second_result)?;
+        offers.sort_by_key(|offer| {
+            (
+                offer.hourly_microusd,
+                offer.storage_microusd_per_gib_month.unwrap_or(i64::MAX),
+                offer.provider.clone(),
+                offer.offer_id.clone(),
+            )
+        });
+        Ok(offers)
+    }
+
+    pub async fn confirm<P>(
+        &self,
+        recipe_id: &str,
+        selected_offer: &GpuOffer,
+        authorization: &RentalAuthorization,
+        provider: &P,
+        now_ms: i64,
+    ) -> Result<GpuRental, ProviderError>
+    where
+        P: GpuProvider,
+    {
+        let recipe = self.verified_recipe(recipe_id)?;
+        validate_authorization_identity(authorization)?;
+        let rental_id = format!("gpu-{}", authorization.client_operation_id);
+        if let Some(existing) = self
+            .state
+            .get_gpu_rental(rental_id.as_str())
+            .await
+            .map_err(state_error)?
+        {
+            return Ok(existing);
+        }
+        validate_authorization_limits(authorization, now_ms)?;
+        let capabilities = provider.capabilities();
+        if capabilities.provider != selected_offer.provider {
+            return Err(ProviderError::new(
+                ProviderErrorKind::InvalidRequest,
+                "The selected offer belongs to a different provider.",
+            ));
+        }
+        if !capabilities.supports_secure_endpoint_transport {
+            return Err(ProviderError::new(
+                ProviderErrorKind::CapabilityUnavailable,
+                "This GPU provider cannot yet prove a secure inference transport; creation is disabled.",
+            ));
+        }
+        let local_enforcement =
+            !capabilities.supports_native_ttl || !capabilities.supports_native_spend_cap;
+        if local_enforcement && !authorization.acknowledged_local_enforcement {
+            return Err(ProviderError::new(
+                ProviderErrorKind::InvalidRequest,
+                "This provider requires acknowledgement that spend and TTL enforcement depend on the local controller.",
+            ));
+        }
+
+        let request = search_request(recipe, authorization.maximum_hourly_microusd)?;
+        let current = if provider.create_revalidates_exact_offer_atomically() {
+            selected_offer.clone()
+        } else {
+            let mut current = None;
+            for attempt in 0..3 {
+                current = provider
+                    .search_offers(request.clone())
+                    .await?
+                    .into_iter()
+                    .find(|offer| offer.offer_id == selected_offer.offer_id);
+                if current.is_some() {
+                    break;
+                }
+                if attempt < 2 {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+            }
+            current.ok_or_else(|| {
+                ProviderError::new(
+                    ProviderErrorKind::OfferUnavailable,
+                    "The selected GPU offer is no longer available.",
+                )
+            })?
+        };
+        if current.hourly_microusd != selected_offer.hourly_microusd
+            || current.hourly_microusd > authorization.maximum_hourly_microusd
+        {
+            return Err(ProviderError::new(
+                ProviderErrorKind::PriceDrift,
+                "The selected GPU offer price changed; confirmation is required again.",
+            ));
+        }
+        current.validate_for(
+            &search_request(recipe, authorization.maximum_hourly_microusd)?,
+            now_ms,
+        )?;
+
+        let rental = self
+            .state
+            .create_gpu_rental(
+                &GpuRentalCreateParams {
+                    rental_id: rental_id.clone(),
+                    installation_id: self.installation_id.clone(),
+                    client_operation_id: authorization.client_operation_id.clone(),
+                    provider: current.provider.clone(),
+                    recipe_id: recipe.id.clone(),
+                    recipe_revision: recipe.revision.clone(),
+                    offer_snapshot_json: serde_json::to_string(&current).map_err(|_| {
+                        ProviderError::new(
+                            ProviderErrorKind::Permanent,
+                            "The verified offer could not be recorded.",
+                        )
+                    })?,
+                    quote_expires_at_ms: current.expires_at_ms,
+                    max_hourly_microusd: authorization.maximum_hourly_microusd,
+                    max_total_microusd: authorization.maximum_total_microusd,
+                    terminate_at_ms: authorization.terminate_at_ms,
+                    enforcement_class: if local_enforcement {
+                        GpuLimitEnforcement::LocalControllerDependent
+                    } else {
+                        GpuLimitEnforcement::ProviderGuaranteed
+                    },
+                    ownership_tag: format!("pft-{}-{rental_id}", self.installation_id),
+                },
+                now_ms,
+            )
+            .await
+            .map_err(state_error)?;
+        self.state
+            .request_gpu_rental_creation(rental.rental_id.as_str(), now_ms)
+            .await
+            .map_err(state_error)?;
+        self.state
+            .get_gpu_rental(rental.rental_id.as_str())
+            .await
+            .map_err(state_error)?
+            .ok_or_else(|| {
+                ProviderError::new(
+                    ProviderErrorKind::Permanent,
+                    "The authorized rental was not durably recorded.",
+                )
+            })
+    }
+
+    fn verified_recipe(&self, recipe_id: &str) -> Result<&GpuRecipe, ProviderError> {
+        let recipe = self.recipes.get(recipe_id).ok_or_else(|| {
+            ProviderError::new(
+                ProviderErrorKind::InvalidRequest,
+                "GPU recipe was not found.",
+            )
+        })?;
+        if !recipe.manifest_verified {
+            return Err(ProviderError::new(
+                ProviderErrorKind::InvalidRequest,
+                "GPU recipe creation is disabled until its immutable manifest is verified.",
+            ));
+        }
+        Ok(recipe)
+    }
+}
+
+fn search_request(
+    recipe: &GpuRecipe,
+    maximum_hourly_microusd: i64,
+) -> Result<SearchOffersRequest, ProviderError> {
+    if maximum_hourly_microusd <= 0 {
+        return Err(ProviderError::new(
+            ProviderErrorKind::InvalidRequest,
+            "Maximum hourly price must be positive.",
+        ));
+    }
+    Ok(SearchOffersRequest {
+        hardware: recipe.hardware.clone(),
+        allow_interruptible: false,
+        require_verified_or_secure: true,
+        maximum_hourly_microusd,
+    })
+}
+
+async fn search_secure_provider<P: GpuProvider>(
+    provider: &P,
+    request: SearchOffersRequest,
+) -> Result<Vec<GpuOffer>, ProviderError> {
+    if !provider.capabilities().supports_secure_endpoint_transport {
+        return Err(ProviderError::new(
+            ProviderErrorKind::CapabilityUnavailable,
+            "GPU provider secure endpoint transport is not qualified.",
+        ));
+    }
+    provider.search_offers(request).await
+}
+
+fn validate_authorization_identity(
+    authorization: &RentalAuthorization,
+) -> Result<(), ProviderError> {
+    if authorization.client_operation_id.trim().is_empty()
+        || authorization.client_operation_id.len() > 100
+        || !authorization
+            .client_operation_id
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
+    {
+        return Err(ProviderError::new(
+            ProviderErrorKind::InvalidRequest,
+            "GPU rental authorization identity is invalid; no rental was created.",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_authorization_limits(
+    authorization: &RentalAuthorization,
+    now_ms: i64,
+) -> Result<(), ProviderError> {
+    if authorization.maximum_hourly_microusd <= 0 || authorization.maximum_total_microusd <= 0 {
+        return Err(ProviderError::new(
+            ProviderErrorKind::InvalidRequest,
+            "GPU rental spending limits are incomplete; no rental was created.",
+        ));
+    }
+    if authorization.terminate_at_ms <= now_ms {
+        return Err(ProviderError::new(
+            ProviderErrorKind::InvalidRequest,
+            "This GPU rental authorization expired before confirmation. No rental was created; search again from /gpu.",
+        ));
+    }
+    Ok(())
+}
+
+fn merge_search_results(
+    first: Result<Vec<GpuOffer>, ProviderError>,
+    second: Result<Vec<GpuOffer>, ProviderError>,
+) -> Result<Vec<GpuOffer>, ProviderError> {
+    let insufficient_funds = [&first, &second]
+        .into_iter()
+        .find_map(|result| match result {
+            Err(error) if error.kind == ProviderErrorKind::InsufficientFunds => Some(error.clone()),
+            _ => None,
+        });
+    if matches!(
+        (&first, &second),
+        (
+            Err(ProviderError {
+                kind: ProviderErrorKind::NotConfigured,
+                ..
+            }),
+            Err(ProviderError {
+                kind: ProviderErrorKind::NotConfigured,
+                ..
+            })
+        )
+    ) {
+        return Err(ProviderError::new(
+            ProviderErrorKind::NotConfigured,
+            "Configure at least one GPU provider API key from /gpu before searching.",
+        ));
+    }
+    if matches!(
+        (&first, &second),
+        (Err(first_error), Err(second_error))
+            if matches!(
+                first_error.kind,
+                ProviderErrorKind::NotConfigured | ProviderErrorKind::CapabilityUnavailable
+            ) && matches!(
+                second_error.kind,
+                ProviderErrorKind::NotConfigured | ProviderErrorKind::CapabilityUnavailable
+            )
+    ) {
+        return Err(ProviderError::new(
+            ProviderErrorKind::CapabilityUnavailable,
+            "Configure a GPU provider whose secure endpoint transport is qualified.",
+        ));
+    }
+    if let (Err(first_error), Err(second_error)) = (&first, &second)
+        && first_error.kind == ProviderErrorKind::RateLimited
+        && second_error.kind == ProviderErrorKind::RateLimited
+    {
+        return Err(ProviderError {
+            retry_after_ms: match (first_error.retry_after_ms, second_error.retry_after_ms) {
+                (Some(first), Some(second)) => Some(first.min(second)),
+                (first, second) => first.or(second),
+            },
+            ..ProviderError::new(
+                ProviderErrorKind::RateLimited,
+                "GPU provider searches are temporarily rate limited.",
+            )
+        });
+    }
+    let mut offers = Vec::new();
+    for result in [first, second] {
+        match result {
+            Ok(found) => offers.extend(found),
+            Err(error)
+                if matches!(
+                    error.kind,
+                    ProviderErrorKind::NotConfigured
+                        | ProviderErrorKind::CapabilityUnavailable
+                        | ProviderErrorKind::InsufficientFunds
+                        | ProviderErrorKind::OfferUnavailable
+                        | ProviderErrorKind::RateLimited
+                ) => {}
+            Err(error) => return Err(error),
+        }
+    }
+    if offers.is_empty()
+        && let Some(error) = insufficient_funds
+    {
+        return Err(error);
+    }
+    Ok(offers)
+}
+
+fn state_error(error: anyhow::Error) -> ProviderError {
+    tracing::warn!(error = %error, "GPU rental state operation failed");
+    ProviderError::new(
+        ProviderErrorKind::Permanent,
+        "The GPU rental ledger could not record the operation.",
+    )
+}
+
+#[cfg(test)]
+#[path = "market_tests.rs"]
+mod tests;

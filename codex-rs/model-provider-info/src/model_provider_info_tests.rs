@@ -367,6 +367,48 @@ fn test_create_ambient_provider() {
 }
 
 #[test]
+fn ambient_glm_context_ceiling_is_scoped_to_ambient_routes() {
+    assert_eq!(
+        default_model_context_window_for_provider(AMBIENT_PROVIDER_ID, AMBIENT_DEFAULT_MODEL),
+        Some(AMBIENT_GLM_5_2_CONTEXT_WINDOW)
+    );
+    assert_eq!(
+        default_model_context_window_for_provider(
+            PFTERMINAL_PLAN_PROVIDER_ID,
+            AMBIENT_DEFAULT_MODEL
+        ),
+        Some(AMBIENT_GLM_5_2_CONTEXT_WINDOW)
+    );
+    assert_eq!(
+        default_model_context_window_for_provider(OPENROUTER_PROVIDER_ID, AMBIENT_DEFAULT_MODEL),
+        None
+    );
+}
+
+#[test]
+fn completion_guard_is_scoped_to_demonstrated_provider_routes() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    for provider in [
+        AMBIENT_PROVIDER_ID,
+        PFTERMINAL_PLAN_PROVIDER_ID,
+        KIMI_CODE_PROVIDER_ID,
+    ] {
+        assert!(
+            providers
+                .get(provider)
+                .expect("guarded provider")
+                .requires_completion_guard()
+        );
+    }
+    assert!(
+        !providers
+            .get(OPENROUTER_PROVIDER_ID)
+            .expect("OpenRouter provider")
+            .requires_completion_guard()
+    );
+}
+
+#[test]
 fn test_create_zai_provider() {
     assert_eq!(
         ModelProviderInfo::create_zai_provider(),
@@ -431,6 +473,13 @@ fn test_create_anthropic_provider() {
 
 #[test]
 fn test_create_claude_plan_provider() {
+    let expected_root = AbsolutePathBuf::current_dir()
+        .expect("current directory should be absolute")
+        .ancestors()
+        .last()
+        .expect("current directory should have a filesystem root");
+    assert!(expected_root.parent().is_none());
+
     assert_eq!(
         ModelProviderInfo::create_claude_plan_provider(),
         ModelProviderInfo {
@@ -444,8 +493,7 @@ fn test_create_claude_plan_provider() {
                 args: vec!["internal-claude-oauth-token".to_string()],
                 timeout_ms: NonZeroU64::new(5_000).expect("timeout should be non-zero"),
                 refresh_interval_ms: 60_000,
-                cwd: AbsolutePathBuf::from_absolute_path_checked("/")
-                    .expect("root path should be absolute"),
+                cwd: expected_root,
             }),
             aws: None,
             wire_api: WireApi::Anthropic,
@@ -509,6 +557,22 @@ fn test_built_in_model_providers_include_ambient() {
             .map(ModelProviderInfo::is_ambient),
         Some(true)
     );
+}
+
+#[test]
+fn test_built_in_model_providers_include_pfterminal_plan() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let provider = providers
+        .get(PFTERMINAL_PLAN_PROVIDER_ID)
+        .expect("PfTerminal Plan provider");
+
+    assert!(provider.is_pfterminal_plan());
+    assert_eq!(
+        provider.env_key.as_deref(),
+        Some(PFTERMINAL_PLAN_API_KEY_ENV_VAR)
+    );
+    assert_eq!(provider.wire_api, WireApi::Chat);
+    assert!(!provider.requires_openai_auth);
 }
 
 #[test]
@@ -599,6 +663,115 @@ fn test_built_in_model_providers_include_openrouter() {
         Duration::from_millis(600_000)
     );
     assert!(!openrouter.requires_openai_auth);
+}
+
+#[test]
+fn test_built_in_model_providers_include_meta() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let meta = providers
+        .get(META_PROVIDER_ID)
+        .expect("Meta provider should be built in");
+
+    assert_eq!(meta.base_url.as_deref(), Some(META_BASE_URL));
+    assert_eq!(meta.env_key.as_deref(), Some(META_API_KEY_ENV_VAR));
+    assert_eq!(meta.wire_api, WireApi::Responses);
+    assert!(meta.is_meta());
+    assert!(!meta.requires_openai_auth);
+    assert!(!meta.supports_websockets);
+    assert_eq!(
+        resolve_model_for_provider(None, META_PROVIDER_ID).as_deref(),
+        Some(META_DEFAULT_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(Some(META_DEFAULT_MODEL.to_string()), META_PROVIDER_ID)
+            .as_deref(),
+        Some(META_DEFAULT_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(Some("gpt-5.6-sol".to_string()), META_PROVIDER_ID).as_deref(),
+        Some(META_DEFAULT_MODEL)
+    );
+}
+
+#[test]
+fn kimi_code_provider_is_builtin_and_resolves_k3() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let kimi_code = providers
+        .get(KIMI_CODE_PROVIDER_ID)
+        .expect("Kimi Code provider should be built in");
+
+    assert_eq!(kimi_code.base_url.as_deref(), Some(KIMI_CODE_BASE_URL));
+    assert_eq!(
+        kimi_code.env_key.as_deref(),
+        Some(KIMI_CODE_API_KEY_ENV_VAR)
+    );
+    assert_eq!(kimi_code.wire_api, WireApi::Chat);
+    assert!(kimi_code.is_kimi_code());
+    assert_eq!(
+        resolve_model_for_provider(None, KIMI_CODE_PROVIDER_ID).as_deref(),
+        Some(KIMI_CODE_K3_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(
+            Some("moonshotai/kimi-k3".to_string()),
+            KIMI_CODE_PROVIDER_ID,
+        )
+        .as_deref(),
+        Some(KIMI_CODE_K3_MODEL)
+    );
+}
+
+#[test]
+fn openrouter_preserves_nonempty_model_slugs() {
+    for provider in [OPENROUTER_PROVIDER_ID, OPENROUTER_ANTHROPIC_PROVIDER_ID] {
+        for model in [
+            "minimax/minimax-m3",
+            "google/gemini-3.5-flash",
+            "x-ai/grok-4.5",
+            "deepseek/deepseek-v4-pro",
+            "tencent/hy3:free",
+            "vendor/future-model",
+        ] {
+            assert_eq!(
+                resolve_model_for_provider(Some(model.to_string()), provider).as_deref(),
+                Some(model),
+                "expected {provider} to preserve {model}"
+            );
+        }
+        assert_eq!(
+            resolve_model_for_provider(Some("  ".to_string()), provider).as_deref(),
+            Some(OPENROUTER_DEFAULT_MODEL)
+        );
+        assert_eq!(
+            resolve_model_for_provider(None, provider).as_deref(),
+            Some(OPENROUTER_DEFAULT_MODEL)
+        );
+    }
+}
+
+#[test]
+fn direct_zai_retries_transient_provider_rate_limits() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let zai = providers
+        .get(ZAI_PROVIDER_ID)
+        .expect("Z.AI provider should be built in");
+    let openrouter = providers
+        .get(OPENROUTER_PROVIDER_ID)
+        .expect("OpenRouter provider should be built in");
+
+    assert!(
+        zai.to_api_provider(None)
+            .expect("Z.AI should convert to API provider")
+            .retry
+            .retry_429
+    );
+    assert!(
+        !openrouter
+            .to_api_provider(None)
+            .expect("OpenRouter should convert to API provider")
+            .retry
+            .retry_429
+    );
 }
 
 #[test]
@@ -983,6 +1156,10 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider("gpt-5.5", AMBIENT_PROVIDER_ID),
         Some(OPENAI_PROVIDER_ID)
     );
+    assert_eq!(
+        corrected_catalog_provider(KIMI_CODE_K3_MODEL, OPENROUTER_PROVIDER_ID),
+        Some(KIMI_CODE_PROVIDER_ID)
+    );
 
     // Consistent pairs and legitimate family variants: untouched.
     assert_eq!(
@@ -1011,6 +1188,10 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
     );
     assert_eq!(
         corrected_catalog_provider("gpt-5.5", OPENAI_PROVIDER_ID),
+        None
+    );
+    assert_eq!(
+        corrected_catalog_provider(KIMI_CODE_K3_MODEL, KIMI_CODE_PROVIDER_ID),
         None
     );
 

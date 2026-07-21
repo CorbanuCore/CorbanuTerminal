@@ -141,6 +141,7 @@ pub enum CodexErrKind {
     TurnAborted,
     Stream,
     ContextWindowExceeded,
+    PlanEntitlementExceeded,
     ThreadNotFound,
     AgentLimitReached,
     SessionConfiguredNotFirstEvent,
@@ -197,6 +198,7 @@ impl From<&CodexErr> for CodexErrKind {
             CodexErr::TurnAborted => CodexErrKind::TurnAborted,
             CodexErr::Stream(..) => CodexErrKind::Stream,
             CodexErr::ContextWindowExceeded => CodexErrKind::ContextWindowExceeded,
+            CodexErr::PlanEntitlementExceeded(_) => CodexErrKind::PlanEntitlementExceeded,
             CodexErr::ThreadNotFound(_) => CodexErrKind::ThreadNotFound,
             CodexErr::AgentLimitReached { .. } => CodexErrKind::AgentLimitReached,
             CodexErr::SessionConfiguredNotFirstEvent => {

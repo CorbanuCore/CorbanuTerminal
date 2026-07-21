@@ -1,0 +1,25 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+expression: popup
+---
+  Select Model and Effort
+  OpenRouter API key
+
+  OpenAI  Ambient  Kimi Code  Z.AI  Claude Plan  Anthropic  Meta  Vercel  Baseten  [OpenRouter]
+
+  1. OpenRouter MiniMax M3         Model: minimax/minimax-m3. OpenRouter: MiniMax M3 - $0.30/M
+                                   input, $1.20/M output.
+  2. OpenRouter Owl Alpha          Model: openrouter/owl-alpha. OpenRouter: Owl Alpha - $0/M
+                                   input, $0/M output.
+  3. OpenRouter Gemini 3.5 Flash   Model: google/gemini-3.5-flash. OpenRouter: Gemini 3.5 Flash -
+                                   $1.50/M input, $9.00/M output.
+  4. OpenRouter Grok 4.5           Model: x-ai/grok-4.5. OpenRouter: Grok 4.5 - $2.00/M input,
+                                   $6.00/M output.
+  5. OpenRouter DeepSeek V4 Pro    Model: deepseek/deepseek-v4-pro. OpenRouter: DeepSeek V4 Pro -
+                                   $0.435/M input, $0.87/M output.
+  6. OpenRouter Tencent Hy3 Free   Model: tencent/hy3:free. OpenRouter: Tencent Hy3 Free - $0/M
+                                   input, $0/M output.
+› 7. OpenRouter Kimi K3 (current)  Model: moonshotai/kimi-k3. OpenRouter: Kimi K3 - $3.00/M input,
+                                   $0.30/M cached input, $15.00/M output.
+
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

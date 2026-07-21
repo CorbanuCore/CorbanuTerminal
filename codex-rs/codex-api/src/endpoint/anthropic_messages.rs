@@ -381,7 +381,7 @@ impl AnthropicStreamState {
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_string();
-        let index = event.index.unwrap_or_else(|| self.block_types.len());
+        let index = event.index.unwrap_or(self.block_types.len());
         self.block_types.insert(index, block_type.clone());
         match block_type.as_str() {
             "text" => {
@@ -816,7 +816,7 @@ impl AnthropicStreamState {
             return true;
         }
 
-        let content = result.content.clone().unwrap_or_else(|| json_array());
+        let content = result.content.clone().unwrap_or_else(json_array);
         let status = if content.is_object() {
             "failed"
         } else {
@@ -882,6 +882,7 @@ impl AnthropicStreamState {
                 response_id,
                 token_usage: self.token_usage.take(),
                 end_turn: self.end_turn,
+                finish_reason: None,
             }))
             .await;
     }
@@ -1097,6 +1098,7 @@ data: {"type":"message_stop"}
                     total_tokens: 23,
                 }),
                 end_turn: Some(true),
+                ..
             }) if response_id == "msg_1"
         );
         assert_eq!(events.len(), 5);

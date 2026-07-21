@@ -172,6 +172,16 @@ mod tests {
         );
         assert!(
             paths
+                .binary_search_by(|probe| probe.as_str().cmp("pfterminal-help/SKILL.md"))
+                .is_ok()
+        );
+        assert!(
+            paths
+                .binary_search_by(|probe| probe.as_str().cmp("pfterminal-help/agents/openai.yaml"))
+                .is_ok()
+        );
+        assert!(
+            paths
                 .binary_search_by(|probe| probe.as_str().cmp("tasknode-usage/SKILL.md"))
                 .is_ok()
         );

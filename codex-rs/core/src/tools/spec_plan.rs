@@ -229,6 +229,7 @@ fn apply_direct_model_only_namespace_overrides(
             ToolExposure::Direct
             | ToolExposure::Deferred
             | ToolExposure::DirectModelOnly
+            | ToolExposure::CodeModeOnly
             | ToolExposure::Hidden => {}
         }
     }
@@ -816,44 +817,97 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mu
             let agent_type_description =
                 agent_type_description(turn_context, context.default_agent_type_description);
             planned_tools.add_arc(override_tool_exposure(
-                multi_agent_v2_handler(
-                    SpawnAgentHandlerV2::new(SpawnAgentToolOptions {
-                        available_models: spawn_agent_available_models(turn_context),
-                        agent_type_description,
-                        hide_agent_type_model_reasoning: turn_context
-                            .config
-                            .multi_agent_v2
-                            .hide_spawn_agent_metadata,
-                        include_usage_hint: turn_context.config.multi_agent_v2.usage_hint_enabled,
-                        usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
-                    }),
-                    tool_namespace,
-                ),
-                exposure,
-            ));
-            planned_tools.add_arc(override_tool_exposure(
                 multi_agent_v2_handler(SendMessageHandlerV2, tool_namespace),
                 exposure,
             ));
-            planned_tools.add_arc(override_tool_exposure(
-                multi_agent_v2_handler(FollowupTaskHandlerV2, tool_namespace),
-                exposure,
-            ));
-            planned_tools.add_arc(override_tool_exposure(
-                multi_agent_v2_handler(
-                    WaitAgentHandlerV2::new(context.wait_agent_timeouts),
-                    tool_namespace,
-                ),
-                exposure,
-            ));
-            planned_tools.add_arc(override_tool_exposure(
-                multi_agent_v2_handler(InterruptAgentHandler, tool_namespace),
-                exposure,
-            ));
-            planned_tools.add_arc(override_tool_exposure(
-                multi_agent_v2_handler(ListAgentsHandlerV2, tool_namespace),
-                exposure,
-            ));
+            let is_orc = turn_context
+                .session_source
+                .get_agent_role()
+                .as_deref()
+                .is_some_and(|role| role.eq_ignore_ascii_case("orc"));
+            if !is_orc {
+                planned_tools.add_arc(override_tool_exposure(
+                    multi_agent_v2_handler(
+                        SpawnAgentHandlerV2::new(SpawnAgentToolOptions {
+                            available_models: spawn_agent_available_models(turn_context),
+                            agent_type_description,
+                            hide_agent_type_model_reasoning: turn_context
+                                .config
+                                .multi_agent_v2
+                                .hide_spawn_agent_metadata,
+                            include_usage_hint: turn_context
+                                .config
+                                .multi_agent_v2
+                                .usage_hint_enabled,
+                            usage_hint_text: turn_context
+                                .config
+                                .multi_agent_v2
+                                .usage_hint_text
+                                .clone(),
+                        }),
+                        tool_namespace,
+                    ),
+                    exposure,
+                ));
+                planned_tools.add_arc(override_tool_exposure(
+                    multi_agent_v2_handler(FollowupTaskHandlerV2, tool_namespace),
+                    exposure,
+                ));
+                planned_tools.add_arc(override_tool_exposure(
+                    multi_agent_v2_handler(
+                        WaitAgentHandlerV2::new(context.wait_agent_timeouts),
+                        tool_namespace,
+                    ),
+                    exposure,
+                ));
+                planned_tools.add_arc(override_tool_exposure(
+                    multi_agent_v2_handler(InterruptAgentHandler, tool_namespace),
+                    exposure,
+                ));
+                planned_tools.add_arc(override_tool_exposure(
+                    multi_agent_v2_handler(ListAgentsHandlerV2, tool_namespace),
+                    exposure,
+                ));
+            } else {
+                // Orcs must not be offered manager controls to the model, while the runtime
+                // still needs registered handlers so indirect/code-mode calls are rejected by
+                // role with an actionable error instead of looking like an unknown tool.
+                planned_tools.add_arc(override_tool_exposure(
+                    multi_agent_v2_handler(
+                        SpawnAgentHandlerV2::new(SpawnAgentToolOptions {
+                            available_models: spawn_agent_available_models(turn_context),
+                            agent_type_description,
+                            hide_agent_type_model_reasoning: turn_context
+                                .config
+                                .multi_agent_v2
+                                .hide_spawn_agent_metadata,
+                            include_usage_hint: turn_context
+                                .config
+                                .multi_agent_v2
+                                .usage_hint_enabled,
+                            usage_hint_text: turn_context
+                                .config
+                                .multi_agent_v2
+                                .usage_hint_text
+                                .clone(),
+                        }),
+                        tool_namespace,
+                    ),
+                    ToolExposure::CodeModeOnly,
+                ));
+                for handler in [
+                    multi_agent_v2_handler(FollowupTaskHandlerV2, tool_namespace),
+                    multi_agent_v2_handler(
+                        WaitAgentHandlerV2::new(context.wait_agent_timeouts),
+                        tool_namespace,
+                    ),
+                    multi_agent_v2_handler(InterruptAgentHandler, tool_namespace),
+                    multi_agent_v2_handler(ListAgentsHandlerV2, tool_namespace),
+                ] {
+                    planned_tools
+                        .add_arc(override_tool_exposure(handler, ToolExposure::CodeModeOnly));
+                }
+            }
         } else {
             let agent_type_description =
                 agent_type_description(turn_context, context.default_agent_type_description);
@@ -1094,6 +1148,7 @@ fn v1_plain_function_subagents_enabled(turn_context: &TurnContext) -> bool {
     let provider_info = turn_context.provider.info();
     !namespace_tools_enabled(turn_context)
         && (provider_info.is_ambient()
+            || provider_info.is_kimi_code()
             || provider_info.is_zai()
             || provider_info.is_openrouter()
             || provider_info.is_baseten()
@@ -1110,6 +1165,7 @@ fn spawn_agent_available_models(turn_context: &TurnContext) -> Vec<ModelPreset> 
 fn third_party_provider_without_spawn_model_switching(turn_context: &TurnContext) -> bool {
     let provider_info = turn_context.provider.info();
     provider_info.is_ambient()
+        || provider_info.is_kimi_code()
         || provider_info.is_zai()
         || provider_info.is_openrouter()
         || provider_info.is_baseten()
