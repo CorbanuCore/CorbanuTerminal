@@ -16,6 +16,18 @@ terminal interface for AI-assisted coding and crypto-native workflows.
 curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install.sh | sh
 ```
 
+### Windows
+
+Run the native installer from PowerShell. Do not use the Linux `curl ... | sh`
+command in PowerShell; Windows PowerShell maps `curl` to `Invoke-WebRequest`,
+which does not support curl's `-fsSL` flags.
+
+```powershell
+Invoke-RestMethod https://github.com/agtico/PfTerminal/releases/latest/download/install.ps1 | Invoke-Expression
+```
+
+If you are working inside WSL2, use the Linux command instead.
+
 ### macOS
 
 Download the latest DMG from
@@ -65,7 +77,7 @@ rm -rf "${PFTERMINAL_HOME:-$HOME/.pfterminal}"
 ## Key Features
 
 - Ambient GLM 5.2 default model path.
-- Provider choices for Ambient, Z.AI, OpenRouter, Baseten, Vercel, and OpenAI
+- Provider choices for Ambient, Kimi Code, Z.AI, OpenRouter, Baseten, Vercel, and OpenAI
   Codex account auth.
 - Encrypted `/vault` storage for provider API keys and user credentials.
 - `pfterminal telegram` connector for allowlisted Telegram chats.
@@ -99,7 +111,7 @@ run shell commands.
 
 Use:
 
-- `/providers` to add Ambient, Z.AI, OpenRouter, Baseten, Vercel, or OpenAI
+- `/providers` to add Ambient, Kimi Code, Z.AI, OpenRouter, Baseten, Vercel, or OpenAI
   Codex credentials.
 - `/vault` to manage encrypted credentials.
 - `/model` or `pfterminal -m <model>` to choose a model.
@@ -119,7 +131,7 @@ PFTerminal vault.
 
 Common uses:
 
-- Add an Ambient, Z.AI, OpenRouter, Baseten, Vercel, or Anthropic API key.
+- Add an Ambient, Kimi Code, Z.AI, OpenRouter, Baseten, Vercel, or Anthropic API key.
 - Add or refresh OpenAI Codex account auth.
 - Check which provider key a selected model expects.
 

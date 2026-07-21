@@ -504,6 +504,7 @@ mod tests {
                 text: "raw reasoning".to_string(),
             }]),
             encrypted_content: Some("encoded".to_string()),
+            anthropic_content_block: None,
             metadata: None,
         };
 

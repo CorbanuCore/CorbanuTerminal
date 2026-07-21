@@ -261,12 +261,12 @@ function Get-CurrentInstalledVersion {
         [string]$StandaloneCurrentDir
     )
 
-    $standaloneVersion = Get-VersionFromBinary -CodexPath (Join-Path $StandaloneCurrentDir "bin\codex.exe")
+    $standaloneVersion = Get-VersionFromBinary -CodexPath (Join-Path $StandaloneCurrentDir "bin\pfterminal.exe")
     if (-not [string]::IsNullOrWhiteSpace($standaloneVersion)) {
         return $standaloneVersion
     }
 
-    $standaloneVersion = Get-VersionFromBinary -CodexPath (Join-Path $StandaloneCurrentDir "codex.exe")
+    $standaloneVersion = Get-VersionFromBinary -CodexPath (Join-Path $StandaloneCurrentDir "pfterminal.exe")
     if (-not [string]::IsNullOrWhiteSpace($standaloneVersion)) {
         return $standaloneVersion
     }
@@ -536,7 +536,8 @@ function Test-PackageContentsAreComplete {
 
     $expectedFiles = @(
         "codex-package.json",
-        "bin\codex.exe",
+        "bin\pfterminal.exe",
+        "bin\pfterminal-walletd.exe",
         "codex-path\rg.exe",
         "codex-resources\codex-command-runner.exe",
         "codex-resources\codex-windows-sandbox-setup.exe"
@@ -560,7 +561,7 @@ function Test-LegacyPlatformNpmContentsAreComplete {
     }
 
     $expectedFiles = @(
-        "codex.exe",
+        "pfterminal.exe",
         "codex-resources\codex-command-runner.exe",
         "codex-resources\codex-windows-sandbox-setup.exe",
         "codex-resources\rg.exe"
@@ -601,8 +602,8 @@ function Test-ReleaseIsComplete {
     return (Split-Path -Leaf $ReleaseDir) -eq "$ExpectedVersion-$ExpectedTarget"
 }
 
-function Get-ExistingCodexCommand {
-    $existing = Get-Command codex -ErrorAction SilentlyContinue
+function Get-ExistingPFTerminalCommand {
+    $existing = Get-Command pfterminal -ErrorAction SilentlyContinue
     if ($null -eq $existing) {
         return $null
     }
@@ -610,7 +611,7 @@ function Get-ExistingCodexCommand {
     return $existing.Source
 }
 
-function Get-ExistingCodexManager {
+function Get-ExistingPFTerminalManager {
     param(
         [string]$ExistingPath,
         [string]$VisibleBinDir
@@ -640,8 +641,8 @@ function Get-ConflictingInstall {
         [string]$VisibleBinDir
     )
 
-    $existingPath = Get-ExistingCodexCommand
-    $manager = Get-ExistingCodexManager -ExistingPath $existingPath -VisibleBinDir $VisibleBinDir
+    $existingPath = Get-ExistingPFTerminalCommand
+    $manager = Get-ExistingPFTerminalManager -ExistingPath $existingPath -VisibleBinDir $VisibleBinDir
     if ($null -eq $manager) {
         return $null
     }
@@ -681,19 +682,19 @@ function Maybe-HandleConflictingInstall {
             Write-WarningStep "Failed to uninstall the existing $manager-managed PFTerminal. Continuing with the standalone install."
         }
     } else {
-        Write-WarningStep "Leaving the existing $manager-managed PFTerminal installed. PATH order will determine which codex runs."
+        Write-WarningStep "Leaving the existing $manager-managed PFTerminal installed. PATH order will determine which pfterminal runs."
     }
 }
 
-function Test-VisibleCodexCommand {
+function Test-VisiblePFTerminalCommand {
     param(
         [string]$VisibleBinDir
     )
 
-    $codexCommand = Join-Path $VisibleBinDir "codex.exe"
-    & $codexCommand --version *> $null
+    $pfterminalCommand = Join-Path $VisibleBinDir "pfterminal.exe"
+    & $pfterminalCommand --version *> $null
     if ($LASTEXITCODE -ne 0) {
-        throw "Installed PFTerminal command failed verification: $codexCommand --version"
+        throw "Installed PFTerminal command failed verification: $pfterminalCommand --version"
     }
 }
 
@@ -746,6 +747,15 @@ if ([string]::IsNullOrWhiteSpace($env:CODEX_INSTALL_DIR)) {
 }
 
 $currentVersion = Get-CurrentInstalledVersion -StandaloneCurrentDir $currentDir
+$oldPackageCodexPaths = @(
+    (Join-Path $currentDir "bin\codex.exe"),
+    (Join-Path $currentDir "codex.exe")
+)
+foreach ($oldPackageCodexPath in $oldPackageCodexPaths) {
+    if (Test-Path -LiteralPath $oldPackageCodexPath -PathType Leaf) {
+        Remove-Item -LiteralPath $oldPackageCodexPath -Force
+    }
+}
 $resolvedVersion = Resolve-Version
 $releaseName = "$resolvedVersion-$target"
 $releaseDir = Join-Path $releasesDir $releaseName
@@ -830,7 +840,7 @@ try {
                 $resourcesDir = Join-Path $stagingDir "codex-resources"
                 New-Item -ItemType Directory -Force -Path $resourcesDir | Out-Null
                 $copyMap = @{
-                    "codex/codex.exe" = "codex.exe"
+                    "codex/codex.exe" = "pfterminal.exe"
                     "codex/codex-command-runner.exe" = "codex-resources\codex-command-runner.exe"
                     "codex/codex-windows-sandbox-setup.exe" = "codex-resources\codex-windows-sandbox-setup.exe"
                     "path/rg.exe" = "codex-resources\rg.exe"
@@ -864,7 +874,7 @@ try {
         $oldStandaloneBackup = Move-OldStandaloneBinIfApproved -VisibleBinDir $visibleBinDir -DefaultVisibleBinDir $defaultVisibleBinDir
         try {
             Ensure-Junction -LinkPath $visibleBinDir -TargetPath $currentBinDir -InstallerOwnedTargetPrefix $standaloneRoot
-            Test-VisibleCodexCommand -VisibleBinDir $visibleBinDir
+            Test-VisiblePFTerminalCommand -VisibleBinDir $visibleBinDir
         } catch {
             if ($null -ne $oldStandaloneBackup -and (Test-Path -LiteralPath $oldStandaloneBackup)) {
                 if (Test-Path -LiteralPath $visibleBinDir) {
@@ -919,12 +929,12 @@ if ($prioritizeVisibleBin) {
     }
 }
 
-Write-Step "Current PowerShell session: codex"
-Write-Step "Future PowerShell windows: open a new PowerShell window and run: codex"
+Write-Step "Current PowerShell session: pfterminal"
+Write-Step "Future PowerShell windows: open a new PowerShell window and run: pfterminal"
 Write-Host "PFTerminal CLI $resolvedVersion installed successfully."
 
-$codexCommand = Join-Path $visibleBinDir "codex.exe"
+$pfterminalCommand = Join-Path $visibleBinDir "pfterminal.exe"
 if (Prompt-YesNo "Start PFTerminal now?") {
     Write-Step "Launching PFTerminal"
-    & $codexCommand
+    & $pfterminalCommand
 }

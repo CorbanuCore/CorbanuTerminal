@@ -4,20 +4,34 @@ use crate::session::InputQueueActivity;
 use crate::tools::handlers::multi_agents_spec::WaitAgentTimeoutOptions;
 use crate::tools::handlers::multi_agents_spec::create_wait_agent_tool_v2;
 use crate::turn_timing::now_unix_timestamp_ms;
+use codex_protocol::ThreadId;
 use codex_tools::ToolSpec;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio::time::timeout_at;
 
-#[derive(Default)]
 pub(crate) struct Handler {
     options: WaitAgentTimeoutOptions,
+    empty_waits_by_thread: Arc<tokio::sync::Mutex<HashMap<ThreadId, u8>>>,
+}
+
+impl Default for Handler {
+    fn default() -> Self {
+        Self {
+            options: WaitAgentTimeoutOptions::default(),
+            empty_waits_by_thread: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+        }
+    }
 }
 
 impl Handler {
     pub(crate) fn new(options: WaitAgentTimeoutOptions) -> Self {
-        Self { options }
+        Self {
+            options,
+            empty_waits_by_thread: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+        }
     }
 }
 
@@ -47,6 +61,7 @@ impl Handler {
             call_id,
             ..
         } = invocation;
+        ensure_manager_tool_allowed(&turn, "wait_agent")?;
         let arguments = function_arguments(payload)?;
         let args: WaitArgs = parse_arguments(&arguments)?;
         let min_timeout_ms = turn.config.multi_agent_v2.min_wait_timeout_ms;
@@ -66,6 +81,42 @@ impl Handler {
             Some(ms) => ms,
             None => default_timeout_ms,
         };
+
+        let current_path = turn
+            .session_source
+            .get_agent_path()
+            .unwrap_or_else(AgentPath::root);
+        let descendant_prefix = format!("{}/", current_path.as_str().trim_end_matches('/'));
+        let agents = session
+            .services
+            .agent_control
+            .list_agents(&turn.session_source, /*path_prefix*/ None)
+            .await
+            .unwrap_or_default();
+        if !agents.iter().any(|agent| {
+            agent.agent_name.starts_with(&descendant_prefix)
+                && !matches!(
+                    agent.agent_status,
+                    AgentStatus::Shutdown | AgentStatus::NotFound
+                )
+        }) {
+            return Err(FunctionCallError::RespondToModel(
+                "wait_agent rejected: this agent has no eligible child agents; return the result to its parent instead"
+                    .to_string(),
+            ));
+        }
+        if self
+            .empty_waits_by_thread
+            .lock()
+            .await
+            .get(&session.thread_id)
+            .is_some_and(|count| *count >= 3)
+        {
+            return Err(FunctionCallError::RespondToModel(
+                "wait_agent watchdog is open after 3 consecutive empty waits; polling is blocked until new work starts"
+                    .to_string(),
+            ));
+        }
 
         let turn_state = session
             .input_queue
@@ -92,13 +143,55 @@ impl Handler {
 
         let deadline = Instant::now() + Duration::from_millis(timeout_ms as u64);
         let outcome = wait_for_activity(&mut activity_rx, pending_activity, deadline).await;
+        let consecutive_empty_waits = {
+            let mut counts = self.empty_waits_by_thread.lock().await;
+            let count = counts.entry(session.thread_id).or_default();
+            if outcome == WaitOutcome::TimedOut {
+                *count = count.saturating_add(1);
+            } else {
+                *count = 0;
+            }
+            *count
+        };
+        let watchdog_escalated = consecutive_empty_waits >= 3;
         let agents = session
             .services
             .agent_control
             .list_agents(&turn.session_source, /*path_prefix*/ None)
             .await
             .unwrap_or_default();
-        let result = WaitAgentResult::from_outcome(outcome, agents);
+        let result = WaitAgentResult::from_outcome(
+            outcome,
+            agents,
+            current_path.to_string(),
+            consecutive_empty_waits,
+            watchdog_escalated,
+        );
+
+        if watchdog_escalated
+            && let Some(parent_thread_id) = turn.parent_thread_id
+            && let Some(parent) = session
+                .services
+                .agent_control
+                .get_agent_metadata(parent_thread_id)
+            && let Some(parent_path) = parent.agent_path
+        {
+            let communication = InterAgentCommunication::new(
+                current_path.clone(),
+                parent_path,
+                Vec::new(),
+                format!(
+                    "WATCHDOG ESCALATION — {current_path} reached {consecutive_empty_waits} consecutive empty waits. Automatic polling is now blocked; dispatch real work or end the manager turn."
+                ),
+                /*trigger_turn*/ true,
+            );
+            session
+                .services
+                .agent_control
+                .send_inter_agent_communication(parent_thread_id, communication)
+                .await
+                .map_err(|err| collab_agent_error(parent_thread_id, err))?;
+        }
 
         session
             .send_event(
@@ -134,19 +227,38 @@ struct WaitArgs {
 pub(crate) struct WaitAgentResult {
     pub(crate) message: String,
     pub(crate) timed_out: bool,
+    pub(crate) waiting_for: String,
+    pub(crate) wake_conditions: String,
+    pub(crate) consecutive_empty_waits: u8,
+    pub(crate) watchdog_escalated: bool,
     pub(crate) agents: Vec<ListedAgent>,
 }
 
 impl WaitAgentResult {
-    fn from_outcome(outcome: WaitOutcome, agents: Vec<ListedAgent>) -> Self {
+    fn from_outcome(
+        outcome: WaitOutcome,
+        agents: Vec<ListedAgent>,
+        waiting_for: String,
+        consecutive_empty_waits: u8,
+        watchdog_escalated: bool,
+    ) -> Self {
         let message = match outcome {
             WaitOutcome::MailboxActivity => "Wait completed.",
             WaitOutcome::Steered => "Wait interrupted by new input.",
+            WaitOutcome::TimedOut if watchdog_escalated => {
+                "WATCHDOG ESCALATION: 3 consecutive empty waits; further polling is blocked."
+            }
             WaitOutcome::TimedOut => "Wait timed out.",
         };
         Self {
             message: message.to_string(),
             timed_out: outcome == WaitOutcome::TimedOut,
+            waiting_for,
+            wake_conditions:
+                "child completion or message, follow-up task, human steering, or timeout"
+                    .to_string(),
+            consecutive_empty_waits,
+            watchdog_escalated,
             agents,
         }
     }

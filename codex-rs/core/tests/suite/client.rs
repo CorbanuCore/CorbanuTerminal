@@ -302,6 +302,66 @@ async fn response_item_ids_persist_across_resume_and_preserve_server_ids() -> an
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn meta_responses_assigns_ids_across_tool_continuations() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let response_mock = mount_sse_sequence(
+        &server,
+        vec![
+            sse(vec![
+                ev_response_created("resp-1"),
+                ev_function_call(
+                    "call-meta-id",
+                    "exec_command",
+                    r#"{"cmd":"printf meta-id-test"}"#,
+                ),
+                ev_completed("resp-1"),
+            ]),
+            sse(vec![
+                ev_response_created("resp-2"),
+                ev_assistant_message("msg-meta-answer", "done"),
+                ev_completed("resp-2"),
+            ]),
+        ],
+    )
+    .await;
+    let mut provider = built_in_model_providers(/*openai_base_url*/ None)["meta"].clone();
+    provider.base_url = Some(format!("{}/v1", server.uri()));
+    provider.env_key = None;
+    let test = test_codex()
+        .with_config(move |config| {
+            config.model_provider_id = "meta".to_string();
+            config.model_provider = provider;
+        })
+        .build(&server)
+        .await?;
+
+    test.submit_turn("run one command").await?;
+
+    let requests = response_mock.requests();
+    assert_eq!(requests.len(), 2);
+    let continuation_body = requests[1].body_json();
+    let continuation_input = continuation_body["input"]
+        .as_array()
+        .expect("continuation request should include input items");
+    for kind in ["message", "function_call", "function_call_output"] {
+        let item = continuation_input
+            .iter()
+            .find(|item| item.get("type").and_then(serde_json::Value::as_str) == Some(kind))
+            .unwrap_or_else(|| {
+                panic!("continuation should include {kind}: {continuation_input:?}")
+            });
+        assert!(
+            item.get("id")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|id| !id.is_empty()),
+            "Meta requires an ID on replayed {kind}: {item}"
+        );
+    }
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn response_item_ids_are_sent_for_all_remote_v2_compaction_requests() -> anyhow::Result<()> {
     let server = MockServer::start().await;
     let response_mock = mount_sse_sequence(
@@ -344,6 +404,18 @@ async fn response_item_ids_are_sent_for_all_remote_v2_compaction_requests() -> a
     for (request_index, request) in requests.iter().enumerate() {
         let input = request.input();
         assert!(!input.is_empty(), "request {request_index} input is empty");
+        if input.iter().any(|item| {
+            item.get("type").and_then(serde_json::Value::as_str) == Some("compaction_trigger")
+        }) {
+            assert_eq!(
+                input
+                    .last()
+                    .and_then(|item| item.get("type"))
+                    .and_then(serde_json::Value::as_str),
+                Some("compaction_trigger"),
+                "request {request_index} compaction_trigger must be the final input item"
+            );
+        }
         for item in input {
             if item.get("type").and_then(serde_json::Value::as_str) == Some("compaction_trigger") {
                 continue;
@@ -435,6 +507,7 @@ impl ProviderAuthCommandFixture {
                 r#"#!/bin/sh
 first_line=$(sed -n '1p' tokens.txt)
 printf '%s\n' "$first_line"
+printf '%s\n' "${PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH:-0}" >> refresh-signals.txt
 tail -n +2 tokens.txt > tokens.next
 mv tokens.next tokens.txt
 "#,
@@ -461,6 +534,7 @@ set "first_line="
 if not defined first_line exit /b 1
 
 echo(%first_line%
+if defined PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH (echo %PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH%>>refresh-signals.txt) else (echo 0>>refresh-signals.txt)
 more +1 tokens.txt > tokens.next
 move /y tokens.next tokens.txt >nul
 "#,
@@ -493,6 +567,14 @@ move /y tokens.next tokens.txt >nul
             cwd: codex_utils_absolute_path::AbsolutePathBuf::try_from(self.tempdir.path())
                 .expect("tempdir should be absolute"),
         }
+    }
+
+    fn refresh_signals(&self) -> Vec<String> {
+        std::fs::read_to_string(self.tempdir.path().join("refresh-signals.txt"))
+            .unwrap_or_default()
+            .lines()
+            .map(ToString::to_string)
+            .collect()
     }
 }
 
@@ -1066,6 +1148,7 @@ async fn provider_auth_command_supplies_bearer_token() {
     let auth_fixture = ProviderAuthCommandFixture::new(&["command-token"]).unwrap();
 
     send_provider_auth_request(&server, auth_fixture.auth()).await;
+    assert_eq!(auth_fixture.refresh_signals(), ["0"]);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1098,6 +1181,7 @@ async fn provider_auth_command_refreshes_after_401() {
         .await;
 
     send_provider_auth_request(&server, auth_fixture.auth()).await;
+    assert_eq!(auth_fixture.refresh_signals(), ["0", "1"]);
 }
 
 /// Issues one streamed Responses request through a provider configured with command-backed auth.

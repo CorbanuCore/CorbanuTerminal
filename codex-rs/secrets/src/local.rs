@@ -1,10 +1,13 @@
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::OnceLock;
+use std::sync::Weak;
 use std::sync::atomic::Ordering;
 use std::sync::atomic::compiler_fence;
 use std::time::SystemTime;
@@ -42,9 +45,11 @@ const SECRETS_VERSION: u8 = 1;
 const LOCAL_SECRETS_FILENAME: &str = "local.age";
 const CODEX_AUTH_SECRETS_FILENAME: &str = "codex_auth.age";
 const MCP_OAUTH_SECRETS_FILENAME: &str = "mcp_oauth.age";
+const LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR: u8 = 16;
+const LOCAL_SECRETS_MAX_SCRYPT_WORK_FACTOR: u8 = 20;
 
 /// Selects the local encrypted file used by a `LocalSecretsBackend`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum LocalSecretsNamespace {
     /// General managed secrets stored in `local.age`.
     #[default]
@@ -74,15 +79,22 @@ impl SecretsFile {
 pub struct LocalSecretsBackend {
     codex_home: PathBuf,
     keyring_store: Arc<dyn KeyringStore>,
+    default_keyring_store: Option<Arc<LocalFallbackKeyringStore>>,
     namespace: LocalSecretsNamespace,
     cached_file: Arc<Mutex<Option<SecretsFile>>>,
 }
 
 impl LocalSecretsBackend {
     pub(crate) fn new_with_default_keyring(codex_home: PathBuf) -> Self {
-        let keyring_store: Arc<dyn KeyringStore> =
-            Arc::new(LocalFallbackKeyringStore::new(codex_home.clone()));
-        Self::new(codex_home, keyring_store)
+        let default_keyring_store = Arc::new(LocalFallbackKeyringStore::new(codex_home.clone()));
+        let keyring_store: Arc<dyn KeyringStore> = default_keyring_store.clone();
+        Self {
+            cached_file: shared_default_cache(&codex_home, LocalSecretsNamespace::ManagedSecrets),
+            codex_home,
+            keyring_store,
+            default_keyring_store: Some(default_keyring_store),
+            namespace: LocalSecretsNamespace::ManagedSecrets,
+        }
     }
 
     pub fn new(codex_home: PathBuf, keyring_store: Arc<dyn KeyringStore>) -> Self {
@@ -101,7 +113,24 @@ impl LocalSecretsBackend {
         Self {
             codex_home,
             keyring_store,
+            default_keyring_store: None,
             namespace,
+            cached_file: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    #[cfg(test)]
+    fn new_with_default_primary(codex_home: PathBuf, primary: Arc<dyn KeyringStore>) -> Self {
+        let default_keyring_store = Arc::new(LocalFallbackKeyringStore::new_with_primary(
+            codex_home.clone(),
+            primary,
+        ));
+        let keyring_store: Arc<dyn KeyringStore> = default_keyring_store.clone();
+        Self {
+            codex_home,
+            keyring_store,
+            default_keyring_store: Some(default_keyring_store),
+            namespace: LocalSecretsNamespace::ManagedSecrets,
             cached_file: Arc::new(Mutex::new(None)),
         }
     }
@@ -179,8 +208,7 @@ impl LocalSecretsBackend {
 
             let ciphertext = fs::read(&path)
                 .with_context(|| format!("failed to read secrets file at {}", path.display()))?;
-            let passphrase = self.load_or_create_passphrase()?;
-            let plaintext = decrypt_with_passphrase(&ciphertext, &passphrase)?;
+            let (passphrase, plaintext) = self.decrypt_existing_file(&ciphertext)?;
             let mut parsed: SecretsFile =
                 serde_json::from_slice(&plaintext).with_context(|| {
                     format!(
@@ -197,6 +225,15 @@ impl LocalSecretsBackend {
                 parsed.version,
                 SECRETS_VERSION
             );
+            if should_reencrypt_scrypt_file(&ciphertext)
+                && let Err(err) = self.save_file_with_passphrase(&parsed, &passphrase)
+            {
+                warn!(
+                    path = %path.display(),
+                    error = %err,
+                    "failed to normalize local secrets scrypt work factor after decrypt"
+                );
+            }
             parsed
         };
 
@@ -214,9 +251,24 @@ impl LocalSecretsBackend {
             .map_err(|err| anyhow::anyhow!(err.message()))
             .with_context(|| format!("failed to harden permissions on {}", dir.display()))?;
 
-        let passphrase = self.load_or_create_passphrase()?;
+        let path = self.secrets_path();
+        let passphrase = if path.exists() {
+            let ciphertext = fs::read(&path)
+                .with_context(|| format!("failed to read secrets file at {}", path.display()))?;
+            self.decrypt_existing_file(&ciphertext)?.0
+        } else {
+            self.load_or_create_passphrase_for_new_file()?
+        };
+        self.save_file_with_passphrase(file, &passphrase)
+    }
+
+    fn save_file_with_passphrase(
+        &self,
+        file: &SecretsFile,
+        passphrase: &SecretString,
+    ) -> Result<()> {
         let plaintext = serde_json::to_vec(file).context("failed to serialize secrets file")?;
-        let ciphertext = encrypt_with_passphrase(&plaintext, &passphrase)?;
+        let ciphertext = encrypt_with_passphrase(&plaintext, passphrase)?;
         let path = self.secrets_path();
         write_file_atomically(&path, &ciphertext)?;
         if file.version <= SECRETS_VERSION
@@ -227,7 +279,39 @@ impl LocalSecretsBackend {
         Ok(())
     }
 
-    fn load_or_create_passphrase(&self) -> Result<SecretString> {
+    fn decrypt_existing_file(&self, ciphertext: &[u8]) -> Result<(SecretString, Vec<u8>)> {
+        let candidates = self.load_passphrase_candidates()?;
+        anyhow::ensure!(
+            !candidates.is_empty(),
+            "existing secrets file cannot be opened because its encryption key is unavailable; the file was left unchanged"
+        );
+
+        for passphrase in candidates {
+            if let Ok(plaintext) = decrypt_with_passphrase(ciphertext, &passphrase) {
+                return Ok((passphrase, plaintext));
+            }
+        }
+
+        anyhow::bail!(
+            "existing secrets file cannot be decrypted with any available encryption key; the file and keys were left unchanged"
+        )
+    }
+
+    fn load_passphrase_candidates(&self) -> Result<Vec<SecretString>> {
+        let account = compute_keyring_account(&self.codex_home);
+        if let Some(default_store) = &self.default_keyring_store {
+            return default_store.load_candidates(keyring_service(), &account);
+        }
+
+        let loaded = self
+            .keyring_store
+            .load(keyring_service(), &account)
+            .map_err(|err| anyhow::anyhow!(err.message()))
+            .with_context(|| format!("failed to load secrets key from keyring for {account}"))?;
+        Ok(loaded.into_iter().map(SecretString::from).collect())
+    }
+
+    fn load_or_create_passphrase_for_new_file(&self) -> Result<SecretString> {
         let account = compute_keyring_account(&self.codex_home);
         let loaded = self
             .keyring_store
@@ -249,6 +333,27 @@ impl LocalSecretsBackend {
             }
         }
     }
+}
+
+type SharedSecretsCache =
+    Mutex<HashMap<(PathBuf, LocalSecretsNamespace), Weak<Mutex<Option<SecretsFile>>>>>;
+
+fn shared_default_cache(
+    codex_home: &Path,
+    namespace: LocalSecretsNamespace,
+) -> Arc<Mutex<Option<SecretsFile>>> {
+    static CACHES: OnceLock<SharedSecretsCache> = OnceLock::new();
+    let caches = CACHES.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut caches = caches
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let key = (codex_home.to_path_buf(), namespace);
+    if let Some(cache) = caches.get(&key).and_then(Weak::upgrade) {
+        return cache;
+    }
+    let cache = Arc::new(Mutex::new(None));
+    caches.insert(key, Arc::downgrade(&cache));
+    cache
 }
 
 #[derive(Debug)]
@@ -331,11 +436,53 @@ impl LocalFallbackKeyringStore {
             ))),
         }
     }
+
+    fn load_candidates(&self, service: &str, account: &str) -> Result<Vec<SecretString>> {
+        let mut candidates = Vec::new();
+        let mut errors = Vec::new();
+
+        match self.primary.load(service, account) {
+            Ok(Some(value)) => candidates.push(value),
+            Ok(None) => {}
+            Err(err) => {
+                warn!(
+                    service,
+                    account,
+                    error = %err,
+                    "OS keyring unavailable while opening existing encrypted secrets"
+                );
+                errors.push(format!("OS keyring: {}", err.message()));
+            }
+        }
+
+        match self.load_fallback(service, account) {
+            Ok(Some(value)) if !candidates.contains(&value) => candidates.push(value),
+            Ok(Some(_)) | Ok(None) => {}
+            Err(err) => {
+                warn!(
+                    service,
+                    account,
+                    error = %err,
+                    "local file-backed keyring fallback unavailable while opening existing encrypted secrets"
+                );
+                errors.push(format!("local fallback: {}", err.message()));
+            }
+        }
+
+        if candidates.is_empty() && !errors.is_empty() {
+            anyhow::bail!(
+                "failed to load existing secrets encryption key ({})",
+                errors.join("; ")
+            );
+        }
+
+        Ok(candidates.into_iter().map(SecretString::from).collect())
+    }
 }
 
 impl KeyringStore for LocalFallbackKeyringStore {
     fn load(&self, service: &str, account: &str) -> Result<Option<String>, CredentialStoreError> {
-        match self.load_fallback(service, account) {
+        match self.primary.load(service, account) {
             Ok(Some(value)) => return Ok(Some(value)),
             Ok(None) => {}
             Err(err) => {
@@ -343,12 +490,12 @@ impl KeyringStore for LocalFallbackKeyringStore {
                     service,
                     account,
                     error = %err,
-                    "local file-backed keyring fallback unavailable; trying OS keyring"
+                    "OS keyring unavailable; trying local file-backed keyring fallback"
                 );
             }
         }
 
-        match self.primary.load(service, account) {
+        match self.load_fallback(service, account) {
             Ok(Some(value)) => Ok(Some(value)),
             Ok(None) => Ok(None),
             Err(err) => {
@@ -356,9 +503,9 @@ impl KeyringStore for LocalFallbackKeyringStore {
                     service,
                     account,
                     error = %err,
-                    "OS keyring unavailable; using local file-backed keyring fallback"
+                    "local file-backed keyring fallback unavailable"
                 );
-                self.load_fallback(service, account)
+                Err(err)
             }
         }
     }
@@ -618,13 +765,39 @@ fn wipe_bytes(bytes: &mut [u8]) {
 }
 
 fn encrypt_with_passphrase(plaintext: &[u8], passphrase: &SecretString) -> Result<Vec<u8>> {
-    let recipient = ScryptRecipient::new(passphrase.clone());
+    let mut recipient = ScryptRecipient::new(passphrase.clone());
+    // The passphrase is generated with 32 bytes of entropy and stored in the
+    // local keyring/fallback store. Pinning the age/scrypt factor avoids slow
+    // machine-calibrated files that later exceed the decrypt safety limit.
+    recipient.set_work_factor(LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR);
     encrypt(&recipient, plaintext).context("failed to encrypt secrets file")
 }
 
 fn decrypt_with_passphrase(ciphertext: &[u8], passphrase: &SecretString) -> Result<Vec<u8>> {
-    let identity = ScryptIdentity::new(passphrase.clone());
+    let mut identity = ScryptIdentity::new(passphrase.clone());
+    // These files are local, PFTerminal-owned vaults. Older/faster hosts can
+    // produce age/scrypt headers above the library's current machine-calibrated
+    // default limit, which makes existing provider keys appear missing.
+    identity.set_max_work_factor(LOCAL_SECRETS_MAX_SCRYPT_WORK_FACTOR);
     decrypt(&identity, ciphertext).context("failed to decrypt secrets file")
+}
+
+fn should_reencrypt_scrypt_file(ciphertext: &[u8]) -> bool {
+    scrypt_work_factor_from_age_header(ciphertext)
+        .is_some_and(|work_factor| work_factor > LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR)
+}
+
+fn scrypt_work_factor_from_age_header(ciphertext: &[u8]) -> Option<u8> {
+    for line in ciphertext.split(|byte| *byte == b'\n') {
+        let line = std::str::from_utf8(line).ok()?;
+        if line.starts_with("---") {
+            break;
+        }
+        if let Some(fields) = line.strip_prefix("-> scrypt ") {
+            return fields.split_whitespace().nth(1)?.parse().ok();
+        }
+    }
+    None
 }
 
 fn parse_canonical_key(canonical_key: &str) -> Option<SecretListEntry> {
@@ -659,6 +832,15 @@ fn parse_canonical_key(canonical_key: &str) -> Option<SecretListEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_backends_share_decrypted_file_cache() {
+        let codex_home = tempfile::tempdir().expect("temp dir");
+        let first = LocalSecretsBackend::new_with_default_keyring(codex_home.path().to_path_buf());
+        let second = LocalSecretsBackend::new_with_default_keyring(codex_home.path().to_path_buf());
+
+        assert!(Arc::ptr_eq(&first.cached_file, &second.cached_file));
+    }
     use codex_keyring_store::tests::MockKeyringStore;
     use keyring::Error as KeyringError;
     use pretty_assertions::assert_eq;
@@ -739,11 +921,10 @@ mod tests {
     #[test]
     fn default_keyring_fallback_persists_when_os_keyring_is_unavailable() -> Result<()> {
         let codex_home = tempfile::tempdir().expect("tempdir");
-        let fallback = Arc::new(LocalFallbackKeyringStore::new_with_primary(
+        let backend = LocalSecretsBackend::new_with_default_primary(
             codex_home.path().to_path_buf(),
             Arc::new(AlwaysFailingKeyringStore),
-        ));
-        let backend = LocalSecretsBackend::new(codex_home.path().to_path_buf(), fallback);
+        );
         let scope = SecretScope::Global;
         let name = SecretName::new("TEST_SECRET")?;
 
@@ -781,6 +962,195 @@ mod tests {
     }
 
     #[test]
+    fn existing_vault_never_generates_a_replacement_key_when_key_is_missing() -> Result<()> {
+        let codex_home = tempfile::tempdir().expect("tempdir");
+        let original_keyring = Arc::new(MockKeyringStore::default());
+        let original =
+            LocalSecretsBackend::new(codex_home.path().to_path_buf(), original_keyring.clone());
+        let scope = SecretScope::Global;
+        let name = SecretName::new("TEST_SECRET")?;
+        original.set(&scope, &name, "must-survive")?;
+
+        let path = original.secrets_path();
+        let ciphertext_before = fs::read(&path)?;
+        let account = compute_keyring_account(codex_home.path());
+        original_keyring.delete(keyring_service(), &account)?;
+
+        let missing_keyring = Arc::new(MockKeyringStore::default());
+        let reopened =
+            LocalSecretsBackend::new(codex_home.path().to_path_buf(), missing_keyring.clone());
+        let error = reopened
+            .get(&scope, &name)
+            .expect_err("an existing vault without its key must fail closed");
+
+        assert!(
+            error.to_string().contains("encryption key is unavailable"),
+            "unexpected error: {error:#}"
+        );
+        assert_eq!(fs::read(&path)?, ciphertext_before);
+        assert_eq!(missing_keyring.saved_value(&account), None);
+        Ok(())
+    }
+
+    #[test]
+    fn stale_fallback_does_not_shadow_primary_key_for_existing_vault() -> Result<()> {
+        let codex_home = tempfile::tempdir().expect("tempdir");
+        let primary = Arc::new(MockKeyringStore::default());
+        let original = LocalSecretsBackend::new_with_default_primary(
+            codex_home.path().to_path_buf(),
+            primary.clone(),
+        );
+        let scope = SecretScope::Global;
+        let name = SecretName::new("KIMI_API_KEY")?;
+        original.set(&scope, &name, "preserved-provider-key")?;
+
+        let account = compute_keyring_account(codex_home.path());
+        original
+            .default_keyring_store
+            .as_ref()
+            .expect("default keyring")
+            .save_fallback(keyring_service(), &account, "stale-generated-key")?;
+        drop(original);
+
+        let reopened = LocalSecretsBackend::new_with_default_primary(
+            codex_home.path().to_path_buf(),
+            primary.clone(),
+        );
+        assert_eq!(
+            reopened.get(&scope, &name)?,
+            Some("preserved-provider-key".to_string())
+        );
+
+        reopened.set(&scope, &name, "rotated-provider-key")?;
+        let verified =
+            LocalSecretsBackend::new_with_default_primary(codex_home.path().to_path_buf(), primary);
+        assert_eq!(
+            verified.get(&scope, &name)?,
+            Some("rotated-provider-key".to_string())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn unavailable_os_keyring_does_not_create_fallback_for_existing_vault() -> Result<()> {
+        let codex_home = tempfile::tempdir().expect("tempdir");
+        let primary = Arc::new(MockKeyringStore::default());
+        let original = LocalSecretsBackend::new_with_default_primary(
+            codex_home.path().to_path_buf(),
+            primary.clone(),
+        );
+        let scope = SecretScope::Global;
+        let name = SecretName::new("KIMI_API_KEY")?;
+        original.set(&scope, &name, "preserved-provider-key")?;
+        let path = original.secrets_path();
+        let ciphertext_before = fs::read(&path)?;
+        drop(original);
+
+        let account = compute_keyring_account(codex_home.path());
+        primary.delete(keyring_service(), &account)?;
+        primary.set_error(
+            &account,
+            KeyringError::Invalid("headless session".into(), "load".into()),
+        );
+        let reopened =
+            LocalSecretsBackend::new_with_default_primary(codex_home.path().to_path_buf(), primary);
+        let error = reopened
+            .get(&scope, &name)
+            .expect_err("existing vault must fail closed when the OS keyring is unavailable");
+
+        assert!(
+            error
+                .to_string()
+                .contains("failed to load existing secrets encryption key"),
+            "unexpected error: {error:#}"
+        );
+        assert_eq!(fs::read(&path)?, ciphertext_before);
+        assert!(
+            !reopened
+                .default_keyring_store
+                .as_ref()
+                .expect("default keyring")
+                .fallback_path(keyring_service(), &account)
+                .exists(),
+            "opening an existing vault must never manufacture a fallback key"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn valid_fallback_recovers_existing_vault_when_primary_key_is_stale() -> Result<()> {
+        let codex_home = tempfile::tempdir().expect("tempdir");
+        let original = LocalSecretsBackend::new_with_default_primary(
+            codex_home.path().to_path_buf(),
+            Arc::new(AlwaysFailingKeyringStore),
+        );
+        let scope = SecretScope::Global;
+        let name = SecretName::new("AMBIENT_API_KEY")?;
+        original.set(&scope, &name, "fallback-protected-key")?;
+        drop(original);
+
+        let stale_primary = Arc::new(MockKeyringStore::default());
+        let account = compute_keyring_account(codex_home.path());
+        stale_primary.save(keyring_service(), &account, "unrelated-primary-key")?;
+        let reopened = LocalSecretsBackend::new_with_default_primary(
+            codex_home.path().to_path_buf(),
+            stale_primary,
+        );
+
+        assert_eq!(
+            reopened.get(&scope, &name)?,
+            Some("fallback-protected-key".to_string())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn wrong_primary_and_fallback_keys_leave_existing_vault_unchanged() -> Result<()> {
+        let codex_home = tempfile::tempdir().expect("tempdir");
+        let original_keyring = Arc::new(MockKeyringStore::default());
+        let original = LocalSecretsBackend::new(codex_home.path().to_path_buf(), original_keyring);
+        let scope = SecretScope::Global;
+        let name = SecretName::new("TEST_SECRET")?;
+        original.set(&scope, &name, "must-survive")?;
+        let path = original.secrets_path();
+        let ciphertext_before = fs::read(&path)?;
+        drop(original);
+
+        let stale_primary = Arc::new(MockKeyringStore::default());
+        let account = compute_keyring_account(codex_home.path());
+        stale_primary.save(keyring_service(), &account, "wrong-primary")?;
+        let reopened = LocalSecretsBackend::new_with_default_primary(
+            codex_home.path().to_path_buf(),
+            stale_primary,
+        );
+        reopened
+            .default_keyring_store
+            .as_ref()
+            .expect("default keyring")
+            .save_fallback(keyring_service(), &account, "wrong-fallback")?;
+
+        let error = reopened
+            .get(&scope, &name)
+            .expect_err("conflicting wrong keys must fail closed");
+        assert!(
+            error
+                .to_string()
+                .contains("cannot be decrypted with any available encryption key"),
+            "unexpected error: {error:#}"
+        );
+        assert_eq!(fs::read(&path)?, ciphertext_before);
+        assert_eq!(
+            reopened
+                .default_keyring_store
+                .as_ref()
+                .expect("default keyring")
+                .load_fallback(keyring_service(), &account)?,
+            Some("wrong-fallback".to_string())
+        );
+        Ok(())
+    }
+
+    #[test]
     fn save_file_does_not_leave_temp_files() -> Result<()> {
         let codex_home = tempfile::tempdir().expect("tempdir");
         let keyring = Arc::new(MockKeyringStore::default());
@@ -803,6 +1173,51 @@ mod tests {
             .collect();
         assert_eq!(filenames, vec![LOCAL_SECRETS_FILENAME.to_string()]);
         assert_eq!(backend.get(&scope, &name)?, Some("two".to_string()));
+        Ok(())
+    }
+
+    #[test]
+    fn scrypt_header_parser_flags_files_needing_normalization() {
+        let high_work_factor = LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR + 1;
+        let high_header = format!("age-encryption.org/v1\n-> scrypt salt {high_work_factor}\n---");
+        let pinned_header = format!(
+            "age-encryption.org/v1\n-> scrypt salt {LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR}\n---"
+        );
+        let recipient_header = "age-encryption.org/v1\n-> X25519 key\n---";
+
+        assert_eq!(
+            scrypt_work_factor_from_age_header(high_header.as_bytes()),
+            Some(high_work_factor)
+        );
+        assert!(should_reencrypt_scrypt_file(high_header.as_bytes()));
+        assert_eq!(
+            scrypt_work_factor_from_age_header(pinned_header.as_bytes()),
+            Some(LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR)
+        );
+        assert!(!should_reencrypt_scrypt_file(pinned_header.as_bytes()));
+        assert_eq!(
+            scrypt_work_factor_from_age_header(recipient_header.as_bytes()),
+            None
+        );
+        assert!(!should_reencrypt_scrypt_file(recipient_header.as_bytes()));
+    }
+
+    #[test]
+    fn passphrase_encryption_pins_scrypt_work_factor_and_round_trips() -> Result<()> {
+        let passphrase = SecretString::from("test-only-local-secrets-passphrase");
+        let plaintext = br#"{"version":1,"secrets":{"global/TEST_SECRET":"secret-value"}}"#;
+
+        let ciphertext = encrypt_with_passphrase(plaintext, &passphrase)?;
+
+        assert_eq!(
+            scrypt_work_factor_from_age_header(&ciphertext),
+            Some(LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR)
+        );
+        assert!(!should_reencrypt_scrypt_file(&ciphertext));
+        assert_eq!(
+            decrypt_with_passphrase(&ciphertext, &passphrase)?,
+            plaintext
+        );
         Ok(())
     }
 

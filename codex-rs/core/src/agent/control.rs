@@ -260,27 +260,21 @@ impl AgentControl {
         self.state.agent_metadata_for_thread(agent_id)
     }
 
+    pub(crate) fn get_agent_metadata_for_path(
+        &self,
+        agent_path: &AgentPath,
+    ) -> Option<AgentMetadata> {
+        self.state.agent_metadata_for_path(agent_path)
+    }
+
+    pub(crate) fn is_root_thread(&self, agent_id: ThreadId) -> bool {
+        self.state.agent_id_for_path(&AgentPath::root()) == Some(agent_id)
+    }
+
     pub(crate) fn ensure_agent_known(&self, agent_id: ThreadId) -> CodexResult<AgentMetadata> {
         self.state
             .agent_metadata_for_thread(agent_id)
             .ok_or(CodexErr::ThreadNotFound(agent_id))
-    }
-
-    pub(crate) fn record_agent_task_message(
-        &self,
-        agent_id: ThreadId,
-        message: String,
-    ) -> Option<String> {
-        let task_message = non_empty_task_message(message);
-        match task_message.as_ref() {
-            Some(message) => {
-                self.state
-                    .update_last_task_message(agent_id, message.clone());
-                self.state.clear_last_result_message(agent_id);
-            }
-            None => self.state.clear_last_task_message(agent_id),
-        }
-        task_message
     }
 
     pub(crate) fn record_agent_result_status(

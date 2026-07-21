@@ -34,6 +34,10 @@ use codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR;
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_API_KEY_ENV_VAR;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
+use codex_model_provider_info::KIMI_CODE_API_KEY_ENV_VAR;
+use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
+use codex_model_provider_info::META_API_KEY_ENV_VAR;
+use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_API_KEY_ENV_VAR;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_API_KEY_ENV_VAR;
@@ -118,7 +122,9 @@ struct ApiKeyEntryContext {
 }
 
 const OPENROUTER_PROVIDER_NAME: &str = "OpenRouter";
+const META_PROVIDER_NAME: &str = "Meta";
 const BASETEN_PROVIDER_NAME: &str = "Baseten";
+const KIMI_CODE_PROVIDER_NAME: &str = "Kimi Code";
 const VERCEL_PROVIDER_NAME: &str = "Vercel";
 
 const RECOMMENDED_PROVIDER_API_KEY_OPTIONS: &[(&str, &str, &str)] = &[
@@ -128,12 +134,18 @@ const RECOMMENDED_PROVIDER_API_KEY_OPTIONS: &[(&str, &str, &str)] = &[
         ANTHROPIC_API_KEY_ENV_VAR,
     ),
     (AMBIENT_PROVIDER_ID, "Ambient", AMBIENT_API_KEY_ENV_VAR),
+    (
+        KIMI_CODE_PROVIDER_ID,
+        KIMI_CODE_PROVIDER_NAME,
+        KIMI_CODE_API_KEY_ENV_VAR,
+    ),
     (ZAI_PROVIDER_ID, "Z.AI", ZAI_API_KEY_ENV_VAR),
     (
         OPENROUTER_PROVIDER_ID,
         OPENROUTER_PROVIDER_NAME,
         OPENROUTER_API_KEY_ENV_VAR,
     ),
+    (META_PROVIDER_ID, META_PROVIDER_NAME, META_API_KEY_ENV_VAR),
     (
         BASETEN_PROVIDER_ID,
         BASETEN_PROVIDER_NAME,
@@ -194,11 +206,13 @@ fn provider_api_key_sort_rank(provider_id: &str) -> usize {
     match provider_id {
         ANTHROPIC_PROVIDER_ID => 0,
         AMBIENT_PROVIDER_ID => 1,
-        ZAI_PROVIDER_ID => 2,
-        OPENROUTER_PROVIDER_ID => 3,
-        BASETEN_PROVIDER_ID => 4,
-        VERCEL_PROVIDER_ID => 5,
-        _ => 6,
+        KIMI_CODE_PROVIDER_ID => 2,
+        ZAI_PROVIDER_ID => 3,
+        OPENROUTER_PROVIDER_ID => 4,
+        META_PROVIDER_ID => 5,
+        BASETEN_PROVIDER_ID => 6,
+        VERCEL_PROVIDER_ID => 7,
+        _ => 8,
     }
 }
 
@@ -206,8 +220,10 @@ pub(crate) fn provider_api_key_display_name(provider: &ApiKeyProviderOption) -> 
     match provider.env_var.as_str() {
         ANTHROPIC_API_KEY_ENV_VAR => "Provider: Anthropic API Key".to_string(),
         AMBIENT_API_KEY_ENV_VAR => "Provider: Ambient API Key".to_string(),
+        KIMI_CODE_API_KEY_ENV_VAR => "Provider: Kimi Code API Key".to_string(),
         ZAI_API_KEY_ENV_VAR => "Provider: Z.AI API Key".to_string(),
         OPENROUTER_API_KEY_ENV_VAR => "Provider: OpenRouter API Key".to_string(),
+        META_API_KEY_ENV_VAR => "Provider: Meta API Key".to_string(),
         BASETEN_API_KEY_ENV_VAR => "Provider: Baseten API Key".to_string(),
         VERCEL_API_KEY_ENV_VAR => "Provider: Vercel API Key".to_string(),
         _ => format!("Provider: {} {}", provider.name, provider.env_var),

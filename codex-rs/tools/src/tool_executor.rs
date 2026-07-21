@@ -31,6 +31,12 @@ pub enum ToolExposure {
     /// model tool while excluding it from the nested code-mode tool surface.
     DirectModelOnly,
 
+    /// Omit this tool from the direct model tool list while exposing it as a
+    /// nested code-mode tool. This is useful for runtime-enforced operations
+    /// that must be reachable for an explained rejection without granting the
+    /// direct model surface the capability.
+    CodeModeOnly,
+
     /// Keep this tool registered for dispatch without exposing it to the model.
     Hidden,
 }

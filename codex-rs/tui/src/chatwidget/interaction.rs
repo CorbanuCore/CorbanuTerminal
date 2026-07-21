@@ -311,9 +311,9 @@ impl ChatWidget {
         let tx = self.app_event_tx.clone();
         let existing_name = self.thread_name.as_deref().filter(|name| !name.is_empty());
         let title = if existing_name.is_some() {
-            "Rename thread"
+            "Rename pane"
         } else {
-            "Name thread"
+            "Name pane"
         };
         let view = CustomPromptView::new(
             title.to_string(),
@@ -327,7 +327,7 @@ impl ChatWidget {
                     )));
                     return;
                 };
-                tx.set_thread_name(name);
+                tx.rename_current_pane(name);
             }),
         );
 

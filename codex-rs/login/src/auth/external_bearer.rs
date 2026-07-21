@@ -45,7 +45,7 @@ impl BearerTokenRefresher {
                 }
             }
 
-            let access_token = run_provider_auth_command(&self.state.config).await?;
+            let access_token = run_provider_auth_command(&self.state.config, false).await?;
             *cached = Some(CachedExternalBearerToken {
                 access_token: access_token.clone(),
                 fetched_at: Instant::now(),
@@ -59,7 +59,7 @@ impl BearerTokenRefresher {
         &self,
         _context: ExternalAuthRefreshContext,
     ) -> io::Result<ExternalAuthTokens> {
-        let access_token = run_provider_auth_command(&self.state.config).await?;
+        let access_token = run_provider_auth_command(&self.state.config, true).await?;
         let mut cached = self.state.cached_token.lock().await;
         *cached = Some(CachedExternalBearerToken {
             access_token: access_token.clone(),
@@ -112,7 +112,10 @@ struct CachedExternalBearerToken {
     fetched_at: Instant,
 }
 
-async fn run_provider_auth_command(config: &ModelProviderAuthInfo) -> io::Result<String> {
+async fn run_provider_auth_command(
+    config: &ModelProviderAuthInfo,
+    force_refresh: bool,
+) -> io::Result<String> {
     let program = resolve_provider_auth_program(&config.command, &config.cwd)?;
     let mut command = Command::new(&program);
     command
@@ -122,6 +125,11 @@ async fn run_provider_auth_command(config: &ModelProviderAuthInfo) -> io::Result
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    if force_refresh {
+        command.env("PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH", "1");
+    } else {
+        command.env_remove("PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH");
+    }
 
     let output = tokio::time::timeout(config.timeout(), command.output())
         .await

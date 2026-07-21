@@ -65,6 +65,12 @@ pub(crate) struct ClipboardLease {
     _clipboard: Option<arboard::Clipboard>,
 }
 
+impl std::fmt::Debug for ClipboardLease {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClipboardLease").finish_non_exhaustive()
+    }
+}
+
 impl ClipboardLease {
     #[cfg(target_os = "linux")]
     fn native_linux(clipboard: arboard::Clipboard) -> Self {

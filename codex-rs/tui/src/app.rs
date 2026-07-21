@@ -93,6 +93,7 @@ use codex_app_server_protocol::ConfigLayerSource;
 use codex_app_server_protocol::ConfigReadResponse;
 use codex_app_server_protocol::ConfigValueWriteParams;
 use codex_app_server_protocol::ConfigWriteResponse;
+use codex_app_server_protocol::ErrorNotification;
 use codex_app_server_protocol::FeedbackUploadParams;
 use codex_app_server_protocol::FeedbackUploadResponse;
 use codex_app_server_protocol::GetAccountRateLimitsResponse;
@@ -154,6 +155,7 @@ use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
 use codex_protocol::models::PermissionProfile;
+use codex_protocol::openai_models::InputModality;
 #[cfg(test)]
 use codex_protocol::openai_models::ModelAvailabilityNux;
 use codex_protocol::openai_models::ModelPreset;
@@ -247,6 +249,7 @@ const EXTERNAL_EDITOR_HINT: &str = "Save and close external editor to continue."
 const THREAD_EVENT_CHANNEL_CAPACITY: usize = 32768;
 const TUI_INPUT_WATCHDOG_INTERVAL: Duration = Duration::from_secs(5);
 const TUI_INPUT_WATCHDOG_STALLED_AFTER: Duration = Duration::from_secs(10);
+const WHIP_SWEEP_INTERVAL: Duration = Duration::from_secs(45);
 
 type BoxedTuiEventStream = Pin<Box<dyn Stream<Item = TuiEvent> + Send + 'static>>;
 
@@ -349,6 +352,22 @@ fn spawn_tui_input_watchdog(
                 );
                 frame_requester.schedule_frame();
             }
+        }
+    })
+}
+
+fn spawn_whip_sweep_tick(app_event_tx: AppEventSender) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let interval_duration = if std::env::var("PFTERMINAL_ORCHESTRATE_QA").as_deref() == Ok("1")
+        {
+            Duration::from_millis(250)
+        } else {
+            WHIP_SWEEP_INTERVAL
+        };
+        let mut interval = tokio::time::interval(interval_duration);
+        loop {
+            interval.tick().await;
+            app_event_tx.send(AppEvent::WhipSweepTick);
         }
     })
 }
@@ -740,22 +759,59 @@ pub(crate) struct App {
     pub(crate) agent_navigation: AgentNavigationState,
     pub(crate) spawn_parent_by_thread: HashMap<ThreadId, ThreadId>,
     pub(crate) spawn_parent_by_node: HashMap<String, String>,
+    pub(crate) spawn_native_runtime_by_node:
+        HashMap<String, crate::dispatch_queue::SavedNativeSpawnRuntime>,
+    pub(crate) spawn_native_endpoint_by_node: HashMap<String, ThreadId>,
     pub(crate) spawn_status_by_thread:
         HashMap<ThreadId, codex_app_server_protocol::CollabAgentState>,
+    /// Active `wait_agent` call by native spawn thread, keyed to the exact turn and item so a
+    /// delayed completion from an older wait cannot clear a newer wait state.
+    pub(crate) spawn_waiting_for_agents_by_thread: HashMap<ThreadId, (String, String)>,
     pub(crate) spawn_parent_reports_by_node: HashMap<String, VecDeque<String>>,
     /// Child reports delivered to a native Codex parent thread that could not be turned into a
     /// parent turn immediately because the parent was mid-turn. These are flushed (each turned
     /// into a parent processing turn) when the parent goes idle. Keyed by parent thread id so a
     /// flush only fires for the pane that actually became idle.
     pub(crate) spawn_pending_reports_by_thread: HashMap<ThreadId, VecDeque<String>>,
-    pub(crate) spawn_processed_dispatches: HashSet<(ThreadId, String, String, String)>,
+    /// The single durable dispatch inbox, keyed by logical target node id (`thread:`/`pane:`).
+    pub(crate) spawn_pending_dispatches:
+        HashMap<String, VecDeque<crate::spawn_orchestration::PendingSpawnDispatch>>,
+    /// Coalesces pump wakes and prevents more than one in-flight delivery per destination.
+    pub(crate) spawn_dispatch_pump_scheduled: bool,
+    pub(crate) spawn_dispatch_inflight_targets: HashSet<String>,
+    pub(crate) spawn_dispatch_round_robin_after: Option<String>,
+    pub(crate) spawn_dispatch_acks_by_target_task:
+        HashMap<(String, String), VecDeque<crate::spawn_orchestration::SpawnDispatchAck>>,
+    pub(crate) spawn_next_dispatch_seq: u64,
+    pub(crate) spawn_processed_dispatch_seq_ids: HashSet<u64>,
+    pub(crate) spawn_processed_dispatch_origins: HashSet<String>,
+    /// Number of host dispatch-correction prompts submitted per source thread. Bounded so a
+    /// model that keeps emitting dispatch blocks inside shell text cannot ping-pong corrections
+    /// forever; each correction starts a fresh turn id, so turn-keyed dedup alone cannot stop it.
+    pub(crate) spawn_dispatch_corrections_by_thread: HashMap<ThreadId, usize>,
+    pub(crate) spawn_accepted_delivery_ids: HashSet<String>,
+    /// Terminal turn notifications are observed both on receipt and during buffered replay. Keep
+    /// orchestration side effects idempotent across those two delivery paths.
+    pub(crate) spawn_processed_terminal_turns: HashSet<(ThreadId, String)>,
     /// Loop-breaker state for auto child-report processing turns, keyed by parent node id.
     pub(crate) spawn_auto_loop_state_by_node:
         HashMap<String, crate::spawn_orchestration::SpawnAutoLoopState>,
     /// False after resume until a live operator/non-auto turn proves current intent.
     pub(crate) spawn_operator_input_seen: bool,
     pub(crate) spawn_quarantine_notified_by_node: HashSet<String>,
+    pub(crate) spawn_context_left_by_thread: HashMap<ThreadId, i64>,
+    pub(crate) spawn_last_report_seq_by_node: HashMap<String, u64>,
+    pub(crate) spawn_last_dispatch_seq_by_node: HashMap<String, u64>,
+    pub(crate) spawn_last_event_at_by_node: HashMap<String, String>,
     pub(crate) spawn_nazgul_pane_id: Option<String>,
+    pub(crate) spawn_nazgul_rebind_required: bool,
+    #[allow(clippy::box_collection)]
+    pub(crate) orchestrate_whips: Box<HashMap<String, crate::orchestrate::Whip>>,
+    pub(crate) orchestrate_next_whip_seq: u64,
+    #[cfg(test)]
+    pub(crate) orchestrate_now_override: Option<chrono::DateTime<chrono::Utc>>,
+    #[allow(clippy::box_collection)]
+    pub(crate) orchestrate_idle_generation_by_target: Box<HashMap<String, u64>>,
     side_threads: HashMap<ThreadId, SideThreadState>,
     pub(crate) claude_panes: crate::claude_panes::ClaudePaneRegistry,
     pub(crate) active_thread_id: Option<ThreadId>,
@@ -812,6 +868,44 @@ async fn resolve_runtime_model_provider_base_url(provider: &ModelProviderInfo) -
             tracing::warn!(%err, "failed to resolve runtime model provider base URL for status");
             None
         }
+    }
+}
+
+fn gpu_runtime_model_preset(provider: &codex_state::GpuRuntimeProvider) -> Option<ModelPreset> {
+    if provider.health != "ready" || !provider.provider_id.starts_with("gpu-") {
+        return None;
+    }
+    Some(ModelPreset {
+        id: format!("{}:{}", provider.provider_id, provider.model_id),
+        model: provider.model_id.clone(),
+        provider_id: Some(provider.provider_id.clone()),
+        display_name: provider.model_id.clone(),
+        description: format!(
+            "{} · active GPU rental {} · ${:.4}/hour",
+            gpu_infrastructure_provider_label(provider.infrastructure_provider.as_str()),
+            provider.rental_id,
+            provider.display_hourly_microusd as f64 / 1_000_000.0
+        ),
+        default_reasoning_effort: ReasoningEffortConfig::None,
+        supported_reasoning_efforts: Vec::new(),
+        supports_personality: false,
+        additional_speed_tiers: Vec::new(),
+        service_tiers: Vec::new(),
+        default_service_tier: None,
+        is_default: false,
+        upgrade: None,
+        show_in_picker: true,
+        availability_nux: None,
+        supported_in_api: true,
+        input_modalities: vec![InputModality::Text],
+    })
+}
+
+fn gpu_infrastructure_provider_label(provider: &str) -> &str {
+    match provider {
+        "runpod" => "RunPod",
+        "vast" => "Vast.ai",
+        _ => "GPU marketplace",
     }
 }
 
@@ -1006,7 +1100,15 @@ impl App {
         };
         let bootstrap_ms = bootstrap.duration.as_millis();
         let mut model = bootstrap.default_model;
-        let available_models = bootstrap.available_models;
+        let mut available_models = bootstrap.available_models;
+        if let Some(state_db) = state_db.as_ref() {
+            match state_db.list_gpu_runtime_providers().await {
+                Ok(providers) => {
+                    available_models.extend(providers.iter().filter_map(gpu_runtime_model_preset))
+                }
+                Err(error) => tracing::warn!(%error, "failed to load GPU rental model catalog"),
+            }
+        }
         let remote_connection = crate::status::remote_connection::remote_connection_status_value(
             &app_server_target,
             app_server.server_version(),
@@ -1268,6 +1370,79 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     .iter()
                     .any(|pane| pane.id == *pane_id)
             });
+        let restored_spawn_nazgul_rebind_required = restored_pane_layout
+            .as_ref()
+            .is_some_and(|layout| layout.spawn_nazgul_rebind_required);
+        let mut restored_orchestrate_whips: HashMap<_, _> = restored_pane_layout
+            .as_ref()
+            .map(|layout| {
+                layout
+                    .orchestrate_whips
+                    .iter()
+                    .filter(|(_, whip)| whip.state != crate::orchestrate::WhipState::Detached)
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        for whip in restored_orchestrate_whips.values_mut() {
+            if matches!(
+                whip.kind,
+                crate::orchestrate::WhipKind::Assignment {
+                    phase: crate::orchestrate::AssignmentPhase::Executing,
+                    ..
+                }
+            ) {
+                whip.last_fire_utc = Some(chrono::Utc::now());
+                // Generation zero represents the state restored from disk. Treat any saved
+                // Worker output as already observed so restart honors one full cadence; a fresh
+                // completion increments the generation and can still trigger immediately.
+                whip.last_idle_generation_fired = Some(0);
+            } else {
+                whip.last_idle_generation_fired = Some(0);
+            }
+        }
+        let restored_orchestrate_next_whip_seq = restored_pane_layout
+            .as_ref()
+            .map(|layout| layout.orchestrate_next_whip_seq)
+            .unwrap_or_else(|| {
+                restored_orchestrate_whips
+                    .keys()
+                    .filter_map(|id| {
+                        id.strip_prefix("whip-")
+                            .or_else(|| id.strip_prefix("assignment-"))?
+                            .parse::<u64>()
+                            .ok()
+                    })
+                    .max()
+                    .unwrap_or(0)
+            });
+        let restored_orchestrate_idle_generation_by_target = restored_orchestrate_whips
+            .values()
+            .map(|whip| (whip.target.clone(), 0))
+            .collect();
+        let restored_spawn_next_dispatch_seq = restored_pane_layout
+            .as_ref()
+            .map(|layout| layout.spawn_next_dispatch_seq.max(1))
+            .unwrap_or(1);
+        let restored_spawn_processed_dispatch_seq_ids = restored_pane_layout
+            .as_ref()
+            .map(|layout| {
+                crate::spawn_orchestration::bounded_spawn_processed_dispatch_seq_ids(
+                    layout.spawn_processed_dispatch_seq_ids.iter().copied(),
+                    restored_spawn_next_dispatch_seq,
+                )
+            })
+            .unwrap_or_default();
+        let restored_spawn_processed_dispatch_origins = restored_pane_layout
+            .as_ref()
+            .map(|layout| {
+                layout
+                    .spawn_processed_dispatch_origin_ids
+                    .iter()
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
 
         let mut app = Self {
             model_catalog,
@@ -1311,14 +1486,78 @@ See the PFTerminal keymap documentation for supported actions and examples."
             agent_navigation: AgentNavigationState::default(),
             spawn_parent_by_thread: HashMap::new(),
             spawn_parent_by_node: restored_spawn_parent_by_node,
+            spawn_native_runtime_by_node: restored_pane_layout
+                .as_ref()
+                .map(|layout| {
+                    layout
+                        .spawn_native_runtime_by_node
+                        .clone()
+                        .into_iter()
+                        .collect()
+                })
+                .unwrap_or_default(),
+            spawn_native_endpoint_by_node: restored_pane_layout
+                .as_ref()
+                .map(|layout| {
+                    layout
+                        .spawn_native_endpoint_by_node
+                        .iter()
+                        .filter_map(|(node, endpoint)| {
+                            ThreadId::from_string(endpoint)
+                                .ok()
+                                .map(|endpoint| (node.clone(), endpoint))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
             spawn_status_by_thread: HashMap::new(),
+            spawn_waiting_for_agents_by_thread: HashMap::new(),
             spawn_parent_reports_by_node: HashMap::new(),
             spawn_pending_reports_by_thread: HashMap::new(),
-            spawn_processed_dispatches: HashSet::new(),
+            spawn_pending_dispatches: restored_pane_layout
+                .as_ref()
+                .map(|layout| {
+                    layout
+                        .spawn_pending_dispatches
+                        .iter()
+                        .map(|(target, queue)| {
+                            (
+                                target.clone(),
+                                crate::spawn_orchestration::reconcile_restored_dispatches(queue),
+                            )
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            spawn_dispatch_pump_scheduled: false,
+            spawn_dispatch_inflight_targets: HashSet::new(),
+            spawn_dispatch_round_robin_after: None,
+            spawn_dispatch_acks_by_target_task: HashMap::new(),
+            spawn_next_dispatch_seq: restored_spawn_next_dispatch_seq,
+            spawn_processed_dispatch_seq_ids: restored_spawn_processed_dispatch_seq_ids,
+            spawn_processed_dispatch_origins: restored_spawn_processed_dispatch_origins,
+            spawn_dispatch_corrections_by_thread: HashMap::new(),
+            spawn_accepted_delivery_ids: restored_pane_layout
+                .as_ref()
+                .map(|layout| layout.spawn_accepted_delivery_ids.iter().cloned().collect())
+                .unwrap_or_default(),
+            spawn_processed_terminal_turns: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
             spawn_operator_input_seen: false,
             spawn_quarantine_notified_by_node: HashSet::new(),
+            spawn_context_left_by_thread: HashMap::new(),
+            spawn_last_report_seq_by_node: HashMap::new(),
+            spawn_last_dispatch_seq_by_node: HashMap::new(),
+            spawn_last_event_at_by_node: HashMap::new(),
             spawn_nazgul_pane_id: restored_spawn_nazgul_pane_id,
+            spawn_nazgul_rebind_required: restored_spawn_nazgul_rebind_required,
+            orchestrate_whips: Box::new(restored_orchestrate_whips),
+            orchestrate_next_whip_seq: restored_orchestrate_next_whip_seq,
+            #[cfg(test)]
+            orchestrate_now_override: None,
+            orchestrate_idle_generation_by_target: Box::new(
+                restored_orchestrate_idle_generation_by_target,
+            ),
             side_threads: HashMap::new(),
             claude_panes: restored_claude_panes,
             active_thread_id: None,
@@ -1332,6 +1571,11 @@ See the PFTerminal keymap documentation for supported actions and examples."
             pending_plugin_enabled_writes: HashMap::new(),
             pending_hook_enabled_writes: HashMap::new(),
         };
+        app.refresh_gpu_spend_indicator().await;
+        // A rental outlives the TUI that created it. Reattach the independent reconciler on
+        // every startup; its process lock deduplicates concurrent PFTerminal processes and it
+        // exits immediately when there is no potentially billable work.
+        app.start_gpu_controller();
         if let Some(entry) = startup_hooks_browser {
             app.chat_widget.open_hooks_browser(entry);
         }
@@ -1344,6 +1588,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
                 .await?;
             app.restore_native_spawn_panes_from_saved_state(&mut app_server)
                 .await;
+            app.audit_restored_assignments();
             if should_prompt_for_paused_goal_after_startup_resume {
                 app.maybe_prompt_resume_paused_goal_after_resume(&mut app_server, thread_id)
                     .await;
@@ -1385,6 +1630,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
         let drained_tui_events = spawn_tui_event_drainer(tui.event_stream());
         let tui_input_watchdog =
             spawn_tui_input_watchdog(drained_tui_events.watchdog.clone(), tui.frame_requester());
+        let _whip_sweep_tick = spawn_whip_sweep_tick(app.app_event_tx.clone());
         let mut tui_event_rx = drained_tui_events.rx;
         let tui_input_watchdog_state = drained_tui_events.watchdog;
 
@@ -1413,6 +1659,14 @@ See the PFTerminal keymap documentation for supported actions and examples."
         }
 
         let mut listen_for_app_server_events = true;
+        let mut app_server_reconnect_tick = tokio::time::interval(Duration::from_secs(5));
+        app_server_reconnect_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut gpu_runtime_overlay_tick = tokio::time::interval(Duration::from_secs(5));
+        gpu_runtime_overlay_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let (app_server_reconnect_tx, mut app_server_reconnect_rx) =
+            mpsc::unbounded_channel::<Result<AppServerSession, String>>();
+        let mut app_server_reconnect_inflight = false;
+        let mut app_server_reconnect_failure_notified = false;
         let mut waiting_for_initial_session_configured = wait_for_initial_session_configured;
 
         #[cfg(not(debug_assertions))]
@@ -1444,7 +1698,13 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     Some(event) = app_event_rx.recv() => {
                         match Box::pin(app.handle_event(tui, &mut app_server, event)).await {
                             Ok(control) => control,
-                            Err(err) => break Err(err),
+                            Err(err) => {
+                                tracing::error!(error = ?err, "contained app event handler failure");
+                                app.chat_widget.add_error_message(format!(
+                                    "A command failed but PFTerminal is still running: {err:#}"
+                                ));
+                                AppRunControl::Continue
+                            },
                         }
                     }
                     active = async {
@@ -1459,7 +1719,10 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     ) => {
                         if let Some(event) = active {
                             if let Err(err) = app.handle_active_thread_event(tui, &mut app_server, event).await {
-                                break Err(err);
+                                tracing::error!(error = ?err, "contained active-thread event failure");
+                                app.chat_widget.add_error_message(format!(
+                                    "A pane event failed but PFTerminal is still running: {err:#}"
+                                ));
                             }
                         } else {
                             app.clear_active_thread().await;
@@ -1471,7 +1734,13 @@ See the PFTerminal keymap documentation for supported actions and examples."
                             tui_input_watchdog_state.note_handled();
                             match app.handle_tui_event(tui, &mut app_server, event).await {
                                 Ok(control) => control,
-                                Err(err) => break Err(err),
+                                Err(err) => {
+                                    tracing::error!(error = ?err, "contained terminal input handler failure");
+                                    app.chat_widget.add_error_message(format!(
+                                        "An input command failed but PFTerminal is still running: {err:#}"
+                                    ));
+                                    AppRunControl::Continue
+                                },
                             }
                         } else {
                             tracing::warn!("terminal input stream closed; shutting down active thread");
@@ -1493,7 +1762,13 @@ See the PFTerminal keymap documentation for supported actions and examples."
                             .await
                             {
                                 Ok(control) => control,
-                                Err(err) => break Err(err),
+                                Err(err) => {
+                                    tracing::error!(error = ?err, "contained interrupt handler failure");
+                                    app.chat_widget.add_error_message(format!(
+                                        "Interrupt failed but PFTerminal is still running: {err:#}"
+                                    ));
+                                    AppRunControl::Continue
+                                },
                             }
                         } else {
                             app.handle_exit_mode(&mut app_server, ExitMode::ShutdownFirst).await
@@ -1505,8 +1780,67 @@ See the PFTerminal keymap documentation for supported actions and examples."
                             None => {
                                 listen_for_app_server_events = false;
                                 tracing::warn!("app-server event stream closed");
+                                app.chat_widget.add_error_message(
+                                    "App-server event stream closed; PFTerminal is degraded and will reconnect automatically."
+                                        .to_string(),
+                                );
                             }
                         }
+                        AppRunControl::Continue
+                    }
+                    _ = app_server_reconnect_tick.tick(), if !listen_for_app_server_events && !app_server_reconnect_inflight => {
+                        app_server_reconnect_inflight = true;
+                        let config = app.config.clone();
+                        let target = app.app_server_target.clone();
+                        let state_db = app.state_db.clone();
+                        let environment_manager = app.environment_manager.clone();
+                        let reconnect_tx = app_server_reconnect_tx.clone();
+                        tokio::spawn(async move {
+                            let result = crate::start_app_server_for_picker(
+                                &config,
+                                &target,
+                                state_db,
+                                environment_manager,
+                            )
+                            .await
+                            .map_err(|error| format!("{error:#}"));
+                            let _ = reconnect_tx.send(result);
+                        });
+                        AppRunControl::Continue
+                    }
+                    Some(result) = app_server_reconnect_rx.recv(), if app_server_reconnect_inflight => {
+                        app_server_reconnect_inflight = false;
+                        match result {
+                            Ok(mut replacement) => {
+                                std::mem::swap(&mut app_server, &mut replacement);
+                                tokio::spawn(async move {
+                                    if let Err(error) = replacement.shutdown().await {
+                                        tracing::warn!(%error, "old app-server shutdown after reconnect failed");
+                                    }
+                                });
+                                app.restore_native_spawn_panes_from_saved_state(&mut app_server).await;
+                                app.request_spawn_dispatch_pump();
+                                listen_for_app_server_events = true;
+                                app_server_reconnect_failure_notified = false;
+                                app.chat_widget.add_info_message(
+                                    "App-server connection restored.".to_string(),
+                                    Some("Pending identified deliveries are being reconciled.".to_string()),
+                                );
+                            }
+                            Err(error) => {
+                                tracing::warn!(%error, "bounded app-server reconnect attempt failed");
+                                if !app_server_reconnect_failure_notified {
+                                    app_server_reconnect_failure_notified = true;
+                                    app.chat_widget.add_error_message(format!(
+                                        "App-server reconnect failed; retrying every 5 seconds: {error:#}"
+                                    ));
+                                }
+                            }
+                        }
+                        AppRunControl::Continue
+                    }
+                    _ = gpu_runtime_overlay_tick.tick() => {
+                        app.refresh_gpu_runtime_overlay().await;
                         AppRunControl::Continue
                     }
                 };
@@ -1522,8 +1856,23 @@ See the PFTerminal keymap documentation for supported actions and examples."
                 }
             }
         };
+        let shutdown_detail = match &exit_reason_result {
+            Ok(_) => "user or terminal exit",
+            Err(_) => "TUI event loop failure",
+        };
+        if let Err(error) = app
+            .show_backend_shutdown_control_events(tui, shutdown_detail)
+            .await
+        {
+            tracing::error!(
+                error = ?error,
+                error_chain = %format!("{error:#}"),
+                "failed to render backend shutdown control events"
+            );
+        }
+        app.abort_all_thread_event_listeners();
         if let Err(err) = app_server.shutdown().await {
-            tracing::warn!(error = %err, "failed to shut down embedded app server");
+            tracing::error!(error = ?err, "failed to shut down embedded app server");
         }
         tui_input_watchdog.abort();
         let clear_pet_result = tui.clear_ambient_pet_image();
@@ -1646,6 +1995,50 @@ See the PFTerminal keymap documentation for supported actions and examples."
         self.chat_widget.pre_draw_tick();
         self.render_chat_widget_frame(tui)?;
         Ok(())
+    }
+
+    async fn show_backend_shutdown_control_events(
+        &mut self,
+        tui: &mut tui::Tui,
+        detail: &str,
+    ) -> Result<()> {
+        let message = format!("CONTROL EVENT — TUI shutdown: {detail}");
+        self.chat_widget.add_info_message(
+            message.clone(),
+            Some(
+                "Stopping every pane and flushing rollouts before returning to the shell."
+                    .to_string(),
+            ),
+        );
+        let mut thread_ids = self
+            .thread_event_channels
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        if let Some(thread_id) = self.primary_thread_id {
+            thread_ids.push(thread_id);
+        }
+        thread_ids.sort_by_key(ThreadId::to_string);
+        thread_ids.dedup();
+        for thread_id in thread_ids {
+            let notification =
+                ServerNotification::Warning(codex_app_server_protocol::WarningNotification {
+                    thread_id: Some(thread_id.to_string()),
+                    message: message.clone(),
+                });
+            if let Err(error) = self
+                .enqueue_thread_notification(thread_id, notification)
+                .await
+            {
+                tracing::error!(
+                    %thread_id,
+                    error = ?error,
+                    error_chain = %format!("{error:#}"),
+                    "failed to record backend shutdown control event"
+                );
+            }
+        }
+        self.show_shutdown_feedback(tui)
     }
 
     fn render_chat_widget_frame(&mut self, tui: &mut tui::Tui) -> Result<Rect> {

@@ -5,9 +5,78 @@
 //! when the visible thread changes.
 
 use super::*;
+use crate::app_server_session::TurnStartOutcome;
 use crate::session_resume::read_session_model;
+use std::fmt::Write as _;
 
 impl App {
+    pub(super) async fn surface_turn_start_failure(
+        &mut self,
+        thread_id: ThreadId,
+        details: String,
+        will_retry: bool,
+    ) {
+        let label = self.thread_label(thread_id);
+        let message = if will_retry {
+            format!("turn/start failed for {label}; recovered after bounded retry")
+        } else {
+            format!("turn/start failed for {label}; retry limit reached, pane remains available")
+        };
+        if self.active_thread_id == Some(thread_id) {
+            self.chat_widget
+                .add_error_message(format!("{message}. Cause: {details}"));
+            return;
+        }
+        let notification = if will_retry {
+            // A retryable Error notification is intentionally transient in ChatWidget and is
+            // cleared by the following turn/started event. Buffer a targeted warning instead so
+            // an inactive affected pane retains visible recovery evidence when selected.
+            ServerNotification::Warning(codex_app_server_protocol::WarningNotification {
+                thread_id: Some(thread_id.to_string()),
+                message: format!("ERROR — {message}. Cause: {details}"),
+            })
+        } else {
+            ServerNotification::Error(ErrorNotification {
+                error: AppServerTurnError {
+                    message,
+                    codex_error_info: None,
+                    additional_details: Some(details.clone()),
+                },
+                will_retry,
+                thread_id: thread_id.to_string(),
+                turn_id: "turn-start-recovery".to_string(),
+            })
+        };
+        if let Err(error) = self
+            .enqueue_thread_notification(thread_id, notification)
+            .await
+        {
+            tracing::error!(
+                %thread_id,
+                error = ?error,
+                error_chain = %format!("{error:#}"),
+                "failed to enqueue pane-local turn/start error banner"
+            );
+            self.chat_widget.add_error_message(format!(
+                "turn/start failed for {label}: {details}. The pane remains available."
+            ));
+        }
+    }
+
+    pub(crate) fn native_thread_loaded_for_orchestrate(&self, thread_id: ThreadId) -> bool {
+        match self.agent_navigation.get(&thread_id) {
+            Some(entry) => !entry.is_closed,
+            None => self.thread_event_channels.contains_key(&thread_id),
+        }
+    }
+
+    pub(crate) fn native_thread_idle_for_orchestrate(&self, thread_id: ThreadId) -> bool {
+        self.thread_event_channels
+            .get(&thread_id)
+            .and_then(|channel| channel.store.try_lock().ok())
+            .is_some_and(|store| store.active_turn_id().is_none())
+    }
+
     pub(super) fn note_thread_interrupt_failure(
         &mut self,
         thread_id: ThreadId,
@@ -22,6 +91,24 @@ impl App {
         self.chat_widget.add_error_message(format!(
             "Failed to interrupt {label}: {error}. The pane remains open."
         ));
+    }
+
+    pub(super) fn note_thread_steer_failure(
+        &mut self,
+        thread_id: ThreadId,
+        error: TypedRequestError,
+    ) {
+        let label = self.thread_label(thread_id);
+        tracing::error!(
+            %thread_id,
+            error = ?error,
+            "turn/steer failed in TUI; queueing the user input and keeping the pane alive"
+        );
+        if !self.chat_widget.enqueue_rejected_steer() {
+            self.chat_widget.add_error_message(format!(
+                "Failed to steer {label}: {error}. The pane remains open."
+            ));
+        }
     }
 
     pub(super) async fn shutdown_current_thread(&mut self, app_server: &mut AppServerSession) {
@@ -253,12 +340,17 @@ impl App {
     /// not spend footer space restating that the user is already on the main conversation.
     pub(crate) fn sync_active_agent_label(&mut self) {
         let active_claude_title = self.claude_panes.active_claude_pane_title();
-        let label = active_claude_title
+        let mut label = active_claude_title
             .map(|title| format!("{title} pane"))
             .or_else(|| {
                 self.agent_navigation
                     .active_agent_label(self.current_displayed_thread_id(), self.primary_thread_id)
             });
+        if let (Some(label), Some((items, bytes))) =
+            (label.as_mut(), self.active_spawn_dispatch_queue_usage())
+        {
+            let _ = write!(label, " · dispatch queue: {items} items, {bytes} bytes");
+        }
         self.chat_widget
             .set_active_external_model_display(self.claude_panes.active_claude_pane_model_label());
         self.chat_widget.set_active_agent_label(label);
@@ -652,7 +744,12 @@ impl App {
                     let mut retried_after_turn_mismatch = false;
                     loop {
                         match app_server
-                            .turn_steer(thread_id, steer_turn_id.clone(), items.to_vec())
+                            .turn_steer(
+                                thread_id,
+                                steer_turn_id.clone(),
+                                items.to_vec(),
+                                /*client_user_message_id*/ None,
+                            )
                             .await
                         {
                             Ok(_) => return Ok(true),
@@ -703,9 +800,13 @@ impl App {
                                             let mut store = channel.store.lock().await;
                                             store.active_turn_id = Some(actual_turn_id);
                                         }
-                                        return Err(error.into());
+                                        self.note_thread_steer_failure(thread_id, error);
+                                        return Ok(true);
                                     }
-                                    None => return Err(error.into()),
+                                    None => {
+                                        self.note_thread_steer_failure(thread_id, error);
+                                        return Ok(true);
+                                    }
                                 }
                             }
                         }
@@ -722,7 +823,7 @@ impl App {
                             .as_ref()
                             .map(|profile| &profile.permission_profile),
                     );
-                    app_server
+                    match app_server
                         .turn_start(
                             thread_id,
                             items.to_vec(),
@@ -739,8 +840,41 @@ impl App {
                             *personality,
                             final_output_json_schema.clone(),
                             self.spawn_additional_context_for_thread(thread_id),
+                            /*client_user_message_id*/ None,
                         )
-                        .await?;
+                        .await
+                    {
+                        Ok(TurnStartOutcome::Started {
+                            recovered_failures, ..
+                        }) => {
+                            if !recovered_failures.is_empty() {
+                                self.surface_turn_start_failure(
+                                    thread_id,
+                                    recovered_failures.join("\n"),
+                                    /*will_retry*/ true,
+                                )
+                                .await;
+                            }
+                        }
+                        Ok(TurnStartOutcome::CapacityUnavailable { max_threads }) => {
+                            self.chat_widget.add_error_message(format!(
+                                "Cannot start turn: all {max_threads} execution slots are in use."
+                            ));
+                        }
+                        Err(error) => {
+                            let details = format!("{error:#}");
+                            tracing::error!(
+                                %thread_id,
+                                error = ?error,
+                                error_chain = %details,
+                                "turn/start retry limit reached; containing failure to pane"
+                            );
+                            self.surface_turn_start_failure(
+                                thread_id, details, /*will_retry*/ false,
+                            )
+                            .await;
+                        }
+                    }
                 }
                 Ok(true)
             }
@@ -758,12 +892,6 @@ impl App {
             }
             AppCommand::Compact => {
                 app_server.thread_compact_start(thread_id).await?;
-                Ok(true)
-            }
-            AppCommand::SetThreadName { name } => {
-                app_server
-                    .thread_set_name(thread_id, name.to_string())
-                    .await?;
                 Ok(true)
             }
             AppCommand::ThreadRollback { num_turns } => {
@@ -1057,18 +1185,26 @@ impl App {
                     status,
                 )
             {
+                let is_running = matches!(
+                    status.status,
+                    codex_app_server_protocol::CollabAgentStatus::PendingInit
+                        | codex_app_server_protocol::CollabAgentStatus::Running
+                );
                 self.spawn_status_by_thread
                     .insert(thread_id, status.clone());
-                self.agent_navigation.set_running(
-                    thread_id,
-                    matches!(
-                        status.status,
-                        codex_app_server_protocol::CollabAgentStatus::PendingInit
-                            | codex_app_server_protocol::CollabAgentStatus::Running
-                    ),
-                );
+                self.agent_navigation.set_running(thread_id, is_running);
                 self.agent_navigation
                     .set_last_result_message(thread_id, status.message.clone());
+                if !is_running && self.is_spawn_orchestration_thread(thread_id) {
+                    let flushed_dispatch = self
+                        .spawn_pending_dispatches
+                        .get(&crate::spawn_orchestration::thread_node_id(thread_id))
+                        .is_some_and(|queue| !queue.is_empty());
+                    self.request_spawn_dispatch_pump();
+                    if !flushed_dispatch {
+                        self.flush_pending_reports_for_thread(thread_id);
+                    }
+                }
             }
 
             if self.agent_navigation.get(&thread_id).is_some() {
@@ -1115,6 +1251,8 @@ impl App {
             notification.thread.agent_role.clone(),
             /*is_closed*/ false,
         );
+        self.agent_navigation
+            .set_model(thread_id, Some(session.model.clone()));
         Some(session)
     }
 
@@ -1582,7 +1720,85 @@ impl App {
         &mut self,
         notification: &ServerNotification,
     ) {
-        let (thread_id, status, message) = match notification {
+        match notification {
+            ServerNotification::ItemStarted(notification) => {
+                if let codex_app_server_protocol::ThreadItem::CollabAgentToolCall {
+                    id,
+                    tool: codex_app_server_protocol::CollabAgentTool::Wait,
+                    status: codex_app_server_protocol::CollabAgentToolCallStatus::InProgress,
+                    ..
+                } = &notification.item
+                    && let Ok(thread_id) = ThreadId::from_string(&notification.thread_id)
+                    && self.is_spawn_orchestration_thread(thread_id)
+                {
+                    self.spawn_waiting_for_agents_by_thread
+                        .insert(thread_id, (notification.turn_id.clone(), id.clone()));
+                    self.request_spawn_dispatch_pump();
+                }
+            }
+            ServerNotification::ItemCompleted(notification) => {
+                if let codex_app_server_protocol::ThreadItem::CollabAgentToolCall {
+                    id,
+                    tool: codex_app_server_protocol::CollabAgentTool::Wait,
+                    ..
+                } = &notification.item
+                    && let Ok(thread_id) = ThreadId::from_string(&notification.thread_id)
+                    && self
+                        .spawn_waiting_for_agents_by_thread
+                        .get(&thread_id)
+                        .is_some_and(|(turn_id, call_id)| {
+                            turn_id == &notification.turn_id && call_id == id
+                        })
+                {
+                    self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
+                }
+            }
+            ServerNotification::TurnStarted(notification) => {
+                if let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) {
+                    self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
+                }
+            }
+            ServerNotification::TurnCompleted(notification) => {
+                if let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) {
+                    self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
+                }
+            }
+            ServerNotification::ThreadClosed(notification) => {
+                if let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) {
+                    self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
+                }
+            }
+            _ => {}
+        }
+        if let ServerNotification::ThreadClosed(notification) = notification {
+            let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
+                return;
+            };
+            self.note_assignment_node_gone(&crate::spawn_orchestration::thread_node_id(thread_id));
+            if !self.is_spawn_orchestration_thread(thread_id) {
+                return;
+            }
+            self.spawn_status_by_thread.insert(
+                thread_id,
+                codex_app_server_protocol::CollabAgentState {
+                    status: codex_app_server_protocol::CollabAgentStatus::Shutdown,
+                    message: Some("thread closed".to_string()),
+                },
+            );
+            self.agent_navigation.mark_closed(thread_id);
+            self.record_spawn_child_report_for_thread(
+                thread_id,
+                codex_app_server_protocol::CollabAgentStatus::Shutdown,
+                Some("thread closed".to_string()),
+            );
+            self.fail_pending_dispatches_for_thread(thread_id, "target closed before delivery");
+            self.flush_pending_reports_for_thread(thread_id);
+            self.persist_pane_state();
+            return;
+        }
+
+        let (thread_id, status, message, should_process_terminal_side_effects) = match notification
+        {
             ServerNotification::TurnStarted(notification) => {
                 let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
                     return;
@@ -1591,10 +1807,12 @@ impl App {
                 // pending -> running; any other turn is fresh work and resets the auto chain.
                 let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                 self.note_spawn_turn_started_for_auto_loop(&node_key);
+                self.note_whip_target_started(&node_key);
                 (
                     thread_id,
                     codex_app_server_protocol::CollabAgentStatus::Running,
                     None,
+                    true,
                 )
             }
             ServerNotification::TurnCompleted(notification) => {
@@ -1618,10 +1836,20 @@ impl App {
                     TurnStatus::Failed => codex_app_server_protocol::CollabAgentStatus::Errored,
                     TurnStatus::InProgress => codex_app_server_protocol::CollabAgentStatus::Running,
                 };
+                let terminal_key = (thread_id, notification.turn.id.clone());
+                let should_process_terminal_side_effects = self
+                    .spawn_processed_terminal_turns
+                    .insert(terminal_key.clone());
+                const PROCESSED_TERMINAL_TURN_LIMIT: usize = 4_096;
+                if self.spawn_processed_terminal_turns.len() > PROCESSED_TERMINAL_TURN_LIMIT {
+                    self.spawn_processed_terminal_turns.clear();
+                    self.spawn_processed_terminal_turns.insert(terminal_key);
+                }
                 (
                     thread_id,
                     status,
                     spawn_turn_result_message(&notification.turn),
+                    should_process_terminal_side_effects,
                 )
             }
             ServerNotification::ItemCompleted(notification) => {
@@ -1635,12 +1863,22 @@ impl App {
                 if let codex_app_server_protocol::ThreadItem::AgentMessage { text, .. } =
                     &notification.item
                 {
-                    self.dispatch_native_spawn_task_blocks_from_text(
+                    let source_node_id = self.spawn_auto_loop_node_for_thread(thread_id);
+                    self.dispatch_orchestrate_blocks_from_text(&source_node_id, text);
+                    self.dispatch_native_spawn_task_blocks_from_item(
                         thread_id,
                         &notification.turn_id,
                         text,
                     );
                 }
+                return;
+            }
+            // Deliberately NOT AgentMessageDelta: spawn task blocks must never dispatch from a
+            ServerNotification::ThreadTokenUsageUpdated(notification) => {
+                let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
+                    return;
+                };
+                self.update_spawn_context_pressure_for_thread(thread_id, &notification.token_usage);
                 return;
             }
             // Deliberately NOT AgentMessageDelta: spawn task blocks must never dispatch from a
@@ -1659,6 +1897,27 @@ impl App {
             codex_app_server_protocol::CollabAgentStatus::PendingInit
                 | codex_app_server_protocol::CollabAgentStatus::Running
         );
+        // Preserve what this turn actually emitted for orchestration decisions. The synthetic
+        // status text below is useful in the picker and child reports, but it must not make an
+        // empty Manager completion look like visible provider output.
+        let current_turn_message = message.clone();
+        let message = if !is_running && message.as_deref().is_none_or(|text| text.trim().is_empty())
+        {
+            match &status {
+                codex_app_server_protocol::CollabAgentStatus::Completed => {
+                    Some("Turn completed without visible output.".to_string())
+                }
+                codex_app_server_protocol::CollabAgentStatus::Interrupted => {
+                    Some("Turn interrupted without visible output.".to_string())
+                }
+                codex_app_server_protocol::CollabAgentStatus::Errored => {
+                    Some("Turn failed without visible output.".to_string())
+                }
+                _ => message,
+            }
+        } else {
+            message
+        };
         let report_message = message.clone();
         self.spawn_status_by_thread.insert(
             thread_id,
@@ -1673,11 +1932,58 @@ impl App {
                 .set_last_result_message(thread_id, message);
         }
         if !is_running {
+            if matches!(
+                status,
+                codex_app_server_protocol::CollabAgentStatus::Shutdown
+                    | codex_app_server_protocol::CollabAgentStatus::NotFound
+            ) {
+                self.note_assignment_node_gone(&crate::spawn_orchestration::thread_node_id(
+                    thread_id,
+                ));
+            }
+            let turn_succeeded = matches!(
+                status,
+                codex_app_server_protocol::CollabAgentStatus::Completed
+            );
             self.record_spawn_child_report_for_thread(thread_id, status, report_message);
+            // Commands queued for this target take priority over informational child reports.
+            let flushed_dispatch = self
+                .spawn_pending_dispatches
+                .get(&crate::spawn_orchestration::thread_node_id(thread_id))
+                .is_some_and(|queue| !queue.is_empty());
+            self.request_spawn_dispatch_pump();
             // This thread just went idle. If child reports arrived while it was mid-turn, flush them
             // now into a real processing turn so no report is silently dropped (the multi-turn race).
-            self.flush_pending_reports_for_thread(thread_id);
+            let flushed_reports = if flushed_dispatch {
+                false
+            } else {
+                self.flush_pending_reports_for_thread(thread_id)
+            };
+            let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
+            if should_process_terminal_side_effects {
+                self.note_whip_target_idle_with_fire_control(
+                    &node_key,
+                    current_turn_message.as_deref(),
+                    !flushed_dispatch && !flushed_reports,
+                    turn_succeeded,
+                );
+            }
         }
+    }
+
+    fn update_spawn_context_pressure_for_thread(
+        &mut self,
+        thread_id: ThreadId,
+        token_usage: &codex_app_server_protocol::ThreadTokenUsage,
+    ) {
+        if !self.is_spawn_orchestration_thread(thread_id) {
+            return;
+        }
+        let Some(context_left) = context_left_percent_from_token_usage(token_usage) else {
+            return;
+        };
+        self.spawn_context_left_by_thread
+            .insert(thread_id, context_left);
     }
 
     pub(super) fn handle_thread_event_replay(&mut self, event: ThreadBufferedEvent) {
@@ -1767,15 +2073,61 @@ impl App {
 }
 
 fn spawn_turn_result_message(turn: &codex_app_server_protocol::Turn) -> Option<String> {
-    let text = turn.items.iter().rev().find_map(|item| match item {
+    let agent_text = turn.items.iter().rev().find_map(|item| match item {
         codex_app_server_protocol::ThreadItem::AgentMessage { text, .. } => {
             let trimmed = text.trim();
             (!trimmed.is_empty()).then_some(trimmed)
         }
         _ => None,
-    })?;
+    });
 
-    Some(crate::spawn_orchestration::bounded_spawn_report_value(text))
+    let error_text = matches!(turn.status, TurnStatus::Failed | TurnStatus::Interrupted)
+        .then(|| turn.error.as_ref())
+        .flatten()
+        .map(format_turn_error_for_spawn_report);
+
+    let text = match (error_text, agent_text) {
+        (Some(error), Some(agent_text)) => format!("{error}; result={agent_text}"),
+        (Some(error), None) => error,
+        (None, Some(agent_text)) => agent_text.to_string(),
+        (None, None) => return None,
+    };
+
+    Some(crate::spawn_orchestration::bounded_spawn_report_value(
+        &text,
+    ))
+}
+
+fn format_turn_error_for_spawn_report(error: &AppServerTurnError) -> String {
+    let mut text = format!("turn_error={}", error.message.trim());
+    if let Some(info) = &error.codex_error_info {
+        let _ = write!(text, "; info={info:?}");
+    }
+    if let Some(details) = error
+        .additional_details
+        .as_deref()
+        .map(str::trim)
+        .filter(|details| !details.is_empty())
+    {
+        let _ = write!(text, "; details={details}");
+    }
+    text
+}
+
+fn context_left_percent_from_token_usage(
+    token_usage: &codex_app_server_protocol::ThreadTokenUsage,
+) -> Option<i64> {
+    let context_window = token_usage.model_context_window?;
+    Some(
+        TokenUsage {
+            total_tokens: token_usage.last.total_tokens,
+            input_tokens: token_usage.last.input_tokens,
+            cached_input_tokens: token_usage.last.cached_input_tokens,
+            output_tokens: token_usage.last.output_tokens,
+            reasoning_output_tokens: token_usage.last.reasoning_output_tokens,
+        }
+        .percent_of_context_window_remaining(context_window),
+    )
 }
 
 fn should_apply_collab_receiver_status(

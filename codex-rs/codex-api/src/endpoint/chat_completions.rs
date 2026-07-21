@@ -1,5 +1,6 @@
 use crate::auth::SharedAuthProvider;
 use crate::common::ChatCompletionsRequest;
+use crate::common::CompletionFinishReason;
 use crate::common::ResponseEvent;
 use crate::common::ResponseStream;
 use crate::endpoint::session::EndpointSession;
@@ -30,6 +31,7 @@ use http::HeaderMap;
 use http::HeaderValue;
 use http::Method;
 use serde::Deserialize;
+use serde::Deserializer;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -46,6 +48,7 @@ use tokio::time::timeout;
 use tracing::debug;
 use tracing::instrument;
 use tracing::trace;
+use tracing::warn;
 
 const REQUEST_ID_HEADER: &str = "x-request-id";
 const GENERATION_ID_HEADERS: [&str; 3] = [
@@ -217,7 +220,6 @@ struct ChatCompletionChunk {
 struct ChatChoice {
     #[serde(default)]
     delta: ChatDelta,
-    #[allow(dead_code)]
     finish_reason: Option<String>,
 }
 
@@ -232,10 +234,18 @@ struct ChatDelta {
     reasoning: Option<String>,
     /// OpenRouter typed reasoning blocks; may arrive without a plain-text
     /// `reasoning` twin (e.g. encrypted/redacted thinking).
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_default")]
     reasoning_details: Vec<serde_json::Value>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_default")]
     tool_calls: Vec<ChatToolCallDelta>,
+}
+
+fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    Option::<T>::deserialize(deserializer).map(Option::unwrap_or_default)
 }
 
 #[derive(Debug, Deserialize)]
@@ -335,6 +345,7 @@ struct ChatStreamState {
     tool_calls: BTreeMap<usize, PendingToolCall>,
     token_usage: Option<TokenUsage>,
     response_id_hint: Option<String>,
+    finish_reason: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -363,8 +374,7 @@ fn line_is_sse_comment(line: &[u8]) -> bool {
     let line = line.strip_suffix(b"\r").unwrap_or(line);
     line.iter()
         .copied()
-        .skip_while(|byte| matches!(byte, b' ' | b'\t'))
-        .next()
+        .find(|byte| !matches!(byte, b' ' | b'\t'))
         == Some(b':')
 }
 
@@ -469,7 +479,10 @@ impl ChatCallMetrics {
     }
 
     fn record_response_headers(&self, elapsed: Duration, headers: &HeaderMap) {
-        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         inner.ms_to_response_headers = Some(duration_ms(elapsed));
         inner.x_request_id = header_value(headers, REQUEST_ID_HEADER);
         inner.generation_id = GENERATION_ID_HEADERS
@@ -478,13 +491,19 @@ impl ChatCallMetrics {
     }
 
     fn record_response_header_error(&self, elapsed: Duration) {
-        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         inner.ms_to_response_headers = Some(duration_ms(elapsed));
     }
 
     fn record_sse_bytes(&self, bytes: &[u8], comment_frames: u64) {
         let elapsed_ms = self.elapsed_ms();
-        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if !bytes.is_empty() && inner.ms_to_first_sse_byte.is_none() {
             inner.ms_to_first_sse_byte = Some(elapsed_ms);
         }
@@ -493,7 +512,10 @@ impl ChatCallMetrics {
 
     fn record_parsed_data_event(&self) {
         let elapsed_ms = self.elapsed_ms();
-        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if inner.ms_to_first_parsed_data_event.is_none() {
             inner.ms_to_first_parsed_data_event = Some(elapsed_ms);
         }
@@ -504,7 +526,10 @@ impl ChatCallMetrics {
         let Some(generation_id) = generation_id.filter(|value| !value.is_empty()) else {
             return;
         };
-        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if inner.generation_id.is_none() {
             inner.generation_id = Some(generation_id.to_string());
         }
@@ -514,7 +539,10 @@ impl ChatCallMetrics {
         let Some(provider) = provider.filter(|value| !value.is_empty()) else {
             return;
         };
-        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if inner.provider.is_none() {
             inner.provider = Some(provider.to_string());
         }
@@ -522,7 +550,10 @@ impl ChatCallMetrics {
 
     fn record_actionable_event(&self) {
         let elapsed_ms = self.elapsed_ms();
-        let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if inner.ms_to_first_actionable_event.is_none() {
             inner.ms_to_first_actionable_event = Some(elapsed_ms);
         }
@@ -532,7 +563,10 @@ impl ChatCallMetrics {
         let finish_reason = finish_reason.into();
         let total_stream_ms = self.elapsed_ms();
         let record = {
-            let mut inner = self.inner.lock().expect("metrics mutex poisoned");
+            let mut inner = self
+                .inner
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if inner.emitted {
                 return;
             }
@@ -609,6 +643,7 @@ impl ChatStreamState {
             tool_calls: BTreeMap::new(),
             token_usage: None,
             response_id_hint,
+            finish_reason: None,
         }
     }
 
@@ -637,6 +672,17 @@ impl ChatStreamState {
         }
 
         for choice in chunk.choices {
+            if let Some(finish_reason) = choice.finish_reason.as_deref() {
+                if let Some(previous) = self.finish_reason.as_deref()
+                    && previous != finish_reason
+                {
+                    warn!(
+                        previous,
+                        finish_reason, "chat completion changed finish reason"
+                    );
+                }
+                self.finish_reason = Some(finish_reason.to_string());
+            }
             // Hosts speak one of two reasoning dialects: Z.AI-style
             // `reasoning_content` or OpenRouter-normalized `reasoning`.
             let reasoning_delta = match (choice.delta.reasoning_content, choice.delta.reasoning) {
@@ -783,11 +829,29 @@ impl ChatStreamState {
             }
         }
 
+        let finish_reason = self
+            .finish_reason
+            .take()
+            .map(CompletionFinishReason::from_provider);
+        // A length-limited response is incomplete but recoverable: the turn runner records
+        // the partial assistant output, requests a continuation, and caps consecutive
+        // provider-driven continuations. Filtered and unknown terminal states are left
+        // indeterminate so the turn runner can surface them as explicit errors.
+        let end_turn = match finish_reason.as_ref() {
+            Some(CompletionFinishReason::Stop) => Some(true),
+            Some(CompletionFinishReason::ToolCalls)
+            | Some(CompletionFinishReason::FunctionCall)
+            | Some(CompletionFinishReason::Length) => Some(false),
+            Some(CompletionFinishReason::ContentFilter)
+            | Some(CompletionFinishReason::Unknown(_))
+            | None => None,
+        };
         let _ = tx_event
             .send(Ok(ResponseEvent::Completed {
                 response_id,
                 token_usage,
-                end_turn: None,
+                end_turn,
+                finish_reason,
             }))
             .await;
     }
@@ -1396,6 +1460,86 @@ mod tests {
             }) if response_id == "chatcmpl-1"
         );
         assert_eq!(events.len(), 6);
+    }
+
+    #[tokio::test]
+    async fn parses_sglang_text_deltas_with_null_optional_collections() {
+        let events = collect_events(&[
+            br#"data: {"id":"chatcmpl-sglang","model":"deepseek-ai/DeepSeek-V4-Flash","choices":[{"index":0,"delta":{"reasoning_content":null,"reasoning_details":null,"role":"assistant","content":""},"finish_reason":null}]}"#,
+            b"\n\n",
+            br#"data: {"id":"chatcmpl-sglang","choices":[{"index":0,"delta":{"role":null,"content":"RENTED_GPU_OK","reasoning_content":null,"reasoning_details":null,"tool_calls":null},"finish_reason":null}],"usage":null}"#,
+            b"\n\n",
+            br#"data: {"id":"chatcmpl-sglang","choices":[{"index":0,"delta":{"reasoning_content":null},"finish_reason":"stop"}]}"#,
+            b"\n\n",
+            b"data: [DONE]\n\n",
+        ])
+        .await;
+
+        assert_matches!(
+            &events[0],
+            Ok(ResponseEvent::ServerModel(model))
+                if model == "deepseek-ai/DeepSeek-V4-Flash"
+        );
+        assert_matches!(
+            &events[1],
+            Ok(ResponseEvent::OutputItemAdded(ResponseItem::Message { .. }))
+        );
+        assert_matches!(
+            &events[2],
+            Ok(ResponseEvent::OutputTextDelta(delta)) if delta == "RENTED_GPU_OK"
+        );
+        assert_matches!(
+            &events[3],
+            Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { content, .. }))
+                if content == &vec![ContentItem::OutputText {
+                    text: "RENTED_GPU_OK".to_string(),
+                }]
+        );
+        assert_matches!(
+            &events[4],
+            Ok(ResponseEvent::Completed {
+                response_id,
+                end_turn: Some(true),
+                finish_reason: Some(CompletionFinishReason::Stop),
+                ..
+            }) if response_id == "chatcmpl-sglang"
+        );
+        assert_eq!(events.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn preserves_and_classifies_chat_completion_finish_reasons() {
+        let cases = [
+            ("stop", CompletionFinishReason::Stop, Some(true)),
+            ("length", CompletionFinishReason::Length, Some(false)),
+            (
+                "content_filter",
+                CompletionFinishReason::ContentFilter,
+                None,
+            ),
+            ("tool_calls", CompletionFinishReason::ToolCalls, Some(false)),
+            (
+                "provider_new_reason",
+                CompletionFinishReason::Unknown("provider_new_reason".to_string()),
+                None,
+            ),
+        ];
+
+        for (raw, expected_reason, expected_end_turn) in cases {
+            let terminal = format!(
+                "data: {{\"id\":\"chatcmpl-finish\",\"choices\":[{{\"delta\":{{}},\"finish_reason\":\"{raw}\"}}]}}\n\n"
+            );
+            let events = collect_events(&[terminal.as_bytes(), b"data: [DONE]\n\n"]).await;
+            assert_matches!(
+                events.last(),
+                Some(Ok(ResponseEvent::Completed {
+                    finish_reason: Some(reason),
+                    end_turn,
+                    ..
+                })) if reason == &expected_reason && end_turn == &expected_end_turn,
+                "finish reason {raw} was not preserved"
+            );
+        }
     }
 
     #[tokio::test]

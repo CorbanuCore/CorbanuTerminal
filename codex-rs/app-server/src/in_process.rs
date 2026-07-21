@@ -93,6 +93,7 @@ use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 use toml::Value as TomlValue;
+use tracing::debug;
 use tracing::warn;
 
 const IN_PROCESS_CONNECTION_ID: ConnectionId = ConnectionId(0);
@@ -100,9 +101,11 @@ const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
 fn trace_in_process_timing(label: &str, start: Instant) {
     if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
-        eprintln!(
-            "[pfterminal-in-process] {label} elapsed_ms={}",
-            start.elapsed().as_millis()
+        debug!(
+            target: "pfterminal_in_process",
+            label,
+            elapsed_ms = start.elapsed().as_millis(),
+            "pfterminal in-process timing"
         );
     }
 }

@@ -14975,6 +14975,7 @@
           },
           {
             "properties": {
+              "anthropic_content_block": true,
               "content": {
                 "default": null,
                 "items": {
@@ -15374,6 +15375,9 @@
                     "type": "null"
                   }
                 ]
+              },
+              "anthropic_content_block": {
+                "description": "Provider-native server-side search blocks that must be replayed as assistant content for providers that own the web-search execution."
               },
               "id": {
                 "type": [
@@ -17893,6 +17897,12 @@
               },
               "kind": {
                 "$ref": "#/definitions/v2/SubAgentActivityKind"
+              },
+              "taskPreview": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "type": {
                 "enum": [

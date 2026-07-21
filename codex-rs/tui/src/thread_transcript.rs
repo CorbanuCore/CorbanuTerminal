@@ -133,19 +133,36 @@ fn fallback_transcript_cell(item: &ThreadItem) -> Option<PlainHistoryCell> {
             })
             .collect::<Vec<_>>(),
         ThreadItem::CommandExecution {
+            id,
             command,
+            cwd,
+            process_id,
             status,
             aggregated_output,
             exit_code,
+            duration_ms,
             ..
         } => {
             let mut lines: Vec<Line<'static>> =
                 vec![vec!["$ ".dim(), command.clone().into()].into()];
             lines.push(
                 format!(
-                    "status: {status:?}{}",
+                    "job: pid={} · call={} · cwd={} · output=thread transcript",
+                    process_id.as_deref().unwrap_or("not reported"),
+                    id,
+                    cwd.as_str()
+                )
+                .dim()
+                .into(),
+            );
+            lines.push(
+                format!(
+                    "status: {status:?}{}{}",
                     exit_code
                         .map(|code| format!(" · exit {code}"))
+                        .unwrap_or_default(),
+                    duration_ms
+                        .map(|duration| format!(" · {duration}ms"))
                         .unwrap_or_default()
                 )
                 .dim()

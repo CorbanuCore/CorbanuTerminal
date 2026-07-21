@@ -58,6 +58,20 @@ pub(crate) async fn run_claude_command_plan(
     cancel_token: CancellationToken,
     progress_tx: Option<AppEventSender>,
 ) -> Result<ClaudePaneTurnOutput> {
+    if let Some(bridge) = plan.bridge.as_mut()
+        && bridge.upstream_api_key.is_none()
+    {
+        let deferred = bridge
+            .deferred_vault_secret
+            .take()
+            .ok_or_else(|| anyhow!("Claude bridge is missing provider credentials"))?;
+        let secret = tokio::task::spawn_blocking(move || {
+            super::command_plan::reveal_provider_secret(&deferred.codex_home, &deferred.label)
+        })
+        .await
+        .context("Claude bridge credential task failed")??;
+        bridge.upstream_api_key = Some(secret);
+    }
     let started_at = Instant::now();
     let started_at_unix_ms = unix_epoch_ms();
     let mut last_progress_elapsed_ms = Some(0);
@@ -373,7 +387,7 @@ impl ClaudeSecretRedactor {
         let secrets = plan
             .bridge
             .as_ref()
-            .map(|bridge| bridge.upstream_api_key.as_str())
+            .and_then(|bridge| bridge.upstream_api_key.as_deref())
             .into_iter()
             .filter(|secret| secret.len() >= MIN_REDACTED_SECRET_LEN)
             .map(ToString::to_string)

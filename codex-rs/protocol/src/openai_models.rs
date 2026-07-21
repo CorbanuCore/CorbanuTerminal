@@ -198,6 +198,9 @@ pub struct ModelPreset {
     pub id: String,
     /// Model slug (e.g., "gpt-5").
     pub model: String,
+    /// Provider that owns this catalog entry when model naming alone is not authoritative.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
     /// Display name shown in UIs.
     pub display_name: String,
     /// Short human description shown in UIs.
@@ -557,6 +560,7 @@ impl From<ModelInfo> for ModelPreset {
         ModelPreset {
             id: info.slug.clone(),
             model: info.slug.clone(),
+            provider_id: None,
             display_name: info.display_name,
             description: info.description.unwrap_or_default(),
             default_reasoning_effort: info

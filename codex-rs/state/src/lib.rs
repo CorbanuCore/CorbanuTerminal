@@ -45,6 +45,16 @@ pub use model::BackfillStats;
 pub use model::BackfillStatus;
 pub use model::DirectionalThreadSpawnEdgeStatus;
 pub use model::ExtractionOutcome;
+pub use model::GpuLimitEnforcement;
+pub use model::GpuOperationKind;
+pub use model::GpuProvisionStep;
+pub use model::GpuRental;
+pub use model::GpuRentalCreateParams;
+pub use model::GpuRentalLease;
+pub use model::GpuRentalState;
+pub use model::GpuRentalUpdate;
+pub use model::GpuRuntimeProvider;
+pub use model::GpuRuntimeProviderUpsert;
 pub use model::SortDirection;
 pub use model::SortKey;
 pub use model::Stage1JobClaim;
@@ -100,10 +110,10 @@ pub use telemetry::record_fallback;
 /// Environment variable for overriding the SQLite state database home directory.
 pub const SQLITE_HOME_ENV: &str = "CODEX_SQLITE_HOME";
 
-pub const LOGS_DB_FILENAME: &str = "logs_2.sqlite";
-pub const GOALS_DB_FILENAME: &str = "goals_1.sqlite";
-pub const MEMORIES_DB_FILENAME: &str = "memories_1.sqlite";
-pub const STATE_DB_FILENAME: &str = "state_5.sqlite";
+pub const LOGS_DB_FILENAME: &str = "pfterminal_logs_2.sqlite";
+pub const GOALS_DB_FILENAME: &str = "pfterminal_goals_1.sqlite";
+pub const MEMORIES_DB_FILENAME: &str = "pfterminal_memories_1.sqlite";
+pub const STATE_DB_FILENAME: &str = "pfterminal_state_5.sqlite";
 
 /// Errors encountered during DB operations. Tags: [stage]
 pub const DB_ERROR_METRIC: &str = "codex.db.error";

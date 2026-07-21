@@ -568,6 +568,10 @@ pub enum Op {
         communication: InterAgentCommunication,
     },
 
+    /// Internal wake-up for pending work that was accepted while a turn was
+    /// active and must run after that turn clears.
+    WakePendingWork,
+
     /// Approve a command execution
     ExecApproval {
         /// The id of the submission we are approving
@@ -813,6 +817,7 @@ impl Op {
             Self::UserInput { .. } => "user_input",
             Self::ThreadSettings { .. } => "thread_settings",
             Self::InterAgentCommunication { .. } => "inter_agent_communication",
+            Self::WakePendingWork => "wake_pending_work",
             Self::ExecApproval { .. } => "exec_approval",
             Self::PatchApproval { .. } => "patch_approval",
             Self::ResolveElicitation { .. } => "resolve_elicitation",
@@ -1686,6 +1691,7 @@ pub enum NonSteerableTurnKind {
 #[ts(rename_all = "snake_case")]
 pub enum CodexErrorInfo {
     ContextWindowExceeded,
+    PlanEntitlementExceeded,
     UsageLimitExceeded,
     ServerOverloaded,
     CyberPolicy,
@@ -1723,6 +1729,7 @@ impl CodexErrorInfo {
         match self {
             Self::ThreadRollbackFailed | Self::ActiveTurnNotSteerable { .. } => false,
             Self::ContextWindowExceeded
+            | Self::PlanEntitlementExceeded
             | Self::UsageLimitExceeded
             | Self::ServerOverloaded
             | Self::CyberPolicy
@@ -1964,6 +1971,11 @@ pub struct ModelResponseCompletedEvent {
     pub response_id: String,
     pub model: String,
     pub model_provider_id: String,
+    /// Provider terminal reason when available (for example `stop`, `length`,
+    /// `content_filter`, or `tool_calls`). Persisted for rollout diagnosis.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub finish_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
@@ -4067,6 +4079,12 @@ pub struct SubAgentActivityEvent {
     pub agent_thread_id: ThreadId,
     /// Canonical v2 path of the affected sub-agent.
     pub agent_path: AgentPath,
+    /// Human-readable nickname of the affected agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_nickname: Option<String>,
+    /// Runtime-enforced role of the affected agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_role: Option<String>,
     /// Optional human-readable task preview for model-to-agent messages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task_preview: Option<String>,
@@ -4210,6 +4228,26 @@ mod tests {
             serde_json::from_value::<ThreadSource>(json!("automation"))?,
             source
         );
+        Ok(())
+    }
+
+    #[test]
+    fn subagent_activity_serializes_one_reconciled_named_identity() -> Result<()> {
+        let event = SubAgentActivityEvent {
+            event_id: "message-7".to_string(),
+            occurred_at_ms: 7,
+            agent_thread_id: ThreadId::new(),
+            agent_path: AgentPath::try_from("/root/troll_burzum").expect("agent path"),
+            agent_nickname: Some("Burzum".to_string()),
+            agent_role: Some("troll".to_string()),
+            task_preview: Some("continue the audit".to_string()),
+            kind: SubAgentActivityKind::Interacted,
+        };
+
+        let value = serde_json::to_value(event)?;
+        assert_eq!(value["agent_path"], json!("/root/troll_burzum"));
+        assert_eq!(value["agent_nickname"], json!("Burzum"));
+        assert_eq!(value["agent_role"], json!("troll"));
         Ok(())
     }
 

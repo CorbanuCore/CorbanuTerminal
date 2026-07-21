@@ -4,6 +4,8 @@ use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelInstructionsVariables;
 use codex_protocol::openai_models::ModelMessages;
 use codex_protocol::openai_models::ModelVisibility;
+use codex_protocol::openai_models::ReasoningEffort;
+use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_protocol::openai_models::TruncationMode;
 use codex_protocol::openai_models::TruncationPolicyConfig;
 use codex_protocol::openai_models::WebSearchToolType;
@@ -71,13 +73,39 @@ pub fn with_config_overrides(mut model: ModelInfo, config: &ModelsManagerConfig)
 
 /// Build a minimal fallback model descriptor for missing/unknown slugs.
 pub fn model_info_from_slug(slug: &str) -> ModelInfo {
-    warn!("Unknown model {slug} is used. This will use fallback model metadata.");
+    let is_deepseek_v4_flash = slug == "deepseek-ai/DeepSeek-V4-Flash";
+    let curated_gpu_model = match slug {
+        "deepseek-ai/DeepSeek-V4-Flash" => Some(("DeepSeek V4 Flash", 384_000)),
+        "zai-org/GLM-5.2-FP8" => Some(("GLM 5.2 FP8", 131_072)),
+        _ => None,
+    };
+    if curated_gpu_model.is_none() {
+        warn!("Unknown model {slug} is used. This will use fallback model metadata.");
+    }
+    let (display_name, context_window, used_fallback_model_metadata) = curated_gpu_model
+        .map_or_else(
+            || (slug.to_string(), 272_000, true),
+            |(display_name, context_window)| (display_name.to_string(), context_window, false),
+        );
     ModelInfo {
         slug: slug.to_string(),
-        display_name: slug.to_string(),
+        display_name,
         description: None,
-        default_reasoning_level: None,
-        supported_reasoning_levels: Vec::new(),
+        default_reasoning_level: is_deepseek_v4_flash.then_some(ReasoningEffort::High),
+        supported_reasoning_levels: if is_deepseek_v4_flash {
+            vec![
+                ReasoningEffortPreset {
+                    effort: ReasoningEffort::High,
+                    description: "DeepSeek V4 thinking mode".to_string(),
+                },
+                ReasoningEffortPreset {
+                    effort: ReasoningEffort::XHigh,
+                    description: "Maximum DeepSeek V4 reasoning effort".to_string(),
+                },
+            ]
+        } else {
+            Vec::new()
+        },
         shell_type: ConfigShellToolType::Default,
         visibility: ModelVisibility::None,
         supported_in_api: true,
@@ -98,14 +126,14 @@ pub fn model_info_from_slug(slug: &str) -> ModelInfo {
         truncation_policy: TruncationPolicyConfig::bytes(/*limit*/ 10_000),
         supports_parallel_tool_calls: false,
         supports_image_detail_original: false,
-        context_window: Some(272_000),
-        max_context_window: Some(272_000),
+        context_window: Some(context_window),
+        max_context_window: Some(context_window),
         auto_compact_token_limit: None,
         comp_hash: None,
         effective_context_window_percent: 95,
         experimental_supported_tools: Vec::new(),
         input_modalities: default_input_modalities(),
-        used_fallback_model_metadata: true, // this is the fallback model metadata
+        used_fallback_model_metadata,
         supports_search_tool: false,
         use_responses_lite: false,
         auto_review_model_override: None,
@@ -118,7 +146,10 @@ fn local_personality_messages_for_slug(slug: &str) -> Option<ModelMessages> {
     let lower_slug = slug.to_ascii_lowercase();
     let header = if slug == "gpt-5.2-codex" || slug == "exp-codex-personality" {
         DEFAULT_PERSONALITY_HEADER
-    } else if lower_slug.contains("glm") || lower_slug.contains("zai") {
+    } else if lower_slug.contains("glm")
+        || lower_slug.contains("zai")
+        || lower_slug.contains("deepseek")
+    {
         COMPAT_PERSONALITY_HEADER
     } else {
         return None;

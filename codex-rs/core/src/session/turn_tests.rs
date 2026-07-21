@@ -149,13 +149,68 @@ fn third_party_cache_health_uses_last_provider_usage() {
 #[test]
 fn third_party_cache_miss_requires_large_recent_usage() {
     let miss = token_usage(17_136, 0);
+    let partial = token_usage(582_554, 386_112);
     let small = token_usage(1_000, 0);
 
     assert!(third_party_cache_miss_is_known(Some(&miss)));
     assert!(!third_party_cache_looks_healthy(Some(&miss)));
+    assert!(third_party_cache_miss_is_known(Some(&partial)));
+    assert!(!third_party_cache_looks_healthy(Some(&partial)));
     assert!(!third_party_cache_miss_is_known(Some(&small)));
     assert!(!third_party_cache_looks_healthy(Some(&small)));
     assert_eq!(cache_hit_rate(None), None);
+}
+
+#[test]
+fn runtime_gpu_providers_do_not_use_third_party_request_leases() {
+    assert!(!provider_uses_request_lease("gpu-rental-123", false));
+    assert!(!provider_uses_request_lease("openai", true));
+    assert!(provider_uses_request_lease("openrouter", false));
+}
+
+#[test]
+fn provider_cache_pressure_warning_labels_partial_hits() {
+    let key = ProviderRequestKey {
+        provider_id: "vercel".to_string(),
+        model: "zai/glm-5.2".to_string(),
+        key_fingerprint: "stored:test".to_string(),
+    };
+    let preflight = ProviderRequestPreflight {
+        input_tokens: 515_674,
+        cached_input_tokens: 386_112,
+        request_bytes: 1_888_058,
+        thread_id: None,
+        turn_id: None,
+    };
+    let details = cache_hit_details(Some(&token_usage(582_554, 386_112))).expect("cache details");
+
+    let message = provider_cache_pressure_warning_message(&key, &preflight, details);
+
+    assert!(message.starts_with("Provider cache low hit rate: vercel/zai/glm-5.2"));
+    assert!(message.contains("cached_input=386112/582554 (66.3%)"));
+    assert!(!message.starts_with("Provider cache miss"));
+}
+
+#[test]
+fn provider_cache_pressure_warning_labels_true_miss() {
+    let key = ProviderRequestKey {
+        provider_id: "vercel".to_string(),
+        model: "zai/glm-5.2".to_string(),
+        key_fingerprint: "stored:test".to_string(),
+    };
+    let preflight = ProviderRequestPreflight {
+        input_tokens: 515_674,
+        cached_input_tokens: 0,
+        request_bytes: 1_888_058,
+        thread_id: None,
+        turn_id: None,
+    };
+    let details = cache_hit_details(Some(&token_usage(582_554, 0))).expect("cache details");
+
+    let message = provider_cache_pressure_warning_message(&key, &preflight, details);
+
+    assert!(message.starts_with("Provider cache miss: vercel/zai/glm-5.2"));
+    assert!(message.contains("cached_input=0/582554 (0.0%)"));
 }
 
 #[tokio::test]

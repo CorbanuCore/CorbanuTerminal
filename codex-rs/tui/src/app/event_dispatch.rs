@@ -5,14 +5,417 @@
 
 use super::resize_reflow::trailing_run_start;
 use super::*;
+use crate::app_server_session::TurnStartOutcome;
 use crate::config_update::format_config_error;
 use crate::external_agent_config_migration_flow::ExternalAgentConfigMigrationFlowOutcome;
+use crate::spawn_orchestration::PendingDispatchEnqueueResult;
+use chrono::Utc;
 #[cfg(target_os = "windows")]
 use codex_config::types::WindowsSandboxModeToml;
+use std::collections::HashSet;
 
 const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
+const RESERVED_PANE_DISPLAY_NAMES: &[&str] = &["Codex - Main", "me", "none", "root", "nazgul"];
 
 impl App {
+    pub(super) async fn refresh_gpu_runtime_overlay(&mut self) {
+        let Some(state_db) = self.state_db.as_ref() else {
+            self.model_catalog.replace_gpu_models(Vec::new());
+            self.refresh_gpu_spend_indicator().await;
+            return;
+        };
+        let providers = match state_db.list_gpu_runtime_providers().await {
+            Ok(providers) => providers,
+            Err(error) => {
+                tracing::warn!(%error, "failed to refresh GPU runtime provider overlay");
+                self.refresh_gpu_spend_indicator().await;
+                return;
+            }
+        };
+        let models = providers
+            .iter()
+            .filter_map(super::gpu_runtime_model_preset)
+            .collect();
+        let runtime_providers = providers
+            .into_iter()
+            .filter_map(|provider| {
+                codex_core::config::gpu_runtime_model_provider(provider, &self.config.codex_home)
+            })
+            .collect::<std::collections::HashMap<_, _>>();
+        self.model_catalog.replace_gpu_models(models);
+        self.config
+            .model_providers
+            .retain(|provider_id, _| !provider_id.starts_with("gpu-"));
+        self.config
+            .model_providers
+            .extend(runtime_providers.clone());
+        self.chat_widget
+            .replace_gpu_model_providers(&runtime_providers);
+        self.refresh_gpu_notifications().await;
+        self.refresh_gpu_spend_indicator().await;
+    }
+
+    async fn refresh_gpu_notifications(&mut self) {
+        let Some(state_db) = self.state_db.clone() else {
+            return;
+        };
+        let Ok(rentals) = state_db.list_gpu_rentals(1_000).await else {
+            return;
+        };
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        for rental in rentals {
+            let Some((kind, message, is_error)) = gpu_notification(&rental) else {
+                continue;
+            };
+            match state_db
+                .record_gpu_notification_once(
+                    rental.rental_id.as_str(),
+                    rental.state_sequence,
+                    kind.as_str(),
+                    now_ms,
+                )
+                .await
+            {
+                Ok(true) if is_error => self.chat_widget.add_error_message(message),
+                Ok(true) => self.chat_widget.add_info_message(message, None),
+                Ok(false) => {}
+                Err(error) => {
+                    tracing::warn!(%error, "failed to deduplicate GPU rental notification")
+                }
+            }
+        }
+    }
+
+    fn normalize_pane_display_name(&self, name: &str) -> Result<String> {
+        let normalized = name.split_whitespace().collect::<Vec<_>>().join(" ");
+        if normalized.is_empty() {
+            color_eyre::eyre::bail!("Pane name cannot be empty.");
+        }
+        if RESERVED_PANE_DISPLAY_NAMES
+            .iter()
+            .any(|reserved| reserved.eq_ignore_ascii_case(&normalized))
+        {
+            color_eyre::eyre::bail!("`{normalized}` is reserved; choose a different pane name.");
+        }
+        Ok(normalized)
+    }
+
+    fn occupied_pane_name_keys(&self, exclude_node_id: Option<&str>) -> HashSet<String> {
+        let mut occupied = HashSet::new();
+        let mut insert = |value: &str| {
+            let folded = value.trim().to_ascii_lowercase();
+            if !folded.is_empty() {
+                occupied.insert(folded);
+            }
+        };
+
+        for (thread_id, entry) in self.agent_navigation.ordered_threads() {
+            let node_id = crate::spawn_orchestration::thread_node_id(thread_id);
+            if exclude_node_id == Some(node_id.as_str()) {
+                continue;
+            }
+            let label = self.thread_label(thread_id);
+            insert(&label);
+            if let Some(nickname) = entry.agent_nickname.as_deref() {
+                insert(nickname);
+                if Some(thread_id) != self.primary_thread_id
+                    && entry
+                        .agent_role
+                        .as_deref()
+                        .map(|role| role == "default")
+                        .unwrap_or(true)
+                {
+                    insert(&format!("Codex - {nickname}"));
+                }
+            }
+        }
+        for pane in self.claude_panes.panes() {
+            let node_id = crate::spawn_orchestration::pane_node_id(&pane.id);
+            if exclude_node_id == Some(node_id.as_str()) {
+                continue;
+            }
+            insert(&pane.title);
+        }
+        occupied
+    }
+
+    fn unique_pane_display_name(
+        &self,
+        requested: &str,
+        exclude_node_id: Option<&str>,
+    ) -> Result<String> {
+        let base = self.normalize_pane_display_name(requested)?;
+        let occupied = self.occupied_pane_name_keys(exclude_node_id);
+        let mut candidate = base.clone();
+        for suffix in 2..1000 {
+            if !occupied.contains(&candidate.to_ascii_lowercase()) {
+                return Ok(candidate);
+            }
+            candidate = format!("{base} ({suffix})");
+        }
+        color_eyre::eyre::bail!("Could not find an unused pane name for `{base}`.");
+    }
+
+    fn unique_native_pane_nickname(
+        &self,
+        requested: &str,
+        exclude_thread_id: Option<ThreadId>,
+    ) -> Result<String> {
+        let mut base = self.normalize_pane_display_name(requested)?;
+        if let Some(stripped) = base.strip_prefix("Codex - ") {
+            base = self.normalize_pane_display_name(stripped)?;
+        }
+        let exclude_node_id = exclude_thread_id.map(crate::spawn_orchestration::thread_node_id);
+        let occupied = self.occupied_pane_name_keys(exclude_node_id.as_deref());
+        let mut candidate = base.clone();
+        for suffix in 2..1000 {
+            let candidate_key = candidate.to_ascii_lowercase();
+            let display_key = format!("codex - {}", candidate.to_ascii_lowercase());
+            if !occupied.contains(&candidate_key) && !occupied.contains(&display_key) {
+                return Ok(candidate);
+            }
+            candidate = format!("{base} ({suffix})");
+        }
+        color_eyre::eyre::bail!("Could not find an unused pane name for `{base}`.");
+    }
+
+    async fn rename_current_pane_display_name(
+        &mut self,
+        app_server: &mut AppServerSession,
+        name: String,
+    ) {
+        if let Some(pane_id) = self
+            .claude_panes
+            .active_claude_pane_id()
+            .map(ToString::to_string)
+        {
+            self.rename_claude_pane_display_name(pane_id, name);
+            return;
+        }
+
+        let Some(thread_id) = self.current_displayed_thread_id() else {
+            self.chat_widget
+                .add_error_message("No active Codex pane to rename.".to_string());
+            return;
+        };
+        self.rename_codex_pane_display_name(app_server, thread_id, name)
+            .await;
+    }
+
+    fn rename_claude_pane_display_name(&mut self, pane_id: String, name: String) {
+        let exclude = crate::spawn_orchestration::pane_node_id(&pane_id);
+        let title = match self.unique_pane_display_name(&name, Some(exclude.as_str())) {
+            Ok(title) => title,
+            Err(err) => {
+                self.chat_widget.add_error_message(err.to_string());
+                return;
+            }
+        };
+        match self.claude_panes.rename_pane(&pane_id, title.clone()) {
+            Ok(()) => {
+                self.sync_active_agent_label();
+                self.persist_pane_state();
+                self.chat_widget
+                    .add_info_message(format!("Renamed pane to {title}."), None);
+            }
+            Err(err) => self
+                .chat_widget
+                .add_error_message(format!("Failed to rename pane: {err}")),
+        }
+    }
+
+    async fn rename_codex_pane_display_name(
+        &mut self,
+        app_server: &mut AppServerSession,
+        thread_id: ThreadId,
+        name: String,
+    ) {
+        let nickname = match self.unique_native_pane_nickname(&name, Some(thread_id)) {
+            Ok(nickname) => nickname,
+            Err(err) => {
+                self.chat_widget.add_error_message(err.to_string());
+                return;
+            }
+        };
+        let backend_name = nickname.clone();
+        if let Err(err) = app_server.thread_set_name(thread_id, backend_name).await {
+            self.chat_widget
+                .add_error_message(format!("Failed to rename thread: {err}"));
+            return;
+        }
+        self.agent_navigation
+            .set_agent_nickname(thread_id, Some(nickname.clone()));
+        self.persist_existing_thread_agent_nickname(thread_id, Some(nickname.clone()))
+            .await;
+        self.sync_active_agent_label();
+        self.persist_pane_state();
+        self.chat_widget
+            .add_info_message(format!("Renamed pane to {nickname}."), None);
+    }
+
+    async fn persist_existing_thread_agent_nickname(
+        &self,
+        thread_id: ThreadId,
+        agent_nickname: Option<String>,
+    ) {
+        let Some(state_db) = self.state_db.as_ref() else {
+            return;
+        };
+        let Ok(Some(mut metadata)) = state_db.get_thread(thread_id).await else {
+            return;
+        };
+        let now = Utc::now();
+        metadata.updated_at = now;
+        metadata.recency_at = now;
+        metadata.agent_nickname = agent_nickname;
+        if let Err(err) = state_db.upsert_thread(&metadata).await {
+            tracing::warn!(
+                thread_id = %thread_id,
+                error = %err,
+                "failed to persist renamed pane nickname"
+            );
+        }
+    }
+}
+
+fn gpu_notification(rental: &codex_state::GpuRental) -> Option<(String, String, bool)> {
+    use codex_state::GpuRentalState;
+    match rental.observed_state {
+        GpuRentalState::Ready => Some((
+            "ready".to_string(),
+            format!(
+                "GPU rental {} is READY and its model is available in the picker.",
+                rental.rental_id
+            ),
+            false,
+        )),
+        GpuRentalState::Degraded => Some((
+            "degraded".to_string(),
+            format!(
+                "GPU rental {} is DEGRADED and has been disabled for new selections.",
+                rental.rental_id
+            ),
+            true,
+        )),
+        GpuRentalState::Failed => Some((
+            "failed".to_string(),
+            failed_gpu_notification(
+                rental.rental_id.as_str(),
+                rental.last_error_message.as_deref(),
+            ),
+            true,
+        )),
+        GpuRentalState::TerminationUnconfirmed => Some((
+            "termination-unconfirmed".to_string(),
+            format!(
+                "GPU rental {} cleanup is UNCONFIRMED; it remains visible as a billing risk.",
+                rental.rental_id
+            ),
+            true,
+        )),
+        GpuRentalState::TerminatedConfirmed => Some((
+            "terminated".to_string(),
+            format!(
+                "GPU rental {} termination is provider-confirmed.",
+                rental.rental_id
+            ),
+            false,
+        )),
+        _ => rental.provision_step.as_deref().and_then(|step| {
+            crate::chatwidget::gpu_menu::gpu_provision_phase_label(step)?;
+            let progress = crate::chatwidget::gpu_menu::gpu_progress_summary(
+                rental,
+                chrono::Utc::now().timestamp_millis(),
+            );
+            Some((
+                format!("progress-{step}"),
+                format!(
+                    "GPU rental {}: {progress}. Provider billing is active; /gpu shows current spend and termination controls.",
+                    rental.rental_id
+                ),
+                false,
+            ))
+        }),
+    }
+}
+
+fn failed_gpu_notification(rental_id: &str, reason: Option<&str>) -> String {
+    reason.map_or_else(
+        || format!("GPU rental {rental_id} failed before a billable resource was confirmed."),
+        |reason| {
+            format!(
+                "GPU rental {rental_id} failed before a billable resource was confirmed: {reason}"
+            )
+        },
+    )
+}
+
+impl App {
+    #[cfg(test)]
+    pub(super) fn start_gpu_controller(&mut self) {}
+
+    #[cfg(not(test))]
+    pub(super) fn start_gpu_controller(&mut self) {
+        let executable = match std::env::current_exe() {
+            Ok(executable) => executable,
+            Err(error) => {
+                self.chat_widget.add_error_message(format!(
+                    "GPU rental state was saved, but the independent controller could not be located: {error}"
+                ));
+                return;
+            }
+        };
+        match std::process::Command::new(executable)
+            .arg("internal-gpu-controller")
+            .env("CODEX_HOME", self.config.codex_home.as_path())
+            .env(codex_state::SQLITE_HOME_ENV, self.config.sqlite_home.as_path())
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(_) => {}
+            Err(error) => self.chat_widget.add_error_message(format!(
+                "GPU rental state was saved, but the independent controller did not start: {error}. Run `pfterminal internal-gpu-controller` before relying on local TTL or spend enforcement."
+            )),
+        }
+    }
+
+    pub(super) async fn refresh_gpu_spend_indicator(&mut self) {
+        let Some(state_db) = self.state_db.as_ref() else {
+            self.chat_widget.set_gpu_spend_status(None);
+            return;
+        };
+        let status = state_db
+            .list_gpu_rentals(1_000)
+            .await
+            .ok()
+            .and_then(|rentals| {
+                let billable = rentals
+                    .into_iter()
+                    .filter(codex_state::GpuRental::may_be_billable)
+                    .collect::<Vec<_>>();
+                if billable.is_empty() {
+                    return None;
+                }
+                let estimated = billable
+                    .iter()
+                    .map(|rental| rental.estimated_accrued_microusd)
+                    .sum::<i64>() as f64
+                    / 1_000_000.0;
+                let hourly_cap = billable
+                    .iter()
+                    .map(|rental| rental.max_hourly_microusd)
+                    .sum::<i64>() as f64
+                    / 1_000_000.0;
+                Some(format!(
+                    "GPU SPEND {} active · ${estimated:.2} est · ≤${hourly_cap:.2}/hr",
+                    billable.len()
+                ))
+            });
+        self.chat_widget.set_gpu_spend_status(status);
+    }
+
     pub(super) async fn handle_event(
         &mut self,
         tui: &mut tui::Tui,
@@ -339,6 +742,13 @@ impl App {
                 self.chat_widget.prepare_local_op_submission(&op);
                 if self.try_submit_active_claude_pane_op(&op) {
                     return Ok(AppRunControl::Continue);
+                }
+                if matches!(op, crate::app_command::AppCommand::UserTurn { .. })
+                    && let Some(thread_id) = self.active_thread_id
+                {
+                    self.note_assignment_user_turn(&crate::spawn_orchestration::thread_node_id(
+                        thread_id,
+                    ));
                 }
                 self.submit_active_thread_op(app_server, op).await?;
             }
@@ -942,15 +1352,326 @@ impl App {
                     self.chat_widget.maybe_send_next_queued_input();
                 }
             }
-            AppEvent::OpenReasoningPopup { model } => {
-                self.chat_widget.open_reasoning_popup(model);
-            }
-            AppEvent::OpenPlanReasoningScopePrompt { model, effort } => {
+            AppEvent::OpenReasoningPopup { model, purpose } => {
                 self.chat_widget
-                    .open_plan_reasoning_scope_prompt(model, effort);
+                    .open_reasoning_popup_for_purpose(model, purpose);
+            }
+            AppEvent::OpenPlanReasoningScopePrompt {
+                model,
+                provider,
+                effort,
+            } => {
+                self.chat_widget
+                    .open_plan_reasoning_scope_prompt(model, provider, effort);
             }
             AppEvent::OpenAllModelsPopup { models } => {
                 self.chat_widget.open_all_models_popup(models);
+            }
+            AppEvent::OpenGpuMenu => {
+                self.refresh_gpu_spend_indicator().await;
+                let Some(state_db) = self.state_db.as_ref() else {
+                    self.chat_widget.add_error_message(
+                        "GPU rental state is unavailable in this session.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
+                match state_db.list_gpu_rentals(100).await {
+                    Ok(rentals) => self.chat_widget.open_gpu_menu(rentals),
+                    Err(error) => self
+                        .chat_widget
+                        .add_error_message(format!("Unable to read GPU rentals: {error}")),
+                }
+            }
+            AppEvent::OpenGpuRental { rental_id } => {
+                let Some(state_db) = self.state_db.as_ref() else {
+                    self.chat_widget.add_error_message(
+                        "GPU rental state is unavailable in this session.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
+                match state_db.get_gpu_rental(rental_id.as_str()).await {
+                    Ok(Some(rental)) => self.chat_widget.open_gpu_rental(rental),
+                    Ok(None) => self
+                        .chat_widget
+                        .add_error_message(format!("GPU rental {rental_id} was not found.")),
+                    Err(error) => self
+                        .chat_widget
+                        .add_error_message(format!("Unable to read GPU rental: {error}")),
+                }
+            }
+            AppEvent::DisableGpuServing { rental_id } => {
+                let Some(state_db) = self.state_db.as_ref() else {
+                    self.chat_widget.add_error_message(
+                        "GPU rental state is unavailable in this session.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
+                let now_ms = chrono::Utc::now().timestamp_millis();
+                match state_db
+                    .set_gpu_runtime_provider_health(rental_id.as_str(), "degraded", now_ms)
+                    .await
+                {
+                    Ok(true) => self.chat_widget.add_info_message(
+                        format!(
+                            "Stopped serving GPU rental {rental_id}. Provider billing may continue."
+                        ),
+                        None,
+                    ),
+                    Ok(false) => self.chat_widget.add_error_message(format!(
+                        "GPU rental {rental_id} has no active runtime provider."
+                    )),
+                    Err(error) => self
+                        .chat_widget
+                        .add_error_message(format!("Unable to stop GPU serving: {error}")),
+                }
+                self.refresh_gpu_spend_indicator().await;
+            }
+            AppEvent::TerminateGpuRental { rental_id } => {
+                let Some(state_db) = self.state_db.as_ref() else {
+                    self.chat_widget.add_error_message(
+                        "GPU rental state is unavailable in this session.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
+                let now_ms = chrono::Utc::now().timestamp_millis();
+                let _ = state_db
+                    .set_gpu_runtime_provider_health(rental_id.as_str(), "degraded", now_ms)
+                    .await;
+                match state_db
+                    .request_gpu_rental_termination(rental_id.as_str(), now_ms)
+                    .await
+                {
+                    Ok(true) => {
+                        self.chat_widget.add_info_message(
+                            format!(
+                                "Termination requested for GPU rental {rental_id}; billing remains unresolved until the provider confirms absence."
+                            ),
+                            None,
+                        );
+                        self.start_gpu_controller();
+                    }
+                    Ok(false) => self.chat_widget.add_error_message(format!(
+                        "GPU rental {rental_id} is already terminal or cannot be terminated."
+                    )),
+                    Err(error) => self
+                        .chat_widget
+                        .add_error_message(format!("Unable to terminate GPU rental: {error}")),
+                }
+                self.refresh_gpu_spend_indicator().await;
+            }
+            AppEvent::OpenGpuAuthorizationPrompt { recipe_id, state } => self
+                .chat_widget
+                .open_gpu_authorization_prompt(recipe_id, state),
+            AppEvent::SearchGpuOffers {
+                recipe_id,
+                maximum_hourly_microusd,
+                maximum_total_microusd,
+                ttl_minutes,
+            } => {
+                let Some(state_db) = self.state_db.clone() else {
+                    self.chat_widget.add_error_message(
+                        "GPU rental state is unavailable in this session.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
+                let tx = self.app_event_tx.clone();
+                let codex_home = self.config.codex_home.clone();
+                let now_ms = chrono::Utc::now().timestamp_millis();
+                let authorization = codex_gpu_market::RentalAuthorization {
+                    client_operation_id: Uuid::new_v4().to_string(),
+                    maximum_hourly_microusd,
+                    maximum_total_microusd,
+                    terminate_at_ms: now_ms.saturating_add(ttl_minutes.saturating_mul(60_000)),
+                    acknowledged_local_enforcement: true,
+                };
+                self.chat_widget.add_info_message(
+                    format!("Searching verified capacity for {recipe_id}…"),
+                    None,
+                );
+                tokio::spawn(async move {
+                    let result = async {
+                        let installation_id = codex_core::resolve_installation_id(&codex_home)
+                            .await
+                            .map_err(|error| error.to_string())?;
+                        let credentials =
+                            Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
+                                codex_vault::Vault::new(codex_home.to_path_buf()),
+                            )));
+                        let service = codex_gpu_market::GpuMarketService::new(
+                            state_db,
+                            codex_gpu_market::RecipeCatalog::default(),
+                            installation_id,
+                        );
+                        service
+                            .search(
+                                recipe_id.as_str(),
+                                maximum_hourly_microusd,
+                                &codex_gpu_market::VastProvider::new(credentials.clone()),
+                                &codex_gpu_market::RunpodProvider::new(credentials),
+                            )
+                            .await
+                            .map_err(|error| error.safe_message)
+                    }
+                    .await;
+                    tx.send(AppEvent::GpuOffersLoaded {
+                        recipe_id,
+                        authorization,
+                        offers: result,
+                    });
+                });
+            }
+            AppEvent::GpuOffersLoaded {
+                recipe_id,
+                authorization,
+                offers,
+            } => match offers {
+                Ok(offers) => {
+                    self.chat_widget
+                        .open_gpu_offers(recipe_id, authorization, offers);
+                }
+                Err(message) => self.chat_widget.add_error_message(message),
+            },
+            AppEvent::OpenGpuConfirmation {
+                recipe_id,
+                authorization,
+                offer,
+            } => self
+                .chat_widget
+                .open_gpu_confirmation(recipe_id, authorization, offer),
+            AppEvent::ConfirmGpuRental {
+                recipe_id,
+                authorization,
+                offer,
+            } => {
+                let Some(state_db) = self.state_db.clone() else {
+                    self.chat_widget.add_error_message(
+                        "GPU rental state is unavailable in this session.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
+                let tx = self.app_event_tx.clone();
+                let codex_home = self.config.codex_home.clone();
+                tokio::spawn(async move {
+                    let result = async {
+                        let installation_id = codex_core::resolve_installation_id(&codex_home)
+                            .await
+                            .map_err(|error| error.to_string())?;
+                        let credentials =
+                            Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
+                                codex_vault::Vault::new(codex_home.to_path_buf()),
+                            )));
+                        let rental_id = format!("gpu-{}", authorization.client_operation_id);
+                        credentials
+                            .ensure_rental_endpoint_token(rental_id.as_str())
+                            .map_err(|_| {
+                                "Could not create the scoped GPU endpoint credential. No rental was started."
+                                    .to_string()
+                            })?;
+                        let service = codex_gpu_market::GpuMarketService::new(
+                            state_db,
+                            codex_gpu_market::RecipeCatalog::default(),
+                            installation_id,
+                        );
+                        let now_ms = chrono::Utc::now().timestamp_millis();
+                        match offer.provider.as_str() {
+                            "vast" => {
+                                service
+                                    .confirm(
+                                        recipe_id.as_str(),
+                                        &offer,
+                                        &authorization,
+                                        &codex_gpu_market::VastProvider::new(credentials.clone()),
+                                        now_ms,
+                                    )
+                                    .await
+                            }
+                            "runpod" => {
+                                service
+                                    .confirm(
+                                        recipe_id.as_str(),
+                                        &offer,
+                                        &authorization,
+                                        &codex_gpu_market::RunpodProvider::new(credentials.clone()),
+                                        now_ms,
+                                    )
+                                    .await
+                            }
+                            _ => Err(codex_gpu_market::ProviderError::new(
+                                codex_gpu_market::ProviderErrorKind::InvalidRequest,
+                                "Unsupported GPU provider.",
+                            )),
+                        }
+                        .map_err(|error| error.safe_message)
+                    }
+                    .await;
+                    tx.send(AppEvent::GpuRentalConfirmationFinished { result });
+                });
+            }
+            AppEvent::GpuRentalConfirmationFinished { result } => match result {
+                Ok(rental) => {
+                    if rental.observed_state == codex_state::GpuRentalState::Failed {
+                        let reason = rental.last_error_message.as_deref().unwrap_or(
+                            "The earlier allocation attempt failed before a resource was created.",
+                        );
+                        self.chat_widget.add_error_message(format!(
+                            "That confirmation already produced GPU rental {}, which failed: {reason} Choose another current offer from /gpu.",
+                            rental.rental_id
+                        ));
+                    } else {
+                        self.chat_widget.add_info_message(
+                            format!(
+                                "GPU rental {} was authorized. The independent controller is starting; /gpu remains authoritative for billing state.",
+                                rental.rental_id
+                            ),
+                            None,
+                        );
+                        self.start_gpu_controller();
+                    }
+                    self.refresh_gpu_spend_indicator().await;
+                }
+                Err(message) => self.chat_widget.add_error_message(message),
+            },
+            AppEvent::OpenGpuProviderCredential { provider } => {
+                self.chat_widget.open_gpu_provider_credential(provider);
+            }
+            AppEvent::SaveGpuProviderCredential { provider, api_key } => {
+                let (label, display_name) = match provider.as_str() {
+                    "runpod" => (codex_gpu_market::RUNPOD_API_KEY_LABEL, "RunPod"),
+                    "vast" => (codex_gpu_market::VAST_API_KEY_LABEL, "Vast.ai"),
+                    _ => {
+                        self.chat_widget
+                            .add_error_message("Unsupported GPU provider credential.".to_string());
+                        return Ok(AppRunControl::Continue);
+                    }
+                };
+                let vault = codex_vault::Vault::new(self.config.codex_home.clone().to_path_buf());
+                let secret = api_key.into_inner();
+                let result = if vault.exists(label).unwrap_or(false) {
+                    vault
+                        .update(label, Some(secret), None, None, None)
+                        .map(|_| ())
+                } else {
+                    vault.add(codex_vault::AddCredential {
+                        label: label.to_string(),
+                        credential_type: codex_vault::CredentialType::ApiKey,
+                        provider: Some(provider),
+                        notes: Some("PFTerminal GPU rental provider credential".to_string()),
+                        revocation_notes: Some(
+                            "Revoke at the provider and delete from /vault when retired."
+                                .to_string(),
+                        ),
+                        secret,
+                    })
+                };
+                match result {
+                    Ok(()) => self.chat_widget.add_info_message(
+                        format!("Stored {display_name} API key in the vault."),
+                        None,
+                    ),
+                    Err(_) => self.chat_widget.add_error_message(format!(
+                        "Could not store {display_name} API key in the vault."
+                    )),
+                }
             }
             AppEvent::OpenProviderApiKeyAdd {
                 provider_id,
@@ -1056,6 +1777,37 @@ impl App {
                     }
                 });
             }
+            AppEvent::OpenClaudeCodePlanLogin => {
+                let input_tx =
+                    crate::chatwidget::claude_code_login::start(self.app_event_tx.clone());
+                self.chat_widget
+                    .open_claude_code_plan_login_pending(input_tx);
+            }
+            AppEvent::ClaudeCodePlanLoginReady {
+                verification_url,
+                input_tx,
+            } => {
+                self.chat_widget
+                    .open_claude_code_plan_login_ready(verification_url, input_tx);
+            }
+            AppEvent::OpenClaudeCodePlanLoginCodeEntry { input_tx } => {
+                self.chat_widget
+                    .open_claude_code_plan_login_code_entry(input_tx);
+            }
+            AppEvent::ClaudeCodePlanLoginFinished { result } => {
+                self.chat_widget.on_claude_code_plan_login_finished(result);
+            }
+            AppEvent::ProviderCredentialStatusesReady {
+                claude_status,
+                pfterminal_plan_status,
+                api_key_statuses,
+            } => {
+                self.chat_widget.refresh_provider_credentials_status(
+                    claude_status,
+                    pfterminal_plan_status,
+                    api_key_statuses,
+                );
+            }
             AppEvent::CodexAccountDeviceLoginReady {
                 login_id,
                 verification_url,
@@ -1096,6 +1848,107 @@ impl App {
             AppEvent::OpenVaultCredentialAdd => {
                 self.chat_widget.open_vault_credential_add();
             }
+            AppEvent::OpenWallet => {
+                self.chat_widget.open_wallet_menu();
+            }
+            AppEvent::OpenWalletPlanUsage => {
+                self.chat_widget.open_wallet_plan_usage();
+            }
+            AppEvent::WalletPlanUsageReady { result } => {
+                self.chat_widget.on_wallet_plan_usage_ready(result);
+            }
+            AppEvent::OpenWalletCreate => {
+                self.chat_widget.open_wallet_create();
+            }
+            AppEvent::OpenWalletRestore => {
+                self.chat_widget.open_wallet_restore();
+            }
+            AppEvent::OpenWalletRestorePasscode { recovery } => {
+                self.chat_widget.open_wallet_restore_passcode(recovery);
+            }
+            AppEvent::OpenWalletRecoveryBackup => {
+                self.chat_widget.open_wallet_recovery_backup();
+            }
+            AppEvent::WalletRecoveryBackupFinished { result } => {
+                self.chat_widget.on_wallet_recovery_backup_finished(result);
+            }
+            AppEvent::OpenWalletUnlock {
+                policy,
+                continuation,
+            } => {
+                self.chat_widget.open_wallet_unlock(policy, continuation);
+            }
+            AppEvent::OpenWalletCustomUnlock {
+                validation_error,
+                continuation,
+            } => {
+                self.chat_widget
+                    .open_wallet_custom_unlock(validation_error, continuation);
+            }
+            AppEvent::WalletLockRequested => {
+                self.chat_widget.lock_wallet();
+            }
+            AppEvent::ConfirmWalletPlanDisconnect => {
+                self.chat_widget.confirm_wallet_plan_disconnect();
+            }
+            AppEvent::WalletPlanDisconnectRequested => {
+                self.chat_widget.disconnect_wallet_plan();
+            }
+            AppEvent::WalletPlanDisconnected { result } => {
+                self.chat_widget.on_wallet_plan_disconnected(result);
+            }
+            AppEvent::ConfirmWalletRemoval { address } => {
+                self.chat_widget.confirm_wallet_removal(address);
+            }
+            AppEvent::WalletRemoveRequested { address } => {
+                self.chat_widget.remove_wallet_from_device(address);
+            }
+            AppEvent::WalletRemoved { result } => {
+                self.chat_widget.on_wallet_removed(result);
+            }
+            AppEvent::WalletStatusReady { generation, result } => {
+                self.chat_widget.on_wallet_status_ready(generation, result);
+            }
+            AppEvent::WalletCreateFinished { operation, result } => {
+                self.chat_widget
+                    .on_wallet_create_finished(operation, result);
+            }
+            AppEvent::WalletUnlockFinished {
+                policy,
+                continuation,
+                result,
+            } => {
+                self.chat_widget
+                    .on_wallet_unlock_finished(policy, continuation, result);
+            }
+            AppEvent::OpenWalletPlans { mode } => {
+                self.chat_widget.open_wallet_plans(mode);
+            }
+            AppEvent::WalletPlansReady { mode, result } => {
+                self.chat_widget.on_wallet_plans_ready(mode, result);
+            }
+            AppEvent::ConfirmWalletPlanPurchase { plan } => {
+                self.chat_widget.confirm_wallet_plan_purchase(plan);
+            }
+            AppEvent::WalletPlanPurchaseRequested { plan } => {
+                self.chat_widget.purchase_wallet_plan(plan);
+            }
+            AppEvent::WalletPlanProvisioned { operation, result } => {
+                self.chat_widget
+                    .on_wallet_plan_provisioned(operation, result);
+            }
+            AppEvent::WalletPlanReceiptReady { receipt } => {
+                self.chat_widget.on_wallet_plan_receipt_ready(receipt);
+            }
+            AppEvent::OpenWalletPlanReceipt { receipt } => {
+                self.chat_widget.open_wallet_plan_receipt(receipt);
+            }
+            AppEvent::CloseWalletPlanReceipt => {
+                self.chat_widget.close_wallet_plan_receipt();
+            }
+            AppEvent::WalletRecoverPlanRequested => {
+                self.chat_widget.recover_wallet_plan_access();
+            }
             AppEvent::OpenVaultCredentialsList => {
                 self.chat_widget.open_vault_credentials_list();
             }
@@ -1104,6 +1957,16 @@ impl App {
             }
             AppEvent::OpenVaultCopySecret { label } => {
                 self.chat_widget.copy_vault_secret_to_clipboard(label);
+            }
+            AppEvent::VaultMenuCredentialsReady { result } => {
+                self.chat_widget.on_vault_menu_credentials_ready(result);
+            }
+            AppEvent::VaultCredentialsReady { result } => {
+                self.chat_widget.on_vault_credentials_ready(result);
+            }
+            AppEvent::VaultCopySecretFinished { label, result } => {
+                self.chat_widget
+                    .on_vault_copy_secret_finished(label, result);
             }
             AppEvent::OpenTaskNodeMenu => {
                 self.chat_widget.open_tasknode_menu();
@@ -1824,10 +2687,30 @@ impl App {
                             "Selected model: {model}, Selected provider: {:?}, Selected effort: {effort_label}",
                             provider
                         );
-                        let mut message = if let Some(provider) = provider {
-                            format!("Model changed to {model} via {provider}")
+                        let model_label = self
+                            .model_catalog
+                            .try_list_models()
+                            .ok()
+                            .and_then(|models| {
+                                models
+                                    .into_iter()
+                                    .find(|preset| preset.model == model)
+                                    .map(|preset| preset.display_name)
+                            })
+                            .filter(|display_name| !display_name.trim().is_empty())
+                            .unwrap_or_else(|| model.clone());
+                        let provider_label = provider.as_deref().map(|provider_id| {
+                            self.config
+                                .model_providers
+                                .get(provider_id)
+                                .map(|provider| provider.name.clone())
+                                .filter(|name| !name.trim().is_empty())
+                                .unwrap_or_else(|| provider_id.to_string())
+                        });
+                        let mut message = if let Some(provider_label) = provider_label {
+                            format!("Model changed to {model_label} via {provider_label}")
                         } else {
-                            format!("Model changed to {model}")
+                            format!("Model changed to {model_label}")
                         };
                         if let Some(label) = Self::reasoning_label_for(&model, effort.as_ref()) {
                             message.push(' ');
@@ -2288,6 +3171,7 @@ impl App {
                             agent_nickname.clone(),
                             agent_type,
                             started,
+                            true,
                         )
                         .await;
                         // When spawning a Nazgul pane, bind it as the visible root so subsequent
@@ -2321,8 +3205,14 @@ impl App {
                         );
                     }
                     Err(err) => {
+                        tracing::error!(
+                            error = ?err,
+                            error_chain = %format!("{err:#}"),
+                            role = role.label(),
+                            "thread/spawnAgent retry limit reached; keeping the TUI alive"
+                        );
                         self.chat_widget.add_error_message(format!(
-                            "Failed to spawn Codex {} pane: {err}",
+                            "Failed to spawn Codex {} pane: {err:#}",
                             role.label()
                         ));
                     }
@@ -2333,13 +3223,18 @@ impl App {
                     Ok((nazgul_thread_id, troll_thread_id)) => {
                         self.open_spawn_status();
                         self.chat_widget.add_info_message(
-                            "Created standard crew: Nazgul + Troll + 2 Orcs.".to_string(),
+                            "Created standard crew: Nazgul + Troll + 3 Orcs.".to_string(),
                             Some(format!(
                                 "Nazgul: {nazgul_thread_id}. Troll: {troll_thread_id}. No task was started. Send work explicitly from /spawn status or by dispatch block."
                             )),
                         );
                     }
                     Err(err) => {
+                        tracing::error!(
+                            error = ?err,
+                            error_chain = %format!("{err:#}"),
+                            "standard crew spawn failed; keeping all live panes available"
+                        );
                         self.chat_widget
                             .add_error_message(format!("Failed to create standard crew: {err:#}"));
                     }
@@ -2351,17 +3246,142 @@ impl App {
             AppEvent::OpenSpawnClaudePaneTaskPrompt { pane_id } => {
                 self.open_spawn_claude_pane_task_prompt(pane_id);
             }
-            AppEvent::SubmitSpawnAgentTask { thread_id, task } => {
+            AppEvent::SteerWaitingSpawnAgentTask {
+                thread_id,
+                task,
+                delivery_id,
+            } => {
                 let task = task.trim().to_string();
+                let target_node_id = self.logical_native_node_for_thread(thread_id);
+                let Some(delivery_id) = delivery_id else {
+                    self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+                        thread_id,
+                        task,
+                        delivery_id: None,
+                    });
+                    return Ok(AppRunControl::Continue);
+                };
+                let waiting_turn_id = self
+                    .spawn_waiting_for_agents_by_thread
+                    .get(&thread_id)
+                    .cloned()
+                    .map(|(turn_id, _)| turn_id);
+                let turn_id = if waiting_turn_id.is_some() {
+                    waiting_turn_id
+                } else {
+                    self.active_turn_id_for_submission(thread_id).await
+                };
+                let Some(turn_id) = turn_id else {
+                    self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+                        thread_id,
+                        task,
+                        delivery_id: Some(delivery_id),
+                    });
+                    return Ok(AppRunControl::Continue);
+                };
+                let task_for_submission = self.spawn_agent_task_for_submission(thread_id, &task);
+                let worker = app_server.spawn_turn_steer(
+                    thread_id,
+                    turn_id,
+                    vec![codex_app_server_protocol::UserInput::Text {
+                        text: task_for_submission,
+                        text_elements: Vec::new(),
+                    }],
+                    Some(delivery_id.clone()),
+                );
+                let app_event_tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = worker
+                        .await
+                        .map_err(|error| format!("turn/steer worker panicked: {error}"))
+                        .and_then(|result| result.map(|_| ()).map_err(|error| error.to_string()));
+                    app_event_tx.send(AppEvent::NativeSpawnSteerCompleted {
+                        thread_id,
+                        target_node_id,
+                        task,
+                        delivery_id,
+                        result,
+                    });
+                });
+            }
+            AppEvent::NativeSpawnSteerCompleted {
+                thread_id,
+                target_node_id,
+                task,
+                delivery_id,
+                result,
+            } => match result {
+                Ok(()) => {
+                    #[cfg(test)]
+                    if std::env::var("PFTERMINAL_DISPATCH_CRASH_CUT").as_deref()
+                        == Ok("response_before_local_tombstone")
+                    {
+                        std::process::exit(86);
+                    }
+                    self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
+                    self.finish_spawn_dispatch_delivery(&target_node_id, &delivery_id, &task);
+                    self.agent_navigation
+                        .set_last_task_message(thread_id, Some(task.chars().take(240).collect()));
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        %thread_id,
+                        %error,
+                        "ambiguous running-turn steer retained for identity reconciliation"
+                    );
+                    self.contain_ambiguous_spawn_dispatch(&target_node_id);
+                }
+            },
+            AppEvent::SubmitSpawnAgentTask {
+                thread_id,
+                task,
+                delivery_id,
+            } => {
+                let task = task.trim().to_string();
+                let original_target_node_id = self.logical_native_node_for_thread(thread_id);
                 if task.is_empty() {
                     self.chat_widget
                         .add_error_message("Spawn task cannot be empty.".to_string());
                     return Ok(AppRunControl::Continue);
                 }
+                if delivery_id.is_none() {
+                    let label = self.thread_label(thread_id);
+                    let pending =
+                        self.pending_dispatch_from_registered_task(&original_target_node_id, task);
+                    let acks = pending.acks.clone();
+                    match self.enqueue_pending_dispatch_for_thread(thread_id, pending) {
+                        PendingDispatchEnqueueResult::Queued => {
+                            self.record_spawn_dispatch_acks(
+                                &acks,
+                                "queued",
+                                "durably queued for the delivery pump",
+                                false,
+                            );
+                            self.request_spawn_dispatch_pump();
+                        }
+                        PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
+                            self.record_duplicate_pending_dispatch(&label, &acks, notify);
+                        }
+                        PendingDispatchEnqueueResult::Rejected { acks, reason } => {
+                            self.record_spawn_dispatch_acks(
+                                &acks,
+                                "failed",
+                                format!("queue rejected: {reason}"),
+                                true,
+                            );
+                            self.chat_widget.add_error_message(format!(
+                                "Cannot queue task for {label}: {reason}"
+                            ));
+                        }
+                    }
+                    return Ok(AppRunControl::Continue);
+                }
+                let Some(delivery_id) = delivery_id else {
+                    return Ok(AppRunControl::Continue);
+                };
                 let task_preview = task.chars().take(240).collect::<String>();
-                let mut thread_id = thread_id;
-                let mut label = self.thread_label(thread_id);
-                let mut session = if self.primary_thread_id == Some(thread_id) {
+                let label = self.thread_label(thread_id);
+                let session = if self.primary_thread_id == Some(thread_id) {
                     self.primary_session_configured.clone()
                 } else if let Some(channel) = self.thread_event_channels.get(&thread_id) {
                     let store = channel.store.lock().await;
@@ -2369,101 +3389,30 @@ impl App {
                 } else {
                     None
                 };
-                if session.is_none() && self.should_attach_live_thread_for_selection(thread_id) {
-                    match self
-                        .attach_live_thread_for_selection(app_server, thread_id)
-                        .await
-                    {
-                        Ok(_) => {
-                            if let Some(channel) = self.thread_event_channels.get(&thread_id) {
-                                let store = channel.store.lock().await;
-                                session = store.session.clone();
-                            }
-                        }
-                        Err(err) => {
-                            let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
-                            self.abort_spawn_auto_processing_turn(&node_key);
-                            self.requeue_spawn_report_processing_task(thread_id, &task);
-                            self.chat_widget.add_error_message(format!(
-                                "Cannot send task to {label}; failed to attach pane session: {err}"
-                            ));
-                            return Ok(AppRunControl::Continue);
-                        }
-                    }
-                }
-                if session.is_none() {
-                    match app_server
-                        .thread_read(thread_id, /*include_turns*/ false)
-                        .await
-                    {
-                        Ok(thread) => {
-                            let mut restored_session =
-                                self.session_state_for_thread_read(thread_id, &thread).await;
-                            self.apply_native_spawn_task_session_fallbacks(
-                                thread_id,
-                                &mut restored_session,
-                            );
-                            let channel = self.ensure_thread_channel(thread_id);
-                            channel
-                                .set_session(restored_session.clone(), Vec::new())
-                                .await;
-                            session = Some(restored_session);
-                        }
-                        Err(err) => {
-                            match self
-                                .materialize_saved_native_spawn_thread_for_task(
-                                    app_server, thread_id,
-                                )
-                                .await
-                            {
-                                Ok(materialized_thread_id) => {
-                                    tracing::warn!(
-                                        old_thread_id = %thread_id,
-                                        new_thread_id = %materialized_thread_id,
-                                        error = %err,
-                                        "materialized saved native spawn thread after thread/read failed"
-                                    );
-                                    thread_id = materialized_thread_id;
-                                    label = self.thread_label(thread_id);
-                                    if let Some(channel) =
-                                        self.thread_event_channels.get(&thread_id)
-                                    {
-                                        let store = channel.store.lock().await;
-                                        session = store.session.clone();
-                                    }
-                                }
-                                Err(materialize_err) => {
-                                    let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
-                                    self.abort_spawn_auto_processing_turn(&node_key);
-                                    self.requeue_spawn_report_processing_task(thread_id, &task);
-                                    self.chat_widget.add_error_message(format!(
-                                        "Cannot send task to {label}; failed to read pane metadata: {err}; failed to materialize saved pane: {materialize_err}"
-                                    ));
-                                    return Ok(AppRunControl::Continue);
-                                }
-                            }
-                        }
-                    }
-                }
                 let Some(session) = session else {
                     let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                     self.abort_spawn_auto_processing_turn(&node_key);
-                    self.requeue_spawn_report_processing_task(thread_id, &task);
                     let detail = self
                         .unloaded_agent_thread_reason(thread_id)
                         .unwrap_or_else(|| "Pane session is not loaded.".to_string());
+                    self.defer_spawn_dispatch_for_capacity(&original_target_node_id, &delivery_id);
                     self.chat_widget
                         .add_error_message(format!("Cannot send task to {label}; {detail}"));
                     return Ok(AppRunControl::Continue);
                 };
+                let delivery_target_node_id = self.logical_native_node_for_thread(thread_id);
                 if let Some(message) =
                     self.native_spawn_provider_auth_error(Some(session.model_provider_id.as_str()))
                 {
                     let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
                     self.abort_spawn_auto_processing_turn(&node_key);
-                    self.requeue_spawn_report_processing_task(thread_id, &task);
+                    self.defer_spawn_dispatch_for_capacity(&delivery_target_node_id, &delivery_id);
                     self.chat_widget
                         .add_error_message(format!("Cannot send task to {label}: {message}"));
+                    return Ok(AppRunControl::Continue);
+                }
+                if self.native_spawn_target_is_busy(thread_id) {
+                    self.defer_spawn_dispatch_for_capacity(&delivery_target_node_id, &delivery_id);
                     return Ok(AppRunControl::Continue);
                 }
                 // Inject the live spawn hierarchy as additional context so native spawn panes
@@ -2472,33 +3421,68 @@ impl App {
                 // answer "none spawned yet" even after the TUI shows them in the status tree.
                 let task_for_submission = self.spawn_agent_task_for_submission(thread_id, &task);
                 let additional_context = self.spawn_additional_context_for_thread(thread_id);
-                match app_server
-                    .turn_start(
+                let worker = app_server.spawn_turn_start(
+                    thread_id,
+                    vec![codex_app_server_protocol::UserInput::Text {
+                        text: task_for_submission,
+                        text_elements: Vec::new(),
+                    }],
+                    session.cwd.to_path_buf(),
+                    session.approval_policy,
+                    session.approvals_reviewer,
+                    TurnPermissionsOverride::Preserve,
+                    &session.runtime_workspace_roots,
+                    session.model.clone(),
+                    session.reasoning_effort.clone(),
+                    /*summary*/ None,
+                    /*service_tier*/ None,
+                    session
+                        .collaboration_mode
+                        .as_ref()
+                        .map(|mode| (**mode).clone()),
+                    session.personality,
+                    /*output_schema*/ None,
+                    additional_context,
+                    Some(delivery_id.clone()),
+                );
+                let app_event_tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = worker
+                        .await
+                        .map_err(|error| format!("turn/start worker panicked: {error}"))
+                        .and_then(|result| result.map_err(|error| format!("{error:#}")));
+                    app_event_tx.send(AppEvent::NativeSpawnDeliveryCompleted {
                         thread_id,
-                        vec![codex_app_server_protocol::UserInput::Text {
-                            text: task_for_submission,
-                            text_elements: Vec::new(),
-                        }],
-                        session.cwd.to_path_buf(),
-                        session.approval_policy,
-                        session.approvals_reviewer,
-                        TurnPermissionsOverride::Preserve,
-                        &session.runtime_workspace_roots,
-                        session.model.clone(),
-                        session.reasoning_effort.clone(),
-                        /*summary*/ None,
-                        /*service_tier*/ None,
-                        session
-                            .collaboration_mode
-                            .as_ref()
-                            .map(|mode| (**mode).clone()),
-                        session.personality,
-                        /*output_schema*/ None,
-                        additional_context,
-                    )
-                    .await
-                {
-                    Ok(_) => {
+                        target_node_id: delivery_target_node_id,
+                        task,
+                        delivery_id,
+                        task_preview,
+                        label,
+                        result,
+                    });
+                });
+            }
+            AppEvent::NativeSpawnDeliveryCompleted {
+                thread_id,
+                target_node_id,
+                task,
+                delivery_id,
+                task_preview,
+                label,
+                result,
+            } => {
+                match result {
+                    Ok(TurnStartOutcome::Started {
+                        recovered_failures, ..
+                    }) => {
+                        if !recovered_failures.is_empty() {
+                            self.surface_turn_start_failure(
+                                thread_id,
+                                recovered_failures.join("\n"),
+                                /*will_retry*/ true,
+                            )
+                            .await;
+                        }
                         self.spawn_status_by_thread.insert(
                             thread_id,
                             codex_app_server_protocol::CollabAgentState {
@@ -2506,6 +3490,7 @@ impl App {
                                 message: None,
                             },
                         );
+                        self.finish_spawn_dispatch_delivery(&target_node_id, &delivery_id, &task);
                         self.agent_navigation
                             .set_running(thread_id, /*is_running*/ true);
                         self.agent_navigation
@@ -2522,20 +3507,354 @@ impl App {
                             );
                         }
                     }
-                    Err(err) => {
-                        let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
-                        self.abort_spawn_auto_processing_turn(&node_key);
-                        self.requeue_spawn_report_processing_task(thread_id, &task);
-                        self.chat_widget
-                            .add_error_message(format!("Failed to send task to {label}: {err}"));
+                    Ok(TurnStartOutcome::CapacityUnavailable { max_threads }) => {
+                        tracing::info!(
+                            %thread_id,
+                            max_threads,
+                            "dispatch pump paused at typed session capacity"
+                        );
+                        self.defer_spawn_dispatch_for_capacity(&target_node_id, &delivery_id);
+                    }
+                    Err(detail) => {
+                        tracing::error!(
+                            %thread_id,
+                            error = %detail,
+                            "ambiguous pump delivery retained for identity reconciliation"
+                        );
+                        self.contain_ambiguous_spawn_dispatch(&target_node_id);
+                        self.surface_turn_start_failure(
+                            thread_id, detail, /*will_retry*/ true,
+                        )
+                        .await;
                     }
                 }
             }
-            AppEvent::SubmitSpawnClaudePaneTask { pane_id, task } => {
-                self.submit_claude_pane_task(pane_id, task);
+            AppEvent::PumpSpawnDispatches => {
+                // Reconcile every non-live Submitting record before selecting new work. Native
+                // thread history is the durable acceptance witness; absence permits a same-ID
+                // resend. Claude has no equivalent witness and is therefore never auto-replayed.
+                for (target, delivery_id, task) in self.submitting_spawn_dispatches() {
+                    if self.spawn_dispatch_inflight_targets.contains(&target) {
+                        continue;
+                    }
+                    let Ok(crate::spawn_orchestration::SpawnTaskTarget::Native(thread_id)) =
+                        self.resolve_spawn_task_target(&target)
+                    else {
+                        continue;
+                    };
+                    self.spawn_dispatch_inflight_targets.insert(target.clone());
+                    let worker = app_server
+                        .spawn_find_turn_for_client_message(thread_id, delivery_id.clone());
+                    let app_event_tx = self.app_event_tx.clone();
+                    tokio::spawn(async move {
+                        let result = worker
+                            .await
+                            .map_err(|error| format!("reconciliation worker panicked: {error}"))
+                            .and_then(|result| result.map_err(|error| format!("{error:#}")));
+                        app_event_tx.send(AppEvent::NativeSpawnReconciliationCompleted {
+                            thread_id,
+                            target_node_id: target,
+                            task,
+                            delivery_id,
+                            result,
+                        });
+                    });
+                }
+                if let Some(delivery) = self.select_spawn_dispatch_pump_delivery() {
+                    match delivery {
+                        crate::spawn_orchestration::SpawnDispatchPumpDelivery::Native {
+                            thread_id,
+                            task,
+                            delivery_id,
+                            steer,
+                        } => {
+                            if steer {
+                                self.app_event_tx
+                                    .send(AppEvent::SteerWaitingSpawnAgentTask {
+                                        thread_id,
+                                        task,
+                                        delivery_id: Some(delivery_id),
+                                    });
+                            } else {
+                                self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+                                    thread_id,
+                                    task,
+                                    delivery_id: Some(delivery_id),
+                                });
+                            }
+                        }
+                        crate::spawn_orchestration::SpawnDispatchPumpDelivery::Claude {
+                            pane_id,
+                            task,
+                            delivery_id,
+                        } => self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
+                            pane_id,
+                            task,
+                            delivery_id: Some(delivery_id),
+                        }),
+                    }
+                }
+            }
+            AppEvent::NativeSpawnReconciliationCompleted {
+                thread_id,
+                target_node_id,
+                task,
+                delivery_id,
+                result,
+            } => {
+                self.spawn_dispatch_inflight_targets.remove(&target_node_id);
+                match result {
+                    Ok(Some(_destination_turn_id)) => {
+                        self.finish_spawn_dispatch_delivery(&target_node_id, &delivery_id, &task);
+                    }
+                    Ok(None) => {
+                        self.defer_spawn_dispatch_for_capacity(&target_node_id, &delivery_id);
+                        self.request_spawn_dispatch_pump();
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            %thread_id,
+                            %delivery_id,
+                            %error,
+                            "dispatch reconciliation deferred until the next state change"
+                        );
+                    }
+                }
+            }
+            AppEvent::SubmitSpawnClaudePaneTask {
+                pane_id,
+                task,
+                delivery_id,
+            } => {
+                if delivery_id.is_none() {
+                    let target = crate::spawn_orchestration::pane_node_id(&pane_id);
+                    let pending = self.pending_dispatch_from_registered_task(&target, task);
+                    let acks = pending.acks.clone();
+                    match self.enqueue_pending_dispatch_for_claude_pane(pane_id.clone(), pending) {
+                        PendingDispatchEnqueueResult::Queued => {
+                            self.record_spawn_dispatch_acks(
+                                &acks,
+                                "queued",
+                                "durably queued for the delivery pump",
+                                false,
+                            );
+                            self.request_spawn_dispatch_pump();
+                        }
+                        PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
+                            self.record_duplicate_pending_dispatch(&pane_id, &acks, notify);
+                        }
+                        PendingDispatchEnqueueResult::Rejected { acks, reason } => {
+                            self.record_spawn_dispatch_acks(
+                                &acks,
+                                "failed",
+                                format!("queue rejected: {reason}"),
+                                true,
+                            );
+                        }
+                    }
+                    return Ok(AppRunControl::Continue);
+                }
+                let Some(delivery_id) = delivery_id.as_deref() else {
+                    return Ok(AppRunControl::Continue);
+                };
+                if self.claude_panes.claude_pane_is_running(&pane_id) {
+                    self.defer_spawn_dispatch_for_capacity(
+                        &crate::spawn_orchestration::pane_node_id(&pane_id),
+                        delivery_id,
+                    );
+                    return Ok(AppRunControl::Continue);
+                }
+                self.submit_claude_pane_task(pane_id.clone(), task.clone());
+                self.finish_spawn_dispatch_delivery(
+                    &crate::spawn_orchestration::pane_node_id(&pane_id),
+                    delivery_id,
+                    &task,
+                );
             }
             AppEvent::OpenSpawnStatus => {
                 self.open_spawn_status();
+            }
+            AppEvent::HandleOrchestrateCommand { args } => {
+                self.handle_orchestrate_command(args);
+            }
+            AppEvent::OpenOrchestrateTargetPicker => {
+                self.open_orchestrate_target_picker();
+            }
+            AppEvent::OpenOrchestrateFastTargetPicker => {
+                self.open_orchestrate_fast_target_picker();
+            }
+            AppEvent::OpenOrchestrateFastManagerPicker { target } => {
+                self.open_orchestrate_fast_manager_picker(target);
+            }
+            AppEvent::AttachOrchestrateFastManager {
+                target,
+                manager_node_id,
+            } => {
+                let args = crate::orchestrate::orchestrate_guided_attach_args(
+                    &target,
+                    "8h",
+                    crate::orchestrate::DRAFT_WITH_MANAGER_SPEC,
+                    &manager_node_id,
+                );
+                match self.attach_guided_assignment(&args) {
+                    Ok(message) => self.chat_widget.add_info_message(message, None),
+                    Err(err) => self.chat_widget.add_error_message(err),
+                }
+            }
+            AppEvent::OpenOrchestrateDurationPicker { target } => {
+                self.open_orchestrate_duration_picker(target);
+            }
+            AppEvent::OpenOrchestrateWhipPicker {
+                target,
+                duration_arg,
+                duration_label,
+            } => {
+                self.open_orchestrate_whip_picker(target, duration_arg, duration_label);
+            }
+            AppEvent::OpenOrchestrateWriteWhipPrompt {
+                target,
+                duration_arg,
+                duration_label,
+            } => {
+                self.open_orchestrate_write_whip_prompt(target, duration_arg, duration_label);
+            }
+            AppEvent::OpenOrchestrateSaveWhipPrompt {
+                target,
+                duration_arg,
+                duration_label,
+                instructions,
+            } => {
+                self.open_orchestrate_save_whip_prompt(
+                    target,
+                    duration_arg,
+                    duration_label,
+                    instructions,
+                );
+            }
+            AppEvent::SaveOrchestrateWhipAndConfirm {
+                target,
+                duration_arg,
+                duration_label,
+                requested_name,
+                instructions,
+            } => {
+                self.save_orchestrate_whip_and_open_confirm(
+                    target,
+                    duration_arg,
+                    duration_label,
+                    requested_name,
+                    instructions,
+                );
+            }
+            AppEvent::OpenOrchestrateConfirm {
+                target,
+                duration_arg,
+                duration_label,
+                whip_name,
+                manager_node_id,
+            } => {
+                self.open_orchestrate_confirm(
+                    target,
+                    duration_arg,
+                    duration_label,
+                    whip_name,
+                    manager_node_id,
+                );
+            }
+            AppEvent::OpenOrchestrateManagerPicker {
+                target,
+                duration_arg,
+                duration_label,
+                whip_name,
+            } => {
+                self.open_orchestrate_manager_picker(
+                    target,
+                    duration_arg,
+                    duration_label,
+                    whip_name,
+                );
+            }
+            AppEvent::CreateOrchestrateManager {
+                target,
+                duration_arg,
+                whip_name,
+            } => {
+                let Some(parent_thread_id) = self.primary_thread_id.or(self.active_thread_id)
+                else {
+                    self.chat_widget.add_error_message(
+                        "Cannot create a Manager before Codex Main has started.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
+                let spawn_config = match self.native_spawn_agent_config() {
+                    Ok(config) => config,
+                    Err(err) => {
+                        self.chat_widget.add_error_message(err.to_string());
+                        return Ok(AppRunControl::Continue);
+                    }
+                };
+                let model = self.native_spawn_default_model();
+                let provider = crate::chatwidget::ChatWidget::model_provider_for_selection(&model);
+                let nickname = match self.unique_native_pane_nickname("Manager", None) {
+                    Ok(nickname) => nickname,
+                    Err(err) => {
+                        self.chat_widget.add_error_message(err.to_string());
+                        return Ok(AppRunControl::Continue);
+                    }
+                };
+                match app_server
+                    .spawn_agent_thread(
+                        &spawn_config,
+                        parent_thread_id,
+                        "default".to_string(),
+                        Some(nickname.clone()),
+                        model,
+                        provider,
+                        None,
+                        None,
+                    )
+                    .await
+                {
+                    Ok(started) => {
+                        let thread_id = started.session.thread_id;
+                        self.register_codex_user_pane(thread_id, Some(nickname.clone()), started)
+                            .await;
+                        let manager_node_id = crate::spawn_orchestration::thread_node_id(thread_id);
+                        let args = crate::orchestrate::orchestrate_guided_attach_args(
+                            &target,
+                            &duration_arg,
+                            &whip_name,
+                            &manager_node_id,
+                        );
+                        match self.attach_guided_assignment(&args) {
+                            Ok(message) => {
+                                self.chat_widget.add_info_message(message, None);
+                                self.chat_widget.add_info_message(
+                                    format!("Created Manager {nickname}."),
+                                    Some(
+                                        "The assignment brief was sent to the new pane."
+                                            .to_string(),
+                                    ),
+                                );
+                            }
+                            Err(err) => self.chat_widget.add_error_message(format!(
+                                "Manager pane {nickname} created but not bound: {err}"
+                            )),
+                        }
+                    }
+                    Err(err) => self
+                        .chat_widget
+                        .add_error_message(format!("Failed to create Manager: {err}")),
+                }
+            }
+            AppEvent::OpenOrchestrateWhipDetails { whip_id } => {
+                self.open_orchestrate_whip_details(whip_id);
+            }
+            AppEvent::OpenOrchestrateExtendDurationPicker { whip_id } => {
+                self.open_orchestrate_extend_duration_picker(whip_id);
+            }
+            AppEvent::WhipSweepTick => {
+                self.sweep_orchestrate_whips();
             }
             AppEvent::SelectUserPane { pane_id } => {
                 let is_codex_main = pane_id == crate::claude_panes::CODEX_MAIN_PANE_ID;
@@ -2549,6 +3868,7 @@ impl App {
                 model,
                 provider,
                 effort,
+                display_name,
             } => {
                 let Some(parent_thread_id) = self.primary_thread_id.or(self.active_thread_id)
                 else {
@@ -2564,7 +3884,15 @@ impl App {
                         return Ok(AppRunControl::Continue);
                     }
                 };
-                let nickname = self.next_codex_pane_nickname();
+                let requested_name =
+                    display_name.unwrap_or_else(|| self.next_codex_pane_nickname());
+                let nickname = match self.unique_native_pane_nickname(&requested_name, None) {
+                    Ok(nickname) => nickname,
+                    Err(err) => {
+                        self.chat_widget.add_error_message(err.to_string());
+                        return Ok(AppRunControl::Continue);
+                    }
+                };
                 match app_server
                     .spawn_agent_thread(
                         &spawn_config,
@@ -2599,8 +3927,50 @@ impl App {
                     }
                 }
             }
-            AppEvent::CreateClaudePane { profile } => {
-                self.create_claude_pane(tui, profile).await;
+            AppEvent::OpenCodexPaneNamePrompt {
+                model,
+                provider,
+                effort,
+            } => {
+                self.open_codex_pane_name_prompt(model, provider, effort);
+            }
+            AppEvent::OpenClaudePaneNamePrompt { profile } => {
+                self.open_claude_pane_name_prompt(profile);
+            }
+            AppEvent::CreateClaudePane {
+                profile,
+                display_name,
+            } => {
+                let display_name = match display_name {
+                    Some(display_name) => {
+                        match self.unique_pane_display_name(&display_name, None) {
+                            Ok(name) => Some(name),
+                            Err(err) => {
+                                self.chat_widget.add_error_message(err.to_string());
+                                return Ok(AppRunControl::Continue);
+                            }
+                        }
+                    }
+                    None => None,
+                };
+                self.create_claude_pane(tui, profile, display_name).await;
+            }
+            AppEvent::RenameCurrentPane { name } => {
+                self.rename_current_pane_display_name(app_server, name)
+                    .await;
+            }
+            AppEvent::OpenRenameCodexPanePrompt { thread_id } => {
+                self.open_rename_codex_pane_prompt(thread_id);
+            }
+            AppEvent::OpenRenameClaudePanePrompt { pane_id } => {
+                self.open_rename_claude_pane_prompt(pane_id);
+            }
+            AppEvent::RenameCodexPane { thread_id, name } => {
+                self.rename_codex_pane_display_name(app_server, thread_id, name)
+                    .await;
+            }
+            AppEvent::RenameClaudePane { pane_id, name } => {
+                self.rename_claude_pane_display_name(pane_id, name);
             }
             AppEvent::CreateSpawnClaudePane {
                 role,
@@ -2738,6 +4108,11 @@ impl App {
                 text,
                 collaboration_mode,
             } => {
+                if let Some(thread_id) = self.active_thread_id {
+                    self.note_assignment_user_turn(&crate::spawn_orchestration::thread_node_id(
+                        thread_id,
+                    ));
+                }
                 self.chat_widget
                     .submit_user_message_with_mode(text, collaboration_mode);
             }
@@ -3161,5 +4536,21 @@ impl App {
                 AppRunControl::Continue
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod gpu_notification_tests {
+    use super::failed_gpu_notification;
+
+    #[test]
+    fn failed_rental_notification_includes_actionable_provider_reason() {
+        let message = failed_gpu_notification(
+            "gpu-test",
+            Some("The selected capacity was claimed. Search again from /gpu."),
+        );
+
+        assert!(message.contains("selected capacity was claimed"));
+        assert!(message.contains("/gpu"));
     }
 }

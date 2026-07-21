@@ -71,6 +71,14 @@ impl ChatWidget {
         self.bottom_pane.set_status_line(status_line);
     }
 
+    pub(crate) fn set_gpu_spend_status(&mut self, status: Option<String>) {
+        if self.gpu_spend_status == status {
+            return;
+        }
+        self.gpu_spend_status = status;
+        self.refresh_status_line();
+    }
+
     /// Sets the terminal hyperlink target for the currently rendered footer status line.
     pub(crate) fn set_status_line_hyperlink(&mut self, url: Option<String>) {
         self.bottom_pane.set_status_line_hyperlink(url);
@@ -232,6 +240,7 @@ impl ChatWidget {
             .collect();
         let agents_summary =
             crate::status::compose_agents_summary(&self.config, &self.instruction_source_paths);
+        let model_display_name = self.model_display_name();
         let (cell, handle) = crate::status::new_status_output_with_rate_limits_handle(
             &self.config,
             self.runtime_model_provider_base_url.as_deref(),
@@ -245,7 +254,7 @@ impl ChatWidget {
             rate_limit_snapshots.as_slice(),
             self.plan_type,
             Local::now(),
-            self.model_display_name(),
+            &model_display_name,
             collaboration_mode,
             reasoning_effort_override,
             agents_summary,

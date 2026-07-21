@@ -1,0 +1,53 @@
+name: orchestrate-tui-matrix
+
+on:
+  pull_request:
+    paths:
+      - "codex-rs/app-server/src/request_processors/turn_processor.rs"
+      - "codex-rs/tui/src/app/**"
+      - "codex-rs/tui/src/claude_panes/**"
+      - "codex-rs/tui/src/orchestrate.rs"
+      - "codex-rs/tui/src/spawn_orchestration.rs"
+      - "qa/orchestrate_*"
+      - "qa/fixtures/**"
+      - "justfile"
+      - ".github/workflows/orchestrate-tui-matrix.yml"
+  push:
+    branches: [main]
+    paths:
+      - "codex-rs/app-server/src/request_processors/turn_processor.rs"
+      - "codex-rs/tui/src/app/**"
+      - "codex-rs/tui/src/claude_panes/**"
+      - "codex-rs/tui/src/orchestrate.rs"
+      - "codex-rs/tui/src/spawn_orchestration.rs"
+      - "qa/orchestrate_*"
+      - "qa/fixtures/**"
+      - "justfile"
+      - ".github/workflows/orchestrate-tui-matrix.yml"
+
+jobs:
+  real-tui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: codex-rs
+      - name: Install pinned just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just@1.55.1
+      - name: Install TUI harness dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq ripgrep tmux
+      - name: Run orchestrate TUI matrix
+        run: just orchestrate-tui-matrix
+      - name: Upload matrix evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: orchestrate-tui-matrix-${{ github.sha }}
+          path: |
+            qa/artifacts/${{ github.sha }}/
+            !qa/artifacts/${{ github.sha }}/**/home/**

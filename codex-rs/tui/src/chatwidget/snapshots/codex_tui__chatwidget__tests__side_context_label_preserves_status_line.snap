@@ -1,10 +1,9 @@
 ---
 source: tui/src/chatwidget/tests/side.rs
-assertion_line: 401
 expression: terminal.backend()
 ---
 "                                                                                "
 "                                                                                "
 "› Check recently modified functions for compatibility                           "
 "                                                                                "
-"  z-ai/glm-5.2                 Side from main thread · Ctrl+C to return  "
+"  Ambient GLM 5.2                     Side from main thread · Ctrl+C to return  "
