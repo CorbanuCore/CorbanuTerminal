@@ -208,6 +208,7 @@ use codex_protocol::error::Result as CodexResult;
 #[cfg(test)]
 use codex_protocol::exec_output::StreamOutput;
 
+mod completion_guard;
 mod config_lock;
 mod handlers;
 mod inject;
@@ -583,7 +584,10 @@ impl Codex {
         // 2. conversation history => session_meta.base_instructions
         // 3. base_instructions for current model
         let model_info = models_manager
-            .get_model_info(model.as_str(), &config.to_models_manager_config())
+            .get_model_info(
+                model.as_str(),
+                &config.to_models_manager_config_for_model(Some(model.as_str())),
+            )
             .await;
         let multi_agent_version =
             resolve_multi_agent_version(&conversation_history, inherited_multi_agent_version);
@@ -624,6 +628,7 @@ impl Codex {
             multi_agent_mode,
             model_reasoning_summary: config.model_reasoning_summary,
             service_tier,
+            runtime_model_context_window: None,
             developer_instructions: config.developer_instructions.clone(),
             loaded_agents_md: None,
             personality: config.personality,
@@ -664,6 +669,7 @@ impl Codex {
             auth_manager.clone(),
             models_manager.clone(),
             exec_policy,
+            tx_sub.clone(),
             tx_event.clone(),
             agent_status_tx.clone(),
             conversation_history,
@@ -950,9 +956,11 @@ fn push_prompt_fragment(
 impl Session {
     fn trace_session_timing(label: &str, start: Instant) {
         if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
-            eprintln!(
-                "[pfterminal-session] {label} elapsed_ms={}",
-                start.elapsed().as_millis()
+            debug!(
+                target: "pfterminal_session",
+                label,
+                elapsed_ms = start.elapsed().as_millis(),
+                "pfterminal session timing"
             );
         }
     }
@@ -1514,8 +1522,9 @@ impl Session {
 
     pub(crate) async fn update_settings(
         &self,
-        updates: SessionSettingsUpdate,
+        mut updates: SessionSettingsUpdate,
     ) -> ConstraintResult<()> {
+        self.ensure_runtime_model_provider(&mut updates).await;
         let notify_config_contributors = !self.services.extensions.config_contributors().is_empty();
         let (
             previous_config,
@@ -1545,7 +1554,8 @@ impl Session {
                 .session_configuration
                 .original_config_do_not_use
                 .model_provider_id
-                != updated.original_config_do_not_use.model_provider_id;
+                != updated.original_config_do_not_use.model_provider_id
+                || state.session_configuration.provider != updated.provider;
             let model_client_configuration = model_provider_changed.then(|| updated.clone());
             let stale_startup_prewarm = if model_provider_changed {
                 state.take_session_startup_prewarm()
@@ -1582,6 +1592,70 @@ impl Session {
         Ok(())
     }
 
+    async fn ensure_runtime_model_provider(&self, updates: &mut SessionSettingsUpdate) {
+        let model_provider_id = match updates.model_provider.clone() {
+            Some(model_provider_id) => model_provider_id,
+            None => {
+                let current_model_provider_id = {
+                    let state = self.state.lock().await;
+                    state
+                        .session_configuration
+                        .original_config_do_not_use
+                        .model_provider_id
+                        .clone()
+                };
+                if !current_model_provider_id.starts_with("gpu-") {
+                    return;
+                }
+                updates.model_provider = Some(current_model_provider_id.clone());
+                current_model_provider_id
+            }
+        };
+        if !model_provider_id.starts_with("gpu-") {
+            updates.runtime_model_context_window = Some(None);
+            return;
+        }
+        {
+            let runtime_overlay_source = {
+                let state = self.state.lock().await;
+                (
+                    state
+                        .session_configuration
+                        .original_config_do_not_use
+                        .sqlite_home
+                        .clone(),
+                    state
+                        .session_configuration
+                        .original_config_do_not_use
+                        .codex_home
+                        .clone(),
+                )
+            };
+            let (sqlite_home, codex_home) = runtime_overlay_source;
+            let records =
+                crate::config::load_gpu_runtime_model_provider_records(&sqlite_home).await;
+            updates.runtime_model_context_window = Some(
+                records
+                    .iter()
+                    .find(|record| record.provider_id == model_provider_id)
+                    .and_then(|record| record.maximum_context_tokens),
+            );
+            let runtime_providers = records
+                .into_iter()
+                .filter_map(|record| crate::config::gpu_runtime_model_provider(record, &codex_home))
+                .collect::<HashMap<_, _>>();
+            if runtime_providers.contains_key(&model_provider_id) {
+                let mut state = self.state.lock().await;
+                let mut config = (*state.session_configuration.original_config_do_not_use).clone();
+                // Runtime endpoints are controller-owned process-local transports. Replacing an
+                // existing entry is required after controller or SSH-forward recovery; presence
+                // alone does not mean the cached base URL is still current.
+                config.model_providers.extend(runtime_providers);
+                state.session_configuration.original_config_do_not_use = Arc::new(config);
+            }
+        }
+    }
+
     fn build_model_client_for_configuration(
         &self,
         configuration: &SessionConfiguration,
@@ -1596,7 +1670,8 @@ impl Session {
             config.features.enabled(Feature::EnableRequestCompression),
             config.features.enabled(Feature::RuntimeMetrics),
             Self::build_model_client_beta_features_header(config),
-            /*item_ids_enabled*/ config.features.enabled(Feature::ItemIds),
+            /*item_ids_enabled*/
+            config.features.enabled(Feature::ItemIds) || configuration.provider.is_meta(),
             self.services.attestation_provider.clone(),
         )
         .with_prompt_cache_key_override(
@@ -1611,10 +1686,12 @@ impl Session {
         &self,
         updates: &SessionSettingsUpdate,
     ) -> ConstraintResult<ThreadConfigSnapshot> {
+        let mut updates = updates.clone();
+        self.ensure_runtime_model_provider(&mut updates).await;
         let state = self.state.lock().await;
         state
             .session_configuration
-            .apply(updates)
+            .apply(&updates)
             .map(|configuration| configuration.thread_config_snapshot())
     }
 
@@ -2811,7 +2888,9 @@ impl Session {
         {
             prepare_response_items(items.to_mut());
         }
-        if turn_context.config.features.enabled(Feature::ItemIds) {
+        if turn_context.config.features.enabled(Feature::ItemIds)
+            || turn_context.provider.info().is_meta()
+        {
             Self::assign_missing_response_item_ids(items)
         } else {
             items
@@ -2824,27 +2903,7 @@ impl Session {
         }
         let mut items = items;
         for item in items.to_mut() {
-            if item.id().is_some() {
-                continue;
-            }
-            let prefix = match item {
-                ResponseItem::Message { .. } => "msg",
-                ResponseItem::Reasoning { .. } => "rs",
-                ResponseItem::LocalShellCall { .. } => "lsh",
-                ResponseItem::FunctionCall { .. } => "fc",
-                ResponseItem::ToolSearchCall { .. } => "tsc",
-                ResponseItem::FunctionCallOutput { .. } => "fco",
-                ResponseItem::CustomToolCall { .. } => "ctc",
-                ResponseItem::CustomToolCallOutput { .. } => "ctco",
-                ResponseItem::ToolSearchOutput { .. } => "tso",
-                ResponseItem::WebSearchCall { .. } => "ws",
-                ResponseItem::ImageGenerationCall { .. } => "ig",
-                ResponseItem::Compaction { .. } | ResponseItem::ContextCompaction { .. } => "cmp",
-                ResponseItem::AgentMessage { .. }
-                | ResponseItem::CompactionTrigger { .. }
-                | ResponseItem::Other => continue,
-            };
-            item.set_id(Some(format!("{prefix}_{}", Uuid::now_v7())));
+            item.assign_id_if_missing();
         }
         items
     }
@@ -2909,6 +2968,13 @@ impl Session {
         self.persist_rollout_items(&[RolloutItem::InterAgentCommunication(communication)])
             .await;
         self.send_raw_response_items(turn_context, items).await;
+        // Plaintext inter-agent controls are operator-visible transcript content. Raw response
+        // notifications preserve provider compatibility, but app-server clients render the
+        // item lifecycle; emit it here just as we do for ordinary recorded response items.
+        if let Some(item) = parse_turn_item(&response_item) {
+            self.emit_turn_item_started(turn_context, &item).await;
+            self.emit_turn_item_completed(turn_context, item).await;
+        }
     }
 
     async fn maybe_warn_on_server_model_mismatch(
@@ -2996,7 +3062,9 @@ impl Session {
         reference_context_item: Option<TurnContextItem>,
         compacted_item: CompactedItem,
     ) {
-        let items = if turn_context.config.features.enabled(Feature::ItemIds) {
+        let items = if turn_context.config.features.enabled(Feature::ItemIds)
+            || turn_context.provider.info().is_meta()
+        {
             Self::assign_missing_response_item_ids(Cow::Owned(items)).into_owned()
         } else {
             items
@@ -3821,6 +3889,66 @@ impl Session {
             )
             .await;
         Ok(active_turn_id.clone())
+    }
+
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "active turn checks and turn state updates must remain atomic"
+    )]
+    pub(crate) async fn defer_user_input_until_active_turn_finished(
+        &self,
+        input: Vec<UserInput>,
+        additional_context: BTreeMap<String, AdditionalContextEntry>,
+        client_user_message_id: Option<String>,
+    ) -> Result<String, SteerInputError> {
+        let mut active = self.active_turn.lock().await;
+        let Some(active_turn) = active.as_mut() else {
+            return Err(SteerInputError::NoActiveTurn(input));
+        };
+
+        let Some(active_task) = active_turn.task.as_ref() else {
+            return Err(SteerInputError::NoActiveTurn(input));
+        };
+
+        if input.is_empty() {
+            return Err(SteerInputError::EmptyInput);
+        }
+
+        let additional_context_input = {
+            let mut state = self.state.lock().await;
+            state.additional_context.merge(additional_context)
+        };
+
+        let mut pending_input = additional_context_input
+            .into_iter()
+            .map(ResponseItem::from)
+            .map(TurnInput::ResponseItem)
+            .collect::<Vec<_>>();
+        pending_input.push(TurnInput::UserInput {
+            content: input,
+            client_id: client_user_message_id,
+        });
+        self.input_queue
+            .extend_pending_input_for_turn_state(active_turn.turn_state.as_ref(), pending_input)
+            .await;
+        Ok(active_task.turn_context.sub_id.clone())
+    }
+
+    pub(crate) async fn submit_internal_follow_up(
+        &self,
+        op: Op,
+        client_user_message_id: Option<String>,
+    ) -> CodexResult<()> {
+        let sub = Submission {
+            id: Uuid::now_v7().to_string(),
+            op,
+            client_user_message_id,
+            trace: current_span_w3c_trace_context(),
+        };
+        self.tx_sub
+            .send(sub)
+            .await
+            .map_err(|_| CodexErr::InternalAgentDied)
     }
 
     pub(crate) async fn record_memory_citation_for_turn(&self, sub_id: &str) {

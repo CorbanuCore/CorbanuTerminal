@@ -347,6 +347,13 @@ pub enum ThreadItem {
         agent_thread_id: String,
         agent_path: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional, type = "string")]
+        agent_nickname: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional, type = "string")]
+        agent_role: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional, type = "string")]
         task_preview: Option<String>,
     },
     #[serde(rename_all = "camelCase")]

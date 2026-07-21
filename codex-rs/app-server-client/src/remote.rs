@@ -64,10 +64,31 @@ use url::Url;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const INITIALIZE_TIMEOUT: Duration = Duration::from_secs(10);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const REMOTE_APP_SERVER_MAX_WEBSOCKET_MESSAGE_SIZE: usize = 128 << 20;
 // Tungstenite still needs an HTTP request URI for the WebSocket handshake;
 // the bytes travel over the Unix socket, not TCP.
 const UDS_WEBSOCKET_HANDSHAKE_URL: &str = "ws://localhost/rpc";
+
+async fn await_remote_response<T>(
+    response_rx: oneshot::Receiver<T>,
+    operation: &'static str,
+) -> IoResult<T> {
+    timeout(REQUEST_TIMEOUT, response_rx)
+        .await
+        .map_err(|_| {
+            IoError::new(
+                ErrorKind::TimedOut,
+                format!("remote app-server {operation} timed out after 30 seconds"),
+            )
+        })?
+        .map_err(|_| {
+            IoError::new(
+                ErrorKind::BrokenPipe,
+                format!("remote app-server {operation} channel is closed"),
+            )
+        })
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RemoteAppServerEndpoint {
@@ -528,12 +549,7 @@ impl RemoteAppServerClient {
                     "remote app-server worker channel is closed",
                 )
             })?;
-        response_rx.await.map_err(|_| {
-            IoError::new(
-                ErrorKind::BrokenPipe,
-                "remote app-server notify channel is closed",
-            )
-        })?
+        await_remote_response(response_rx, "notification").await?
     }
 
     pub async fn resolve_server_request(
@@ -555,12 +571,7 @@ impl RemoteAppServerClient {
                     "remote app-server worker channel is closed",
                 )
             })?;
-        response_rx.await.map_err(|_| {
-            IoError::new(
-                ErrorKind::BrokenPipe,
-                "remote app-server resolve channel is closed",
-            )
-        })?
+        await_remote_response(response_rx, "server-request resolution").await?
     }
 
     pub async fn reject_server_request(
@@ -582,12 +593,7 @@ impl RemoteAppServerClient {
                     "remote app-server worker channel is closed",
                 )
             })?;
-        response_rx.await.map_err(|_| {
-            IoError::new(
-                ErrorKind::BrokenPipe,
-                "remote app-server reject channel is closed",
-            )
-        })?
+        await_remote_response(response_rx, "server-request rejection").await?
     }
 
     pub async fn next_event(&mut self) -> Option<AppServerEvent> {
@@ -646,12 +652,7 @@ impl RemoteAppServerRequestHandle {
                     "remote app-server worker channel is closed",
                 )
             })?;
-        response_rx.await.map_err(|_| {
-            IoError::new(
-                ErrorKind::BrokenPipe,
-                "remote app-server request channel is closed",
-            )
-        })?
+        await_remote_response(response_rx, "request").await?
     }
 
     pub async fn request_typed<T>(&self, request: ClientRequest) -> Result<T, TypedRequestError>
@@ -1031,5 +1032,14 @@ mod tests {
             .shutdown()
             .await
             .expect("shutdown should complete when worker exits first");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn remote_response_wait_has_uniform_deadline() {
+        let (_tx, rx) = oneshot::channel::<()>();
+        let error = await_remote_response(rx, "test request")
+            .await
+            .expect_err("unanswered response must time out");
+        assert_eq!(error.kind(), ErrorKind::TimedOut);
     }
 }

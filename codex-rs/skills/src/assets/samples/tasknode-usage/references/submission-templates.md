@@ -32,8 +32,10 @@ Evidence Plan:
 Summary:
 <What was completed.>
 
-Artifacts:
+Artifacts (durable and reviewable only — see note below):
 - <PR URL, commit hash, file path, task id, screenshot, route probe, or generated text.>
+
+Note: The submission parser scans the evidence body for URLs and registers every URL it finds as a formal evidence item. Cite only durable, reviewable artifacts here — real file paths, commit hashes, task IDs, event IDs, or production URLs. Never include localhost, 127.0.0.1, deliberately-broken origins, or throwaway stub-server endpoints; a reviewer cannot reach them and they cannot be removed after submission. Describe test scenarios under Verification below using the exact command run and the observed output, never by citing a transient endpoint as an artifact.
 
 Verification:
 - <Command/check/probe and result.>

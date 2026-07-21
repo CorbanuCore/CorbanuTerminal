@@ -342,6 +342,7 @@ use self::goal_status::GoalStatusState;
 #[cfg(test)]
 use self::goal_status::goal_status_indicator_from_app_goal;
 mod goal_menu;
+pub(crate) mod gpu_menu;
 mod ide_context;
 use self::ide_context::IdeContextState;
 mod input_queue;
@@ -375,6 +376,7 @@ use self::plugins::PluginsCacheState;
 mod plan_implementation;
 use self::plan_implementation::PLAN_IMPLEMENTATION_TITLE;
 mod model_popups;
+pub(crate) use model_popups::ModelSelectionPurpose;
 mod notifications;
 use self::notifications::Notification;
 mod permission_popups;
@@ -421,11 +423,20 @@ use self::tps::TpsEstimator;
 mod turn_lifecycle;
 mod turn_runtime;
 use self::turn_lifecycle::TurnLifecycleState;
-mod provider_credentials;
+pub(crate) mod claude_code_login;
+mod pfterminal_plan_status;
+pub(crate) mod provider_credentials;
 mod tasknode_menu;
 mod usage;
 mod user_messages;
 mod vault_menu;
+mod wallet_account_actions;
+mod wallet_http;
+pub(crate) mod wallet_menu;
+pub(crate) mod wallet_receipt;
+mod wallet_render;
+mod wallet_unlock;
+pub(crate) mod wallet_usage;
 use self::user_messages::PendingSteer;
 use self::user_messages::PendingSteerCompareKey;
 use self::user_messages::QueueDrain;
@@ -553,6 +564,7 @@ pub(crate) struct ChatWidget {
     session_header: SessionHeader,
     initial_user_message: Option<UserMessage>,
     status_account_display: Option<StatusAccountDisplay>,
+    gpu_spend_status: Option<String>,
     active_external_model_display: Option<String>,
     runtime_model_provider_base_url: Option<String>,
     pub(crate) remote_connection: Option<RemoteConnectionStatus>,
@@ -586,6 +598,10 @@ pub(crate) struct ChatWidget {
     tasknode_active_chat_stream_id: Option<String>,
     /// Holds the platform clipboard lease so copied text remains available while supported.
     clipboard_lease: Option<crate::clipboard_copy::ClipboardLease>,
+    wallet_capability: Option<zeroize::Zeroizing<String>>,
+    wallet_status_generation: u64,
+    wallet_payment_config: Option<crate::chatwidget::wallet_menu::WalletPaymentConfig>,
+    wallet_balances: Option<codex_wallet::WalletBalances>,
     copy_last_response_binding: Vec<KeyBinding>,
     running_commands: HashMap<String, RunningCommand>,
     collab_agent_metadata: HashMap<ThreadId, AgentMetadata>,
@@ -1466,7 +1482,17 @@ impl ChatWidget {
             .unified_exec_processes
             .iter()
             .map(|process| history_cell::UnifiedExecProcessDetails {
-                command_display: process.command_display.clone(),
+                command_display: format!(
+                    "{} · pid={}{} · status=running · call={} · output=thread-transcript",
+                    process.command_display,
+                    process.key,
+                    process
+                        .interrupt_notes
+                        .last()
+                        .map(|_| " · interrupt=preserved".to_string())
+                        .unwrap_or_default(),
+                    process.call_id,
+                ),
                 recent_chunks: process.recent_chunks.clone(),
             })
             .collect();

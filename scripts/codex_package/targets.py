@@ -63,7 +63,10 @@ PACKAGE_VARIANTS: dict[str, PackageVariant] = {
         cargo_bin="pfterminal",
         executable_stem="pfterminal",
         extra_binaries=(
-            PackageExtraBinary(cargo_bin="codex", executable_stem="codex"),
+            PackageExtraBinary(
+                cargo_bin="pfterminal-walletd",
+                executable_stem="pfterminal-walletd",
+            ),
         ),
     ),
     "codex": PackageVariant(

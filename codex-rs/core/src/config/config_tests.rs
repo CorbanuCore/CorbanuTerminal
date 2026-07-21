@@ -66,6 +66,7 @@ use codex_exec_server::LOCAL_FS;
 use codex_features::Feature;
 use codex_features::FeaturesToml;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
+use codex_model_provider_info::AMBIENT_GLM_5_2_CONTEXT_WINDOW;
 use codex_model_provider_info::AMBIENT_KIMI_K2_7_CODE_MODEL;
 use codex_model_provider_info::AMBIENT_LEGACY_GLM_5_2_FP8_MODEL;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
@@ -78,11 +79,16 @@ use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+use codex_model_provider_info::KIMI_CODE_K3_MODEL;
+use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
+use codex_model_provider_info::META_DEFAULT_MODEL;
+use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
+use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
@@ -132,6 +138,7 @@ use codex_config::test_support::CloudConfigBundleFixture;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::Path;
+use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::TempDir;
 
@@ -881,6 +888,90 @@ model = "z-ai/glm-5.2"
     assert_eq!(config.model_provider_id, OPENROUTER_PROVIDER_ID);
     assert_eq!(config.model.as_deref(), Some(OPENROUTER_DEFAULT_MODEL));
     assert_eq!(config.model_provider.wire_api, WireApi::Chat);
+    assert_eq!(config.model_context_window, None);
+    assert_eq!(config.to_models_manager_config().model_context_window, None);
+    assert_eq!(config.forced_login_method, Some(ForcedLoginMethod::Api));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn ambient_routes_apply_their_glm_context_ceiling() -> std::io::Result<()> {
+    for provider in [AMBIENT_PROVIDER_ID, PFTERMINAL_PLAN_PROVIDER_ID] {
+        let cfg = toml::from_str::<ConfigToml>(&format!(
+            r#"
+model_provider = "{provider}"
+model = "z-ai/glm-5.2"
+"#
+        ))
+        .expect("config should deserialize");
+
+        let config = Config::load_from_base_config_with_overrides(
+            cfg,
+            ConfigOverrides::default(),
+            tempdir()?.abs(),
+        )
+        .await?;
+
+        assert_eq!(config.model_provider_id, provider);
+        assert_eq!(config.model_context_window, None);
+        assert_eq!(
+            config
+                .to_models_manager_config_for_model(Some(AMBIENT_DEFAULT_MODEL))
+                .model_context_window,
+            Some(AMBIENT_GLM_5_2_CONTEXT_WINDOW)
+        );
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn explicit_context_override_wins_over_ambient_route_default() -> std::io::Result<()> {
+    let cfg = toml::from_str::<ConfigToml>(
+        r#"
+model_provider = "pfterminal-plan"
+model = "z-ai/glm-5.2"
+model_context_window = 90000
+"#,
+    )
+    .expect("config should deserialize");
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.model_context_window, Some(90_000));
+    assert_eq!(
+        config.to_models_manager_config().model_context_window,
+        Some(90_000)
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn load_config_meta_provider_defaults_to_muse_spark() -> std::io::Result<()> {
+    let cfg = toml::from_str::<ConfigToml>(
+        r#"
+model_provider = "meta"
+"#,
+    )
+    .expect("config should deserialize");
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.model_provider_id, META_PROVIDER_ID);
+    assert_eq!(config.model.as_deref(), Some(META_DEFAULT_MODEL));
+    assert_eq!(config.model_provider.wire_api, WireApi::Responses);
     assert_eq!(config.forced_login_method, Some(ForcedLoginMethod::Api));
 
     Ok(())
@@ -969,7 +1060,7 @@ model = "gpt-5.5"
     .await?;
 
     assert_eq!(config.model_provider_id, OPENROUTER_ANTHROPIC_PROVIDER_ID);
-    assert_eq!(config.model.as_deref(), Some(OPENROUTER_DEFAULT_MODEL));
+    assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
     assert_eq!(config.model_provider.wire_api, WireApi::Anthropic);
     assert_eq!(config.forced_login_method, Some(ForcedLoginMethod::Api));
 
@@ -997,6 +1088,54 @@ model = "zai-org/GLM-5.2"
     assert_eq!(config.model.as_deref(), Some(BASETEN_DEFAULT_MODEL));
     assert_eq!(config.model_provider.wire_api, WireApi::Chat);
     assert_eq!(config.forced_login_method, Some(ForcedLoginMethod::Api));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn load_config_kimi_code_provider_uses_api_login() -> std::io::Result<()> {
+    let cfg = toml::from_str::<ConfigToml>(
+        r#"
+model_provider = "kimi-code"
+model = "k3"
+"#,
+    )
+    .expect("config should deserialize");
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.model_provider_id, KIMI_CODE_PROVIDER_ID);
+    assert_eq!(config.model.as_deref(), Some(KIMI_CODE_K3_MODEL));
+    assert_eq!(config.model_provider.wire_api, WireApi::Chat);
+    assert_eq!(config.forced_login_method, Some(ForcedLoginMethod::Api));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn load_config_k3_without_provider_routes_to_kimi_code() -> std::io::Result<()> {
+    let cfg = toml::from_str::<ConfigToml>(
+        r#"
+model = "k3"
+"#,
+    )
+    .expect("config should deserialize");
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.model_provider_id, KIMI_CODE_PROVIDER_ID);
+    assert_eq!(config.model.as_deref(), Some(KIMI_CODE_K3_MODEL));
+    assert_eq!(config.model_provider.wire_api, WireApi::Chat);
 
     Ok(())
 }
@@ -10795,7 +10934,7 @@ enabled = true
             config.agent_max_threads,
             config.effective_agent_max_threads(MultiAgentVersion::V2)
         ),
-        (None, Some(3))
+        (None, Some(5))
     );
 
     Ok(())
@@ -11813,4 +11952,94 @@ fn test_tui_notification_condition_rejects_unknown_value() {
             && err.contains("always"),
         "unexpected error: {err}"
     );
+}
+#[test]
+fn gpu_runtime_provider_uses_command_backed_scoped_auth() {
+    let home = tempfile::tempdir().expect("temporary home");
+    let codex_home = AbsolutePathBuf::try_from(home.path().to_path_buf()).expect("absolute home");
+    let (provider_id, provider) = gpu_runtime_model_provider(
+        codex_state::GpuRuntimeProvider {
+            rental_id: "rental-123".to_string(),
+            infrastructure_provider: "vast".to_string(),
+            provider_id: "gpu-rental-123".to_string(),
+            base_url: "https://gpu.example.test/v1".to_string(),
+            model_id: "pinned-model".to_string(),
+            wire_api: "chat".to_string(),
+            health: "ready".to_string(),
+            display_hourly_microusd: 2_000_000,
+            maximum_context_tokens: Some(65_536),
+            catalog_sequence: 4,
+            updated_at_ms: 10,
+        },
+        &codex_home,
+    )
+    .expect("ready runtime provider");
+
+    assert_eq!(provider_id, "gpu-rental-123");
+    let auth = provider.auth.as_ref().expect("command-backed auth");
+    assert_eq!(auth.command, "pfterminal");
+    assert_eq!(auth.args, vec!["internal-gpu-endpoint-token", "rental-123"]);
+    assert_eq!(auth.timeout_ms.get(), 30_000);
+    assert!(provider.env_key.is_none());
+    assert!(provider.experimental_bearer_token.is_none());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn replaced_running_binary_keeps_a_self_invocation_path_for_gpu_auth() {
+    assert_eq!(
+        pfterminal_auth_helper_from_executable(PathBuf::from(
+            "/opt/pfterminal/bin/pfterminal (deleted)"
+        )),
+        Some("/proc/self/exe".to_string())
+    );
+}
+
+#[test]
+fn gpu_runtime_provider_preserves_the_registered_wire_api() {
+    let home = tempfile::tempdir().expect("temporary home");
+    let codex_home = AbsolutePathBuf::try_from(home.path().to_path_buf()).expect("absolute home");
+    let (_, provider) = gpu_runtime_model_provider(
+        codex_state::GpuRuntimeProvider {
+            rental_id: "rental-responses".to_string(),
+            infrastructure_provider: "vast".to_string(),
+            provider_id: "gpu-rental-responses".to_string(),
+            base_url: "https://gpu.example.test/v1".to_string(),
+            model_id: "served-fine-tune".to_string(),
+            wire_api: "responses".to_string(),
+            health: "ready".to_string(),
+            display_hourly_microusd: 2_000_000,
+            maximum_context_tokens: Some(65_536),
+            catalog_sequence: 4,
+            updated_at_ms: 10,
+        },
+        &codex_home,
+    )
+    .expect("Responses runtime provider");
+
+    assert_eq!(provider.wire_api, WireApi::Responses);
+}
+
+#[tokio::test]
+async fn stale_gpu_runtime_provider_falls_back_without_bricking_startup() -> anyhow::Result<()> {
+    let codex_home = TempDir::new()?;
+    std::fs::write(
+        codex_home.path().join(CONFIG_TOML_FILE),
+        r#"
+model = "deepseek-ai/DeepSeek-V4-Flash"
+model_provider = "gpu-expired-rental"
+"#,
+    )?;
+
+    let config = ConfigBuilder::default()
+        .codex_home(codex_home.path().to_path_buf())
+        .build()
+        .await?;
+
+    assert_eq!(config.model_provider_id, AMBIENT_PROVIDER_ID);
+    assert_eq!(config.model, Some(AMBIENT_DEFAULT_MODEL.to_string()));
+    assert!(config.startup_warnings.iter().any(|warning| {
+        warning.contains("gpu-expired-rental") && warning.contains("no longer active")
+    }));
+    Ok(())
 }

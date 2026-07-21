@@ -157,6 +157,7 @@ fn fixed_secret_mode_submits_known_label_without_label_step() {
     let mut view = VaultSecretEntryView::new_fixed_secret(
         "provider/zai_api_key".to_string(),
         "Add Provider: Z.AI API Key".to_string(),
+        "API key — masked".to_string(),
         "ZAI_API_KEY (masked)".to_string(),
         capture.clone().callback(),
     );
@@ -170,6 +171,102 @@ fn fixed_secret_mode_submits_known_label_without_label_step() {
     assert_eq!(
         capture.taken(),
         Some(("provider/zai_api_key".to_string(), "zai-secret".to_string()))
+    );
+    assert!(view.is_complete());
+}
+
+#[test]
+fn fixed_secret_cancel_callback_runs_once() {
+    let cancellations = Arc::new(Mutex::new(0));
+    let cancellations_for_callback = Arc::clone(&cancellations);
+    let mut view = VaultSecretEntryView::new_fixed_secret_with_cancel(
+        "oauth".to_string(),
+        "OAuth".to_string(),
+        "Authorization code — masked".to_string(),
+        "Paste code".to_string(),
+        Box::new(|_, _| {}),
+        Box::new(move || {
+            *cancellations_for_callback.lock().unwrap() += 1;
+        }),
+    );
+    let escape = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+
+    view.handle_key_event(escape);
+    view.handle_key_event(escape);
+
+    assert_eq!(*cancellations.lock().unwrap(), 1);
+    assert_eq!(
+        view.completion(),
+        Some(crate::bottom_pane::ViewCompletion::Cancelled)
+    );
+}
+
+#[test]
+fn confirmed_secret_submits_only_after_matching_second_entry() {
+    let capture = Capture::default();
+    let mut view = VaultSecretEntryView::new_confirmed_secret(
+        "wallet-passcode".to_string(),
+        "Protect wallet".to_string(),
+        "Wallet passcode — masked".to_string(),
+        "New passcode".to_string(),
+        capture.clone().callback(),
+    );
+
+    for c in "same-passcode".chars() {
+        view.handle_key_event(char_event(c));
+    }
+    view.handle_key_event(enter_event());
+    assert_eq!(view.field, Field::SecretConfirm);
+    assert!(capture.taken().is_none());
+
+    for c in "same-passcode".chars() {
+        view.handle_key_event(char_event(c));
+    }
+    view.handle_key_event(enter_event());
+
+    assert_eq!(
+        capture.taken(),
+        Some(("wallet-passcode".to_string(), "same-passcode".to_string()))
+    );
+    assert!(view.is_complete());
+}
+
+#[test]
+fn confirmed_secret_mismatch_is_visible_and_next_matching_pair_succeeds() {
+    let capture = Capture::default();
+    let mut view = VaultSecretEntryView::new_confirmed_secret(
+        "wallet-passcode".to_string(),
+        "Protect wallet".to_string(),
+        "Wallet passcode — masked".to_string(),
+        "New passcode".to_string(),
+        capture.clone().callback(),
+    );
+
+    for value in ["first-passcode", "different-passcode"] {
+        for c in value.chars() {
+            view.handle_key_event(char_event(c));
+        }
+        view.handle_key_event(enter_event());
+    }
+
+    assert_eq!(view.field, Field::Secret);
+    assert_eq!(
+        view.validation_error.as_deref(),
+        Some("Values did not match. Enter the value twice again.")
+    );
+    assert!(capture.taken().is_none());
+    assert!(!view.is_complete());
+
+    for value in ["replacement", "replacement"] {
+        for c in value.chars() {
+            view.handle_key_event(char_event(c));
+        }
+        view.handle_key_event(enter_event());
+    }
+
+    assert_eq!(
+        capture.taken(),
+        Some(("wallet-passcode".to_string(), "replacement".to_string()))
     );
     assert!(view.is_complete());
 }

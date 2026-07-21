@@ -1,0 +1,15 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+expression: popup
+---
+  Select Model and Effort
+  Kimi Code plan
+
+  OpenAI  Ambient  [Kimi Code]  Z.AI  Claude Plan  Anthropic  Meta  Vercel  Baseten  OpenRouter
+
+› 1. Kimi Code K3 (current)  Model: k3. Kimi K3 through your Kimi Code plan. Context is plan-
+                             dependent: up to 256K on Moderato (the default assumption) and up to
+                             1M on Allegretto and above. Set model_context_window = 1048576 in
+                             config.toml if your plan entitles 1M.
+
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

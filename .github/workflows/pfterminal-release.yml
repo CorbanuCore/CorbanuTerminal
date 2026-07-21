@@ -7,7 +7,7 @@ on:
         description: "Release version; must match codex-rs/Cargo.toml."
         required: true
         type: string
-        default: "0.1.1"
+        default: "0.1.19"
       publish_release:
         description: "Create or update the matching GitHub release."
         required: true
@@ -102,7 +102,8 @@ jobs:
             --manifest-path codex-rs/Cargo.toml \
             --target "$TARGET" \
             --release \
-            --bin pfterminal
+            --bin pfterminal \
+            --bin pfterminal-walletd
 
       - name: Build standalone package archive
         shell: bash
@@ -113,7 +114,7 @@ jobs:
             --target "$TARGET" \
             --variant pfterminal \
             --entrypoint-bin "codex-rs/target/${TARGET}/release/pfterminal" \
-            --extra-bin "codex=codex-rs/target/${TARGET}/release/pfterminal" \
+            --extra-bin "pfterminal-walletd=codex-rs/target/${TARGET}/release/pfterminal-walletd" \
             --cargo-profile release \
             --package-dir "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
             --archive-output "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz" \
@@ -128,8 +129,44 @@ jobs:
           mkdir -p "$package_dir"
           tar -xzf "$archive" -C "$package_dir"
           "$package_dir/bin/pfterminal" --version
-          test -x "$package_dir/bin/codex"
+          test -x "$package_dir/bin/pfterminal-walletd"
+          "$package_dir/bin/pfterminal-walletd" --help >/dev/null
+          wallet_home="${RUNNER_TEMP}/wallet-smoke-${TARGET}"
+          "$package_dir/bin/pfterminal-walletd" --codex-home "$wallet_home" &
+          walletd_pid=$!
+          trap 'kill "$walletd_pid" 2>/dev/null || true; wait "$walletd_pid" 2>/dev/null || true' EXIT
+          for _ in {1..100}; do
+            test -S "$wallet_home/wallet/run/walletd.sock" && break
+            kill -0 "$walletd_pid" 2>/dev/null
+            sleep 0.05
+          done
+          test -S "$wallet_home/wallet/run/walletd.sock"
+          kill "$walletd_pid"
+          wait "$walletd_pid" || true
+          trap - EXIT
+          ! find "$package_dir" -type f -o -type l | grep -E '/codex([^/-]*)(\.exe)?$'
           test -x "$package_dir/codex-path/rg"
+
+      - name: Free runner disk before DMG packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h .
+          rm -rf \
+            codex-rs/target \
+            "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
+            "${RUNNER_TEMP}/smoke-${TARGET}" \
+            "${RUNNER_TEMP}/rusty_v8" \
+            "${HOME}/.cargo/git" \
+            "${HOME}/.cargo/registry/cache" \
+            "${HOME}/.cargo/registry/src" \
+            "${HOME}/Library/Caches/Homebrew" \
+            "${HOME}/Library/Developer/CoreSimulator"
+          sudo rm -rf \
+            /Applications/Xcode*.app \
+            /Library/Developer/CoreSimulator
+          ls -lh "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz"
+          df -h .
 
       - name: Build macOS DMG installer
         shell: bash
@@ -185,7 +222,8 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            runner: ubuntu-24.04
+            # Keep the portable GNU/Linux artifact compatible with glibc 2.35.
+            runner: ubuntu-22.04
           - target: aarch64-unknown-linux-musl
             runner: ubuntu-24.04-arm
     steps:
@@ -253,7 +291,8 @@ jobs:
             --manifest-path codex-rs/Cargo.toml \
             --target "$TARGET" \
             --release \
-            --bin pfterminal
+            --bin pfterminal \
+            --bin pfterminal-walletd
 
       - name: Build standalone package archive
         shell: bash
@@ -264,7 +303,7 @@ jobs:
             --target "$TARGET" \
             --variant pfterminal \
             --entrypoint-bin "codex-rs/target/${TARGET}/release/pfterminal" \
-            --extra-bin "codex=codex-rs/target/${TARGET}/release/pfterminal" \
+            --extra-bin "pfterminal-walletd=codex-rs/target/${TARGET}/release/pfterminal-walletd" \
             --cargo-profile release \
             --package-dir "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
             --archive-output "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz" \
@@ -279,7 +318,22 @@ jobs:
           mkdir -p "$package_dir"
           tar -xzf "$archive" -C "$package_dir"
           "$package_dir/bin/pfterminal" --version
-          test -x "$package_dir/bin/codex"
+          test -x "$package_dir/bin/pfterminal-walletd"
+          "$package_dir/bin/pfterminal-walletd" --help >/dev/null
+          wallet_home="${RUNNER_TEMP}/wallet-smoke-${TARGET}"
+          "$package_dir/bin/pfterminal-walletd" --codex-home "$wallet_home" &
+          walletd_pid=$!
+          trap 'kill "$walletd_pid" 2>/dev/null || true; wait "$walletd_pid" 2>/dev/null || true' EXIT
+          for _ in {1..100}; do
+            test -S "$wallet_home/wallet/run/walletd.sock" && break
+            kill -0 "$walletd_pid" 2>/dev/null
+            sleep 0.05
+          done
+          test -S "$wallet_home/wallet/run/walletd.sock"
+          kill "$walletd_pid"
+          wait "$walletd_pid" || true
+          trap - EXIT
+          ! find "$package_dir" -type f -o -type l | grep -E '/codex([^/-]*)(\.exe)?$'
           test -x "$package_dir/codex-path/rg"
           test -x "$package_dir/codex-resources/bwrap"
 
@@ -322,6 +376,17 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
+      - name: Test native Windows provider initialization
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LIBSQLITE3_FLAGS=SQLITE_DISABLE_INTRINSIC
+          cargo test \
+            --manifest-path codex-rs/Cargo.toml \
+            --target "$TARGET" \
+            --release \
+            -p codex-model-provider-info
+
       - name: Build pfterminal package binaries
         shell: bash
         run: |
@@ -334,6 +399,7 @@ jobs:
             --target "$TARGET" \
             --release \
             --bin pfterminal \
+            --bin pfterminal-walletd \
             --bin codex-command-runner \
             --bin codex-windows-sandbox-setup
 
@@ -346,7 +412,7 @@ jobs:
             --target "$TARGET" \
             --variant pfterminal \
             --entrypoint-bin "codex-rs/target/${TARGET}/release/pfterminal.exe" \
-            --extra-bin "codex=codex-rs/target/${TARGET}/release/pfterminal.exe" \
+            --extra-bin "pfterminal-walletd=codex-rs/target/${TARGET}/release/pfterminal-walletd.exe" \
             --codex-command-runner-bin "codex-rs/target/${TARGET}/release/codex-command-runner.exe" \
             --codex-windows-sandbox-setup-bin "codex-rs/target/${TARGET}/release/codex-windows-sandbox-setup.exe" \
             --cargo-profile release \
@@ -366,7 +432,19 @@ jobs:
           New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
           Expand-Archive -Path $archive -DestinationPath $packageDir
           & (Join-Path $packageDir "bin/pfterminal.exe") --version
-          if (-not (Test-Path (Join-Path $packageDir "bin/codex.exe"))) { throw "missing codex.exe" }
+          $walletDaemon = Join-Path $packageDir "bin/pfterminal-walletd.exe"
+          if (-not (Test-Path $walletDaemon)) { throw "missing pfterminal-walletd.exe" }
+          & $walletDaemon --help | Out-Null
+          $walletHome = Join-Path $env:RUNNER_TEMP "wallet-smoke-${env:TARGET}"
+          $walletProcess = Start-Process -FilePath $walletDaemon -ArgumentList @("--codex-home", $walletHome) -PassThru
+          try {
+            Start-Sleep -Milliseconds 500
+            if ($walletProcess.HasExited) { throw "pfterminal-walletd exited during startup" }
+          } finally {
+            if (-not $walletProcess.HasExited) { Stop-Process -Id $walletProcess.Id -Force }
+          }
+          $forbidden = Get-ChildItem -Path $packageDir -Recurse -File | Where-Object { $_.Name -match '^codex(?:\.exe)?$' }
+          if ($forbidden) { throw "package contains forbidden codex entrypoint: $($forbidden.FullName -join ', ')" }
           if (-not (Test-Path (Join-Path $packageDir "codex-path/rg.exe"))) { throw "missing rg.exe" }
           if (-not (Test-Path (Join-Path $packageDir "codex-resources/codex-command-runner.exe"))) { throw "missing command runner" }
           if (-not (Test-Path (Join-Path $packageDir "codex-resources/codex-windows-sandbox-setup.exe"))) { throw "missing sandbox setup" }

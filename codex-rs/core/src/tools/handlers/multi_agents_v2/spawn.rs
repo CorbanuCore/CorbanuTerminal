@@ -47,6 +47,7 @@ async fn handle_spawn_agent(
         call_id,
         ..
     } = invocation;
+    ensure_manager_tool_allowed(&turn, "spawn_agent")?;
     let arguments = function_arguments(payload)?;
     let args: SpawnAgentArgs = parse_arguments(&arguments)?;
     let fork_mode = args.fork_mode()?;
@@ -69,6 +70,7 @@ async fn handle_spawn_agent(
     let initial_operation = parse_collab_input(Some(args.message), /*items*/ None)?;
     let session_source = turn.session_source.clone();
     let child_depth = next_thread_spawn_depth(&session_source);
+    validate_model_spawn_role_graph(&session_source, role_name, child_depth)?;
     let mut config =
         build_agent_spawn_config(&session.get_base_instructions().await, turn.as_ref())?;
     if let Some(service_tier) = args.service_tier.as_ref() {
@@ -127,8 +129,12 @@ async fn handle_spawn_agent(
                         .session_source
                         .get_agent_path()
                         .unwrap_or_else(AgentPath::root);
-                    let mut communication =
-                        communication_from_tool_message(author, new_agent_path.clone(), message);
+                    let mut communication = communication_from_model_tool_message(
+                        author,
+                        new_agent_path.clone(),
+                        message,
+                        &turn.config.model_provider_id,
+                    );
                     communication
                         .metadata
                         .get_or_insert_with(ResponseItemMetadata::default)
@@ -159,6 +165,9 @@ async fn handle_spawn_agent(
         .as_ref()
         .and_then(|snapshot| snapshot.session_source.get_nickname())
         .or(spawned_agent.metadata.agent_nickname);
+    let agent_role = agent_snapshot
+        .as_ref()
+        .and_then(|snapshot| snapshot.session_source.get_agent_role());
     session
         .send_event(
             &turn,
@@ -167,6 +176,8 @@ async fn handle_spawn_agent(
                 occurred_at_ms: now_unix_timestamp_ms(),
                 agent_thread_id: new_thread_id,
                 agent_path: new_agent_path.clone(),
+                agent_nickname: nickname.clone(),
+                agent_role,
                 task_preview: None,
                 kind: SubAgentActivityKind::Started,
             }

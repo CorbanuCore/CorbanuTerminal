@@ -1,0 +1,7 @@
+---
+source: tui/src/chatwidget/wallet_render_tests.rs
+expression: render_wallet_lines(90)
+---
+Weekly: 4,795,298 used + 0 in flight of 50,000,000 tokens (9.6%)
+45,204,702 remaining · resets in 6d 10h · 2026-07-26T00:35:20.051Z
+Next: Basic plan · 20 USDC prepaid · 2026-08-19T00:35:20.051Z to 2026-09-19T00:35:20.051Z

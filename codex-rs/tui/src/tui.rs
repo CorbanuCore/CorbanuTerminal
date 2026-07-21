@@ -601,6 +601,27 @@ impl Tui {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn for_dispatch_integration_test() -> std::io::Result<Self> {
+        let backend = CrosstermBackend::new(stdout());
+        let terminal = CustomTerminal::with_test_screen_size(
+            backend,
+            ratatui::layout::Size {
+                width: 100,
+                height: 40,
+            },
+            ratatui::layout::Position { x: 0, y: 0 },
+        );
+        let stderr_guard = terminal_stderr::TerminalStderrGuard::install()?;
+        let mut tui = Self::new(
+            terminal,
+            /*enhanced_keys_supported*/ false,
+            stderr_guard,
+        );
+        tui.set_alt_screen_enabled(false);
+        Ok(tui)
+    }
+
     /// Set whether alternate screen is enabled. When false, enter_alt_screen() becomes a no-op.
     pub fn set_alt_screen_enabled(&mut self, enabled: bool) {
         self.alt_screen_enabled = enabled;

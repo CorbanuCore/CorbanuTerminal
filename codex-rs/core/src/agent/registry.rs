@@ -111,6 +111,9 @@ impl AgentRegistry {
             removed_key
                 .and_then(|key| active_agents.agent_tree.remove(key.as_str()))
                 .is_some_and(|metadata| {
+                    if let Some(nickname) = metadata.agent_nickname.as_ref() {
+                        active_agents.used_agent_nicknames.remove(nickname);
+                    }
                     !metadata.agent_path.as_ref().is_some_and(AgentPath::is_root)
                 })
         };
@@ -141,6 +144,15 @@ impl AgentRegistry {
             .agent_tree
             .get(agent_path.as_str())
             .and_then(|metadata| metadata.agent_id)
+    }
+
+    pub(crate) fn agent_metadata_for_path(&self, agent_path: &AgentPath) -> Option<AgentMetadata> {
+        self.active_agents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .agent_tree
+            .get(agent_path.as_str())
+            .cloned()
     }
 
     pub(crate) fn agent_id_for_nickname(&self, agent_nickname: &str) -> Option<ThreadId> {

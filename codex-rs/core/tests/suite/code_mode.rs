@@ -123,8 +123,13 @@ fn wait_for_file_source(path: &Path) -> Result<String> {
     let quoted_path = shlex::try_join([path.to_string_lossy().as_ref()])?;
     let command = format!("if [ -f {quoted_path} ]; then printf ready; fi");
     Ok(format!(
-        r#"while ((await tools.exec_command({{ cmd: {command:?} }})).output !== "ready") {{
-}}"#
+        r#"await (async () => {{
+    const waitCommand = {command:?};
+    let waitAttempt = 0;
+    while ((await tools.exec_command({{ cmd: `${{waitCommand}} # wait-poll-${{waitAttempt++}}` }})).output !== "ready") {{
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }}
+}})();"#
     ))
 }
 
@@ -2231,7 +2236,12 @@ text("session b done");
 
     let third_request = third_completion.single_request();
     let third_items = function_tool_output_items(&third_request, "call-3");
-    assert_eq!(third_items.len(), 1);
+    assert_eq!(
+        third_items.len(),
+        1,
+        "third wait output items: {}",
+        serde_json::to_string_pretty(&third_items).expect("serialize third items")
+    );
     assert_regex_match(
         concat!(
             r"(?s)\A",

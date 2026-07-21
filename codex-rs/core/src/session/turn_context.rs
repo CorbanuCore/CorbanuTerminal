@@ -160,6 +160,7 @@ pub struct TurnContext {
     pub(crate) model_edit_protocol_state: Arc<ModelEditProtocolState>,
     pub(crate) explicit_tool_budget_state: Arc<ExplicitToolBudgetState>,
     pub(crate) server_model_warning_emitted: AtomicBool,
+    pub(crate) provider_cache_pressure_warning_emitted: AtomicBool,
     pub(crate) model_verification_emitted: AtomicBool,
 }
 
@@ -394,6 +395,10 @@ impl TurnContext {
             server_model_warning_emitted: AtomicBool::new(
                 self.server_model_warning_emitted.load(Ordering::Relaxed),
             ),
+            provider_cache_pressure_warning_emitted: AtomicBool::new(
+                self.provider_cache_pressure_warning_emitted
+                    .load(Ordering::Relaxed),
+            ),
             model_verification_emitted: AtomicBool::new(
                 self.model_verification_emitted.load(Ordering::Relaxed),
             ),
@@ -535,6 +540,7 @@ impl Session {
         // todo(aibrahim): store this state somewhere else so we don't need to mut config
         let config = session_configuration.original_config_do_not_use.clone();
         let mut per_turn_config = (*config).clone();
+        per_turn_config.model = Some(session_configuration.collaboration_mode.model().to_string());
         per_turn_config.cwd = cwd;
         per_turn_config.workspace_roots = session_configuration.workspace_roots.clone();
         per_turn_config
@@ -543,6 +549,13 @@ impl Session {
         per_turn_config.model_reasoning_effort =
             session_configuration.collaboration_mode.reasoning_effort();
         per_turn_config.model_reasoning_summary = session_configuration.model_reasoning_summary;
+        if let Some(runtime_limit) = session_configuration.runtime_model_context_window {
+            per_turn_config.model_context_window = Some(
+                per_turn_config
+                    .model_context_window
+                    .map_or(runtime_limit, |configured| configured.min(runtime_limit)),
+            );
+        }
         per_turn_config.service_tier = session_configuration.service_tier.clone();
         per_turn_config.personality = session_configuration.personality;
         per_turn_config.approvals_reviewer = session_configuration.approvals_reviewer;
@@ -688,6 +701,7 @@ impl Session {
             model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
             explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
             server_model_warning_emitted: AtomicBool::new(false),
+            provider_cache_pressure_warning_emitted: AtomicBool::new(false),
             model_verification_emitted: AtomicBool::new(false),
         }
     }
@@ -695,8 +709,12 @@ impl Session {
     pub(crate) async fn new_turn_with_sub_id(
         &self,
         sub_id: String,
-        updates: SessionSettingsUpdate,
+        mut updates: SessionSettingsUpdate,
     ) -> CodexResult<Arc<TurnContext>> {
+        // GPU endpoints are process-local controller transports and can change while a
+        // session remains open. Refresh the selected runtime provider before every turn so
+        // recovery does not leave the session's ModelClient pinned to a dead local port.
+        self.ensure_runtime_model_provider(&mut updates).await;
         let notify_config_contributors = !self.services.extensions.config_contributors().is_empty();
         let update_result: CodexResult<_> = {
             let mut state = self.state.lock().await;
@@ -712,6 +730,18 @@ impl Session {
                     });
                     let new_config = notify_config_contributors
                         .then(|| Self::build_effective_session_config(&next));
+                    let model_provider_changed = state
+                        .session_configuration
+                        .original_config_do_not_use
+                        .model_provider_id
+                        != next.original_config_do_not_use.model_provider_id
+                        || state.session_configuration.provider != next.provider;
+                    let model_client_configuration = model_provider_changed.then(|| next.clone());
+                    let stale_startup_prewarm = if model_provider_changed {
+                        state.take_session_startup_prewarm()
+                    } else {
+                        None
+                    };
                     if updates.environments.is_some() {
                         self.services
                             .turn_environments
@@ -723,29 +753,45 @@ impl Session {
                         permission_profile_changed,
                         previous_config,
                         new_config,
+                        model_client_configuration,
+                        stale_startup_prewarm,
                     ))
                 }
                 Err(err) => Err(CodexErr::InvalidRequest(err.to_string())),
             }
         };
 
-        let (session_configuration, permission_profile_changed, previous_config, new_config) =
-            match update_result {
-                Ok(update) => update,
-                Err(err) => {
-                    let message = err.to_string();
-                    self.send_event_raw(Event {
-                        id: sub_id.clone(),
-                        msg: EventMsg::Error(ErrorEvent {
-                            message: message.clone(),
-                            codex_error_info: Some(CodexErrorInfo::BadRequest),
-                        }),
-                    })
-                    .await;
-                    return Err(CodexErr::InvalidRequest(message));
-                }
-            };
+        let (
+            session_configuration,
+            permission_profile_changed,
+            previous_config,
+            new_config,
+            model_client_configuration,
+            stale_startup_prewarm,
+        ) = match update_result {
+            Ok(update) => update,
+            Err(err) => {
+                let message = err.to_string();
+                self.send_event_raw(Event {
+                    id: sub_id.clone(),
+                    msg: EventMsg::Error(ErrorEvent {
+                        message: message.clone(),
+                        codex_error_info: Some(CodexErrorInfo::BadRequest),
+                    }),
+                })
+                .await;
+                return Err(CodexErr::InvalidRequest(message));
+            }
+        };
         self.emit_config_changed_contributors(previous_config.as_ref(), new_config.as_ref());
+
+        if let Some(configuration) = model_client_configuration {
+            self.services
+                .replace_model_client(self.build_model_client_for_configuration(&configuration));
+        }
+        if let Some(startup_prewarm) = stale_startup_prewarm {
+            startup_prewarm.abort().await;
+        }
 
         if permission_profile_changed {
             self.refresh_managed_network_proxy_for_current_permission_profile()

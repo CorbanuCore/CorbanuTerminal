@@ -62,6 +62,7 @@ pub(crate) async fn handle_retryable_response_stream_error(
     request: ResponsesStreamRequest,
     attempt_elapsed: Duration,
 ) -> Result<(), CodexErr> {
+    ensure_gpu_runtime_provider_active(sess, turn_context).await?;
     let long_failure = attempt_elapsed
         >= turn_context
             .provider
@@ -88,10 +89,8 @@ pub(crate) async fn handle_retryable_response_stream_error(
         .await;
     }
 
-    if *retries >= effective_max_retries {
-        if long_failure {
-            return Err(err);
-        }
+    if *retries >= effective_max_retries && long_failure {
+        return Err(err);
     }
 
     if *retries >= effective_max_retries
@@ -149,6 +148,61 @@ pub(crate) async fn handle_retryable_response_stream_error(
     }
 
     Err(err)
+}
+
+pub(crate) async fn ensure_gpu_runtime_provider_active(
+    sess: &Session,
+    turn_context: &TurnContext,
+) -> Result<(), CodexErr> {
+    let provider_id = turn_context.config.model_provider_id.as_str();
+    if !provider_id.starts_with("gpu-") {
+        return Ok(());
+    }
+    let Some(state_db) = sess.state_db() else {
+        warn!(
+            "could not verify rented GPU liveness because session state is unavailable; preserving normal retry policy"
+        );
+        return Ok(());
+    };
+    let records = match state_db.list_gpu_runtime_providers().await {
+        Ok(records) => records,
+        Err(error) => {
+            warn!(%error, "could not read rented GPU liveness; preserving normal retry policy");
+            return Ok(());
+        }
+    };
+    match gpu_runtime_provider_availability(provider_id, &records) {
+        GpuRuntimeProviderAvailability::Ready => Ok(()),
+        GpuRuntimeProviderAvailability::Recovering => Err(CodexErr::InvalidRequest(
+            "The selected rented GPU is temporarily unavailable while its controller reconnects. Wait for the GPU READY notification, then retry this turn; no /model reselection is required. The rental may still be billing, so use /gpu to inspect or terminate it."
+                .to_string(),
+        )),
+        GpuRuntimeProviderAvailability::Gone => Err(CodexErr::InvalidRequest(
+            "The selected rented GPU is no longer active. Select another model with /model or start a new rental from /gpu."
+                .to_string(),
+        )),
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum GpuRuntimeProviderAvailability {
+    Ready,
+    Recovering,
+    Gone,
+}
+
+fn gpu_runtime_provider_availability(
+    provider_id: &str,
+    records: &[codex_state::GpuRuntimeProvider],
+) -> GpuRuntimeProviderAvailability {
+    match records
+        .iter()
+        .find(|record| record.provider_id == provider_id)
+    {
+        Some(record) if record.health == "ready" => GpuRuntimeProviderAvailability::Ready,
+        Some(_) => GpuRuntimeProviderAvailability::Recovering,
+        None => GpuRuntimeProviderAvailability::Gone,
+    }
 }
 
 fn effective_max_stream_retries(
@@ -266,6 +320,42 @@ mod tests {
                 /*long_failure_max_retries*/ 1,
             ),
             5
+        );
+    }
+
+    #[test]
+    fn gpu_retry_liveness_distinguishes_recovery_from_termination() {
+        let record = codex_state::GpuRuntimeProvider {
+            rental_id: "gpu-rental".to_string(),
+            infrastructure_provider: "vast".to_string(),
+            provider_id: "gpu-gpu-rental".to_string(),
+            base_url: "http://127.0.0.1:1234/v1".to_string(),
+            model_id: "test-model".to_string(),
+            wire_api: "chat".to_string(),
+            health: "ready".to_string(),
+            display_hourly_microusd: 1_000_000,
+            maximum_context_tokens: Some(32_768),
+            catalog_sequence: 1,
+            updated_at_ms: 1,
+        };
+
+        assert_eq!(
+            gpu_runtime_provider_availability("gpu-gpu-rental", std::slice::from_ref(&record)),
+            GpuRuntimeProviderAvailability::Ready
+        );
+        assert_eq!(
+            gpu_runtime_provider_availability("gpu-another-rental", std::slice::from_ref(&record)),
+            GpuRuntimeProviderAvailability::Gone
+        );
+        assert_eq!(
+            gpu_runtime_provider_availability(
+                "gpu-gpu-rental",
+                &[codex_state::GpuRuntimeProvider {
+                    health: "degraded".to_string(),
+                    ..record
+                }]
+            ),
+            GpuRuntimeProviderAvailability::Recovering
         );
     }
 }

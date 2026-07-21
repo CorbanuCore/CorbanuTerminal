@@ -4,8 +4,7 @@
   "description": "PFTerminal is a crypto-native AI services terminal based on the open-source Codex CLI.",
   "license": "Apache-2.0",
   "bin": {
-    "pfterminal": "bin/codex.js",
-    "codex": "bin/codex.js"
+    "pfterminal": "bin/codex.js"
   },
   "type": "module",
   "engines": {

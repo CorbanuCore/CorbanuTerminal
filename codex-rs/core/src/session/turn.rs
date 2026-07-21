@@ -40,10 +40,19 @@ use crate::plugins::build_plugin_injections;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::responses_metadata::CodexResponsesRequestKind;
 use crate::responses_retry::ResponsesStreamRequest;
+use crate::responses_retry::ensure_gpu_runtime_provider_active;
 use crate::responses_retry::guard_same_request_idle_retry;
 use crate::responses_retry::handle_retryable_response_stream_error;
 use crate::session::PreviousTurnSettings;
 use crate::session::TurnInput;
+use crate::session::completion_guard::CompletionAssessment;
+use crate::session::completion_guard::CompletionGuardAction;
+use crate::session::completion_guard::CompletionGuardState;
+use crate::session::completion_guard::MAX_COMPLETION_ASSESSMENT_ATTEMPTS;
+use crate::session::completion_guard::assessment_prompt;
+use crate::session::completion_guard::continuation_message;
+use crate::session::completion_guard::objective_from_turn_input;
+use crate::session::completion_guard::parse_assessment;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::stream_events_utils::HandleOutputCtx;
@@ -85,6 +94,7 @@ use codex_features::Feature;
 use codex_git_utils::get_git_repo_root_with_fs;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
 use codex_protocol::config_types::ModeKind;
+use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
 use codex_protocol::config_types::ServiceTier;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result as CodexResult;
@@ -96,6 +106,7 @@ use codex_protocol::models::ContentItem;
 use codex_protocol::models::MessagePhase;
 use codex_protocol::models::ResponseInputItem;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::AgentMessageContentDeltaEvent;
 use codex_protocol::protocol::AgentReasoningSectionBreakEvent;
 use codex_protocol::protocol::CodexErrorInfo;
@@ -109,6 +120,7 @@ use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TurnDiffEvent;
 use codex_protocol::protocol::WarningEvent;
 use codex_protocol::user_input::UserInput;
+use codex_rollout_trace::InferenceTraceContext;
 use codex_state::ProviderRequestBlock;
 use codex_state::ProviderRequestBlockReason;
 use codex_state::ProviderRequestKey;
@@ -131,6 +143,7 @@ use sha2::Digest;
 use sha2::Sha256;
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
+use tracing::debug;
 use tracing::error;
 use tracing::field;
 use tracing::info;
@@ -145,13 +158,95 @@ const THIRD_PARTY_PREFLIGHT_WARNING_REQUEST_BYTES: i64 = 128 * 1024;
 const THIRD_PARTY_CACHE_HEALTH_MIN_INPUT_TOKENS: i64 = 8_000;
 const THIRD_PARTY_CACHE_HEALTHY_HIT_RATE: f64 = 0.70;
 const MAX_SERVER_SIDE_MODEL_CONTINUATIONS: u64 = 5;
-
 fn trace_turn_timing(label: &str, start: Instant) {
     if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
-        eprintln!(
-            "[pfterminal-turn] {label} elapsed_ms={}",
-            start.elapsed().as_millis()
+        debug!(
+            target: "pfterminal_turn",
+            label,
+            elapsed_ms = start.elapsed().as_millis(),
+            "pfterminal turn timing"
         );
+    }
+}
+
+async fn assess_turn_completion(
+    sess: &Session,
+    turn_context: &TurnContext,
+    client_session: &mut ModelClientSession,
+    responses_metadata: &CodexResponsesMetadata,
+    objective: &str,
+    assistant_response: &str,
+    cancellation_token: &CancellationToken,
+) -> CodexResult<CompletionAssessment> {
+    let prompt = assessment_prompt(objective, assistant_response);
+    let stream_result = client_session
+        .stream(
+            &prompt,
+            &turn_context.model_info,
+            &turn_context.session_telemetry,
+            Some(ReasoningEffortConfig::Low),
+            ReasoningSummaryConfig::None,
+            turn_context.config.service_tier.clone(),
+            responses_metadata,
+            &InferenceTraceContext::disabled(),
+        )
+        .or_cancel(cancellation_token)
+        .await;
+    let mut stream = match stream_result {
+        Ok(result) => result?,
+        Err(_) => return Err(CodexErr::TurnAborted),
+    };
+    let mut output = None;
+    loop {
+        let event = match stream.next().or_cancel(cancellation_token).await {
+            Ok(Some(event)) => event?,
+            Ok(None) => {
+                return Err(CodexErr::Stream(
+                    "completion assessment stream closed before response.completed".into(),
+                    None,
+                ));
+            }
+            Err(_) => return Err(CodexErr::TurnAborted),
+        };
+        match event {
+            ResponseEvent::OutputItemDone(item) => {
+                if let Some(text) = raw_assistant_output_text_from_item(&item)
+                    && !text.trim().is_empty()
+                {
+                    output = Some(text);
+                }
+            }
+            ResponseEvent::Completed {
+                token_usage,
+                finish_reason,
+                ..
+            } => {
+                sess.update_token_usage_info(turn_context, token_usage.as_ref())
+                    .await?;
+                if !matches!(
+                    finish_reason,
+                    None | Some(codex_api::CompletionFinishReason::Stop)
+                ) {
+                    return Err(CodexErr::InvalidRequest(format!(
+                        "completion assessment ended with finish reason `{}`",
+                        finish_reason
+                            .as_ref()
+                            .map_or("missing", codex_api::CompletionFinishReason::as_str)
+                    )));
+                }
+                let output = output.ok_or_else(|| {
+                    CodexErr::InvalidRequest(
+                        "completion assessment returned no structured output".to_string(),
+                    )
+                })?;
+                return parse_assessment(&output).map_err(|err| {
+                    CodexErr::InvalidRequest(format!(
+                        "completion assessment returned invalid structured output: {err}"
+                    ))
+                });
+            }
+            _ => {}
+        }
     }
 }
 
@@ -238,6 +333,8 @@ pub(crate) async fn run_turn(
     let mut last_agent_message: Option<String> = None;
     let mut stop_hook_active = false;
     let mut consecutive_server_side_model_continuations = 0_u64;
+    let completion_objective = objective_from_turn_input(&input);
+    let mut completion_guard = CompletionGuardState::default();
     // Although from the perspective of codex.rs, TurnDiffTracker has the lifecycle of a Task which contains
     // many turns, from the perspective of the user, it is a single turn.
     let display_roots = turn_diff_display_roots(turn_context.as_ref()).await;
@@ -295,7 +392,7 @@ pub(crate) async fn run_turn(
 
             let responses_metadata = turn_context.turn_metadata_state.to_responses_metadata(
                 sess.installation_id.clone(),
-                window_id,
+                window_id.clone(),
                 CodexResponsesRequestKind::Turn,
             );
             let tokens_before_sampling = sess.get_total_token_usage().await;
@@ -415,6 +512,91 @@ pub(crate) async fn run_turn(
                     }
                     can_drain_pending_input = !model_needs_follow_up;
                     continue;
+                }
+
+                if completion_guard.should_assess(
+                    turn_context.provider.info().requires_completion_guard(),
+                    needs_follow_up,
+                    sampling_request_last_agent_message.as_deref(),
+                ) {
+                    let assessment_metadata =
+                        turn_context.turn_metadata_state.to_responses_metadata(
+                            sess.installation_id.clone(),
+                            window_id.clone(),
+                            CodexResponsesRequestKind::Turn,
+                        );
+                    let assistant_response = sampling_request_last_agent_message
+                        .as_deref()
+                        .filter(|response| !response.trim().is_empty());
+                    let assessment = if let Some(assistant_response) = assistant_response {
+                        match assess_turn_completion(
+                            sess.as_ref(),
+                            turn_context.as_ref(),
+                            &mut client_session,
+                            &assessment_metadata,
+                            &completion_objective,
+                            assistant_response,
+                            &cancellation_token,
+                        )
+                        .await
+                        {
+                            Ok(assessment) => assessment,
+                            Err(CodexErr::TurnAborted) => return Err(CodexErr::TurnAborted),
+                            Err(err) => {
+                                warn!(
+                                    turn_id = %turn_context.sub_id,
+                                    error = %err,
+                                    "completion assessment failed; requesting bounded automatic continuation"
+                                );
+                                CompletionAssessment::Uncertain
+                            }
+                        }
+                    } else {
+                        trace!(
+                            turn_id = %turn_context.sub_id,
+                            "provider stopped without a final assistant response; requesting bounded automatic continuation"
+                        );
+                        CompletionAssessment::Incomplete
+                    };
+                    match completion_guard.record_assessment(assessment) {
+                        CompletionGuardAction::Accept => {
+                            trace!(
+                                turn_id = %turn_context.sub_id,
+                                "completion assessment accepted the final response"
+                            );
+                        }
+                        CompletionGuardAction::Continue => {
+                            trace!(
+                                turn_id = %turn_context.sub_id,
+                                assessment = ?assessment,
+                                attempts = completion_guard.unsuccessful_assessments(),
+                                "completion assessment requested continuation"
+                            );
+                            let message = continuation_message();
+                            sess.record_conversation_items(
+                                &turn_context,
+                                std::slice::from_ref(&message),
+                            )
+                            .await;
+                            continue;
+                        }
+                        CompletionGuardAction::AcceptAfterLimit => {
+                            warn!(
+                                turn_id = %turn_context.sub_id,
+                                attempts = MAX_COMPLETION_ASSESSMENT_ATTEMPTS,
+                                "completion assessment limit reached; accepting the latest response"
+                            );
+                            sess.send_event(
+                                &turn_context,
+                                EventMsg::Warning(WarningEvent {
+                                    message: format!(
+                                        "The completion check could not verify this response after {MAX_COMPLETION_ASSESSMENT_ATTEMPTS} attempts. PfTerminal stopped the automatic continuation loop; review the result before relying on it."
+                                    ),
+                                }),
+                            )
+                            .await;
+                        }
+                    }
                 }
 
                 if !needs_follow_up {
@@ -1250,6 +1432,7 @@ async fn run_sampling_request(
         );
         trace_turn_timing("after_build_prompt", sampling_started_at);
         let same_turn_attempt_index = retries + 1;
+        ensure_gpu_runtime_provider_active(&sess, &turn_context).await?;
         let attempt_started_at = Instant::now();
         let attempt_result = try_run_sampling_request(
             tool_runtime.clone(),
@@ -2187,7 +2370,10 @@ async fn maybe_emit_provider_request_pressure_warning(
     preflight: &ProviderRequestPreflight,
     last_token_usage: Option<&TokenUsage>,
 ) {
-    if turn_context.provider.info().is_openai() {
+    if !provider_uses_request_lease(
+        turn_context.config.model_provider_id.as_str(),
+        turn_context.provider.info().is_openai(),
+    ) {
         return;
     }
     if preflight.input_tokens < THIRD_PARTY_PREFLIGHT_WARNING_INPUT_TOKENS
@@ -2218,14 +2404,25 @@ async fn maybe_emit_provider_request_pressure_warning(
         );
         return;
     }
-    let message = format!(
-        "Provider cache miss: {}/{} is about to send input={} request_bytes={} after the previous large request had cached_input={}. This may hit third-party provider limits; compact or start a fresh thread if this was a tiny follow-up.",
-        key.provider_id,
-        key.model,
-        preflight.input_tokens,
-        preflight.request_bytes,
-        preflight.cached_input_tokens
-    );
+    if turn_context
+        .provider_cache_pressure_warning_emitted
+        .swap(true, Ordering::Relaxed)
+    {
+        info!(
+            turn_id = %turn_context.sub_id,
+            provider = %key.provider_id,
+            model = %key.model,
+            input_tokens = preflight.input_tokens,
+            cached_input_tokens = preflight.cached_input_tokens,
+            request_bytes = preflight.request_bytes,
+            "suppressing duplicate third-party provider cache pressure warning for turn"
+        );
+        return;
+    }
+    let Some(cache_details) = cache_hit_details(last_token_usage) else {
+        return;
+    };
+    let message = provider_cache_pressure_warning_message(key, preflight, cache_details);
     sess.send_event(turn_context, EventMsg::Warning(WarningEvent { message }))
         .await;
 }
@@ -2238,12 +2435,50 @@ fn third_party_cache_miss_is_known(last_token_usage: Option<&TokenUsage>) -> boo
     cache_hit_rate(last_token_usage).is_some_and(|rate| rate < THIRD_PARTY_CACHE_HEALTHY_HIT_RATE)
 }
 
+#[derive(Debug, Clone, Copy)]
+struct CacheHitDetails {
+    input_tokens: i64,
+    cached_input_tokens: i64,
+    hit_rate: f64,
+}
+
+fn provider_cache_pressure_warning_message(
+    key: &ProviderRequestKey,
+    preflight: &ProviderRequestPreflight,
+    cache_details: CacheHitDetails,
+) -> String {
+    if cache_details.cached_input_tokens <= 0 {
+        return format!(
+            "Provider cache miss: {}/{} is about to send input={} request_bytes={} after the previous large request had cached_input=0/{} (0.0%). This may hit third-party provider limits; compact or start a fresh thread if this was a tiny follow-up.",
+            key.provider_id,
+            key.model,
+            preflight.input_tokens,
+            preflight.request_bytes,
+            cache_details.input_tokens,
+        );
+    }
+
+    format!(
+        "Provider cache low hit rate: {}/{} is about to send input={} request_bytes={} after the previous large request reused cached_input={}/{} ({:.1}%). This may hit third-party provider limits; compact or start a fresh thread if this was a tiny follow-up.",
+        key.provider_id,
+        key.model,
+        preflight.input_tokens,
+        preflight.request_bytes,
+        cache_details.cached_input_tokens,
+        cache_details.input_tokens,
+        cache_details.hit_rate * 100.0,
+    )
+}
+
 fn provider_request_active_lease_needed(
     turn_context: &TurnContext,
     preflight: &ProviderRequestPreflight,
     last_token_usage: Option<&TokenUsage>,
 ) -> bool {
-    if turn_context.provider.info().is_openai() {
+    if !provider_uses_request_lease(
+        turn_context.config.model_provider_id.as_str(),
+        turn_context.provider.info().is_openai(),
+    ) {
         return false;
     }
     let large_request = preflight.input_tokens >= THIRD_PARTY_PREFLIGHT_WARNING_INPUT_TOKENS
@@ -2251,13 +2486,29 @@ fn provider_request_active_lease_needed(
     large_request && !third_party_cache_looks_healthy(last_token_usage)
 }
 
+fn provider_uses_request_lease(provider_id: &str, is_openai: bool) -> bool {
+    // Runtime GPU providers represent user-owned, explicitly capacity-bounded inference.
+    // The cross-process hammer-reduction lease is for metered third-party APIs and would
+    // otherwise serialize GPU tool turns for ten minutes after a process interruption.
+    !is_openai && !provider_id.starts_with("gpu-")
+}
+
 fn cache_hit_rate(last_token_usage: Option<&TokenUsage>) -> Option<f64> {
+    cache_hit_details(last_token_usage).map(|details| details.hit_rate)
+}
+
+fn cache_hit_details(last_token_usage: Option<&TokenUsage>) -> Option<CacheHitDetails> {
     let usage = last_token_usage?;
     let input = usage.input_tokens.max(0);
     if input < THIRD_PARTY_CACHE_HEALTH_MIN_INPUT_TOKENS {
         return None;
     }
-    Some(usage.cached_input() as f64 / input as f64)
+    let cached = usage.cached_input().max(0);
+    Some(CacheHitDetails {
+        input_tokens: input,
+        cached_input_tokens: cached,
+        hit_rate: cached as f64 / input as f64,
+    })
 }
 
 async fn record_provider_request_result_for_lease(
@@ -2694,27 +2945,6 @@ async fn try_run_sampling_request(
                     cancellation_token: cancellation_token.child_token(),
                 };
 
-                let preempt_for_mailbox_mail = match &item {
-                    ResponseItem::Message { role, phase, .. } => {
-                        role == "assistant" && matches!(phase, Some(MessagePhase::Commentary))
-                    }
-                    ResponseItem::Reasoning { .. } => true,
-                    ResponseItem::AgentMessage { .. } => false,
-                    ResponseItem::LocalShellCall { .. }
-                    | ResponseItem::FunctionCall { .. }
-                    | ResponseItem::ToolSearchCall { .. }
-                    | ResponseItem::FunctionCallOutput { .. }
-                    | ResponseItem::CustomToolCall { .. }
-                    | ResponseItem::CustomToolCallOutput { .. }
-                    | ResponseItem::ToolSearchOutput { .. }
-                    | ResponseItem::WebSearchCall { .. }
-                    | ResponseItem::ImageGenerationCall { .. }
-                    | ResponseItem::Compaction { .. }
-                    | ResponseItem::CompactionTrigger { .. }
-                    | ResponseItem::ContextCompaction { .. }
-                    | ResponseItem::Other => false,
-                };
-
                 let output_result =
                     match handle_output_item_done(&mut ctx, item, previously_streamed_item)
                         .instrument(handle_responses)
@@ -2731,15 +2961,6 @@ async fn try_run_sampling_request(
                     last_agent_message = Some(agent_message);
                 }
                 needs_follow_up |= output_result.needs_follow_up;
-                // todo: remove before stabilizing multi-agent v2
-                if preempt_for_mailbox_mail && sess.input_queue.has_pending_mailbox_items().await {
-                    break Ok(SamplingRequestResult {
-                        needs_follow_up: true,
-                        last_agent_message,
-                        token_usage: None,
-                        server_side_model_continuation: false,
-                    });
-                }
             }
             ResponseEvent::OutputItemAdded(item) => {
                 if let ResponseItem::CustomToolCall { call_id, name, .. } = &item {
@@ -2856,6 +3077,7 @@ async fn try_run_sampling_request(
                 response_id,
                 token_usage,
                 end_turn,
+                finish_reason,
             } => {
                 flush_assistant_text_segments_all(
                     &sess,
@@ -2872,6 +3094,9 @@ async fn try_run_sampling_request(
                             response_id: response_id.clone(),
                             model: turn_context.model_info.slug.clone(),
                             model_provider_id: turn_context.config.model_provider_id.clone(),
+                            finish_reason: finish_reason
+                                .as_ref()
+                                .map(|reason| reason.as_str().to_string()),
                         }),
                     )
                     .await;
@@ -2883,6 +3108,22 @@ async fn try_run_sampling_request(
                 should_emit_turn_diff = true;
                 if let Err(err) = budget_result {
                     break Err(err);
+                }
+                match finish_reason.as_ref() {
+                    Some(codex_api::CompletionFinishReason::ContentFilter) => {
+                        break Err(CodexErr::InvalidRequest(
+                            "the model provider stopped generation because content was filtered; \
+                             the turn was not completed"
+                                .to_string(),
+                        ));
+                    }
+                    Some(codex_api::CompletionFinishReason::Unknown(reason)) => {
+                        break Err(CodexErr::InvalidRequest(format!(
+                            "the model provider returned an unknown completion finish reason \
+                             `{reason}`; the turn was not marked complete"
+                        )));
+                    }
+                    _ => {}
                 }
                 if let Some(false) = end_turn {
                     needs_follow_up = true;
@@ -3029,9 +3270,7 @@ async fn try_run_sampling_request(
     } else {
         Some(turn_context.turn_timing_state.begin_tool_blocking())
     };
-    if let Err(err) = drain_in_flight(&mut in_flight, sess.clone(), turn_context.clone()).await {
-        return Err(err);
-    }
+    drain_in_flight(&mut in_flight, sess.clone(), turn_context.clone()).await?;
     drop(tool_blocking_timing_guard);
 
     if should_emit_token_count {

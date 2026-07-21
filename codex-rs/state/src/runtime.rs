@@ -62,6 +62,8 @@ mod agent_jobs;
 mod backfill;
 mod external_agent_config_imports;
 mod goals;
+mod gpu_rentals;
+mod gpu_runtime_providers;
 mod logs;
 mod memories;
 mod provider_requests;
@@ -109,6 +111,7 @@ const LOG_PARTITION_ROW_LIMIT: i64 = 1_000;
 struct RuntimeDbSpec {
     label: &'static str,
     filename: &'static str,
+    legacy_filename: &'static str,
     kind: DbKind,
     open_phase: &'static str,
     migrate_phase: &'static str,
@@ -123,6 +126,7 @@ impl RuntimeDbSpec {
 const STATE_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "state DB",
     filename: STATE_DB_FILENAME,
+    legacy_filename: "state_5.sqlite",
     kind: DbKind::State,
     open_phase: "open_state",
     migrate_phase: "migrate_state",
@@ -131,6 +135,7 @@ const STATE_DB: RuntimeDbSpec = RuntimeDbSpec {
 const LOGS_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "log DB",
     filename: LOGS_DB_FILENAME,
+    legacy_filename: "logs_2.sqlite",
     kind: DbKind::Logs,
     open_phase: "open_logs",
     migrate_phase: "migrate_logs",
@@ -139,6 +144,7 @@ const LOGS_DB: RuntimeDbSpec = RuntimeDbSpec {
 const GOALS_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "goals DB",
     filename: GOALS_DB_FILENAME,
+    legacy_filename: "goals_1.sqlite",
     kind: DbKind::Goals,
     open_phase: "open_goals",
     migrate_phase: "migrate_goals",
@@ -147,6 +153,7 @@ const GOALS_DB: RuntimeDbSpec = RuntimeDbSpec {
 const MEMORIES_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "memories DB",
     filename: MEMORIES_DB_FILENAME,
+    legacy_filename: "memories_1.sqlite",
     kind: DbKind::Memories,
     open_phase: "open_memories",
     migrate_phase: "migrate_memories",
@@ -202,6 +209,7 @@ impl StateRuntime {
         telemetry_override: Option<&dyn DbTelemetry>,
     ) -> anyhow::Result<Arc<Self>> {
         tokio::fs::create_dir_all(&codex_home).await?;
+        migrate_legacy_runtime_db_names(codex_home.as_path()).await?;
         let state_migrator = runtime_state_migrator();
         let logs_migrator = runtime_logs_migrator();
         let goals_migrator = runtime_goals_migrator();
@@ -367,6 +375,47 @@ async fn close_sqlite_pools(pools: &[&SqlitePool]) {
     }
 }
 
+async fn migrate_legacy_runtime_db_names(codex_home: &Path) -> anyhow::Result<()> {
+    let has_legacy_db = RUNTIME_DBS
+        .iter()
+        .any(|spec| std::fs::exists(codex_home.join(spec.legacy_filename)).unwrap_or(false));
+    if !has_legacy_db {
+        return Ok(());
+    }
+    if codex_home.file_name().and_then(|name| name.to_str()) == Some(".codex") {
+        anyhow::bail!(
+            "refusing to rename upstream-named databases in {}: this database appears to belong to a different Codex/PFTerminal distribution; follow the repair recipe in pfterminal_codex_home_collision_incident_20260710.md",
+            codex_home.display()
+        );
+    }
+
+    for spec in RUNTIME_DBS {
+        let legacy_path = codex_home.join(spec.legacy_filename);
+        let namespaced_path = spec.path(codex_home);
+        if tokio::fs::try_exists(&legacy_path).await?
+            && !tokio::fs::try_exists(&namespaced_path).await?
+        {
+            let migrator = match spec.kind {
+                DbKind::State => runtime_state_migrator(),
+                DbKind::Logs => runtime_logs_migrator(),
+                DbKind::Goals => runtime_goals_migrator(),
+                DbKind::Memories => runtime_memories_migrator(),
+            };
+            validate_applied_migrations(&legacy_path, &migrator).await?;
+            tokio::fs::rename(&legacy_path, &namespaced_path).await?;
+            for suffix in ["-wal", "-shm"] {
+                let legacy_sidecar = PathBuf::from(format!("{}{suffix}", legacy_path.display()));
+                if tokio::fs::try_exists(&legacy_sidecar).await? {
+                    let namespaced_sidecar =
+                        PathBuf::from(format!("{}{suffix}", namespaced_path.display()));
+                    tokio::fs::rename(legacy_sidecar, namespaced_sidecar).await?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn base_sqlite_options(path: &Path) -> SqliteConnectOptions {
     SqliteConnectOptions::new()
         .filename(path)
@@ -418,6 +467,15 @@ async fn open_sqlite(
     spec: RuntimeDbSpec,
     telemetry_override: Option<&dyn DbTelemetry>,
 ) -> anyhow::Result<SqlitePool> {
+    if let Err(source) = validate_applied_migrations(path, migrator).await {
+        return Err(recovery::RuntimeDbInitError::new(
+            spec.label,
+            "validate migrations for",
+            path,
+            source,
+        )
+        .into());
+    }
     let options = base_sqlite_options(path).auto_vacuum(SqliteAutoVacuum::Incremental);
     let started = Instant::now();
     let pool_result = SqlitePoolOptions::new()
@@ -454,6 +512,63 @@ async fn open_sqlite(
         return Err(recovery::RuntimeDbInitError::new(spec.label, "migrate", path, source).into());
     }
     Ok(pool)
+}
+
+async fn validate_applied_migrations(path: &Path, migrator: &Migrator) -> anyhow::Result<()> {
+    if !tokio::fs::try_exists(path).await? {
+        return Ok(());
+    }
+    let options = SqliteConnectOptions::new()
+        .filename(path)
+        .create_if_missing(false)
+        .read_only(true)
+        .log_statements(LevelFilter::Off);
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await?;
+    let table_exists = sqlx::query_scalar::<_, i64>(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'",
+    )
+    .fetch_optional(&pool)
+    .await?
+    .is_some();
+    if !table_exists {
+        pool.close().await;
+        return Ok(());
+    }
+    let applied = sqlx::query("SELECT version, checksum FROM _sqlx_migrations ORDER BY version")
+        .fetch_all(&pool)
+        .await?;
+    pool.close().await;
+    let foreign = applied
+        .into_iter()
+        .filter_map(|row| {
+            let version = row.get::<i64, _>("version");
+            let checksum = row.get::<Vec<u8>, _>("checksum");
+            let known = migrator.migrations.iter().any(|migration| {
+                migration.version == version && migration.checksum.as_ref() == checksum
+            }) || (version == 38
+                && migrator.migrations.iter().any(|migration| {
+                    migration.version == 39 && migration.checksum.as_ref() == checksum
+                }));
+            (!known).then(|| {
+                let checksum = checksum
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>();
+                format!("version {version} (checksum {checksum})")
+            })
+        })
+        .collect::<Vec<_>>();
+    if !foreign.is_empty() {
+        anyhow::bail!(
+            "refusing to migrate {}: this database appears to belong to a different Codex/PFTerminal distribution; foreign migrations: {}; follow the repair recipe in pfterminal_codex_home_collision_incident_20260710.md",
+            path.display(),
+            foreign.join(", ")
+        );
+    }
+    Ok(())
 }
 
 pub(super) async fn ensure_backfill_state_row_in_pool(
@@ -557,11 +672,9 @@ mod tests {
     use crate::migrations::STATE_MIGRATOR;
     use pretty_assertions::assert_eq;
     use sqlx::SqlitePool;
-    use sqlx::migrate::MigrateError;
     use sqlx::sqlite::SqliteConnectOptions;
     use std::collections::BTreeMap;
     use std::collections::BTreeSet;
-    use std::path::Path;
     use std::sync::Mutex;
 
     #[derive(Default)]
@@ -615,16 +728,6 @@ mod tests {
             .collect()
     }
 
-    async fn open_db_pool(path: &Path) -> SqlitePool {
-        SqlitePool::connect_with(
-            SqliteConnectOptions::new()
-                .filename(path)
-                .create_if_missing(false),
-        )
-        .await
-        .expect("open sqlite pool")
-    }
-
     #[tokio::test]
     async fn sqlite_integrity_check_reports_ok_for_valid_db() {
         let codex_home = unique_temp_dir();
@@ -654,7 +757,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn open_state_sqlite_tolerates_newer_applied_migrations() {
+    async fn open_state_sqlite_rejects_foreign_migrations_without_writing() {
         let codex_home = unique_temp_dir();
         tokio::fs::create_dir_all(&codex_home)
             .await
@@ -683,26 +786,119 @@ mod tests {
         .await
         .expect("insert future migration record");
         pool.close().await;
-
-        let strict_pool = open_db_pool(state_path.as_path()).await;
-        let strict_err = STATE_MIGRATOR
-            .run(&strict_pool)
-            .await
-            .expect_err("strict migrator should reject newer applied migrations");
-        assert!(matches!(strict_err, MigrateError::VersionMissing(9_999)));
-        strict_pool.close().await;
+        let before = tokio::fs::read(&state_path).await.expect("read state db");
 
         let tolerant_migrator = runtime_state_migrator();
-        let tolerant_pool = open_state_sqlite(
+        let err = open_state_sqlite(
             state_path.as_path(),
             &tolerant_migrator,
             /*telemetry_override*/ None,
         )
         .await
-        .expect("runtime migrator should tolerate newer applied migrations");
-        tolerant_pool.close().await;
+        .expect_err("runtime migrator should reject foreign migrations");
+        let after = tokio::fs::read(&state_path).await.expect("reread state db");
+
+        assert!(
+            err.to_string()
+                .contains("different Codex/PFTerminal distribution")
+        );
+        assert!(err.to_string().contains("version 9999"));
+        assert_eq!(after, before);
 
         let _ = tokio::fs::remove_dir_all(codex_home).await;
+    }
+
+    #[tokio::test]
+    async fn init_creates_namespaced_runtime_databases() {
+        let codex_home = unique_temp_dir();
+        let runtime = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
+            .await
+            .expect("state runtime should initialize");
+        runtime.close().await;
+
+        let filenames = std::fs::read_dir(&codex_home)
+            .expect("read runtime home")
+            .map(|entry| entry.expect("directory entry").file_name())
+            .collect::<BTreeSet<_>>();
+        for expected in [
+            "pfterminal_state_5.sqlite",
+            "pfterminal_logs_2.sqlite",
+            "pfterminal_goals_1.sqlite",
+            "pfterminal_memories_1.sqlite",
+        ] {
+            assert!(filenames.contains(std::ffi::OsStr::new(expected)));
+        }
+        assert!(!filenames.contains(std::ffi::OsStr::new("state_5.sqlite")));
+
+        let _ = tokio::fs::remove_dir_all(codex_home).await;
+    }
+
+    #[tokio::test]
+    async fn init_renames_legacy_pfterminal_database_once() {
+        let codex_home = unique_temp_dir();
+        tokio::fs::create_dir_all(&codex_home)
+            .await
+            .expect("create runtime home");
+        let legacy_path = codex_home.join("state_5.sqlite");
+        let pool = SqlitePool::connect_with(
+            SqliteConnectOptions::new()
+                .filename(&legacy_path)
+                .create_if_missing(true),
+        )
+        .await
+        .expect("create legacy state db");
+        STATE_MIGRATOR
+            .run(&pool)
+            .await
+            .expect("apply legacy state schema");
+        pool.close().await;
+
+        let runtime = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
+            .await
+            .expect("legacy runtime should initialize");
+        runtime.close().await;
+
+        assert!(
+            !tokio::fs::try_exists(legacy_path)
+                .await
+                .expect("check legacy path")
+        );
+        assert!(
+            tokio::fs::try_exists(state_db_path(&codex_home))
+                .await
+                .expect("check namespaced path")
+        );
+        let _ = tokio::fs::remove_dir_all(codex_home).await;
+    }
+
+    #[tokio::test]
+    async fn init_does_not_touch_upstream_named_database_in_codex_home() {
+        let parent = unique_temp_dir();
+        let codex_home = parent.join(".codex");
+        tokio::fs::create_dir_all(&codex_home)
+            .await
+            .expect("create upstream home");
+        let legacy_path = codex_home.join("state_5.sqlite");
+        tokio::fs::write(&legacy_path, b"upstream bytes")
+            .await
+            .expect("write upstream database");
+
+        let err = match StateRuntime::init(codex_home, "test-provider".to_string()).await {
+            Ok(_) => panic!("upstream home should be rejected"),
+            Err(err) => err,
+        };
+
+        assert!(
+            err.to_string()
+                .contains("different Codex/PFTerminal distribution")
+        );
+        assert_eq!(
+            tokio::fs::read(legacy_path)
+                .await
+                .expect("read upstream database"),
+            b"upstream bytes"
+        );
+        let _ = tokio::fs::remove_dir_all(parent).await;
     }
 
     #[tokio::test]

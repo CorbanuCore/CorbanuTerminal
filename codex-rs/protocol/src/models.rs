@@ -1197,6 +1197,29 @@ impl ResponseItem {
         }
     }
 
+    /// Assigns a Responses API-compatible item ID when this item supports IDs and has none.
+    pub fn assign_id_if_missing(&mut self) {
+        if self.id().is_some() {
+            return;
+        }
+        let prefix = match self {
+            Self::Message { .. } => "msg",
+            Self::Reasoning { .. } => "rs",
+            Self::LocalShellCall { .. } => "lsh",
+            Self::FunctionCall { .. } => "fc",
+            Self::ToolSearchCall { .. } => "tsc",
+            Self::FunctionCallOutput { .. } => "fco",
+            Self::CustomToolCall { .. } => "ctc",
+            Self::CustomToolCallOutput { .. } => "ctco",
+            Self::ToolSearchOutput { .. } => "tso",
+            Self::WebSearchCall { .. } => "ws",
+            Self::ImageGenerationCall { .. } => "ig",
+            Self::Compaction { .. } | Self::ContextCompaction { .. } => "cmp",
+            Self::AgentMessage { .. } | Self::CompactionTrigger { .. } | Self::Other => return,
+        };
+        self.set_id(Some(format!("{prefix}_{}", uuid::Uuid::now_v7())));
+    }
+
     /// Returns the non-empty turn ID stamped onto this item, if present.
     pub fn turn_id(&self) -> Option<&str> {
         self.metadata()
@@ -2147,6 +2170,21 @@ mod tests {
         item.set_id(/*new_id*/ None);
 
         assert_eq!(item.id(), None);
+    }
+
+    #[test]
+    fn response_item_assigns_missing_id_without_replacing_existing_id() {
+        let mut item = response_item_with_metadata(/*metadata*/ None);
+        item.assign_id_if_missing();
+        let assigned = item.id().expect("message should receive an ID").to_string();
+        assert!(assigned.starts_with("msg_"));
+
+        item.assign_id_if_missing();
+        assert_eq!(item.id(), Some(assigned.as_str()));
+
+        let mut other = ResponseItem::Other;
+        other.assign_id_if_missing();
+        assert_eq!(other.id(), None);
     }
 
     fn response_item_with_metadata(metadata: Option<ResponseItemMetadata>) -> ResponseItem {

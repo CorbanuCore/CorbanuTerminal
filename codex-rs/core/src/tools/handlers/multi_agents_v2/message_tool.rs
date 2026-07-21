@@ -6,6 +6,7 @@
 use super::*;
 use crate::tools::context::FunctionToolOutput;
 use crate::turn_timing::now_unix_timestamp_ms;
+use codex_protocol::error::CodexErr;
 use codex_protocol::models::ResponseItemMetadata;
 use codex_protocol::protocol::InterAgentCommunication;
 
@@ -74,13 +75,15 @@ pub(crate) async fn handle_message_string_tool(
     message: String,
 ) -> Result<FunctionToolOutput, FunctionCallError> {
     let message = message_content(message)?;
-    let task_preview = message.clone();
     let ToolInvocation {
         session,
         turn,
         call_id,
         ..
     } = invocation;
+    if mode == MessageDeliveryMode::TriggerTurn {
+        ensure_manager_tool_allowed(&turn, "followup_task")?;
+    }
     let receiver_thread_id = resolve_agent_target(&session, &turn, &target).await?;
     let receiver_agent = session
         .services
@@ -111,8 +114,12 @@ pub(crate) async fn handle_message_string_tool(
         .session_source
         .get_agent_path()
         .unwrap_or_else(AgentPath::root);
-    let mut communication =
-        communication_from_tool_message(author, receiver_agent_path.clone(), message);
+    let mut communication = communication_from_model_tool_message(
+        author,
+        receiver_agent_path.clone(),
+        message,
+        &turn.config.model_provider_id,
+    );
     communication
         .metadata
         .get_or_insert_with(ResponseItemMetadata::default)
@@ -121,13 +128,23 @@ pub(crate) async fn handle_message_string_tool(
         .services
         .agent_control
         .send_inter_agent_communication(receiver_thread_id, mode.apply(communication))
-        .await
-        .map_err(|err| collab_agent_error(receiver_thread_id, err));
-    result?;
-    let task_preview = session
-        .services
-        .agent_control
-        .record_agent_task_message(receiver_thread_id, task_preview);
+        .await;
+    match result {
+        Err(CodexErr::AgentLimitReached { max_threads }) => {
+            return Ok(FunctionToolOutput::from_text(
+                format!(
+                    "capacity unavailable: maximum {max_threads} agent turns are active; task was not accepted; wait for capacity before retrying"
+                ),
+                Some(false),
+            ));
+        }
+        Err(err) => return Err(collab_agent_error(receiver_thread_id, err)),
+        Ok(_) => {}
+    }
+    // V2 messages are opaque encrypted Responses payloads. Recording that wire value as a
+    // human-readable task preview leaks ciphertext into list_agents and /spawn status, and can
+    // overwrite the plaintext preview already owned by the TUI dispatch path.
+    let task_preview = None;
     session
         .send_event(
             &turn,
@@ -136,6 +153,8 @@ pub(crate) async fn handle_message_string_tool(
                 occurred_at_ms: now_unix_timestamp_ms(),
                 agent_thread_id: receiver_thread_id,
                 agent_path: receiver_agent_path.clone(),
+                agent_nickname: receiver_agent.agent_nickname.clone(),
+                agent_role: receiver_agent.agent_role.clone(),
                 task_preview,
                 kind: SubAgentActivityKind::Interacted,
             }

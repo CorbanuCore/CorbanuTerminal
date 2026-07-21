@@ -23,6 +23,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
+use std::num::NonZeroU64;
 use std::time::Duration;
 
 const DEFAULT_STREAM_IDLE_TIMEOUT_MS: u64 = 600_000;
@@ -37,6 +38,23 @@ const MAX_STREAM_MAX_RETRIES: u64 = 100;
 /// Hard cap for user-configured `request_max_retries`.
 const MAX_REQUEST_MAX_RETRIES: u64 = 100;
 
+fn provider_auth_timeout_ms() -> NonZeroU64 {
+    match NonZeroU64::new(5_000) {
+        Some(timeout_ms) => timeout_ms,
+        None => panic!("provider auth timeout must be non-zero"),
+    }
+}
+
+fn root_absolute_path() -> AbsolutePathBuf {
+    let current_dir = AbsolutePathBuf::current_dir().unwrap_or_else(|err| {
+        panic!("current directory must resolve to determine provider auth cwd: {err}")
+    });
+    current_dir
+        .ancestors()
+        .last()
+        .unwrap_or_else(|| panic!("current directory must have a filesystem root"))
+}
+
 const OPENAI_PROVIDER_NAME: &str = "OpenAI";
 pub const OPENAI_PROVIDER_ID: &str = "openai";
 /// OpenAI backend compatibility version for protocol-gated model access.
@@ -44,7 +62,7 @@ pub const OPENAI_PROVIDER_ID: &str = "openai";
 /// This is intentionally separate from PFTerminal's product version. The OpenAI
 /// provider sends this value to first-party endpoints so fork-specific release
 /// numbering does not make the backend treat a compatible client as obsolete.
-pub const OPENAI_CODEX_COMPAT_VERSION: &str = "0.124.0";
+pub const OPENAI_CODEX_COMPAT_VERSION: &str = "0.144.1";
 pub const CHATGPT_CODEX_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
 const ANTHROPIC_PROVIDER_NAME: &str = "Anthropic";
 pub const ANTHROPIC_PROVIDER_ID: &str = "anthropic";
@@ -62,9 +80,25 @@ const AMBIENT_PROVIDER_NAME: &str = "Ambient";
 pub const AMBIENT_PROVIDER_ID: &str = "ambient";
 pub const AMBIENT_BASE_URL: &str = "https://api.ambient.xyz/v1";
 pub const AMBIENT_DEFAULT_MODEL: &str = "z-ai/glm-5.2";
+/// Input context accepted by Ambient's GLM 5.2 chat route.
+///
+/// The model can have a larger native context on other providers, so this
+/// limit belongs to the provider/model route rather than the shared model
+/// catalog.
+pub const AMBIENT_GLM_5_2_CONTEXT_WINDOW: i64 = 101_376;
 pub const AMBIENT_LEGACY_GLM_5_2_FP8_MODEL: &str = "zai-org/GLM-5.2-FP8";
 pub const AMBIENT_KIMI_K2_7_CODE_MODEL: &str = "moonshotai/kimi-k2.7-code";
 pub const AMBIENT_API_KEY_ENV_VAR: &str = "AMBIENT_API_KEY";
+const PFTERMINAL_PLAN_PROVIDER_NAME: &str = "PfTerminal Plan";
+pub const PFTERMINAL_PLAN_PROVIDER_ID: &str = "pfterminal-plan";
+pub const PFTERMINAL_PLAN_GATEWAY_ORIGIN: &str = "https://pfterminal-plan-gateway.fly.dev";
+pub const PFTERMINAL_PLAN_DEFAULT_BASE_URL: &str = "https://pfterminal-plan-gateway.fly.dev/v1";
+pub const PFTERMINAL_PLAN_API_KEY_ENV_VAR: &str = "PFTERMINAL_PLAN_API_KEY";
+const KIMI_CODE_PROVIDER_NAME: &str = "Kimi Code";
+pub const KIMI_CODE_PROVIDER_ID: &str = "kimi-code";
+pub const KIMI_CODE_BASE_URL: &str = "https://api.kimi.com/coding/v1";
+pub const KIMI_CODE_K3_MODEL: &str = "k3";
+pub const KIMI_CODE_API_KEY_ENV_VAR: &str = "KIMI_API_KEY";
 const ZAI_PROVIDER_NAME: &str = "Z.AI";
 pub const ZAI_PROVIDER_ID: &str = "zai";
 pub const ZAI_BASE_URL: &str = "https://api.z.ai/api/coding/paas/v4";
@@ -80,6 +114,11 @@ const OPENROUTER_ANTHROPIC_PROVIDER_NAME: &str = "OpenRouter Anthropic";
 pub const OPENROUTER_ANTHROPIC_PROVIDER_ID: &str = "openrouter-anthropic";
 pub const OPENROUTER_DEFAULT_MODEL: &str = "z-ai/glm-5.2";
 pub const OPENROUTER_API_KEY_ENV_VAR: &str = "OPENROUTER_API_KEY";
+const META_PROVIDER_NAME: &str = "Meta";
+pub const META_PROVIDER_ID: &str = "meta";
+pub const META_BASE_URL: &str = "https://api.meta.ai/v1";
+pub const META_DEFAULT_MODEL: &str = "muse-spark-1.1";
+pub const META_API_KEY_ENV_VAR: &str = "MODEL_API_KEY";
 const BASETEN_PROVIDER_NAME: &str = "Baseten";
 pub const BASETEN_PROVIDER_ID: &str = "baseten";
 pub const BASETEN_BASE_URL: &str = "https://inference.baseten.co/v1";
@@ -100,15 +139,18 @@ pub const VERCEL_API_KEY_ENV_VAR: &str = "AI_GATEWAY_API_KEY";
 
 /// Built-in catalog providers eligible for impossible-pair correction. User-defined providers
 /// (e.g. a private Azure deployment) are never second-guessed.
-const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 14] = [
+const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 17] = [
     OPENAI_PROVIDER_ID,
     ANTHROPIC_PROVIDER_ID,
     CLAUDE_PLAN_PROVIDER_ID,
     AMBIENT_PROVIDER_ID,
+    PFTERMINAL_PLAN_PROVIDER_ID,
+    KIMI_CODE_PROVIDER_ID,
     ZAI_PROVIDER_ID,
     ZAI_ANTHROPIC_PROVIDER_ID,
     OPENROUTER_PROVIDER_ID,
     OPENROUTER_ANTHROPIC_PROVIDER_ID,
+    META_PROVIDER_ID,
     BASETEN_PROVIDER_ID,
     BASETEN_ANTHROPIC_PROVIDER_ID,
     VERCEL_PROVIDER_ID,
@@ -133,6 +175,7 @@ const VERCEL_FAMILY_PROVIDERS: [&str; 3] = [
 /// - `zai/…` slugs (Vercel gateway GLM ids) off the Vercel provider family;
 /// - the Claude plan models off `claude-plan`;
 /// - bare `glm-…` slugs (Z.AI-direct ids) off either Z.AI dialect;
+/// - the bare `k3` subscription model off Kimi Code;
 /// - bare `gpt-…` slugs off OpenAI (Bedrock uses `openai.gpt-…` ids).
 ///
 /// Servable-but-unusual pairs (e.g. ambient serving `z-ai/glm-5.2`), unknown models, and
@@ -160,6 +203,9 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     {
         return Some(ZAI_PROVIDER_ID);
     }
+    if model == KIMI_CODE_K3_MODEL && provider != KIMI_CODE_PROVIDER_ID {
+        return Some(KIMI_CODE_PROVIDER_ID);
+    }
     if model.starts_with("gpt-") && provider != OPENAI_PROVIDER_ID {
         return Some(OPENAI_PROVIDER_ID);
     }
@@ -171,7 +217,7 @@ pub fn resolve_model_for_provider(
     model_provider_id: &str,
 ) -> Option<String> {
     match model_provider_id {
-        AMBIENT_PROVIDER_ID => match model {
+        AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID => match model {
             Some(model) if model.trim() == AMBIENT_LEGACY_GLM_5_2_FP8_MODEL => {
                 Some(AMBIENT_DEFAULT_MODEL.to_string())
             }
@@ -185,6 +231,10 @@ pub fn resolve_model_for_provider(
                 Some(model)
             }
             _ => Some(AMBIENT_DEFAULT_MODEL.to_string()),
+        },
+        KIMI_CODE_PROVIDER_ID => match model {
+            Some(model) if model.trim() == KIMI_CODE_K3_MODEL => Some(model),
+            _ => Some(KIMI_CODE_K3_MODEL.to_string()),
         },
         ZAI_PROVIDER_ID | ZAI_ANTHROPIC_PROVIDER_ID => match model {
             Some(model) if model.trim().starts_with("glm-") => Some(model),
@@ -209,8 +259,12 @@ pub fn resolve_model_for_provider(
             _ => Some(CLAUDE_PLAN_MODEL.to_string()),
         },
         OPENROUTER_PROVIDER_ID | OPENROUTER_ANTHROPIC_PROVIDER_ID => match model {
-            Some(model) if model.trim().starts_with("z-ai/") => Some(model),
+            Some(model) if !model.trim().is_empty() => Some(model),
             _ => Some(OPENROUTER_DEFAULT_MODEL.to_string()),
+        },
+        META_PROVIDER_ID => match model {
+            Some(model) if model.trim() == META_DEFAULT_MODEL => Some(model),
+            _ => Some(META_DEFAULT_MODEL.to_string()),
         },
         BASETEN_PROVIDER_ID | BASETEN_ANTHROPIC_PROVIDER_ID => match model {
             Some(model) if model.trim() == BASETEN_DEFAULT_MODEL => Some(model),
@@ -242,6 +296,20 @@ pub fn resolve_model_for_provider(
     }
 }
 
+/// Return a provider-route context ceiling when it is narrower than the
+/// model's shared catalog capability.
+pub fn default_model_context_window_for_provider(
+    model_provider_id: &str,
+    model: &str,
+) -> Option<i64> {
+    match (model_provider_id, model.trim()) {
+        (AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID, AMBIENT_DEFAULT_MODEL) => {
+            Some(AMBIENT_GLM_5_2_CONTEXT_WINDOW)
+        }
+        _ => None,
+    }
+}
+
 fn provider_api_key_vault_instructions() -> String {
     [
         "Run `/providers` and select the matching provider key:",
@@ -252,8 +320,10 @@ fn provider_api_key_vault_instructions() -> String {
         "  Search providers",
         "> Provider: Anthropic API Key   Store ANTHROPIC_API_KEY in the vault",
         "  Provider: Ambient API Key     Store AMBIENT_API_KEY in the vault",
+        "  Provider: Kimi Code API Key   Store KIMI_API_KEY in the vault",
         "  Provider: Z.AI API Key        Store ZAI_API_KEY in the vault",
         "  Provider: OpenRouter API Key  Store OPENROUTER_API_KEY in the vault",
+        "  Provider: Meta API Key        Store MODEL_API_KEY in the vault",
         "  Provider: Baseten API Key     Store BASETEN_API_KEY in the vault",
         "  Provider: Vercel API Key      Store AI_GATEWAY_API_KEY in the vault",
     ]
@@ -271,11 +341,12 @@ const AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_VALUE: &str = "codex";
 pub const LEGACY_OLLAMA_CHAT_PROVIDER_ID: &str = "ollama-chat";
 pub const OLLAMA_CHAT_PROVIDER_REMOVED_ERROR: &str = "`ollama-chat` is no longer supported.\nHow to fix: replace `ollama-chat` with `ollama` in `model_provider`, `oss_provider`, or `--local-provider`.\nMore info: https://github.com/openai/codex/discussions/7782";
 const OSS_PROVIDER_NAME: &str = "gpt-oss";
-pub const BUILT_IN_MODEL_PROVIDER_NAMES: [&str; 14] = [
+pub const BUILT_IN_MODEL_PROVIDER_NAMES: [&str; 15] = [
     OPENAI_PROVIDER_NAME,
     ANTHROPIC_PROVIDER_NAME,
     CLAUDE_PLAN_PROVIDER_NAME,
     AMBIENT_PROVIDER_NAME,
+    KIMI_CODE_PROVIDER_NAME,
     ZAI_PROVIDER_NAME,
     ZAI_ANTHROPIC_PROVIDER_NAME,
     OPENROUTER_PROVIDER_NAME,
@@ -526,7 +597,7 @@ impl ModelProviderInfo {
         let retry = ApiRetryConfig {
             max_attempts: self.request_max_retries(),
             base_delay: Duration::from_millis(200),
-            retry_429: false,
+            retry_429: self.retries_transient_rate_limits(),
             retry_5xx: true,
             retry_transport: true,
         };
@@ -693,11 +764,9 @@ impl ModelProviderInfo {
             auth: Some(ModelProviderAuthInfo {
                 command: "pfterminal".to_string(),
                 args: vec!["internal-claude-oauth-token".to_string()],
-                timeout_ms: std::num::NonZeroU64::new(5_000)
-                    .expect("provider auth timeout must be non-zero"),
+                timeout_ms: provider_auth_timeout_ms(),
                 refresh_interval_ms: 60_000,
-                cwd: AbsolutePathBuf::from_absolute_path_checked("/")
-                    .expect("root path must be absolute"),
+                cwd: root_absolute_path(),
             }),
             aws: None,
             wire_api: WireApi::Anthropic,
@@ -725,6 +794,61 @@ impl ModelProviderInfo {
             name: AMBIENT_PROVIDER_NAME.into(),
             base_url: Some(AMBIENT_BASE_URL.into()),
             env_key: Some(AMBIENT_API_KEY_ENV_VAR.into()),
+            env_key_instructions: Some(provider_api_key_vault_instructions()),
+            experimental_bearer_token: None,
+            auth: None,
+            aws: None,
+            wire_api: WireApi::Chat,
+            query_params: None,
+            http_headers: None,
+            env_http_headers: None,
+            chat_completions_provider: None,
+            request_max_retries: None,
+            stream_max_retries: None,
+            stream_idle_timeout_ms: None,
+            stream_actionable_timeout_ms: None,
+            stream_long_failure_retry_threshold_ms: None,
+            stream_long_failure_max_retries: None,
+            websocket_connect_timeout_ms: None,
+            requires_openai_auth: false,
+            supports_websockets: false,
+        }
+    }
+
+    pub fn create_pfterminal_plan_provider() -> ModelProviderInfo {
+        ModelProviderInfo {
+            name: PFTERMINAL_PLAN_PROVIDER_NAME.into(),
+            base_url: Some(
+                std::env::var("PFTERMINAL_PLAN_BASE_URL")
+                    .unwrap_or_else(|_| PFTERMINAL_PLAN_DEFAULT_BASE_URL.to_string()),
+            ),
+            env_key: Some(PFTERMINAL_PLAN_API_KEY_ENV_VAR.into()),
+            env_key_instructions: Some(provider_api_key_vault_instructions()),
+            experimental_bearer_token: None,
+            auth: None,
+            aws: None,
+            wire_api: WireApi::Chat,
+            query_params: None,
+            http_headers: None,
+            env_http_headers: None,
+            chat_completions_provider: None,
+            request_max_retries: None,
+            stream_max_retries: None,
+            stream_idle_timeout_ms: None,
+            stream_actionable_timeout_ms: None,
+            stream_long_failure_retry_threshold_ms: None,
+            stream_long_failure_max_retries: None,
+            websocket_connect_timeout_ms: None,
+            requires_openai_auth: false,
+            supports_websockets: false,
+        }
+    }
+
+    pub fn create_kimi_code_provider() -> ModelProviderInfo {
+        ModelProviderInfo {
+            name: KIMI_CODE_PROVIDER_NAME.into(),
+            base_url: Some(KIMI_CODE_BASE_URL.into()),
+            env_key: Some(KIMI_CODE_API_KEY_ENV_VAR.into()),
             env_key_instructions: Some(provider_api_key_vault_instructions()),
             experimental_bearer_token: None,
             auth: None,
@@ -834,6 +958,32 @@ impl ModelProviderInfo {
             auth: None,
             aws: None,
             wire_api: WireApi::Anthropic,
+            query_params: None,
+            http_headers: None,
+            env_http_headers: None,
+            chat_completions_provider: None,
+            request_max_retries: None,
+            stream_max_retries: None,
+            stream_idle_timeout_ms: None,
+            stream_actionable_timeout_ms: None,
+            stream_long_failure_retry_threshold_ms: None,
+            stream_long_failure_max_retries: None,
+            websocket_connect_timeout_ms: None,
+            requires_openai_auth: false,
+            supports_websockets: false,
+        }
+    }
+
+    pub fn create_meta_provider() -> ModelProviderInfo {
+        ModelProviderInfo {
+            name: META_PROVIDER_NAME.into(),
+            base_url: Some(META_BASE_URL.into()),
+            env_key: Some(META_API_KEY_ENV_VAR.into()),
+            env_key_instructions: Some(provider_api_key_vault_instructions()),
+            experimental_bearer_token: None,
+            auth: None,
+            aws: None,
+            wire_api: WireApi::Responses,
             query_params: None,
             http_headers: None,
             env_http_headers: None,
@@ -1036,12 +1186,35 @@ impl ModelProviderInfo {
         self.name == AMBIENT_PROVIDER_NAME
     }
 
+    pub fn is_pfterminal_plan(&self) -> bool {
+        self.name == PFTERMINAL_PLAN_PROVIDER_NAME
+    }
+
+    pub fn is_kimi_code(&self) -> bool {
+        self.name == KIMI_CODE_PROVIDER_NAME
+    }
+
+    /// Providers whose coding models have demonstrated text-only premature
+    /// stops before or after tool work. These routes use the structured completion
+    /// classifier before accepting a turn as finished.
+    pub fn requires_completion_guard(&self) -> bool {
+        self.is_kimi_code() || self.is_ambient() || self.is_pfterminal_plan()
+    }
+
     pub fn is_zai(&self) -> bool {
         self.name == ZAI_PROVIDER_NAME
     }
 
+    fn retries_transient_rate_limits(&self) -> bool {
+        self.is_zai()
+    }
+
     pub fn is_openrouter(&self) -> bool {
         self.name == OPENROUTER_PROVIDER_NAME
+    }
+
+    pub fn is_meta(&self) -> bool {
+        self.name == META_PROVIDER_NAME
     }
 
     pub fn is_baseten(&self) -> bool {
@@ -1080,10 +1253,13 @@ pub fn built_in_model_providers(
     let anthropic_provider = P::create_anthropic_provider();
     let claude_plan_provider = P::create_claude_plan_provider();
     let ambient_provider = P::create_ambient_provider();
+    let pfterminal_plan_provider = P::create_pfterminal_plan_provider();
+    let kimi_code_provider = P::create_kimi_code_provider();
     let zai_provider = P::create_zai_provider();
     let zai_anthropic_provider = P::create_zai_anthropic_provider();
     let openrouter_provider = P::create_openrouter_provider();
     let openrouter_anthropic_provider = P::create_openrouter_anthropic_provider();
+    let meta_provider = P::create_meta_provider();
     let baseten_provider = P::create_baseten_provider();
     let baseten_anthropic_provider = P::create_baseten_anthropic_provider();
     let vercel_provider = P::create_vercel_provider();
@@ -1098,6 +1274,8 @@ pub fn built_in_model_providers(
         (ANTHROPIC_PROVIDER_ID, anthropic_provider),
         (CLAUDE_PLAN_PROVIDER_ID, claude_plan_provider),
         (AMBIENT_PROVIDER_ID, ambient_provider),
+        (PFTERMINAL_PLAN_PROVIDER_ID, pfterminal_plan_provider),
+        (KIMI_CODE_PROVIDER_ID, kimi_code_provider),
         (ZAI_PROVIDER_ID, zai_provider),
         (ZAI_ANTHROPIC_PROVIDER_ID, zai_anthropic_provider),
         (OPENROUTER_PROVIDER_ID, openrouter_provider),
@@ -1105,6 +1283,7 @@ pub fn built_in_model_providers(
             OPENROUTER_ANTHROPIC_PROVIDER_ID,
             openrouter_anthropic_provider,
         ),
+        (META_PROVIDER_ID, meta_provider),
         (BASETEN_PROVIDER_ID, baseten_provider),
         (BASETEN_ANTHROPIC_PROVIDER_ID, baseten_anthropic_provider),
         (VERCEL_PROVIDER_ID, vercel_provider),

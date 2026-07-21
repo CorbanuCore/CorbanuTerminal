@@ -48,6 +48,59 @@ def parse_token_usage(text: str) -> dict[str, int] | None:
     }
 
 
+def matching_rollout(
+    session_root: Path,
+    existing: set[Path],
+    provider: str,
+    first_prompt: str,
+) -> Path | None:
+    if not session_root.exists():
+        return None
+    candidates = sorted(
+        (path for path in session_root.rglob("*.jsonl") if path not in existing),
+        key=lambda path: path.stat().st_mtime_ns,
+        reverse=True,
+    )
+    for path in candidates:
+        saw_provider = False
+        saw_prompt = False
+        try:
+            for line in path.read_text(errors="replace").splitlines():
+                record = json.loads(line)
+                if record.get("type") == "session_meta":
+                    saw_provider = record.get("payload", {}).get("model_provider") == provider
+                elif record.get("type") == "response_item":
+                    payload = record.get("payload", {})
+                    if payload.get("type") == "message" and payload.get("role") == "user":
+                        saw_prompt = any(
+                            item.get("type") == "input_text" and item.get("text") == first_prompt
+                            for item in payload.get("content", [])
+                            if isinstance(item, dict)
+                        )
+                if saw_provider and saw_prompt:
+                    return path
+        except (OSError, json.JSONDecodeError):
+            continue
+    return None
+
+
+def persisted_completed_turns(rollout: Path | None) -> int:
+    if rollout is None:
+        return 0
+    completed = 0
+    try:
+        for line in rollout.read_text(errors="replace").splitlines():
+            record = json.loads(line)
+            if (
+                record.get("type") == "event_msg"
+                and record.get("payload", {}).get("type") == "task_complete"
+            ):
+                completed += 1
+    except (OSError, json.JSONDecodeError):
+        return completed
+    return completed
+
+
 def provider_key_from_vault(binary: Path, vault_label: str) -> str:
     result = subprocess.run(
         [str(binary), "vault", "auth-helper", vault_label],
@@ -97,6 +150,9 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
         }[dump_api]
         env[dump_env_var] = args.dump_request
 
+    session_root = Path(env.get("CODEX_HOME", Path.home() / ".pfterminal")) / "sessions"
+    existing_rollouts = set(session_root.rglob("*.jsonl")) if session_root.exists() else set()
+
     cmd = [
         str(binary),
         "--yolo",
@@ -129,6 +185,7 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
     first_completion_at: float | None = None
     deadline = started_at + args.timeout
     completed_turns = 0
+    rollout_path: Path | None = None
     benchmark_complete = False
 
     try:
@@ -139,7 +196,17 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
 
             clean = strip_ansi(raw_output)
             stream_done = parse_numbers(STREAM_DONE_RE, clean)
-            completed_turns = len(stream_done)
+            if rollout_path is None:
+                rollout_path = matching_rollout(
+                    session_root,
+                    existing_rollouts,
+                    args.provider,
+                    args.turn1,
+                )
+            completed_turns = max(
+                len(stream_done),
+                persisted_completed_turns(rollout_path),
+            )
             if first_completion_at is None and completed_turns >= 1:
                 first_completion_at = time.monotonic()
 
@@ -208,6 +275,7 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
             (line for line in clean.splitlines() if line.startswith("To continue this session,")),
             None,
         ),
+        "rollout_path": str(rollout_path) if rollout_path is not None else None,
         "success": second_enter_sent and completed_turns >= 2,
     }
 

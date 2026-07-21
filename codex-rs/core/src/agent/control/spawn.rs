@@ -186,6 +186,33 @@ impl AgentControl {
                 &config,
             )
             .await;
+        if let Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            parent_thread_id,
+            depth,
+            agent_role,
+            ..
+        })) = session_source.as_ref()
+        {
+            let parent_thread = state.get_thread(*parent_thread_id).await?;
+            let parent_snapshot = parent_thread.config_snapshot().await;
+            let parent_depth = match &parent_snapshot.session_source {
+                SessionSource::SubAgent(SubAgentSource::ThreadSpawn { depth, .. }) => *depth,
+                _ => 0,
+            };
+            let expected_depth = parent_depth + 1;
+            if *depth != expected_depth {
+                return Err(CodexErr::InvalidRequest(format!(
+                    "spawn depth {depth} does not follow parent depth {parent_depth}"
+                )));
+            }
+            let parent_role = parent_snapshot.session_source.get_agent_role();
+            crate::agent::role::validate_thread_spawn_role_graph(
+                parent_role.as_deref(),
+                agent_role.as_deref(),
+                expected_depth,
+            )
+            .map_err(CodexErr::InvalidRequest)?;
+        }
         if let Some(session_source) = session_source.as_ref() {
             self.ensure_execution_capacity(multi_agent_version, session_source)?;
         }

@@ -14,6 +14,7 @@ use codex_protocol::models::is_image_close_tag_text;
 use codex_protocol::models::is_image_open_tag_text;
 use codex_protocol::models::is_local_image_close_tag_text;
 use codex_protocol::models::is_local_image_open_tag_text;
+use codex_protocol::models::plaintext_agent_message_content;
 use codex_protocol::protocol::COLLABORATION_MODE_OPEN_TAG;
 use codex_protocol::protocol::MULTI_AGENT_MODE_OPEN_TAG;
 use codex_protocol::protocol::REALTIME_CONVERSATION_OPEN_TAG;
@@ -159,6 +160,15 @@ pub fn parse_turn_item(item: &ResponseItem) -> Option<TurnItem> {
             "system" => None,
             _ => None,
         },
+        ResponseItem::AgentMessage { id, content, .. } => plaintext_agent_message_content(content)
+            .map(|text| {
+                TurnItem::AgentMessage(AgentMessageItem {
+                    id: id.clone().unwrap_or_else(|| Uuid::new_v4().to_string()),
+                    content: vec![AgentMessageContent::Text { text }],
+                    phase: Some(MessagePhase::Commentary),
+                    memory_citation: None,
+                })
+            }),
         ResponseItem::Reasoning {
             id,
             summary,

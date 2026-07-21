@@ -68,6 +68,28 @@ fn developer_interrupted_marker() -> ResponseItem {
 }
 
 #[test]
+fn fresh_thread_spawn_honors_explicit_v2_config_over_legacy_v1_parent() {
+    assert_eq!(
+        resolve_spawn_multi_agent_version(
+            &InitialHistory::New,
+            Some(MultiAgentVersion::V1),
+            /*is_thread_spawn*/ true,
+            MultiAgentVersion::V2,
+        ),
+        Some(MultiAgentVersion::V2)
+    );
+    assert_eq!(
+        resolve_spawn_multi_agent_version(
+            &InitialHistory::New,
+            Some(MultiAgentVersion::Disabled),
+            /*is_thread_spawn*/ true,
+            MultiAgentVersion::V2,
+        ),
+        Some(MultiAgentVersion::Disabled)
+    );
+}
+
+#[test]
 fn truncates_before_requested_user_message() {
     let items = [
         user_msg("u1"),
@@ -1030,7 +1052,7 @@ async fn new_uses_active_provider_for_model_refresh() {
     config.cwd = config.codex_home.abs();
     std::fs::create_dir_all(&config.codex_home).expect("create codex home");
     config.model_catalog = None;
-    config.model_provider.base_url = Some(server.uri());
+    config.model_provider = ModelProviderInfo::create_openai_provider(Some(server.uri()));
 
     let auth_manager =
         AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());

@@ -11,6 +11,7 @@ Scenario: Remote manual /compact while realtime remains active: the next regular
 01:message/user:<ENVIRONMENT_CONTEXT:cwd=<CWD>>
 02:message/user:USER_ONE
 03:message/assistant:REMOTE_FIRST_REPLY
+04:message/user:Continue.
 
 ## Remote Post-Compaction History Layout
 00:compaction:encrypted=true

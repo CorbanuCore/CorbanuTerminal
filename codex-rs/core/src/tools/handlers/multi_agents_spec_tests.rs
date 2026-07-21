@@ -12,6 +12,7 @@ fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
     ModelPreset {
         id: id.to_string(),
         model: format!("{id}-model"),
+        provider_id: None,
         display_name: format!("{id} display"),
         description: format!("{id} description"),
         default_reasoning_effort: ReasoningEffort::XHigh,
@@ -371,7 +372,15 @@ fn wait_agent_tool_v2_uses_timeout_only_summary_output() {
     );
     assert_eq!(
         output_schema["required"],
-        json!(["message", "timed_out", "agents"])
+        json!([
+            "message",
+            "timed_out",
+            "waiting_for",
+            "wake_conditions",
+            "consecutive_empty_waits",
+            "watchdog_escalated",
+            "agents"
+        ])
     );
     assert_eq!(
         output_schema["properties"]["agents"]["items"]["required"],

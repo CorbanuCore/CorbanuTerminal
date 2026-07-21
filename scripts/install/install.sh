@@ -682,21 +682,16 @@ install_package_release() {
   stage_release="$RELEASES_DIR/.staging.$(basename "$release_dir").$$"
 
   mkdir -p "$RELEASES_DIR"
+  rm -f "$CURRENT_LINK/bin/codex" "$CURRENT_LINK/codex"
   rm -rf "$stage_release"
   mkdir -p "$stage_release"
   tar -xzf "$archive_path" -C "$stage_release"
-  if [ ! -x "$stage_release/bin/pfterminal" ] && [ -x "$stage_release/bin/codex" ]; then
-    ln -sf "codex" "$stage_release/bin/pfterminal"
-  fi
   chmod 0755 "$stage_release/bin/pfterminal" "$stage_release/codex-path/rg"
-  if [ -f "$stage_release/bin/codex" ]; then
-    chmod 0755 "$stage_release/bin/codex"
-  fi
+  rm -f "$stage_release/bin/codex" "$stage_release/codex"
   if [ -f "$stage_release/codex-resources/bwrap" ]; then
     chmod 0755 "$stage_release/codex-resources/bwrap"
   fi
   ln -sf "bin/pfterminal" "$stage_release/pfterminal"
-  ln -sf "bin/codex" "$stage_release/codex"
 
   if [ -e "$release_dir" ] || [ -L "$release_dir" ]; then
     rm -rf "$release_dir"
@@ -718,7 +713,6 @@ install_legacy_platform_npm_release() {
   tar -xzf "$archive_path" -C "$extract_dir"
 
   cp "$vendor_root/codex/codex" "$stage_release/pfterminal"
-  ln -sf "pfterminal" "$stage_release/codex"
   cp "$vendor_root/path/rg" "$stage_release/codex-resources/rg"
   chmod 0755 "$stage_release/pfterminal" "$stage_release/codex-resources/rg"
   if [ -f "$vendor_root/codex-resources/bwrap" ]; then
@@ -746,7 +740,7 @@ release_dir_is_complete() {
     package)
       [ -f "$release_dir/codex-package.json" ] &&
         [ -x "$release_dir/bin/pfterminal" ] &&
-        [ -x "$release_dir/bin/codex" ] &&
+        [ -x "$release_dir/bin/pfterminal-walletd" ] &&
         [ -x "$release_dir/pfterminal" ] &&
         [ -x "$release_dir/codex-path/rg" ] ||
         return 1

@@ -141,6 +141,7 @@ fn registry_restores_persisted_pane_metadata() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec![pane_id.clone()],
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
     let restored = ClaudePaneRegistry::restore_from_disk(codex_home.path(), Some(&layout));
     assert_eq!(restored.panes().len(), 1);
@@ -168,6 +169,7 @@ fn registry_restores_persisted_pane_metadata() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec![pane_id.clone()],
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
     let restored = ClaudePaneRegistry::restore_from_disk(codex_home.path(), Some(&layout));
     assert_eq!(restored.active_user_pane_id(), pane_id);
@@ -241,6 +243,7 @@ fn registry_restores_legacy_pane_from_latest_audit() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec![pane_id.to_string()],
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
     let restored = ClaudePaneRegistry::restore_from_disk(codex_home.path(), Some(&layout));
     assert_eq!(restored.panes().len(), 1);
@@ -319,6 +322,7 @@ fn registry_restores_session_id_from_artifact_when_interrupted_audit_lost_it() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec![pane_id.to_string()],
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
     let mut restored = ClaudePaneRegistry::restore_from_disk(codex_home.path(), Some(&layout));
     assert_eq!(restored.panes().len(), 1);
@@ -409,6 +413,7 @@ fn registry_restores_legacy_claude_plan_pane_from_old_audit_title() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec![pane_id.to_string()],
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
     let restored = ClaudePaneRegistry::restore_from_disk(codex_home.path(), Some(&layout));
     assert_eq!(restored.panes().len(), 1);
@@ -433,13 +438,72 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
     let codex_home = tempfile::tempdir().expect("codex home");
     let mut parents = BTreeMap::new();
     parents.insert("pane:orc".to_string(), "pane:troll".to_string());
+    let mut whips = BTreeMap::new();
+    whips.insert(
+        "whip-3".to_string(),
+        crate::orchestrate::Whip {
+            id: "whip-3".to_string(),
+            holder: Some("pane:troll".to_string()),
+            target: "pane:orc".to_string(),
+            instructions: "keep-going".to_string(),
+            mode: crate::orchestrate::WhipMode::Review,
+            kind: crate::orchestrate::WhipKind::LegacyNudge,
+            expires_at: None,
+            max_fires: 20,
+            cooldown_s: 60,
+            stop_marker: "WHIP_DONE".to_string(),
+            fires: 2,
+            last_fire_utc: None,
+            state: crate::orchestrate::WhipState::Armed,
+            last_idle_generation_fired: Some(4),
+            empty_output_fires: 0,
+            consecutive_failed_turns: 0,
+            assignment_unreachable_since_utc: None,
+            pending_review_fire: None,
+            ignored_review_fires: 0,
+            expiry_notified: false,
+            last_target_output: None,
+            last_dispatch_result: None,
+        },
+    );
+    let mut pending_native_dispatches = BTreeMap::new();
+    pending_native_dispatches.insert(
+        "019f0657-1d67-7103-9d65-89e71587347d".to_string(),
+        vec![crate::spawn_orchestration::PendingSpawnDispatch::new(
+            "native queued task".to_string(),
+            Vec::new(),
+        )],
+    );
+    let mut pending_claude_dispatches = BTreeMap::new();
+    pending_claude_dispatches.insert(
+        "claude-active".to_string(),
+        vec![crate::spawn_orchestration::PendingSpawnDispatch::new(
+            "claude queued task".to_string(),
+            Vec::new(),
+        )],
+    );
     let layout = PaneLayoutState {
         version: 0,
         codex_thread_id: Some("019f0657-1d67-7103-9d65-89e71587347d".to_string()),
         active_user_pane_id: Some("claude-active".to_string()),
         spawn_nazgul_pane_id: Some("claude-root".to_string()),
+        spawn_nazgul_rebind_required: true,
         claude_pane_ids: vec!["claude-root".to_string(), "claude-active".to_string()],
         spawn_parent_by_node: parents.clone(),
+        spawn_native_runtime_by_node: BTreeMap::new(),
+        spawn_native_endpoint_by_node: BTreeMap::from([(
+            "thread:019f0657-1d67-7103-9d65-89e71587347d".to_string(),
+            "019f0e22-e6e9-7e02-9cca-9dc18667b3e5".to_string(),
+        )]),
+        orchestrate_whips: whips.clone(),
+        orchestrate_next_whip_seq: 3,
+        spawn_pending_dispatches: BTreeMap::new(),
+        spawn_pending_dispatches_by_thread: pending_native_dispatches.clone(),
+        spawn_pending_dispatches_by_pane: pending_claude_dispatches.clone(),
+        spawn_next_dispatch_seq: 42,
+        spawn_processed_dispatch_seq_ids: vec![39, 41],
+        spawn_processed_dispatch_origin_ids: Vec::new(),
+        spawn_accepted_delivery_ids: Vec::new(),
     };
 
     persist_pane_layout(codex_home.path(), &layout).expect("persist layout");
@@ -458,8 +522,29 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
         restored.spawn_nazgul_pane_id.as_deref(),
         Some("claude-root")
     );
+    assert!(restored.spawn_nazgul_rebind_required);
     assert_eq!(restored.claude_pane_ids, layout.claude_pane_ids);
     assert_eq!(restored.spawn_parent_by_node, parents);
+    assert_eq!(
+        restored.spawn_native_endpoint_by_node["thread:019f0657-1d67-7103-9d65-89e71587347d"],
+        "019f0e22-e6e9-7e02-9cca-9dc18667b3e5"
+    );
+    assert_eq!(restored.orchestrate_whips, whips);
+    assert_eq!(restored.orchestrate_next_whip_seq, 3);
+    let restored_native =
+        &restored.spawn_pending_dispatches["thread:019f0657-1d67-7103-9d65-89e71587347d"][0];
+    assert_eq!(restored_native.task, "native queued task");
+    assert!(!restored_native.dispatch_id.is_empty());
+    assert_eq!(
+        restored_native.target_pane_id,
+        "thread:019f0657-1d67-7103-9d65-89e71587347d"
+    );
+    let restored_claude = &restored.spawn_pending_dispatches["pane:claude-active"][0];
+    assert_eq!(restored_claude.task, "claude queued task");
+    assert!(!restored_claude.dispatch_id.is_empty());
+    assert_eq!(restored_claude.target_pane_id, "pane:claude-active");
+    assert_eq!(restored.spawn_next_dispatch_seq, 42);
+    assert_eq!(restored.spawn_processed_dispatch_seq_ids, vec![39, 41]);
 }
 
 #[test]
@@ -474,6 +559,7 @@ fn pane_layout_persistence_is_thread_scoped() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec!["claude-first".to_string()],
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
     let second_layout = PaneLayoutState {
         version: 0,
@@ -482,6 +568,7 @@ fn pane_layout_persistence_is_thread_scoped() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: vec!["claude-second".to_string()],
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
 
     persist_pane_layout(codex_home.path(), &first_layout).expect("persist first layout");
@@ -516,6 +603,7 @@ fn pane_layout_load_finds_related_root_layout_for_native_spawn_thread() {
         spawn_nazgul_pane_id: Some(format!("thread:{nazgul_thread}")),
         claude_pane_ids: Vec::new(),
         spawn_parent_by_node: parents.clone(),
+        ..Default::default()
     };
     let empty_child_layout = PaneLayoutState {
         version: 0,
@@ -524,6 +612,7 @@ fn pane_layout_load_finds_related_root_layout_for_native_spawn_thread() {
         spawn_nazgul_pane_id: None,
         claude_pane_ids: Vec::new(),
         spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
     };
 
     persist_pane_layout(codex_home.path(), &root_layout).expect("persist root layout");
@@ -539,6 +628,423 @@ fn pane_layout_load_finds_related_root_layout_for_native_spawn_thread() {
         Some(format!("thread:{nazgul_thread}").as_str())
     );
     assert_eq!(restored.spawn_parent_by_node, parents);
+}
+
+#[test]
+fn pane_layout_recovers_verified_previous_generation_after_corruption() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let thread_id = "019f2b89-775c-7dc1-9d20-4fdf7e990199";
+    let first = PaneLayoutState {
+        version: 0,
+        codex_thread_id: Some(thread_id.to_string()),
+        active_user_pane_id: Some("first".to_string()),
+        ..Default::default()
+    };
+    let second = PaneLayoutState {
+        active_user_pane_id: Some("second".to_string()),
+        ..first.clone()
+    };
+    persist_pane_layout(codex_home.path(), &first).expect("first generation");
+    persist_pane_layout(codex_home.path(), &second).expect("second generation");
+    let primary = codex_home
+        .path()
+        .join("panes")
+        .join("pane-layouts")
+        .join(format!("{thread_id}.json"));
+    std::fs::write(&primary, b"{truncated").expect("corrupt primary");
+
+    let restored =
+        load_pane_layout(codex_home.path(), Some(thread_id)).expect("verified previous generation");
+
+    assert_eq!(restored.active_user_pane_id.as_deref(), Some("first"));
+}
+
+fn persisted_layout_path(codex_home: &std::path::Path, thread_id: &str) -> PathBuf {
+    codex_home
+        .join("panes")
+        .join("pane-layouts")
+        .join(format!("{thread_id}.json"))
+}
+
+#[test]
+fn pane_layout_bad_checksum_recovers_verified_previous_generation() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let thread_id = "019f2b89-775c-7dc1-9d20-4fdf7e990299";
+    let first = PaneLayoutState {
+        codex_thread_id: Some(thread_id.to_string()),
+        active_user_pane_id: Some("checksum-previous".to_string()),
+        ..Default::default()
+    };
+    let second = PaneLayoutState {
+        active_user_pane_id: Some("checksum-primary".to_string()),
+        ..first.clone()
+    };
+    persist_pane_layout(codex_home.path(), &first).expect("first generation");
+    persist_pane_layout(codex_home.path(), &second).expect("second generation");
+    let primary = persisted_layout_path(codex_home.path(), thread_id);
+    let mut json: Value =
+        serde_json::from_slice(&std::fs::read(&primary).expect("primary")).expect("persisted JSON");
+    json["checksum"] = Value::String("bad-checksum".to_string());
+    std::fs::write(&primary, serde_json::to_vec_pretty(&json).expect("JSON"))
+        .expect("corrupt checksum");
+
+    let restored = load_pane_layout(codex_home.path(), Some(thread_id)).expect("previous");
+    assert_eq!(
+        restored.active_user_pane_id.as_deref(),
+        Some("checksum-previous")
+    );
+}
+
+#[test]
+fn pane_layout_corrupt_primary_without_previous_fails_closed() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let thread_id = "019f2b89-775c-7dc1-9d20-4fdf7e990399";
+    let layout = PaneLayoutState {
+        codex_thread_id: Some(thread_id.to_string()),
+        active_user_pane_id: Some("only-generation".to_string()),
+        ..Default::default()
+    };
+    persist_pane_layout(codex_home.path(), &layout).expect("primary generation");
+    std::fs::write(
+        persisted_layout_path(codex_home.path(), thread_id),
+        b"{truncated",
+    )
+    .expect("truncate primary");
+
+    assert!(load_pane_layout(codex_home.path(), Some(thread_id)).is_none());
+}
+
+#[test]
+fn pane_layout_incompatible_version_fails_closed() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let thread_id = "019f2b89-775c-7dc1-9d20-4fdf7e990499";
+    let layout = PaneLayoutState {
+        codex_thread_id: Some(thread_id.to_string()),
+        ..Default::default()
+    };
+    persist_pane_layout(codex_home.path(), &layout).expect("primary generation");
+    let primary = persisted_layout_path(codex_home.path(), thread_id);
+    let mut json: Value =
+        serde_json::from_slice(&std::fs::read(&primary).expect("primary")).expect("persisted JSON");
+    json["format_version"] = serde_json::json!(PANE_LAYOUT_VERSION + 1);
+    std::fs::write(&primary, serde_json::to_vec_pretty(&json).expect("JSON"))
+        .expect("incompatible version");
+
+    assert!(load_pane_layout(codex_home.path(), Some(thread_id)).is_none());
+}
+
+const CRASH_MATRIX_THREAD_ID: &str = "019f2b89-775c-7dc1-9d20-4fdf7e991000";
+const CRASH_MATRIX_TARGET_ID: &str = "019f2b89-775c-7dc1-9d20-4fdf7e991001";
+
+fn crash_matrix_layout(state: Option<crate::dispatch_queue::DispatchState>) -> PaneLayoutState {
+    let target = format!("thread:{CRASH_MATRIX_TARGET_ID}");
+    let mut layout = PaneLayoutState {
+        codex_thread_id: Some(CRASH_MATRIX_THREAD_ID.to_string()),
+        spawn_native_endpoint_by_node: BTreeMap::from([(
+            target.clone(),
+            CRASH_MATRIX_TARGET_ID.to_string(),
+        )]),
+        ..Default::default()
+    };
+    if let Some(state) = state {
+        let mut dispatch = crate::spawn_orchestration::PendingSpawnDispatch::new(
+            "crash matrix task".to_string(),
+            Vec::new(),
+        );
+        dispatch.assign_identity(1, "pane:codex-main", &target, Some("crash-matrix-origin"));
+        dispatch.state = state;
+        layout
+            .spawn_processed_dispatch_origin_ids
+            .push(dispatch.origin.origin_id.clone());
+        layout
+            .spawn_pending_dispatches
+            .insert(target, vec![dispatch]);
+    }
+    layout
+}
+
+#[test]
+fn dispatch_process_cut_child() {
+    let Ok(home) = std::env::var("PFTERMINAL_DISPATCH_CRASH_HOME") else {
+        return;
+    };
+    let cut = std::env::var("PFTERMINAL_DISPATCH_CRASH_CUT").expect("crash cut");
+    let home = PathBuf::from(home);
+    persist_pane_layout(&home, &crash_matrix_layout(None)).expect("baseline generation");
+    let queued = crate::dispatch_queue::DispatchState::Queued;
+    let submitting = crate::dispatch_queue::DispatchState::Submitting {
+        delivery_id: "delivery-crash-matrix".to_string(),
+        ordered_dispatch_ids: vec!["dispatch-crash-matrix".to_string()],
+    };
+    let marker = |name: &str| std::fs::write(home.join(name), b"durable").expect("marker");
+    match cut.as_str() {
+        "before_enqueue_commit" => {}
+        "after_enqueue_before_receipt" => {
+            persist_pane_layout(&home, &crash_matrix_layout(Some(queued))).expect("queued commit");
+        }
+        "after_submitting_before_send" => {
+            persist_pane_layout(&home, &crash_matrix_layout(Some(submitting)))
+                .expect("submitting commit");
+        }
+        "request_bytes_before_server_receipt" => {
+            persist_pane_layout(&home, &crash_matrix_layout(Some(submitting)))
+                .expect("submitting commit");
+            marker("rpc-bytes-sent");
+        }
+        "server_accept_before_response" => {
+            persist_pane_layout(&home, &crash_matrix_layout(Some(submitting)))
+                .expect("submitting commit");
+            marker("rpc-bytes-sent");
+            marker("server-durable-acceptance");
+        }
+        "response_before_local_tombstone" => {
+            persist_pane_layout(&home, &crash_matrix_layout(Some(submitting)))
+                .expect("submitting commit");
+            marker("rpc-bytes-sent");
+            marker("server-durable-acceptance");
+            marker("rpc-response-received");
+        }
+        "during_atomic_snapshot_write" => {
+            // The registry fault exits after the replacement temp file is synced but before the
+            // verified baseline generation is rotated.
+            persist_pane_layout(&home, &crash_matrix_layout(Some(queued)))
+                .expect("fault exits before return");
+            unreachable!("atomic snapshot fault must terminate the process");
+        }
+        "during_thread_replacement_migration" => {
+            let mut in_memory = crash_matrix_layout(Some(queued));
+            in_memory.spawn_native_endpoint_by_node.insert(
+                format!("thread:{CRASH_MATRIX_TARGET_ID}"),
+                "019f2b89-775c-7dc1-9d20-4fdf7e991099".to_string(),
+            );
+            marker("replacement-mutation-started");
+            std::hint::black_box(in_memory);
+        }
+        "event_stream_disconnected" => {
+            persist_pane_layout(&home, &crash_matrix_layout(Some(queued))).expect("queued commit");
+            marker("event-stream-disconnected");
+        }
+        "during_tui_shutdown" => {
+            persist_pane_layout(&home, &crash_matrix_layout(Some(queued))).expect("queued commit");
+            marker("shutdown-started");
+        }
+        other => panic!("unknown crash cut {other}"),
+    }
+    std::process::exit(86);
+}
+
+fn crash_matrix_loaded_layout(home: &std::path::Path) -> Option<PaneLayoutState> {
+    std::fs::read_dir(home.join("panes").join("pane-layouts"))
+        .ok()?
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            (path.extension().and_then(|extension| extension.to_str()) == Some("json"))
+                .then(|| path.file_stem()?.to_str().map(str::to_string))
+                .flatten()
+        })
+        .find_map(|thread_id| load_pane_layout(home, Some(&thread_id)))
+}
+
+fn crash_tree_contains(path: &std::path::Path, needle: &str) -> bool {
+    if path.is_file() {
+        return std::fs::read(path)
+            .ok()
+            .is_some_and(|bytes| String::from_utf8_lossy(&bytes).contains(needle));
+    }
+    std::fs::read_dir(path)
+        .ok()
+        .into_iter()
+        .flatten()
+        .flatten()
+        .any(|entry| crash_tree_contains(&entry.path(), needle))
+}
+
+#[test]
+fn deterministic_dispatch_process_crash_matrix_recovers_readable_state() {
+    let cuts = [
+        "before_enqueue_commit",
+        "after_enqueue_before_receipt",
+        "after_submitting_before_send",
+        "request_bytes_before_server_receipt",
+        "server_accept_before_response",
+        "response_before_local_tombstone",
+        "during_atomic_snapshot_write",
+        "during_thread_replacement_migration",
+        "event_stream_disconnected",
+        "during_tui_shutdown",
+    ];
+    for cut in cuts {
+        let home = tempfile::tempdir().expect("crash home");
+        let rpc_cut = matches!(
+            cut,
+            "server_accept_before_response" | "response_before_local_tombstone"
+        );
+        let test_filter = if rpc_cut {
+            "app::tests::dispatch_integration::lost_wait_steer_response_reconciles_without_start_fallback"
+        } else {
+            "claude_panes::tests::dispatch_process_cut_child"
+        };
+        let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args(["--exact", test_filter, "--nocapture"])
+            .env("PFTERMINAL_DISPATCH_CRASH_HOME", home.path())
+            .env("PFTERMINAL_DISPATCH_CRASH_CUT", cut)
+            .output()
+            .expect("spawn crash child");
+        assert_eq!(
+            output.status.code(),
+            Some(86),
+            "cut={cut}; stdout={}; stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        if rpc_cut {
+            let restored = crash_matrix_loaded_layout(home.path())
+                .unwrap_or_else(|| panic!("cut={cut}: no persisted RPC layout"));
+            let queue = restored
+                .spawn_pending_dispatches
+                .values()
+                .find(|queue| !queue.is_empty())
+                .unwrap_or_else(|| panic!("cut={cut}: submitting RPC record was lost"));
+            assert_eq!(queue.len(), 1, "cut={cut}: duplicate RPC presentation");
+            let crate::dispatch_queue::DispatchState::Submitting { delivery_id, .. } =
+                &queue[0].state
+            else {
+                panic!("cut={cut}: RPC cut did not retain Submitting state")
+            };
+            assert!(
+                crash_tree_contains(home.path(), delivery_id),
+                "cut={cut}: core rollout lacks the durable client delivery identity"
+            );
+            let owner = restored.codex_thread_id.expect("layout owner");
+            let primary = persisted_layout_path(home.path(), &owner);
+            let stable = std::fs::read(&primary).expect("stable RPC primary bytes");
+            std::thread::sleep(Duration::from_millis(30));
+            assert_eq!(
+                std::fs::read(&primary).expect("RPC primary after child death"),
+                stable,
+                "cut={cut}: stale RPC writer continued after termination"
+            );
+            continue;
+        }
+
+        let restored = load_pane_layout(home.path(), Some(CRASH_MATRIX_THREAD_ID))
+            .unwrap_or_else(|| panic!("cut={cut}: restart could not read a verified generation"));
+        let target = format!("thread:{CRASH_MATRIX_TARGET_ID}");
+        let queue = restored.spawn_pending_dispatches.get(&target);
+        match cut {
+            "before_enqueue_commit"
+            | "during_atomic_snapshot_write"
+            | "during_thread_replacement_migration" => assert!(
+                queue.is_none_or(Vec::is_empty),
+                "cut={cut}: uncommitted work became visible"
+            ),
+            "after_enqueue_before_receipt"
+            | "event_stream_disconnected"
+            | "during_tui_shutdown" => assert!(matches!(
+                queue
+                    .and_then(|queue| queue.first())
+                    .map(|item| &item.state),
+                Some(crate::dispatch_queue::DispatchState::Queued)
+            )),
+            _ => assert!(matches!(
+                queue
+                    .and_then(|queue| queue.first())
+                    .map(|item| &item.state),
+                Some(crate::dispatch_queue::DispatchState::Submitting { .. })
+            )),
+        }
+        assert!(queue.is_none_or(|queue| queue.len() <= 1));
+        if matches!(
+            cut,
+            "server_accept_before_response" | "response_before_local_tombstone"
+        ) {
+            assert!(home.path().join("server-durable-acceptance").exists());
+        }
+        if cut == "during_thread_replacement_migration" {
+            assert_eq!(
+                restored
+                    .spawn_native_endpoint_by_node
+                    .get(&target)
+                    .map(String::as_str),
+                Some(CRASH_MATRIX_TARGET_ID),
+                "replacement must restore wholly before or wholly after migration"
+            );
+        }
+
+        let primary = persisted_layout_path(home.path(), CRASH_MATRIX_THREAD_ID);
+        let stable = std::fs::read(&primary).expect("stable primary bytes");
+        std::thread::sleep(Duration::from_millis(30));
+        assert_eq!(
+            std::fs::read(&primary).expect("primary after child death"),
+            stable,
+            "cut={cut}: stale process continued writing after termination"
+        );
+    }
+}
+
+#[test]
+fn pane_layout_v1_migrates_legacy_batch_once() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let thread_id = "019f2b89-cba2-7c81-ae8f-f48106932d0b";
+    let first = "first legacy task";
+    let second = "second legacy task";
+    let envelope = format!(
+        "Multiple spawn dispatches were queued while you were busy. Execute each task below in order, do not skip any task, and treat every section as assigned work.\n\n## Queued dispatch 1 (bytes={})\n{}\n## Queued dispatch 2 (bytes={})\n{}",
+        first.len(),
+        first,
+        second.len(),
+        second
+    );
+    let mut queues = BTreeMap::new();
+    queues.insert(
+        thread_id.to_string(),
+        vec![crate::spawn_orchestration::PendingSpawnDispatch::new(
+            envelope,
+            Vec::new(),
+        )],
+    );
+    let legacy = PaneLayoutState {
+        version: 1,
+        codex_thread_id: Some(thread_id.to_string()),
+        spawn_nazgul_pane_id: Some(format!("thread:{thread_id}")),
+        spawn_pending_dispatches_by_thread: queues,
+        ..Default::default()
+    };
+    let primary = codex_home
+        .path()
+        .join("panes")
+        .join("pane-layouts")
+        .join(format!("{thread_id}.json"));
+    std::fs::create_dir_all(primary.parent().expect("layout parent")).expect("layout dir");
+    std::fs::write(
+        &primary,
+        serde_json::to_vec_pretty(&legacy).expect("legacy JSON"),
+    )
+    .expect("legacy layout");
+
+    let restored = load_pane_layout(codex_home.path(), Some(thread_id)).expect("migrated layout");
+    let migrated = restored
+        .spawn_pending_dispatches
+        .get(&format!("thread:{thread_id}"))
+        .expect("migrated queue");
+
+    assert_eq!(
+        migrated
+            .iter()
+            .map(|dispatch| dispatch.task.as_str())
+            .collect::<Vec<_>>(),
+        vec![first, second]
+    );
+    assert!(
+        migrated
+            .iter()
+            .all(|dispatch| !dispatch.dispatch_id.is_empty())
+    );
+    let persisted = std::fs::read_to_string(primary).expect("version 2 layout");
+    assert!(persisted.contains("\"format_version\": 2"));
+    assert!(persisted.contains("\"checksum\""));
 }
 
 #[test]
@@ -1222,7 +1728,14 @@ fn vercel_fast_command_plan_uses_count_tokens_passthrough_bridge() {
 
     assert_eq!(bridge.kind, ClaudeBridgeKind::AnthropicPassthrough);
     assert_eq!(bridge.upstream_base_url, "https://ai-gateway.vercel.sh");
-    assert_eq!(bridge.upstream_api_key, "vercel-test-key");
+    assert!(bridge.upstream_api_key.is_none());
+    assert_eq!(
+        bridge
+            .deferred_vault_secret
+            .as_ref()
+            .map(|secret| secret.label.as_str()),
+        Some("provider/ai_gateway_api_key")
+    );
     assert_eq!(
         plan.env.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
         Some("pfterminal-local-bridge")
@@ -1270,7 +1783,14 @@ fn ambient_kimi_profile_uses_ambient_bridge_model() {
 
     assert_eq!(bridge.kind, ClaudeBridgeKind::AmbientChat);
     assert_eq!(bridge.upstream_model, AMBIENT_KIMI_K2_7_CODE_MODEL);
-    assert_eq!(bridge.upstream_api_key, "ambient-test-key");
+    assert!(bridge.upstream_api_key.is_none());
+    assert_eq!(
+        bridge
+            .deferred_vault_secret
+            .as_ref()
+            .map(|secret| secret.label.as_str()),
+        Some("provider/ambient_api_key")
+    );
     assert_eq!(
         settings.pointer("/env/ANTHROPIC_DEFAULT_OPUS_MODEL"),
         Some(&json!(AMBIENT_KIMI_K2_7_CODE_MODEL))
@@ -1302,6 +1822,24 @@ fn ambient_glm_profile_uses_native_ambient_model_slug() {
 
     assert_eq!(plan.provider_model, AMBIENT_DEFAULT_MODEL);
     assert_eq!(bridge.upstream_model, AMBIENT_DEFAULT_MODEL);
+}
+
+#[test]
+fn bridge_command_plan_defers_vault_reveal() {
+    let (dir, pane) = pane(ClaudeProviderProfileKind::AmbientGlm52);
+
+    let plan = build_claude_command_plan(&pane, "hello".to_string(), dir.path())
+        .expect("planning must not read the vault");
+    let bridge = plan.bridge.expect("bridge plan");
+
+    assert!(bridge.upstream_api_key.is_none());
+    assert_eq!(
+        bridge
+            .deferred_vault_secret
+            .as_ref()
+            .map(|secret| secret.label.as_str()),
+        Some("provider/ambient_api_key")
+    );
 }
 
 #[cfg(unix)]
@@ -1337,7 +1875,8 @@ fn bridge_redaction_plan(
             listener,
             bind_addr,
             upstream_base_url: "https://example.invalid".to_string(),
-            upstream_api_key: secret.to_string(),
+            upstream_api_key: Some(secret.to_string()),
+            deferred_vault_secret: None,
             upstream_model: "test-model".to_string(),
         }),
     }
@@ -2209,6 +2748,7 @@ fn allowed_auth_helper_labels_are_provider_scoped() {
     assert!(allowed_provider_vault_label("provider/zai_api_key"));
     assert!(allowed_provider_vault_label("provider/anthropic_api_key"));
     assert!(allowed_provider_vault_label("provider/ambient_api_key"));
+    assert!(allowed_provider_vault_label("provider/kimi_api_key"));
     assert!(allowed_provider_vault_label("provider/baseten_api_key"));
     assert!(allowed_provider_vault_label("provider/openrouter_api_key"));
     assert!(allowed_provider_vault_label("provider/ai_gateway_api_key"));

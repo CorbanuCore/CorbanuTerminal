@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "codex_thread_id": "00000000-0000-0000-0000-000000000901",
+  "active_user_pane_id": "codex-main",
+  "spawn_nazgul_pane_id": null,
+  "claude_pane_ids": [],
+  "spawn_parent_by_node": {},
+  "orchestrate_whips": {
+    "whip-1": {
+      "id": "whip-1",
+      "holder": "thread:00000000-0000-0000-0000-000000000902",
+      "target": "thread:00000000-0000-0000-0000-000000000903",
+      "instructions": "draft-with-manager",
+      "mode": "review",
+      "kind": {
+        "type": "assignment",
+        "phase": "executing",
+        "execution_started_utc": "2026-07-10T20:00:00Z",
+        "last_user_turn_utc": "2026-07-10T20:00:00Z",
+        "failure_backoff_level": 0,
+        "execution_duration_s": 28800
+      },
+      "expires_at": "2099-07-11T04:00:00Z",
+      "max_fires": 20,
+      "cooldown_s": 900,
+      "stop_marker": "WHIP_DONE",
+      "fires": 0,
+      "last_fire_utc": null,
+      "state": "armed",
+      "last_idle_generation_fired": null,
+      "empty_output_fires": 0,
+      "consecutive_failed_turns": 0,
+      "pending_review_fire": null,
+      "ignored_review_fires": 0,
+      "expiry_notified": false,
+      "last_target_output": null
+    }
+  },
+  "orchestrate_next_whip_seq": 1,
+  "spawn_pending_dispatches_by_thread": {},
+  "spawn_pending_dispatches_by_pane": {},
+  "spawn_next_dispatch_seq": 1,
+  "spawn_processed_dispatch_seq_ids": []
+}

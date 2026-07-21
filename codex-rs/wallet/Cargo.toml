@@ -1,0 +1,51 @@
+[package]
+name = "codex-wallet"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+argon2 = { workspace = true }
+base64 = { workspace = true }
+bs58 = { workspace = true }
+chacha20poly1305 = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+codex-keyring-store = { workspace = true }
+ed25519-dalek = { workspace = true }
+libc = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
+bincode = { workspace = true }
+solana-compute-budget-interface = { workspace = true }
+solana-hash = { workspace = true }
+solana-keypair = { workspace = true }
+solana-message = { workspace = true }
+solana-pubkey = { workspace = true }
+solana-signature = { workspace = true }
+solana-signer = { workspace = true }
+solana-transaction = { workspace = true }
+spl-token = { workspace = true }
+zeroize = { workspace = true, features = ["derive"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+] }
+
+[dev-dependencies]
+codex-keyring-store = { workspace = true }
+tempfile = { workspace = true }
