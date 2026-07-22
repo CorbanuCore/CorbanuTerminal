@@ -4,9 +4,11 @@ mod bot;
 mod bridge;
 pub mod commands;
 pub mod config;
+pub mod dedup;
 pub mod error;
 pub mod media;
 mod model_selection;
+pub mod outbound;
 mod polling;
 pub mod render;
 mod sandbox_preflight;
@@ -15,6 +17,10 @@ mod session;
 #[cfg(test)]
 #[path = "session_tests.rs"]
 mod session_tests;
+
+#[cfg(test)]
+#[path = "dedup_tests.rs"]
+mod dedup_tests;
 
 use std::sync::Arc;
 
@@ -40,8 +46,17 @@ use crate::bot::run_bot;
 use crate::bridge::BridgeHandle;
 use crate::config::TelegramConfig;
 use crate::config::TelegramMode;
+use crate::dedup::UpdateDeduplicator;
 use crate::error::TelegramError;
 use crate::session::SessionStore;
+
+/// Client-level ceiling for any single outbound Bot API HTTP request. The
+/// poller runs on a separate client built for long-poll reads (see
+/// `polling::polling_bot`), so this bound applies only to action-style calls.
+/// It must sit below the inner retry-attempt timeout in `outbound.rs` so a
+/// hung attempt aborts with a clean `Elapsed` instead of a mid-read socket
+/// error, and a stalled call can never wedge a chat pipeline forever.
+const OUTBOUND_CLIENT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 #[derive(Debug, Parser, Clone)]
 pub struct Cli {
@@ -148,14 +163,22 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         .await
         .context("failed to initialize in-process app-server client")?;
     let sessions = SessionStore::load(&codex_home).await?;
-    let bot = Bot::new(token);
+    let dedup = UpdateDeduplicator::load(&codex_home).await;
+    let outbound_client = teloxide::net::default_reqwest_settings()
+        .timeout(OUTBOUND_CLIENT_TIMEOUT)
+        .build()
+        .context("failed to build Telegram outbound HTTP client")?;
+    let bot = Bot::with_client(token.clone(), outbound_client);
+    let polling = crate::polling::polling_bot(token)?;
     let media = crate::media::MediaStore::new(&codex_home);
     let bridge = BridgeHandle::spawn(bot.clone(), client, Arc::new(core_config), sessions);
     let result = run_bot(
         bot,
+        polling,
         bridge.clone(),
         allowlist,
         media,
+        dedup,
         telegram_config.max_consecutive_polling_failures,
     )
     .await;

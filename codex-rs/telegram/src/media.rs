@@ -121,14 +121,39 @@ pub async fn fetch_message_images(
 
     let mut paths = Vec::with_capacity(wanted.len());
     for (meta, ext) in wanted {
-        let file = bot
-            .get_file(meta.id.clone())
-            .await
-            .context("telegram getFile failed")?;
-        let mut bytes: Vec<u8> = Vec::with_capacity(meta.size as usize);
-        bot.download_file(&file.path, &mut bytes)
-            .await
-            .context("telegram file download failed")?;
+        // Both calls are idempotent reads, so they are safe to retry under
+        // the outbound policy: 429 honors `retry_after`, 5xx/transport use
+        // bounded backoff, and the whole fetch is time-boxed so a stalled
+        // download degrades to the caption-note path instead of wedging.
+        let file = crate::outbound::call_with_policy(
+            crate::outbound::CallSafety::Idempotent,
+            crate::outbound::MEDIA_API_TIMEOUT,
+            "telegram getFile",
+            || {
+                let bot = bot.clone();
+                let file_id = meta.id.clone();
+                async move { bot.get_file(file_id).await }
+            },
+        )
+        .await
+        .context("telegram getFile failed")?;
+        let file_path = file.path.clone();
+        let bytes = crate::outbound::call_with_policy(
+            crate::outbound::CallSafety::Idempotent,
+            crate::outbound::MEDIA_API_TIMEOUT,
+            "telegram file download",
+            || {
+                let bot = bot.clone();
+                let file_path = file_path.clone();
+                let mut bytes = Vec::with_capacity(meta.size as usize);
+                async move {
+                    bot.download_file(&file_path, &mut bytes).await?;
+                    Ok(bytes)
+                }
+            },
+        )
+        .await
+        .context("telegram file download failed")?;
         let name = format!("{}.{ext}", meta.unique_id);
         let path = store.save(message.chat.id, &name, &bytes).await?;
         info!(path = %path.display(), bytes = bytes.len(), "fetched inbound Telegram image");

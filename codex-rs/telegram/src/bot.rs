@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Context;
 use teloxide::dispatching::UpdateHandler;
 use teloxide::dptree;
@@ -16,12 +18,59 @@ use crate::commands::Command;
 use crate::commands::IncomingCommand;
 use crate::commands::help_text;
 use crate::commands::parse_incoming;
+use crate::dedup::UpdateDeduplicator;
 use crate::media::FetchedImages;
 use crate::media::MediaStore;
 use crate::media::fetch_message_images;
+use crate::outbound::CallSafety;
+use crate::outbound::DEFAULT_API_TIMEOUT;
+use crate::outbound::call_with_policy;
 
 type HandlerResult = anyhow::Result<()>;
 const CALLBACK_ANSWER_TEXT_LIMIT: usize = 200;
+
+/// Send a plain-text notice with an explicit timeout. Mutating, so never
+/// auto-retried — duplicate protection is the update-level dedup gate.
+async fn send_notice(bot: &Bot, chat_id: ChatId, text: impl Into<String>) -> HandlerResult {
+    let bot = bot.clone();
+    let text = text.into();
+    call_with_policy(
+        CallSafety::Mutating,
+        DEFAULT_API_TIMEOUT,
+        "telegram notice",
+        move || {
+            let bot = bot.clone();
+            let text = text.clone();
+            async move { bot.send_message(chat_id, text).await }
+        },
+    )
+    .await
+    .context("send Telegram notice")?;
+    Ok(())
+}
+
+/// Dispatcher-side wrapper that deduplicates by Telegram `update_id` before
+/// any handler runs. Telegram delivers updates at-least-once: a long-poll
+/// reconnect or a restart before the offset is acknowledged replays the tail
+/// of the stream. Without this gate a replayed message fires the same
+/// mutating agent action twice (two identical turns, a double approval).
+/// `Update::filter_message`/`filter_callback_query` forward the full update,
+/// so the id is always available here.
+async fn deduplicate(update: Update, dedup: Arc<UpdateDeduplicator>) -> HandlerResult {
+    let update_id = u64::from(update.id.0);
+    if dedup.check_and_record(update_id).await {
+        Ok(())
+    } else {
+        Err(DuplicateUpdate.into())
+    }
+}
+
+/// Control-flow marker: every update flows through `deduplicate` first, so a
+/// duplicate reaches the real handlers as `Err(DuplicateUpdate)` and dptree
+/// stops dispatching; a first-seen update arrives as `Ok(())` and continues.
+#[derive(Debug, thiserror::Error, Clone, Copy)]
+#[error("duplicate Telegram update")]
+struct DuplicateUpdate;
 
 /// What an inbound Telegram message contributes as turn input.
 ///
@@ -53,9 +102,11 @@ struct BotUsername(String);
 
 pub async fn run_bot(
     bot: Bot,
+    polling: Bot,
     bridge: BridgeHandle,
     allowlist: ChatAllowlist,
     media: MediaStore,
+    dedup: UpdateDeduplicator,
     max_consecutive_polling_failures: u32,
 ) -> anyhow::Result<()> {
     bot.set_my_commands(Command::bot_commands())
@@ -72,13 +123,19 @@ pub async fn run_bot(
     info!(username = %bot_username.0, "Telegram bot identity loaded");
 
     let mut listener =
-        crate::polling::guarded_polling(bot.clone(), max_consecutive_polling_failures).await;
+        crate::polling::guarded_polling(polling, max_consecutive_polling_failures).await;
     let fatal_polling = listener.fatal_flag();
     let listener_error_handler =
         crate::polling::listener_error_handler(listener.stop_token(), fatal_polling.clone());
 
     let mut dispatcher = Dispatcher::builder(bot, schema())
-        .dependencies(dptree::deps![bridge, allowlist, bot_username, media])
+        .dependencies(dptree::deps![
+            bridge,
+            allowlist,
+            bot_username,
+            media,
+            Arc::new(dedup)
+        ])
         .enable_ctrlc_handler()
         .build();
     dispatcher
@@ -92,7 +149,10 @@ pub async fn run_bot(
 }
 
 fn schema() -> UpdateHandler<anyhow::Error> {
+    // `deduplicate` runs before every handler branch: first-seen updates pass
+    // through as `Ok(())`, duplicates stop the chain with `DuplicateUpdate`.
     dptree::entry()
+        .chain(dptree::endpoint(deduplicate))
         .branch(Update::filter_message().endpoint(handle_message))
         .branch(Update::filter_callback_query().endpoint(handle_callback))
 }
@@ -126,20 +186,18 @@ async fn handle_message(
             return Ok(());
         }
         Ok(FetchedImages::Rejected(reason)) => {
-            bot.send_message(chat_id, reason)
-                .await
-                .context("send Telegram media-rejected notice")?;
+            send_notice(&bot, chat_id, reason).await?;
             return Ok(());
         }
         Ok(FetchedImages::None) => {}
         Err(err) => {
             warn!("inbound Telegram image fetch failed: {err:#}");
-            bot.send_message(
+            send_notice(
+                &bot,
                 chat_id,
                 "I couldn't download that image from Telegram — try again, or upload it somewhere and send the link.",
             )
-            .await
-            .context("send Telegram media-fetch-failed notice")?;
+            .await?;
             return Ok(());
         }
     }
@@ -147,12 +205,12 @@ async fn handle_message(
     let text = match resolve_message_input(message.text(), message.caption()) {
         MessageInput::Text(text) => text,
         MessageInput::Unsupported => {
-            bot.send_message(
+            send_notice(
+                &bot,
                 chat_id,
                 "I can read text, photos, and image files. This message had none of those — send a link or paste the text and I'll act on it.",
             )
-            .await
-            .context("send Telegram unsupported message notice")?;
+            .await?;
             return Ok(());
         }
     };
@@ -162,10 +220,22 @@ async fn handle_message(
             command: Command::Start | Command::Help,
             ..
         } => {
-            bot.send_message(chat_id, help_text())
-                .parse_mode(ParseMode::Html)
-                .await
-                .context("send Telegram help")?;
+            let bot2 = bot.clone();
+            call_with_policy(
+                CallSafety::Mutating,
+                DEFAULT_API_TIMEOUT,
+                "telegram help",
+                move || {
+                    let bot = bot2.clone();
+                    async move {
+                        bot.send_message(chat_id, help_text())
+                            .parse_mode(ParseMode::Html)
+                            .await
+                    }
+                },
+            )
+            .await
+            .context("send Telegram help")?;
         }
         IncomingCommand::Known {
             command: Command::New,
@@ -184,10 +254,23 @@ async fn handle_message(
             ..
         } => {
             let status = bridge.status_text(chat_id).await?;
-            bot.send_message(chat_id, status)
-                .parse_mode(ParseMode::Html)
-                .await
-                .context("send Telegram status")?;
+            let bot2 = bot.clone();
+            call_with_policy(
+                CallSafety::Mutating,
+                DEFAULT_API_TIMEOUT,
+                "telegram status",
+                move || {
+                    let bot = bot2.clone();
+                    let status = status.clone();
+                    async move {
+                        bot.send_message(chat_id, status)
+                            .parse_mode(ParseMode::Html)
+                            .await
+                    }
+                },
+            )
+            .await
+            .context("send Telegram status")?;
         }
         IncomingCommand::Known {
             command: Command::Model,
@@ -251,14 +334,21 @@ async fn handle_callback(
     if answer_text != response
         && let Some(chat_id) = chat_id
     {
-        bot.send_message(chat_id, response)
-            .await
-            .context("send Telegram callback details")?;
+        send_notice(&bot, chat_id, response).await?;
     }
-    bot.answer_callback_query(query.id)
-        .text(answer_text)
-        .await
-        .context("answer Telegram callback query")?;
+    call_with_policy(
+        CallSafety::Mutating,
+        DEFAULT_API_TIMEOUT,
+        "telegram answerCallbackQuery",
+        move || {
+            let bot = bot.clone();
+            let query_id = query.id.clone();
+            let answer_text = answer_text.clone();
+            async move { bot.answer_callback_query(query_id).text(answer_text).await }
+        },
+    )
+    .await
+    .context("answer Telegram callback query")?;
     Ok(())
 }
 

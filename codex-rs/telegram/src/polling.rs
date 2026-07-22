@@ -4,6 +4,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+use anyhow::Context;
 use futures::Stream;
 use futures::StreamExt;
 use teloxide::ApiError;
@@ -104,7 +105,30 @@ impl FatalPollingFlag {
     }
 }
 
+/// HTTP client ceiling for the long-poll reader. It must exceed the
+/// `getUpdates` long-poll timeout below plus network slack: teloxide's
+/// default client uses a 17s overall timeout for a 10s poll, so a normal
+/// long-poll response arrives well inside this window. This bound only
+/// matters when the connection stalls mid-read — without it a wedged socket
+/// could hang the poller silently.
+const POLLING_CLIENT_TIMEOUT: Duration = Duration::from_secs(17);
+
+/// Build the bot handle dedicated to long-polling, on an HTTP client whose
+/// timeout accommodates long-poll reads. Kept separate from the action-style
+/// outbound client in `lib.rs` because the two have incompatible timeout
+/// requirements on a shared reqwest client.
+pub fn polling_bot(token: String) -> anyhow::Result<Bot> {
+    let client = teloxide::net::default_reqwest_settings()
+        .build()
+        .context("failed to build Telegram polling HTTP client")?;
+    Ok(Bot::with_client(token, client))
+}
+
 pub async fn guarded_polling(bot: Bot, max_consecutive_failures: u32) -> GuardedPolling {
+    debug_assert!(
+        POLLING_CLIENT_TIMEOUT > Duration::from_secs(10),
+        "polling client timeout must exceed the long-poll timeout"
+    );
     let inner = Polling::builder(bot)
         .timeout(Duration::from_secs(10))
         .backoff_strategy(exponential_backoff_strategy)

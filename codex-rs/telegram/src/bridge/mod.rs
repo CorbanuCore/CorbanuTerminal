@@ -530,11 +530,27 @@ impl BridgeRuntime {
     }
 
     pub(super) async fn send_html(&self, chat_id: ChatId, html: &str) -> anyhow::Result<Message> {
-        self.bot
-            .send_message(chat_id, html.to_string())
-            .parse_mode(ParseMode::Html)
-            .await
-            .context("send Telegram message")
+        // Mutating: a timeout bounds the call, but it is never auto-retried —
+        // a retried send could post the message twice. Duplicate protection
+        // for sends lives at the update level (`crate::dedup`), not here.
+        let bot = self.bot.clone();
+        let html = html.to_string();
+        crate::outbound::call_with_policy(
+            crate::outbound::CallSafety::Mutating,
+            crate::outbound::DEFAULT_API_TIMEOUT,
+            "telegram sendMessage",
+            move || {
+                let bot = bot.clone();
+                let html = html.clone();
+                async move {
+                    bot.send_message(chat_id, html)
+                        .parse_mode(ParseMode::Html)
+                        .await
+                }
+            },
+        )
+        .await
+        .context("send Telegram message")
     }
 
     pub(super) async fn edit_message(
@@ -546,10 +562,21 @@ impl BridgeRuntime {
         let chunks = render_html_chunks(text);
         if let Some(first) = chunks.first()
             && let Some(delay) = finish_edit_result(
-                self.bot
-                    .edit_message_text(chat_id, message_id, first.html.clone())
-                    .parse_mode(ParseMode::Html)
-                    .await,
+                crate::outbound::call_with_policy(
+                    crate::outbound::CallSafety::Mutating,
+                    crate::outbound::DEFAULT_API_TIMEOUT,
+                    "telegram editMessageText",
+                    || {
+                        let bot = self.bot.clone();
+                        let html = first.html.clone();
+                        async move {
+                            bot.edit_message_text(chat_id, message_id, html)
+                                .parse_mode(ParseMode::Html)
+                                .await
+                        }
+                    },
+                )
+                .await,
                 "edit Telegram message",
             )?
         {
