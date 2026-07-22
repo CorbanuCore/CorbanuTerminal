@@ -4038,7 +4038,7 @@ dependencies = [
 
 [[package]]
 name = "codex-telegram"
-version = "0.1.9"
+version = "0.1.19"
 dependencies = [
  "anyhow",
  "clap",
