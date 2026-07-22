@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+expression: "render_bottom_popup(&chat, 94)"
+---
+  Telegram
+  Not connected
+
+› 1. Connect Telegram bot  Paste a BotFather token, verify it, then authorize a chat by
+                           messaging the bot.
+  2. Refresh               Reload configuration and connector health.
+
+  Press enter to confirm or esc to go back

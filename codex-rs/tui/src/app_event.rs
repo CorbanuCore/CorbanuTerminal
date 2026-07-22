@@ -158,6 +158,30 @@ impl fmt::Debug for ProviderApiKeySecret {
     }
 }
 
+pub(crate) struct TelegramBotSecret(String);
+
+impl TelegramBotSecret {
+    pub(crate) fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    pub(crate) fn into_inner(mut self) -> String {
+        std::mem::take(&mut self.0)
+    }
+}
+
+impl Drop for TelegramBotSecret {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl fmt::Debug for TelegramBotSecret {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("<redacted Telegram bot token>")
+    }
+}
+
 pub(crate) struct WalletSecret(String);
 
 impl WalletSecret {
@@ -1314,6 +1338,41 @@ pub(crate) enum AppEvent {
         provider_id: String,
         display_name: String,
         api_key: ProviderApiKeySecret,
+    },
+
+    OpenTelegram,
+    OpenTelegramTokenEntry,
+    ValidateTelegramToken {
+        token: TelegramBotSecret,
+    },
+    TelegramTokenValidated {
+        result: Result<crate::chatwidget::telegram_setup::TelegramBotIdentity, String>,
+    },
+    DiscoverTelegramChats,
+    PollTelegramChats {
+        generation: u64,
+    },
+    TelegramChatsDiscovered {
+        generation: u64,
+        result: Result<crate::chatwidget::telegram_setup::TelegramDiscovery, String>,
+    },
+    ConfirmTelegramChat {
+        candidate: crate::chatwidget::telegram_setup::TelegramChatCandidate,
+    },
+    ConnectTelegramChat {
+        candidate: crate::chatwidget::telegram_setup::TelegramChatCandidate,
+        defaults: crate::chatwidget::telegram_setup::TelegramConnectionDefaults,
+    },
+    StartTelegramConnector,
+    StopTelegramConnector,
+    ReplaceTelegramBot,
+    ConfirmTelegramDisconnect,
+    DisconnectTelegram,
+    TelegramOperationFinished {
+        result: Result<String, String>,
+    },
+    TelegramStatusReady {
+        result: Result<crate::chatwidget::telegram_setup::TelegramStatus, String>,
     },
 
     /// Start OpenAI Codex account device-code login from the Providers screen.

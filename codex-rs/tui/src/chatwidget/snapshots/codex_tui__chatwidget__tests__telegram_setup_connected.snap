@@ -1,0 +1,17 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+expression: "render_bottom_popup(&chat, 94)"
+---
+  Telegram
+  @pumps_bot · running · PID 4242
+  Chats: 123456 · Model: gpt-5.6-sol
+  Workspace: /work/project
+  Approvals: on-request · Sandbox: workspace-write
+
+› 1. Restart connector    Run the configured bot in the background.
+  2. Stop connector       Keep its token and authorized chat for later.
+  3. Replace bot          Validate a different BotFather token and choose its chat.
+  4. Disconnect Telegram  Stop it and delete its local token and authorization.
+  5. Refresh              Reload configuration and connector health.
+
+  Press enter to confirm or esc to go back

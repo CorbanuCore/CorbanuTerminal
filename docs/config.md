@@ -127,6 +127,240 @@ Do not put long-lived provider keys in `experimental_bearer_token` unless you
 are intentionally running an automation-only setup. For interactive use, use
 onboarding or `/vault`.
 
+<a id="telegram"></a>
+
+## Telegram Connector
+
+`pfterminal telegram` runs a Telegram long-polling connector that drives the
+same in-process app-server harness as the terminal UI and `pfterminal exec`.
+Telegram-specific configuration is read locally by the connector from the
+`[telegram]` table. Core accepts this table during strict config validation,
+but the connector owns the individual settings.
+
+For interactive setup, run `/telegram` in the TUI. PFTerminal validates a
+masked BotFather token into the encrypted vault, waits automatically for the
+user to message the bot, asks which exact chat and sender to authorize, captures
+the current model/workspace/permission settings, and starts the connector. The
+bot remains silent until that authorization completes. Leaving the discovery
+screen cancels its polling, and stale results cannot reopen the screen. The
+same screen reports health and supports restart, stop, token replacement, and
+full disconnect. A configured connector is restored when PFTerminal starts;
+an operation lock prevents multiple PFTerminal processes from racing into two
+pollers. The setup script below remains available for unattended hosts.
+
+```toml
+[telegram]
+enabled = true
+bot_token_env = "PFTERMINAL_TELEGRAM_TOKEN"
+allowed_chat_ids = [21000038, -1001941234987]
+allowed_user_ids = [21000038]
+max_attachment_bytes = 10485760
+media_retention_days = 7
+max_media_store_bytes = 268435456
+mode = "polling"
+default_model = "glm-5.2"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+default_cwd = "/home/alice/pfterminal-telegram"
+webhook_url = ""
+```
+
+The bot token is never read from `config.toml`. Resolution order is:
+
+1. The environment variable named by `bot_token_env`.
+2. The encrypted vault label `telegram/bot_token`.
+3. Startup error.
+
+Connectors created through `/telegram` remove the token environment variable
+from their child process so the just-validated vault credential cannot be
+silently replaced by a stale shell value. `sandbox_mode` is connector-specific:
+the TUI copies the permission mode shown at authorization time without changing
+the global PFTerminal sandbox.
+
+Chats are default-deny. Only numeric Telegram chat IDs in `allowed_chat_ids`
+can start turns. Private chats use that list directly. Group and supergroup chat
+IDs are negative and additionally require the initiating user in
+`allowed_user_ids`; group membership alone grants no authority. Approval buttons
+are accepted only from an allowed user in the exact chat and forum topic that
+owns the pending request. The setup script refuses a group chat without at least
+one `--user-id`.
+
+The connector stores recovered thread IDs and delivered item markers in
+`$CODEX_HOME/telegram/state.json` so a restarted poller can resume the same
+app-server threads without replaying the full transcript after lag recovery.
+Per-conversation model and approval-policy overrides are stored in the same
+file. A conversation is a chat plus its optional forum-topic ID, so two topics
+in one group cannot share turns, model settings, or approvals.
+
+Incoming updates first enter a bounded, bot-specific durable inbox at
+`$CODEX_HOME/telegram/updates-<bot-id>.json`. The connector marks an update
+complete only after app-server acceptance. Unapplied updates replay after a
+restart with a deterministic client message ID, while completed IDs provide a
+bounded duplicate filter.
+
+Telegram messages use HTML parse mode, split outbound text at Telegram's
+4096-character raw-text limit, and surface sensitive operations through inline
+approval buttons rather than auto-approving them.
+
+The Telegram command surface is:
+
+- `/new` starts a fresh app-server thread.
+- `/cancel` or `/stop` interrupts the active turn.
+- `/status` shows the active thread and turn.
+- `/model` shows the chat's active model/provider and the available model list.
+- `/model <alias-or-slug>` saves the model for the chat and updates the current
+  thread with `thread/settings/update` so subsequent turns keep the same
+  history. Built-in aliases include `fable`, `opus`, `gpt`, and `gpt-5.5`.
+
+  **`/model` selects a model, not a provider.** `model/list` does not report which
+  provider serves each model, so the chat keeps the provider it already had except
+  for the few model families whose provider is unambiguous from the slug (the
+  Claude plan models, `gpt-…`, `glm-…`, `zai/…`). When the provider does not
+  change, the reply says `Provider unchanged: <id>` rather than implying a switch.
+  To change provider, set `model_provider` in `config.toml` and restart.
+
+  Two selections are refused up front rather than failing at turn time: a model
+  that is neither in the catalog nor a known alias, and a model whose provider has
+  no reachable API key (checked against both the environment and the stored
+  provider keys).
+- `/approvals` shows the chat's active approval policy.
+- `/approvals <untrusted|on-failure|on-request|never>` saves the approval
+  policy for the chat and updates the current thread with
+  `thread/settings/update`.
+- `/compact` starts compaction for the active thread.
+- `/diff` shows the git diff from `default_cwd` to the remote branch.
+- `/skills` lists discovered skill names.
+
+Ordinary follow-ups sent during a running turn use app-server steering. If a
+turn temporarily cannot be steered, the connector holds up to 16 messages for
+that conversation in FIFO order and shows the queue once. `/status` reports
+`Idle`, `Working`, `Working · follow-ups queued`, `Awaiting approval`,
+`Recovering queued input`, or `Blocked`, plus model, workspace, topic, queue
+depth, the most recent successful Telegram contact or error, and the next useful
+action.
+
+Photos and image documents remain native image inputs. Supported non-image
+documents (text/source, JSON, PDF, and XML/YAML) are downloaded into the
+connector-owned media directory and described to the agent with their local
+path, original name, MIME type, byte count, and SHA-256. The defaults accept up
+to 10 MiB per file, retain media for seven days, and cap the media store at
+256 MiB; configure those bounds with `max_attachment_bytes`,
+`media_retention_days`, and `max_media_store_bytes`. Cleanup runs at startup and
+during ingestion. Archives, executables, and unrelated binary media are
+rejected rather than unpacked or implied to be available.
+
+`default_cwd` is the workspace used for Telegram-created turns. Set it to the
+directory where the agent should work, not to the PFTerminal source tree or all
+of `$HOME`. Codex automatically loads `AGENTS.md` from that workspace. The setup
+script defaults `--workspace` to `~/pfterminal-telegram`, creates it, and seeds
+`AGENTS.md` there from `codex-rs/telegram/dist/AGENTS.md.template` when the
+workspace does not already have one. Use `--workspace "$HOME"` only when you
+intentionally want a home-rooted remote agent workspace.
+
+The recommended setup path is:
+
+```bash
+pfterminal telegram --setup
+```
+
+Installed PFTerminal packages bundle the setup script and service templates;
+`--setup` locates and runs that exact packaged copy. From a source checkout,
+`codex-rs/scripts/setup-telegram.sh --chat-id 21000038` remains available for
+scripted setup.
+
+The script prompts for the bot token without echoing it when neither the
+process environment nor configured environment file provides one. For
+unattended setup,
+provide `PFTERMINAL_TELEGRAM_TOKEN` through the process environment without
+placing the value in a command argument or shell-history line.
+
+The script resolves `CODEX_HOME` the same way `pfterminal telegram` does,
+writes the token to `~/.config/pfterminal/telegram.env`, writes or merges the
+`[telegram]` block, sets `default_cwd`, and backs up an existing `config.toml`
+before editing it. On reruns, the script only changes `[telegram]` settings that
+were explicitly passed on that invocation or are missing from the existing file,
+so operator tuning such as `approval_policy = "on-failure"` is preserved. Do not
+pass the bot token on the command line; use `PFTERMINAL_TELEGRAM_TOKEN`, an
+existing env-file entry, or the interactive prompt.
+
+`pfterminal -c telegram.foo=... telegram` and profile overrides do not override
+`[telegram]` connector settings today. The connector reads this table directly
+from `CODEX_HOME/config.toml`; use the config file or setup script for Telegram
+settings. Core settings such as model, cwd, approval policy, and sandbox posture
+still resolve through the normal core config after the connector has loaded its
+own table.
+
+On Linux, the connector emits one advisory startup warning when the resolved
+sandbox policy is not `danger-full-access` and cheap host probes indicate the
+sandbox is unlikely to launch: `bwrap` is missing from `PATH`,
+`/proc/sys/user/max_user_namespaces` reads as `0`, or
+`/proc/sys/kernel/unprivileged_userns_clone` exists and reads as `0`, or
+`/proc/sys/kernel/apparmor_restrict_unprivileged_userns` exists and reads as
+`1`. The setup script also runs a live `bwrap --ro-bind / / true` probe when
+`bwrap` exists. In a failing state, even simple shell commands can require
+manual Telegram approval because the sandboxed launch fails before command
+execution.
+
+On a trusted single-user host where unprivileged user namespaces are unavailable,
+set top-level `sandbox_mode = "danger-full-access"` so the always-on connector
+can execute commands without sandbox-launch approval churn. This disables the
+filesystem sandbox, so do not use it on shared or untrusted hosts; install
+`bwrap` and enable unprivileged user namespaces instead. The setup script never
+writes this setting silently: pass `--allow-danger-full-access` or, on an
+interactive TTY, confirm the prompt that states this disables the sandbox
+globally for all PFTerminal surfaces. In non-interactive mode without the flag,
+preflight failure exits non-zero and does not write `sandbox_mode`.
+
+At startup, the connector emits loud warnings when the effective approval policy
+resolves to `never` or the effective sandbox resolves to `danger-full-access`.
+
+To keep the poller always on, install the user service:
+
+```bash
+codex-rs/scripts/setup-telegram.sh --chat-id 21000038 --install-systemd
+systemctl --user daemon-reload
+systemctl --user enable --now pfterminal-telegram.service
+```
+
+The setup script runs `pfterminal telegram --health` before installing a managed
+service, then installs a concrete user unit: `ExecStart` is rewritten to the
+absolute path returned by `command -v pfterminal`, and `EnvironmentFile` is
+rewritten to the actual `--env-file` path. The checked-in template remains
+generic for review. The unit reads `CODEX_HOME` and `PFTERMINAL_TELEGRAM_TOKEN`
+from `~/.config/pfterminal/telegram.env`, restarts automatically, and uses
+`StartLimitIntervalSec=300` with `StartLimitBurst=5` so a persistent 409 conflict
+from a second poller stops instead of restart-fighting forever. Run only one
+poller per Telegram bot token.
+
+Before enabling any service, run the local readiness probe:
+
+```bash
+pfterminal telegram --health
+```
+
+It verifies the Bot API identity, non-empty authorization policy, group user
+policy, writable state and workspace paths, the selected provider's known
+credential requirement, and sandbox viability. It exits non-zero with the
+failed boundary named.
+
+On macOS, install the checked-in LaunchAgent through the same setup script:
+
+```bash
+codex-rs/scripts/setup-telegram.sh --chat-id 21000038 --install-launchd
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.postfiat.pfterminal.telegram.plist
+```
+
+On Windows, configure the connector first, verify it with
+`pfterminal telegram --health`, then install a current-user Scheduled Task:
+
+```powershell
+.\codex-rs\scripts\install-telegram-task.ps1
+Start-ScheduledTask -TaskName 'PFTerminal Telegram'
+```
+
+The task command contains no bot token; credentials remain in the PFTerminal
+vault. The task refuses duplicate instances and has bounded restart settings.
+
 ## Provider Overrides
 
 Advanced users can still define custom providers under `[model_providers]`.

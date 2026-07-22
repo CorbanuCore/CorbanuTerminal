@@ -77,6 +77,7 @@ jobs:
           mkdir -p "$package_dir"
           tar -xzf "dist/pfterminal-package-x86_64-unknown-linux-gnu.tar.gz" -C "$package_dir"
           "$package_dir/bin/pfterminal" --version
+          "$package_dir/bin/pfterminal" telegram --help >/dev/null
           test -x "$package_dir/bin/pfterminal-walletd"
           "$package_dir/bin/pfterminal-walletd" --help >/dev/null
           wallet_home="${RUNNER_TEMP}/wallet-smoke-x86_64-unknown-linux-gnu"
@@ -94,6 +95,13 @@ jobs:
           trap - EXIT
           ! find "$package_dir" -type f -o -type l | grep -E '/codex([^/-]*)(\.exe)?$'
           test -x "$package_dir/codex-path/rg"
+          telegram_resources="$package_dir/codex-resources/telegram"
+          test -x "$telegram_resources/setup-telegram.sh"
+          bash -n "$telegram_resources/setup-telegram.sh"
+          test -f "$telegram_resources/install-telegram-task.ps1"
+          test -f "$telegram_resources/dist/AGENTS.md.template"
+          test -f "$telegram_resources/dist/pfterminal-telegram.service"
+          test -f "$telegram_resources/dist/net.postfiat.pfterminal.telegram.plist"
 
       - name: Upload package smoke artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0

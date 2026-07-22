@@ -302,6 +302,7 @@ mod tests {
         assert_eq!(
             commands,
             vec![
+                SlashCommand::Gpu,
                 SlashCommand::Ide,
                 SlashCommand::Orchestrate,
                 SlashCommand::Tasknode,
@@ -313,6 +314,8 @@ mod tests {
                 SlashCommand::Status,
                 SlashCommand::Usage,
                 SlashCommand::Providers,
+                SlashCommand::Telegram,
+                SlashCommand::Wallet,
                 SlashCommand::Vault,
             ]
         );

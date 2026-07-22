@@ -1,0 +1,13 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+expression: "render_bottom_popup(&chat, 94)"
+---
+  Telegram
+  @pumps_bot · waiting for chat authorization
+
+› 1. Finish connection  Send /start to the bot, select that chat, and start the connector.
+  2. Replace bot token  Validate a different token from @BotFather.
+  3. Forget bot         Delete this token without authorizing a chat.
+  4. Refresh            Reload configuration and connector health.
+
+  Press enter to confirm or esc to go back

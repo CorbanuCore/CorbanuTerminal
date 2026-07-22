@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+expression: "render_bottom_popup(&chat, 94)"
+---
+  Connect Telegram
+  Bot: @pumps_bot · Send /start in Telegram; this screen checks automatically.
+  Only the chat you explicitly select will be authorized.
+  Waiting for /start… The bot stays silent until you authorize the chat here.
+
+› 1. Return to Telegram settings  Stop waiting and return to connector settings.
+
+  Press enter to confirm or esc to go back

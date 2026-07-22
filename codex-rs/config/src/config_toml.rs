@@ -360,6 +360,11 @@ pub struct ConfigToml {
     /// Collection of settings that are specific to the TUI.
     pub tui: Option<Tui>,
 
+    /// Telegram connector settings. The connector parses this table itself;
+    /// core only accepts it so strict config validation does not reject it.
+    #[serde(default)]
+    pub telegram: Option<BTreeMap<String, JsonValue>>,
+
     /// When set to `true`, `AgentReasoning` events will be hidden from the
     /// UI/output. Defaults to `false`.
     #[serde(default = "default_hide_agent_reasoning")]

@@ -80,6 +80,7 @@ rm -rf "${PFTERMINAL_HOME:-$HOME/.pfterminal}"
 - Provider choices for Ambient, Kimi Code, Z.AI, OpenRouter, Baseten, Vercel, and OpenAI
   Codex account auth.
 - Encrypted `/vault` storage for provider API keys and user credentials.
+- `pfterminal telegram` connector for allowlisted Telegram chats.
 - Codex-level coding workflows in a local terminal.
 - Native pane orchestration for Sauron → Nazgul → Troll → Orc agent workflows.
 - Separate PFTerminal home at `$HOME/.pfterminal`, so it does not collide with
@@ -176,6 +177,30 @@ Useful forms:
 
 Use `/spawn` when you want work split across persistent panes instead of asking
 the current chat to do everything in one thread.
+
+## Telegram Connector
+
+`pfterminal telegram` starts a long-polling Telegram bot that sends allowlisted
+chat messages into PFTerminal agent threads and returns streamed replies.
+Configure it in `$CODEX_HOME/config.toml`:
+
+```toml
+[telegram]
+enabled = true
+bot_token_env = "PFTERMINAL_TELEGRAM_TOKEN"
+allowed_chat_ids = [21000038, -1001941234987]
+allowed_user_ids = [21000038]
+mode = "polling"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+```
+
+Store the bot token in the named environment variable or in the encrypted vault
+label `telegram/bot_token`; do not put raw bot tokens in `config.toml`.
+Approvals are confirmed with Telegram inline buttons.
+Run `/telegram` in PFTerminal for the normal masked-token, chat-discovery, and
+connector-management flow. `pfterminal telegram --setup` remains available for
+unattended host configuration.
 
 ## Codex Sessions vs Claude Panes
 
