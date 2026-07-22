@@ -20,6 +20,7 @@ use codex_app_server_protocol::ThreadUnsubscribeResponse;
 use codex_app_server_protocol::TurnInterruptParams;
 use codex_app_server_protocol::TurnInterruptResponse;
 use codex_core::config::Config;
+use codex_login::AuthManager;
 use serde::de::DeserializeOwned;
 use teloxide::ApiError;
 use teloxide::Bot;
@@ -177,12 +178,14 @@ impl BridgeHandle {
         client: InProcessAppServerClient,
         config: Arc<Config>,
         sessions: Arc<SessionStore>,
+        auth_manager: Arc<AuthManager>,
     ) -> Self {
         let (command_tx, command_rx) = mpsc::channel(BRIDGE_CHANNEL_CAPACITY);
         let runtime = BridgeRuntime {
             bot,
             client,
             config,
+            auth_manager,
             sessions,
             request_ids: RequestIdSequencer::new(),
             pending_inputs: HashMap::new(),
@@ -423,6 +426,7 @@ struct BridgeRuntime {
     bot: Bot,
     client: InProcessAppServerClient,
     config: Arc<Config>,
+    auth_manager: Arc<AuthManager>,
     sessions: Arc<SessionStore>,
     request_ids: RequestIdSequencer,
     pending_inputs: HashMap<ConversationKey, VecDeque<QueuedUserInput>>,

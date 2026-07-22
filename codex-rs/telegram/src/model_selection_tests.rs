@@ -18,6 +18,7 @@ use super::ModelResolutionSource;
 use super::missing_provider_credential_with;
 use super::model_for_fingerprint;
 use super::provider_for_model;
+use super::provider_is_missing_openai_auth;
 use super::resolve_model;
 
 const ZAI: &str = "zai";
@@ -29,7 +30,9 @@ fn provider_needing_env(env_key: &str) -> ModelProviderInfo {
     }
 }
 
-fn providers(entries: [(&str, ModelProviderInfo); 1]) -> HashMap<String, ModelProviderInfo> {
+fn providers<const N: usize>(
+    entries: [(&str, ModelProviderInfo); N],
+) -> HashMap<String, ModelProviderInfo> {
     entries
         .into_iter()
         .map(|(id, info)| (id.to_string(), info))
@@ -236,6 +239,31 @@ fn providers_authenticating_without_an_env_key_are_never_blocked() {
 
     let no_env = providers([(OPENAI_PROVIDER_ID, ModelProviderInfo::default())]);
     assert!(missing_provider_credential_with(OPENAI_PROVIDER_ID, &no_env, |_| false).is_none());
+}
+
+#[test]
+fn missing_openai_auth_is_derived_from_provider_metadata_and_live_auth_state() {
+    let requiring_auth = ModelProviderInfo {
+        requires_openai_auth: true,
+        ..ModelProviderInfo::default()
+    };
+    let map = providers([
+        (OPENAI_PROVIDER_ID, requiring_auth),
+        (ZAI, provider_needing_env("ZAI_API_KEY")),
+    ]);
+
+    assert!(provider_is_missing_openai_auth(
+        OPENAI_PROVIDER_ID,
+        &map,
+        false
+    ));
+    assert!(!provider_is_missing_openai_auth(
+        OPENAI_PROVIDER_ID,
+        &map,
+        true
+    ));
+    assert!(!provider_is_missing_openai_auth(ZAI, &map, false));
+    assert!(!provider_is_missing_openai_auth("unknown", &map, false));
 }
 
 #[test]

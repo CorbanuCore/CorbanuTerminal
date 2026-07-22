@@ -9,6 +9,7 @@ use crate::model_selection::known_model_source;
 use crate::model_selection::missing_provider_credential;
 use crate::model_selection::model_for_fingerprint;
 use crate::model_selection::provider_for_model;
+use crate::model_selection::provider_is_missing_openai_auth;
 use crate::model_selection::resolve_model;
 use crate::outbound::CallSafety;
 use crate::outbound::DEFAULT_API_TIMEOUT;
@@ -83,6 +84,23 @@ impl BridgeRuntime {
         }
 
         let choice = provider_for_model(&resolution.model, &old_provider);
+
+        let openai_auth_present = self.auth_manager.auth().await.is_some();
+        if provider_is_missing_openai_auth(
+            &choice.provider,
+            &self.config.model_providers,
+            openai_auth_present,
+        ) {
+            self.send_text(
+                chat_id,
+                &format!(
+                    "Not switching to {}.\n\nProvider {} requires an OpenAI login, but this Telegram connector is not logged in. The active model was left unchanged. Log in using the same PFTerminal home that runs the connector, then retry /model.",
+                    resolution.model, choice.provider
+                ),
+            )
+            .await?;
+            return Ok(());
+        }
 
         // Reject at selection time when the provider that would serve this model has no
         // usable credential. Otherwise every subsequent turn dies on a missing env var and

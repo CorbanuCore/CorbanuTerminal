@@ -177,6 +177,17 @@ pub(crate) fn provider_for_model(model: &str, current_provider: &str) -> Provide
     }
 }
 
+pub(crate) fn provider_is_missing_openai_auth(
+    provider_id: &str,
+    providers: &HashMap<String, ModelProviderInfo>,
+    openai_auth_present: bool,
+) -> bool {
+    !openai_auth_present
+        && providers
+            .get(provider_id)
+            .is_some_and(|provider| provider.requires_openai_auth)
+}
+
 /// A credential a provider requires from the environment but does not have.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct MissingProviderCredential {

@@ -41,6 +41,7 @@ use codex_arg0::Arg0DispatchPaths;
 use codex_config::CloudConfigBundleLoader;
 use codex_config::LoaderOverrides;
 use codex_feedback::CodexFeedback;
+use codex_login::AuthManager;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::SessionSource;
@@ -182,6 +183,8 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
     let client = InProcessAppServerClient::start(start_args)
         .await
         .context("failed to initialize in-process app-server client")?;
+    let auth_manager =
+        AuthManager::shared_from_config(&core_config, /*enable_codex_api_key_env*/ true).await;
     let sessions = SessionStore::load(&codex_home).await?;
     let outbound_client = teloxide::net::default_reqwest_settings()
         .timeout(OUTBOUND_CLIENT_TIMEOUT)
@@ -196,7 +199,13 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         telegram_config.max_media_store_bytes,
     );
     media.cleanup_expired().await;
-    let bridge = BridgeHandle::spawn(bot.clone(), client, Arc::new(core_config), sessions);
+    let bridge = BridgeHandle::spawn(
+        bot.clone(),
+        client,
+        Arc::new(core_config),
+        sessions,
+        auth_manager,
+    );
     let result = run_bot(
         bot,
         polling,
