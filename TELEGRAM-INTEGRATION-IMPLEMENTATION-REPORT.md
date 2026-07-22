@@ -3,16 +3,18 @@
 Date: 2026-07-22  
 Branch: `feat/telegram-connector-hardened`  
 Pull request: [agtico/PfTerminal#59](https://github.com/agtico/PfTerminal/pull/59)  
-Candidate binary SHA-256: `0158d41238b493fa4412d6d94284761f88c057fa47f451593caafce5962dd291`
+Candidate binary SHA-256: `dd43427a94989d26383b7ec28c382b5049796564ab5c85193048ce023fd3d1eb`
 
 ## Verdict
 
 The implementation work in Phases 2–5 of
 `TELEGRAM-INTEGRATION-WITH-PFTERMINAL.md` is present and passes its scoped
-automated gates. The connector remains **experimental**. It is not qualified
-for a private-chat testing claim or a stable claim because this host has no
-Telegram bot token or authorized test chat, so the mandatory exact-package
-live sessions have not run.
+automated gates. One private-chat replay has now run against a real bot and
+exposed a first-message reconciliation loop; that defect was fixed and the
+same durable pending update then completed without a repeated app-server
+error. The connector remains **experimental** because the full live matrix,
+three-session gate, native final-head packages, and durability soak have not
+run.
 
 ## Implemented boundaries
 
@@ -22,6 +24,7 @@ live sessions have not run.
 | Authorization | Chats are default-deny. Group and forum messages require both an allowed chat and an allowed actor. Approval callbacks bind to the exact conversation and the actor who started the turn. |
 | Durable delivery | Raw updates enter a bot-keyed bounded inbox before dispatch. Atomic persistence is serialized, failed writes roll memory back, completed IDs are bounded, and corrupt state is isolated. |
 | App-server idempotency | User turns and steering use deterministic `telegram:<bot-id>:<update-id>` client IDs. Pending replay checks thread history before resubmission. |
+| First-message recovery | Fresh threads skip history reconciliation until a first message materializes them. A replayed first message treats the app-server's structured “not materialized” response as an empty history, while unrelated errors still fail. Persisted threads are replaced only for the structured missing-rollout state; transient resume failures do not discard context. |
 | Natural follow-ups | Active turns use `turn/steer`; non-steerable cases enter a 16-item/256-KiB per-conversation FIFO without blocking later Telegram updates behind the queued handler. |
 | Approval recovery | A failed app-server resolution leaves the approval pending. Successful state changes are not replayed merely because the Telegram confirmation message failed. |
 | Attachments | Images remain native image inputs. Bounded text/source, JSON, PDF, XML, and YAML files receive stable hashed paths and sidecar metadata. Archives, executables, and opaque binary media are rejected. Cleanup enforces age and total-byte caps. |
@@ -32,14 +35,15 @@ live sessions have not run.
 
 ## Verification completed
 
-- `just test -p codex-telegram`: **107 passed, 0 failed**.
+- `just test -p codex-telegram`: **111 passed, 0 failed**.
 - Package-helper tests: **15 passed, 0 failed**, including PFTerminal-only
   Telegram resources and an unchanged stock Codex package layout.
 - `cargo clippy -p codex-telegram --all-targets --no-deps`: passed.
 - `just fix -p codex-telegram`: passed.
 - `just fmt`: passed.
 - `just bazel-lock-check`: passed.
-- `cargo build -p codex-cli --bin pfterminal`: passed; candidate hash is recorded above.
+- `cargo build -p codex-cli --bin pfterminal`: passed; candidate hash is
+  recorded above.
 - `pfterminal telegram --help`: exposes `--health` and documents the readiness scope.
 - Clean-home setup dry run: generated valid configuration and a systemd unit with absolute executable and environment-file paths.
 - Built-package setup dry run: the extracted PFTerminal binary found and
@@ -50,6 +54,34 @@ live sessions have not run.
 - `just test -p codex-cli`: 519/520 passed. The sole
   `debug_clear_memories_resets_memories_db_without_state_db` failure reproduces
   on the clean `c378b230a` base checkout and is unrelated to Telegram.
+
+### Live evidence completed
+
+- Real bot identity: `@a65123_bot`; one explicitly authorized private chat.
+- A clean qualification home and workspace were created under
+  `/tmp/pfterminal-telegram-qual-29929282255` without copying live Telegram
+  state.
+- The first `/start` update completed, but the next text update exposed a
+  deterministic retry loop: `thread/read includeTurns=true` ran before the
+  new thread had its first user message, returned `-32600`, and released the
+  durable update for another attempt. Restart then exposed the adjacent
+  missing-rollout state.
+- After repair, the exact pending update `570445838` moved to the completed
+  set, the pending count became zero, and a delivered assistant item was
+  persisted. The captured replay log contains zero `thread/read`,
+  `not materialized`, `no rollout`, or app-server failure entries.
+- Replay evidence:
+  `/tmp/pfterminal-telegram-qual-29929282255/evidence/replay-after-unmaterialized-fix.log`.
+
+The first nonpublishing package workflow at
+`https://github.com/agtico/PfTerminal/actions/runs/29929282255` passed Linux
+x64, Linux ARM64, macOS ARM64 (including DMG), and macOS Intel (including
+DMG). Its Windows job hit the workflow's exact 90-minute timeout while still
+compiling; it did not report a compiler or smoke-test failure. The timeout is
+now 150 minutes. That workflow predates the live defect repair and therefore
+does **not** qualify the final head. A second nonpublishing run was cancelled
+once its head became obsolete. Neither run published a release or changed
+Latest.
 
 Two workspace tools could not provide a Telegram verdict:
 
@@ -70,12 +102,13 @@ The following requirements remain deliberately unclaimed:
    observer.
 3. Independent adversarial review of group/topic authorization and callback
    isolation.
-4. Native packaged execution on macOS and Windows.
+4. Native packaged execution on the final head on all five targets. Earlier
+   Linux and macOS packages passed; Windows timed out before smoke tests.
 5. The seven-day, 100-turn durability soak required for a stable claim.
 
-A Telegram bot token, authorized private chat/user IDs, and an external live
-driver are the immediate inputs needed to start gates 1–2. No token or matching
-Telegram configuration was present on this host during qualification.
+The real bot and private chat are configured only in the isolated qualification
+home. An external live driver and additional fresh qualification homes are the
+remaining inputs for gates 1–2.
 
 ## Release rule
 

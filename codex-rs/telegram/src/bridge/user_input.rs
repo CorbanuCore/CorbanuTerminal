@@ -1,7 +1,10 @@
 use std::collections::VecDeque;
 use std::path::PathBuf;
 
+use anyhow::Context;
+use codex_app_server_client::TypedRequestError;
 use codex_app_server_protocol::ClientRequest;
+use codex_app_server_protocol::JSONRPCErrorError;
 use codex_app_server_protocol::ThreadItem;
 use codex_app_server_protocol::ThreadReadParams;
 use codex_app_server_protocol::ThreadReadResponse;
@@ -180,10 +183,12 @@ impl BridgeRuntime {
         client_user_message_id: String,
         actor_user_id: Option<UserId>,
     ) -> anyhow::Result<()> {
-        let thread_id = self.ensure_thread(conversation).await?;
-        if self
-            .client_message_already_applied(&thread_id, &client_user_message_id)
-            .await?
+        let thread = self.ensure_thread(conversation).await?;
+        let thread_id = thread.thread_id;
+        if thread.reconcile_inbox
+            && self
+                .client_message_already_applied(&thread_id, &client_user_message_id)
+                .await?
         {
             return Ok(());
         }
@@ -261,18 +266,34 @@ impl BridgeRuntime {
         client_user_message_id: &str,
     ) -> anyhow::Result<bool> {
         let request_id = self.request_ids.next();
-        let response: ThreadReadResponse = self
-            .request_typed(
-                ClientRequest::ThreadRead {
-                    request_id,
-                    params: ThreadReadParams {
-                        thread_id: thread_id.to_string(),
-                        include_turns: true,
-                    },
+        let response: ThreadReadResponse = match self
+            .client
+            .request_typed(ClientRequest::ThreadRead {
+                request_id,
+                params: ThreadReadParams {
+                    thread_id: thread_id.to_string(),
+                    include_turns: true,
                 },
-                "thread/read for Telegram inbox reconciliation",
-            )
-            .await?;
+            })
+            .await
+        {
+            Ok(response) => response,
+            Err(TypedRequestError::Server { method, source })
+                if thread_read_unavailable_before_first_message(&method, &source) =>
+            {
+                // `thread/start` creates an in-memory thread before its first
+                // user message creates a rollout. A replay can reach this
+                // state after an interrupted first turn. There is nothing to
+                // reconcile yet, so the pending message must proceed to
+                // `turn/start` instead of becoming a retry loop.
+                return Ok(false);
+            }
+            Err(err) => {
+                return Err(err).context(
+                    "failed app-server request `thread/read for Telegram inbox reconciliation`",
+                );
+            }
+        };
         Ok(turn_items_contain_client_message(
             response
                 .thread
@@ -282,6 +303,16 @@ impl BridgeRuntime {
             client_user_message_id,
         ))
     }
+}
+
+fn thread_read_unavailable_before_first_message(method: &str, error: &JSONRPCErrorError) -> bool {
+    method == "thread/read"
+        && error.code == -32600
+        && error.message.starts_with("thread/read failed:")
+        && error.message.contains("thread")
+        && error.message.contains("not materialized yet")
+        && error.message.contains("includeTurns")
+        && error.message.contains("before first user message")
 }
 
 fn turn_items_contain_client_message<'a>(

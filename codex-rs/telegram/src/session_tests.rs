@@ -125,6 +125,42 @@ async fn clear_turn_for_thread_removes_pending_approvals() {
 }
 
 #[tokio::test]
+async fn replacement_thread_overwrites_stale_persisted_mapping() {
+    let codex_home = unique_temp_dir("codex-telegram-session-replacement");
+    fs::create_dir_all(&codex_home).expect("create codex home");
+    let conversation = ConversationKey::new(ChatId(42), None);
+    let sessions = SessionStore::load(&codex_home).await.unwrap();
+    sessions
+        .set_thread(conversation, "stale-thread".to_string())
+        .await
+        .unwrap();
+
+    let restarted = SessionStore::load(&codex_home).await.unwrap();
+    assert_eq!(
+        restarted.thread_id(conversation).await.as_deref(),
+        Some("stale-thread")
+    );
+    assert!(!restarted.thread_loaded(conversation).await);
+
+    restarted
+        .set_thread(conversation, "replacement-thread".to_string())
+        .await
+        .unwrap();
+    assert_eq!(
+        restarted.thread_id(conversation).await.as_deref(),
+        Some("replacement-thread")
+    );
+    assert!(restarted.thread_loaded(conversation).await);
+
+    let reloaded = SessionStore::load(&codex_home).await.unwrap();
+    assert_eq!(
+        reloaded.thread_id(conversation).await.as_deref(),
+        Some("replacement-thread")
+    );
+    fs::remove_dir_all(codex_home).expect("remove codex home");
+}
+
+#[tokio::test]
 async fn delivered_item_marker_survives_reload() {
     let codex_home = unique_temp_dir("codex-telegram-session-delivered");
     fs::create_dir_all(&codex_home).expect("create codex home");

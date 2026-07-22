@@ -6,7 +6,9 @@ use std::time::Duration;
 use anyhow::Context;
 use codex_app_server_client::InProcessAppServerClient;
 use codex_app_server_client::InProcessServerEvent;
+use codex_app_server_client::TypedRequestError;
 use codex_app_server_protocol::ClientRequest;
+use codex_app_server_protocol::JSONRPCErrorError;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::ThreadResumeParams;
 use codex_app_server_protocol::ThreadResumeResponse;
@@ -128,6 +130,28 @@ enum BridgeCommand {
 enum UserInputAdmission {
     Applied,
     Queued,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ThreadResolution {
+    thread_id: String,
+    reconcile_inbox: bool,
+}
+
+impl ThreadResolution {
+    fn existing(thread_id: String) -> Self {
+        Self {
+            thread_id,
+            reconcile_inbox: true,
+        }
+    }
+
+    fn fresh(thread_id: String) -> Self {
+        Self {
+            thread_id,
+            reconcile_inbox: false,
+        }
+    }
 }
 
 pub(crate) enum UserInputReceipt {
@@ -585,14 +609,49 @@ impl BridgeRuntime {
         Ok(())
     }
 
-    async fn ensure_thread(&mut self, conversation: ConversationKey) -> anyhow::Result<String> {
+    async fn ensure_thread(
+        &mut self,
+        conversation: ConversationKey,
+    ) -> anyhow::Result<ThreadResolution> {
         if let Some(thread_id) = self.sessions.thread_id(conversation).await {
             if !self.sessions.thread_loaded(conversation).await {
-                self.resume_thread(conversation, thread_id.clone()).await?;
+                match self
+                    .try_resume_thread(conversation, thread_id.clone())
+                    .await
+                {
+                    Ok(()) => {}
+                    Err(TypedRequestError::Server { method, source })
+                        if thread_resume_has_no_rollout(&method, &source) =>
+                    {
+                        warn!(
+                            %conversation,
+                            stale_thread_id = %thread_id,
+                            "stored Telegram thread has no rollout; replacing it"
+                        );
+                        let replacement = self
+                            .start_new_thread(conversation)
+                            .await
+                            .context("failed to replace unresumable Telegram thread")?;
+                        self.notify_after_effect(
+                            conversation,
+                            "The previous PFTerminal thread could not be resumed. I started a new thread and kept your pending Telegram message; prior thread context is not available in this chat.",
+                            "thread replacement notice",
+                        )
+                        .await;
+                        return Ok(ThreadResolution::fresh(replacement));
+                    }
+                    Err(err) => {
+                        return Err(err).context(
+                            "failed app-server request `thread/resume for Telegram session`",
+                        );
+                    }
+                }
             }
-            return Ok(thread_id);
+            return Ok(ThreadResolution::existing(thread_id));
         }
-        self.start_new_thread(conversation).await
+        self.start_new_thread(conversation)
+            .await
+            .map(ThreadResolution::fresh)
     }
 
     async fn start_new_thread(&mut self, conversation: ConversationKey) -> anyhow::Result<String> {
@@ -616,25 +675,33 @@ impl BridgeRuntime {
         conversation: ConversationKey,
         thread_id: String,
     ) -> anyhow::Result<()> {
+        self.try_resume_thread(conversation, thread_id)
+            .await
+            .context("failed app-server request `thread/resume`")
+    }
+
+    async fn try_resume_thread(
+        &mut self,
+        conversation: ConversationKey,
+        thread_id: String,
+    ) -> Result<(), TypedRequestError> {
         let request_id = self.request_ids.next();
         let (model, model_provider) = self.active_model_settings(conversation).await;
         let approval_policy = self.active_approval_policy(conversation).await;
         let _: ThreadResumeResponse = self
-            .request_typed(
-                ClientRequest::ThreadResume {
-                    request_id,
-                    params: ThreadResumeParams {
-                        thread_id,
-                        model,
-                        model_provider: Some(model_provider),
-                        cwd: Some(self.config.cwd.to_string_lossy().to_string()),
-                        runtime_workspace_roots: Some(self.config.workspace_roots.clone()),
-                        approval_policy: Some(approval_policy),
-                        ..ThreadResumeParams::default()
-                    },
+            .client
+            .request_typed(ClientRequest::ThreadResume {
+                request_id,
+                params: ThreadResumeParams {
+                    thread_id,
+                    model,
+                    model_provider: Some(model_provider),
+                    cwd: Some(self.config.cwd.to_string_lossy().to_string()),
+                    runtime_workspace_roots: Some(self.config.workspace_roots.clone()),
+                    approval_policy: Some(approval_policy),
+                    ..ThreadResumeParams::default()
                 },
-                "thread/resume",
-            )
+            })
             .await?;
         self.sessions.mark_thread_loaded(conversation).await;
         Ok(())
@@ -786,6 +853,16 @@ impl BridgeRuntime {
             .with_context(|| format!("failed app-server request `{method}`"))
     }
 }
+
+fn thread_resume_has_no_rollout(method: &str, error: &JSONRPCErrorError) -> bool {
+    method == "thread/resume"
+        && error.code == -32600
+        && error.message.contains("no rollout found for thread id")
+}
+
+#[cfg(test)]
+#[path = "bridge_tests.rs"]
+mod tests;
 
 impl BridgeCommand {
     fn error_conversation(&self) -> Option<ConversationKey> {
