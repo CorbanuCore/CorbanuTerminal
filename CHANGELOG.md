@@ -1,23 +1,38 @@
-# PFTerminal 0.1.19
+# PFTerminal 0.1.20
+
+## Added
+
+- Added an in-product `/telegram` setup flow with masked BotFather token entry,
+  encrypted vault storage, exact chat and sender authorization, connector
+  lifecycle controls, and automatic startup recovery.
+- Added Telegram support for text, images, bounded documents, approvals,
+  selectable model pages, per-chat status, cancellation, compaction, git diff,
+  skills, and queued follow-up turns.
+- Added durable update reconciliation so accepted Telegram messages survive
+  connector restarts without duplicating completed work.
 
 ## Fixed
 
-- Prevented updates and headless launches from making an existing encrypted
-  credential vault unreadable when the OS keyring is temporarily unavailable.
-- Existing vaults now validate every available key source against their
-  ciphertext and never generate or overwrite a key during recovery.
-- Stale file-fallback keys can no longer shadow a valid OS-keyring key, while a
-  valid fallback still recovers a vault when the OS-keyring entry is stale.
+- Made first-message setup self-progressing: PFTerminal now waits for `/start`
+  while the authorization view is open and ignores stale discovery results.
+- Prevented simultaneous PFTerminal processes from starting duplicate Telegram
+  pollers or stopping an unrelated process after PID reuse.
+- Rejects model switches that cannot authenticate instead of changing the UI
+  to a provider that will immediately fail.
+- Preserved chat authorization, model selection, and queued input across the
+  app-server state boundaries that previously caused silent or repeated work.
 
 ## Qualification status
 
-- Regression coverage reproduces the update-shaped macOS failure: an existing
-  vault plus an unavailable OS keyring cannot create a replacement fallback.
-- Candidate-key tests cover stale fallback, stale primary, missing key, and two
-  conflicting wrong keys; every failure path preserves ciphertext and keys.
-- The secrets, vault, and provider-key integration suites pass, along with
-  warnings-as-errors linting for the changed crate.
+- The Telegram connector suite passes 118 tests covering authorization,
+  polling, durable reconciliation, media limits, approvals, model selection,
+  rendering, session recovery, and failure backoff.
+- Focused TUI setup tests and snapshots pass, including automatic discovery,
+  stale-result cancellation, polling failure recovery, and connector status.
+- The packaged-build and real-TUI CI checks passed on the release branch before
+  merge. Live qualification covered encrypted token storage, connector health,
+  forced-crash recovery, and single-poller behavior across two TUI processes.
 
-Previous release: 0.1.18.
+Previous release: 0.1.19.
 
 The changelog can be found on the [releases page](https://github.com/agtico/PfTerminal/releases).
