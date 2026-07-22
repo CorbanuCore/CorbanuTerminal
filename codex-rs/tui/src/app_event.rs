@@ -1349,7 +1349,11 @@ pub(crate) enum AppEvent {
         result: Result<crate::chatwidget::telegram_setup::TelegramBotIdentity, String>,
     },
     DiscoverTelegramChats,
+    PollTelegramChats {
+        generation: u64,
+    },
     TelegramChatsDiscovered {
+        generation: u64,
         result: Result<crate::chatwidget::telegram_setup::TelegramDiscovery, String>,
     },
     ConfirmTelegramChat {

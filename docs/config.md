@@ -138,9 +138,11 @@ Telegram-specific configuration is read locally by the connector from the
 but the connector owns the individual settings.
 
 For interactive setup, run `/telegram` in the TUI. PFTerminal validates a
-masked BotFather token into the encrypted vault, discovers chats only after the
-user messages the bot, asks which exact chat and sender to authorize, captures
+masked BotFather token into the encrypted vault, waits automatically for the
+user to message the bot, asks which exact chat and sender to authorize, captures
 the current model/workspace/permission settings, and starts the connector. The
+bot remains silent until that authorization completes. Leaving the discovery
+screen cancels its polling, and stale results cannot reopen the screen. The
 same screen reports health and supports restart, stop, token replacement, and
 full disconnect. A configured connector is restored when PFTerminal starts;
 an operation lock prevents multiple PFTerminal processes from racing into two

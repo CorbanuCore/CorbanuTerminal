@@ -97,7 +97,7 @@ async fn discover_at(api_root: &str, token: &str) -> Result<TelegramDiscovery, S
         api_root,
         token,
         "getUpdates",
-        Some(json!({"timeout": 0, "allowed_updates": ["message"]})),
+        Some(json!({"timeout": 10, "allowed_updates": ["message"]})),
     )
     .await?;
     let mut candidates = BTreeMap::new();

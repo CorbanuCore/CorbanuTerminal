@@ -601,6 +601,7 @@ pub(crate) struct ChatWidget {
     clipboard_lease: Option<crate::clipboard_copy::ClipboardLease>,
     wallet_capability: Option<zeroize::Zeroizing<String>>,
     wallet_status_generation: u64,
+    telegram_discovery_generation: u64,
     wallet_payment_config: Option<crate::chatwidget::wallet_menu::WalletPaymentConfig>,
     wallet_balances: Option<codex_wallet::WalletBalances>,
     copy_last_response_binding: Vec<KeyBinding>,

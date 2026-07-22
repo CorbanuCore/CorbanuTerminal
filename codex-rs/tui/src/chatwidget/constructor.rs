@@ -153,6 +153,7 @@ impl ChatWidget {
             clipboard_lease: None,
             wallet_capability: None,
             wallet_status_generation: 0,
+            telegram_discovery_generation: 0,
             wallet_payment_config: None,
             wallet_balances: None,
             copy_last_response_binding,

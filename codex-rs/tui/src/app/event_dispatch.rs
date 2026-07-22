@@ -1749,28 +1749,46 @@ impl App {
                 });
             }
             AppEvent::TelegramTokenValidated { result } => match result {
-                Ok(identity) => self
-                    .chat_widget
-                    .open_telegram_discovery(identity, Vec::new()),
+                Ok(identity) => {
+                    let generation = self.chat_widget.begin_telegram_discovery(Some(identity));
+                    self.app_event_tx
+                        .send(AppEvent::PollTelegramChats { generation });
+                }
                 Err(error) => {
                     self.chat_widget.add_error_message(error);
                     self.chat_widget.open_telegram_token_entry();
                 }
             },
             AppEvent::DiscoverTelegramChats => {
+                let generation = self.chat_widget.begin_telegram_discovery(None);
+                self.app_event_tx
+                    .send(AppEvent::PollTelegramChats { generation });
+            }
+            AppEvent::PollTelegramChats { generation } => {
                 let codex_home = self.config.codex_home.clone().to_path_buf();
                 let tx = self.app_event_tx.clone();
                 tokio::spawn(async move {
                     let result =
                         crate::chatwidget::telegram_setup::discover_chats(codex_home).await;
-                    tx.send(AppEvent::TelegramChatsDiscovered { result });
+                    tx.send(AppEvent::TelegramChatsDiscovered { generation, result });
                 });
             }
-            AppEvent::TelegramChatsDiscovered { result } => match result {
-                Ok(discovery) => self
+            AppEvent::TelegramChatsDiscovered { generation, result } => match result {
+                Ok(discovery) => {
+                    if self
+                        .chat_widget
+                        .apply_telegram_discovery(generation, discovery)
+                    {
+                        let tx = self.app_event_tx.clone();
+                        tokio::spawn(async move {
+                            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                            tx.send(AppEvent::PollTelegramChats { generation });
+                        });
+                    }
+                }
+                Err(error) => self
                     .chat_widget
-                    .open_telegram_discovery(discovery.identity, discovery.candidates),
-                Err(error) => self.chat_widget.add_error_message(error),
+                    .telegram_discovery_failed(generation, error),
             },
             AppEvent::ConfirmTelegramChat { candidate } => {
                 self.chat_widget.confirm_telegram_chat(candidate);

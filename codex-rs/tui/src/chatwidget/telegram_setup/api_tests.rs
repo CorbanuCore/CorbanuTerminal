@@ -2,6 +2,7 @@ use pretty_assertions::assert_eq;
 use wiremock::Mock;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
+use wiremock::matchers::body_json;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
@@ -98,6 +99,10 @@ async fn discovery_returns_exact_chat_and_actor_pairs() {
         .await;
     Mock::given(method("POST"))
         .and(path(format!("/bot{token}/getUpdates")))
+        .and(body_json(serde_json::json!({
+            "timeout": 10,
+            "allowed_updates": ["message"]
+        })))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "ok": true,
             "result": [{

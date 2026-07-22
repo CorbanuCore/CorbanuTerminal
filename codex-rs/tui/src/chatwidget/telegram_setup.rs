@@ -24,7 +24,7 @@ pub(crate) use service::start_connector;
 pub(crate) use service::stop_connector;
 
 const TELEGRAM_VIEW_ID: &str = "telegram-settings";
-const TELEGRAM_DISCOVERY_VIEW_ID: &str = "telegram-discovery";
+pub(crate) const TELEGRAM_DISCOVERY_VIEW_ID: &str = "telegram-discovery";
 
 impl ChatWidget {
     pub(crate) fn open_telegram_menu(&mut self) {
@@ -64,64 +64,53 @@ impl ChatWidget {
         self.bottom_pane.show_view(Box::new(view));
     }
 
-    pub(crate) fn open_telegram_discovery(
+    pub(crate) fn begin_telegram_discovery(
         &mut self,
-        identity: TelegramBotIdentity,
-        candidates: Vec<TelegramChatCandidate>,
-    ) {
-        let mut header = ColumnRenderable::new();
-        header.push(Line::from("Connect Telegram".bold()));
-        header.push(Line::from(format!(
-            "Bot: @{} · Open Telegram and send it /start, then refresh.",
-            identity.username
-        )));
-        header.push(Line::from(
-            "Only the chat you explicitly select will be authorized.".dim(),
-        ));
-
-        if candidates.is_empty() {
-            header.push(Line::from(
-                "No eligible message found yet. Send /start to the bot, then refresh.".dim(),
-            ));
+        identity: Option<TelegramBotIdentity>,
+    ) -> u64 {
+        self.telegram_discovery_generation = self.telegram_discovery_generation.wrapping_add(1);
+        let generation = self.telegram_discovery_generation;
+        let params = telegram_discovery_params(identity, Vec::new());
+        if self.bottom_pane.active_view_id() == Some(TELEGRAM_DISCOVERY_VIEW_ID) {
+            self.bottom_pane
+                .replace_selection_view_if_present(TELEGRAM_DISCOVERY_VIEW_ID, params);
+        } else {
+            self.show_selection_view(params);
         }
+        generation
+    }
 
-        let mut items = Vec::new();
-        for candidate in candidates {
-            let selected = candidate.clone();
-            items.push(SelectionItem {
-                name: candidate.display_name,
-                description: Some(format!(
-                    "{} · chat {} · sender {}",
-                    candidate.chat_kind, candidate.chat_id, candidate.actor_user_id
-                )),
-                actions: vec![Box::new(move |tx| {
-                    tx.send(AppEvent::ConfirmTelegramChat {
-                        candidate: selected.clone(),
-                    });
-                })],
-                dismiss_on_select: true,
-                ..Default::default()
-            });
+    pub(crate) fn apply_telegram_discovery(
+        &mut self,
+        generation: u64,
+        discovery: TelegramDiscovery,
+    ) -> bool {
+        if generation != self.telegram_discovery_generation
+            || self.bottom_pane.active_view_id() != Some(TELEGRAM_DISCOVERY_VIEW_ID)
+        {
+            return false;
         }
-        items.push(SelectionItem {
-            name: "Refresh chats".to_string(),
-            description: Some("Check for a new message sent to this bot.".to_string()),
-            actions: vec![Box::new(|tx| {
-                tx.send(AppEvent::DiscoverTelegramChats);
-            })],
-            dismiss_on_select: false,
-            ..Default::default()
-        });
+        let should_continue = discovery.candidates.is_empty();
+        self.bottom_pane.replace_selection_view_if_present(
+            TELEGRAM_DISCOVERY_VIEW_ID,
+            telegram_discovery_params(Some(discovery.identity), discovery.candidates),
+        );
+        should_continue
+    }
 
-        self.show_selection_view(SelectionViewParams {
-            view_id: Some(TELEGRAM_DISCOVERY_VIEW_ID),
-            header: Box::new(header),
-            items,
-            ..Default::default()
-        });
+    pub(crate) fn telegram_discovery_failed(&mut self, generation: u64, error: String) {
+        if generation == self.telegram_discovery_generation
+            && self.bottom_pane.active_view_id() == Some(TELEGRAM_DISCOVERY_VIEW_ID)
+        {
+            self.bottom_pane.replace_selection_view_if_present(
+                TELEGRAM_DISCOVERY_VIEW_ID,
+                telegram_discovery_error_params(error),
+            );
+        }
     }
 
     pub(crate) fn confirm_telegram_chat(&mut self, candidate: TelegramChatCandidate) {
+        self.telegram_discovery_generation = self.telegram_discovery_generation.wrapping_add(1);
         let model = self.config.model.clone();
         let cwd = self.config.cwd.to_path_buf();
         let approval_policy =
@@ -164,6 +153,7 @@ impl ChatWidget {
     }
 
     pub(crate) fn confirm_telegram_disconnect(&mut self) {
+        self.telegram_discovery_generation = self.telegram_discovery_generation.wrapping_add(1);
         self.show_selection_view(SelectionViewParams {
             title: Some("Disconnect Telegram?".to_string()),
             subtitle: Some(
@@ -179,6 +169,87 @@ impl ChatWidget {
             }],
             ..Default::default()
         });
+    }
+}
+
+fn telegram_discovery_params(
+    identity: Option<TelegramBotIdentity>,
+    candidates: Vec<TelegramChatCandidate>,
+) -> SelectionViewParams {
+    let mut header = ColumnRenderable::new();
+    header.push(Line::from("Connect Telegram".bold()));
+    let bot = identity
+        .as_ref()
+        .map(|identity| format!("@{}", identity.username))
+        .unwrap_or_else(|| "verified bot".to_string());
+    header.push(Line::from(format!(
+        "Bot: {bot} · Send /start in Telegram; this screen checks automatically."
+    )));
+    header.push(Line::from(
+        "Only the chat you explicitly select will be authorized.".dim(),
+    ));
+
+    if candidates.is_empty() {
+        header.push(Line::from(
+            "Waiting for /start… The bot stays silent until you authorize the chat here.".dim(),
+        ));
+    }
+
+    let mut items = Vec::new();
+    for candidate in candidates {
+        let selected = candidate.clone();
+        items.push(SelectionItem {
+            name: candidate.display_name,
+            description: Some(format!(
+                "{} · chat {} · sender {}",
+                candidate.chat_kind, candidate.chat_id, candidate.actor_user_id
+            )),
+            actions: vec![Box::new(move |tx| {
+                tx.send(AppEvent::ConfirmTelegramChat {
+                    candidate: selected.clone(),
+                });
+            })],
+            dismiss_on_select: true,
+            ..Default::default()
+        });
+    }
+    items.push(SelectionItem {
+        name: "Return to Telegram settings".to_string(),
+        description: Some("Stop waiting and return to connector settings.".to_string()),
+        dismiss_on_select: true,
+        ..Default::default()
+    });
+
+    SelectionViewParams {
+        view_id: Some(TELEGRAM_DISCOVERY_VIEW_ID),
+        header: Box::new(header),
+        items,
+        ..Default::default()
+    }
+}
+
+fn telegram_discovery_error_params(error: String) -> SelectionViewParams {
+    let mut header = ColumnRenderable::new();
+    header.push(Line::from("Connect Telegram".bold()));
+    header.push(Line::from(format!("Chat discovery stopped: {error}")).red());
+    SelectionViewParams {
+        view_id: Some(TELEGRAM_DISCOVERY_VIEW_ID),
+        header: Box::new(header),
+        items: vec![
+            SelectionItem {
+                name: "Retry chat discovery".to_string(),
+                description: Some("Resume waiting for a message to this bot.".to_string()),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::DiscoverTelegramChats))],
+                dismiss_on_select: false,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "Return to Telegram settings".to_string(),
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
     }
 }
 

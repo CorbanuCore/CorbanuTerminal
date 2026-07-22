@@ -97,6 +97,88 @@ async fn telegram_setup_resumes_after_token_validation_snapshot() {
 }
 
 #[tokio::test]
+async fn telegram_setup_polls_until_a_chat_is_discovered_and_ignores_stale_results() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.6-sol")).await;
+    let identity = crate::chatwidget::telegram_setup::TelegramBotIdentity {
+        id: 99,
+        username: "pumps_bot".to_string(),
+        display_name: "Pumps".to_string(),
+    };
+    let stale_generation = chat.begin_telegram_discovery(Some(identity.clone()));
+    let generation = chat.begin_telegram_discovery(Some(identity.clone()));
+
+    assert_chatwidget_snapshot!(
+        "telegram_setup_auto_discovery",
+        render_bottom_popup(&chat, /*width*/ 94)
+    );
+    assert!(!chat.apply_telegram_discovery(
+        stale_generation,
+        crate::chatwidget::telegram_setup::TelegramDiscovery {
+            identity: identity.clone(),
+            candidates: vec![crate::chatwidget::telegram_setup::TelegramChatCandidate {
+                chat_id: 7,
+                actor_user_id: 7,
+                display_name: "Stale chat".to_string(),
+                chat_kind: "private".to_string(),
+            }],
+        },
+    ));
+    assert!(chat.apply_telegram_discovery(
+        generation,
+        crate::chatwidget::telegram_setup::TelegramDiscovery {
+            identity: identity.clone(),
+            candidates: Vec::new(),
+        },
+    ));
+    assert!(!chat.apply_telegram_discovery(
+        generation,
+        crate::chatwidget::telegram_setup::TelegramDiscovery {
+            identity,
+            candidates: vec![crate::chatwidget::telegram_setup::TelegramChatCandidate {
+                chat_id: 42,
+                actor_user_id: 42,
+                display_name: "Alice".to_string(),
+                chat_kind: "private".to_string(),
+            }],
+        },
+    ));
+    let popup = render_bottom_popup(&chat, /*width*/ 94);
+    assert!(popup.contains("Alice"));
+    assert!(!popup.contains("Stale chat"));
+
+    let cancelled_generation = chat.begin_telegram_discovery(None);
+    chat.bottom_pane
+        .dismiss_active_view_if_id(crate::chatwidget::telegram_setup::TELEGRAM_DISCOVERY_VIEW_ID);
+    assert!(!chat.apply_telegram_discovery(
+        cancelled_generation,
+        crate::chatwidget::telegram_setup::TelegramDiscovery {
+            identity: crate::chatwidget::telegram_setup::TelegramBotIdentity {
+                id: 99,
+                username: "pumps_bot".to_string(),
+                display_name: "Pumps".to_string(),
+            },
+            candidates: Vec::new(),
+        },
+    ));
+}
+
+#[tokio::test]
+async fn telegram_setup_surfaces_polling_failure_with_a_retry_action() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.6-sol")).await;
+    let generation = chat.begin_telegram_discovery(None);
+
+    chat.telegram_discovery_failed(
+        generation,
+        "Another process is already polling this bot.".to_string(),
+    );
+
+    let popup = render_bottom_popup(&chat, /*width*/ 94);
+    assert!(popup.contains("Chat discovery stopped"));
+    assert!(popup.contains("Retry chat discovery"));
+    assert!(popup.contains("Return to Telegram settings"));
+}
+
+#[tokio::test]
 async fn wallet_disconnect_wraps_copy_and_dismisses_confirmation_before_replacement() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.config.model_provider_id = PFTERMINAL_PLAN_PROVIDER_ID.to_string();
