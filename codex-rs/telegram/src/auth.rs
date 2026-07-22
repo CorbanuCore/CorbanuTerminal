@@ -2,6 +2,8 @@ use teloxide::types::ChatId;
 use teloxide::types::UserId;
 use tracing::warn;
 
+use crate::conversation::ConversationKey;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChatAllowlist {
     allowed_chat_ids: Vec<i64>,
@@ -31,7 +33,10 @@ impl ChatAllowlist {
         if self.is_authorized(chat_id) {
             true
         } else {
-            warn!(chat_id = chat_id.0, "rejecting unauthorized Telegram chat");
+            warn!(
+                conversation = %ConversationKey::from(chat_id).redacted_id(),
+                "rejecting unauthorized Telegram chat"
+            );
             false
         }
     }
@@ -51,8 +56,8 @@ impl ChatAllowlist {
                 || user_id.is_some_and(|user_id| self.allowed_user_ids.contains(&user_id.0)));
         if !allowed {
             warn!(
-                chat_id = chat_id.0,
-                user_id = user_id.map(|id| id.0),
+                conversation = %ConversationKey::from(chat_id).redacted_id(),
+                actor_present = user_id.is_some(),
                 "rejecting unauthorized Telegram actor"
             );
         }

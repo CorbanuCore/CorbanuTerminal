@@ -35,4 +35,6 @@ fn redacted_identity_is_stable_without_exposing_chat_id() {
     assert_eq!(key.redacted_id(), key.redacted_id());
     assert_eq!(key.redacted_id().len(), 12);
     assert_ne!(key.redacted_id(), key.storage_key());
+    assert_eq!(key.to_string(), key.redacted_id());
+    assert!(!key.to_string().contains("42"));
 }

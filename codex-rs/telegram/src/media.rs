@@ -348,7 +348,12 @@ pub async fn fetch_message_document(
         .save(message, &stored_name, &original_name, &mime_type, &bytes)
         .await?;
     let sha256 = format!("{:x}", Sha256::digest(&bytes));
-    info!(path = %path.display(), bytes = bytes.len(), %sha256, "fetched inbound Telegram document");
+    info!(
+        conversation = %ConversationKey::from_message(message).redacted_id(),
+        bytes = bytes.len(),
+        %sha256,
+        "fetched inbound Telegram document"
+    );
     Ok(DocumentFetch::Document(FetchedDocument {
         path,
         original_name,
@@ -455,7 +460,11 @@ pub async fn fetch_message_images(
         let path = store
             .save(message, &name, &original_name, &mime_type, &bytes)
             .await?;
-        info!(path = %path.display(), bytes = bytes.len(), "fetched inbound Telegram image");
+        info!(
+            conversation = %ConversationKey::from_message(message).redacted_id(),
+            bytes = bytes.len(),
+            "fetched inbound Telegram image"
+        );
         paths.push(path);
     }
     Ok(FetchedImages::Images(paths))

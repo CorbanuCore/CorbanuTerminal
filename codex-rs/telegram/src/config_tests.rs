@@ -21,6 +21,20 @@ fn telegram_cli_accepts_health_mode() {
 }
 
 #[test]
+fn telegram_cli_accepts_setup_mode() {
+    let cli = Cli::try_parse_from(["telegram", "--setup"])
+        .expect("--setup should be a valid Telegram connector mode");
+    assert!(cli.setup);
+    assert!(!cli.health);
+}
+
+#[test]
+fn telegram_cli_rejects_setup_with_health() {
+    Cli::try_parse_from(["telegram", "--setup", "--health"])
+        .expect_err("setup and health are mutually exclusive");
+}
+
+#[test]
 fn telegram_config_defaults_when_table_absent() {
     let config = TelegramConfig::from_toml_str("model = \"x\"").expect("config parses");
 

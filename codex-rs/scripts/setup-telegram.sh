@@ -572,6 +572,11 @@ if [[ ${#USER_IDS[@]} -eq 0 ]]; then
     fi
 fi
 if printf '%s\n' "${CHAT_IDS[@]}" | grep -q '^-'; then
+    if [[ ${#USER_IDS[@]} -eq 0 && -t 0 ]]; then
+        read -r -p "Telegram user ID(s) allowed to act in groups, comma-separated: " USER_ID_INPUT
+        add_user_ids "$USER_ID_INPUT"
+        USER_IDS_EXPLICIT=1
+    fi
     [[ ${#USER_IDS[@]} -gt 0 ]] || die "group chat IDs require at least one --user-id"
 fi
 

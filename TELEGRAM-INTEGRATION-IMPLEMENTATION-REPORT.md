@@ -3,7 +3,7 @@
 Date: 2026-07-22  
 Branch: `feat/telegram-connector-hardened`  
 Pull request: [agtico/PfTerminal#59](https://github.com/agtico/PfTerminal/pull/59)  
-Candidate binary SHA-256: `001f3a937c5732d754d7419e604be0bccc42fa1e7e2a3b43387d1c7cdf7405a0`
+Candidate binary SHA-256: `0158d41238b493fa4412d6d94284761f88c057fa47f451593caafce5962dd291`
 
 ## Verdict
 
@@ -27,10 +27,14 @@ live sessions have not run.
 | Attachments | Images remain native image inputs. Bounded text/source, JSON, PDF, XML, and YAML files receive stable hashed paths and sidecar metadata. Archives, executables, and opaque binary media are rejected. Cleanup enforces age and total-byte caps. |
 | Operation | `/status` reports plain-language runtime state, queue depth, last contact/error, and next action. `telegram --health` checks authorization, storage, workspace, provider credentials, sandbox viability, and Bot API identity. |
 | Services | Setup preserves existing chat/user policy, rejects command-line tokens, runs health before service install, and emits systemd, launchd, and Windows current-user service definitions. |
+| Installed setup | PFTerminal package archives now carry the setup script and all service templates. `pfterminal telegram --setup` locates the packaged copy and runs it without requiring a source checkout. |
+| Log privacy | Structured connector logs use a stable redacted conversation identifier. Authorization and media logs no longer emit raw Telegram chat/user IDs or paths containing them. |
 
 ## Verification completed
 
-- `just test -p codex-telegram`: **105 passed, 0 failed**.
+- `just test -p codex-telegram`: **107 passed, 0 failed**.
+- Package-helper tests: **15 passed, 0 failed**, including PFTerminal-only
+  Telegram resources and an unchanged stock Codex package layout.
 - `cargo clippy -p codex-telegram --all-targets --no-deps`: passed.
 - `just fix -p codex-telegram`: passed.
 - `just fmt`: passed.
@@ -38,6 +42,9 @@ live sessions have not run.
 - `cargo build -p codex-cli --bin pfterminal`: passed; candidate hash is recorded above.
 - `pfterminal telegram --help`: exposes `--health` and documents the readiness scope.
 - Clean-home setup dry run: generated valid configuration and a systemd unit with absolute executable and environment-file paths.
+- Built-package setup dry run: the extracted PFTerminal binary found and
+  launched `codex-resources/telegram/setup-telegram.sh`; the package also
+  contained the systemd, launchd, Windows Task, and `AGENTS.md` templates.
 - Missing-token health run: exited nonzero with the exact environment/vault remediation and no hang.
 - LaunchAgent template: parsed as XML. Windows installer was inspected, but PowerShell is unavailable on this Linux host.
 - `just test -p codex-cli`: 519/520 passed. The sole

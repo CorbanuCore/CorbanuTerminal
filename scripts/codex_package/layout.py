@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .targets import PackageInputs
 from .targets import PackageVariant
+from .targets import REPO_ROOT
 from .targets import TargetSpec
 from .zsh import ZSH_RESOURCE_PATH
 
@@ -79,6 +80,9 @@ def build_package_dir(
             is_windows=True,
         )
 
+    if variant.name == "pfterminal":
+        copy_telegram_resources(resources_dir / "telegram", spec)
+
     metadata = {
         "layoutVersion": LAYOUT_VERSION,
         "version": version,
@@ -91,6 +95,8 @@ def build_package_dir(
         "resourcesDir": "codex-resources",
         "pathDir": "codex-path",
     }
+    if variant.name == "pfterminal":
+        metadata["telegramResourcesDir"] = "codex-resources/telegram"
     write_json(package_dir / "codex-package.json", metadata)
 
 
@@ -129,6 +135,8 @@ def validate_package_dir(
         "resourcesDir": "codex-resources",
         "pathDir": "codex-path",
     }
+    if variant.name == "pfterminal":
+        expected_metadata["telegramResourcesDir"] = "codex-resources/telegram"
     for key, expected in expected_metadata.items():
         actual = metadata.get(key)
         if actual != expected:
@@ -163,6 +171,20 @@ def validate_package_dir(
             ]
         )
 
+    if variant.name == "pfterminal":
+        telegram_dir = Path("codex-resources") / "telegram"
+        required_files.extend(
+            [
+                telegram_dir / "setup-telegram.sh",
+                telegram_dir / "install-telegram-task.ps1",
+                telegram_dir / "dist" / "AGENTS.md.template",
+                telegram_dir / "dist" / "pfterminal-telegram.service",
+                telegram_dir / "dist" / "net.postfiat.pfterminal.telegram.plist",
+            ]
+        )
+        if not spec.is_windows:
+            executable_files.append(telegram_dir / "setup-telegram.sh")
+
     for relative_file in required_files:
         path = package_dir / relative_file
         if not path.is_file():
@@ -181,6 +203,41 @@ def copy_executable(src: Path, dest: Path, *, is_windows: bool) -> None:
     if not is_windows:
         mode = dest.stat().st_mode
         dest.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def copy_telegram_resources(dest: Path, spec: TargetSpec) -> None:
+    sources = {
+        Path("setup-telegram.sh"): REPO_ROOT
+        / "codex-rs"
+        / "scripts"
+        / "setup-telegram.sh",
+        Path("install-telegram-task.ps1"): REPO_ROOT
+        / "codex-rs"
+        / "scripts"
+        / "install-telegram-task.ps1",
+        Path("dist/AGENTS.md.template"): REPO_ROOT
+        / "codex-rs"
+        / "telegram"
+        / "dist"
+        / "AGENTS.md.template",
+        Path("dist/pfterminal-telegram.service"): REPO_ROOT
+        / "codex-rs"
+        / "telegram"
+        / "dist"
+        / "pfterminal-telegram.service",
+        Path("dist/net.postfiat.pfterminal.telegram.plist"): REPO_ROOT
+        / "codex-rs"
+        / "telegram"
+        / "dist"
+        / "net.postfiat.pfterminal.telegram.plist",
+    }
+    for relative_path, source in sources.items():
+        target = dest / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+    if not spec.is_windows:
+        setup = dest / "setup-telegram.sh"
+        setup.chmod(setup.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
 def write_json(path: Path, value: object) -> None:

@@ -24,6 +24,10 @@ mod session_tests;
 #[path = "dedup_tests.rs"]
 mod dedup_tests;
 
+#[cfg(not(windows))]
+use std::path::PathBuf;
+#[cfg(not(windows))]
+use std::process::Command;
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -69,6 +73,10 @@ pub struct Cli {
     /// Verify Telegram identity, authorization, state, workspace, and provider readiness, then exit.
     #[arg(long, default_value_t = false)]
     pub health: bool,
+
+    /// Configure Telegram interactively without requiring a source checkout.
+    #[arg(long, default_value_t = false, conflicts_with = "health")]
+    pub setup: bool,
 }
 
 pub struct RunConfig {
@@ -86,6 +94,9 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         cli_overrides,
         loader_overrides,
     } = run_config;
+    if cli.setup {
+        return run_setup();
+    }
     let codex_home = codex_core::config::find_codex_home()?;
     let telegram_config = TelegramConfig::load_from_codex_home(&codex_home)?;
     if !telegram_config.enabled {
@@ -108,7 +119,7 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         .filter(|chat_id| *chat_id < 0)
     {
         warn!(
-            chat_id,
+            conversation = %crate::conversation::ConversationKey::from(teloxide::types::ChatId(chat_id)).redacted_id(),
             "Telegram allowlist includes a group or supergroup chat; only allowed_user_ids may drive and approve turns"
         );
     }
@@ -200,6 +211,54 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         warn!("Telegram bridge shutdown failed: {err}");
     }
     result
+}
+
+fn run_setup() -> anyhow::Result<()> {
+    #[cfg(windows)]
+    {
+        anyhow::bail!(
+            "interactive Telegram setup is not yet available on Windows; configure [telegram], run `pfterminal telegram --health`, then use the bundled install-telegram-task.ps1"
+        );
+    }
+
+    #[cfg(not(windows))]
+    {
+        let script = locate_setup_script()?;
+        let status = Command::new("bash")
+            .arg(&script)
+            .status()
+            .with_context(|| format!("failed to launch {}", script.display()))?;
+        if !status.success() {
+            anyhow::bail!("Telegram setup exited with {status}");
+        }
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+fn locate_setup_script() -> anyhow::Result<PathBuf> {
+    let executable = std::env::current_exe().context("resolve current PFTerminal executable")?;
+    if let Some(package_root) = executable.parent().and_then(|bin_dir| bin_dir.parent()) {
+        let packaged = package_root
+            .join("codex-resources")
+            .join("telegram")
+            .join("setup-telegram.sh");
+        if packaged.is_file() {
+            return Ok(packaged);
+        }
+    }
+
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .context("Telegram crate has no codex-rs parent")?
+        .join("scripts")
+        .join("setup-telegram.sh");
+    if source.is_file() {
+        return Ok(source);
+    }
+    anyhow::bail!(
+        "Telegram setup resources are missing; reinstall PFTerminal or configure [telegram] manually"
+    )
 }
 
 async fn run_health_check(

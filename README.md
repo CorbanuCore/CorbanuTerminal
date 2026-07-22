@@ -189,6 +189,7 @@ Configure it in `$CODEX_HOME/config.toml`:
 enabled = true
 bot_token_env = "PFTERMINAL_TELEGRAM_TOKEN"
 allowed_chat_ids = [21000038, -1001941234987]
+allowed_user_ids = [21000038]
 mode = "polling"
 approval_policy = "on-request"
 ```
@@ -196,6 +197,8 @@ approval_policy = "on-request"
 Store the bot token in the named environment variable or in the encrypted vault
 label `telegram/bot_token`; do not put raw bot tokens in `config.toml`.
 Approvals are confirmed with Telegram inline buttons.
+Run `pfterminal telegram --setup` for interactive setup from an installed
+package, then `pfterminal telegram` to start the connector.
 
 ## Codex Sessions vs Claude Panes
 

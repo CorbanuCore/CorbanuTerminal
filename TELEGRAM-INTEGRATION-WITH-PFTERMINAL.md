@@ -88,7 +88,9 @@ Today it provides:
   ingestion with configurable size, age, and total-storage limits;
 - bot-token loading from a named environment variable or the encrypted vault;
 - setup and health checks plus Linux systemd, macOS launchd, and Windows
-  Scheduled Task templates;
+  Scheduled Task templates, all carried in PFTerminal package archives;
+- `pfterminal telegram --setup`, which launches the packaged interactive setup
+  path without requiring a source checkout;
 - bounded outbound calls, retry of idempotent reads, persisted update-ID
   deduplication, a bot-keyed durable inbox, deterministic app-server message
   IDs, polling-conflict detection, and restart reconciliation;
@@ -96,6 +98,10 @@ Today it provides:
   forum-topic ID;
 - mid-turn `turn/steer`, a bounded per-conversation FIFO fallback, and
   plain-language `/status` recovery guidance.
+
+Connector logs use a stable redacted conversation identifier. Authorization
+and media events do not emit raw Telegram chat/user IDs or paths containing
+them.
 
 Commit `990f1169f` corrected a merge-blocking defect in the reliability layer:
 the deduplication function had been installed as a terminal dptree endpoint, so

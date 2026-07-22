@@ -55,7 +55,7 @@ impl ConversationKey {
 
 impl fmt::Display for ConversationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.storage_key())
+        f.write_str(&self.redacted_id())
     }
 }
 

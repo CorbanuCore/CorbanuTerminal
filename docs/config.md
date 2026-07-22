@@ -242,8 +242,13 @@ intentionally want a home-rooted remote agent workspace.
 The recommended setup path is:
 
 ```bash
-codex-rs/scripts/setup-telegram.sh --chat-id 21000038
+pfterminal telegram --setup
 ```
+
+Installed PFTerminal packages bundle the setup script and service templates;
+`--setup` locates and runs that exact packaged copy. From a source checkout,
+`codex-rs/scripts/setup-telegram.sh --chat-id 21000038` remains available for
+scripted setup.
 
 The script prompts for the bot token without echoing it when neither the
 process environment nor configured environment file provides one. For
