@@ -64,7 +64,11 @@ jobs:
     needs: validate
     name: Build macOS package - ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 150
+    # Intel hosted runners can take more than two hours for a cold build. Keep
+    # enough headroom for archive qualification and DMG packaging after cargo
+    # completes instead of cancelling an otherwise healthy release at the
+    # cleanup boundary.
+    timeout-minutes: 240
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
@@ -160,19 +164,25 @@ jobs:
         run: |
           set -euo pipefail
           df -h .
-          rm -rf \
-            codex-rs/target \
-            "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
-            "${RUNNER_TEMP}/smoke-${TARGET}" \
-            "${RUNNER_TEMP}/rusty_v8" \
-            "${HOME}/.cargo/git" \
-            "${HOME}/.cargo/registry/cache" \
-            "${HOME}/.cargo/registry/src" \
-            "${HOME}/Library/Caches/Homebrew" \
-            "${HOME}/Library/Developer/CoreSimulator"
-          sudo rm -rf \
-            /Applications/Xcode*.app \
-            /Library/Developer/CoreSimulator
+          available_kb="$(df -Pk . | awk 'NR == 2 { print $4 }')"
+          reserve_kb="$((60 * 1024 * 1024))"
+          if (( available_kb < reserve_kb )); then
+            rm -rf \
+              codex-rs/target \
+              "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
+              "${RUNNER_TEMP}/smoke-${TARGET}" \
+              "${RUNNER_TEMP}/rusty_v8" \
+              "${HOME}/.cargo/git" \
+              "${HOME}/.cargo/registry/cache" \
+              "${HOME}/.cargo/registry/src" \
+              "${HOME}/Library/Caches/Homebrew" \
+              "${HOME}/Library/Developer/CoreSimulator"
+            sudo rm -rf \
+              /Applications/Xcode*.app \
+              /Library/Developer/CoreSimulator
+          else
+            echo "Skipping destructive cleanup: ${available_kb} KiB available exceeds ${reserve_kb} KiB reserve"
+          fi
           ls -lh "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz"
           df -h .
 
