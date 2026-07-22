@@ -12218,3 +12218,36 @@ async fn absent_gpu_runtime_overlay_does_not_create_state_db() -> std::io::Resul
 
     Ok(())
 }
+
+#[tokio::test]
+async fn load_config_k3_with_explicit_incompatible_provider_repairs_pair() -> std::io::Result<()> {
+    use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+    use codex_model_provider_info::KIMI_CODE_K3_MODEL;
+    use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
+    use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
+
+    for incompatible_provider in [
+        ANTHROPIC_PROVIDER_ID,
+        CLAUDE_PLAN_PROVIDER_ID,
+        OPENROUTER_PROVIDER_ID,
+    ] {
+        let cfg = toml::from_str::<ConfigToml>(&format!(
+            "model_provider = {incompatible_provider:?}\nmodel = {KIMI_CODE_K3_MODEL:?}\n"
+        ))
+        .expect("config should deserialize");
+
+        let config = Config::load_from_base_config_with_overrides(
+            cfg,
+            ConfigOverrides::default(),
+            tempdir()?.abs(),
+        )
+        .await?;
+
+        assert_eq!(config.model_provider_id, KIMI_CODE_PROVIDER_ID);
+        assert_eq!(config.model.as_deref(), Some(KIMI_CODE_K3_MODEL));
+        assert!(config.model_provider.is_kimi_code());
+    }
+
+    Ok(())
+}

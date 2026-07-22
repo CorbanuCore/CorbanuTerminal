@@ -547,7 +547,17 @@ impl ChatWidget {
     fn apply_thread_settings(&mut self, mut settings: ThreadSettings) {
         let cwd_changed = self.config.cwd != settings.cwd;
         self.apply_thread_settings_cwd(settings.cwd.clone());
-        self.apply_thread_model_provider(settings.model_provider.clone());
+        // Keep the transport paired with the thread's model: persisted settings and
+        // resumed-thread metadata can carry an impossible built-in pair (for example a
+        // `k3` model with an Anthropic-style provider). The catalog helper is
+        // conservative and only corrects unambiguous built-in families.
+        let model_provider_id = codex_model_provider_info::corrected_catalog_provider(
+            settings.model.as_str(),
+            settings.model_provider.as_str(),
+        )
+        .unwrap_or(settings.model_provider.as_str())
+        .to_string();
+        self.apply_thread_model_provider(model_provider_id);
         self.set_service_tier(settings.service_tier.clone());
         self.set_approval_policy(settings.approval_policy);
         self.set_approvals_reviewer(settings.approvals_reviewer.to_core());

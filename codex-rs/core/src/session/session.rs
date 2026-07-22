@@ -288,6 +288,29 @@ impl SessionConfiguration {
             next_configuration.provider = provider;
             next_configuration.original_config_do_not_use = Arc::new(config);
         }
+        // Keep the runtime transport paired with the effective model even when model and
+        // provider arrive through separate settings updates or stale resumed-thread metadata.
+        // The catalog helper is conservative: it only corrects impossible built-in pairs.
+        if let Some(corrected_provider_id) = codex_model_provider_info::corrected_catalog_provider(
+            next_configuration.collaboration_mode.model(),
+            &next_configuration
+                .original_config_do_not_use
+                .model_provider_id,
+        ) {
+            let mut config = (*next_configuration.original_config_do_not_use).clone();
+            let Some(provider) = config.model_providers.get(corrected_provider_id).cloned() else {
+                return Err(ConstraintError::InvalidValue {
+                    field_name: "model_provider",
+                    candidate: corrected_provider_id.to_string(),
+                    allowed: "a configured model provider id".to_string(),
+                    requirement_source: codex_config::RequirementSource::Unknown,
+                });
+            };
+            config.model_provider_id = corrected_provider_id.to_string();
+            config.model_provider = provider.clone();
+            next_configuration.provider = provider;
+            next_configuration.original_config_do_not_use = Arc::new(config);
+        }
         if let Some(runtime_model_context_window) = updates.runtime_model_context_window {
             next_configuration.runtime_model_context_window = runtime_model_context_window;
         }
