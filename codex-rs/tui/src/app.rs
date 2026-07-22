@@ -1576,6 +1576,22 @@ See the PFTerminal keymap documentation for supported actions and examples."
         // every startup; its process lock deduplicates concurrent PFTerminal processes and it
         // exits immediately when there is no potentially billable work.
         app.start_gpu_controller();
+        let telegram_home = app.config.codex_home.clone().to_path_buf();
+        tokio::spawn(async move {
+            let result = tokio::task::spawn_blocking(move || {
+                crate::chatwidget::telegram_setup::ensure_connector(&telegram_home)
+            })
+            .await;
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    tracing::warn!(%error, "configured Telegram connector did not start")
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "Telegram connector startup task failed")
+                }
+            }
+        });
         if let Some(entry) = startup_hooks_browser {
             app.chat_widget.open_hooks_browser(entry);
         }

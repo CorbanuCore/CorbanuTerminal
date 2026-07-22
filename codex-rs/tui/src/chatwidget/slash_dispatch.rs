@@ -530,6 +530,9 @@ impl ChatWidget {
             SlashCommand::Providers => {
                 self.open_provider_credentials_menu();
             }
+            SlashCommand::Telegram => {
+                self.open_telegram_menu();
+            }
             SlashCommand::Mcp => {
                 self.add_mcp_output(McpServerStatusDetail::ToolsAndAuthOnly);
             }
@@ -787,6 +790,16 @@ impl ChatWidget {
                 ),
                 _ => self.add_error_message(
                     "Usage: /wallet [status|create|restore|unlock|lock]".to_string(),
+                ),
+            },
+            SlashCommand::Telegram => match trimmed.to_ascii_lowercase().as_str() {
+                "" | "status" => self.open_telegram_menu(),
+                "connect" => self.open_telegram_token_entry(),
+                "start" => self.app_event_tx.send(AppEvent::StartTelegramConnector),
+                "stop" => self.app_event_tx.send(AppEvent::StopTelegramConnector),
+                "disconnect" => self.app_event_tx.send(AppEvent::ConfirmTelegramDisconnect),
+                _ => self.add_error_message(
+                    "Usage: /telegram [status|connect|start|stop|disconnect]".to_string(),
                 ),
             },
             SlashCommand::Gpu => {
@@ -1313,6 +1326,7 @@ impl ChatWidget {
             | SlashCommand::Rollout
             | SlashCommand::Vault
             | SlashCommand::Wallet
+            | SlashCommand::Telegram
             | SlashCommand::Gpu
             | SlashCommand::Copy
             | SlashCommand::Raw

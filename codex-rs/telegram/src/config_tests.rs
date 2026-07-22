@@ -1,4 +1,5 @@
 use clap::Parser;
+use codex_protocol::config_types::SandboxMode;
 use codex_protocol::protocol::AskForApproval;
 use pretty_assertions::assert_eq;
 use std::fs;
@@ -58,6 +59,7 @@ fn telegram_config_parses_local_table() {
         mode = "polling"
         default_model = "glm-5.2"
         approval_policy = "on-request"
+        sandbox_mode = "workspace-write"
         webhook_url = ""
         max_consecutive_polling_failures = 3
         "#,
@@ -74,6 +76,7 @@ fn telegram_config_parses_local_table() {
     assert_eq!(config.mode, TelegramMode::Polling);
     assert_eq!(config.default_model, Some("glm-5.2".to_string()));
     assert_eq!(config.approval_policy, Some(AskForApproval::OnRequest));
+    assert_eq!(config.sandbox_mode, Some(SandboxMode::WorkspaceWrite));
     assert_eq!(config.webhook_url, Some(String::new()));
     assert_eq!(config.max_consecutive_polling_failures, 3);
 }

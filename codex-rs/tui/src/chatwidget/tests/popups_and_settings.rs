@@ -28,6 +28,75 @@ use codex_protocol::openai_models::ReasoningEffort;
 use pretty_assertions::assert_eq;
 
 #[tokio::test]
+async fn telegram_setup_disconnected_snapshot() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.6-sol")).await;
+    chat.open_telegram_menu();
+    chat.refresh_telegram_menu(Ok(crate::chatwidget::telegram_setup::TelegramStatus {
+        configured: false,
+        token_stored: false,
+        running: false,
+        pid: None,
+        bot_username: None,
+        allowed_chat_ids: Vec::new(),
+        default_model: None,
+        default_cwd: None,
+        approval_policy: None,
+        sandbox_mode: None,
+    }));
+
+    assert_chatwidget_snapshot!(
+        "telegram_setup_disconnected",
+        render_bottom_popup(&chat, /*width*/ 94)
+    );
+}
+
+#[tokio::test]
+async fn telegram_setup_connected_snapshot() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.6-sol")).await;
+    chat.open_telegram_menu();
+    chat.refresh_telegram_menu(Ok(crate::chatwidget::telegram_setup::TelegramStatus {
+        configured: true,
+        token_stored: true,
+        running: true,
+        pid: Some(4242),
+        bot_username: Some("pumps_bot".to_string()),
+        allowed_chat_ids: vec![123456],
+        default_model: Some("gpt-5.6-sol".to_string()),
+        default_cwd: Some(PathBuf::from("/work/project")),
+        approval_policy: Some("on-request".to_string()),
+        sandbox_mode: Some("workspace-write".to_string()),
+    }));
+
+    assert_chatwidget_snapshot!(
+        "telegram_setup_connected",
+        render_bottom_popup(&chat, /*width*/ 94)
+    );
+}
+
+#[tokio::test]
+async fn telegram_setup_resumes_after_token_validation_snapshot() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.6-sol")).await;
+    chat.open_telegram_menu();
+    chat.refresh_telegram_menu(Ok(crate::chatwidget::telegram_setup::TelegramStatus {
+        configured: false,
+        token_stored: true,
+        running: false,
+        pid: None,
+        bot_username: Some("pumps_bot".to_string()),
+        allowed_chat_ids: Vec::new(),
+        default_model: None,
+        default_cwd: None,
+        approval_policy: None,
+        sandbox_mode: None,
+    }));
+
+    assert_chatwidget_snapshot!(
+        "telegram_setup_waiting_for_chat",
+        render_bottom_popup(&chat, /*width*/ 94)
+    );
+}
+
+#[tokio::test]
 async fn wallet_disconnect_wraps_copy_and_dismisses_confirmation_before_replacement() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.config.model_provider_id = PFTERMINAL_PLAN_PROVIDER_ID.to_string();

@@ -65,6 +65,7 @@ pub enum SlashCommand {
     Apps,
     Plugins,
     Providers,
+    Telegram,
     Logout,
     Wallet,
     Vault,
@@ -153,6 +154,7 @@ impl SlashCommand {
             SlashCommand::Apps => "manage apps",
             SlashCommand::Plugins => "browse plugins",
             SlashCommand::Providers => "add provider API keys to the encrypted vault",
+            SlashCommand::Telegram => "connect and manage PFTerminal from Telegram",
             SlashCommand::Vault => "manage the encrypted credential vault (keys, tokens)",
             SlashCommand::Wallet => "manage SOL, USDC, and PfTerminal inference plans",
             SlashCommand::Logout => "log out of PFTerminal",
@@ -191,6 +193,7 @@ impl SlashCommand {
                 | SlashCommand::Tasknode
                 | SlashCommand::Vault
                 | SlashCommand::Wallet
+                | SlashCommand::Telegram
                 | SlashCommand::Gpu
         )
     }
@@ -208,6 +211,7 @@ impl SlashCommand {
                 | SlashCommand::Usage
                 | SlashCommand::Ide
                 | SlashCommand::Providers
+                | SlashCommand::Telegram
                 | SlashCommand::Tasknode
                 | SlashCommand::Orchestrate
                 | SlashCommand::Vault
@@ -262,6 +266,7 @@ impl SlashCommand {
             | SlashCommand::Apps
             | SlashCommand::Plugins
             | SlashCommand::Providers
+            | SlashCommand::Telegram
             | SlashCommand::Panes
             | SlashCommand::Spawn
             | SlashCommand::Orchestrate
@@ -336,6 +341,9 @@ mod tests {
         assert!(SlashCommand::Raw.available_in_side_conversation());
         assert!(SlashCommand::Raw.supports_inline_args());
         assert!(SlashCommand::App.available_during_task());
+        assert!(SlashCommand::Telegram.available_during_task());
+        assert!(SlashCommand::Telegram.available_in_side_conversation());
+        assert!(SlashCommand::Telegram.supports_inline_args());
     }
 
     #[test]

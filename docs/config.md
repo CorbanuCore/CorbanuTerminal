@@ -137,6 +137,15 @@ Telegram-specific configuration is read locally by the connector from the
 `[telegram]` table. Core accepts this table during strict config validation,
 but the connector owns the individual settings.
 
+For interactive setup, run `/telegram` in the TUI. PFTerminal validates a
+masked BotFather token into the encrypted vault, discovers chats only after the
+user messages the bot, asks which exact chat and sender to authorize, captures
+the current model/workspace/permission settings, and starts the connector. The
+same screen reports health and supports restart, stop, token replacement, and
+full disconnect. A configured connector is restored when PFTerminal starts;
+an operation lock prevents multiple PFTerminal processes from racing into two
+pollers. The setup script below remains available for unattended hosts.
+
 ```toml
 [telegram]
 enabled = true
@@ -149,6 +158,7 @@ max_media_store_bytes = 268435456
 mode = "polling"
 default_model = "glm-5.2"
 approval_policy = "on-request"
+sandbox_mode = "workspace-write"
 default_cwd = "/home/alice/pfterminal-telegram"
 webhook_url = ""
 ```
@@ -158,6 +168,12 @@ The bot token is never read from `config.toml`. Resolution order is:
 1. The environment variable named by `bot_token_env`.
 2. The encrypted vault label `telegram/bot_token`.
 3. Startup error.
+
+Connectors created through `/telegram` remove the token environment variable
+from their child process so the just-validated vault credential cannot be
+silently replaced by a stale shell value. `sandbox_mode` is connector-specific:
+the TUI copies the permission mode shown at authorization time without changing
+the global PFTerminal sandbox.
 
 Chats are default-deny. Only numeric Telegram chat IDs in `allowed_chat_ids`
 can start turns. Private chats use that list directly. Group and supergroup chat

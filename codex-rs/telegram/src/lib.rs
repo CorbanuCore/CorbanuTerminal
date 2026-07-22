@@ -349,6 +349,7 @@ async fn build_core_config(
         model: telegram_config.default_model.clone(),
         cwd: telegram_config.default_cwd.clone(),
         approval_policy: telegram_config.approval_policy,
+        sandbox_mode: telegram_config.sandbox_mode,
         codex_self_exe: arg0_paths.codex_self_exe.clone(),
         codex_linux_sandbox_exe: arg0_paths.codex_linux_sandbox_exe.clone(),
         main_execve_wrapper_exe: arg0_paths.main_execve_wrapper_exe.clone(),

@@ -1731,6 +1731,139 @@ impl App {
                     }
                 });
             }
+            AppEvent::OpenTelegram => {
+                self.chat_widget.open_telegram_menu();
+            }
+            AppEvent::OpenTelegramTokenEntry => {
+                self.chat_widget.open_telegram_token_entry();
+            }
+            AppEvent::ValidateTelegramToken { token } => {
+                let codex_home = self.config.codex_home.clone().to_path_buf();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = crate::chatwidget::telegram_setup::validate_and_store_token(
+                        codex_home, token,
+                    )
+                    .await;
+                    tx.send(AppEvent::TelegramTokenValidated { result });
+                });
+            }
+            AppEvent::TelegramTokenValidated { result } => match result {
+                Ok(identity) => self
+                    .chat_widget
+                    .open_telegram_discovery(identity, Vec::new()),
+                Err(error) => {
+                    self.chat_widget.add_error_message(error);
+                    self.chat_widget.open_telegram_token_entry();
+                }
+            },
+            AppEvent::DiscoverTelegramChats => {
+                let codex_home = self.config.codex_home.clone().to_path_buf();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result =
+                        crate::chatwidget::telegram_setup::discover_chats(codex_home).await;
+                    tx.send(AppEvent::TelegramChatsDiscovered { result });
+                });
+            }
+            AppEvent::TelegramChatsDiscovered { result } => match result {
+                Ok(discovery) => self
+                    .chat_widget
+                    .open_telegram_discovery(discovery.identity, discovery.candidates),
+                Err(error) => self.chat_widget.add_error_message(error),
+            },
+            AppEvent::ConfirmTelegramChat { candidate } => {
+                self.chat_widget.confirm_telegram_chat(candidate);
+            }
+            AppEvent::ConnectTelegramChat {
+                candidate,
+                defaults,
+            } => {
+                let codex_home = self.config.codex_home.clone().to_path_buf();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::chatwidget::telegram_setup::connect_chat(
+                            &codex_home,
+                            candidate,
+                            defaults,
+                        )
+                    })
+                    .await
+                    .map_err(|error| format!("Telegram connection task failed: {error}"))
+                    .and_then(|result| result);
+                    tx.send(AppEvent::TelegramOperationFinished { result });
+                });
+            }
+            AppEvent::StartTelegramConnector => {
+                let codex_home = self.config.codex_home.clone().to_path_buf();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::chatwidget::telegram_setup::start_connector(&codex_home)
+                    })
+                    .await
+                    .map_err(|error| format!("Telegram start task failed: {error}"))
+                    .and_then(|result| result);
+                    tx.send(AppEvent::TelegramOperationFinished { result });
+                });
+            }
+            AppEvent::StopTelegramConnector => {
+                let codex_home = self.config.codex_home.clone().to_path_buf();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::chatwidget::telegram_setup::stop_connector(&codex_home)
+                    })
+                    .await
+                    .map_err(|error| format!("Telegram stop task failed: {error}"))
+                    .and_then(|result| result);
+                    tx.send(AppEvent::TelegramOperationFinished { result });
+                });
+            }
+            AppEvent::ReplaceTelegramBot => {
+                let codex_home = self.config.codex_home.clone().to_path_buf();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::chatwidget::telegram_setup::stop_connector(&codex_home)
+                    })
+                    .await
+                    .map_err(|error| format!("Telegram stop task failed: {error}"))
+                    .and_then(|result| result);
+                    if result.is_ok() {
+                        tx.send(AppEvent::OpenTelegramTokenEntry);
+                    } else {
+                        tx.send(AppEvent::TelegramOperationFinished { result });
+                    }
+                });
+            }
+            AppEvent::ConfirmTelegramDisconnect => {
+                self.chat_widget.confirm_telegram_disconnect();
+            }
+            AppEvent::DisconnectTelegram => {
+                let codex_home = self.config.codex_home.clone().to_path_buf();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::chatwidget::telegram_setup::disconnect(&codex_home)
+                    })
+                    .await
+                    .map_err(|error| format!("Telegram disconnect task failed: {error}"))
+                    .and_then(|result| result);
+                    tx.send(AppEvent::TelegramOperationFinished { result });
+                });
+            }
+            AppEvent::TelegramOperationFinished { result } => {
+                match result {
+                    Ok(message) => self.chat_widget.add_info_message(message, None),
+                    Err(error) => self.chat_widget.add_error_message(error),
+                }
+                self.chat_widget.open_telegram_menu();
+            }
+            AppEvent::TelegramStatusReady { result } => {
+                self.chat_widget.refresh_telegram_menu(result);
+            }
             AppEvent::OpenCodexAccountDeviceLogin => {
                 self.chat_widget.open_codex_account_device_login_pending();
                 let request_handle = app_server.request_handle();

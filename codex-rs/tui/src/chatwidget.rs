@@ -427,6 +427,7 @@ pub(crate) mod claude_code_login;
 mod pfterminal_plan_status;
 pub(crate) mod provider_credentials;
 mod tasknode_menu;
+pub(crate) mod telegram_setup;
 mod usage;
 mod user_messages;
 mod vault_menu;

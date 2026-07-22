@@ -2,6 +2,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::Context;
+use codex_protocol::config_types::SandboxMode;
 use codex_protocol::protocol::AskForApproval;
 use codex_vault::Vault;
 use serde::Deserialize;
@@ -32,6 +33,7 @@ pub struct TelegramConfig {
     pub default_model: Option<String>,
     pub default_cwd: Option<PathBuf>,
     pub approval_policy: Option<AskForApproval>,
+    pub sandbox_mode: Option<SandboxMode>,
     pub webhook_url: Option<String>,
     pub max_consecutive_polling_failures: u32,
     pub max_attachment_bytes: u32,
@@ -50,6 +52,7 @@ impl Default for TelegramConfig {
             default_model: None,
             default_cwd: None,
             approval_policy: Some(AskForApproval::OnRequest),
+            sandbox_mode: None,
             webhook_url: None,
             max_consecutive_polling_failures: 8,
             max_attachment_bytes: 10 * 1024 * 1024,
