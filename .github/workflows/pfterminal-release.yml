@@ -129,6 +129,7 @@ jobs:
           mkdir -p "$package_dir"
           tar -xzf "$archive" -C "$package_dir"
           "$package_dir/bin/pfterminal" --version
+          "$package_dir/bin/pfterminal" telegram --help >/dev/null
           test -x "$package_dir/bin/pfterminal-walletd"
           "$package_dir/bin/pfterminal-walletd" --help >/dev/null
           wallet_home="${RUNNER_TEMP}/wallet-smoke-${TARGET}"
@@ -146,6 +147,13 @@ jobs:
           trap - EXIT
           ! find "$package_dir" -type f -o -type l | grep -E '/codex([^/-]*)(\.exe)?$'
           test -x "$package_dir/codex-path/rg"
+          telegram_resources="$package_dir/codex-resources/telegram"
+          test -x "$telegram_resources/setup-telegram.sh"
+          bash -n "$telegram_resources/setup-telegram.sh"
+          test -f "$telegram_resources/install-telegram-task.ps1"
+          test -f "$telegram_resources/dist/AGENTS.md.template"
+          test -f "$telegram_resources/dist/pfterminal-telegram.service"
+          plutil -lint "$telegram_resources/dist/net.postfiat.pfterminal.telegram.plist" >/dev/null
 
       - name: Free runner disk before DMG packaging
         shell: bash
@@ -318,6 +326,7 @@ jobs:
           mkdir -p "$package_dir"
           tar -xzf "$archive" -C "$package_dir"
           "$package_dir/bin/pfterminal" --version
+          "$package_dir/bin/pfterminal" telegram --help >/dev/null
           test -x "$package_dir/bin/pfterminal-walletd"
           "$package_dir/bin/pfterminal-walletd" --help >/dev/null
           wallet_home="${RUNNER_TEMP}/wallet-smoke-${TARGET}"
@@ -336,6 +345,13 @@ jobs:
           ! find "$package_dir" -type f -o -type l | grep -E '/codex([^/-]*)(\.exe)?$'
           test -x "$package_dir/codex-path/rg"
           test -x "$package_dir/codex-resources/bwrap"
+          telegram_resources="$package_dir/codex-resources/telegram"
+          test -x "$telegram_resources/setup-telegram.sh"
+          bash -n "$telegram_resources/setup-telegram.sh"
+          test -f "$telegram_resources/install-telegram-task.ps1"
+          test -f "$telegram_resources/dist/AGENTS.md.template"
+          test -f "$telegram_resources/dist/pfterminal-telegram.service"
+          test -f "$telegram_resources/dist/net.postfiat.pfterminal.telegram.plist"
 
       - name: Upload Linux package archive
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
@@ -431,7 +447,9 @@ jobs:
           }
           New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
           Expand-Archive -Path $archive -DestinationPath $packageDir
-          & (Join-Path $packageDir "bin/pfterminal.exe") --version
+          $pfterminal = Join-Path $packageDir "bin/pfterminal.exe"
+          & $pfterminal --version
+          & $pfterminal telegram --help | Out-Null
           $walletDaemon = Join-Path $packageDir "bin/pfterminal-walletd.exe"
           if (-not (Test-Path $walletDaemon)) { throw "missing pfterminal-walletd.exe" }
           & $walletDaemon --help | Out-Null
@@ -448,6 +466,18 @@ jobs:
           if (-not (Test-Path (Join-Path $packageDir "codex-path/rg.exe"))) { throw "missing rg.exe" }
           if (-not (Test-Path (Join-Path $packageDir "codex-resources/codex-command-runner.exe"))) { throw "missing command runner" }
           if (-not (Test-Path (Join-Path $packageDir "codex-resources/codex-windows-sandbox-setup.exe"))) { throw "missing sandbox setup" }
+          $telegramResources = Join-Path $packageDir "codex-resources/telegram"
+          $telegramSetup = Join-Path $telegramResources "setup-telegram.sh"
+          $telegramTask = Join-Path $telegramResources "install-telegram-task.ps1"
+          if (-not (Test-Path $telegramSetup)) { throw "missing Telegram setup script" }
+          if (-not (Test-Path $telegramTask)) { throw "missing Telegram Scheduled Task installer" }
+          if (-not (Test-Path (Join-Path $telegramResources "dist/AGENTS.md.template"))) { throw "missing Telegram AGENTS template" }
+          if (-not (Test-Path (Join-Path $telegramResources "dist/pfterminal-telegram.service"))) { throw "missing Telegram systemd template" }
+          if (-not (Test-Path (Join-Path $telegramResources "dist/net.postfiat.pfterminal.telegram.plist"))) { throw "missing Telegram launchd template" }
+          $tokens = $null
+          $parseErrors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile($telegramTask, [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors.Count -gt 0) { throw "invalid Telegram Scheduled Task installer: $($parseErrors -join '; ')" }
 
       - name: Upload Windows package archive
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
