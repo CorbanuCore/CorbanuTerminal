@@ -2,14 +2,15 @@
 
 ## Executive summary
 
-PR #59 contains a useful but experimental Telegram remote surface: private-chat
-text, screenshots, commands, approvals, persistence, and recovery foundations
-exist. It should merge only after packaging CI and review of the corrected dedup
-routing. It should not be advertised for private-chat testing until the exact
-package passes the three-session live gate, or as stable until mid-turn steering,
-attachments, status, and the seven-day soak pass. Group and forum-topic support
-remain explicitly unsupported until per-user authorization and topic isolation
-land.
+PR #59 contains a useful but experimental Telegram remote surface. The
+implementation now includes private and authorized group/topic identity,
+crash-recoverable input delivery, mid-turn steering with a bounded queue,
+attachments, approvals, operational status, health checks, and managed-service
+templates. It should merge only after packaging CI and independent review. It
+must not be advertised for private-chat testing until the exact package passes
+the three-session live gate, or as stable until the seven-day soak passes.
+Group and forum-topic stability remains a separate security claim that requires
+its independent adversarial review.
 
 ## Product goal
 
@@ -55,7 +56,7 @@ described as passing the next.
 | --- | --- | --- | --- | --- |
 | Merge as disabled experimental code | Current PR plus P0 routing correction | Telegram tests and packaging CI pass; review has no open merge-blocking P0 in the enabled private-chat scope; connector remains disabled by default | CI links, commit, test transcript, reviewed diff | PR maintainer |
 | Ship for private-chat testing | Phase 1 | Three fresh sessions on the exact packaged artifact; at least 50 accepted updates total; text, image, approval, cancellation, restart, replay, and network-loss cases exercised; zero lost accepted inputs, duplicate mutations, or silent deaths | Binary hash, redacted transcripts, state snapshots, log intervals, verdicts | Release owner, with one session driven by someone other than the implementer |
-| Declare private-chat stable | Phases 1, 2, 4, and 5 | Every private-stability blocker in Known gaps is closed; three consecutive free-form sessions pass; seven-day soak with at least 100 turns and zero lost accepted inputs, duplicate mutations, stuck turns, unbounded storage, or manual restarts | Regression results, session evidence, soak ledger, storage measurements | Release owner after independent review |
+| Declare private-chat stable | Phases 1, 2, 4, and 5 | Every private-stability blocker in Implementation status is closed; three consecutive free-form sessions pass; seven-day soak with at least 100 turns and zero lost accepted inputs, duplicate mutations, stuck turns, unbounded storage, or manual restarts | Regression results, session evidence, soak ledger, storage measurements | Release owner after independent review |
 | Declare group/topic support stable | Phase 3 | Per-user authorization and topic isolation pass adversarial callback, cross-topic, restart, and race tests; zero cross-talk or cross-principal approvals | Security review and adversarial test artifacts | Release owner plus independent security reviewer |
 
 There are no calendar deadlines in this plan. Progress is landing-based: a
@@ -82,12 +83,19 @@ Today it provides:
 - command and file-change approvals through inline buttons;
 - `/new`, `/cancel`, `/stop`, `/status`, `/model`, `/approvals`, `/compact`,
   `/diff`, and `/skills`;
-- inbound photos and image documents up to 10 MB as real local-image model
-  inputs, including image-only messages;
+- inbound photos and image documents as real local-image model inputs,
+  including image-only messages, plus bounded text/source/PDF/XML/YAML
+  ingestion with configurable size, age, and total-storage limits;
 - bot-token loading from a named environment variable or the encrypted vault;
-- a setup script and a Linux systemd user-service template;
+- setup and health checks plus Linux systemd, macOS launchd, and Windows
+  Scheduled Task templates;
 - bounded outbound calls, retry of idempotent reads, persisted update-ID
-  deduplication, polling-conflict detection, and restart recovery.
+  deduplication, a bot-keyed durable inbox, deterministic app-server message
+  IDs, polling-conflict detection, and restart reconciliation;
+- per-user group authorization and conversation isolation by Telegram chat and
+  forum-topic ID;
+- mid-turn `turn/steer`, a bounded per-conversation FIFO fallback, and
+  plain-language `/status` recovery guidance.
 
 Commit `990f1169f` corrected a merge-blocking defect in the reliability layer:
 the deduplication function had been installed as a terminal dptree endpoint, so
@@ -95,58 +103,33 @@ it recorded and swallowed all updates. It is now filter middleware, with a
 regression proving that the first delivery reaches its handler and a replay
 does not.
 
-## Known gaps
+## Implementation status and remaining gates
 
-The current connector is useful for controlled private-chat testing, but it is
-not yet a high-quality mobile interface.
+The code-level boundaries in Phases 2–5 are implemented and covered by scoped
+regressions. This does not substitute for the release gates.
 
-### Qualification and security boundaries
+### Remaining qualification and review boundaries
 
-1. **No release-level live qualification** *(blocks private testing and every
-   later gate)*. Automated tests cover components,
-   but the current head still needs a real bot-token session exercising the
-   complete Telegram-to-app-server path.
-2. **Group authorization is too broad** *(blocks group/topic stability only)*.
-   Allowlisting a group authorizes every
-   member to submit work and press approval buttons. Group use must support an
-   explicit user allowlist before it is presented as a safe default.
-3. **Conversation identity ignores Telegram topics** *(blocks group/topic
-   stability only)*. State is keyed by chat
-   ID. Two forum topics in the same group therefore share one PFTerminal thread,
-   active turn, model selection, and approval state.
-4. **Deduplication is not a crash-safe delivery transaction** *(blocks
-   private-chat stability)*. The connector records a Telegram update before its
-   handler durably commits the corresponding input. A crash at that boundary
-   can suppress Telegram's replay and lose an accepted message. Moving the
-   marker after dispatch would invert the failure into duplicate mutation.
+1. **Exact-package live qualification** *(blocks private testing and every
+   later gate)*. Run the three fresh sessions and at least 50 accepted updates
+   defined below with a real bot, copied home, external driver, fault injection,
+   and invariant observer.
+2. **Independent group/topic security verdict** *(blocks group/topic stability
+   only)*. Per-user authorization and topic isolation are implemented, but the
+   implementation author cannot supply the required adversarial verdict.
+3. **Seven-day durability soak** *(blocks a stable claim)*. The automated suite
+   proves bounded mechanisms, not seven days of provider, Telegram, service,
+   network, and restart behavior.
+4. **Cross-platform packaged execution**. Linux script behavior and service
+   generation are locally exercised. macOS launchd and Windows Scheduled Task
+   behavior require their native packaging CI and host checks.
 
-### P1: everyday mobile workflow
-
-1. **Mid-turn messages are rejected** *(blocks private-chat stability)*. A
-   follow-up sent while a turn is active
-   receives “A turn is already running.” Normal chat behavior requires
-   `turn/steer` for steerable turns and a bounded queue for the narrow cases
-   that cannot be steered.
-2. **Non-image files are not ingested** *(blocks private-chat stability)*. A
-   caption is forwarded with an honest
-   warning, but the agent cannot read the attached PDF, text file, archive, or
-   source file.
-3. **Recovery is operator-oriented** *(blocks private-chat stability)*.
-   `/status` exposes IDs but does not clearly
-   explain whether the bot is idle, working, awaiting approval, disconnected,
-   recovering, or blocked.
-4. **Installation is Linux-first** *(does not block Linux private-chat
-   stability)*. The systemd path is reasonable for an
-   always-on Linux host, but there is no equivalent managed service path for
-   macOS or Windows.
-
-### P2: polish and breadth
+### Deferred product breadth
 
 - No explicit topic/thread selector or recent-conversation list.
-- No attachment retention controls or cleanup policy.
 - No concise usage/cost summary in `/status`.
 - No outbound artifact delivery for generated images or files.
-- No first-class connector setup and health view in the TUI.
+- No first-class connector setup flow in the TUI; setup is command-driven.
 
 ## User stories
 

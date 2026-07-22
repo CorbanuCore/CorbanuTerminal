@@ -142,6 +142,10 @@ but the connector owns the individual settings.
 enabled = true
 bot_token_env = "PFTERMINAL_TELEGRAM_TOKEN"
 allowed_chat_ids = [21000038, -1001941234987]
+allowed_user_ids = [21000038]
+max_attachment_bytes = 10485760
+media_retention_days = 7
+max_media_store_bytes = 268435456
 mode = "polling"
 default_model = "glm-5.2"
 approval_policy = "on-request"
@@ -156,17 +160,25 @@ The bot token is never read from `config.toml`. Resolution order is:
 3. Startup error.
 
 Chats are default-deny. Only numeric Telegram chat IDs in `allowed_chat_ids`
-can start turns. Approval buttons are accepted only from the same authorized
-chat that owns the pending request. Group and supergroup chat IDs are negative;
-if a group/supergroup ID is allowlisted, every member of that Telegram chat can
-drive turns and press approval buttons. For higher assurance, use a private chat
-until per-user authorization is available. The connector emits a startup warning
-when any allowlisted chat ID is negative.
+can start turns. Private chats use that list directly. Group and supergroup chat
+IDs are negative and additionally require the initiating user in
+`allowed_user_ids`; group membership alone grants no authority. Approval buttons
+are accepted only from an allowed user in the exact chat and forum topic that
+owns the pending request. The setup script refuses a group chat without at least
+one `--user-id`.
 
 The connector stores recovered thread IDs and delivered item markers in
 `$CODEX_HOME/telegram/state.json` so a restarted poller can resume the same
 app-server threads without replaying the full transcript after lag recovery.
-Per-chat model and approval-policy overrides are stored in the same file.
+Per-conversation model and approval-policy overrides are stored in the same
+file. A conversation is a chat plus its optional forum-topic ID, so two topics
+in one group cannot share turns, model settings, or approvals.
+
+Incoming updates first enter a bounded, bot-specific durable inbox at
+`$CODEX_HOME/telegram/updates-<bot-id>.json`. The connector marks an update
+complete only after app-server acceptance. Unapplied updates replay after a
+restart with a deterministic client message ID, while completed IDs provide a
+bounded duplicate filter.
 
 Telegram messages use HTML parse mode, split outbound text at Telegram's
 4096-character raw-text limit, and surface sensitive operations through inline
@@ -201,6 +213,24 @@ The Telegram command surface is:
 - `/diff` shows the git diff from `default_cwd` to the remote branch.
 - `/skills` lists discovered skill names.
 
+Ordinary follow-ups sent during a running turn use app-server steering. If a
+turn temporarily cannot be steered, the connector holds up to 16 messages for
+that conversation in FIFO order and shows the queue once. `/status` reports
+`Idle`, `Working`, `Working · follow-ups queued`, `Awaiting approval`,
+`Recovering queued input`, or `Blocked`, plus model, workspace, topic, queue
+depth, the most recent successful Telegram contact or error, and the next useful
+action.
+
+Photos and image documents remain native image inputs. Supported non-image
+documents (text/source, JSON, PDF, and XML/YAML) are downloaded into the
+connector-owned media directory and described to the agent with their local
+path, original name, MIME type, byte count, and SHA-256. The defaults accept up
+to 10 MiB per file, retain media for seven days, and cap the media store at
+256 MiB; configure those bounds with `max_attachment_bytes`,
+`media_retention_days`, and `max_media_store_bytes`. Cleanup runs at startup and
+during ingestion. Archives, executables, and unrelated binary media are
+rejected rather than unpacked or implied to be available.
+
 `default_cwd` is the workspace used for Telegram-created turns. Set it to the
 directory where the agent should work, not to the PFTerminal source tree or all
 of `$HOME`. Codex automatically loads `AGENTS.md` from that workspace. The setup
@@ -212,9 +242,14 @@ intentionally want a home-rooted remote agent workspace.
 The recommended setup path is:
 
 ```bash
-export PFTERMINAL_TELEGRAM_TOKEN="123456:telegram-token"
 codex-rs/scripts/setup-telegram.sh --chat-id 21000038
 ```
+
+The script prompts for the bot token without echoing it when neither the
+process environment nor configured environment file provides one. For
+unattended setup,
+provide `PFTERMINAL_TELEGRAM_TOKEN` through the process environment without
+placing the value in a command argument or shell-history line.
 
 The script resolves `CODEX_HOME` the same way `pfterminal telegram` does,
 writes the token to `~/.config/pfterminal/telegram.env`, writes or merges the
@@ -264,7 +299,8 @@ systemctl --user daemon-reload
 systemctl --user enable --now pfterminal-telegram.service
 ```
 
-The setup script installs a concrete user unit: `ExecStart` is rewritten to the
+The setup script runs `pfterminal telegram --health` before installing a managed
+service, then installs a concrete user unit: `ExecStart` is rewritten to the
 absolute path returned by `command -v pfterminal`, and `EnvironmentFile` is
 rewritten to the actual `--env-file` path. The checked-in template remains
 generic for review. The unit reads `CODEX_HOME` and `PFTERMINAL_TELEGRAM_TOKEN`
@@ -272,6 +308,35 @@ from `~/.config/pfterminal/telegram.env`, restarts automatically, and uses
 `StartLimitIntervalSec=300` with `StartLimitBurst=5` so a persistent 409 conflict
 from a second poller stops instead of restart-fighting forever. Run only one
 poller per Telegram bot token.
+
+Before enabling any service, run the local readiness probe:
+
+```bash
+pfterminal telegram --health
+```
+
+It verifies the Bot API identity, non-empty authorization policy, group user
+policy, writable state and workspace paths, the selected provider's known
+credential requirement, and sandbox viability. It exits non-zero with the
+failed boundary named.
+
+On macOS, install the checked-in LaunchAgent through the same setup script:
+
+```bash
+codex-rs/scripts/setup-telegram.sh --chat-id 21000038 --install-launchd
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.postfiat.pfterminal.telegram.plist
+```
+
+On Windows, configure the connector first, verify it with
+`pfterminal telegram --health`, then install a current-user Scheduled Task:
+
+```powershell
+.\codex-rs\scripts\install-telegram-task.ps1
+Start-ScheduledTask -TaskName 'PFTerminal Telegram'
+```
+
+The task command contains no bot token; credentials remain in the PFTerminal
+vault. The task refuses duplicate instances and has bounded restart settings.
 
 ## Provider Overrides
 

@@ -29,10 +29,12 @@ codex-feedback = { workspace = true }
 codex-login = { workspace = true }
 codex-model-provider-info = { workspace = true }
 codex-protocol = { workspace = true }
+codex-utils-path = { workspace = true }
 codex-vault = { workspace = true }
 futures = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 teloxide = { version = "0.17", features = ["macros"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = [

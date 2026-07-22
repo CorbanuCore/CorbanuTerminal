@@ -1,5 +1,13 @@
 use std::collections::BTreeSet;
 
+use super::BridgeRuntime;
+use crate::conversation::ConversationKey;
+use crate::model_selection::CatalogModel;
+use crate::model_selection::available_models;
+use crate::model_selection::known_model_source;
+use crate::model_selection::missing_provider_credential;
+use crate::model_selection::provider_for_model;
+use crate::model_selection::resolve_model;
 use codex_app_server_protocol::AskForApproval;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::GitDiffToRemoteParams;
@@ -13,20 +21,11 @@ use codex_app_server_protocol::ThreadCompactStartParams;
 use codex_app_server_protocol::ThreadCompactStartResponse;
 use codex_app_server_protocol::ThreadSettingsUpdateParams;
 use codex_app_server_protocol::ThreadSettingsUpdateResponse;
-use teloxide::types::ChatId;
-
-use super::BridgeRuntime;
-use crate::model_selection::CatalogModel;
-use crate::model_selection::available_models;
-use crate::model_selection::known_model_source;
-use crate::model_selection::missing_provider_credential;
-use crate::model_selection::provider_for_model;
-use crate::model_selection::resolve_model;
 
 impl BridgeRuntime {
     pub(super) async fn handle_model(
         &mut self,
-        chat_id: ChatId,
+        chat_id: ConversationKey,
         args: String,
     ) -> anyhow::Result<()> {
         let models = self.list_models().await?;
@@ -121,13 +120,18 @@ impl BridgeRuntime {
                 resolution.model, choice.provider
             )
         };
-        self.send_text(chat_id, &format!("{headline}\n{suffix}"))
-            .await
+        self.notify_after_effect(
+            chat_id,
+            &format!("{headline}\n{suffix}"),
+            "model-change confirmation",
+        )
+        .await;
+        Ok(())
     }
 
     pub(super) async fn handle_approvals(
         &mut self,
-        chat_id: ChatId,
+        chat_id: ConversationKey,
         args: String,
     ) -> anyhow::Result<()> {
         let arg = args.trim();
@@ -171,18 +175,20 @@ impl BridgeRuntime {
         } else {
             "Saved for the next thread."
         };
-        self.send_text(
+        self.notify_after_effect(
             chat_id,
             &format!(
                 "Approval policy changed: {} -> {}.\n{suffix}",
                 approval_policy_name(old_policy),
                 approval_policy_name(new_policy)
             ),
+            "approval-policy confirmation",
         )
-        .await
+        .await;
+        Ok(())
     }
 
-    pub(super) async fn compact_thread(&mut self, chat_id: ChatId) -> anyhow::Result<()> {
+    pub(super) async fn compact_thread(&mut self, chat_id: ConversationKey) -> anyhow::Result<()> {
         let Some(thread_id) = self.sessions.thread_id(chat_id).await else {
             self.send_text(chat_id, "No active thread to compact.")
                 .await?;
@@ -201,10 +207,12 @@ impl BridgeRuntime {
                 "thread/compact/start",
             )
             .await?;
-        self.send_text(chat_id, "Compaction requested.").await
+        self.notify_after_effect(chat_id, "Compaction requested.", "compaction confirmation")
+            .await;
+        Ok(())
     }
 
-    pub(super) async fn send_diff(&mut self, chat_id: ChatId) -> anyhow::Result<()> {
+    pub(super) async fn send_diff(&mut self, chat_id: ConversationKey) -> anyhow::Result<()> {
         let request_id = self.request_ids.next();
         let response: GitDiffToRemoteResponse = self
             .request_typed(
@@ -225,7 +233,7 @@ impl BridgeRuntime {
             .await
     }
 
-    pub(super) async fn list_skills(&mut self, chat_id: ChatId) -> anyhow::Result<()> {
+    pub(super) async fn list_skills(&mut self, chat_id: ConversationKey) -> anyhow::Result<()> {
         let request_id = self.request_ids.next();
         let response: SkillsListResponse = self
             .request_typed(
@@ -257,7 +265,10 @@ impl BridgeRuntime {
         self.send_text(chat_id, &text).await
     }
 
-    pub(super) async fn active_model_settings(&self, chat_id: ChatId) -> (Option<String>, String) {
+    pub(super) async fn active_model_settings(
+        &self,
+        chat_id: ConversationKey,
+    ) -> (Option<String>, String) {
         let model = self
             .sessions
             .model(chat_id)
@@ -275,7 +286,7 @@ impl BridgeRuntime {
         (model, provider)
     }
 
-    pub(super) async fn active_approval_policy(&self, chat_id: ChatId) -> AskForApproval {
+    pub(super) async fn active_approval_policy(&self, chat_id: ConversationKey) -> AskForApproval {
         self.sessions
             .approval_policy(chat_id)
             .await
@@ -300,7 +311,7 @@ impl BridgeRuntime {
 
     async fn apply_thread_settings_update_if_thread_loaded(
         &mut self,
-        chat_id: ChatId,
+        chat_id: ConversationKey,
         mut params: ThreadSettingsUpdateParams,
     ) -> anyhow::Result<bool> {
         let Some(thread_id) = self.sessions.thread_id(chat_id).await else {

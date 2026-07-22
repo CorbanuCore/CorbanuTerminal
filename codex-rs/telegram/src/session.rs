@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
@@ -12,19 +13,24 @@ use codex_app_server_protocol::AskForApproval;
 use codex_app_server_protocol::RequestId;
 use serde::Deserialize;
 use serde::Serialize;
-use teloxide::types::ChatId;
 use teloxide::types::MessageId;
+use teloxide::types::UserId;
 use tokio::sync::Mutex;
 use tracing::warn;
 
 use crate::approvals::PendingApproval;
+use crate::conversation::ConversationKey;
 use crate::render::StreamingText;
 
 #[derive(Debug, Clone, PartialEq)]
 struct PendingApprovalState {
     approval: PendingApproval,
     message_id: Option<MessageId>,
+    actor_user_id: Option<UserId>,
+    created_at: Instant,
 }
+
+const PENDING_APPROVAL_TTL: Duration = Duration::from_secs(15 * 60);
 
 #[derive(Debug, Clone, Default)]
 pub struct ChatSession {
@@ -34,6 +40,7 @@ pub struct ChatSession {
     pub model_provider: Option<String>,
     pub approval_policy: Option<AskForApproval>,
     pub turn_id: Option<String>,
+    pub active_user_id: Option<UserId>,
     pub streaming_item_id: Option<String>,
     pub streaming_text: StreamingText,
     pub streaming_message_id: Option<MessageId>,
@@ -45,14 +52,15 @@ pub struct ChatSession {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PendingApprovalRecord {
-    pub chat_id: ChatId,
+    pub conversation: ConversationKey,
     pub approval: PendingApproval,
     pub message_id: Option<MessageId>,
+    pub actor_user_id: Option<UserId>,
 }
 
 #[derive(Debug, Clone)]
 pub struct StreamUpdate {
-    pub chat_id: ChatId,
+    pub conversation: ConversationKey,
     pub message_id: Option<MessageId>,
     pub html: String,
 }
@@ -78,7 +86,7 @@ struct PersistedChat {
 
 #[derive(Debug)]
 pub struct SessionStore {
-    inner: Mutex<HashMap<ChatId, ChatSession>>,
+    inner: Mutex<HashMap<ConversationKey, ChatSession>>,
     state_path: PathBuf,
 }
 
@@ -92,16 +100,20 @@ impl SessionStore {
                     .with_context(|| format!("failed to parse {}", state_path.display()))
                     .and_then(|persisted| {
                         let mut sessions = HashMap::new();
-                        for (chat_id, chat) in persisted.chats {
-                            let chat_id = ChatId(chat_id.parse().with_context(|| {
-                                format!("invalid Telegram chat id in {}", state_path.display())
-                            })?);
+                        for (conversation, chat) in persisted.chats {
+                            let conversation =
+                                conversation.parse::<ConversationKey>().with_context(|| {
+                                    format!(
+                                        "invalid Telegram conversation key in {}",
+                                        state_path.display()
+                                    )
+                                })?;
                             let mut delivered_item_ids = HashSet::new();
                             if let Some(item_id) = &chat.last_delivered_item_id {
                                 delivered_item_ids.insert(item_id.clone());
                             }
                             sessions.insert(
-                                chat_id,
+                                conversation,
                                 ChatSession {
                                     thread_id: chat.thread_id,
                                     thread_loaded: false,
@@ -146,75 +158,85 @@ impl SessionStore {
         }))
     }
 
-    pub async fn status_text(&self, chat_id: ChatId) -> String {
-        let sessions = self.inner.lock().await;
-        let Some(session) = sessions.get(&chat_id) else {
-            return "No active Telegram session.".to_string();
-        };
-        match (&session.thread_id, &session.turn_id) {
-            (Some(thread_id), Some(turn_id)) => {
-                format!("Thread: {thread_id}\nActive turn: {turn_id}")
-            }
-            (Some(thread_id), None) => format!("Thread: {thread_id}\nNo active turn."),
-            (None, _) => "No active thread.".to_string(),
-        }
-    }
-
-    pub async fn thread_id(&self, chat_id: ChatId) -> Option<String> {
+    pub async fn thread_id(&self, conversation: impl Into<ConversationKey>) -> Option<String> {
+        let conversation = conversation.into();
         self.inner
             .lock()
             .await
-            .get(&chat_id)
+            .get(&conversation)
             .and_then(|session| session.thread_id.clone())
     }
 
-    pub async fn model(&self, chat_id: ChatId) -> Option<String> {
+    pub async fn model(&self, conversation: impl Into<ConversationKey>) -> Option<String> {
+        let conversation = conversation.into();
         self.inner
             .lock()
             .await
-            .get(&chat_id)
+            .get(&conversation)
             .and_then(|session| session.model.clone())
     }
 
-    pub async fn model_provider(&self, chat_id: ChatId) -> Option<String> {
+    pub async fn model_provider(&self, conversation: impl Into<ConversationKey>) -> Option<String> {
+        let conversation = conversation.into();
         self.inner
             .lock()
             .await
-            .get(&chat_id)
+            .get(&conversation)
             .and_then(|session| session.model_provider.clone())
     }
 
-    pub async fn approval_policy(&self, chat_id: ChatId) -> Option<AskForApproval> {
+    pub async fn approval_policy(
+        &self,
+        conversation: impl Into<ConversationKey>,
+    ) -> Option<AskForApproval> {
+        let conversation = conversation.into();
         self.inner
             .lock()
             .await
-            .get(&chat_id)
+            .get(&conversation)
             .and_then(|session| session.approval_policy)
     }
 
-    pub async fn thread_loaded(&self, chat_id: ChatId) -> bool {
+    pub async fn thread_loaded(&self, conversation: impl Into<ConversationKey>) -> bool {
+        let conversation = conversation.into();
         self.inner
             .lock()
             .await
-            .get(&chat_id)
+            .get(&conversation)
             .is_some_and(|session| session.thread_loaded)
     }
 
-    pub async fn turn_id(&self, chat_id: ChatId) -> Option<String> {
+    pub async fn turn_id(&self, conversation: impl Into<ConversationKey>) -> Option<String> {
+        let conversation = conversation.into();
         self.inner
             .lock()
             .await
-            .get(&chat_id)
+            .get(&conversation)
             .and_then(|session| session.turn_id.clone())
     }
 
-    pub async fn set_thread(&self, chat_id: ChatId, thread_id: String) -> anyhow::Result<()> {
+    pub async fn pending_approval_count(&self, conversation: impl Into<ConversationKey>) -> usize {
+        let conversation = conversation.into();
+        self.inner
+            .lock()
+            .await
+            .get(&conversation)
+            .map_or(0, |session| session.pending_approvals.len())
+    }
+
+    pub async fn set_thread(
+        &self,
+        conversation: impl Into<ConversationKey>,
+        thread_id: String,
+    ) -> anyhow::Result<()> {
+        let conversation = conversation.into();
         {
             let mut sessions = self.inner.lock().await;
-            let session = sessions.entry(chat_id).or_default();
+            let session = sessions.entry(conversation).or_default();
             session.thread_id = Some(thread_id);
             session.thread_loaded = true;
             session.turn_id = None;
+            session.active_user_id = None;
             session.streaming_item_id = None;
             session.streaming_message_id = None;
             session.streaming_text = StreamingText::new();
@@ -227,13 +249,14 @@ impl SessionStore {
 
     pub async fn set_model(
         &self,
-        chat_id: ChatId,
+        conversation: impl Into<ConversationKey>,
         model: String,
         model_provider: String,
     ) -> anyhow::Result<()> {
+        let conversation = conversation.into();
         {
             let mut sessions = self.inner.lock().await;
-            let session = sessions.entry(chat_id).or_default();
+            let session = sessions.entry(conversation).or_default();
             session.model = Some(model);
             session.model_provider = Some(model_provider);
         }
@@ -242,24 +265,34 @@ impl SessionStore {
 
     pub async fn set_approval_policy(
         &self,
-        chat_id: ChatId,
+        conversation: impl Into<ConversationKey>,
         approval_policy: AskForApproval,
     ) -> anyhow::Result<()> {
+        let conversation = conversation.into();
         {
             let mut sessions = self.inner.lock().await;
-            sessions.entry(chat_id).or_default().approval_policy = Some(approval_policy);
+            sessions.entry(conversation).or_default().approval_policy = Some(approval_policy);
         }
         self.persist().await
     }
 
-    pub async fn set_turn(&self, chat_id: ChatId, turn_id: String) {
+    pub async fn set_turn(
+        &self,
+        conversation: impl Into<ConversationKey>,
+        turn_id: String,
+        actor_user_id: Option<UserId>,
+    ) {
+        let conversation = conversation.into();
         let mut sessions = self.inner.lock().await;
-        sessions.entry(chat_id).or_default().turn_id = Some(turn_id);
+        let session = sessions.entry(conversation).or_default();
+        session.turn_id = Some(turn_id);
+        session.active_user_id = actor_user_id;
     }
 
-    pub async fn mark_thread_loaded(&self, chat_id: ChatId) {
+    pub async fn mark_thread_loaded(&self, conversation: impl Into<ConversationKey>) {
+        let conversation = conversation.into();
         let mut sessions = self.inner.lock().await;
-        sessions.entry(chat_id).or_default().thread_loaded = true;
+        sessions.entry(conversation).or_default().thread_loaded = true;
     }
 
     pub async fn clear_turn_for_thread(&self, thread_id: &str) {
@@ -267,6 +300,7 @@ impl SessionStore {
         for session in sessions.values_mut() {
             if session.thread_id.as_deref() == Some(thread_id) {
                 session.turn_id = None;
+                session.active_user_id = None;
                 session.streaming_item_id = None;
                 session.streaming_message_id = None;
                 session.streaming_text = StreamingText::new();
@@ -276,13 +310,13 @@ impl SessionStore {
         }
     }
 
-    pub async fn chat_for_thread(&self, thread_id: &str) -> Option<ChatId> {
+    pub async fn conversation_for_thread(&self, thread_id: &str) -> Option<ConversationKey> {
         self.inner
             .lock()
             .await
             .iter()
-            .find_map(|(chat_id, session)| {
-                (session.thread_id.as_deref() == Some(thread_id)).then_some(*chat_id)
+            .find_map(|(conversation, session)| {
+                (session.thread_id.as_deref() == Some(thread_id)).then_some(*conversation)
             })
     }
 
@@ -295,39 +329,45 @@ impl SessionStore {
             .collect()
     }
 
-    pub async fn chat_ids_with_threads(&self) -> Vec<ChatId> {
+    pub async fn conversations_with_threads(&self) -> Vec<ConversationKey> {
         self.inner
             .lock()
             .await
             .iter()
-            .filter_map(|(chat_id, session)| session.thread_id.as_ref().map(|_| *chat_id))
+            .filter_map(|(conversation, session)| session.thread_id.as_ref().map(|_| *conversation))
             .collect()
     }
 
-    pub async fn insert_pending_approval(&self, chat_id: ChatId, approval: PendingApproval) {
+    pub async fn insert_pending_approval(
+        &self,
+        conversation: impl Into<ConversationKey>,
+        approval: PendingApproval,
+    ) {
+        let conversation = conversation.into();
         let mut sessions = self.inner.lock().await;
-        sessions
-            .entry(chat_id)
-            .or_default()
-            .pending_approvals
-            .insert(
-                approval.request_id.clone(),
-                PendingApprovalState {
-                    approval,
-                    message_id: None,
-                },
-            );
+        let session = sessions.entry(conversation).or_default();
+        let actor_user_id = session.active_user_id;
+        session.pending_approvals.insert(
+            approval.request_id.clone(),
+            PendingApprovalState {
+                approval,
+                message_id: None,
+                actor_user_id,
+                created_at: Instant::now(),
+            },
+        );
     }
 
     pub async fn set_pending_approval_message(
         &self,
-        chat_id: ChatId,
+        conversation: impl Into<ConversationKey>,
         request_id: &RequestId,
         message_id: MessageId,
     ) {
+        let conversation = conversation.into();
         let mut sessions = self.inner.lock().await;
         if let Some(state) = sessions
-            .get_mut(&chat_id)
+            .get_mut(&conversation)
             .and_then(|session| session.pending_approvals.get_mut(request_id))
         {
             state.message_id = Some(message_id);
@@ -336,45 +376,59 @@ impl SessionStore {
 
     pub async fn remove_pending_approval(
         &self,
-        chat_id: ChatId,
+        conversation: impl Into<ConversationKey>,
         request_id: &RequestId,
     ) -> Option<PendingApproval> {
+        let conversation = conversation.into();
         self.inner
             .lock()
             .await
-            .get_mut(&chat_id)
+            .get_mut(&conversation)
             .and_then(|session| session.pending_approvals.remove(request_id))
             .map(|state| state.approval)
     }
 
     pub async fn pending_approval(
         &self,
-        chat_id: ChatId,
+        conversation: impl Into<ConversationKey>,
         request_id: &RequestId,
     ) -> Option<PendingApprovalRecord> {
+        let conversation = conversation.into();
         let sessions = self.inner.lock().await;
-        let state = sessions.get(&chat_id)?.pending_approvals.get(request_id)?;
+        let state = sessions
+            .get(&conversation)?
+            .pending_approvals
+            .get(request_id)?;
+        if approval_expired(state.created_at, Instant::now()) {
+            return None;
+        }
         Some(PendingApprovalRecord {
-            chat_id,
+            conversation,
             approval: state.approval.clone(),
             message_id: state.message_id,
+            actor_user_id: state.actor_user_id,
         })
     }
 
     pub async fn take_pending_approval(
         &self,
-        chat_id: ChatId,
+        conversation: impl Into<ConversationKey>,
         request_id: &RequestId,
     ) -> Option<PendingApprovalRecord> {
+        let conversation = conversation.into();
         let mut sessions = self.inner.lock().await;
         let state = sessions
-            .get_mut(&chat_id)?
+            .get_mut(&conversation)?
             .pending_approvals
             .remove(request_id)?;
+        if approval_expired(state.created_at, Instant::now()) {
+            return None;
+        }
         Some(PendingApprovalRecord {
-            chat_id,
+            conversation,
             approval: state.approval,
             message_id: state.message_id,
+            actor_user_id: state.actor_user_id,
         })
     }
 
@@ -423,7 +477,7 @@ impl SessionStore {
         now: Instant,
     ) -> Option<StreamUpdate> {
         let mut sessions = self.inner.lock().await;
-        let (chat_id, session) = sessions
+        let (conversation, session) = sessions
             .iter_mut()
             .find(|(_, session)| session.thread_id.as_deref() == Some(thread_id))?;
         if session.streaming_item_id.as_deref() != Some(item_id) {
@@ -435,20 +489,33 @@ impl SessionStore {
             return None;
         }
         Some(StreamUpdate {
-            chat_id: *chat_id,
+            conversation: *conversation,
             message_id: session.streaming_message_id,
             html: session.streaming_text.preview_html(),
         })
     }
 
-    pub async fn set_stream_message(&self, chat_id: ChatId, message_id: MessageId) {
+    pub async fn set_stream_message(
+        &self,
+        conversation: impl Into<ConversationKey>,
+        message_id: MessageId,
+    ) {
+        let conversation = conversation.into();
         let mut sessions = self.inner.lock().await;
-        sessions.entry(chat_id).or_default().streaming_message_id = Some(message_id);
+        sessions
+            .entry(conversation)
+            .or_default()
+            .streaming_message_id = Some(message_id);
     }
 
-    pub async fn stream_edits_suppressed(&self, chat_id: ChatId, now: Instant) -> bool {
+    pub async fn stream_edits_suppressed(
+        &self,
+        conversation: impl Into<ConversationKey>,
+        now: Instant,
+    ) -> bool {
+        let conversation = conversation.into();
         let mut sessions = self.inner.lock().await;
-        let Some(session) = sessions.get_mut(&chat_id) else {
+        let Some(session) = sessions.get_mut(&conversation) else {
             return false;
         };
         match session.stream_edits_suppressed_until {
@@ -461,10 +528,15 @@ impl SessionStore {
         }
     }
 
-    pub async fn suppress_stream_edits_until(&self, chat_id: ChatId, until: Instant) {
+    pub async fn suppress_stream_edits_until(
+        &self,
+        conversation: impl Into<ConversationKey>,
+        until: Instant,
+    ) {
+        let conversation = conversation.into();
         let mut sessions = self.inner.lock().await;
         sessions
-            .entry(chat_id)
+            .entry(conversation)
             .or_default()
             .stream_edits_suppressed_until = Some(until);
     }
@@ -473,16 +545,16 @@ impl SessionStore {
         &self,
         thread_id: &str,
         item_id: &str,
-    ) -> Option<(ChatId, Option<MessageId>)> {
+    ) -> Option<(ConversationKey, Option<MessageId>)> {
         let mut sessions = self.inner.lock().await;
-        let (chat_id, session) = sessions.iter_mut().find(|(_, session)| {
+        let (conversation, session) = sessions.iter_mut().find(|(_, session)| {
             session.thread_id.as_deref() == Some(thread_id)
                 && session.streaming_item_id.as_deref() == Some(item_id)
         })?;
         let message_id = session.streaming_message_id.take();
         session.streaming_item_id = None;
         session.streaming_text = StreamingText::new();
-        Some((*chat_id, message_id))
+        Some((*conversation, message_id))
     }
 
     async fn persist(&self) -> anyhow::Result<()> {
@@ -492,9 +564,9 @@ impl SessionStore {
                 chats: sessions
                     .iter()
                     .filter(|(_, session)| session.should_persist())
-                    .map(|(chat_id, session)| {
+                    .map(|(conversation, session)| {
                         (
-                            chat_id.0.to_string(),
+                            conversation.storage_key(),
                             PersistedChat {
                                 thread_id: session.thread_id.clone(),
                                 model: session.model.clone(),
@@ -507,13 +579,17 @@ impl SessionStore {
                     .collect(),
             }
         };
-        if let Some(parent) = self.state_path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
-        let bytes = serde_json::to_vec_pretty(&persisted)?;
-        tokio::fs::write(&self.state_path, bytes).await?;
-        Ok(())
+        crate::persistence::write_atomically(
+            &self.state_path,
+            serde_json::to_string_pretty(&persisted)?,
+        )
+        .await
     }
+}
+
+pub(crate) fn approval_expired(created_at: Instant, now: Instant) -> bool {
+    now.checked_duration_since(created_at)
+        .is_some_and(|age| age > PENDING_APPROVAL_TTL)
 }
 
 async fn rename_corrupt_state(state_path: &Path) -> anyhow::Result<()> {

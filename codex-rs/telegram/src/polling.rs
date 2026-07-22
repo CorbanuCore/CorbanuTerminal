@@ -76,6 +76,7 @@ impl PollingState {
 
 pub struct GuardedPolling {
     inner: Polling<Bot>,
+    replay: Vec<Update>,
     state: Arc<Mutex<PollingState>>,
     fatal: FatalPollingFlag,
 }
@@ -124,7 +125,11 @@ pub fn polling_bot(token: String) -> anyhow::Result<Bot> {
     Ok(Bot::with_client(token, client))
 }
 
-pub async fn guarded_polling(bot: Bot, max_consecutive_failures: u32) -> GuardedPolling {
+pub async fn guarded_polling(
+    bot: Bot,
+    max_consecutive_failures: u32,
+    replay: Vec<Update>,
+) -> GuardedPolling {
     debug_assert!(
         POLLING_CLIENT_TIMEOUT > Duration::from_secs(10),
         "polling client timeout must exceed the long-poll timeout"
@@ -137,6 +142,7 @@ pub async fn guarded_polling(bot: Bot, max_consecutive_failures: u32) -> Guarded
         .build();
     GuardedPolling {
         inner,
+        replay,
         state: Arc::new(Mutex::new(PollingState::new(max_consecutive_failures))),
         fatal: FatalPollingFlag::default(),
     }
@@ -169,29 +175,32 @@ impl<'a> AsUpdateStream<'a> for GuardedPolling {
         let state = Arc::clone(&self.state);
         let stop_token = self.inner.stop_token();
         let fatal = self.fatal.clone();
-        Box::pin(self.inner.as_stream().map(move |result| {
-            let should_stop = {
-                let mut state = match state.lock() {
-                    Ok(state) => state,
-                    Err(poisoned) => {
-                        warn!("Telegram polling state mutex was poisoned; continuing");
-                        poisoned.into_inner()
+        let replay = std::mem::take(&mut self.replay).into_iter().map(Ok);
+        Box::pin(
+            futures::stream::iter(replay).chain(self.inner.as_stream().map(move |result| {
+                let should_stop = {
+                    let mut state = match state.lock() {
+                        Ok(state) => state,
+                        Err(poisoned) => {
+                            warn!("Telegram polling state mutex was poisoned; continuing");
+                            poisoned.into_inner()
+                        }
+                    };
+                    match &result {
+                        Ok(_) => {
+                            state.record_success();
+                            false
+                        }
+                        Err(error) => state.record_failure(error),
                     }
                 };
-                match &result {
-                    Ok(_) => {
-                        state.record_success();
-                        false
-                    }
-                    Err(error) => state.record_failure(error),
+                if should_stop {
+                    fatal.mark_fatal();
+                    stop_token.stop();
                 }
-            };
-            if should_stop {
-                fatal.mark_fatal();
-                stop_token.stop();
-            }
-            result
-        }))
+                result
+            })),
+        )
     }
 }
 

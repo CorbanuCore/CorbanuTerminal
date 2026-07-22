@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,10 +17,7 @@ use codex_app_server_protocol::ThreadUnsubscribeParams;
 use codex_app_server_protocol::ThreadUnsubscribeResponse;
 use codex_app_server_protocol::TurnInterruptParams;
 use codex_app_server_protocol::TurnInterruptResponse;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
 use codex_core::config::Config;
-use codex_protocol::user_input::UserInput;
 use serde::de::DeserializeOwned;
 use teloxide::ApiError;
 use teloxide::Bot;
@@ -26,11 +25,10 @@ use teloxide::RequestError;
 use teloxide::payloads::EditMessageTextSetters;
 use teloxide::payloads::SendMessageSetters;
 use teloxide::prelude::Requester;
-use teloxide::types::ChatAction;
-use teloxide::types::ChatId;
 use teloxide::types::Message;
 use teloxide::types::MessageId;
 use teloxide::types::ParseMode;
+use teloxide::types::UserId;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
@@ -40,12 +38,17 @@ use tracing::instrument;
 use tracing::warn;
 
 use crate::approvals::ApprovalCallback;
+use crate::conversation::ConversationKey;
 use crate::render::render_html_chunks;
 use crate::session::SessionStore;
 
 mod commands;
 mod notifications;
 mod server_requests;
+mod status;
+mod user_input;
+
+use self::user_input::QueuedUserInput;
 
 const BRIDGE_CHANNEL_CAPACITY: usize = 128;
 
@@ -68,45 +71,68 @@ impl RequestIdSequencer {
 
 enum BridgeCommand {
     UserText {
-        chat_id: ChatId,
+        conversation: ConversationKey,
         text: String,
         /// Local paths of already-downloaded inbound images; each becomes a
         /// `UserInput::LocalImage` on the turn.
         images: Vec<std::path::PathBuf>,
+        client_user_message_id: String,
+        actor_user_id: Option<UserId>,
+        admission_tx: oneshot::Sender<Result<UserInputAdmission, String>>,
+        completion_tx: oneshot::Sender<Result<(), String>>,
     },
     NewThread {
-        chat_id: ChatId,
+        conversation: ConversationKey,
+        response_tx: oneshot::Sender<Result<(), String>>,
     },
     Cancel {
-        chat_id: ChatId,
+        conversation: ConversationKey,
+        response_tx: oneshot::Sender<Result<(), String>>,
     },
     Model {
-        chat_id: ChatId,
+        conversation: ConversationKey,
         args: String,
+        response_tx: oneshot::Sender<Result<(), String>>,
     },
     Approvals {
-        chat_id: ChatId,
+        conversation: ConversationKey,
         args: String,
+        response_tx: oneshot::Sender<Result<(), String>>,
     },
     Compact {
-        chat_id: ChatId,
+        conversation: ConversationKey,
+        response_tx: oneshot::Sender<Result<(), String>>,
     },
     Diff {
-        chat_id: ChatId,
+        conversation: ConversationKey,
+        response_tx: oneshot::Sender<Result<(), String>>,
     },
     Skills {
-        chat_id: ChatId,
+        conversation: ConversationKey,
+        response_tx: oneshot::Sender<Result<(), String>>,
     },
     Status {
-        chat_id: ChatId,
+        conversation: ConversationKey,
         response_tx: oneshot::Sender<String>,
     },
     Approval {
-        chat_id: ChatId,
+        conversation: ConversationKey,
         callback: ApprovalCallback,
+        actor_user_id: UserId,
         response_tx: oneshot::Sender<String>,
     },
     Shutdown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UserInputAdmission {
+    Applied,
+    Queued,
+}
+
+pub(crate) enum UserInputReceipt {
+    Applied,
+    Queued(oneshot::Receiver<Result<(), String>>),
 }
 
 #[derive(Clone)]
@@ -129,6 +155,9 @@ impl BridgeHandle {
             config,
             sessions,
             request_ids: RequestIdSequencer::new(),
+            pending_inputs: HashMap::new(),
+            last_successful_contact_at: HashMap::new(),
+            last_errors: HashMap::new(),
         };
         let task = tokio::spawn(async move {
             runtime.run(command_rx).await;
@@ -140,88 +169,158 @@ impl BridgeHandle {
     }
 
     #[instrument(skip(self, text))]
-    pub async fn send_user_text(&self, chat_id: ChatId, text: String) -> anyhow::Result<()> {
-        self.send_user_input(chat_id, text, Vec::new()).await
+    pub async fn send_user_text(
+        &self,
+        conversation: ConversationKey,
+        text: String,
+        client_user_message_id: String,
+        actor_user_id: Option<UserId>,
+    ) -> anyhow::Result<UserInputReceipt> {
+        self.send_user_input(
+            conversation,
+            text,
+            Vec::new(),
+            client_user_message_id,
+            actor_user_id,
+        )
+        .await
     }
 
     #[instrument(skip(self, text, images))]
     pub async fn send_user_input(
         &self,
-        chat_id: ChatId,
+        conversation: ConversationKey,
         text: String,
         images: Vec<std::path::PathBuf>,
-    ) -> anyhow::Result<()> {
+        client_user_message_id: String,
+        actor_user_id: Option<UserId>,
+    ) -> anyhow::Result<UserInputReceipt> {
+        let (admission_tx, admission_rx) = oneshot::channel();
+        let (completion_tx, completion_rx) = oneshot::channel();
         self.command_tx
             .send(BridgeCommand::UserText {
-                chat_id,
+                conversation,
                 text,
                 images,
+                client_user_message_id,
+                actor_user_id,
+                admission_tx,
+                completion_tx,
             })
             .await
-            .context("telegram bridge task stopped")
+            .context("telegram bridge task stopped")?;
+        match admission_rx
+            .await
+            .context("telegram bridge user-input acknowledgement dropped")?
+            .map_err(anyhow::Error::msg)?
+        {
+            UserInputAdmission::Applied => Ok(UserInputReceipt::Applied),
+            UserInputAdmission::Queued => Ok(UserInputReceipt::Queued(completion_rx)),
+        }
     }
 
     #[instrument(skip(self))]
-    pub async fn new_thread(&self, chat_id: ChatId) -> anyhow::Result<()> {
+    pub async fn new_thread(&self, conversation: ConversationKey) -> anyhow::Result<()> {
+        let (response_tx, response_rx) = oneshot::channel();
         self.command_tx
-            .send(BridgeCommand::NewThread { chat_id })
+            .send(BridgeCommand::NewThread {
+                conversation,
+                response_tx,
+            })
             .await
-            .context("telegram bridge task stopped")
+            .context("telegram bridge task stopped")?;
+        await_command_ack(response_rx).await
     }
 
     #[instrument(skip(self))]
-    pub async fn cancel(&self, chat_id: ChatId) -> anyhow::Result<()> {
+    pub async fn cancel(&self, conversation: ConversationKey) -> anyhow::Result<()> {
+        let (response_tx, response_rx) = oneshot::channel();
         self.command_tx
-            .send(BridgeCommand::Cancel { chat_id })
+            .send(BridgeCommand::Cancel {
+                conversation,
+                response_tx,
+            })
             .await
-            .context("telegram bridge task stopped")
+            .context("telegram bridge task stopped")?;
+        await_command_ack(response_rx).await
     }
 
     #[instrument(skip(self, args))]
-    pub async fn model(&self, chat_id: ChatId, args: String) -> anyhow::Result<()> {
+    pub async fn model(&self, conversation: ConversationKey, args: String) -> anyhow::Result<()> {
+        let (response_tx, response_rx) = oneshot::channel();
         self.command_tx
-            .send(BridgeCommand::Model { chat_id, args })
+            .send(BridgeCommand::Model {
+                conversation,
+                args,
+                response_tx,
+            })
             .await
-            .context("telegram bridge task stopped")
+            .context("telegram bridge task stopped")?;
+        await_command_ack(response_rx).await
     }
 
     #[instrument(skip(self, args))]
-    pub async fn approvals(&self, chat_id: ChatId, args: String) -> anyhow::Result<()> {
+    pub async fn approvals(
+        &self,
+        conversation: ConversationKey,
+        args: String,
+    ) -> anyhow::Result<()> {
+        let (response_tx, response_rx) = oneshot::channel();
         self.command_tx
-            .send(BridgeCommand::Approvals { chat_id, args })
+            .send(BridgeCommand::Approvals {
+                conversation,
+                args,
+                response_tx,
+            })
             .await
-            .context("telegram bridge task stopped")
+            .context("telegram bridge task stopped")?;
+        await_command_ack(response_rx).await
     }
 
     #[instrument(skip(self))]
-    pub async fn compact(&self, chat_id: ChatId) -> anyhow::Result<()> {
+    pub async fn compact(&self, conversation: ConversationKey) -> anyhow::Result<()> {
+        let (response_tx, response_rx) = oneshot::channel();
         self.command_tx
-            .send(BridgeCommand::Compact { chat_id })
+            .send(BridgeCommand::Compact {
+                conversation,
+                response_tx,
+            })
             .await
-            .context("telegram bridge task stopped")
+            .context("telegram bridge task stopped")?;
+        await_command_ack(response_rx).await
     }
 
     #[instrument(skip(self))]
-    pub async fn diff(&self, chat_id: ChatId) -> anyhow::Result<()> {
+    pub async fn diff(&self, conversation: ConversationKey) -> anyhow::Result<()> {
+        let (response_tx, response_rx) = oneshot::channel();
         self.command_tx
-            .send(BridgeCommand::Diff { chat_id })
+            .send(BridgeCommand::Diff {
+                conversation,
+                response_tx,
+            })
             .await
-            .context("telegram bridge task stopped")
+            .context("telegram bridge task stopped")?;
+        await_command_ack(response_rx).await
     }
 
     #[instrument(skip(self))]
-    pub async fn skills(&self, chat_id: ChatId) -> anyhow::Result<()> {
+    pub async fn skills(&self, conversation: ConversationKey) -> anyhow::Result<()> {
+        let (response_tx, response_rx) = oneshot::channel();
         self.command_tx
-            .send(BridgeCommand::Skills { chat_id })
+            .send(BridgeCommand::Skills {
+                conversation,
+                response_tx,
+            })
             .await
-            .context("telegram bridge task stopped")
+            .context("telegram bridge task stopped")?;
+        await_command_ack(response_rx).await
     }
 
-    pub async fn status_text(&self, chat_id: ChatId) -> anyhow::Result<String> {
+    pub async fn status_text(&self, conversation: ConversationKey) -> anyhow::Result<String> {
         let (response_tx, response_rx) = oneshot::channel();
         self.command_tx
             .send(BridgeCommand::Status {
-                chat_id,
+                conversation,
                 response_tx,
             })
             .await
@@ -231,14 +330,16 @@ impl BridgeHandle {
 
     pub async fn handle_approval_callback(
         &self,
-        chat_id: ChatId,
+        conversation: ConversationKey,
         callback: ApprovalCallback,
+        actor_user_id: UserId,
     ) -> anyhow::Result<String> {
         let (response_tx, response_rx) = oneshot::channel();
         self.command_tx
             .send(BridgeCommand::Approval {
-                chat_id,
+                conversation,
                 callback,
+                actor_user_id,
                 response_tx,
             })
             .await
@@ -274,6 +375,9 @@ struct BridgeRuntime {
     config: Arc<Config>,
     sessions: Arc<SessionStore>,
     request_ids: RequestIdSequencer,
+    pending_inputs: HashMap<ConversationKey, VecDeque<QueuedUserInput>>,
+    last_successful_contact_at: HashMap<ConversationKey, u64>,
+    last_errors: HashMap<ConversationKey, String>,
 }
 
 impl BridgeRuntime {
@@ -284,15 +388,31 @@ impl BridgeRuntime {
                     match command {
                         Some(BridgeCommand::Shutdown) | None => break,
                         Some(command) => {
-                            let error_chat_id = command.error_chat_id();
+                            let error_conversation = command.error_conversation();
+                            let contact_conversation = command.conversation();
+                            let clears_prior_error = command.clears_prior_error_on_success();
                             if let Err(err) = self.handle_command(command).await {
+                                if let Some(conversation) = error_conversation {
+                                    self.last_errors.insert(conversation, format!("{err:#}"));
+                                }
                                 warn!("telegram bridge command failed: {err}");
-                                if let Some(chat_id) = error_chat_id
+                                if let Some(conversation) = error_conversation
                                     && let Err(send_err) = self
-                                        .send_text(chat_id, &format!("Error: {err:#}"))
+                                        .send_text(conversation, &format!("Error: {err:#}"))
                                         .await
                                 {
                                     warn!("failed to report Telegram bridge error to chat: {send_err}");
+                                }
+                            } else if let Some(conversation) = contact_conversation {
+                                let now = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .ok()
+                                    .map(|duration| duration.as_secs());
+                                if let Some(now) = now {
+                                    self.last_successful_contact_at.insert(conversation, now);
+                                }
+                                if clears_prior_error {
+                                    self.last_errors.remove(&conversation);
                                 }
                             }
                         }
@@ -305,6 +425,7 @@ impl BridgeRuntime {
                     if let Err(err) = self.handle_event(event).await {
                         warn!("telegram bridge event handling failed: {err}");
                     }
+                    self.pump_pending_inputs().await;
                 }
             }
         }
@@ -323,36 +444,84 @@ impl BridgeRuntime {
     async fn handle_command(&mut self, command: BridgeCommand) -> anyhow::Result<()> {
         match command {
             BridgeCommand::UserText {
-                chat_id,
+                conversation,
                 text,
                 images,
-            } => self.start_turn(chat_id, text, images).await,
-            BridgeCommand::NewThread { chat_id } => {
-                let thread_id = self.start_new_thread(chat_id).await?;
-                self.send_text(chat_id, &format!("Started new thread {thread_id}."))
-                    .await
+                client_user_message_id,
+                actor_user_id,
+                admission_tx,
+                completion_tx,
+            } => {
+                self.handle_user_input(
+                    conversation,
+                    text,
+                    images,
+                    client_user_message_id,
+                    actor_user_id,
+                    admission_tx,
+                    completion_tx,
+                )
+                .await
             }
-            BridgeCommand::Cancel { chat_id } => self.cancel_turn(chat_id).await,
-            BridgeCommand::Model { chat_id, args } => self.handle_model(chat_id, args).await,
-            BridgeCommand::Approvals { chat_id, args } => {
-                self.handle_approvals(chat_id, args).await
-            }
-            BridgeCommand::Compact { chat_id } => self.compact_thread(chat_id).await,
-            BridgeCommand::Diff { chat_id } => self.send_diff(chat_id).await,
-            BridgeCommand::Skills { chat_id } => self.list_skills(chat_id).await,
-            BridgeCommand::Status {
-                chat_id,
+            BridgeCommand::NewThread {
+                conversation,
                 response_tx,
             } => {
-                let _ = response_tx.send(self.sessions.status_text(chat_id).await);
+                let result = async {
+                    let thread_id = self.start_new_thread(conversation).await?;
+                    self.notify_after_effect(
+                        conversation,
+                        &format!("Started new thread {thread_id}."),
+                        "new-thread confirmation",
+                    )
+                    .await;
+                    Ok(())
+                }
+                .await;
+                acknowledge_command(response_tx, result)
+            }
+            BridgeCommand::Cancel {
+                conversation,
+                response_tx,
+            } => acknowledge_command(response_tx, self.cancel_turn(conversation).await),
+            BridgeCommand::Model {
+                conversation,
+                args,
+                response_tx,
+            } => acknowledge_command(response_tx, self.handle_model(conversation, args).await),
+            BridgeCommand::Approvals {
+                conversation,
+                args,
+                response_tx,
+            } => acknowledge_command(response_tx, self.handle_approvals(conversation, args).await),
+            BridgeCommand::Compact {
+                conversation,
+                response_tx,
+            } => acknowledge_command(response_tx, self.compact_thread(conversation).await),
+            BridgeCommand::Diff {
+                conversation,
+                response_tx,
+            } => acknowledge_command(response_tx, self.send_diff(conversation).await),
+            BridgeCommand::Skills {
+                conversation,
+                response_tx,
+            } => acknowledge_command(response_tx, self.list_skills(conversation).await),
+            BridgeCommand::Status {
+                conversation,
+                response_tx,
+            } => {
+                let _ = response_tx.send(self.runtime_status_text(conversation).await);
                 Ok(())
             }
             BridgeCommand::Approval {
-                chat_id,
+                conversation,
                 callback,
+                actor_user_id,
                 response_tx,
             } => {
-                let result = self.resolve_approval(chat_id, callback).await;
+                let result = self
+                    .resolve_approval(conversation, actor_user_id, callback)
+                    .await;
                 let text = match result {
                     Ok(text) => text,
                     Err(err) => format!("Approval failed: {err}"),
@@ -376,68 +545,24 @@ impl BridgeRuntime {
         }
     }
 
-    #[instrument(skip(self, text))]
-    async fn start_turn(
-        &mut self,
-        chat_id: ChatId,
-        text: String,
-        images: Vec<std::path::PathBuf>,
-    ) -> anyhow::Result<()> {
-        if self.sessions.turn_id(chat_id).await.is_some() {
-            self.send_text(
-                chat_id,
-                "A turn is already running. Use /cancel before starting another.",
-            )
-            .await?;
-            return Ok(());
-        }
-
-        let thread_id = self.ensure_thread(chat_id).await?;
-        let approval_policy = self.active_approval_policy(chat_id).await;
-        let request_id = self.request_ids.next();
-        let response: TurnStartResponse = self
-            .request_typed(
-                ClientRequest::TurnStart {
-                    request_id,
-                    params: TurnStartParams {
-                        thread_id: thread_id.clone(),
-                        client_user_message_id: None,
-                        input: turn_input(text, images),
-                        responsesapi_client_metadata: None,
-                        additional_context: None,
-                        environments: None,
-                        cwd: Some(self.config.cwd.to_path_buf()),
-                        runtime_workspace_roots: None,
-                        approval_policy: Some(approval_policy),
-                        approvals_reviewer: None,
-                        sandbox_policy: None,
-                        permissions: None,
-                        model: None,
-                        service_tier: None,
-                        effort: self.config.model_reasoning_effort.clone(),
-                        summary: None,
-                        personality: None,
-                        output_schema: None,
-                        collaboration_mode: None,
-                        multi_agent_mode: None,
-                    },
-                },
-                "turn/start",
-            )
-            .await?;
-        self.sessions.set_turn(chat_id, response.turn.id).await;
-        let _ = self.bot.send_chat_action(chat_id, ChatAction::Typing).await;
-        Ok(())
-    }
-
-    async fn cancel_turn(&mut self, chat_id: ChatId) -> anyhow::Result<()> {
-        let Some(thread_id) = self.sessions.thread_id(chat_id).await else {
-            self.send_text(chat_id, "No active thread to cancel.")
-                .await?;
+    async fn cancel_turn(&mut self, conversation: ConversationKey) -> anyhow::Result<()> {
+        let cancelled_queued = self.cancel_pending_inputs(conversation);
+        let Some(thread_id) = self.sessions.thread_id(conversation).await else {
+            let message = if cancelled_queued > 0 {
+                format!("Cancelled {cancelled_queued} queued message(s).")
+            } else {
+                "No active thread to cancel.".to_string()
+            };
+            self.send_text(conversation, &message).await?;
             return Ok(());
         };
-        let Some(turn_id) = self.sessions.turn_id(chat_id).await else {
-            self.send_text(chat_id, "No active turn to cancel.").await?;
+        let Some(turn_id) = self.sessions.turn_id(conversation).await else {
+            let message = if cancelled_queued > 0 {
+                format!("Cancelled {cancelled_queued} queued message(s); no turn was running.")
+            } else {
+                "No active turn to cancel.".to_string()
+            };
+            self.send_text(conversation, &message).await?;
             return Ok(());
         };
         let request_id = self.request_ids.next();
@@ -450,22 +575,29 @@ impl BridgeRuntime {
                 "turn/interrupt",
             )
             .await?;
-        self.send_text(chat_id, "Cancel requested.").await
+        let message = if cancelled_queued > 0 {
+            format!("Cancel requested; also cancelled {cancelled_queued} queued message(s).")
+        } else {
+            "Cancel requested.".to_string()
+        };
+        self.notify_after_effect(conversation, &message, "cancel confirmation")
+            .await;
+        Ok(())
     }
 
-    async fn ensure_thread(&mut self, chat_id: ChatId) -> anyhow::Result<String> {
-        if let Some(thread_id) = self.sessions.thread_id(chat_id).await {
-            if !self.sessions.thread_loaded(chat_id).await {
-                self.resume_thread(chat_id, thread_id.clone()).await?;
+    async fn ensure_thread(&mut self, conversation: ConversationKey) -> anyhow::Result<String> {
+        if let Some(thread_id) = self.sessions.thread_id(conversation).await {
+            if !self.sessions.thread_loaded(conversation).await {
+                self.resume_thread(conversation, thread_id.clone()).await?;
             }
             return Ok(thread_id);
         }
-        self.start_new_thread(chat_id).await
+        self.start_new_thread(conversation).await
     }
 
-    async fn start_new_thread(&mut self, chat_id: ChatId) -> anyhow::Result<String> {
+    async fn start_new_thread(&mut self, conversation: ConversationKey) -> anyhow::Result<String> {
         let request_id = self.request_ids.next();
-        let params = self.thread_start_params(chat_id).await;
+        let params = self.thread_start_params(conversation).await;
         let response: ThreadStartResponse = self
             .request_typed(
                 ClientRequest::ThreadStart { request_id, params },
@@ -473,14 +605,20 @@ impl BridgeRuntime {
             )
             .await?;
         let thread_id = response.thread.id;
-        self.sessions.set_thread(chat_id, thread_id.clone()).await?;
+        self.sessions
+            .set_thread(conversation, thread_id.clone())
+            .await?;
         Ok(thread_id)
     }
 
-    async fn resume_thread(&mut self, chat_id: ChatId, thread_id: String) -> anyhow::Result<()> {
+    async fn resume_thread(
+        &mut self,
+        conversation: ConversationKey,
+        thread_id: String,
+    ) -> anyhow::Result<()> {
         let request_id = self.request_ids.next();
-        let (model, model_provider) = self.active_model_settings(chat_id).await;
-        let approval_policy = self.active_approval_policy(chat_id).await;
+        let (model, model_provider) = self.active_model_settings(conversation).await;
+        let approval_policy = self.active_approval_policy(conversation).await;
         let _: ThreadResumeResponse = self
             .request_typed(
                 ClientRequest::ThreadResume {
@@ -498,13 +636,13 @@ impl BridgeRuntime {
                 "thread/resume",
             )
             .await?;
-        self.sessions.mark_thread_loaded(chat_id).await;
+        self.sessions.mark_thread_loaded(conversation).await;
         Ok(())
     }
 
-    async fn thread_start_params(&self, chat_id: ChatId) -> ThreadStartParams {
-        let (model, model_provider) = self.active_model_settings(chat_id).await;
-        let approval_policy = self.active_approval_policy(chat_id).await;
+    async fn thread_start_params(&self, conversation: ConversationKey) -> ThreadStartParams {
+        let (model, model_provider) = self.active_model_settings(conversation).await;
+        let approval_policy = self.active_approval_policy(conversation).await;
         ThreadStartParams {
             model,
             model_provider: Some(model_provider),
@@ -522,14 +660,40 @@ impl BridgeRuntime {
         }
     }
 
-    pub(super) async fn send_text(&self, chat_id: ChatId, text: &str) -> anyhow::Result<()> {
+    pub(super) async fn send_text(
+        &self,
+        conversation: ConversationKey,
+        text: &str,
+    ) -> anyhow::Result<()> {
         for chunk in render_html_chunks(text) {
-            self.send_html(chat_id, &chunk.html).await?;
+            self.send_html(conversation, &chunk.html).await?;
         }
         Ok(())
     }
 
-    pub(super) async fn send_html(&self, chat_id: ChatId, html: &str) -> anyhow::Result<Message> {
+    /// Report an already-accepted state change without turning a Telegram send
+    /// failure into a replay of that mutation. The update remains successful;
+    /// `/status` and the next command expose the resulting state.
+    pub(super) async fn notify_after_effect(
+        &self,
+        conversation: ConversationKey,
+        text: &str,
+        operation: &str,
+    ) {
+        if let Err(err) = self.send_text(conversation, text).await {
+            warn!(
+                %conversation,
+                operation,
+                "Telegram confirmation failed after the operation was accepted: {err}"
+            );
+        }
+    }
+
+    pub(super) async fn send_html(
+        &self,
+        conversation: ConversationKey,
+        html: &str,
+    ) -> anyhow::Result<Message> {
         // Mutating: a timeout bounds the call, but it is never auto-retried —
         // a retried send could post the message twice. Duplicate protection
         // for sends lives at the update level (`crate::dedup`), not here.
@@ -543,9 +707,13 @@ impl BridgeRuntime {
                 let bot = bot.clone();
                 let html = html.clone();
                 async move {
-                    bot.send_message(chat_id, html)
-                        .parse_mode(ParseMode::Html)
-                        .await
+                    let mut request = bot
+                        .send_message(conversation.chat_id, html)
+                        .parse_mode(ParseMode::Html);
+                    if let Some(thread_id) = conversation.thread_id {
+                        request = request.message_thread_id(thread_id);
+                    }
+                    request.await
                 }
             },
         )
@@ -555,7 +723,7 @@ impl BridgeRuntime {
 
     pub(super) async fn edit_message(
         &self,
-        chat_id: ChatId,
+        conversation: ConversationKey,
         message_id: MessageId,
         text: &str,
     ) -> anyhow::Result<bool> {
@@ -570,7 +738,7 @@ impl BridgeRuntime {
                         let bot = self.bot.clone();
                         let html = first.html.clone();
                         async move {
-                            bot.edit_message_text(chat_id, message_id, html)
+                            bot.edit_message_text(conversation.chat_id, message_id, html)
                                 .parse_mode(ParseMode::Html)
                                 .await
                         }
@@ -581,7 +749,7 @@ impl BridgeRuntime {
             )?
         {
             self.sessions
-                .suppress_stream_edits_until(chat_id, std::time::Instant::now() + delay)
+                .suppress_stream_edits_until(conversation, std::time::Instant::now() + delay)
                 .await;
             return Ok(false);
         }
@@ -620,42 +788,60 @@ impl BridgeRuntime {
 }
 
 impl BridgeCommand {
-    fn error_chat_id(&self) -> Option<ChatId> {
+    fn error_conversation(&self) -> Option<ConversationKey> {
         match self {
-            Self::UserText { chat_id, .. }
-            | Self::NewThread { chat_id }
-            | Self::Cancel { chat_id }
-            | Self::Model { chat_id, .. }
-            | Self::Approvals { chat_id, .. }
-            | Self::Compact { chat_id }
-            | Self::Diff { chat_id }
-            | Self::Skills { chat_id } => Some(*chat_id),
+            Self::UserText { conversation, .. }
+            | Self::NewThread { conversation, .. }
+            | Self::Cancel { conversation, .. }
+            | Self::Model { conversation, .. }
+            | Self::Approvals { conversation, .. }
+            | Self::Compact { conversation, .. }
+            | Self::Diff { conversation, .. }
+            | Self::Skills { conversation, .. } => Some(*conversation),
             Self::Status { .. } | Self::Approval { .. } | Self::Shutdown => None,
         }
     }
+
+    fn conversation(&self) -> Option<ConversationKey> {
+        match self {
+            Self::UserText { conversation, .. }
+            | Self::NewThread { conversation, .. }
+            | Self::Cancel { conversation, .. }
+            | Self::Model { conversation, .. }
+            | Self::Approvals { conversation, .. }
+            | Self::Compact { conversation, .. }
+            | Self::Diff { conversation, .. }
+            | Self::Skills { conversation, .. }
+            | Self::Status { conversation, .. }
+            | Self::Approval { conversation, .. } => Some(*conversation),
+            Self::Shutdown => None,
+        }
+    }
+
+    fn clears_prior_error_on_success(&self) -> bool {
+        !matches!(self, Self::Status { .. } | Self::Shutdown)
+    }
 }
 
-/// Assemble turn input: images first (so the model reads the screenshot in the
-/// context of the caption that follows), then the text if there is any. An
-/// image-only message yields image items alone; text-only yields text alone.
-fn turn_input(
-    text: String,
-    images: Vec<std::path::PathBuf>,
-) -> Vec<codex_app_server_protocol::UserInput> {
-    let mut input: Vec<codex_app_server_protocol::UserInput> = images
-        .into_iter()
-        .map(|path| UserInput::LocalImage { path, detail: None }.into())
-        .collect();
-    if !text.is_empty() {
-        input.push(
-            UserInput::Text {
-                text,
-                text_elements: Vec::new(),
-            }
-            .into(),
-        );
-    }
-    input
+async fn await_command_ack(
+    response_rx: oneshot::Receiver<Result<(), String>>,
+) -> anyhow::Result<()> {
+    response_rx
+        .await
+        .context("telegram bridge command acknowledgement dropped")?
+        .map_err(anyhow::Error::msg)
+}
+
+fn acknowledge_command(
+    response_tx: oneshot::Sender<Result<(), String>>,
+    result: anyhow::Result<()>,
+) -> anyhow::Result<()> {
+    let response = result
+        .as_ref()
+        .map(|_| ())
+        .map_err(|err| format!("{err:#}"));
+    let _ = response_tx.send(response);
+    result
 }
 
 pub(super) fn finish_edit_result(
@@ -667,31 +853,5 @@ pub(super) fn finish_edit_result(
         Err(RequestError::Api(ApiError::MessageNotModified)) => Ok(None),
         Err(RequestError::RetryAfter(delay)) => Ok(Some(delay.duration())),
         Err(err) => Err(err).context(context.to_string()),
-    }
-}
-
-#[cfg(test)]
-mod turn_input_tests {
-    use super::*;
-
-    #[test]
-    fn image_only_message_yields_only_image_items() {
-        let input = turn_input(String::new(), vec!["/tmp/a.jpg".into()]);
-        assert_eq!(input.len(), 1);
-    }
-
-    #[test]
-    fn caption_follows_images() {
-        let input = turn_input("look at this".into(), vec!["/tmp/a.jpg".into()]);
-        assert_eq!(input.len(), 2);
-        let json = serde_json::to_value(&input).expect("serialize");
-        assert!(json[0].to_string().contains("a.jpg"));
-        assert!(json[1].to_string().contains("look at this"));
-    }
-
-    #[test]
-    fn text_only_unchanged() {
-        let input = turn_input("hi".into(), Vec::new());
-        assert_eq!(input.len(), 1);
     }
 }

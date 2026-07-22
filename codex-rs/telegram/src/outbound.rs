@@ -25,7 +25,7 @@ use tracing::warn;
 pub const DEFAULT_API_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Media downloads get a longer ceiling: they move up to
-/// `crate::media::MAX_IMAGE_BYTES` over whatever link the host has.
+/// the configured attachment ceiling over whatever link the host has.
 pub const MEDIA_API_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Hard cap on automatic retries for one idempotent call, not counting the

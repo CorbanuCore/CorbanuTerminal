@@ -15,6 +15,7 @@ Usage: setup-telegram.sh [OPTIONS]
 
 Options:
   --chat-id ID          Allowed chat ID. Repeat or pass comma-separated IDs.
+  --user-id ID          User allowed to act in group chats. Repeat or comma-separate.
   --workspace DIR       Telegram default_cwd. Defaults to ~/pfterminal-telegram.
   --env-file PATH       EnvironmentFile to write. Defaults to ~/.config/pfterminal/telegram.env.
   --approval-policy VAL Approval policy. Defaults to on-request.
@@ -22,6 +23,7 @@ Options:
                         Allow writing top-level sandbox_mode="danger-full-access"
                         after sandbox preflight failure. This disables the sandbox globally.
   --install-systemd     Install the systemd --user service template.
+  --install-launchd     Install the macOS LaunchAgent template.
   --no-token-required   Skip token prompt/write for dry runs.
   -h, --help            Show this help.
 USAGE
@@ -68,6 +70,7 @@ resolve_codex_home() {
 }
 
 CHAT_IDS=()
+USER_IDS=()
 
 add_chat_ids() {
     local value=$1
@@ -85,9 +88,23 @@ add_chat_ids() {
     done
 }
 
-read_existing_chat_ids() {
+add_user_ids() {
+    local value=$1 raw id
+    local old_ifs=$IFS
+    local -a parts
+    IFS=',' read -r -a parts <<< "$value"
+    IFS=$old_ifs
+    for raw in "${parts[@]}"; do
+        id="${raw//[[:space:]]/}"
+        [[ -z "$id" ]] && continue
+        [[ "$id" =~ ^[0-9]+$ ]] || die "invalid Telegram user ID: $raw"
+        USER_IDS+=("$id")
+    done
+}
+
+read_existing_ids() {
     [[ -f "$1" ]] || return 0
-    python3 - "$1" <<'PY'
+    python3 - "$1" "$2" "$3" <<'PY'
 import sys
 from pathlib import Path
 
@@ -100,11 +117,13 @@ except ModuleNotFoundError:
         tomllib = None
 
 contents = Path(sys.argv[1]).read_text()
+key = sys.argv[2]
+number_pattern = sys.argv[3]
 if tomllib is not None:
     try:
-        ids = tomllib.loads(contents).get("telegram", {}).get("allowed_chat_ids")
+        ids = tomllib.loads(contents).get("telegram", {}).get(key)
     except Exception as exc:
-        print(f"failed to parse existing allowed_chat_ids: {exc}", file=sys.stderr)
+        print(f"failed to parse existing {key}: {exc}", file=sys.stderr)
         sys.exit(1)
 else:
     import re
@@ -126,11 +145,11 @@ else:
             continue
         if capturing:
             buffer += line
-        elif line.startswith("allowed_chat_ids") and "=" in line:
+        elif line.startswith(key) and "=" in line:
             buffer = line.split("=", 1)[1]
             capturing = True
         if capturing and "]" in buffer:
-            ids = [int(value) for value in re.findall(r"-?\d+", buffer)]
+            ids = [int(value) for value in re.findall(number_pattern, buffer)]
             break
 
 if ids:
@@ -264,8 +283,9 @@ merge_config() {
     local sandbox_mode=$3
     local approval_policy=$4
     local explicit_keys=$5
-    shift 5
-    python3 - "$config_path" "$workspace" "$sandbox_mode" "$approval_policy" "$explicit_keys" "$@" <<'PY'
+    local chat_ids_csv=$6
+    local user_ids_csv=$7
+    python3 - "$config_path" "$workspace" "$sandbox_mode" "$approval_policy" "$explicit_keys" "$chat_ids_csv" "$user_ids_csv" <<'PY'
 import json
 import re
 import sys
@@ -276,7 +296,8 @@ explicit_keys = {key for key in sys.argv[5].split(",") if key}
 candidates = {
     "enabled": True,
     "bot_token_env": "PFTERMINAL_TELEGRAM_TOKEN",
-    "allowed_chat_ids": [int(value) for value in sys.argv[6:]],
+    "allowed_chat_ids": [int(value) for value in sys.argv[6].split(",") if value],
+    "allowed_user_ids": [int(value) for value in sys.argv[7].split(",") if value],
     "mode": "polling",
     "approval_policy": sys.argv[4],
     "default_cwd": sys.argv[2],
@@ -440,14 +461,60 @@ PY
     printf 'Enable it with:\n  systemctl --user daemon-reload\n  systemctl --user enable --now pfterminal-telegram.service\n'
 }
 
+install_launchd_unit() {
+    [[ "$(uname -s)" == "Darwin" ]] || die "--install-launchd requires macOS"
+    local source="$CODEX_RS_DIR/telegram/dist/net.postfiat.pfterminal.telegram.plist"
+    local target_dir="$HOME/Library/LaunchAgents"
+    local log_dir="$HOME/Library/Logs/PFTerminal"
+    local target="$target_dir/net.postfiat.pfterminal.telegram.plist"
+    local pfterminal_bin
+    [[ -r "$source" ]] || die "missing launchd template: $source"
+    pfterminal_bin="$(command -v pfterminal || true)"
+    [[ "$pfterminal_bin" == /* ]] || die "pfterminal was not found at an absolute PATH entry"
+    mkdir -p -- "$target_dir" "$log_dir"
+    python3 - "$source" "$target" "$pfterminal_bin" "$CODEX_HOME_RESOLVED" "$log_dir" "$ENV_FILE" <<'PY'
+import sys
+import shlex
+from xml.sax.saxutils import escape
+from pathlib import Path
+
+source, target, binary, codex_home, log_dir, env_file = sys.argv[1:]
+body = Path(source).read_text()
+body = body.replace("__CODEX_HOME__", escape(codex_home))
+body = body.replace("__LOG_DIR__", escape(log_dir))
+command = f"set -a; . {shlex.quote(env_file)}; exec {shlex.quote(binary)} telegram"
+body = body.replace("__COMMAND__", escape(command))
+Path(target).write_text(body)
+PY
+    plutil -lint "$target" >/dev/null
+    printf 'Installed launchd agent at %s\n' "$target"
+    printf 'Enable it with:\n  launchctl bootstrap gui/%s %s\n' "$(id -u)" "$target"
+}
+
+run_health_check() {
+    local pfterminal_bin
+    pfterminal_bin="$(command -v pfterminal || true)"
+    [[ "$pfterminal_bin" == /* ]] || die "pfterminal was not found at an absolute PATH entry"
+    printf 'Running Telegram health check before service installation...\n'
+    set -a
+    # This file is created mode 0600 by this script and is the same input the
+    # managed service will consume.
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+    CODEX_HOME="$CODEX_HOME_RESOLVED" "$pfterminal_bin" telegram --health
+}
+
 TOKEN_VALUE=""
 WORKSPACE="$DEFAULT_WORKSPACE"
 ENV_FILE="$DEFAULT_ENV_FILE"
 APPROVAL_POLICY="on-request"
 INSTALL_SYSTEMD=0
+INSTALL_LAUNCHD=0
 NO_TOKEN_REQUIRED=0
 ALLOW_DANGER_FULL_ACCESS=0
 CHAT_IDS_EXPLICIT=0
+USER_IDS_EXPLICIT=0
 WORKSPACE_EXPLICIT=0
 APPROVAL_POLICY_EXPLICIT=0
 
@@ -456,6 +523,8 @@ while [[ $# -gt 0 ]]; do
         --token|--token=*) die "do not pass Telegram bot tokens on the command line; set $TOKEN_ENV_VAR or enter the prompt" ;;
         --chat-id) [[ $# -ge 2 ]] || die "--chat-id requires a value"; add_chat_ids "$2"; CHAT_IDS_EXPLICIT=1; shift 2 ;;
         --chat-id=*) add_chat_ids "${1#--chat-id=}"; CHAT_IDS_EXPLICIT=1; shift ;;
+        --user-id) [[ $# -ge 2 ]] || die "--user-id requires a value"; add_user_ids "$2"; USER_IDS_EXPLICIT=1; shift 2 ;;
+        --user-id=*) add_user_ids "${1#--user-id=}"; USER_IDS_EXPLICIT=1; shift ;;
         --workspace) [[ $# -ge 2 ]] || die "--workspace requires a value"; WORKSPACE=$2; WORKSPACE_EXPLICIT=1; shift 2 ;;
         --workspace=*) WORKSPACE=${1#--workspace=}; WORKSPACE_EXPLICIT=1; shift ;;
         --env-file) [[ $# -ge 2 ]] || die "--env-file requires a value"; ENV_FILE=$2; shift 2 ;;
@@ -464,6 +533,7 @@ while [[ $# -gt 0 ]]; do
         --approval-policy=*) APPROVAL_POLICY=${1#--approval-policy=}; APPROVAL_POLICY_EXPLICIT=1; shift ;;
         --allow-danger-full-access) ALLOW_DANGER_FULL_ACCESS=1; shift ;;
         --install-systemd) INSTALL_SYSTEMD=1; shift ;;
+        --install-launchd) INSTALL_LAUNCHD=1; shift ;;
         --no-token-required) NO_TOKEN_REQUIRED=1; shift ;;
         -h|--help) usage; exit 0 ;;
         --) shift; break ;;
@@ -481,7 +551,7 @@ WORKSPACE="$(abs_dir "$WORKSPACE")"
 ENV_FILE="$(abs_file "$ENV_FILE")"
 
 if [[ ${#CHAT_IDS[@]} -eq 0 ]]; then
-    EXISTING_CHAT_IDS="$(read_existing_chat_ids "$CONFIG_PATH")"
+    EXISTING_CHAT_IDS="$(read_existing_ids "$CONFIG_PATH" allowed_chat_ids '-?\d+')"
     if [[ -n "$EXISTING_CHAT_IDS" ]]; then
         add_chat_ids "$EXISTING_CHAT_IDS"
         printf 'Using existing Telegram allowed_chat_ids from %s\n' "$CONFIG_PATH"
@@ -494,6 +564,16 @@ if [[ ${#CHAT_IDS[@]} -eq 0 ]]; then
     fi
 fi
 [[ ${#CHAT_IDS[@]} -gt 0 ]] || die "at least one Telegram chat ID is required"
+if [[ ${#USER_IDS[@]} -eq 0 ]]; then
+    EXISTING_USER_IDS="$(read_existing_ids "$CONFIG_PATH" allowed_user_ids '\d+')"
+    if [[ -n "$EXISTING_USER_IDS" ]]; then
+        add_user_ids "$EXISTING_USER_IDS"
+        printf 'Using existing Telegram allowed_user_ids from %s\n' "$CONFIG_PATH"
+    fi
+fi
+if printf '%s\n' "${CHAT_IDS[@]}" | grep -q '^-'; then
+    [[ ${#USER_IDS[@]} -gt 0 ]] || die "group chat IDs require at least one --user-id"
+fi
 
 if [[ $NO_TOKEN_REQUIRED -eq 0 && -z "$TOKEN_VALUE" ]]; then
     if [[ -n "${!TOKEN_ENV_VAR:-}" ]]; then
@@ -540,13 +620,18 @@ printf 'Wrote environment file at %s\n' "$ENV_FILE"
 backup_config "$CONFIG_PATH"
 EXPLICIT_CONFIG_KEYS=""
 [[ $CHAT_IDS_EXPLICIT -eq 1 ]] && EXPLICIT_CONFIG_KEYS="${EXPLICIT_CONFIG_KEYS},allowed_chat_ids"
+[[ $USER_IDS_EXPLICIT -eq 1 ]] && EXPLICIT_CONFIG_KEYS="${EXPLICIT_CONFIG_KEYS},allowed_user_ids"
 [[ $WORKSPACE_EXPLICIT -eq 1 ]] && EXPLICIT_CONFIG_KEYS="${EXPLICIT_CONFIG_KEYS},default_cwd"
 [[ $APPROVAL_POLICY_EXPLICIT -eq 1 ]] && EXPLICIT_CONFIG_KEYS="${EXPLICIT_CONFIG_KEYS},approval_policy"
 EXPLICIT_CONFIG_KEYS="${EXPLICIT_CONFIG_KEYS#,}"
-merge_config "$CONFIG_PATH" "$WORKSPACE" "$SANDBOX_MODE_TO_SET" "$APPROVAL_POLICY" "$EXPLICIT_CONFIG_KEYS" "${CHAT_IDS[@]}"
+CHAT_IDS_CSV="$(IFS=,; printf '%s' "${CHAT_IDS[*]}")"
+USER_IDS_CSV="$(IFS=,; printf '%s' "${USER_IDS[*]}")"
+merge_config "$CONFIG_PATH" "$WORKSPACE" "$SANDBOX_MODE_TO_SET" "$APPROVAL_POLICY" "$EXPLICIT_CONFIG_KEYS" "$CHAT_IDS_CSV" "$USER_IDS_CSV"
 printf 'Configured Telegram connector in %s\n' "$CONFIG_PATH"
 seed_agents_md "$WORKSPACE"
+[[ $NO_TOKEN_REQUIRED -eq 1 ]] || run_health_check
 [[ $INSTALL_SYSTEMD -eq 1 ]] && install_systemd_unit
+[[ $INSTALL_LAUNCHD -eq 1 ]] && install_launchd_unit
 
 printf '\nNext steps:\n'
 printf '  CODEX_HOME=%s pfterminal telegram\n' "$CODEX_HOME_RESOLVED"

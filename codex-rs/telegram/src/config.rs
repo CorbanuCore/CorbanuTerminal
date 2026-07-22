@@ -27,12 +27,16 @@ pub struct TelegramConfig {
     pub enabled: bool,
     pub bot_token_env: String,
     pub allowed_chat_ids: Vec<i64>,
+    pub allowed_user_ids: Vec<u64>,
     pub mode: TelegramMode,
     pub default_model: Option<String>,
     pub default_cwd: Option<PathBuf>,
     pub approval_policy: Option<AskForApproval>,
     pub webhook_url: Option<String>,
     pub max_consecutive_polling_failures: u32,
+    pub max_attachment_bytes: u32,
+    pub media_retention_days: u64,
+    pub max_media_store_bytes: u64,
 }
 
 impl Default for TelegramConfig {
@@ -41,12 +45,16 @@ impl Default for TelegramConfig {
             enabled: false,
             bot_token_env: DEFAULT_TOKEN_ENV.to_string(),
             allowed_chat_ids: Vec::new(),
+            allowed_user_ids: Vec::new(),
             mode: TelegramMode::Polling,
             default_model: None,
             default_cwd: None,
             approval_policy: Some(AskForApproval::OnRequest),
             webhook_url: None,
             max_consecutive_polling_failures: 8,
+            max_attachment_bytes: 10 * 1024 * 1024,
+            media_retention_days: 7,
+            max_media_store_bytes: 256 * 1024 * 1024,
         }
     }
 }
@@ -68,14 +76,27 @@ impl TelegramConfig {
         let Some(table) = value.get("telegram") else {
             return Ok(Self::default());
         };
-        table
+        let config: Self = table
             .clone()
             .try_into()
-            .context("failed to parse [telegram] config")
+            .context("failed to parse [telegram] config")?;
+        anyhow::ensure!(
+            config.max_attachment_bytes > 0,
+            "telegram.max_attachment_bytes must be greater than zero"
+        );
+        anyhow::ensure!(
+            config.media_retention_days > 0,
+            "telegram.media_retention_days must be greater than zero"
+        );
+        anyhow::ensure!(
+            config.max_media_store_bytes >= u64::from(config.max_attachment_bytes),
+            "telegram.max_media_store_bytes must be at least max_attachment_bytes"
+        );
+        Ok(config)
     }
 
     pub fn allowlist(&self) -> ChatAllowlist {
-        ChatAllowlist::new(self.allowed_chat_ids.clone())
+        ChatAllowlist::with_users(self.allowed_chat_ids.clone(), self.allowed_user_ids.clone())
     }
 
     pub fn resolve_token(&self, codex_home: &Path) -> anyhow::Result<String> {

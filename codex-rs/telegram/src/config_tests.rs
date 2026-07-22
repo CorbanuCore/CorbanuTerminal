@@ -1,3 +1,4 @@
+use clap::Parser;
 use codex_protocol::protocol::AskForApproval;
 use pretty_assertions::assert_eq;
 use std::fs;
@@ -5,9 +6,19 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
+use codex_telegram::Cli;
 use codex_telegram::config::DEFAULT_TOKEN_ENV;
 use codex_telegram::config::TelegramConfig;
 use codex_telegram::config::TelegramMode;
+
+#[test]
+fn telegram_cli_accepts_health_mode() {
+    let cli = Cli::try_parse_from(["pfterminal telegram", "--health"])
+        .expect("--health should be a valid Telegram connector mode");
+
+    assert!(cli.health);
+    assert!(!cli.strict_config);
+}
 
 #[test]
 fn telegram_config_defaults_when_table_absent() {
@@ -26,6 +37,10 @@ fn telegram_config_parses_local_table() {
         enabled = true
         bot_token_env = "BOT_ENV"
         allowed_chat_ids = [1, -1002]
+        allowed_user_ids = [1, 77]
+        max_attachment_bytes = 5242880
+        media_retention_days = 3
+        max_media_store_bytes = 104857600
         mode = "polling"
         default_model = "glm-5.2"
         approval_policy = "on-request"
@@ -38,6 +53,10 @@ fn telegram_config_parses_local_table() {
     assert_eq!(config.enabled, true);
     assert_eq!(config.bot_token_env, "BOT_ENV");
     assert_eq!(config.allowed_chat_ids, vec![1, -1002]);
+    assert_eq!(config.allowed_user_ids, vec![1, 77]);
+    assert_eq!(config.max_attachment_bytes, 5 * 1024 * 1024);
+    assert_eq!(config.media_retention_days, 3);
+    assert_eq!(config.max_media_store_bytes, 100 * 1024 * 1024);
     assert_eq!(config.mode, TelegramMode::Polling);
     assert_eq!(config.default_model, Some("glm-5.2".to_string()));
     assert_eq!(config.approval_policy, Some(AskForApproval::OnRequest));
@@ -60,6 +79,27 @@ fn telegram_config_rejects_unknown_fields() {
         err.to_string()
             .contains("failed to parse [telegram] config")
     );
+}
+
+#[test]
+fn telegram_config_rejects_unsafe_media_limits() {
+    for (config, expected) in [
+        (
+            "[telegram]\nmax_attachment_bytes = 0",
+            "max_attachment_bytes must be greater than zero",
+        ),
+        (
+            "[telegram]\nmedia_retention_days = 0",
+            "media_retention_days must be greater than zero",
+        ),
+        (
+            "[telegram]\nmax_attachment_bytes = 20\nmax_media_store_bytes = 10",
+            "max_media_store_bytes must be at least max_attachment_bytes",
+        ),
+    ] {
+        let error = TelegramConfig::from_toml_str(config).unwrap_err();
+        assert!(error.to_string().contains(expected));
+    }
 }
 
 #[test]

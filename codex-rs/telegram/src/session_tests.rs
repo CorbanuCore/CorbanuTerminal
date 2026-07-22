@@ -9,10 +9,15 @@ use codex_app_server_protocol::CommandExecutionRequestApprovalParams;
 use codex_app_server_protocol::RequestId;
 use pretty_assertions::assert_eq;
 use teloxide::types::ChatId;
+use teloxide::types::MessageId;
+use teloxide::types::ThreadId;
+use teloxide::types::UserId;
 
 use crate::approvals::PendingApproval;
 use crate::approvals::PendingApprovalKind;
+use crate::conversation::ConversationKey;
 use crate::session::SessionStore;
+use crate::session::approval_expired;
 
 #[tokio::test]
 async fn old_format_state_file_without_chat_settings_still_loads() {
@@ -79,7 +84,7 @@ async fn pending_approval_can_only_be_taken_by_owner_chat() {
         .expect("owner can take approval");
 
     assert_eq!(wrong_chat, None);
-    assert_eq!(owner_chat.chat_id, ChatId(10));
+    assert_eq!(owner_chat.conversation.chat_id, ChatId(10));
     assert_eq!(owner_chat.approval.request_id, request_id);
 
     fs::remove_dir_all(codex_home).expect("remove codex home");
@@ -174,6 +179,145 @@ async fn stream_edit_suppression_expires() {
     );
 
     fs::remove_dir_all(codex_home).expect("remove codex home");
+}
+
+#[tokio::test]
+async fn topics_in_one_group_have_isolated_threads_and_approvals() {
+    let codex_home = unique_temp_dir("codex-telegram-session-topics");
+    fs::create_dir_all(&codex_home).unwrap();
+    let sessions = SessionStore::load(&codex_home).await.unwrap();
+    let topic_a = ConversationKey::new(ChatId(-1_001), Some(ThreadId(MessageId(11))));
+    let topic_b = ConversationKey::new(ChatId(-1_001), Some(ThreadId(MessageId(12))));
+    sessions
+        .set_thread(topic_a, "thread-a".into())
+        .await
+        .unwrap();
+    sessions
+        .set_thread(topic_b, "thread-b".into())
+        .await
+        .unwrap();
+    let request_id = RequestId::Integer(9);
+    sessions
+        .insert_pending_approval(
+            topic_a,
+            PendingApproval {
+                request_id: request_id.clone(),
+                kind: PendingApprovalKind::Command(command_params("thread-a")),
+            },
+        )
+        .await;
+
+    assert_eq!(
+        sessions.thread_id(topic_a).await.as_deref(),
+        Some("thread-a")
+    );
+    assert_eq!(
+        sessions.thread_id(topic_b).await.as_deref(),
+        Some("thread-b")
+    );
+    assert_eq!(
+        sessions.take_pending_approval(topic_b, &request_id).await,
+        None
+    );
+    assert!(
+        sessions
+            .take_pending_approval(topic_a, &request_id)
+            .await
+            .is_some()
+    );
+
+    let reloaded = SessionStore::load(&codex_home).await.unwrap();
+    assert_eq!(
+        reloaded.thread_id(topic_a).await.as_deref(),
+        Some("thread-a")
+    );
+    assert_eq!(
+        reloaded.thread_id(topic_b).await.as_deref(),
+        Some("thread-b")
+    );
+    fs::remove_dir_all(codex_home).unwrap();
+}
+
+#[tokio::test]
+async fn approval_captures_the_user_who_started_the_turn() {
+    let codex_home = unique_temp_dir("codex-telegram-session-principal");
+    fs::create_dir_all(&codex_home).unwrap();
+    let sessions = SessionStore::load(&codex_home).await.unwrap();
+    let conversation = ConversationKey::new(ChatId(-1_001), Some(ThreadId(MessageId(3))));
+    let request_id = RequestId::Integer(10);
+    sessions
+        .set_turn(conversation, "turn".into(), Some(UserId(77)))
+        .await;
+    sessions
+        .insert_pending_approval(
+            conversation,
+            PendingApproval {
+                request_id: request_id.clone(),
+                kind: PendingApprovalKind::Command(command_params("thread")),
+            },
+        )
+        .await;
+
+    let pending = sessions
+        .pending_approval(conversation, &request_id)
+        .await
+        .unwrap();
+    assert_eq!(pending.actor_user_id, Some(UserId(77)));
+    fs::remove_dir_all(codex_home).unwrap();
+}
+
+#[test]
+fn approval_expires_after_the_bounded_callback_window() {
+    let created_at = Instant::now();
+    assert!(!approval_expired(
+        created_at,
+        created_at + Duration::from_secs(15 * 60)
+    ));
+    assert!(approval_expired(
+        created_at,
+        created_at + Duration::from_secs(15 * 60 + 1)
+    ));
+}
+
+#[tokio::test]
+async fn racing_callbacks_can_consume_an_approval_only_once() {
+    let codex_home = unique_temp_dir("codex-telegram-session-race");
+    fs::create_dir_all(&codex_home).unwrap();
+    let sessions = SessionStore::load(&codex_home).await.unwrap();
+    let request_id = RequestId::Integer(11);
+    sessions
+        .insert_pending_approval(
+            ChatId(10),
+            PendingApproval {
+                request_id: request_id.clone(),
+                kind: PendingApprovalKind::Command(command_params("thread")),
+            },
+        )
+        .await;
+
+    let first = {
+        let sessions = sessions.clone();
+        let request_id = request_id.clone();
+        tokio::spawn(async move {
+            sessions
+                .take_pending_approval(ChatId(10), &request_id)
+                .await
+        })
+    };
+    let second = {
+        let sessions = sessions.clone();
+        let request_id = request_id.clone();
+        tokio::spawn(async move {
+            sessions
+                .take_pending_approval(ChatId(10), &request_id)
+                .await
+        })
+    };
+    let consumed =
+        usize::from(first.await.unwrap().is_some()) + usize::from(second.await.unwrap().is_some());
+
+    assert_eq!(consumed, 1);
+    fs::remove_dir_all(codex_home).unwrap();
 }
 
 fn command_params(thread_id: &str) -> CommandExecutionRequestApprovalParams {

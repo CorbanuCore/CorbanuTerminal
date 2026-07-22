@@ -7,6 +7,7 @@ use codex_app_server_protocol::ThreadReadParams;
 use codex_app_server_protocol::ThreadReadResponse;
 use codex_app_server_protocol::TurnStatus;
 use teloxide::payloads::EditMessageTextSetters;
+use teloxide::payloads::SendChatActionSetters;
 use teloxide::prelude::Requester;
 use teloxide::types::ChatAction;
 use teloxide::types::ParseMode;
@@ -24,9 +25,18 @@ impl BridgeRuntime {
     ) -> anyhow::Result<()> {
         match notification {
             ServerNotification::TurnStarted(notification) => {
-                if let Some(chat_id) = self.sessions.chat_for_thread(&notification.thread_id).await
+                if let Some(conversation) = self
+                    .sessions
+                    .conversation_for_thread(&notification.thread_id)
+                    .await
                 {
-                    let _ = self.bot.send_chat_action(chat_id, ChatAction::Typing).await;
+                    let mut action = self
+                        .bot
+                        .send_chat_action(conversation.chat_id, ChatAction::Typing);
+                    if let Some(thread_id) = conversation.thread_id {
+                        action = action.message_thread_id(thread_id);
+                    }
+                    let _ = action.await;
                 }
                 Ok(())
             }
@@ -56,7 +66,7 @@ impl BridgeRuntime {
             ServerNotification::TurnCompleted(notification) => {
                 let thread_id = notification.thread_id;
                 let status = notification.turn.status;
-                if let Some(chat_id) = self.sessions.chat_for_thread(&thread_id).await {
+                if let Some(chat_id) = self.sessions.conversation_for_thread(&thread_id).await {
                     match status {
                         TurnStatus::Completed => {}
                         TurnStatus::Interrupted => {
@@ -73,7 +83,7 @@ impl BridgeRuntime {
             }
             ServerNotification::Warning(notification) => {
                 if let Some(thread_id) = notification.thread_id
-                    && let Some(chat_id) = self.sessions.chat_for_thread(&thread_id).await
+                    && let Some(chat_id) = self.sessions.conversation_for_thread(&thread_id).await
                 {
                     self.send_text(chat_id, &format!("Warning: {}", notification.message))
                         .await?;
@@ -81,7 +91,10 @@ impl BridgeRuntime {
                 Ok(())
             }
             ServerNotification::GuardianWarning(notification) => {
-                if let Some(chat_id) = self.sessions.chat_for_thread(&notification.thread_id).await
+                if let Some(chat_id) = self
+                    .sessions
+                    .conversation_for_thread(&notification.thread_id)
+                    .await
                 {
                     self.send_text(chat_id, &format!("Warning: {}", notification.message))
                         .await?;
@@ -89,7 +102,10 @@ impl BridgeRuntime {
                 Ok(())
             }
             ServerNotification::Error(notification) => {
-                if let Some(chat_id) = self.sessions.chat_for_thread(&notification.thread_id).await
+                if let Some(chat_id) = self
+                    .sessions
+                    .conversation_for_thread(&notification.thread_id)
+                    .await
                 {
                     self.send_text(chat_id, &format!("Error: {}", notification.error))
                         .await?;
@@ -193,20 +209,21 @@ impl BridgeRuntime {
                             self.send_html(chat_id, &chunk.html).await?;
                         }
                     }
-                } else if let Some(chat_id) = self.sessions.chat_for_thread(thread_id).await {
+                } else if let Some(chat_id) = self.sessions.conversation_for_thread(thread_id).await
+                {
                     self.send_text(chat_id, &text).await?;
                 }
             }
             ThreadItem::CommandExecution {
                 command, status, ..
             } => {
-                if let Some(chat_id) = self.sessions.chat_for_thread(thread_id).await {
+                if let Some(chat_id) = self.sessions.conversation_for_thread(thread_id).await {
                     self.send_text(chat_id, &format!("Command {status:?}: {command}"))
                         .await?;
                 }
             }
             ThreadItem::FileChange { status, .. } => {
-                if let Some(chat_id) = self.sessions.chat_for_thread(thread_id).await {
+                if let Some(chat_id) = self.sessions.conversation_for_thread(thread_id).await {
                     self.send_text(chat_id, &format!("File change {status:?}."))
                         .await?;
                 }
@@ -217,7 +234,7 @@ impl BridgeRuntime {
                 status,
                 ..
             } => {
-                if let Some(chat_id) = self.sessions.chat_for_thread(thread_id).await {
+                if let Some(chat_id) = self.sessions.conversation_for_thread(thread_id).await {
                     self.send_text(chat_id, &format!("MCP {server}/{tool} {status:?}."))
                         .await?;
                 }
@@ -299,7 +316,7 @@ impl BridgeRuntime {
                     }
                 }
             }
-            if let Some(chat_id) = self.sessions.chat_for_thread(&thread_id).await
+            if let Some(chat_id) = self.sessions.conversation_for_thread(&thread_id).await
                 && let Err(err) = self
                     .send_text(
                         chat_id,
@@ -321,27 +338,40 @@ impl BridgeRuntime {
             Some(message_id) => {
                 if self
                     .sessions
-                    .stream_edits_suppressed(update.chat_id, Instant::now())
+                    .stream_edits_suppressed(update.conversation, Instant::now())
                     .await
                 {
                     return Ok(());
                 }
+                let bot = self.bot.clone();
+                let html = update.html;
                 if let Some(delay) = finish_edit_result(
-                    self.bot
-                        .edit_message_text(update.chat_id, message_id, update.html)
-                        .parse_mode(ParseMode::Html)
-                        .await,
+                    crate::outbound::call_with_policy(
+                        crate::outbound::CallSafety::Mutating,
+                        crate::outbound::DEFAULT_API_TIMEOUT,
+                        "telegram streaming edit",
+                        move || {
+                            let bot = bot.clone();
+                            let html = html.clone();
+                            async move {
+                                bot.edit_message_text(update.conversation.chat_id, message_id, html)
+                                    .parse_mode(ParseMode::Html)
+                                    .await
+                            }
+                        },
+                    )
+                    .await,
                     "edit Telegram streaming message",
                 )? {
                     self.sessions
-                        .suppress_stream_edits_until(update.chat_id, Instant::now() + delay)
+                        .suppress_stream_edits_until(update.conversation, Instant::now() + delay)
                         .await;
                 }
             }
             None => {
-                let message = self.send_html(update.chat_id, &update.html).await?;
+                let message = self.send_html(update.conversation, &update.html).await?;
                 self.sessions
-                    .set_stream_message(update.chat_id, message.id)
+                    .set_stream_message(update.conversation, message.id)
                     .await;
             }
         }
@@ -349,7 +379,7 @@ impl BridgeRuntime {
     }
 
     async fn broadcast(&self, text: &str) -> anyhow::Result<()> {
-        for chat_id in self.sessions.chat_ids_with_threads().await {
+        for chat_id in self.sessions.conversations_with_threads().await {
             self.send_text(chat_id, text).await?;
         }
         Ok(())

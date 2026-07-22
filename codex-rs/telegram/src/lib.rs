@@ -4,11 +4,13 @@ mod bot;
 mod bridge;
 pub mod commands;
 pub mod config;
+pub mod conversation;
 pub mod dedup;
 pub mod error;
 pub mod media;
 mod model_selection;
 pub mod outbound;
+mod persistence;
 mod polling;
 pub mod render;
 mod sandbox_preflight;
@@ -39,6 +41,7 @@ use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::SessionSource;
 use teloxide::Bot;
+use teloxide::prelude::Requester;
 use tracing::instrument;
 use tracing::warn;
 
@@ -46,7 +49,6 @@ use crate::bot::run_bot;
 use crate::bridge::BridgeHandle;
 use crate::config::TelegramConfig;
 use crate::config::TelegramMode;
-use crate::dedup::UpdateDeduplicator;
 use crate::error::TelegramError;
 use crate::session::SessionStore;
 
@@ -63,6 +65,10 @@ pub struct Cli {
     /// Error out when config.toml contains fields core does not recognize.
     #[arg(long = "strict-config", default_value_t = false)]
     pub strict_config: bool,
+
+    /// Verify Telegram identity, authorization, state, workspace, and provider readiness, then exit.
+    #[arg(long, default_value_t = false)]
+    pub health: bool,
 }
 
 pub struct RunConfig {
@@ -103,7 +109,7 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
     {
         warn!(
             chat_id,
-            "Telegram allowlist includes a group or supergroup chat; every member of that chat can drive and approve turns"
+            "Telegram allowlist includes a group or supergroup chat; only allowed_user_ids may drive and approve turns"
         );
     }
 
@@ -115,6 +121,9 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         cli.strict_config,
     )
     .await?;
+    if cli.health {
+        return run_health_check(&token, &telegram_config, &core_config).await;
+    }
     let sandbox_policy = core_config.legacy_sandbox_policy();
     if matches!(
         core_config.permissions.approval_policy.value(),
@@ -163,14 +172,19 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         .await
         .context("failed to initialize in-process app-server client")?;
     let sessions = SessionStore::load(&codex_home).await?;
-    let dedup = UpdateDeduplicator::load(&codex_home).await;
     let outbound_client = teloxide::net::default_reqwest_settings()
         .timeout(OUTBOUND_CLIENT_TIMEOUT)
         .build()
         .context("failed to build Telegram outbound HTTP client")?;
     let bot = Bot::with_client(token.clone(), outbound_client);
     let polling = crate::polling::polling_bot(token)?;
-    let media = crate::media::MediaStore::new(&codex_home);
+    let media = crate::media::MediaStore::with_limits(
+        &codex_home,
+        telegram_config.max_attachment_bytes,
+        telegram_config.media_retention_days,
+        telegram_config.max_media_store_bytes,
+    );
+    media.cleanup_expired().await;
     let bridge = BridgeHandle::spawn(bot.clone(), client, Arc::new(core_config), sessions);
     let result = run_bot(
         bot,
@@ -178,7 +192,7 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         bridge.clone(),
         allowlist,
         media,
-        dedup,
+        codex_home.to_path_buf(),
         telegram_config.max_consecutive_polling_failures,
     )
     .await;
@@ -186,6 +200,74 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         warn!("Telegram bridge shutdown failed: {err}");
     }
     result
+}
+
+async fn run_health_check(
+    token: &str,
+    telegram_config: &TelegramConfig,
+    core_config: &codex_core::config::Config,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !telegram_config.allowed_chat_ids.is_empty(),
+        "Telegram health failed: allowed_chat_ids is empty"
+    );
+    if telegram_config
+        .allowed_chat_ids
+        .iter()
+        .any(|chat_id| *chat_id < 0)
+    {
+        anyhow::ensure!(
+            !telegram_config.allowed_user_ids.is_empty(),
+            "Telegram health failed: group chats require allowed_user_ids"
+        );
+    }
+
+    let telegram_dir = core_config.codex_home.join("telegram");
+    tokio::fs::create_dir_all(&telegram_dir).await?;
+    let state_probe = telegram_dir.join(".health-write-probe");
+    tokio::fs::write(&state_probe, b"ok")
+        .await
+        .context("Telegram health failed: state directory is not writable")?;
+    tokio::fs::remove_file(&state_probe).await?;
+
+    let workspace_probe = core_config.cwd.join(".pfterminal-telegram-health-probe");
+    tokio::fs::write(&workspace_probe, b"ok")
+        .await
+        .context("Telegram health failed: workspace is not writable")?;
+    tokio::fs::remove_file(&workspace_probe).await?;
+
+    if let Some(missing) = crate::model_selection::missing_provider_credential(
+        &core_config.model_provider_id,
+        &core_config.model_providers,
+        core_config,
+    ) {
+        anyhow::bail!(
+            "Telegram health failed: provider `{}` is missing `{}`",
+            missing.provider,
+            missing.env_key
+        );
+    }
+
+    sandbox_preflight::ensure_sandbox_viable(&core_config.legacy_sandbox_policy())
+        .context("Telegram health failed: sandbox preflight")?;
+
+    let client = teloxide::net::default_reqwest_settings()
+        .timeout(OUTBOUND_CLIENT_TIMEOUT)
+        .build()
+        .context("Telegram health failed: HTTP client initialization")?;
+    let me = Bot::with_client(token.to_string(), client)
+        .get_me()
+        .await
+        .context("Telegram health failed: Bot API identity check")?;
+    println!(
+        "healthy: bot=@{} id={} chats={} users={} workspace={}",
+        me.username(),
+        me.id.0,
+        telegram_config.allowed_chat_ids.len(),
+        telegram_config.allowed_user_ids.len(),
+        core_config.cwd.display()
+    );
+    Ok(())
 }
 
 async fn build_core_config(

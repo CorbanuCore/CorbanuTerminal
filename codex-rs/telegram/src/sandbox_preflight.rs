@@ -16,6 +16,18 @@ pub(crate) fn warn_if_sandbox_may_fail(sandbox_policy: &SandboxPolicy) {
     }
 }
 
+pub(crate) fn ensure_sandbox_viable(sandbox_policy: &SandboxPolicy) -> anyhow::Result<()> {
+    #[cfg(target_os = "linux")]
+    if let Some(issue) = preflight_issue_for_policy(sandbox_policy, collect_runtime_signals()) {
+        anyhow::bail!(warning_for_issue(issue));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    let _ = sandbox_policy;
+
+    Ok(())
+}
+
 #[cfg(any(test, target_os = "linux"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SandboxPreflightSignals {
