@@ -365,7 +365,11 @@ jobs:
     needs: validate
     name: Build Windows package - ${{ matrix.target }}
     runs-on: windows-latest
-    timeout-minutes: 90
+    # A cold release build has exceeded 90 minutes on GitHub-hosted Windows
+    # runners before the archive smoke test can start. Match the macOS package
+    # budget so qualification fails on an actual build/smoke error, not an
+    # undersized runner clock.
+    timeout-minutes: 150
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"

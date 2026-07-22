@@ -2,15 +2,10 @@
 
 ## Executive summary
 
-PR #59 contains a useful but experimental Telegram remote surface. The
-implementation now includes private and authorized group/topic identity,
-crash-recoverable input delivery, mid-turn steering with a bounded queue,
-attachments, approvals, operational status, health checks, and managed-service
-templates. It should merge only after packaging CI and independent review. It
-must not be advertised for private-chat testing until the exact package passes
-the three-session live gate, or as stable until the seven-day soak passes.
-Group and forum-topic stability remains a separate security claim that requires
-its independent adversarial review.
+**Current verdict:** PR #59 is a candidate for a disabled experimental merge.
+It is not approved for private-chat testing or described as stable. Packaging
+CI, exact-package live qualification, an independent group/topic security
+verdict, and the durability soak are tracked separately in the release table.
 
 ## Product goal
 
@@ -54,15 +49,14 @@ described as passing the next.
 
 | Gate | Required scope | Pass criteria | Evidence | Decision owner |
 | --- | --- | --- | --- | --- |
-| Merge as disabled experimental code | Current PR plus P0 routing correction | Telegram tests and packaging CI pass; review has no open merge-blocking P0 in the enabled private-chat scope; connector remains disabled by default | CI links, commit, test transcript, reviewed diff | PR maintainer |
-| Ship for private-chat testing | Phase 1 | Three fresh sessions on the exact packaged artifact; at least 50 accepted updates total; text, image, approval, cancellation, restart, replay, and network-loss cases exercised; zero lost accepted inputs, duplicate mutations, or silent deaths | Binary hash, redacted transcripts, state snapshots, log intervals, verdicts | Release owner, with one session driven by someone other than the implementer |
-| Declare private-chat stable | Phases 1, 2, 4, and 5 | Every private-stability blocker in Implementation status is closed; three consecutive free-form sessions pass; seven-day soak with at least 100 turns and zero lost accepted inputs, duplicate mutations, stuck turns, unbounded storage, or manual restarts | Regression results, session evidence, soak ledger, storage measurements | Release owner after independent review |
-| Declare group/topic support stable | Phase 3 | Per-user authorization and topic isolation pass adversarial callback, cross-topic, restart, and race tests; zero cross-talk or cross-principal approvals | Security review and adversarial test artifacts | Release owner plus independent security reviewer |
+| Merge as disabled experimental code | PR #59, including the corrected dedup route | Telegram tests and native packaging CI pass; review has no open merge-blocking P0 in private-chat scope; connector remains disabled by default | CI links, commit, test transcript, reviewed diff | PR maintainer |
+| Ship for private-chat testing | Private-chat transport, recovery, approvals, and attachments | Three fresh sessions on the exact packaged artifact; at least 50 accepted updates total; text, image, approval, cancellation, restart, replay, and network-loss cases exercised; zero lost accepted inputs, duplicate mutations, or silent deaths | Binary hash, redacted transcripts, state snapshots, log intervals, verdicts | Release owner, with one session driven by someone other than the implementer |
+| Declare private-chat stable | All private-chat workstreams below | Private-chat testing gate passes, followed by a seven-day soak with at least 100 turns and zero lost accepted inputs, duplicate mutations, stuck turns, unbounded storage, or manual restarts | Regression results, session evidence, soak ledger, storage measurements | Release owner after independent review |
+| Declare group/topic support stable | Per-user authorization and topic isolation | Adversarial callback, cross-topic, restart, and race tests pass with zero cross-talk or cross-principal approvals | Security review and adversarial test artifacts | Release owner plus independent security reviewer |
 
-There are no calendar deadlines in this plan. Progress is landing-based: a
-phase exits only when its gate evidence exists. Before execution, the release
-owner assigns one integration owner, one independent reviewer, and one live-test
-driver; the same person may not fill all three roles.
+Before live qualification, the release owner assigns an integration owner, an
+independent reviewer, and a live-test driver; the same person may not fill all
+three roles.
 
 ## Existing integration (status at 2026-07-22)
 
@@ -103,34 +97,25 @@ Connector logs use a stable redacted conversation identifier. Authorization
 and media events do not emit raw Telegram chat/user IDs or paths containing
 them.
 
-Commit `990f1169f` corrected a merge-blocking defect in the reliability layer:
-the deduplication function had been installed as a terminal dptree endpoint, so
-it recorded and swallowed all updates. It is now filter middleware, with a
-regression proving that the first delivery reaches its handler and a replay
-does not.
+The corrected update route has a regression proving that the first delivery
+reaches its handler and a replay does not.
 
-## Implementation status and remaining gates
+### Evidence ledger
 
-The code-level boundaries in Phases 2–5 are implemented and covered by scoped
-regressions. This does not substitute for the release gates.
+- [Implementation report](TELEGRAM-INTEGRATION-IMPLEMENTATION-REPORT.md):
+  candidate hash, 107-test Telegram result, package-helper results, setup and
+  health dry runs, and explicit unrun gates.
+- [PR #59](https://github.com/agtico/PfTerminal/pull/59): review history and
+  the exact candidate commits.
+- [Native non-publishing package run](https://github.com/agtico/PfTerminal/actions/runs/29929282255):
+  Linux x64/ARM64, macOS x64/ARM64, and Windows x64 package construction and
+  packaged-resource smoke tests. Record its final verdict in the implementation
+  report; an in-progress run is not evidence of a pass.
+- [Independent review request](https://github.com/agtico/PfTerminal/pull/59#issuecomment-5047392566):
+  group/topic adversarial checks and a non-implementer live session. The request
+  is not itself a verdict.
 
-### Remaining qualification and review boundaries
-
-1. **Exact-package live qualification** *(blocks private testing and every
-   later gate)*. Run the three fresh sessions and at least 50 accepted updates
-   defined below with a real bot, copied home, external driver, fault injection,
-   and invariant observer.
-2. **Independent group/topic security verdict** *(blocks group/topic stability
-   only)*. Per-user authorization and topic isolation are implemented, but the
-   implementation author cannot supply the required adversarial verdict.
-3. **Seven-day durability soak** *(blocks a stable claim)*. The automated suite
-   proves bounded mechanisms, not seven days of provider, Telegram, service,
-   network, and restart behavior.
-4. **Cross-platform packaged execution**. Linux script behavior and service
-   generation are locally exercised. macOS launchd and Windows Scheduled Task
-   behavior require their native packaging CI and host checks.
-
-### Deferred product breadth
+## Deferred product breadth
 
 - No explicit topic/thread selector or recent-conversation list.
 - No concise usage/cost summary in `/status`.
@@ -177,92 +162,23 @@ The following stories define the product rather than a list of protocol calls.
 - As a forum user, each Telegram topic maintains an independent PFTerminal
   conversation and approval boundary.
 
-## Delivery plan
+## Execution status and next gates
 
-### Phase 1 — establish an honest baseline
+The table below is the implementation traceability record. “Implemented” means
+the boundary exists in PR #59 and has scoped automated coverage; it does not
+mean that a later live or stability gate has passed.
 
-Land the corrected dedup routing only after CI packaging passes. The integration
-owner builds the exact candidate artifact and runs it with a dedicated test bot
-and copied `CODEX_HOME`. Record the binary hash, commit, configuration shape,
-Telegram update IDs, PFTerminal thread/turn IDs, and redacted logs. Do not use a
-developer binary that differs from the merge candidate.
-
-The three baseline sessions must collectively cover text, a long tool-using
-turn, cancellation, approval, model change, image-only input, captioned image
-input, connector restart, one deliberately replayed update, and temporary
-network loss. A failure blocks the baseline; it is not converted into a
-documentation caveat.
-
-### Phase 2 — make conversation flow natural
-
-Make delivery crash-safe before adding richer flow. Persist each authorized,
-validated update to a bounded durable inbox keyed by bot identity and Telegram
-update ID. Use a deterministic client user-message ID when submitting it to
-`turn/start` or `turn/steer`, record app-server acceptance, and only then mark
-the inbox item applied. On restart, reconcile pending items against the
-PFTerminal thread before resubmission. The recent-update dedup window remains a
-fast replay filter, not the correctness boundary.
-
-Replace the active-turn rejection with app-server `turn/steer` when the current
-turn accepts steering. Preserve Telegram order. If the app-server reports that
-the active turn is not steerable, retain a small per-conversation FIFO with a
-hard item and byte cap, show the queued state once, and start the queued input
-after the active turn completes. Never retry an ambiguous mutating request.
-
-### Phase 3 — close group authorization and isolation gaps
-
-Add an explicit Telegram user allowlist for group and forum use. Authorization
-must evaluate both the destination chat and the initiating Telegram user.
-Approval callbacks must bind the request to the conversation and authorized
-user; possession of callback data alone is insufficient. Keep private chat as
-the setup default, and refuse group activation without an explicit user policy.
-
-Use a conversation key containing both Telegram chat ID and message-thread ID.
-Private chats naturally use an empty message-thread component. Route replies,
-stream edits, approvals, cancellation, model settings, persistence, and restart
-recovery through the same key.
-
-Test unauthorized messages, callbacks copied into another conversation,
-expired approvals, two users racing the same button, and callbacks delivered
-after restart. An independent reviewer owns this verdict; the implementation
-author cannot self-approve the group-security gate.
-
-### Phase 4 — support useful attachments safely
-
-Introduce one bounded attachment-ingestion path rather than per-extension
-special cases. Classify Telegram media from metadata, enforce a configurable
-size ceiling before download, store accepted files under a connector-owned
-inbox, and attach a structured description to the turn. Images remain native
-image inputs. Text and source formats may be read through normal workspace
-tools. Archives and executable formats should be rejected initially with a
-clear reason.
-
-Every accepted file needs a stable name, content hash, original media type,
-source conversation, and retention timestamp. Add cleanup by age and total
-bytes so an always-on bot cannot fill the host disk.
-
-### Phase 5 — make operation understandable
-
-Change `/status` from raw identifiers into a compact state view:
-
-- `Idle`, `Working`, `Awaiting approval`, `Queued`, `Recovering`, or `Blocked`;
-- active model and workspace;
-- current conversation/topic;
-- queued-message count;
-- last successful Telegram contact and last error;
-- the one or two commands that are valid next.
-
-Add a local health command suitable for systemd, launchd, and Windows service
-managers. Setup should verify bot identity, authorization, writable state,
-workspace access, provider credentials, and sandbox viability before enabling
-an always-on service.
-
-### Phase 6 — package and roll out
-
-Ship the connector as experimental until the release-decision table above passes
-on the packaged Linux artifact. Add macOS launchd and Windows service guidance
-only after the same lifecycle tests run on those platforms. Graduate it from
-experimental only at the quantitative private-chat stability gate above.
+| Workstream | Status | Evidence in the candidate | Remaining gate |
+| --- | --- | --- | --- |
+| Baseline routing | Implemented | The dedup middleware routes a first delivery once and suppresses replay; the regression covers both outcomes. | Packaging CI and the exact-package live sessions below. |
+| Crash-safe delivery and follow-ups | Implemented | A bot-keyed bounded inbox persists authorized updates; deterministic client message IDs support reconciliation; active work uses `turn/steer` with a bounded per-conversation FIFO fallback. | Exercise restart, replay, ambiguous failure, rapid follow-ups, and queue saturation through the real Bot API. |
+| Group and topic isolation | Implemented; security claim pending | Group use requires allowed chat and actor; the conversation key includes chat and topic; approvals bind to conversation and initiating actor. | Independent adversarial review of unauthorized messages, copied callbacks, expired approvals, actor races, cross-topic traffic, and restart delivery. |
+| Attachments | Implemented | Images remain native inputs; bounded text/source, JSON, PDF, XML, and YAML ingestion records stable names, hashes, media type, conversation, and retention metadata; cleanup enforces age and byte caps. | Real image-only, captioned-image, supported-file, unsupported-file, oversized-file, and cleanup cases. |
+| Status, health, and setup | Implemented | `/status` reports plain-language state and recovery actions; `telegram --health` checks the operational boundary; `telegram --setup` uses packaged resources; systemd, launchd, and Windows templates ship in archives. | Native packaged execution and real bot-identity/provider/workspace checks. |
+Live qualification must use a dedicated test bot, copied `CODEX_HOME`, and the
+exact package. Appendix A defines the cases and evidence. A product failure is
+fixed with a regression and restarts the affected session count; it is not
+converted into a documentation caveat.
 
 ## Appendix A — acceptance and QA plan
 
@@ -337,11 +253,3 @@ The release report should bind each acceptance claim to:
 - test transcript or artifact path;
 - relevant structured log interval;
 - pass/fail verdict and any defect commit.
-
-## Graduation rule
-
-The release-decision table is authoritative. Until its private-chat stability
-gate passes, describe PR #59 as a useful experimental connector with text,
-image, command, approval, persistence, and reliability foundations—not as a
-finished replacement for the terminal UI. Group and topic support remain a
-separate claim even after private-chat stability is achieved.
