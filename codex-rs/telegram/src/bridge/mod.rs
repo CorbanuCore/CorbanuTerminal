@@ -41,6 +41,7 @@ use tracing::warn;
 
 use crate::approvals::ApprovalCallback;
 use crate::conversation::ConversationKey;
+use crate::model_selection::ModelPickerCallback;
 use crate::render::render_html_chunks;
 use crate::session::SessionStore;
 
@@ -95,6 +96,11 @@ enum BridgeCommand {
         conversation: ConversationKey,
         args: String,
         response_tx: oneshot::Sender<Result<(), String>>,
+    },
+    ModelPicker {
+        conversation: ConversationKey,
+        callback: ModelPickerCallback,
+        response_tx: oneshot::Sender<Result<String, String>>,
     },
     Approvals {
         conversation: ConversationKey,
@@ -281,6 +287,26 @@ impl BridgeHandle {
             .await
             .context("telegram bridge task stopped")?;
         await_command_ack(response_rx).await
+    }
+
+    pub async fn handle_model_picker_callback(
+        &self,
+        conversation: ConversationKey,
+        callback: ModelPickerCallback,
+    ) -> anyhow::Result<String> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.command_tx
+            .send(BridgeCommand::ModelPicker {
+                conversation,
+                callback,
+                response_tx,
+            })
+            .await
+            .context("telegram bridge task stopped")?;
+        response_rx
+            .await
+            .context("telegram bridge model-picker acknowledgement dropped")?
+            .map_err(anyhow::Error::msg)
     }
 
     #[instrument(skip(self, args))]
@@ -513,6 +539,23 @@ impl BridgeRuntime {
                 args,
                 response_tx,
             } => acknowledge_command(response_tx, self.handle_model(conversation, args).await),
+            BridgeCommand::ModelPicker {
+                conversation,
+                callback,
+                response_tx,
+            } => match self
+                .handle_model_picker_callback(conversation, callback)
+                .await
+            {
+                Ok(response) => {
+                    let _ = response_tx.send(Ok(response));
+                    Ok(())
+                }
+                Err(err) => {
+                    let _ = response_tx.send(Err(format!("{err:#}")));
+                    Err(err)
+                }
+            },
             BridgeCommand::Approvals {
                 conversation,
                 args,
@@ -871,6 +914,7 @@ impl BridgeCommand {
             | Self::NewThread { conversation, .. }
             | Self::Cancel { conversation, .. }
             | Self::Model { conversation, .. }
+            | Self::ModelPicker { conversation, .. }
             | Self::Approvals { conversation, .. }
             | Self::Compact { conversation, .. }
             | Self::Diff { conversation, .. }
@@ -885,6 +929,7 @@ impl BridgeCommand {
             | Self::NewThread { conversation, .. }
             | Self::Cancel { conversation, .. }
             | Self::Model { conversation, .. }
+            | Self::ModelPicker { conversation, .. }
             | Self::Approvals { conversation, .. }
             | Self::Compact { conversation, .. }
             | Self::Diff { conversation, .. }

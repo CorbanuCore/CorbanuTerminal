@@ -28,6 +28,7 @@ use crate::media::FetchedImages;
 use crate::media::MediaStore;
 use crate::media::fetch_message_document;
 use crate::media::fetch_message_images;
+use crate::model_selection::ModelPickerCallback;
 use crate::outbound::CallSafety;
 use crate::outbound::DEFAULT_API_TIMEOUT;
 use crate::outbound::call_with_policy;
@@ -483,16 +484,18 @@ async fn handle_callback_inner(
                     .is_some_and(|message| message.chat().is_private()),
             ) =>
         {
-            match query.data.as_deref().and_then(ApprovalCallback::decode) {
-                Some(callback) => {
-                    bridge
-                        .handle_approval_callback(conversation, callback, query.from.id)
-                        .await?
-                }
-                None => {
-                    warn!("ignoring unknown Telegram callback data");
-                    "Unsupported callback.".to_string()
-                }
+            let data = query.data.as_deref();
+            if let Some(callback) = data.and_then(ApprovalCallback::decode) {
+                bridge
+                    .handle_approval_callback(conversation, callback, query.from.id)
+                    .await?
+            } else if let Some(callback) = data.and_then(ModelPickerCallback::decode) {
+                bridge
+                    .handle_model_picker_callback(conversation, callback)
+                    .await?
+            } else {
+                warn!("ignoring unknown Telegram callback data");
+                "Unsupported callback.".to_string()
             }
         }
         Some(_) => "This chat is not authorized to use PFTerminal.".to_string(),

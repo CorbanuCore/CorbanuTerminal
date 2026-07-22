@@ -10,10 +10,13 @@ use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_model_provider_info::built_in_model_providers;
 use pretty_assertions::assert_eq;
 
+use super::AvailableModel;
 use super::CatalogModel;
+use super::ModelPickerCallback;
 use super::ModelResolution;
 use super::ModelResolutionSource;
 use super::missing_provider_credential_with;
+use super::model_for_fingerprint;
 use super::provider_for_model;
 use super::resolve_model;
 
@@ -31,6 +34,62 @@ fn providers(entries: [(&str, ModelProviderInfo); 1]) -> HashMap<String, ModelPr
         .into_iter()
         .map(|(id, info)| (id.to_string(), info))
         .collect()
+}
+
+#[test]
+fn model_picker_callbacks_round_trip_without_embedding_model_names() {
+    let callback = ModelPickerCallback::select(
+        "provider/model-with-a-name-that-could-exceed-telegram-callback-limits",
+    );
+    let encoded = callback.encode();
+
+    assert!(encoded.len() < 64);
+    assert!(!encoded.contains("provider/model"));
+    assert_eq!(ModelPickerCallback::decode(&encoded), Some(callback));
+    assert_eq!(
+        ModelPickerCallback::decode(&ModelPickerCallback::Page { page: 12 }.encode()),
+        Some(ModelPickerCallback::Page { page: 12 })
+    );
+}
+
+#[test]
+fn model_picker_selection_resolves_only_current_catalog_entries() {
+    let models = vec![AvailableModel {
+        model: "provider/current-model".into(),
+        display_name: "Current Model".into(),
+        aliases: Vec::new(),
+        in_catalog: true,
+    }];
+    let ModelPickerCallback::Select { fingerprint } =
+        ModelPickerCallback::select("provider/current-model")
+    else {
+        unreachable!();
+    };
+
+    assert_eq!(
+        model_for_fingerprint(&fingerprint, &models).as_deref(),
+        Some("provider/current-model")
+    );
+    let ModelPickerCallback::Select { fingerprint } =
+        ModelPickerCallback::select("provider/stale-model")
+    else {
+        unreachable!();
+    };
+    assert_eq!(model_for_fingerprint(&fingerprint, &models), None);
+}
+
+#[test]
+fn malformed_model_picker_callbacks_fail_closed() {
+    for raw in [
+        "tgm:s:short",
+        "tgm:s:zzzzzzzzzzzzzzzzzzzzzzzz",
+        "tgm:p:not-a-number",
+        "tgm:x:1",
+        "tgm:p:1:extra",
+        "tg:0:i:1",
+    ] {
+        assert_eq!(ModelPickerCallback::decode(raw), None);
+    }
 }
 
 #[test]

@@ -5,9 +5,61 @@ use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::corrected_catalog_provider;
+use sha2::Digest;
+use sha2::Sha256;
 use tracing::warn;
 
 const GPT_5_5_MODEL: &str = "gpt-5.5";
+const MODEL_CALLBACK_PREFIX: &str = "tgm";
+const MODEL_FINGERPRINT_HEX_LEN: usize = 24;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ModelPickerCallback {
+    Select { fingerprint: String },
+    Page { page: usize },
+}
+
+impl ModelPickerCallback {
+    pub(crate) fn select(model: &str) -> Self {
+        Self::Select {
+            fingerprint: model_fingerprint(model),
+        }
+    }
+
+    pub(crate) fn encode(&self) -> String {
+        match self {
+            Self::Select { fingerprint } => {
+                format!("{MODEL_CALLBACK_PREFIX}:s:{fingerprint}")
+            }
+            Self::Page { page } => format!("{MODEL_CALLBACK_PREFIX}:p:{page}"),
+        }
+    }
+
+    pub(crate) fn decode(raw: &str) -> Option<Self> {
+        let mut parts = raw.split(':');
+        if parts.next()? != MODEL_CALLBACK_PREFIX {
+            return None;
+        }
+        let kind = parts.next()?;
+        let value = parts.next()?;
+        if parts.next().is_some() {
+            return None;
+        }
+        match kind {
+            "s" if value.len() == MODEL_FINGERPRINT_HEX_LEN
+                && value.bytes().all(|byte| byte.is_ascii_hexdigit()) =>
+            {
+                Some(Self::Select {
+                    fingerprint: value.to_ascii_lowercase(),
+                })
+            }
+            "p" => Some(Self::Page {
+                page: value.parse().ok()?,
+            }),
+            _ => None,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ModelAlias {
@@ -232,6 +284,26 @@ pub(crate) fn available_models(catalog: &[CatalogModel]) -> Vec<AvailableModel> 
     }
 
     available
+}
+
+pub(crate) fn model_for_fingerprint(
+    fingerprint: &str,
+    models: &[AvailableModel],
+) -> Option<String> {
+    let mut matches = models
+        .iter()
+        .filter(|model| model_fingerprint(&model.model) == fingerprint)
+        .map(|model| model.model.as_str());
+    let first = matches.next()?;
+    if matches.any(|candidate| candidate != first) {
+        return None;
+    }
+    Some(first.to_string())
+}
+
+fn model_fingerprint(model: &str) -> String {
+    let digest = format!("{:x}", Sha256::digest(model.as_bytes()));
+    digest[..MODEL_FINGERPRINT_HEX_LEN].to_string()
 }
 
 pub(crate) fn known_model_source(model: &str, catalog: &[CatalogModel]) -> Option<&'static str> {
