@@ -658,6 +658,18 @@ fn turn_input(
     input
 }
 
+pub(super) fn finish_edit_result(
+    result: Result<Message, RequestError>,
+    context: &str,
+) -> anyhow::Result<Option<Duration>> {
+    match result {
+        Ok(_) => Ok(None),
+        Err(RequestError::Api(ApiError::MessageNotModified)) => Ok(None),
+        Err(RequestError::RetryAfter(delay)) => Ok(Some(delay.duration())),
+        Err(err) => Err(err).context(context.to_string()),
+    }
+}
+
 #[cfg(test)]
 mod turn_input_tests {
     use super::*;
@@ -681,17 +693,5 @@ mod turn_input_tests {
     fn text_only_unchanged() {
         let input = turn_input("hi".into(), Vec::new());
         assert_eq!(input.len(), 1);
-    }
-}
-
-pub(super) fn finish_edit_result(
-    result: Result<Message, RequestError>,
-    context: &str,
-) -> anyhow::Result<Option<Duration>> {
-    match result {
-        Ok(_) => Ok(None),
-        Err(RequestError::Api(ApiError::MessageNotModified)) => Ok(None),
-        Err(RequestError::RetryAfter(delay)) => Ok(Some(delay.duration())),
-        Err(err) => Err(err).context(context.to_string()),
     }
 }

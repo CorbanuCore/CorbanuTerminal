@@ -56,21 +56,10 @@ async fn send_notice(bot: &Bot, chat_id: ChatId, text: impl Into<String>) -> Han
 /// mutating agent action twice (two identical turns, a double approval).
 /// `Update::filter_message`/`filter_callback_query` forward the full update,
 /// so the id is always available here.
-async fn deduplicate(update: Update, dedup: Arc<UpdateDeduplicator>) -> HandlerResult {
+async fn is_first_delivery(update: Update, dedup: Arc<UpdateDeduplicator>) -> bool {
     let update_id = u64::from(update.id.0);
-    if dedup.check_and_record(update_id).await {
-        Ok(())
-    } else {
-        Err(DuplicateUpdate.into())
-    }
+    dedup.check_and_record(update_id).await
 }
-
-/// Control-flow marker: every update flows through `deduplicate` first, so a
-/// duplicate reaches the real handlers as `Err(DuplicateUpdate)` and dptree
-/// stops dispatching; a first-seen update arrives as `Ok(())` and continues.
-#[derive(Debug, thiserror::Error, Clone, Copy)]
-#[error("duplicate Telegram update")]
-struct DuplicateUpdate;
 
 /// What an inbound Telegram message contributes as turn input.
 ///
@@ -149,12 +138,20 @@ pub async fn run_bot(
 }
 
 fn schema() -> UpdateHandler<anyhow::Error> {
-    // `deduplicate` runs before every handler branch: first-seen updates pass
-    // through as `Ok(())`, duplicates stop the chain with `DuplicateUpdate`.
+    with_dedup(
+        dptree::entry()
+            .branch(Update::filter_message().endpoint(handle_message))
+            .branch(Update::filter_callback_query().endpoint(handle_callback)),
+    )
+}
+
+fn with_dedup(handler: UpdateHandler<anyhow::Error>) -> UpdateHandler<anyhow::Error> {
+    // A filter, unlike an endpoint, continues into the real handler branches
+    // when it returns true. Replayed updates return false and fall through
+    // without firing a mutating agent action twice.
     dptree::entry()
-        .chain(dptree::endpoint(deduplicate))
-        .branch(Update::filter_message().endpoint(handle_message))
-        .branch(Update::filter_callback_query().endpoint(handle_callback))
+        .filter_async(is_first_delivery)
+        .chain(handler)
 }
 
 #[instrument(skip(bot, message, bridge, allowlist, bot_username))]
@@ -370,8 +367,16 @@ fn callback_answer_text(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::ops::ControlFlow;
+    use std::sync::Arc;
+
+    use teloxide::dptree;
+    use teloxide::types::Update;
+
     use super::MessageInput;
     use super::resolve_message_input;
+    use super::with_dedup;
+    use crate::dedup::UpdateDeduplicator;
 
     #[test]
     fn plain_text_is_used_verbatim() {
@@ -412,5 +417,30 @@ mod tests {
             resolve_message_input(Some("real text"), Some("caption")),
             MessageInput::Text("real text".to_string())
         );
+    }
+
+    #[tokio::test]
+    async fn dedup_filter_routes_first_delivery_and_drops_replay() {
+        let dedup = Arc::new(UpdateDeduplicator::new_for_test());
+        let update: Update = serde_json::from_value(serde_json::json!({
+            "update_id": 42,
+            "message": {
+                "message_id": 7,
+                "date": 1,
+                "chat": {"id": 99, "type": "private"},
+                "text": "hello"
+            }
+        }))
+        .expect("valid Telegram update");
+
+        let handler = with_dedup(dptree::endpoint(|| async { Ok(()) }));
+
+        let first = handler
+            .dispatch(dptree::deps![update.clone(), Arc::clone(&dedup)])
+            .await;
+        assert!(matches!(first, ControlFlow::Break(Ok(()))));
+
+        let replay = handler.dispatch(dptree::deps![update, dedup]).await;
+        assert!(matches!(replay, ControlFlow::Continue(_)));
     }
 }
