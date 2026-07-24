@@ -10,6 +10,7 @@ use codex_app_server_client::TypedRequestError;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::JSONRPCErrorError;
 use codex_app_server_protocol::RequestId;
+use codex_app_server_protocol::SandboxMode as AppServerSandboxMode;
 use codex_app_server_protocol::ThreadResumeParams;
 use codex_app_server_protocol::ThreadResumeResponse;
 use codex_app_server_protocol::ThreadSource;
@@ -21,6 +22,7 @@ use codex_app_server_protocol::TurnInterruptParams;
 use codex_app_server_protocol::TurnInterruptResponse;
 use codex_core::config::Config;
 use codex_login::AuthManager;
+use codex_protocol::protocol::SandboxPolicy;
 use serde::de::DeserializeOwned;
 use teloxide::ApiError;
 use teloxide::Bot;
@@ -746,6 +748,9 @@ impl BridgeRuntime {
                     cwd: Some(self.config.cwd.to_string_lossy().to_string()),
                     runtime_workspace_roots: Some(self.config.workspace_roots.clone()),
                     approval_policy: Some(approval_policy),
+                    sandbox: Some(app_server_sandbox_mode(
+                        &self.config.legacy_sandbox_policy(),
+                    )),
                     ..ThreadResumeParams::default()
                 },
             })
@@ -764,7 +769,9 @@ impl BridgeRuntime {
             runtime_workspace_roots: Some(self.config.workspace_roots.clone()),
             approval_policy: Some(approval_policy),
             approvals_reviewer: None,
-            sandbox: None,
+            sandbox: Some(app_server_sandbox_mode(
+                &self.config.legacy_sandbox_policy(),
+            )),
             permissions: None,
             config: None,
             ephemeral: Some(self.config.ephemeral),
@@ -905,6 +912,16 @@ fn thread_resume_has_no_rollout(method: &str, error: &JSONRPCErrorError) -> bool
     method == "thread/resume"
         && error.code == -32600
         && error.message.contains("no rollout found for thread id")
+}
+
+fn app_server_sandbox_mode(policy: &SandboxPolicy) -> AppServerSandboxMode {
+    match policy {
+        SandboxPolicy::ReadOnly { .. } => AppServerSandboxMode::ReadOnly,
+        SandboxPolicy::WorkspaceWrite { .. } => AppServerSandboxMode::WorkspaceWrite,
+        SandboxPolicy::DangerFullAccess | SandboxPolicy::ExternalSandbox { .. } => {
+            AppServerSandboxMode::DangerFullAccess
+        }
+    }
 }
 
 #[cfg(test)]
