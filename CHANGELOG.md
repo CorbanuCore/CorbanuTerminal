@@ -13,8 +13,9 @@
   repeated no-progress responses stop with a bounded warning, and other
   providers retain their existing terminal-stop behavior.
 - The Windows installer now detects x64 and ARM64 safely across Windows
-  PowerShell and .NET variants where `RuntimeInformation.OSArchitecture` is
-  unavailable.
+  PowerShell and .NET variants, selects and extracts the published Windows ZIP
+  package, and upgrades by retargeting the versioned install junction without
+  deleting a locked legacy executable.
 
 ## Qualification status
 
@@ -24,9 +25,9 @@
 - Kimi lifecycle regressions cover progress-to-tool continuation, terminal
   answers, malformed assessments, latency, repeated no-progress stops, and
   unchanged behavior for reliable-stop providers.
-- The installer architecture suite passes under Windows PowerShell 5.1 and
-  PowerShell 7, including the environment-fallback path, and is now a required
-  step in the native Windows release job.
+- The installer suite passes under Windows PowerShell 5.1 and PowerShell 7,
+  including architecture fallback, ZIP extraction, and a locked-executable
+  upgrade, and is now required by the native Windows release job.
 
 Previous release: 0.1.21.
 

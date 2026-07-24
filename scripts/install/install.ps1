@@ -221,6 +221,23 @@ function Get-PackageArchiveDigest {
     throw "Could not find SHA-256 digest for $AssetName in the package checksum manifest."
 }
 
+function Get-WindowsPackageAssetName {
+    param(
+        [string]$Target
+    )
+
+    return "pfterminal-package-$Target.zip"
+}
+
+function Expand-WindowsPackageArchive {
+    param(
+        [string]$ArchivePath,
+        [string]$DestinationPath
+    )
+
+    Expand-Archive -LiteralPath $ArchivePath -DestinationPath $DestinationPath
+}
+
 function Path-Contains {
     param(
         [string]$PathValue,
@@ -826,15 +843,6 @@ if ([string]::IsNullOrWhiteSpace($env:CODEX_INSTALL_DIR)) {
 }
 
 $currentVersion = Get-CurrentInstalledVersion -StandaloneCurrentDir $currentDir
-$oldPackageCodexPaths = @(
-    (Join-Path $currentDir "bin\codex.exe"),
-    (Join-Path $currentDir "codex.exe")
-)
-foreach ($oldPackageCodexPath in $oldPackageCodexPaths) {
-    if (Test-Path -LiteralPath $oldPackageCodexPath -PathType Leaf) {
-        Remove-Item -LiteralPath $oldPackageCodexPath -Force
-    }
-}
 $resolvedVersion = Resolve-Version
 $releaseName = "$resolvedVersion-$target"
 $releaseDir = Join-Path $releasesDir $releaseName
@@ -852,7 +860,7 @@ Write-Step "Resolved version: $resolvedVersion"
 $conflictingInstall = Get-ConflictingInstall -VisibleBinDir $visibleBinDir
 $oldStandaloneBackup = $null
 
-$packageAsset = "pfterminal-package-$target.tar.gz"
+$packageAsset = Get-WindowsPackageAssetName -Target $target
 $checksumAsset = "pfterminal-package_SHA256SUMS"
 $packageMetadata = Find-ReleaseAssetMetadata -AssetName $packageAsset -ResolvedVersion $resolvedVersion
 $checksumMetadata = Find-ReleaseAssetMetadata -AssetName $checksumAsset -ResolvedVersion $resolvedVersion
@@ -906,7 +914,7 @@ try {
             }
             New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
             if ($installLayout -eq "Package") {
-                tar -xzf $archivePath -C $stagingDir
+                Expand-WindowsPackageArchive -ArchivePath $archivePath -DestinationPath $stagingDir
                 if (-not (Test-PackageContentsAreComplete -PackageDir $stagingDir)) {
                     throw "Downloaded PFTerminal package archive did not contain the expected package layout."
                 }

@@ -397,10 +397,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Test Windows installer architecture detection
+      - name: Test Windows installer
         shell: powershell
         run: |
           & scripts/install/install_architecture.tests.ps1
+          & scripts/install/install_upgrade.tests.ps1
 
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
