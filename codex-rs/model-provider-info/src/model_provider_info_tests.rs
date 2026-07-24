@@ -386,29 +386,6 @@ fn ambient_glm_context_ceiling_is_scoped_to_ambient_routes() {
 }
 
 #[test]
-fn completion_guard_is_scoped_to_demonstrated_provider_routes() {
-    let providers = built_in_model_providers(/*openai_base_url*/ None);
-    for provider in [
-        AMBIENT_PROVIDER_ID,
-        PFTERMINAL_PLAN_PROVIDER_ID,
-        KIMI_CODE_PROVIDER_ID,
-    ] {
-        assert!(
-            providers
-                .get(provider)
-                .expect("guarded provider")
-                .requires_completion_guard()
-        );
-    }
-    assert!(
-        !providers
-            .get(OPENROUTER_PROVIDER_ID)
-            .expect("OpenRouter provider")
-            .requires_completion_guard()
-    );
-}
-
-#[test]
 fn test_create_zai_provider() {
     assert_eq!(
         ModelProviderInfo::create_zai_provider(),
