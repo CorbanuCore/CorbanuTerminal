@@ -3291,6 +3291,10 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         "expected Claude Code models in the Claude Plan tab:\n{claude_plan_popup}"
     );
     assert!(
+        !claude_plan_popup.contains("claude-opus-4-8-plan"),
+        "deprecated Claude Opus 4.8 Plan must not appear in the picker:\n{claude_plan_popup}"
+    );
+    assert!(
         claude_plan_popup.contains("through Claude Code subscription auth"),
         "expected Claude Plan rows to explain subscription auth:\n{claude_plan_popup}"
     );
@@ -3316,6 +3320,10 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     assert!(
         anthropic_popup.contains(CLAUDE_FABLE_5_MODEL),
         "expected Claude Fable API-key model in /model picker:\n{anthropic_popup}"
+    );
+    assert!(
+        !anthropic_popup.contains("claude-opus-4-8"),
+        "deprecated Claude Opus 4.8 must not appear in the picker:\n{anthropic_popup}"
     );
     assert!(
         !anthropic_popup.contains("openrouter/owl-alpha"),

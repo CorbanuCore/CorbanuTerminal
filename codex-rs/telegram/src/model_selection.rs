@@ -106,7 +106,7 @@ pub(crate) fn aliases() -> &'static [ModelAlias] {
         ModelAlias {
             alias: "opus",
             model: CLAUDE_PLAN_MODEL,
-            display_name: "Claude Opus 4.8 Plan",
+            display_name: "Claude Opus 5 Plan",
         },
         ModelAlias {
             alias: "gpt",

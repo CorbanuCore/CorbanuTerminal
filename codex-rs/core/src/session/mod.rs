@@ -222,6 +222,7 @@ pub(crate) mod session;
 pub(crate) mod time_reminder;
 mod token_budget;
 pub(crate) mod turn;
+mod turn_completion;
 pub(crate) mod turn_context;
 use self::config_lock::export_config_lock_if_configured;
 use self::config_lock::validate_config_lock_if_configured;

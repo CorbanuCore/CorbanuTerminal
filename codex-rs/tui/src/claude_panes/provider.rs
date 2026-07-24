@@ -50,8 +50,8 @@ impl ClaudeProviderProfileKind {
         match self {
             Self::ClaudePlan => ClaudeProviderProfile {
                 kind: self,
-                title: "Claude Code - Opus 4.8 Claude Plan",
-                description: "Use Claude Code's native auth with Opus 4.8 Claude Plan.",
+                title: "Claude Code - Opus 5 Claude Plan",
+                description: "Use Claude Code's native auth with Opus 5 Claude Plan.",
                 claude_model: "opus",
                 provider_model: "opus",
                 small_model: "haiku",

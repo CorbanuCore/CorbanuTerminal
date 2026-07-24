@@ -18,6 +18,7 @@ use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
+use codex_model_provider_info::CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_K3_MODEL;
@@ -329,7 +330,10 @@ impl ChatWidget {
         if trimmed == ZAI_DEFAULT_MODEL || trimmed.starts_with("glm-") {
             return Some(ZAI_PROVIDER_ID.to_string());
         }
-        if trimmed == CLAUDE_PLAN_MODEL || trimmed == CLAUDE_FABLE_5_PLAN_MODEL {
+        if matches!(
+            trimmed,
+            CLAUDE_PLAN_MODEL | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL | CLAUDE_FABLE_5_PLAN_MODEL
+        ) {
             return Some(CLAUDE_PLAN_PROVIDER_ID.to_string());
         }
         if trimmed == ANTHROPIC_DEFAULT_MODEL || trimmed.starts_with("claude-") {
@@ -1166,6 +1170,10 @@ mod tests {
         );
         assert_eq!(
             ChatWidget::model_provider_for_selection(CLAUDE_PLAN_MODEL).as_deref(),
+            Some(CLAUDE_PLAN_PROVIDER_ID)
+        );
+        assert_eq!(
+            ChatWidget::model_provider_for_selection(CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL).as_deref(),
             Some(CLAUDE_PLAN_PROVIDER_ID)
         );
         assert_eq!(

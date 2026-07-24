@@ -1226,9 +1226,9 @@
       "max_context_window": 1000000,
       "auto_compact_token_limit": null,
       "default_reasoning_summary": "none",
-      "slug": "claude-opus-4-8-plan",
-      "display_name": "Claude Opus 4.8 Plan",
-      "description": "Claude Opus 4.8 through Claude Code subscription auth in the Codex harness.",
+      "slug": "claude-opus-5-plan",
+      "display_name": "Claude Opus 5 Plan",
+      "description": "Claude Opus 5 through Claude Code subscription auth in the Codex harness.",
       "default_reasoning_level": "high",
       "supported_reasoning_levels": [
         {
@@ -1241,7 +1241,7 @@
         },
         {
           "effort": "high",
-          "description": "Default Opus 4.8 reasoning for complex coding."
+          "description": "Default Opus 5 reasoning for complex coding."
         },
         {
           "effort": "xhigh",
@@ -1344,9 +1344,9 @@
       "max_context_window": 1000000,
       "auto_compact_token_limit": null,
       "default_reasoning_summary": "none",
-      "slug": "claude-opus-4-8",
-      "display_name": "Claude Opus 4.8",
-      "description": "Claude Opus 4.8 through the Anthropic Messages API.",
+      "slug": "claude-opus-5",
+      "display_name": "Claude Opus 5",
+      "description": "Claude Opus 5 through the Anthropic Messages API.",
       "default_reasoning_level": "high",
       "supported_reasoning_levels": [
         {
@@ -1359,7 +1359,7 @@
         },
         {
           "effort": "high",
-          "description": "Default Opus 4.8 reasoning for complex coding."
+          "description": "Default Opus 5 reasoning for complex coding."
         },
         {
           "effort": "xhigh",

@@ -30,6 +30,7 @@ mod rollout_budget;
 mod subagent_notification;
 mod token_budget_context;
 mod turn_aborted;
+mod turn_completion_continuation;
 mod user_instructions;
 mod user_shell_command;
 
@@ -74,5 +75,6 @@ pub(crate) use subagent_notification::SubagentNotification;
 pub(crate) use token_budget_context::TokenBudgetContext;
 pub(crate) use token_budget_context::TokenBudgetRemainingContext;
 pub(crate) use turn_aborted::TurnAborted;
+pub(crate) use turn_completion_continuation::TurnCompletionContinuation;
 pub(crate) use user_instructions::UserInstructions;
 pub(crate) use user_shell_command::UserShellCommand;

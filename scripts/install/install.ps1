@@ -66,6 +66,85 @@ function Normalize-Version {
     return $RawVersion
 }
 
+function ConvertTo-WindowsArchitecture {
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Value) {
+        return $null
+    }
+
+    $normalized = ([string]$Value).Trim().ToUpperInvariant()
+    switch ($normalized) {
+        { $_ -in @("ARM64", "AARCH64") } {
+            return "Arm64"
+        }
+        { $_ -in @("AMD64", "X64", "X86_64", "64-BIT") } {
+            return "X64"
+        }
+        default {
+            return $null
+        }
+    }
+}
+
+function Get-WindowsArchitecture {
+    # PROCESSOR_ARCHITEW6432 reports the native architecture when a 32-bit
+    # PowerShell process is running under WOW64. PROCESSOR_ARCHITECTURE covers
+    # native 64-bit PowerShell and remains available on older Windows releases.
+    $environmentCandidates = @(
+        [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITEW6432"),
+        [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE")
+    )
+    foreach ($candidate in $environmentCandidates) {
+        $resolved = ConvertTo-WindowsArchitecture -Value $candidate
+        if ($null -ne $resolved) {
+            return $resolved
+        }
+    }
+
+    # RuntimeInformation.OSArchitecture is absent from some Windows
+    # PowerShell/.NET Framework combinations. Reflection lets us test for the
+    # property without Set-StrictMode turning a missing member into a fatal
+    # PropertyNotFoundStrict error.
+    try {
+        $runtimeInformationType = [System.Runtime.InteropServices.RuntimeInformation]
+        $property = $runtimeInformationType.GetProperty(
+            "OSArchitecture",
+            [System.Reflection.BindingFlags]::Public -bor [System.Reflection.BindingFlags]::Static
+        )
+        if ($null -ne $property) {
+            $resolved = ConvertTo-WindowsArchitecture -Value $property.GetValue($null, $null)
+            if ($null -ne $resolved) {
+                return $resolved
+            }
+        }
+    } catch {
+        # Continue to the guarded CIM fallback.
+    }
+
+    $getCimInstance = Get-Command -Name Get-CimInstance -ErrorAction SilentlyContinue
+    if ($null -ne $getCimInstance) {
+        try {
+            $operatingSystem = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+            $property = $operatingSystem.PSObject.Properties["OSArchitecture"]
+            if ($null -ne $property) {
+                $resolved = ConvertTo-WindowsArchitecture -Value $property.Value
+                if ($null -ne $resolved) {
+                    return $resolved
+                }
+            }
+        } catch {
+            # Report one actionable error below instead of leaking a provider-
+            # specific CIM failure.
+        }
+    }
+
+    throw "Could not determine the native Windows architecture. Expected PROCESSOR_ARCHITEW6432 or PROCESSOR_ARCHITECTURE to be ARM64 or AMD64."
+}
+
 function Assert-ValidReleaseVersion {
     param(
         [string]$Version
@@ -708,7 +787,7 @@ if (-not [Environment]::Is64BitOperatingSystem) {
     exit 1
 }
 
-$architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+$architecture = Get-WindowsArchitecture
 $target = $null
 $platformLabel = $null
 $npmTag = $null

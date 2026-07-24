@@ -739,7 +739,7 @@ async fn load_config_defaults_to_ambient_provider_and_model() -> std::io::Result
 }
 
 #[tokio::test]
-async fn load_config_anthropic_provider_defaults_to_opus_4_8() -> std::io::Result<()> {
+async fn load_config_anthropic_provider_defaults_to_opus_5() -> std::io::Result<()> {
     let cfg = toml::from_str::<ConfigToml>(
         r#"
 model_provider = "anthropic"
@@ -763,7 +763,7 @@ model_provider = "anthropic"
 }
 
 #[tokio::test]
-async fn load_config_claude_plan_provider_defaults_to_plan_opus_4_8() -> std::io::Result<()> {
+async fn load_config_claude_plan_provider_defaults_to_plan_opus_5() -> std::io::Result<()> {
     let cfg = toml::from_str::<ConfigToml>(
         r#"
 model_provider = "claude-plan"

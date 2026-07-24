@@ -22,10 +22,12 @@ use codex_model_provider::BearerAuthProvider;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::AMBIENT_LEGACY_GLM_5_2_FP8_MODEL;
 use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
+use codex_model_provider_info::ANTHROPIC_LEGACY_OPUS_4_8_MODEL;
 use codex_model_provider_info::CHATGPT_CODEX_BASE_URL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL;
+use codex_model_provider_info::CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::ModelProviderInfo;
@@ -533,8 +535,8 @@ fn test_ambient_model_info() -> ModelInfo {
 fn test_anthropic_opus_model_info() -> ModelInfo {
     serde_json::from_value(json!({
         "slug": ANTHROPIC_DEFAULT_MODEL,
-        "display_name": "Claude Opus 4.8",
-        "description": "Claude Opus 4.8",
+        "display_name": "Claude Opus 5",
+        "description": "Claude Opus 5",
         "default_reasoning_level": "high",
         "supported_reasoning_levels": [
             {"effort": "low", "description": "Low"},
@@ -567,7 +569,7 @@ fn test_anthropic_opus_model_info() -> ModelInfo {
 fn test_claude_plan_model_info() -> ModelInfo {
     let mut model = test_anthropic_opus_model_info();
     model.slug = CLAUDE_PLAN_MODEL.to_string();
-    model.display_name = "Claude Opus 4.8 Plan".to_string();
+    model.display_name = "Claude Opus 5 Plan".to_string();
     model
 }
 
@@ -2007,7 +2009,7 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
     assert_eq!(
         body.pointer("/thinking/budget_tokens"),
         None,
-        "Opus 4.8 rejects fixed thinking budgets"
+        "Opus 5 rejects fixed thinking budgets"
     );
     assert_eq!(
         body.pointer("/output_config/effort")
@@ -2028,6 +2030,20 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
         body.pointer("/model").and_then(serde_json::Value::as_str),
         Some(CLAUDE_PLAN_UPSTREAM_MODEL),
         "PFTerminal's visible Claude Plan slug must not be sent upstream"
+    );
+
+    let mut legacy_plan_model = test_claude_plan_model_info();
+    legacy_plan_model.slug = CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL.to_string();
+    let legacy_plan_request = client
+        .build_anthropic_messages_request(
+            &prompt,
+            &legacy_plan_model,
+            Some(ReasoningEffortConfig::XHigh),
+        )
+        .expect("legacy Claude Plan request");
+    assert_eq!(
+        legacy_plan_request.model, ANTHROPIC_LEGACY_OPUS_4_8_MODEL,
+        "a saved Opus 4.8 Plan session must remain resumable without sending its synthetic slug"
     );
     assert_eq!(
         body.pointer("/system/0/text")

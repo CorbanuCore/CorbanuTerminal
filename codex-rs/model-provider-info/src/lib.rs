@@ -67,13 +67,15 @@ pub const CHATGPT_CODEX_BASE_URL: &str = "https://chatgpt.com/backend-api/codex"
 const ANTHROPIC_PROVIDER_NAME: &str = "Anthropic";
 pub const ANTHROPIC_PROVIDER_ID: &str = "anthropic";
 pub const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1";
-pub const ANTHROPIC_DEFAULT_MODEL: &str = "claude-opus-4-8";
+pub const ANTHROPIC_DEFAULT_MODEL: &str = "claude-opus-5";
+pub const ANTHROPIC_LEGACY_OPUS_4_8_MODEL: &str = "claude-opus-4-8";
 pub const CLAUDE_FABLE_5_MODEL: &str = "claude-fable-5";
 pub const ANTHROPIC_API_KEY_ENV_VAR: &str = "ANTHROPIC_API_KEY";
 const CLAUDE_PLAN_PROVIDER_NAME: &str = "Claude Plan";
 pub const CLAUDE_PLAN_PROVIDER_ID: &str = "claude-plan";
-pub const CLAUDE_PLAN_MODEL: &str = "claude-opus-4-8-plan";
+pub const CLAUDE_PLAN_MODEL: &str = "claude-opus-5-plan";
 pub const CLAUDE_PLAN_UPSTREAM_MODEL: &str = ANTHROPIC_DEFAULT_MODEL;
+pub const CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL: &str = "claude-opus-4-8-plan";
 pub const CLAUDE_FABLE_5_PLAN_MODEL: &str = "claude-fable-5-plan";
 pub const CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL: &str = CLAUDE_FABLE_5_MODEL;
 const AMBIENT_PROVIDER_NAME: &str = "Ambient";
@@ -192,8 +194,10 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     if model.starts_with("zai/") && !VERCEL_FAMILY_PROVIDERS.contains(&provider) {
         return Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID);
     }
-    if (model == CLAUDE_PLAN_MODEL || model == CLAUDE_FABLE_5_PLAN_MODEL)
-        && provider != CLAUDE_PLAN_PROVIDER_ID
+    if matches!(
+        model,
+        CLAUDE_PLAN_MODEL | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL | CLAUDE_FABLE_5_PLAN_MODEL
+    ) && provider != CLAUDE_PLAN_PROVIDER_ID
     {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
@@ -244,6 +248,7 @@ pub fn resolve_model_for_provider(
             Some(model)
                 if model.trim().starts_with("claude-")
                     && model.trim() != CLAUDE_PLAN_MODEL
+                    && model.trim() != CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
                     && model.trim() != CLAUDE_FABLE_5_PLAN_MODEL =>
             {
                 Some(model)
@@ -252,7 +257,12 @@ pub fn resolve_model_for_provider(
         },
         CLAUDE_PLAN_PROVIDER_ID => match model {
             Some(model)
-                if matches!(model.trim(), CLAUDE_PLAN_MODEL | CLAUDE_FABLE_5_PLAN_MODEL) =>
+                if matches!(
+                    model.trim(),
+                    CLAUDE_PLAN_MODEL
+                        | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
+                        | CLAUDE_FABLE_5_PLAN_MODEL
+                ) =>
             {
                 Some(model)
             }
@@ -381,6 +391,18 @@ impl fmt::Display for WireApi {
         };
         f.write_str(value)
     }
+}
+
+/// How confidently a provider's text-only `stop` finish reason ends the user's
+/// action turn.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ChatStopSemantics {
+    /// A text-only `stop` is accepted as the provider's final answer.
+    #[default]
+    ReliableTerminal,
+    /// A text-only `stop` needs a semantic completion decision before the turn
+    /// can be considered finished.
+    AmbiguousForActionTurns,
 }
 
 impl<'de> Deserialize<'de> for WireApi {
@@ -1192,6 +1214,14 @@ impl ModelProviderInfo {
 
     pub fn is_kimi_code(&self) -> bool {
         self.name == KIMI_CODE_PROVIDER_NAME
+    }
+
+    pub fn chat_stop_semantics(&self) -> ChatStopSemantics {
+        if self.is_kimi_code() {
+            ChatStopSemantics::AmbiguousForActionTurns
+        } else {
+            ChatStopSemantics::ReliableTerminal
+        }
     }
 
     pub fn is_zai(&self) -> bool {

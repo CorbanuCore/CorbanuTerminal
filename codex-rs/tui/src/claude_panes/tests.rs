@@ -1958,7 +1958,7 @@ fn claude_provider_picker_labels_are_compact() {
     );
     assert_eq!(
         ClaudeProviderProfileKind::ClaudePlan.status_model_label(),
-        "Opus 4.8 Claude Plan"
+        "Opus 5 Claude Plan"
     );
 }
 
@@ -2362,7 +2362,7 @@ fn claude_spawn_pane_title_includes_role() {
     );
     assert_eq!(
         claude_pane_title(ClaudeProviderProfileKind::ClaudePlan, None, None),
-        "Claude Code - Opus 4.8 Claude Plan"
+        "Claude Code - Opus 5 Claude Plan"
     );
 }
 
@@ -2389,7 +2389,7 @@ fn create_pane_with_role_sets_spawn_role_and_title() {
     assert_eq!(pane.spawn_nickname.as_deref(), Some("Burzum"));
     assert_eq!(
         pane.title,
-        "Claude Code Burzum [troll] - Opus 4.8 Claude Plan"
+        "Claude Code Burzum [troll] - Opus 5 Claude Plan"
     );
 }
 

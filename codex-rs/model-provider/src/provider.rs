@@ -654,6 +654,13 @@ mod tests {
             catalog
                 .models
                 .iter()
+                .all(|model| model.slug != "claude-opus-4-8-plan"),
+            "deprecated Claude Opus 4.8 Plan should not remain in the static catalog"
+        );
+        assert!(
+            catalog
+                .models
+                .iter()
                 .any(|model| model.slug == CLAUDE_FABLE_5_PLAN_MODEL),
             "Claude Fable Plan should be available in the static Claude Plan catalog"
         );
@@ -674,8 +681,15 @@ mod tests {
             catalog
                 .models
                 .iter()
-                .any(|model| model.slug == "claude-opus-4-8"),
+                .any(|model| model.slug == "claude-opus-5"),
             "Anthropic API-key models should not be refreshed through OpenAI-compatible /models"
+        );
+        assert!(
+            catalog
+                .models
+                .iter()
+                .all(|model| model.slug != "claude-opus-4-8"),
+            "deprecated Claude Opus 4.8 should not remain in the static catalog"
         );
         assert!(
             catalog

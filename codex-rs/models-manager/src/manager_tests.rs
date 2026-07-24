@@ -1170,9 +1170,9 @@ fn bundled_models_json_tracks_verified_image_capabilities() {
         "moonshotai/kimi-k2.7-code",
         "minimax/minimax-m3",
         "google/gemini-3.5-flash",
-        "claude-opus-4-8-plan",
+        "claude-opus-5-plan",
         "claude-fable-5-plan",
-        "claude-opus-4-8",
+        "claude-opus-5",
         "claude-fable-5",
     ] {
         assert!(supports_images(slug), "{slug} should accept image input");
@@ -1349,9 +1349,9 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
         "deepseek/deepseek-v4-pro",
         "tencent/hy3:free",
         "muse-spark-1.1",
-        "claude-opus-4-8-plan",
+        "claude-opus-5-plan",
         "claude-fable-5-plan",
-        "claude-opus-4-8",
+        "claude-opus-5",
         "claude-fable-5",
     ] {
         let model = response
@@ -1568,10 +1568,10 @@ fn bundled_models_json_contains_openrouter_models() {
     let claude_opus = response
         .models
         .iter()
-        .find(|model| model.slug == "claude-opus-4-8")
-        .expect("bundled models.json should include Claude Opus 4.8");
+        .find(|model| model.slug == "claude-opus-5")
+        .expect("bundled models.json should include Claude Opus 5");
 
-    assert_eq!(claude_opus.display_name, "Claude Opus 4.8");
+    assert_eq!(claude_opus.display_name, "Claude Opus 5");
     assert_eq!(claude_opus.context_window, Some(1_000_000));
     assert_eq!(
         claude_opus.default_reasoning_level,
@@ -1592,6 +1592,13 @@ fn bundled_models_json_contains_openrouter_models() {
         ]
     );
     assert_eq!(claude_opus.visibility, ModelVisibility::List);
+    assert!(
+        response.models.iter().all(|model| !matches!(
+            model.slug.as_str(),
+            "claude-opus-4-8" | "claude-opus-4-8-plan"
+        )),
+        "deprecated Claude Opus 4.8 variants must not appear in the bundled catalog"
+    );
 
     let claude_fable_plan = response
         .models

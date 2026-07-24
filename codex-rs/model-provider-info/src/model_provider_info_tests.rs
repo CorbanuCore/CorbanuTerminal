@@ -134,6 +134,24 @@ wire_api = "chat"
 }
 
 #[test]
+fn only_kimi_built_in_uses_ambiguous_action_stop_semantics() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    assert_eq!(
+        providers[KIMI_CODE_PROVIDER_ID].chat_stop_semantics(),
+        ChatStopSemantics::AmbiguousForActionTurns
+    );
+    for (provider_id, provider) in &providers {
+        if provider_id != KIMI_CODE_PROVIDER_ID {
+            assert_eq!(
+                provider.chat_stop_semantics(),
+                ChatStopSemantics::ReliableTerminal,
+                "unexpected ambiguous stop semantics for {provider_id}"
+            );
+        }
+    }
+}
+
+#[test]
 fn test_deserialize_anthropic_wire_api() {
     let provider_toml = r#"
 name = "Anthropic-compatible"
@@ -444,7 +462,7 @@ fn test_create_anthropic_provider() {
             supports_websockets: false,
         }
     );
-    assert_eq!(ANTHROPIC_DEFAULT_MODEL, "claude-opus-4-8");
+    assert_eq!(ANTHROPIC_DEFAULT_MODEL, "claude-opus-5");
     assert_eq!(CLAUDE_FABLE_5_MODEL, "claude-fable-5");
 }
 
@@ -491,7 +509,7 @@ fn test_create_claude_plan_provider() {
             supports_websockets: false,
         }
     );
-    assert_eq!(CLAUDE_PLAN_MODEL, "claude-opus-4-8-plan");
+    assert_eq!(CLAUDE_PLAN_MODEL, "claude-opus-5-plan");
     assert_eq!(CLAUDE_PLAN_UPSTREAM_MODEL, ANTHROPIC_DEFAULT_MODEL);
     assert_eq!(CLAUDE_FABLE_5_PLAN_MODEL, "claude-fable-5-plan");
     assert_eq!(CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL, CLAUDE_FABLE_5_MODEL);
@@ -1122,6 +1140,10 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         Some(CLAUDE_PLAN_PROVIDER_ID)
     );
     assert_eq!(
+        corrected_catalog_provider(CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL, AMBIENT_PROVIDER_ID),
+        Some(CLAUDE_PLAN_PROVIDER_ID)
+    );
+    assert_eq!(
         corrected_catalog_provider(ZAI_DEFAULT_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         Some(ZAI_PROVIDER_ID)
     );
@@ -1153,6 +1175,10 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
     );
     assert_eq!(
         corrected_catalog_provider(CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+        None
+    );
+    assert_eq!(
+        corrected_catalog_provider(CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         None
     );
     assert_eq!(
