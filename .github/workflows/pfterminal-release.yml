@@ -7,7 +7,7 @@ on:
         description: "Release version; must match codex-rs/Cargo.toml."
         required: true
         type: string
-        default: "0.1.21"
+        default: "0.1.22"
       publish_release:
         description: "Create or update the matching GitHub release."
         required: true
@@ -396,6 +396,11 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+
+      - name: Test Windows installer architecture detection
+        shell: powershell
+        run: |
+          & scripts/install/install_architecture.tests.ps1
 
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
