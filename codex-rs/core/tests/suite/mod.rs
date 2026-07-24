@@ -38,6 +38,7 @@ mod apply_patch_cli;
 #[cfg(not(target_os = "windows"))]
 mod approvals;
 mod auto_review;
+mod chat_provider_turn_lifecycle;
 mod cli_stream;
 mod client;
 mod client_websockets;
@@ -64,7 +65,6 @@ mod hooks_mcp;
 mod image_rollout;
 mod items;
 mod json_result;
-mod kimi_completion_guard;
 mod live_cli;
 mod mcp_tool_exposure;
 mod mcp_turn_metadata;

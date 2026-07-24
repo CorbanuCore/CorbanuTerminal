@@ -232,7 +232,7 @@ impl BridgeRuntime {
                         runtime_workspace_roots: None,
                         approval_policy: Some(approval_policy),
                         approvals_reviewer: None,
-                        sandbox_policy: None,
+                        sandbox_policy: Some(self.config.legacy_sandbox_policy().into()),
                         permissions: None,
                         model: None,
                         service_tier: None,

@@ -1,38 +1,29 @@
-# PFTerminal 0.1.20
-
-## Added
-
-- Added an in-product `/telegram` setup flow with masked BotFather token entry,
-  encrypted vault storage, exact chat and sender authorization, connector
-  lifecycle controls, and automatic startup recovery.
-- Added Telegram support for text, images, bounded documents, approvals,
-  selectable model pages, per-chat status, cancellation, compaction, git diff,
-  skills, and queued follow-up turns.
-- Added durable update reconciliation so accepted Telegram messages survive
-  connector restarts without duplicating completed work.
+# PFTerminal 0.1.21
 
 ## Fixed
 
-- Made first-message setup self-progressing: PFTerminal now waits for `/start`
-  while the authorization view is open and ignores stale discovery results.
-- Prevented simultaneous PFTerminal processes from starting duplicate Telegram
-  pollers or stopping an unrelated process after PID reuse.
-- Rejects model switches that cannot authenticate instead of changing the UI
-  to a provider that will immediately fail.
-- Preserved chat authorization, model selection, and queued input across the
-  app-server state boundaries that previously caused silent or repeated work.
+- Telegram now carries the configured sandbox policy through thread creation,
+  thread resume, and every turn instead of silently falling back to
+  `workspace-write`. This fixes shell commands failing before execution with a
+  `bwrap` loopback error.
+- Kimi Code and other chat-compatible providers now use the native turn
+  lifecycle without a hidden model-based completion assessment. Tool calls
+  continue normally, while a final text response ends the turn without up to
+  three extra inference requests or a misleading completion warning.
+- Increased the Intel macOS release-build timeout so healthy cold builds have
+  time to finish packaging.
 
 ## Qualification status
 
-- The Telegram connector suite passes 118 tests covering authorization,
-  polling, durable reconciliation, media limits, approvals, model selection,
-  rendering, session recovery, and failure backoff.
-- Focused TUI setup tests and snapshots pass, including automatic discovery,
-  stale-result cancellation, polling failure recovery, and connector status.
-- The packaged-build and real-TUI CI checks passed on the release branch before
-  merge. Live qualification covered encrypted token storage, connector health,
-  forced-crash recovery, and single-poller behavior across two TUI processes.
+- The Telegram connector suite passes 119 tests, including sandbox-mode
+  propagation coverage.
+- Live Telegram qualification resumed the configured Kimi thread with
+  `danger-full-access` and successfully ran `pwd` and `rg --version` without a
+  sandbox or `bwrap` failure.
+- Two chat-provider lifecycle regressions prove that a text stop uses one
+  inference request and a tool-call turn uses exactly the expected two.
+- All 47 model-provider-info tests pass.
 
-Previous release: 0.1.19.
+Previous release: 0.1.20.
 
 The changelog can be found on the [releases page](https://github.com/agtico/PfTerminal/releases).
