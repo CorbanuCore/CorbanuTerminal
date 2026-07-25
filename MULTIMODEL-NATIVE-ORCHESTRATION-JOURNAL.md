@@ -656,3 +656,40 @@ Exact live replay:
   removed immediately after this proof.
 - `cargo clean --profile dev` reclaimed 102.5 GiB after the immutable binary was copied; free disk
   rose from 63 GiB to 158 GiB before the replay.
+
+## Phase 8A — Fresh qualification pass 1 reset: chat-wire agent mail was omitted
+
+Status: invariant failure found; qualification count remains zero.
+
+Timestamp: 2026-07-25T07:52:07Z
+
+Candidate:
+
+- Binary: `/tmp/pfterminal-native-orch-29a8b3008`.
+- SHA-256: `6f092ce4ee0ad646c7a3e7c68c6b19af667295d37e8a93948eced5631951b61e`.
+- Fresh copied home: `/tmp/pft-native-orch-pass1-home-20260725b`.
+- Disposable game tree: `/tmp/isometric-native-orch-pass1-20260725b`.
+- Session ran from 2026-07-25T07:43:29Z to 2026-07-25T07:52:07Z and is not counted.
+
+Observed:
+
+- `/spawn` created Opus root, Fable Nazgul, Sol Troll, Luna/Terra/Grok Orcs with the expected
+  explicit runtimes.
+- Burzum issued a real Grok follow-up with durable message ID
+  `019f983f-12bb-71c2-b46a-e0e61581372c`. The full task appears in Krimp's typed
+  `inter_agent_communication` rollout item.
+- Krimp's immediately triggered turn nevertheless replied that it had received no task. Two
+  adjacent follow-ups (`019f983f-d3d5-77c3-8402-8d91d76cc213` and
+  `019f9840-31cb-7e21-882a-b96e7fba277b`) reproduced the same result.
+- Source inspection found the boundary: `append_chat_message_for_response_item` deliberately
+  discarded every `ResponseItem::AgentMessage`. Native Responses runtimes retained collaboration
+  mail, while OpenRouter chat-wire runtimes received a turn with that mail omitted from the
+  provider request.
+
+Disposition:
+
+- This is a Section 6.2 accepted-message application failure, not a model-quality observation.
+- The process and watcher were stopped. Generated game artifacts are disposable.
+- Repair the chat adapter so canonical typed collaboration mail becomes user-role provider input
+  while untyped display/transcript agent messages remain excluded. Add generalized regressions and
+  restart the three-session count from zero on a new immutable binary.

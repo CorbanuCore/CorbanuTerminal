@@ -190,7 +190,7 @@ fn responses_input_normalizes_accidental_assistant_prefill_without_changing_user
 }
 
 #[test]
-fn claude_plan_request_normalizes_child_mail_after_completed_assistant_turn() {
+fn claude_plan_request_maps_typed_child_mail_to_user_input() {
     let message = |role: &str, text: &str| ResponseItem::Message {
         id: None,
         role: role.to_string(),
@@ -233,7 +233,14 @@ fn claude_plan_request_normalizes_child_mail_after_completed_assistant_turn() {
             "role": "user",
             "content": [{
                 "type": "text",
-                "text": "Continue.",
+                "text": concat!(
+                    "<inter_agent_message sender=\"/root/nazgul/troll\" ",
+                    "recipient=\"/root/nazgul\">\n",
+                    "Message Type: FINAL_ANSWER\n",
+                    "Task name: /root/nazgul\n",
+                    "Payload:\nWork complete.\n",
+                    "</inter_agent_message>"
+                ),
                 "cache_control": {
                     "type": "ephemeral",
                     "ttl": "1h",
@@ -250,7 +257,7 @@ fn claude_plan_request_normalizes_child_mail_after_completed_assistant_turn() {
             )
             .count(),
         2,
-        "the repair adds one request-only user continuation"
+        "typed child mail is the second user message"
     );
 }
 
@@ -1516,7 +1523,7 @@ fn openrouter_web_plugin_maps_context_size_to_max_results() {
 }
 
 #[test]
-fn chat_completions_omits_agent_messages_from_history() {
+fn chat_completions_omits_untyped_agent_messages_from_history() {
     let mut messages = Vec::new();
     let mut skipped_tool_call_ids = std::collections::HashSet::new();
     super::append_chat_messages_for_response_item(
@@ -1566,6 +1573,84 @@ fn chat_completions_omits_agent_messages_from_history() {
     assert_eq!(
         messages[0].content,
         Some(codex_api::ChatMessageContent::text("real assistant text"))
+    );
+}
+
+#[test]
+fn chat_completions_maps_typed_collaboration_mail_to_user_input() {
+    let mut messages = Vec::new();
+    let mut skipped_tool_call_ids = std::collections::HashSet::new();
+    super::append_chat_messages_for_response_item(
+        ResponseItem::AgentMessage {
+            id: None,
+            author: "/root/nazgul/troll".to_string(),
+            recipient: "/root/nazgul/troll/orc".to_string(),
+            content: vec![AgentMessageInputContent::InputText {
+                text: "Audit the movement boundary and report evidence.".to_string(),
+            }],
+            metadata: None,
+        },
+        &mut messages,
+        &mut skipped_tool_call_ids,
+    );
+
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].role, "user");
+    assert_eq!(
+        messages[0].content,
+        Some(codex_api::ChatMessageContent::text(concat!(
+            "<inter_agent_message sender=\"/root/nazgul/troll\" ",
+            "recipient=\"/root/nazgul/troll/orc\">\n",
+            "Audit the movement boundary and report evidence.\n",
+            "</inter_agent_message>"
+        )))
+    );
+}
+
+#[test]
+fn openrouter_request_includes_typed_collaboration_mail() {
+    let client = ModelClient::new(
+        /*auth_manager*/ None,
+        ThreadId::new(),
+        ModelProviderInfo::create_openrouter_provider(),
+        SessionSource::Cli,
+        /*model_verbosity*/ None,
+        /*enable_request_compression*/ false,
+        /*include_timing_metrics*/ false,
+        /*beta_features_header*/ None,
+        /*item_ids_enabled*/ false,
+        /*attestation_provider*/ None,
+    );
+    let prompt = super::Prompt {
+        input: vec![ResponseItem::AgentMessage {
+            id: None,
+            author: "/root/nazgul/troll".to_string(),
+            recipient: "/root/nazgul/troll/orc".to_string(),
+            content: vec![AgentMessageInputContent::InputText {
+                text: "Run the assigned regression lane.".to_string(),
+            }],
+            metadata: None,
+        }],
+        ..Default::default()
+    };
+
+    let request = client
+        .build_chat_completions_request(&prompt, &test_model_info(), None)
+        .expect("OpenRouter chat request");
+
+    let collaboration_message = request
+        .messages
+        .iter()
+        .find(|message| message.role == "user")
+        .expect("typed collaboration user message");
+    assert_eq!(
+        collaboration_message.content,
+        Some(codex_api::ChatMessageContent::text(concat!(
+            "<inter_agent_message sender=\"/root/nazgul/troll\" ",
+            "recipient=\"/root/nazgul/troll/orc\">\n",
+            "Run the assigned regression lane.\n",
+            "</inter_agent_message>"
+        )))
     );
 }
 
