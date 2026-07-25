@@ -588,7 +588,7 @@ Live evidence:
 
 ## Phase 6F — Preserve active native descendants across process restart
 
-Status: automated repair passes; the exact live failure replay is pending the rebuilt binary.
+Status: repair passes automated qualification and the exact live failure replay.
 
 Timestamp: 2026-07-25T07:21:00Z
 
@@ -636,3 +636,23 @@ Automated evidence:
 - App-server protocol library: 246 passed; the `unloaded` wire value is covered directly.
 - TUI multi-agent filter: 5 passed.
 - Exec library: 59 passed; JSONL output preserves the `unloaded` state.
+
+Exact live replay:
+
+- Commit: `29a8b3008`.
+- Immutable qualification binary:
+  `/tmp/pfterminal-native-orch-29a8b3008`.
+- Binary SHA-256:
+  `6f092ce4ee0ad646c7a3e7c68c6b19af667295d37e8a93948eced5631951b61e`.
+- Fable resumed in `native_orch_replay` from the copied session home used by the failed
+  qualification. Native `list_agents` reported the original Godel identity
+  `/root/nazgul_angmar/troll_burzum/verification_reassign` with exact status `unloaded`.
+- Fable used `followup_task` on that existing path. No replacement was spawned. Godel's original
+  thread `019f980d-0ffd-7150-abc9-1906f81fe372` accepted the message and replied
+  `no files edited`.
+- Runtime evidence for that turn records
+  `model=gpt-5.6-sol codex.turn.reasoning_effort=xhigh` on the same Godel thread ID.
+- The invalid replay worktree was recreated only long enough to satisfy the stored cwd and is
+  removed immediately after this proof.
+- `cargo clean --profile dev` reclaimed 102.5 GiB after the immutable binary was copied; free disk
+  rose from 63 GiB to 158 GiB before the replay.
