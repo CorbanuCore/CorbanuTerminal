@@ -1163,7 +1163,7 @@ impl MultiAgentV2Config {
                 max_concurrent_threads_per_session,
             )),
             tool_namespace: None,
-            hide_spawn_agent_metadata: true,
+            hide_spawn_agent_metadata: false,
             non_code_mode_only: true,
         }
     }

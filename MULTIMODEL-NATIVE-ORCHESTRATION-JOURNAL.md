@@ -1091,3 +1091,50 @@ Disposition:
 - Session 1 counts. The exact candidate remains immutable.
 - Session 2 must create its custom heterogeneous agents directly through native `spawn_agent`
   runtime overrides; `/spawn` must not be used for agent creation in that session.
+
+## Phase 8I — Native custom-crew attempt exposes hidden runtime controls
+
+Status: invariant failure; prior count reset from 1 to 0; candidate superseded pending rebuild.
+
+Timestamp: 2026-07-25T13:32:20Z
+
+Observed:
+
+- A fresh `/spawn`-free session started with Opus 5 as the root and a plain game onboarding/input
+  objective. The user explicitly requested native Fable, Kimi, Grok, and Sol agents.
+- The underlying V2 handler already accepts `model_provider`, `model`, and `reasoning_effort`.
+  However, `MultiAgentV2Config` defaulted `hide_spawn_agent_metadata` to `true`, so the
+  model-visible `spawn_agent` schema omitted all three runtime fields.
+- Opus stated that its tool exposed only `task_name`, `message`, and `fork_turns`. It therefore
+  placed provider/model labels in task text and omitted the actual runtime arguments.
+- Native agents `/root/plan_lead` and `/root/kbd` consequently inherited
+  `claude-plan / claude-opus-5-plan / high`. Logs prove the Kimi-labeled keyboard agent was
+  actually Opus. This is a silent wrong-provider result and invalidates the session under
+  Sections 6, 15.3, and 16.
+
+Repair:
+
+- Default `hide_spawn_agent_metadata` to `false`. Explicit configuration may still set it to
+  `true`; the existing hidden-schema test remains.
+- The ordinary V2 schema now exposes `model_provider`, `model`, `reasoning_effort`,
+  `service_tier`, and `agent_type`, along with guidance that provider and model must be set
+  together.
+- Updated three stale durable-mailbox schema assertions from encrypted to plaintext. The product
+  code intentionally removed encrypted tool fields in `ddaf1ff9c`; the tests had not followed
+  that change.
+
+Automated evidence:
+
+- `multi_agent_v2_default_session_thread_cap_counts_root` now explicitly proves runtime metadata
+  is visible by default.
+- All five `spawn_agent_tool_*` schema tests pass, including visible runtime fields and the
+  explicit hidden-metadata configuration.
+- `send_message_tool_requires_message_and_has_no_output_schema` and
+  `followup_task_tool_requires_message_and_has_no_output_schema` pass.
+- `cargo fmt --all -- --check` passes.
+
+Disposition:
+
+- The attempted session does not count. Stop it, remove its disposable worktree, commit the
+  generalized schema boundary repair, rebuild a new immutable candidate, and restart the
+  three-session count at zero.

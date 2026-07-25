@@ -10929,6 +10929,10 @@ enabled = true
         .await?;
 
     assert_eq!(config.multi_agent_v2, MultiAgentV2Config::default());
+    assert!(
+        !config.multi_agent_v2.hide_spawn_agent_metadata,
+        "multi-model native orchestration requires spawn_agent to expose provider/model overrides"
+    );
     assert_eq!(
         (
             config.agent_max_threads,
