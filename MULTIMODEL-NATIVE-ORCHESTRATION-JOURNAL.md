@@ -1138,3 +1138,44 @@ Disposition:
 - The attempted session does not count. Stop it, remove its disposable worktree, commit the
   generalized schema boundary repair, rebuild a new immutable candidate, and restart the
   three-session count at zero.
+
+## Phase 8J — Rebuilt candidate and native runtime-override seam
+
+Status: seam passed; qualification count remains 0 of 3.
+
+Timestamp: 2026-07-25T13:43:10Z
+
+Candidate:
+
+- Source commit: `a786872cc` (`fix: expose native agent runtime overrides by default`).
+- Immutable binary: `/tmp/pfterminal-native-orch-a786872cc`.
+- SHA-256:
+  `0ec2cc672677257aa1686fb102926b0ab91f69315f905b31e72f280f95520569`.
+- Reported version: `0.1.22`.
+
+Live seam evidence:
+
+- Fresh copied home: `/tmp/pft-native-orch-schema-seam-home-20260725`.
+- Tmux session: `native_orch_schema_seam`.
+- Root runtime: `claude-plan / claude-opus-5-plan / high`.
+- The root called native `spawn_agent` with structured arguments
+  `model_provider=kimi-code`, `model=k3`, and `reasoning_effort=high`. Runtime labels were not
+  placed in the task message as a substitute.
+- Native child `/root/schema_kimi` completed with literal result `KIMI_SCHEMA_OK`.
+- Child rollout metadata records `model_provider=kimi-code`; its `turn_context` records
+  `model=k3` and `effort=high`. This is runtime evidence, not a label inferred from the prompt.
+
+Qualification-home finding:
+
+- The first seam attempt ran from the PfTerminal source directory and correctly selected Kimi,
+  but could not resolve `KIMI_API_KEY`. The copied vault credential is environment-scoped to the
+  benchmark repository; starting the same fresh copied home in the benchmark repository restored
+  the credential without exposing or rewriting it.
+- This was a qualification setup error, not counted as a product pass or failure. No candidate
+  code changed after the immutable build.
+
+Disposition:
+
+- The generalized native runtime-override boundary is now proven live.
+- Begin the three counted 45–60 minute free-form sessions on this exact candidate. Any invariant
+  failure resets the count.
