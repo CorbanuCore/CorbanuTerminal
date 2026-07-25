@@ -498,6 +498,7 @@ impl App {
         self.agent_navigation.clear();
         self.spawn_parent_by_thread.clear();
         self.spawn_parent_by_node.clear();
+        self.spawn_crew = None;
         self.spawn_status_by_thread.clear();
         self.spawn_parent_reports_by_node.clear();
         self.side_threads.clear();

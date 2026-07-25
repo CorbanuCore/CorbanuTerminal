@@ -341,6 +341,7 @@ impl App {
                 .iter()
                 .map(|(node, endpoint)| (node.clone(), endpoint.to_string()))
                 .collect(),
+            spawn_crew: self.spawn_crew.clone(),
             orchestrate_whips: self
                 .orchestrate_whips
                 .iter()

@@ -762,6 +762,7 @@ pub(crate) struct App {
     pub(crate) spawn_native_runtime_by_node:
         HashMap<String, crate::dispatch_queue::SavedNativeSpawnRuntime>,
     pub(crate) spawn_native_endpoint_by_node: HashMap<String, ThreadId>,
+    pub(crate) spawn_crew: Option<crate::crew_state::CrewInstanceState>,
     pub(crate) spawn_status_by_thread:
         HashMap<ThreadId, codex_app_server_protocol::CollabAgentState>,
     /// Active `wait_agent` call by native spawn thread, keyed to the exact turn and item so a
@@ -1510,6 +1511,9 @@ See the PFTerminal keymap documentation for supported actions and examples."
                         .collect()
                 })
                 .unwrap_or_default(),
+            spawn_crew: restored_pane_layout
+                .as_ref()
+                .and_then(|layout| layout.spawn_crew.clone()),
             spawn_status_by_thread: HashMap::new(),
             spawn_waiting_for_agents_by_thread: HashMap::new(),
             spawn_parent_reports_by_node: HashMap::new(),

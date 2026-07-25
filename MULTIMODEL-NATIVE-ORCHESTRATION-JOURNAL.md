@@ -80,3 +80,35 @@ Open gate:
 - The existing pane layout persists native thread IDs, parent edges, and resolved runtimes, but
   it does not yet persist `CrewSpec` or stable logical-member mappings. Phase 2 is therefore not
   complete until restart tests prove the same crew identity and runtime mapping.
+
+### Phase 2B — Durable crew identity
+
+Status: durable metadata implemented; live restart reconciliation remains for Phase 5.
+
+Changes:
+
+- Added a persisted `CrewInstanceState` containing the versioned spec, stable logical-member to
+  native-node mapping, and explicit `creating`, `ready`, or `incomplete` state.
+- `/spawn` now writes the crew intent before starting the first native thread and checkpoints each
+  successful member mapping.
+- Re-entering creation reuses only an identical crew definition and validates the existing native
+  endpoint, parent edge, provider, model, and effort. It stops instead of duplicating, reparenting,
+  or silently changing a runtime.
+- A provider/start failure leaves an incomplete durable intent for recovery.
+- Pane-layout persistence now round-trips the crew state alongside the existing native thread
+  edges, endpoints, and runtime records.
+
+Passing evidence:
+
+- `crew_instance_round_trip_preserves_logical_to_native_identity` covers both the standard crew
+  and a custom Fable/Opus/Grok/Kimi crew.
+- `crew_instance_rejects_identity_reassignment_and_incomplete_ready_state`.
+- `pane_layout_persistence_round_trips_root_binding_and_parent_map` now asserts full crew-state
+  equality after disk persistence.
+- Standard `/spawn` quick-start regression remains green.
+
+Remaining distinction:
+
+- This proves durable crew metadata and idempotent creation decisions. Kill-and-resume against
+  live native threads, strict stale-layout rejection, and legacy read-only fallback remain Phase 5
+  requirements and are not claimed complete here.

@@ -192,7 +192,7 @@ impl SpawnRole {
     }
 }
 
-fn spawn_role_from_agent_type(agent_type: &str) -> Option<SpawnRole> {
+pub(crate) fn spawn_role_from_agent_type(agent_type: &str) -> Option<SpawnRole> {
     match agent_type {
         NAZGUL_ROLE_NAME => Some(SpawnRole::Nazgul),
         TROLL_ROLE => Some(SpawnRole::Troll),
@@ -3165,119 +3165,6 @@ impl App {
             .collect()
     }
 
-    pub(crate) fn ensure_standard_crew_providers_ready(&self) -> Result<()> {
-        // Preflight every provider before creating the root Nazgul. Without this, a missing Troll
-        // or Orc credential leaves a half-created crew with only the already-bound Nazgul pane.
-        let crew = crew_presets::standard_crew_spec();
-        crew.validate()
-            .map_err(|err| eyre!("The built-in standard crew is invalid: {err}"))?;
-        let mut checked_providers = HashSet::new();
-        for member in crew.members {
-            let RuntimeRequest::Exact { provider_id, .. } = member.runtime_request else {
-                return Err(eyre!(
-                    "The built-in standard crew member {} does not have an exact runtime.",
-                    member.logical_member_id
-                ));
-            };
-            if checked_providers.insert(provider_id.clone()) {
-                self.ensure_native_spawn_provider_ready(Some(&provider_id))?;
-            }
-        }
-        Ok(())
-    }
-
-    pub(crate) async fn create_spawn_standard_crew(
-        &mut self,
-        app_server: &mut AppServerSession,
-    ) -> Result<(ThreadId, ThreadId)> {
-        let root_thread_id = self
-            .primary_thread_id
-            .or(self.active_thread_id)
-            .ok_or_else(|| eyre!("Cannot create standard crew before Codex Main has started."))?;
-        let spawn_config = self.native_spawn_agent_config()?;
-        self.ensure_standard_crew_providers_ready()?;
-        let crew = crew_presets::standard_crew_spec();
-        let mut spawned_members = HashMap::<String, (ThreadId, String)>::new();
-        let mut nazgul_thread_id = None;
-        let mut troll_thread_id = None;
-
-        for member in crew.members {
-            let role = spawn_role_from_agent_type(&member.role_profile).ok_or_else(|| {
-                eyre!(
-                    "The built-in standard crew member {} has unsupported role {}.",
-                    member.logical_member_id,
-                    member.role_profile
-                )
-            })?;
-            let RuntimeRequest::Exact {
-                provider_id,
-                model_id,
-                reasoning_effort,
-                ..
-            } = member.runtime_request
-            else {
-                return Err(eyre!(
-                    "The built-in standard crew member {} does not have an exact runtime.",
-                    member.logical_member_id
-                ));
-            };
-            let (parent_thread_id, parent_node_id) = if let Some(parent_member_id) =
-                member.parent_member_id.as_deref()
-            {
-                spawned_members
-                        .get(parent_member_id)
-                        .cloned()
-                        .ok_or_else(|| {
-                            eyre!(
-                                "The built-in standard crew member {} references unavailable parent {parent_member_id}.",
-                                member.logical_member_id
-                            )
-                        })?
-            } else {
-                (root_thread_id, self.spawn_root_node_id())
-            };
-            let nickname = self.next_spawn_agent_nickname(role);
-            let started = app_server
-                .spawn_agent_thread(
-                    &spawn_config,
-                    parent_thread_id,
-                    member.role_profile.clone(),
-                    nickname.clone(),
-                    model_id,
-                    Some(provider_id),
-                    reasoning_effort,
-                    /*base_instructions*/ None,
-                )
-                .await?;
-            let thread_id = started.session.thread_id;
-            self.register_spawn_agent_pane(
-                thread_id,
-                parent_thread_id,
-                parent_node_id,
-                nickname,
-                &member.role_profile,
-                started,
-                true,
-            )
-            .await;
-            let node_id = thread_node_id(thread_id);
-            spawned_members.insert(member.logical_member_id, (thread_id, node_id.clone()));
-            match role {
-                SpawnRole::Nazgul => {
-                    nazgul_thread_id = Some(thread_id);
-                    self.set_spawn_nazgul_pane_binding(node_id);
-                    self.persist_bound_nazgul_root_thread_metadata().await;
-                }
-                SpawnRole::Troll => troll_thread_id = Some(thread_id),
-                SpawnRole::Orc => {}
-            }
-        }
-
-        Ok((
-            nazgul_thread_id.ok_or_else(|| eyre!("The standard crew did not create a Nazgul."))?,
-            troll_thread_id.ok_or_else(|| eyre!("The standard crew did not create a Troll."))?,
-        ))
-    }
     pub(crate) fn native_spawn_agent_config(&self) -> Result<crate::legacy_core::config::Config> {
         let mut spawn_config = self.config.clone();
         spawn_config.service_tier = self.chat_widget.configured_service_tier();
@@ -4665,7 +4552,7 @@ impl App {
         false
     }
 
-    fn spawn_node_backing_thread_id(&self, node_id: &str) -> Option<ThreadId> {
+    pub(crate) fn spawn_node_backing_thread_id(&self, node_id: &str) -> Option<ThreadId> {
         if node_id == pane_node_id(CODEX_MAIN_PANE_ID) || node_id == CODEX_MAIN_PANE_ID {
             return self.primary_thread_id;
         }
