@@ -272,3 +272,36 @@ Passing evidence:
 - `spawn_agent_internal_treats_roles_as_profiles_and_enforces_structural_depth` with
   `RUST_MIN_STACK=33554432` (the repository's known test-harness stack requirement).
 - `cargo check -p codex-core -p codex-app-server`.
+
+## Phase 5/6 — Strict recovery and direct `/spawn` mailbox admission
+
+Status: new native crews use the canonical mailbox directly; legacy identities fail closed.
+
+Changes:
+
+- Native `/spawn` assignments no longer enter the TUI dispatch queue or pump. The TUI derives one
+  stable message/assignment ID, calls V2 `thread/sendAgentMessage`, and reports “queued” only after
+  the canonical mailbox durably acknowledges admission.
+- A native admission failure is visible and is not automatically replayed. The stable source
+  origin is recorded only after canonical admission, so a failed request is not falsely tombstoned.
+- The legacy pump can select only external Claude compatibility panes. It has no native delivery
+  variant and cannot become a second native retry path.
+- Removed obsolete native-pump qualification tests and replaced their assertions with real
+  app-server/mailbox event-path coverage.
+- Restored pre-CrewSpec hierarchies are inspectable but read-only. They cannot dispatch, replay,
+  or silently enter the new control plane.
+- Modern restored crews are validated against `CrewSpec`: every logical member must resolve to one
+  available native thread, the parent edge must match, and provider/model/effort must equal the
+  persisted exact runtime. Drift marks the crew incomplete and blocks mutation.
+
+Passing evidence:
+
+- Real dispatch integration: 6/6 (FIFO, replay dedup, saturation, waiting-target wake, 32 KiB
+  bound, and compaction).
+- `spawn_orchestration`: 26/26.
+- `restored_legacy_spawn_hierarchy_is_inspectable_but_rejects_mutation`.
+- `restored_crew_validation_rejects_runtime_drift`.
+- `spawn_roster_lines_carry_dispatch_and_report_seq`.
+- `bound_nazgul_freeform_dispatch_routes_without_protocol_headers`.
+- `cargo test -p codex-tui --lib --no-run` with the repository stack setting.
+- `cargo check -p codex-tui`.

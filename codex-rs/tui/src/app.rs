@@ -763,6 +763,9 @@ pub(crate) struct App {
         HashMap<String, crate::dispatch_queue::SavedNativeSpawnRuntime>,
     pub(crate) spawn_native_endpoint_by_node: HashMap<String, ThreadId>,
     pub(crate) spawn_crew: Option<crate::crew_state::CrewInstanceState>,
+    /// A restored pre-CrewSpec hierarchy remains inspectable but cannot be mutated by the native
+    /// control plane because its identity and parentage cannot be proven.
+    pub(crate) spawn_legacy_read_only: bool,
     pub(crate) spawn_status_by_thread:
         HashMap<ThreadId, codex_app_server_protocol::CollabAgentState>,
     /// Active `wait_agent` call by native spawn thread, keyed to the exact turn and item so a
@@ -1374,6 +1377,12 @@ See the PFTerminal keymap documentation for supported actions and examples."
         let restored_spawn_nazgul_rebind_required = restored_pane_layout
             .as_ref()
             .is_some_and(|layout| layout.spawn_nazgul_rebind_required);
+        let restored_spawn_legacy_read_only = restored_pane_layout.as_ref().is_some_and(|layout| {
+            layout.spawn_crew.is_none()
+                && (layout.spawn_nazgul_pane_id.is_some()
+                    || !layout.spawn_parent_by_node.is_empty()
+                    || !layout.claude_pane_ids.is_empty())
+        });
         let mut restored_orchestrate_whips: HashMap<_, _> = restored_pane_layout
             .as_ref()
             .map(|layout| {
@@ -1514,6 +1523,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
             spawn_crew: restored_pane_layout
                 .as_ref()
                 .and_then(|layout| layout.spawn_crew.clone()),
+            spawn_legacy_read_only: restored_spawn_legacy_read_only,
             spawn_status_by_thread: HashMap::new(),
             spawn_waiting_for_agents_by_thread: HashMap::new(),
             spawn_parent_reports_by_node: HashMap::new(),

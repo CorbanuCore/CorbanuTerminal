@@ -511,8 +511,8 @@ fn mailbox_delivery_wakes_waiting_target_without_turn_start_fallback() -> Result
             requests[1].message_input_texts("user")
         );
         assert!(
-            fixture.app.spawn_accepted_delivery_ids.len() >= 2,
-            "accepted mailbox deliveries must be tombstoned locally"
+            fixture.app.spawn_processed_dispatch_origins.len() >= 2,
+            "canonical mailbox admissions must retain their stable source origins"
         );
         fixture.server.shutdown().await?;
         Ok(())
@@ -552,7 +552,7 @@ fn queue_bound_rejection_is_visible_and_accepts_nothing() -> Result<()> {
             .collect::<Vec<_>>()
             .join("\n");
         assert!(
-            rendered.contains("maximum") && rendered.contains("Cannot queue task"),
+            rendered.contains("maximum") && rendered.contains("Could not admit task"),
             "bound rejection must be visible to the source; rendered={rendered:?}"
         );
         fixture.server.shutdown().await?;

@@ -1,9 +1,11 @@
 use crate::app::App;
 use crate::app_server_session::AppServerSession;
+use crate::claude_panes::CODEX_MAIN_PANE_ID;
 use crate::crew_presets;
 use crate::crew_state::CrewCreationStatus;
 use crate::crew_state::CrewInstanceState;
 use crate::spawn_orchestration::SpawnRole;
+use crate::spawn_orchestration::pane_node_id;
 use crate::spawn_orchestration::spawn_role_from_agent_type;
 use crate::spawn_orchestration::thread_node_id;
 use codex_protocol::ThreadId;
@@ -15,6 +17,115 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 impl App {
+    pub(crate) fn validate_restored_crew_state(&self) -> Result<()> {
+        let Some(state) = self.spawn_crew.as_ref() else {
+            return Ok(());
+        };
+        state
+            .spec
+            .validate()
+            .map_err(|err| eyre!("restored crew specification is invalid: {err}"))?;
+        if !matches!(state.status, CrewCreationStatus::Ready) {
+            return Err(eyre!(
+                "restored crew {} is not ready; resume its explicit creation flow",
+                state.spec.crew_id
+            ));
+        }
+        if state.member_node_by_id.len() != state.spec.members.len() {
+            return Err(eyre!(
+                "restored crew {} has {} member mappings for {} members",
+                state.spec.crew_id,
+                state.member_node_by_id.len(),
+                state.spec.members.len()
+            ));
+        }
+
+        for member in &state.spec.members {
+            let node_id = state
+                .member_node_by_id
+                .get(&member.logical_member_id)
+                .ok_or_else(|| {
+                    eyre!(
+                        "restored crew member {} has no native identity",
+                        member.logical_member_id
+                    )
+                })?;
+            let thread_id = self.spawn_node_backing_thread_id(node_id).ok_or_else(|| {
+                eyre!(
+                    "restored crew member {} maps to stale native node {}",
+                    member.logical_member_id,
+                    node_id
+                )
+            })?;
+            if self.agent_navigation.get(&thread_id).is_none() {
+                return Err(eyre!(
+                    "restored crew member {} maps to unavailable thread {}",
+                    member.logical_member_id,
+                    thread_id
+                ));
+            }
+
+            let expected_parent = match member.parent_member_id.as_deref() {
+                Some(parent_member_id) => state
+                    .member_node_by_id
+                    .get(parent_member_id)
+                    .cloned()
+                    .ok_or_else(|| {
+                        eyre!(
+                            "restored crew member {} references unmapped parent {}",
+                            member.logical_member_id,
+                            parent_member_id
+                        )
+                    })?,
+                None => pane_node_id(CODEX_MAIN_PANE_ID),
+            };
+            if self.spawn_parent_by_node.get(node_id) != Some(&expected_parent) {
+                return Err(eyre!(
+                    "restored crew member {} has a stale or changed parent edge",
+                    member.logical_member_id
+                ));
+            }
+
+            let RuntimeRequest::Exact {
+                provider_id,
+                model_id,
+                reasoning_effort,
+                ..
+            } = &member.runtime_request
+            else {
+                return Err(eyre!(
+                    "restored crew member {} does not have an exact runtime",
+                    member.logical_member_id
+                ));
+            };
+            let runtime = self
+                .spawn_native_runtime_by_node
+                .get(node_id)
+                .ok_or_else(|| {
+                    eyre!(
+                        "restored crew member {} has no persisted runtime",
+                        member.logical_member_id
+                    )
+                })?;
+            if runtime.provider != *provider_id
+                || runtime.model != *model_id
+                || runtime.reasoning_effort != *reasoning_effort
+            {
+                return Err(eyre!(
+                    "restored crew member {} runtime changed from {}/{} {:?} to {}/{} {:?}",
+                    member.logical_member_id,
+                    provider_id,
+                    model_id,
+                    reasoning_effort,
+                    runtime.provider,
+                    runtime.model,
+                    runtime.reasoning_effort
+                ));
+            }
+        }
+        Ok(())
+    }
+
     fn ensure_crew_providers_ready(&self, crew: &CrewSpec) -> Result<()> {
         crew.validate()
             .map_err(|err| eyre!("The requested crew is invalid: {err}"))?;
@@ -255,7 +366,7 @@ impl App {
         Ok(Some((thread_id, existing_node_id)))
     }
 
-    fn mark_crew_incomplete(&mut self, error: String) {
+    pub(crate) fn mark_crew_incomplete(&mut self, error: String) {
         if let Some(state) = self.spawn_crew.as_mut() {
             state.mark_incomplete(error);
         }

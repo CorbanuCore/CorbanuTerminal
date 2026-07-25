@@ -61,6 +61,7 @@ pub(super) async fn make_test_app() -> App {
         spawn_native_runtime_by_node: HashMap::new(),
         spawn_native_endpoint_by_node: HashMap::new(),
         spawn_crew: None,
+        spawn_legacy_read_only: false,
         spawn_status_by_thread: HashMap::new(),
         spawn_waiting_for_agents_by_thread: HashMap::new(),
         spawn_parent_reports_by_node: HashMap::new(),

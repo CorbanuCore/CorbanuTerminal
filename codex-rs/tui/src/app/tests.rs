@@ -1,7 +1,6 @@
 //! App-level orchestration tests for the TUI.
 
 mod dispatch_integration;
-mod dispatch_qualification;
 mod model_catalog;
 mod session_summary;
 mod startup;
@@ -2188,6 +2187,93 @@ fn register_native_dispatch_pair(app: &mut App) -> (ThreadId, ThreadId) {
     (troll_thread_id, orc_thread_id)
 }
 
+#[tokio::test]
+async fn restored_legacy_spawn_hierarchy_is_inspectable_but_rejects_mutation() {
+    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
+    let (source, target) = register_native_dispatch_pair(&mut app);
+    app.spawn_legacy_read_only = true;
+
+    app.dispatch_spawn_task_blocks(
+        &thread_node_id(source),
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: target.to_string(),
+            task: "must not enter the new control plane".to_string(),
+            seq: Some(1),
+        }],
+    );
+
+    while let Ok(event) = rx.try_recv() {
+        assert!(
+            !matches!(event, AppEvent::SubmitSpawnAgentTask { .. }),
+            "legacy read-only sessions must never dispatch work"
+        );
+    }
+    assert!(app.spawn_pending_dispatches.is_empty());
+}
+
+#[tokio::test]
+async fn restored_crew_validation_rejects_runtime_drift() {
+    let mut app = make_test_app().await;
+    let thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000499").expect("thread id");
+    let node_id = thread_node_id(thread_id);
+    app.upsert_agent_picker_thread(
+        thread_id,
+        Some("Manager".to_string()),
+        Some("manager".to_string()),
+        false,
+    );
+    app.spawn_parent_by_node.insert(
+        node_id.clone(),
+        crate::spawn_orchestration::pane_node_id(CODEX_MAIN_PANE_ID),
+    );
+    app.spawn_native_runtime_by_node.insert(
+        node_id.clone(),
+        crate::dispatch_queue::SavedNativeSpawnRuntime {
+            provider: "openai".to_string(),
+            model: "gpt-5.6-sol".to_string(),
+            reasoning_effort: None,
+        },
+    );
+    let spec = codex_protocol::crew::CrewSpec {
+        schema_version: codex_protocol::crew::CURRENT_CREW_SCHEMA_VERSION,
+        crew_id: "validation-fixture".to_string(),
+        preset_id: None,
+        members: vec![codex_protocol::crew::CrewMemberSpec {
+            logical_member_id: "manager".to_string(),
+            display_name: "Manager".to_string(),
+            role_profile: "manager".to_string(),
+            parent_member_id: None,
+            runtime_request: codex_protocol::crew::RuntimeRequest::exact(
+                "openai",
+                "gpt-5.6-sol",
+                None,
+            ),
+        }],
+        policy: codex_protocol::crew::CrewPolicy {
+            delegation_mode: codex_protocol::crew::DelegationMode::ExplicitOnly,
+            allow_ephemeral_descendants: true,
+            provider_allowlist: vec!["openai".to_string()],
+            maximum_spend_usd: None,
+        },
+    };
+    let mut state = crate::crew_state::CrewInstanceState::begin(spec).expect("valid crew");
+    state.record_member("manager", &node_id).expect("mapping");
+    state.mark_ready().expect("ready");
+    app.spawn_crew = Some(state);
+
+    app.validate_restored_crew_state()
+        .expect("exact restored mapping");
+    app.spawn_native_runtime_by_node
+        .get_mut(&node_id)
+        .expect("runtime")
+        .model = "different-model".to_string();
+    let error = app
+        .validate_restored_crew_state()
+        .expect_err("runtime drift must stop recovery");
+    assert!(error.to_string().contains("runtime changed"));
+}
+
 impl App {
     /// Test adapter for older unit fixtures. Production has no direct-dispatch bypass: this helper
     /// enters through the same stable model-origin path used by completed agent turns.
@@ -2698,13 +2784,11 @@ async fn spawn_roster_lines_carry_dispatch_and_report_seq() {
             seq: Some(120),
         }],
     );
-    assert!(matches!(rx.try_recv(), Ok(AppEvent::PumpSpawnDispatches)));
-    assert_eq!(
-        app.spawn_pending_dispatches
-            .get(&thread_node_id(orc_thread_id))
-            .map_or(0, std::collections::VecDeque::len),
-        1
-    );
+    assert!(matches!(
+        rx.try_recv(),
+        Ok(AppEvent::SubmitSpawnAgentTask { thread_id, .. }) if thread_id == orc_thread_id
+    ));
+    assert!(app.spawn_pending_dispatches.is_empty());
 
     app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
         orc_thread_id,
@@ -2825,72 +2909,6 @@ async fn spawn_roster_keeps_pending_queue_control_state_out_of_model_context() {
 }
 
 #[tokio::test]
-async fn durable_pump_marks_native_delivery_submitting_before_adapter() {
-    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
-    let (source, target) = register_native_dispatch_pair(&mut app);
-    app.dispatch_spawn_task_blocks(
-        &thread_node_id(source),
-        vec![crate::spawn_orchestration::SpawnTaskDispatch {
-            target: target.to_string(),
-            task: "inspect the boundary".to_string(),
-            seq: Some(501),
-        }],
-    );
-
-    assert!(matches!(rx.try_recv(), Ok(AppEvent::PumpSpawnDispatches)));
-    let delivery = app
-        .select_spawn_dispatch_pump_delivery()
-        .expect("idle native target is eligible");
-    let crate::spawn_orchestration::SpawnDispatchPumpDelivery::Native {
-        source_thread_id,
-        thread_id,
-        delivery_id,
-        ..
-    } = delivery
-    else {
-        panic!("expected native adapter");
-    };
-    assert_eq!(source_thread_id, source);
-    assert_eq!(thread_id, target);
-    let queued = &app.spawn_pending_dispatches[&thread_node_id(target)][0];
-    assert!(matches!(
-        &queued.state,
-        crate::dispatch_queue::DispatchState::Submitting { delivery_id: id, .. }
-            if id == &delivery_id
-    ));
-    assert!(!app.spawn_accepted_delivery_ids.contains(&delivery_id));
-}
-
-#[tokio::test]
-async fn durable_pump_accepts_work_for_a_running_native_target_via_mailbox() {
-    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
-    let (source, target) = register_native_dispatch_pair(&mut app);
-    app.agent_navigation.set_running(target, true);
-    app.dispatch_spawn_task_blocks(
-        &thread_node_id(source),
-        vec![crate::spawn_orchestration::SpawnTaskDispatch {
-            target: target.to_string(),
-            task: "Correct the active review and report the changed verdict.".to_string(),
-            seq: Some(502),
-        }],
-    );
-
-    assert!(matches!(rx.try_recv(), Ok(AppEvent::PumpSpawnDispatches)));
-    let crate::spawn_orchestration::SpawnDispatchPumpDelivery::Native {
-        source_thread_id,
-        thread_id,
-        ..
-    } = app
-        .select_spawn_dispatch_pump_delivery()
-        .expect("running native target accepts durable mailbox work")
-    else {
-        panic!("expected native adapter");
-    };
-    assert_eq!(source_thread_id, source);
-    assert_eq!(thread_id, target);
-}
-
-#[tokio::test]
 async fn oversized_native_self_dispatch_is_rejected_before_queue_accounting() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let (source, _target) = register_native_dispatch_pair(&mut app);
@@ -2914,88 +2932,7 @@ async fn oversized_native_self_dispatch_is_rejected_before_queue_accounting() {
 }
 
 #[tokio::test]
-async fn active_spawn_pane_queue_header_uses_authoritative_items_and_bytes() {
-    let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
-    let (_source, target) = register_native_dispatch_pair(&mut app);
-    app.active_thread_id = Some(target);
-    let dispatch = crate::spawn_orchestration::PendingSpawnDispatch::new(
-        "measure this queued payload".to_string(),
-        Vec::new(),
-    );
-    let expected_bytes = dispatch.payload_bytes();
-    assert!(matches!(
-        app.enqueue_pending_dispatch_for_thread(target, dispatch),
-        crate::spawn_orchestration::PendingDispatchEnqueueResult::Queued
-    ));
-
-    assert_eq!(
-        app.active_spawn_dispatch_queue_usage(),
-        Some((1, expected_bytes))
-    );
-}
-
-#[tokio::test]
-async fn typed_capacity_defers_without_timer_or_notification_and_same_id_replays() {
-    let (mut app, mut rx, mut op_rx) = make_test_app_with_channels().await;
-    let (_source, target) = register_native_dispatch_pair(&mut app);
-    let target_node = thread_node_id(target);
-    app.enqueue_pending_dispatch_for_thread(
-        target,
-        crate::spawn_orchestration::PendingSpawnDispatch::new(
-            "capacity-bound task".to_string(),
-            Vec::new(),
-        ),
-    );
-    app.request_spawn_dispatch_pump();
-    assert!(matches!(rx.try_recv(), Ok(AppEvent::PumpSpawnDispatches)));
-    let crate::spawn_orchestration::SpawnDispatchPumpDelivery::Native { delivery_id, .. } =
-        app.select_spawn_dispatch_pump_delivery().expect("delivery")
-    else {
-        panic!("expected native delivery");
-    };
-    app.defer_spawn_dispatch_for_capacity(&target_node, &delivery_id);
-    assert!(matches!(
-        app.spawn_pending_dispatches[&target_node][0].state,
-        crate::dispatch_queue::DispatchState::Queued
-    ));
-    let crate::spawn_orchestration::SpawnDispatchPumpDelivery::Native {
-        delivery_id: replay_id,
-        ..
-    } = app
-        .select_spawn_dispatch_pump_delivery()
-        .expect("same-ID replay")
-    else {
-        panic!("expected native delivery");
-    };
-    assert_eq!(replay_id, delivery_id);
-    assert!(
-        op_rx.try_recv().is_err(),
-        "scheduler state must stay out of model context"
-    );
-}
-
-#[tokio::test]
-async fn accepted_pump_delivery_removes_record_and_persists_tombstone() {
-    let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
-    let (_source, target) = register_native_dispatch_pair(&mut app);
-    let target_node = thread_node_id(target);
-    app.enqueue_pending_dispatch_for_thread(
-        target,
-        crate::spawn_orchestration::PendingSpawnDispatch::new("one task".into(), Vec::new()),
-    );
-    let crate::spawn_orchestration::SpawnDispatchPumpDelivery::Native {
-        task, delivery_id, ..
-    } = app.select_spawn_dispatch_pump_delivery().expect("delivery")
-    else {
-        panic!("expected native delivery");
-    };
-    app.finish_spawn_dispatch_delivery(&target_node, &delivery_id, &task);
-    assert!(!app.spawn_pending_dispatches.contains_key(&target_node));
-    assert!(app.spawn_accepted_delivery_ids.contains(&delivery_id));
-}
-
-#[tokio::test]
-async fn replacement_transaction_migrates_runtime_queue_waiting_and_relationships() {
+async fn replacement_transaction_migrates_runtime_waiting_and_relationships() {
     let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
     let (parent, old_thread) = register_native_dispatch_pair(&mut app);
     let new_thread =
@@ -3017,13 +2954,6 @@ async fn replacement_transaction_migrates_runtime_queue_waiting_and_relationship
             reasoning_effort: Some(codex_protocol::openai_models::ReasoningEffort::High),
         },
     );
-    app.enqueue_pending_dispatch_for_thread(
-        old_thread,
-        crate::spawn_orchestration::PendingSpawnDispatch::new(
-            "survive replacement".to_string(),
-            Vec::new(),
-        ),
-    );
     app.spawn_waiting_for_agents_by_thread
         .insert(old_thread, ("turn-old".to_string(), "wait-old".to_string()));
     app.spawn_pending_reports_by_thread
@@ -3033,9 +2963,6 @@ async fn replacement_transaction_migrates_runtime_queue_waiting_and_relationship
 
     app.replace_saved_native_spawn_thread(old_thread, new_thread);
 
-    let migrated = &app.spawn_pending_dispatches[&old_node][0];
-    assert_eq!(migrated.target_pane_id, old_node);
-    assert_eq!(migrated.task, "survive replacement");
     assert_eq!(
         app.spawn_native_runtime_by_node[&old_node].model,
         "saved-custom-model"
@@ -3051,63 +2978,6 @@ async fn replacement_transaction_migrates_runtime_queue_waiting_and_relationship
     assert_eq!(app.spawn_parent_by_node[&old_node], thread_node_id(parent));
     assert_eq!(app.spawn_native_endpoint_by_node[&old_node], new_thread);
     assert_eq!(app.logical_native_node_for_thread(new_thread), old_node);
-}
-
-#[tokio::test]
-async fn identical_pending_dispatch_is_suppressed_with_one_render_only_notice() {
-    let (mut app, mut app_event_rx, mut op_rx) = make_test_app_with_channels().await;
-    let (_troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
-    let target_node_id = crate::spawn_orchestration::thread_node_id(orc_thread_id);
-    let label = app.thread_label(orc_thread_id);
-    let pending = |seq| {
-        crate::spawn_orchestration::PendingSpawnDispatch::new(
-            format!("Assigned by Angmar to {label} (dispatch #{seq}).\n\nsame requested work"),
-            vec![crate::spawn_orchestration::SpawnDispatchAck {
-                seq,
-                source_node_id: "thread:source".to_string(),
-                target_node_id: target_node_id.clone(),
-                target_title: label.clone(),
-                attempt: 0,
-            }],
-        )
-    };
-
-    assert!(matches!(
-        app.enqueue_pending_dispatch_for_thread(orc_thread_id, pending(1)),
-        crate::spawn_orchestration::PendingDispatchEnqueueResult::Queued
-    ));
-    for seq in [2, 3] {
-        let crate::spawn_orchestration::PendingDispatchEnqueueResult::Duplicate { acks, notify } =
-            app.enqueue_pending_dispatch_for_thread(orc_thread_id, pending(seq))
-        else {
-            panic!("identical task should be suppressed");
-        };
-        app.record_duplicate_pending_dispatch(&label, &acks, notify);
-    }
-
-    assert_eq!(
-        app.spawn_pending_dispatches
-            .get(&thread_node_id(orc_thread_id))
-            .map_or(0, std::collections::VecDeque::len),
-        1
-    );
-    let mut rendered = Vec::new();
-    while let Ok(event) = app_event_rx.try_recv() {
-        if let AppEvent::InsertHistoryCell(cell) = event {
-            rendered.push(lines_to_single_string(&cell.display_lines(/*width*/ 160)));
-        }
-    }
-    assert_eq!(
-        rendered
-            .iter()
-            .filter(|line| line.contains("Duplicate task") && line.contains("suppressed"))
-            .count(),
-        1
-    );
-    assert!(
-        op_rx.try_recv().is_err(),
-        "duplicate notice must remain render-only"
-    );
 }
 
 #[tokio::test]
@@ -3256,53 +3126,6 @@ async fn failed_dispatch_records_sender_visible_ack_without_fake_pane_cell() {
         !app.claude_pane_transcript_cells
             .contains_key(&source_node_id),
         "native sender errors must not be written as fake Claude-pane transcript cells"
-    );
-}
-
-#[tokio::test]
-async fn model_dispatch_origin_persists_and_suppresses_replayed_turn() {
-    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
-    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
-    app.primary_thread_id = Some(troll_thread_id);
-    let block = format!(
-        "```pfterminal-send-task\n{{\"target\":\"{orc_thread_id}\",\"task\":\"origin replay proof\"}}\n```"
-    );
-
-    assert!(app.dispatch_native_spawn_task_blocks_from_text(
-        troll_thread_id,
-        "stable-source-turn",
-        &block,
-    ));
-    assert!(matches!(rx.try_recv(), Ok(AppEvent::PumpSpawnDispatches)));
-    assert_eq!(
-        app.spawn_pending_dispatches
-            .get(&thread_node_id(orc_thread_id))
-            .map_or(0, std::collections::VecDeque::len),
-        1
-    );
-    let layout = crate::claude_panes::load_pane_layout(
-        app.config.codex_home.as_ref(),
-        Some(&troll_thread_id.to_string()),
-    )
-    .expect("authoritative layout");
-    assert_eq!(layout.spawn_processed_dispatch_origin_ids.len(), 1);
-
-    let (mut restored_app, mut restored_rx, _restored_op_rx) = make_test_app_with_channels().await;
-    register_native_dispatch_pair(&mut restored_app);
-    restored_app.primary_thread_id = Some(troll_thread_id);
-    restored_app.spawn_processed_dispatch_origins = layout
-        .spawn_processed_dispatch_origin_ids
-        .into_iter()
-        .collect();
-
-    assert!(restored_app.dispatch_native_spawn_task_blocks_from_text(
-        troll_thread_id,
-        "stable-source-turn",
-        &block,
-    ));
-    assert!(
-        restored_rx.try_recv().is_err(),
-        "replaying one completed source turn must not present the task again"
     );
 }
 
@@ -5531,10 +5354,7 @@ async fn claude_adapter_delivers_one_fifo_record_without_prose_batching() {
         delivery_id,
     } = app
         .select_spawn_dispatch_pump_delivery()
-        .expect("Claude delivery")
-    else {
-        panic!("expected Claude adapter");
-    };
+        .expect("Claude delivery");
     assert_eq!(pane_id, orc_pane_id);
     assert!(task.contains("first exact task"));
     assert!(!task.contains("second exact task"));
@@ -6105,131 +5925,18 @@ Resume implementation from the existing screenshots and gate logs.
         "turn-freeform-work",
         message,
     ));
-    let mut pump_scheduled = false;
+    let mut task_submitted = false;
     while let Ok(event) = rx.try_recv() {
-        pump_scheduled |= matches!(event, AppEvent::PumpSpawnDispatches);
-    }
-    assert!(pump_scheduled);
-    assert_eq!(
-        app.spawn_pending_dispatches
-            .get(&crate::spawn_orchestration::thread_node_id(troll_thread_id))
-            .map_or(0, VecDeque::len),
-        1,
-        "natural-language work should route without a workflow mini-language"
-    );
-}
-
-#[tokio::test]
-async fn separate_completed_messages_in_one_long_turn_dispatch_once_each() {
-    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
-    let nazgul_thread_id =
-        ThreadId::from_string("00000000-0000-0000-0000-000000000675").expect("valid thread id");
-    let troll_thread_id =
-        ThreadId::from_string("00000000-0000-0000-0000-000000000676").expect("valid thread id");
-    let snaga_thread_id =
-        ThreadId::from_string("00000000-0000-0000-0000-000000000677").expect("valid thread id");
-    let krimp_thread_id =
-        ThreadId::from_string("00000000-0000-0000-0000-000000000678").expect("valid thread id");
-
-    for (thread_id, nickname, role) in [
-        (nazgul_thread_id, "Angmar", "nazgul"),
-        (troll_thread_id, "Burzum", "troll"),
-        (snaga_thread_id, "Snaga", "orc"),
-        (krimp_thread_id, "Krimp", "orc"),
-    ] {
-        app.upsert_agent_picker_thread(
-            thread_id,
-            Some(nickname.to_string()),
-            Some(role.to_string()),
-            /*is_closed*/ false,
+        task_submitted |= matches!(
+            event,
+            AppEvent::SubmitSpawnAgentTask { thread_id, .. } if thread_id == troll_thread_id
         );
     }
-    app.spawn_parent_by_thread
-        .insert(troll_thread_id, nazgul_thread_id);
-    app.spawn_parent_by_thread
-        .insert(snaga_thread_id, troll_thread_id);
-    app.spawn_parent_by_thread
-        .insert(krimp_thread_id, troll_thread_id);
-
-    let first = r#"<pfterminal_send_task target="Snaga">
-Collect telemetry.
-</pfterminal_send_task>"#;
-    let second = r#"<pfterminal_send_task target="Krimp">
-Run the independent proof.
-</pfterminal_send_task>"#;
-    let turn_id = "manager-long-running-turn";
-
-    app.update_spawn_status_for_thread_notification(&item_completed_notification(
-        troll_thread_id,
-        turn_id,
-        "manager-message-1",
-        first,
-    ));
-    app.update_spawn_status_for_thread_notification(&item_completed_notification(
-        troll_thread_id,
-        turn_id,
-        "manager-message-2",
-        second,
-    ));
-
-    assert!(matches!(rx.try_recv(), Ok(AppEvent::PumpSpawnDispatches)));
-    assert_eq!(
-        app.spawn_pending_dispatches
-            .get(&thread_node_id(snaga_thread_id))
-            .map_or(0, std::collections::VecDeque::len),
-        1
+    assert!(
+        task_submitted,
+        "natural-language work should route without a workflow mini-language"
     );
-    assert_eq!(
-        app.spawn_pending_dispatches
-            .get(&thread_node_id(krimp_thread_id))
-            .map_or(0, std::collections::VecDeque::len),
-        1
-    );
-    assert_eq!(app.spawn_processed_dispatch_origins.len(), 2);
-
-    app.update_spawn_status_for_thread_notification(&item_completed_notification(
-        troll_thread_id,
-        turn_id,
-        "manager-message-2",
-        second,
-    ));
-    app.update_spawn_status_for_thread_notification(&ServerNotification::TurnCompleted(
-        TurnCompletedNotification {
-            thread_id: troll_thread_id.to_string(),
-            turn: Turn {
-                completed_at: Some(0),
-                duration_ms: Some(1),
-                ..test_turn(
-                    turn_id,
-                    TurnStatus::Completed,
-                    vec![
-                        ThreadItem::AgentMessage {
-                            id: "durable-manager-message-1".to_string(),
-                            text: first.to_string(),
-                            phase: None,
-                            memory_citation: None,
-                        },
-                        ThreadItem::AgentMessage {
-                            id: "durable-manager-message-2".to_string(),
-                            text: second.to_string(),
-                            phase: None,
-                            memory_citation: None,
-                        },
-                    ],
-                )
-            },
-        },
-    ));
-
-    assert_eq!(
-        app.spawn_pending_dispatches
-            .values()
-            .map(std::collections::VecDeque::len)
-            .sum::<usize>(),
-        2,
-        "item replay and completed-turn catch-up must not duplicate either dispatch"
-    );
-    assert_eq!(app.spawn_processed_dispatch_origins.len(), 2);
+    assert!(app.spawn_pending_dispatches.is_empty());
 }
 
 #[tokio::test]
@@ -9835,6 +9542,7 @@ async fn make_test_app() -> App {
         spawn_native_runtime_by_node: HashMap::new(),
         spawn_native_endpoint_by_node: HashMap::new(),
         spawn_crew: None,
+        spawn_legacy_read_only: false,
         spawn_status_by_thread: HashMap::new(),
         spawn_waiting_for_agents_by_thread: HashMap::new(),
         spawn_parent_reports_by_node: HashMap::new(),
@@ -9935,6 +9643,7 @@ async fn make_test_app_with_channels() -> (
             spawn_native_runtime_by_node: HashMap::new(),
             spawn_native_endpoint_by_node: HashMap::new(),
             spawn_crew: None,
+            spawn_legacy_read_only: false,
             spawn_status_by_thread: HashMap::new(),
             spawn_waiting_for_agents_by_thread: HashMap::new(),
             spawn_parent_reports_by_node: HashMap::new(),

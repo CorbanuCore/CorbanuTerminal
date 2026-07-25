@@ -25,6 +25,8 @@ pub(crate) struct SpawnDispatchAck {
     pub(crate) source_node_id: String,
     pub(crate) target_node_id: String,
     pub(crate) target_title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) origin_id: Option<String>,
     #[serde(default)]
     pub(crate) attempt: u8,
 }

@@ -3399,115 +3399,106 @@ impl App {
                 self.open_spawn_claude_pane_task_prompt(pane_id);
             }
             AppEvent::SubmitSpawnAgentTask { thread_id, task } => {
+                if self.spawn_legacy_read_only
+                    || self.spawn_crew.as_ref().is_some_and(|crew| {
+                        !matches!(crew.status, crate::crew_state::CrewCreationStatus::Ready)
+                    })
+                {
+                    self.chat_widget.add_error_message(
+                        "This /spawn hierarchy is read-only until its crew identity and creation \
+                         state are reconciled."
+                            .to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                }
                 let task = task.trim().to_string();
                 if task.is_empty() {
                     self.chat_widget
                         .add_error_message("Spawn task cannot be empty.".to_string());
                     return Ok(AppRunControl::Continue);
                 }
+                let task = self.spawn_agent_task_for_submission(thread_id, &task);
                 let label = self.thread_label(thread_id);
                 let target_node_id = self.logical_native_node_for_thread(thread_id);
-                let pending = self.pending_dispatch_from_registered_task(&target_node_id, task);
-                let acks = pending.acks.clone();
-                match self.enqueue_pending_dispatch_for_thread(thread_id, pending) {
-                    PendingDispatchEnqueueResult::Queued => {
+                let mut pending =
+                    self.pending_dispatch_from_registered_task(&target_node_id, task.clone());
+                let source_node_id = pending
+                    .acks
+                    .first()
+                    .map(|ack| ack.source_node_id.clone())
+                    .unwrap_or_else(|| self.spawn_root_node_id());
+                let source_thread_id = self
+                    .spawn_node_backing_thread_id(&source_node_id)
+                    .or(self.primary_thread_id)
+                    .unwrap_or(thread_id);
+                let seq = pending
+                    .acks
+                    .first()
+                    .map(|ack| ack.seq)
+                    .unwrap_or_else(|| self.reserve_spawn_dispatch_seq_without_persist());
+                let origin_id = pending
+                    .acks
+                    .first()
+                    .and_then(|ack| ack.origin_id.as_deref())
+                    .map(str::to_string)
+                    .unwrap_or_else(|| format!("host-seq-{seq:020}"));
+                pending.assign_identity(seq, &source_node_id, &target_node_id, Some(&origin_id));
+                let message_id = pending.dispatch_id.clone();
+                let acks = pending.acks;
+                let params = ThreadAgentMessageParams {
+                    source_thread_id: source_thread_id.to_string(),
+                    target_thread_id: thread_id.to_string(),
+                    message_id: Some(message_id.clone()),
+                    assignment_id: Some(message_id),
+                    kind: AgentMessageKind::Assignment,
+                    content: task.clone(),
+                    trigger_turn: true,
+                };
+                match app_server.send_agent_message(params).await {
+                    Ok(_) => {
+                        self.spawn_processed_dispatch_origins.insert(origin_id);
+                        self.spawn_processed_dispatch_seq_ids
+                            .extend(acks.iter().map(|ack| ack.seq));
+                        self.evict_spawn_processed_dispatch_seq_ids();
+                        for ack in &acks {
+                            self.note_assignment_dispatch_delivered(&ack.source_node_id);
+                        }
                         self.record_spawn_dispatch_acks(
                             &acks,
                             "queued",
-                            "durably queued for native mailbox admission",
+                            "durably admitted to the native mailbox",
                             false,
                         );
-                        self.request_spawn_dispatch_pump();
+                        self.spawn_status_by_thread.insert(
+                            thread_id,
+                            codex_app_server_protocol::CollabAgentState {
+                                status: codex_app_server_protocol::CollabAgentStatus::Running,
+                                message: None,
+                            },
+                        );
+                        self.agent_navigation.set_running(thread_id, true);
+                        self.agent_navigation.set_last_task_message(
+                            thread_id,
+                            Some(task.chars().take(240).collect()),
+                        );
+                        self.persist_pane_state();
                     }
-                    PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
-                        self.record_duplicate_pending_dispatch(&label, &acks, notify);
-                    }
-                    PendingDispatchEnqueueResult::Rejected { acks, reason } => {
+                    Err(error) => {
                         self.record_spawn_dispatch_acks(
                             &acks,
                             "failed",
-                            format!("queue rejected: {reason}"),
+                            format!("native mailbox admission failed: {error:#}"),
                             true,
                         );
-                        self.chat_widget
-                            .add_error_message(format!("Cannot queue task for {label}: {reason}"));
+                        self.chat_widget.add_error_message(format!(
+                            "Could not admit task for {label}; no automatic replay was attempted: {error:#}"
+                        ));
                     }
                 }
             }
             AppEvent::PumpSpawnDispatches => {
-                // Native delivery is idempotent in the canonical mailbox. A TUI crash after
-                // admission but before its local tombstone therefore reconciles by resending the
-                // same stable ID. Claude compatibility panes have no equivalent receipt and stay
-                // quarantined for explicit recovery.
-                for (target, delivery_id, _task) in self.submitting_spawn_dispatches() {
-                    if self.spawn_dispatch_inflight_targets.contains(&target) {
-                        continue;
-                    }
-                    if matches!(
-                        self.resolve_spawn_task_target(&target),
-                        Ok(crate::spawn_orchestration::SpawnTaskTarget::Native(_))
-                    ) {
-                        self.defer_spawn_dispatch_for_capacity(&target, &delivery_id);
-                    }
-                }
                 if let Some(delivery) = self.select_spawn_dispatch_pump_delivery() {
                     match delivery {
-                        crate::spawn_orchestration::SpawnDispatchPumpDelivery::Native {
-                            source_thread_id,
-                            thread_id,
-                            task,
-                            delivery_id,
-                        } => {
-                            let target_node_id = self.logical_native_node_for_thread(thread_id);
-                            let label = self.thread_label(thread_id);
-                            let task_preview = task.chars().take(240).collect::<String>();
-                            let params = ThreadAgentMessageParams {
-                                source_thread_id: source_thread_id.to_string(),
-                                target_thread_id: thread_id.to_string(),
-                                message_id: Some(delivery_id.clone()),
-                                assignment_id: Some(delivery_id.clone()),
-                                kind: AgentMessageKind::Assignment,
-                                content: task.clone(),
-                                trigger_turn: true,
-                            };
-                            match app_server.send_agent_message(params).await {
-                                Ok(_) => {
-                                    self.spawn_status_by_thread.insert(
-                                        thread_id,
-                                        codex_app_server_protocol::CollabAgentState {
-                                            status:
-                                                codex_app_server_protocol::CollabAgentStatus::Running,
-                                            message: None,
-                                        },
-                                    );
-                                    self.finish_spawn_dispatch_delivery(
-                                        &target_node_id,
-                                        &delivery_id,
-                                        &task,
-                                    );
-                                    self.agent_navigation
-                                        .set_running(thread_id, /*is_running*/ true);
-                                    self.agent_navigation
-                                        .set_last_task_message(thread_id, Some(task_preview));
-                                }
-                                Err(error) => {
-                                    tracing::warn!(
-                                        %source_thread_id,
-                                        %thread_id,
-                                        %delivery_id,
-                                        error = %format!("{error:#}"),
-                                        "native mailbox admission failed; retaining stable message for event-driven retry"
-                                    );
-                                    self.defer_spawn_dispatch_for_capacity(
-                                        &target_node_id,
-                                        &delivery_id,
-                                    );
-                                    self.chat_widget.add_error_message(format!(
-                                        "Could not deliver task to {label}; it remains queued: {error:#}"
-                                    ));
-                                }
-                            }
-                        }
                         crate::spawn_orchestration::SpawnDispatchPumpDelivery::Claude {
                             pane_id,
                             task,
@@ -3525,6 +3516,14 @@ impl App {
                 task,
                 delivery_id,
             } => {
+                if self.spawn_legacy_read_only {
+                    self.chat_widget.add_error_message(
+                        "This restored legacy /spawn hierarchy is read-only. Existing Claude panes \
+                         can be inspected but not mutated by the new control plane."
+                            .to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                }
                 if delivery_id.is_none() {
                     let target = crate::spawn_orchestration::pane_node_id(&pane_id);
                     let pending = self.pending_dispatch_from_registered_task(&target, task);

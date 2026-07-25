@@ -96,12 +96,6 @@ pub(crate) enum SpawnTaskTarget {
 }
 
 pub(crate) enum SpawnDispatchPumpDelivery {
-    Native {
-        source_thread_id: ThreadId,
-        thread_id: ThreadId,
-        task: String,
-        delivery_id: String,
-    },
     Claude {
         pane_id: String,
         task: String,
@@ -1357,6 +1351,19 @@ impl App {
         source_pane_id: &str,
         dispatches: Vec<(SpawnTaskDispatch, Option<String>)>,
     ) {
+        if self.spawn_legacy_read_only
+            || self.spawn_crew.as_ref().is_some_and(|crew| {
+                !matches!(crew.status, crate::crew_state::CrewCreationStatus::Ready)
+            })
+        {
+            self.chat_widget.add_error_message(
+                "This /spawn hierarchy is read-only because its native identities, parentage, or \
+                 creation state are not fully reconciled. Repair or explicitly recreate the crew \
+                 before dispatching work."
+                    .to_string(),
+            );
+            return;
+        }
         self.clear_stale_nazgul_binding();
         let source_thread_id = node_id_thread(source_pane_id);
         let source_is_active = self.claude_panes.active_user_pane_id() == source_pane_id
@@ -1465,6 +1472,11 @@ impl App {
                         label.clone(),
                         dispatch.seq,
                     );
+                    ack.origin_id = Some(
+                        origin_id
+                            .clone()
+                            .unwrap_or_else(|| format!("host-seq-{:020}", ack.seq)),
+                    );
                     ack.attempt = attempt;
                     if target_node_id == source_pane_id
                         && !self.is_assignment_holder(source_pane_id)
@@ -1490,44 +1502,9 @@ impl App {
                         ack.seq,
                     );
                     self.note_whip_holder_dispatched(source_pane_id, &target_node_id);
-                    let mut pending = PendingSpawnDispatch::new(task, vec![ack.clone()]);
-                    pending.origin.origin_id = origin_id
-                        .clone()
-                        .unwrap_or_else(|| format!("host-seq-{:020}", ack.seq));
-                    match self.enqueue_pending_dispatch_for_thread(thread_id, pending) {
-                        PendingDispatchEnqueueResult::Queued => {
-                            self.record_spawn_dispatch_acks(
-                                &[ack],
-                                "queued",
-                                "durably queued for the delivery pump",
-                                false,
-                            );
-                            self.record_spawn_dispatch_queued(
-                                source_pane_id,
-                                source_is_active,
-                                &format!("Queued task for {label}."),
-                                &dispatch.task,
-                            );
-                            self.request_spawn_dispatch_pump();
-                        }
-                        PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
-                            self.record_duplicate_pending_dispatch(&label, &acks, notify);
-                        }
-                        PendingDispatchEnqueueResult::Rejected { acks, reason } => {
-                            self.record_spawn_dispatch_acks(
-                                &acks,
-                                "failed",
-                                format!("queue rejected: {reason}"),
-                                true,
-                            );
-                            self.record_spawn_dispatch_error(
-                                source_pane_id,
-                                source_is_active,
-                                format!("Cannot queue task for {label}: {reason}"),
-                            );
-                            continue;
-                        }
-                    }
+                    self.register_spawn_dispatch_acks_for_task(&target_node_id, &task, vec![ack]);
+                    self.app_event_tx
+                        .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
                     any_queued = true;
                 }
                 Ok(SpawnTaskTarget::UnavailableNative(thread_id)) => {
@@ -2258,101 +2235,6 @@ impl App {
         }))
     }
 
-    pub(crate) fn enqueue_pending_dispatch_for_thread(
-        &mut self,
-        target_thread_id: ThreadId,
-        mut dispatch: PendingSpawnDispatch,
-    ) -> PendingDispatchEnqueueResult {
-        let target_node_id = self.logical_native_node_for_thread(target_thread_id);
-        if !dispatch.origin.origin_id.is_empty()
-            && self
-                .spawn_processed_dispatch_origins
-                .contains(&dispatch.origin.origin_id)
-        {
-            return PendingDispatchEnqueueResult::Duplicate {
-                acks: dispatch.acks,
-                notify: false,
-            };
-        }
-        // Freeze the current `/spawn` crew context before assigning a stable identity. A retry
-        // must replay byte-identical content even if the live roster changes after admission.
-        dispatch.task =
-            self.spawn_agent_task_for_submission(target_thread_id, dispatch.task.as_str());
-        let identities = spawn_dispatch_component_identities(&dispatch.task);
-        if let Some(queued) = self
-            .spawn_pending_dispatches
-            .get_mut(&target_node_id)
-            .and_then(|queue| {
-                queue.iter_mut().find(|queued| {
-                    let queued_identities = spawn_dispatch_component_identities(&queued.task);
-                    identities
-                        .iter()
-                        .any(|identity| queued_identities.contains(identity))
-                })
-            })
-        {
-            let notify = !queued.duplicate_suppressed_notified;
-            queued.duplicate_suppressed_notified = true;
-            self.persist_pane_state();
-            return PendingDispatchEnqueueResult::Duplicate {
-                acks: dispatch.acks,
-                notify,
-            };
-        }
-        let (target_items, target_bytes) = self
-            .spawn_pending_dispatches
-            .get(&target_node_id)
-            .map_or((0, 0), |queue| {
-                (
-                    queue.len(),
-                    crate::dispatch_queue::queue_payload_bytes(queue),
-                )
-            });
-        let (global_items, global_bytes) = self.pending_dispatch_queue_usage();
-        if let Some(reason) = crate::dispatch_queue::queue_bound_violation(
-            dispatch.payload_bytes(),
-            target_items,
-            target_bytes,
-            global_items,
-            global_bytes,
-        ) {
-            return PendingDispatchEnqueueResult::Rejected {
-                acks: dispatch.acks,
-                reason,
-            };
-        }
-        let seq = dispatch
-            .acks
-            .first()
-            .map(|ack| ack.seq)
-            .unwrap_or_else(|| self.reserve_spawn_dispatch_seq_without_persist());
-        let source_pane_id = dispatch
-            .acks
-            .first()
-            .map(|ack| ack.source_node_id.clone())
-            .unwrap_or_else(|| pane_node_id(CODEX_MAIN_PANE_ID));
-        dispatch.assign_identity(seq, &source_pane_id, &target_node_id, None);
-        self.spawn_processed_dispatch_origins
-            .insert(dispatch.origin.origin_id.clone());
-        if dispatch.origin.origin_id.starts_with("host-seq-") {
-            self.spawn_processed_dispatch_seq_ids
-                .extend(dispatch.acks.iter().map(|ack| ack.seq));
-        }
-        self.evict_spawn_processed_dispatch_seq_ids();
-        let queue = self
-            .spawn_pending_dispatches
-            .entry(target_node_id)
-            .or_default();
-        queue.push_back(dispatch);
-        tracing::info!(
-            thread_id = %target_thread_id,
-            queue_len = queue.len(),
-            "queued spawn dispatch for busy native target; will flush on target idle"
-        );
-        self.persist_pane_state();
-        PendingDispatchEnqueueResult::Queued
-    }
-
     pub(crate) fn enqueue_pending_dispatch_for_claude_pane(
         &mut self,
         pane_id: String,
@@ -2482,9 +2364,9 @@ impl App {
         self.app_event_tx.send(AppEvent::PumpSpawnDispatches);
     }
 
-    /// Selects one destination in stable round-robin order and durably marks one FIFO item as
-    /// Submitting before any adapter is invoked. A one-item request is a valid bounded structured
-    /// batch and keeps Claude's non-idempotent transport out of native batching semantics.
+    /// Selects one legacy Claude-pane destination and marks one FIFO item as submitting.
+    /// Native `/spawn` agents bypass this compatibility pump and admit directly to the canonical
+    /// native mailbox.
     pub(crate) fn select_spawn_dispatch_pump_delivery(
         &mut self,
     ) -> Option<SpawnDispatchPumpDelivery> {
@@ -2508,35 +2390,13 @@ impl App {
             targets.rotate_left(index);
         }
 
-        let (target, adapter) = targets.into_iter().find_map(|target| {
-            let adapter = match self.resolve_spawn_task_target(&target).ok()? {
-                SpawnTaskTarget::Native(thread_id) => {
-                    let source_thread_id = self
-                        .spawn_pending_dispatches
-                        .get(&target)
-                        .and_then(|queue| queue.front())
-                        .and_then(|dispatch| {
-                            self.spawn_node_backing_thread_id(&dispatch.source_pane_id)
-                        })?;
-                    SpawnDispatchPumpDelivery::Native {
-                        source_thread_id,
-                        thread_id,
-                        task: String::new(),
-                        delivery_id: String::new(),
-                    }
-                }
-                SpawnTaskTarget::ClaudePane(ref pane_id)
-                    if !self.claude_panes.claude_pane_is_running(pane_id) =>
-                {
-                    SpawnDispatchPumpDelivery::Claude {
-                        pane_id: pane_id.clone(),
-                        task: String::new(),
-                        delivery_id: String::new(),
-                    }
-                }
-                _ => return None,
+        let (target, pane_id) = targets.into_iter().find_map(|target| {
+            let SpawnTaskTarget::ClaudePane(pane_id) =
+                self.resolve_spawn_task_target(&target).ok()?
+            else {
+                return None;
             };
-            Some((target, adapter))
+            (!self.claude_panes.claude_pane_is_running(&pane_id)).then_some((target, pane_id))
         })?;
 
         let dispatch = self
@@ -2556,24 +2416,10 @@ impl App {
         self.register_spawn_dispatch_acks_for_task(&target, &task, acks);
         self.persist_pane_state();
 
-        Some(match adapter {
-            SpawnDispatchPumpDelivery::Native {
-                source_thread_id,
-                thread_id,
-                ..
-            } => SpawnDispatchPumpDelivery::Native {
-                source_thread_id,
-                thread_id,
-                task,
-                delivery_id,
-            },
-            SpawnDispatchPumpDelivery::Claude { pane_id, .. } => {
-                SpawnDispatchPumpDelivery::Claude {
-                    pane_id,
-                    task,
-                    delivery_id,
-                }
-            }
+        Some(SpawnDispatchPumpDelivery::Claude {
+            pane_id,
+            task,
+            delivery_id,
         })
     }
 
@@ -2619,22 +2465,6 @@ impl App {
         }
         self.spawn_dispatch_inflight_targets.remove(target);
         self.persist_pane_state();
-    }
-
-    pub(crate) fn submitting_spawn_dispatches(&self) -> Vec<(String, String, String)> {
-        self.spawn_pending_dispatches
-            .iter()
-            .filter_map(|(target, queue)| {
-                let dispatch = queue.front()?;
-                let crate::dispatch_queue::DispatchState::Submitting { delivery_id, .. } =
-                    &dispatch.state
-                else {
-                    return None;
-                };
-                (!self.spawn_dispatch_inflight_targets.contains(target))
-                    .then(|| (target.clone(), delivery_id.clone(), dispatch.task.clone()))
-            })
-            .collect()
     }
 
     pub(crate) fn fail_pending_dispatches_for_thread(
@@ -2821,6 +2651,7 @@ impl App {
             source_node_id: source_node_id.to_string(),
             target_node_id,
             target_title,
+            origin_id: None,
             attempt: 0,
         }
     }
@@ -2834,7 +2665,7 @@ impl App {
         reserved
     }
 
-    fn reserve_spawn_dispatch_seq_without_persist(&mut self) -> u64 {
+    pub(crate) fn reserve_spawn_dispatch_seq_without_persist(&mut self) -> u64 {
         self.reserve_spawn_dispatch_seq_value_without_persist(None)
     }
 
@@ -2847,7 +2678,7 @@ impl App {
         reserved
     }
 
-    fn evict_spawn_processed_dispatch_seq_ids(&mut self) {
+    pub(crate) fn evict_spawn_processed_dispatch_seq_ids(&mut self) {
         self.spawn_processed_dispatch_seq_ids = bounded_spawn_processed_dispatch_seq_ids(
             self.spawn_processed_dispatch_seq_ids.iter().copied(),
             self.spawn_next_dispatch_seq,
@@ -3514,6 +3345,14 @@ impl App {
         &mut self,
         app_server: &mut AppServerSession,
     ) {
+        if self.spawn_legacy_read_only {
+            self.chat_widget.add_error_message(
+                "Restored a legacy /spawn hierarchy in read-only mode. Existing panes remain \
+                 inspectable, but PfTerminal will not dispatch or replay work until you create a \
+                 new CrewSpec-backed crew."
+                    .to_string(),
+            );
+        }
         let saved_metadata = self.saved_spawn_metadata_from_loaded_rollouts().await;
         self.recover_native_spawn_edges_from_saved_context(&saved_metadata)
             .await;
@@ -3681,13 +3520,22 @@ impl App {
         self.prune_superseded_saved_native_spawn_threads();
         self.prune_duplicate_live_native_spawn_threads();
         self.clear_stale_nazgul_binding();
+        if let Err(error) = self.validate_restored_crew_state() {
+            tracing::error!(%error, "restored crew state rejected");
+            self.mark_crew_incomplete(error.to_string());
+            self.chat_widget.add_error_message(format!(
+                "Crew recovery is read-only until repaired: {error}"
+            ));
+        }
         if let Err(error) = self.validate_spawn_restore_invariants() {
             tracing::error!(%error, "spawn restoration invariant rejected");
             self.chat_widget
                 .add_error_message(format!("Spawn restoration is degraded: {error}"));
         }
         self.persist_pane_state();
-        self.request_spawn_dispatch_pump();
+        if !self.spawn_legacy_read_only {
+            self.request_spawn_dispatch_pump();
+        }
         self.sync_active_agent_label();
     }
 
@@ -5824,20 +5672,6 @@ fn task_with_dispatch_provenance(
 
 fn spawn_dispatch_task_ack_key(task: &str) -> String {
     task.trim().to_string()
-}
-
-fn spawn_dispatch_task_identity(task: &str) -> &str {
-    let task = task.trim();
-    if task.starts_with("Assigned by ")
-        && let Some((_, body)) = task.split_once("\n\n")
-    {
-        return body.trim();
-    }
-    task
-}
-
-fn spawn_dispatch_component_identities(task: &str) -> Vec<String> {
-    vec![spawn_dispatch_task_identity(task).to_string()]
 }
 
 fn claude_spawn_rollout_path(pane: &crate::claude_panes::ClaudePane) -> std::path::PathBuf {
