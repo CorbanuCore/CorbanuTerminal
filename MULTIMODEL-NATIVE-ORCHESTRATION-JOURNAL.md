@@ -370,3 +370,40 @@ Passing evidence:
 - `codex_main_bound_nazgul_turn_receives_domain_neutral_hierarchy_context`.
 - `troll_spawn_task_submission_names_existing_orc_panes`.
 - `/spawn` app regressions: 6 passed, 1 live-auth test intentionally ignored.
+
+## Phase 5B — Provider-boundary crash recovery
+
+Status: safe local work resumes; remotely ambiguous work is quarantined.
+
+Timestamp: 2026-07-25T05:15:23Z
+
+Changes:
+
+- Added a distinct attempt ID written with the `submitting` transition before delivery. Retries
+  retain the stable message and assignment IDs while receiving a new attempt identity.
+- Wired mailbox application into the recipient turn lifecycle:
+  `submitted -> provider_running -> completed`.
+- A turn that aborts or fails after consuming an assignment moves that message from
+  `provider_running` to `unknown_outcome`.
+- Recovery distinguishes an unapplied `submitted` row (safe local queue replay) from a submitted
+  row already present in the recipient rollout (provider outcome may be ambiguous). The latter is
+  never replayed automatically.
+- `submitting` and `provider_running` rows become `unknown_outcome` across process recovery and
+  retain their attempt IDs for operator reconciliation.
+- Completed rows remain queryable for audit but are excluded from recovery.
+
+Passing evidence:
+
+- `codex-state agent_mailbox`: 4 passed.
+- `durable_agent_mailbox_deduplicates_and_completes_after_rollout_flush`.
+- `ensure_v2_agent_loaded_reloads_registered_unloaded_agent`, expanded to cover admitted,
+  submitted, retryable-failure, submitting, provider-running, completed/applied, and
+  unknown-outcome crash seams.
+- app-server V2 `thread_agent_message_uses_native_mailbox_and_deduplicates_stable_id`.
+- complete native V2 handler filter: 66 passed, 0 failed.
+
+Product boundary:
+
+- These states belong to the native provider-neutral substrate. `/spawn` continues to own crew
+  membership, names, hierarchy presentation, exact runtime selection, panes, and direct
+  human navigation.

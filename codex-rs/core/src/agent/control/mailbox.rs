@@ -20,6 +20,7 @@ impl AgentControl {
                     "failed to read recoverable mailbox for agent {agent_id}: {err}"
                 ))
             })?;
+        let thread = state.get_thread(agent_id).await?;
         for message in messages {
             let message_id = message.communication.message_id.clone().ok_or_else(|| {
                 CodexErr::Fatal(format!(
@@ -43,6 +44,34 @@ impl AgentControl {
                         })?;
                 }
                 AgentMailboxPhase::Submitted => {
+                    if thread
+                        .codex
+                        .session
+                        .has_applied_agent_message_id(&message_id)
+                        .await
+                    {
+                        let _ = state_db
+                            .transition_agent_message(
+                                &message_id,
+                                AgentMailboxPhase::Submitted,
+                                AgentMailboxPhase::UnknownOutcome,
+                                crate::turn_timing::now_unix_timestamp_ms(),
+                            )
+                            .await
+                            .map_err(|err| {
+                                CodexErr::Fatal(format!(
+                                    "failed to quarantine applied submitted agent message \
+                                     {message_id}: {err}"
+                                ))
+                            })?;
+                        warn!(
+                            %message_id,
+                            %agent_id,
+                            "agent mailbox message was applied before process recovery but its \
+                             provider outcome is unknown; automatic replay is disabled"
+                        );
+                        continue;
+                    }
                     let _ = state_db
                         .transition_agent_message(
                             &message_id,
@@ -80,7 +109,8 @@ impl AgentControl {
                 }
                 AgentMailboxPhase::UnknownOutcome => continue,
                 AgentMailboxPhase::Ready | AgentMailboxPhase::RetryableFailure => {}
-                AgentMailboxPhase::Applied
+                AgentMailboxPhase::Completed
+                | AgentMailboxPhase::Applied
                 | AgentMailboxPhase::Cancelled
                 | AgentMailboxPhase::TerminalFailure => continue,
             }
@@ -202,6 +232,7 @@ impl AgentControl {
                     | AgentMailboxPhase::Submitted
                     | AgentMailboxPhase::ProviderRunning
                     | AgentMailboxPhase::UnknownOutcome
+                    | AgentMailboxPhase::Completed
                     | AgentMailboxPhase::Applied
                     | AgentMailboxPhase::Cancelled
                     | AgentMailboxPhase::TerminalFailure,
@@ -224,16 +255,18 @@ impl AgentControl {
                     | AgentMailboxPhase::Submitted
                     | AgentMailboxPhase::ProviderRunning
                     | AgentMailboxPhase::UnknownOutcome
+                    | AgentMailboxPhase::Completed
                     | AgentMailboxPhase::Applied
                     | AgentMailboxPhase::Cancelled
                     | AgentMailboxPhase::TerminalFailure,
                 ) => return Ok(message_id),
             };
+            let attempt_id = uuid::Uuid::now_v7().to_string();
             if !state_db
-                .transition_agent_message(
+                .begin_agent_message_submission(
                     &message_id,
                     expected,
-                    AgentMailboxPhase::Submitting,
+                    &attempt_id,
                     crate::turn_timing::now_unix_timestamp_ms(),
                 )
                 .await

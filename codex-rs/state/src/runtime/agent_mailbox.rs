@@ -11,6 +11,7 @@ pub enum AgentMailboxPhase {
     ProviderRunning,
     RetryableFailure,
     UnknownOutcome,
+    Completed,
     Applied,
     Cancelled,
     TerminalFailure,
@@ -26,6 +27,7 @@ impl AgentMailboxPhase {
             Self::ProviderRunning => "provider_running",
             Self::RetryableFailure => "retryable_failure",
             Self::UnknownOutcome => "unknown_outcome",
+            Self::Completed => "completed",
             Self::Applied => "applied",
             Self::Cancelled => "cancelled",
             Self::TerminalFailure => "terminal_failure",
@@ -45,6 +47,7 @@ impl FromStr for AgentMailboxPhase {
             "provider_running" => Ok(Self::ProviderRunning),
             "retryable_failure" => Ok(Self::RetryableFailure),
             "unknown_outcome" => Ok(Self::UnknownOutcome),
+            "completed" => Ok(Self::Completed),
             "applied" => Ok(Self::Applied),
             "cancelled" => Ok(Self::Cancelled),
             "terminal_failure" => Ok(Self::TerminalFailure),
@@ -64,6 +67,7 @@ pub struct AgentMailboxMessage {
     pub recipient_thread_id: ThreadId,
     pub communication: InterAgentCommunication,
     pub phase: AgentMailboxPhase,
+    pub attempt_id: Option<String>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
 }
@@ -158,16 +162,45 @@ WHERE message_id = ? AND phase = ?
         Ok(rows_affected == 1)
     }
 
+    /// Reserve one concrete delivery attempt before handing the message to the recipient.
+    ///
+    /// `message_id` remains stable across retries. `attempt_id` changes for each attempt so an
+    /// ambiguous crash boundary can be surfaced without manufacturing a new logical assignment.
+    pub async fn begin_agent_message_submission(
+        &self,
+        message_id: &str,
+        expected: AgentMailboxPhase,
+        attempt_id: &str,
+        now_ms: i64,
+    ) -> anyhow::Result<bool> {
+        let rows_affected = sqlx::query(
+            r#"
+UPDATE agent_mailbox_messages
+SET phase = ?, attempt_id = ?, updated_at_ms = ?
+WHERE message_id = ? AND phase = ?
+            "#,
+        )
+        .bind(AgentMailboxPhase::Submitting.as_str())
+        .bind(attempt_id)
+        .bind(now_ms)
+        .bind(message_id)
+        .bind(expected.as_str())
+        .execute(self.pool.as_ref())
+        .await?
+        .rows_affected();
+        Ok(rows_affected == 1)
+    }
+
     pub async fn list_recoverable_agent_messages(
         &self,
         recipient_thread_id: ThreadId,
     ) -> anyhow::Result<Vec<AgentMailboxMessage>> {
         let rows = sqlx::query(
             r#"
-SELECT communication_json, phase, created_at_ms, updated_at_ms
+SELECT communication_json, phase, attempt_id, created_at_ms, updated_at_ms
 FROM agent_mailbox_messages
 WHERE recipient_thread_id = ?
-  AND phase NOT IN ('applied', 'cancelled', 'terminal_failure')
+  AND phase NOT IN ('completed', 'applied', 'cancelled', 'terminal_failure')
 ORDER BY created_at_ms ASC, message_id ASC
             "#,
         )
@@ -182,6 +215,7 @@ ORDER BY created_at_ms ASC, message_id ASC
                         row.try_get::<String, _>("communication_json")?.as_str(),
                     )?,
                     phase: AgentMailboxPhase::from_str(row.try_get("phase")?)?,
+                    attempt_id: row.try_get("attempt_id")?,
                     created_at_ms: row.try_get("created_at_ms")?,
                     updated_at_ms: row.try_get("updated_at_ms")?,
                 })
@@ -189,7 +223,38 @@ ORDER BY created_at_ms ASC, message_id ASC
             .collect()
     }
 
-    pub async fn mark_agent_message_applied(
+    pub async fn get_agent_message(
+        &self,
+        message_id: &str,
+    ) -> anyhow::Result<Option<AgentMailboxMessage>> {
+        let row = sqlx::query(
+            r#"
+SELECT recipient_thread_id, communication_json, phase, attempt_id, created_at_ms, updated_at_ms
+FROM agent_mailbox_messages
+WHERE message_id = ?
+            "#,
+        )
+        .bind(message_id)
+        .fetch_optional(self.pool.as_ref())
+        .await?;
+        row.map(|row| {
+            let recipient_thread_id =
+                ThreadId::from_string(row.try_get::<String, _>("recipient_thread_id")?.as_str())?;
+            Ok(AgentMailboxMessage {
+                recipient_thread_id,
+                communication: serde_json::from_str(
+                    row.try_get::<String, _>("communication_json")?.as_str(),
+                )?,
+                phase: AgentMailboxPhase::from_str(row.try_get("phase")?)?,
+                attempt_id: row.try_get("attempt_id")?,
+                created_at_ms: row.try_get("created_at_ms")?,
+                updated_at_ms: row.try_get("updated_at_ms")?,
+            })
+        })
+        .transpose()
+    }
+
+    pub async fn mark_agent_message_completed(
         &self,
         message_id: &str,
         now_ms: i64,
@@ -199,10 +264,16 @@ ORDER BY created_at_ms ASC, message_id ASC
 UPDATE agent_mailbox_messages
 SET phase = ?, updated_at_ms = ?
 WHERE message_id = ?
-  AND phase NOT IN ('applied', 'cancelled', 'terminal_failure', 'unknown_outcome')
+  AND phase NOT IN (
+      'completed',
+      'applied',
+      'cancelled',
+      'terminal_failure',
+      'unknown_outcome'
+  )
             "#,
         )
-        .bind(AgentMailboxPhase::Applied.as_str())
+        .bind(AgentMailboxPhase::Completed.as_str())
         .bind(now_ms)
         .bind(message_id)
         .execute(self.pool.as_ref())

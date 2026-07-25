@@ -2966,16 +2966,6 @@ impl Session {
                 .await
                 .insert(message_id.clone())
         {
-            if let Some(state_db) = self.state_db()
-                && let Err(err) = state_db
-                    .mark_agent_message_applied(
-                        message_id,
-                        crate::turn_timing::now_unix_timestamp_ms(),
-                    )
-                    .await
-            {
-                warn!(%err, %message_id, "failed to acknowledge deduplicated agent mailbox message");
-            }
             return;
         }
         let response_item = communication.to_model_input_item();
@@ -2998,14 +2988,39 @@ impl Session {
         {
             match self.flush_rollout().await {
                 Ok(()) => {
-                    if let Err(err) = state_db
-                        .mark_agent_message_applied(
+                    if self
+                        .track_agent_message_for_turn(&turn_context.sub_id, message_id.clone())
+                        .await
+                    {
+                        match state_db
+                            .transition_agent_message(
+                                &message_id,
+                                codex_state::AgentMailboxPhase::Submitted,
+                                codex_state::AgentMailboxPhase::ProviderRunning,
+                                crate::turn_timing::now_unix_timestamp_ms(),
+                            )
+                            .await
+                        {
+                            Ok(true) => {}
+                            Ok(false) => warn!(
+                                %message_id,
+                                "agent mailbox message could not enter provider_running from its \
+                                 current state"
+                            ),
+                            Err(err) => warn!(
+                                %err,
+                                %message_id,
+                                "failed to mark agent mailbox message provider_running"
+                            ),
+                        }
+                    } else if let Err(err) = state_db
+                        .mark_agent_message_completed(
                             &message_id,
                             crate::turn_timing::now_unix_timestamp_ms(),
                         )
                         .await
                     {
-                        warn!(%err, %message_id, "failed to mark agent mailbox message applied");
+                        warn!(%err, %message_id, "failed to complete locally applied mailbox message");
                     }
                 }
                 Err(err) => {
@@ -3025,6 +3040,25 @@ impl Session {
             self.emit_turn_item_started(turn_context, &item).await;
             self.emit_turn_item_completed(turn_context, item).await;
         }
+    }
+
+    pub(crate) async fn has_applied_agent_message_id(&self, message_id: &str) -> bool {
+        self.applied_agent_message_ids
+            .lock()
+            .await
+            .contains(message_id)
+    }
+
+    async fn track_agent_message_for_turn(&self, sub_id: &str, message_id: String) -> bool {
+        let Some(turn_state) = self
+            .input_queue
+            .turn_state_for_sub_id(&self.active_turn, sub_id)
+            .await
+        else {
+            return false;
+        };
+        turn_state.lock().await.track_mailbox_message(message_id);
+        true
     }
 
     async fn maybe_warn_on_server_model_mismatch(

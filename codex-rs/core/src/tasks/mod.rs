@@ -554,6 +554,11 @@ impl Session {
                 .await;
         }
         if let Some(active_turn) = active_turn_to_clear {
+            self.finish_turn_mailbox_messages(
+                active_turn.turn_state.as_ref(),
+                /*completed_naturally*/ false,
+            )
+            .await;
             // Let interrupted tasks observe cancellation before dropping pending approvals, or an
             // in-flight approval wait can surface as a model-visible rejection before TurnAborted.
             self.input_queue.clear_pending(&active_turn).await;
@@ -593,6 +598,11 @@ impl Session {
             self.emit_turn_abort_lifecycle(reason.clone(), turn_context.extension_data.as_ref())
                 .await;
         }
+        self.finish_turn_mailbox_messages(
+            active_turn.turn_state.as_ref(),
+            /*completed_naturally*/ false,
+        )
+        .await;
         // Let interrupted tasks observe cancellation before dropping pending approvals, or an
         // in-flight approval wait can surface as a model-visible rejection before TurnAborted.
         self.input_queue.clear_pending(&active_turn).await;
@@ -644,6 +654,8 @@ impl Session {
                 ts.token_usage_at_turn_start.clone(),
             )
         };
+        self.finish_turn_mailbox_messages(turn_state.as_ref(), completed_naturally)
+            .await;
         let mut follow_up_input = Vec::new();
         if !pending_input.is_empty() {
             for pending_input_item in pending_input {
@@ -851,6 +863,47 @@ impl Session {
         }
         self.submit_pending_work_wake().await;
         self.emit_thread_idle_lifecycle_if_idle().await;
+    }
+
+    async fn finish_turn_mailbox_messages(
+        &self,
+        turn_state: &tokio::sync::Mutex<crate::state::TurnState>,
+        completed_naturally: bool,
+    ) {
+        let message_ids = turn_state.lock().await.take_mailbox_message_ids();
+        if message_ids.is_empty() {
+            return;
+        }
+        let Some(state_db) = self.state_db() else {
+            return;
+        };
+        for message_id in message_ids {
+            let result = if completed_naturally {
+                state_db
+                    .mark_agent_message_completed(
+                        &message_id,
+                        crate::turn_timing::now_unix_timestamp_ms(),
+                    )
+                    .await
+            } else {
+                state_db
+                    .transition_agent_message(
+                        &message_id,
+                        codex_state::AgentMailboxPhase::ProviderRunning,
+                        codex_state::AgentMailboxPhase::UnknownOutcome,
+                        crate::turn_timing::now_unix_timestamp_ms(),
+                    )
+                    .await
+            };
+            if let Err(err) = result {
+                warn!(
+                    %err,
+                    %message_id,
+                    completed_naturally,
+                    "failed to finalize agent mailbox message with its turn"
+                );
+            }
+        }
     }
 
     async fn take_active_turn(&self) -> Option<ActiveTurn> {

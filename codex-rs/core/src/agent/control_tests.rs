@@ -664,7 +664,7 @@ async fn send_inter_agent_communication_without_turn_queues_message_without_trig
 }
 
 #[tokio::test]
-async fn durable_agent_mailbox_deduplicates_and_marks_applied_after_rollout_flush() {
+async fn durable_agent_mailbox_deduplicates_and_completes_after_rollout_flush() {
     let (home, mut config) = test_config().await;
     let _ = config.features.enable(Feature::Sqlite);
     let harness = AgentControlHarness::new_with_config(home, config).await;
@@ -707,7 +707,7 @@ async fn durable_agent_mailbox_deduplicates_and_marks_applied_after_rollout_flus
     thread
         .codex
         .session
-        .record_inter_agent_communication(turn_context.as_ref(), communication)
+        .record_inter_agent_communication(turn_context.as_ref(), communication.clone())
         .await;
     assert_eq!(
         thread.codex.session.clone_history().await.raw_items(),
@@ -720,6 +720,20 @@ async fn durable_agent_mailbox_deduplicates_and_marks_applied_after_rollout_flus
             .await
             .expect("applied mailbox"),
         Vec::new()
+    );
+    assert_eq!(
+        state_db
+            .get_agent_message(
+                communication
+                    .message_id
+                    .as_deref()
+                    .expect("stable message id"),
+            )
+            .await
+            .expect("mailbox lookup")
+            .expect("mailbox row")
+            .phase,
+        codex_state::AgentMailboxPhase::Completed
     );
 }
 
@@ -812,6 +826,180 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
             .await
             .expect("submitting transition")
     );
+    let submitted_communication = InterAgentCommunication::new(
+        AgentPath::root(),
+        agent_path.clone(),
+        Vec::new(),
+        "replay this locally queued message".to_string(),
+        /*trigger_turn*/ false,
+    );
+    harness
+        .control
+        .admit_inter_agent_communication(spawned_agent.thread_id, &submitted_communication)
+        .await
+        .expect("submitted mailbox admission");
+    let submitted_message_id = submitted_communication
+        .message_id
+        .as_deref()
+        .expect("message id");
+    assert!(
+        harness
+            .state_db
+            .as_ref()
+            .expect("state db")
+            .begin_agent_message_submission(
+                submitted_message_id,
+                codex_state::AgentMailboxPhase::Ready,
+                "submitted-attempt",
+                1_001,
+            )
+            .await
+            .expect("begin submitted attempt")
+    );
+    assert!(
+        harness
+            .state_db
+            .as_ref()
+            .expect("state db")
+            .transition_agent_message(
+                submitted_message_id,
+                codex_state::AgentMailboxPhase::Submitting,
+                codex_state::AgentMailboxPhase::Submitted,
+                1_002,
+            )
+            .await
+            .expect("submitted transition")
+    );
+    let provider_running_communication = InterAgentCommunication::new(
+        AgentPath::root(),
+        agent_path.clone(),
+        Vec::new(),
+        "do not replay provider-running work".to_string(),
+        /*trigger_turn*/ true,
+    );
+    harness
+        .control
+        .admit_inter_agent_communication(spawned_agent.thread_id, &provider_running_communication)
+        .await
+        .expect("provider-running mailbox admission");
+    let provider_running_message_id = provider_running_communication
+        .message_id
+        .as_deref()
+        .expect("message id");
+    assert!(
+        harness
+            .state_db
+            .as_ref()
+            .expect("state db")
+            .begin_agent_message_submission(
+                provider_running_message_id,
+                codex_state::AgentMailboxPhase::Ready,
+                "provider-running-attempt",
+                1_003,
+            )
+            .await
+            .expect("begin provider-running attempt")
+    );
+    assert!(
+        harness
+            .state_db
+            .as_ref()
+            .expect("state db")
+            .transition_agent_message(
+                provider_running_message_id,
+                codex_state::AgentMailboxPhase::Submitting,
+                codex_state::AgentMailboxPhase::Submitted,
+                1_004,
+            )
+            .await
+            .expect("provider submitted transition")
+    );
+    assert!(
+        harness
+            .state_db
+            .as_ref()
+            .expect("state db")
+            .transition_agent_message(
+                provider_running_message_id,
+                codex_state::AgentMailboxPhase::Submitted,
+                codex_state::AgentMailboxPhase::ProviderRunning,
+                1_005,
+            )
+            .await
+            .expect("provider running transition")
+    );
+    let retryable_communication = InterAgentCommunication::new(
+        AgentPath::root(),
+        agent_path.clone(),
+        Vec::new(),
+        "retry this deterministic local failure".to_string(),
+        /*trigger_turn*/ false,
+    );
+    harness
+        .control
+        .admit_inter_agent_communication(spawned_agent.thread_id, &retryable_communication)
+        .await
+        .expect("retryable mailbox admission");
+    let retryable_message_id = retryable_communication
+        .message_id
+        .as_deref()
+        .expect("message id");
+    assert!(
+        harness
+            .state_db
+            .as_ref()
+            .expect("state db")
+            .transition_agent_message(
+                retryable_message_id,
+                codex_state::AgentMailboxPhase::Ready,
+                codex_state::AgentMailboxPhase::RetryableFailure,
+                1_006,
+            )
+            .await
+            .expect("retryable transition")
+    );
+    let applied_submitted_communication = InterAgentCommunication::new(
+        AgentPath::root(),
+        agent_path.clone(),
+        Vec::new(),
+        "already persisted before submitted-state crash".to_string(),
+        /*trigger_turn*/ false,
+    );
+    harness
+        .control
+        .send_inter_agent_communication(
+            spawned_agent.thread_id,
+            applied_submitted_communication.clone(),
+        )
+        .await
+        .expect("submit applied-crash message");
+    let applied_submitted_message_id = applied_submitted_communication
+        .message_id
+        .as_deref()
+        .expect("message id");
+    let applied_turn_context = child_thread.codex.session.new_default_turn().await;
+    child_thread
+        .codex
+        .session
+        .record_inter_agent_communication(
+            applied_turn_context.as_ref(),
+            applied_submitted_communication.clone(),
+        )
+        .await;
+    assert!(
+        harness
+            .state_db
+            .as_ref()
+            .expect("state db")
+            .transition_agent_message(
+                applied_submitted_message_id,
+                codex_state::AgentMailboxPhase::Completed,
+                codex_state::AgentMailboxPhase::Submitted,
+                1_007,
+            )
+            .await
+            .expect("inject crash after local application but before provider outcome")
+    );
     child_thread
         .shutdown_and_wait()
         .await
@@ -881,6 +1069,59 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
             .count(),
         0
     );
+    for communication in [&submitted_communication, &retryable_communication] {
+        assert_eq!(
+            harness
+                .manager
+                .captured_ops()
+                .iter()
+                .filter(|(thread_id, op)| {
+                    *thread_id == spawned_agent.thread_id
+                        && matches!(
+                            op,
+                            Op::InterAgentCommunication { communication: captured }
+                                if captured == communication
+                        )
+                })
+                .count(),
+            1,
+            "safe local mailbox state should replay once"
+        );
+    }
+    assert_eq!(
+        harness
+            .manager
+            .captured_ops()
+            .iter()
+            .filter(|(thread_id, op)| {
+                *thread_id == spawned_agent.thread_id
+                    && matches!(
+                        op,
+                        Op::InterAgentCommunication { communication }
+                            if communication == &provider_running_communication
+                    )
+            })
+            .count(),
+        0,
+        "provider-running work must not replay automatically"
+    );
+    assert_eq!(
+        harness
+            .manager
+            .captured_ops()
+            .iter()
+            .filter(|(thread_id, op)| {
+                *thread_id == spawned_agent.thread_id
+                    && matches!(
+                        op,
+                        Op::InterAgentCommunication { communication }
+                            if communication == &applied_submitted_communication
+                    )
+            })
+            .count(),
+        1,
+        "the original local submission is captured once; recovery must not submit it again"
+    );
     let ambiguous_row = harness
         .state_db
         .as_ref()
@@ -894,6 +1135,44 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
     assert_eq!(
         ambiguous_row.phase,
         codex_state::AgentMailboxPhase::UnknownOutcome
+    );
+    let provider_running_row = harness
+        .state_db
+        .as_ref()
+        .expect("state db")
+        .list_recoverable_agent_messages(spawned_agent.thread_id)
+        .await
+        .expect("recoverable mailbox")
+        .into_iter()
+        .find(|message| {
+            message.communication.message_id.as_deref() == Some(provider_running_message_id)
+        })
+        .expect("provider-running mailbox row");
+    assert_eq!(
+        provider_running_row.phase,
+        codex_state::AgentMailboxPhase::UnknownOutcome
+    );
+    assert_eq!(
+        provider_running_row.attempt_id.as_deref(),
+        Some("provider-running-attempt"),
+        "recovery must retain the ambiguous attempt identity"
+    );
+    let applied_submitted_row = harness
+        .state_db
+        .as_ref()
+        .expect("state db")
+        .list_recoverable_agent_messages(spawned_agent.thread_id)
+        .await
+        .expect("recoverable mailbox")
+        .into_iter()
+        .find(|message| {
+            message.communication.message_id.as_deref() == Some(applied_submitted_message_id)
+        })
+        .expect("applied submitted mailbox row");
+    assert_eq!(
+        applied_submitted_row.phase,
+        codex_state::AgentMailboxPhase::UnknownOutcome,
+        "a locally applied submitted message has an ambiguous provider outcome after restart"
     );
 
     let communication = InterAgentCommunication::new(

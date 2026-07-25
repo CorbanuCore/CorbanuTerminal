@@ -1,6 +1,7 @@
 //! Turn-scoped state and active turn metadata scaffolding.
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::sync::Notify;
@@ -97,6 +98,7 @@ pub(crate) struct TurnState {
     pub(crate) tool_calls: u64,
     pub(crate) has_memory_citation: bool,
     pub(crate) token_usage_at_turn_start: TokenUsage,
+    mailbox_message_ids: HashSet<String>,
 }
 
 pub(crate) struct PendingRequestPermissions {
@@ -106,6 +108,14 @@ pub(crate) struct PendingRequestPermissions {
 }
 
 impl TurnState {
+    pub(crate) fn track_mailbox_message(&mut self, message_id: String) {
+        self.mailbox_message_ids.insert(message_id);
+    }
+
+    pub(crate) fn take_mailbox_message_ids(&mut self) -> Vec<String> {
+        self.mailbox_message_ids.drain().collect()
+    }
+
     pub(crate) fn insert_pending_approval(
         &mut self,
         key: String,
