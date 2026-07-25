@@ -7,6 +7,7 @@ use crate::bottom_pane::custom_prompt_view::CustomPromptView;
 use crate::bottom_pane::popup_consts::standard_popup_hint_line;
 use crate::claude_panes::CODEX_MAIN_PANE_ID;
 use crate::claude_panes::ClaudeProviderProfileKind;
+use crate::crew_presets;
 use crate::multi_agents::agent_picker_status_dot_spans;
 use crate::multi_agents::format_agent_picker_item_name;
 use chrono::Utc;
@@ -15,11 +16,8 @@ use codex_app_server_protocol::AdditionalContextKind;
 use codex_app_server_protocol::SessionSource as AppServerSessionSource;
 use codex_app_server_protocol::ThreadStatus;
 use codex_features::Feature;
-use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
-use codex_model_provider_info::OPENAI_PROVIDER_ID;
-use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_protocol::ThreadId;
+use codex_protocol::crew::RuntimeRequest;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::SessionSource as CoreSessionSource;
@@ -591,19 +589,24 @@ impl App {
                     self.thread_label(old_thread_id)
                 ));
             };
-            let runtime = self
-                .spawn_native_runtime_by_node
-                .get(&old_node_id)
-                .cloned()
-                .unwrap_or_else(|| {
-                    let (model, provider, reasoning_effort) =
-                        Self::standard_native_spawn_runtime_for_role(role);
-                    crate::dispatch_queue::SavedNativeSpawnRuntime {
-                        model: model.to_string(),
-                        provider: provider.to_string(),
-                        reasoning_effort,
-                    }
-                });
+            let runtime = if let Some(runtime) = self.spawn_native_runtime_by_node.get(&old_node_id)
+            {
+                runtime.clone()
+            } else {
+                let (model, provider, reasoning_effort) =
+                        Self::standard_native_spawn_runtime_for_role(role).ok_or_else(|| {
+                            eyre!(
+                                "Cannot materialize {}: the standard crew is missing an exact runtime for role {}.",
+                                self.thread_label(old_thread_id),
+                                role.label()
+                            )
+                        })?;
+                crate::dispatch_queue::SavedNativeSpawnRuntime {
+                    model,
+                    provider,
+                    reasoning_effort,
+                }
+            };
             self.ensure_native_spawn_provider_ready(Some(&runtime.provider))?;
             let spawn_config = self.native_spawn_agent_config()?;
             let started = app_server
@@ -665,20 +668,20 @@ impl App {
 
     fn standard_native_spawn_runtime_for_role(
         role: SpawnRole,
-    ) -> (&'static str, &'static str, Option<ReasoningEffort>) {
-        match role {
-            SpawnRole::Nazgul => (Self::STANDARD_NAZGUL_MODEL, CLAUDE_PLAN_PROVIDER_ID, None),
-            SpawnRole::Troll => (
-                Self::STANDARD_TROLL_MODEL,
-                OPENAI_PROVIDER_ID,
-                Some(ReasoningEffort::XHigh),
-            ),
-            SpawnRole::Orc => (
-                Self::STANDARD_ORC_MODEL,
-                OPENAI_PROVIDER_ID,
-                Some(ReasoningEffort::XHigh),
-            ),
-        }
+    ) -> Option<(String, String, Option<ReasoningEffort>)> {
+        crew_presets::standard_crew_spec()
+            .members
+            .into_iter()
+            .find(|member| member.role_profile == role.agent_type().unwrap_or_default())
+            .and_then(|member| match member.runtime_request {
+                RuntimeRequest::Exact {
+                    provider_id,
+                    model_id,
+                    reasoning_effort,
+                    ..
+                } => Some((model_id, provider_id, reasoning_effort)),
+                RuntimeRequest::Selector { .. } => None,
+            })
     }
 
     pub(crate) fn replace_saved_native_spawn_thread(
@@ -3133,38 +3136,52 @@ impl App {
     ///   Orc 1: GPT-5.6-Luna (OpenAI) @ xhigh
     ///   Orc 2: GPT-5.6-Terra (OpenAI) @ xhigh
     ///   Orc 3: Grok 4.5 (OpenRouter) @ provider default
-    pub(crate) const STANDARD_NAZGUL_MODEL: &'static str = CLAUDE_FABLE_5_PLAN_MODEL;
-    pub(crate) const STANDARD_TROLL_MODEL: &'static str = "gpt-5.6-sol";
-    pub(crate) const STANDARD_ORC_MODEL: &'static str = "gpt-5.6-luna";
-    pub(crate) const STANDARD_ORC_2_MODEL: &'static str = "gpt-5.6-terra";
-    pub(crate) const STANDARD_ORC_3_MODEL: &'static str = "x-ai/grok-4.5";
+    #[cfg(test)]
+    pub(crate) const STANDARD_NAZGUL_MODEL: &'static str = crew_presets::STANDARD_NAZGUL_MODEL;
+    #[cfg(test)]
+    pub(crate) const STANDARD_TROLL_MODEL: &'static str = crew_presets::STANDARD_TROLL_MODEL;
+    #[cfg(test)]
+    pub(crate) const STANDARD_ORC_MODEL: &'static str = crew_presets::STANDARD_ORC_MODEL;
+    #[cfg(test)]
+    pub(crate) const STANDARD_ORC_2_MODEL: &'static str = crew_presets::STANDARD_ORC_2_MODEL;
+    #[cfg(test)]
+    pub(crate) const STANDARD_ORC_3_MODEL: &'static str = crew_presets::STANDARD_ORC_3_MODEL;
 
-    pub(crate) fn standard_orc_runtimes()
-    -> [(&'static str, &'static str, Option<ReasoningEffort>); 3] {
-        [
-            (
-                Self::STANDARD_ORC_MODEL,
-                OPENAI_PROVIDER_ID,
-                Some(ReasoningEffort::XHigh),
-            ),
-            (
-                Self::STANDARD_ORC_2_MODEL,
-                OPENAI_PROVIDER_ID,
-                Some(ReasoningEffort::XHigh),
-            ),
-            (Self::STANDARD_ORC_3_MODEL, OPENROUTER_PROVIDER_ID, None),
-        ]
+    #[cfg(test)]
+    pub(crate) fn standard_orc_runtimes() -> Vec<(String, String, Option<ReasoningEffort>)> {
+        crew_presets::standard_crew_spec()
+            .members
+            .into_iter()
+            .filter(|member| member.role_profile == ORC_ROLE)
+            .filter_map(|member| match member.runtime_request {
+                RuntimeRequest::Exact {
+                    provider_id,
+                    model_id,
+                    reasoning_effort,
+                    ..
+                } => Some((model_id, provider_id, reasoning_effort)),
+                RuntimeRequest::Selector { .. } => None,
+            })
+            .collect()
     }
 
     pub(crate) fn ensure_standard_crew_providers_ready(&self) -> Result<()> {
         // Preflight every provider before creating the root Nazgul. Without this, a missing Troll
         // or Orc credential leaves a half-created crew with only the already-bound Nazgul pane.
-        for provider_id in [
-            CLAUDE_PLAN_PROVIDER_ID,
-            OPENAI_PROVIDER_ID,
-            OPENROUTER_PROVIDER_ID,
-        ] {
-            self.ensure_native_spawn_provider_ready(Some(provider_id))?;
+        let crew = crew_presets::standard_crew_spec();
+        crew.validate()
+            .map_err(|err| eyre!("The built-in standard crew is invalid: {err}"))?;
+        let mut checked_providers = HashSet::new();
+        for member in crew.members {
+            let RuntimeRequest::Exact { provider_id, .. } = member.runtime_request else {
+                return Err(eyre!(
+                    "The built-in standard crew member {} does not have an exact runtime.",
+                    member.logical_member_id
+                ));
+            };
+            if checked_providers.insert(provider_id.clone()) {
+                self.ensure_native_spawn_provider_ready(Some(&provider_id))?;
+            }
         }
         Ok(())
     }
@@ -3179,95 +3196,87 @@ impl App {
             .ok_or_else(|| eyre!("Cannot create standard crew before Codex Main has started."))?;
         let spawn_config = self.native_spawn_agent_config()?;
         self.ensure_standard_crew_providers_ready()?;
+        let crew = crew_presets::standard_crew_spec();
+        let mut spawned_members = HashMap::<String, (ThreadId, String)>::new();
+        let mut nazgul_thread_id = None;
+        let mut troll_thread_id = None;
 
-        // Nazgul — Claude Fable 5 Plan, root, loaded through the built-in Nazgul role config.
-        let nazgul_nickname = self.next_spawn_agent_nickname(SpawnRole::Nazgul);
-        let nazgul = app_server
-            .spawn_agent_thread(
-                &spawn_config,
-                root_thread_id,
-                NAZGUL_ROLE_NAME.to_string(),
-                nazgul_nickname.clone(),
-                Self::STANDARD_NAZGUL_MODEL.to_string(),
-                Some(CLAUDE_PLAN_PROVIDER_ID.to_string()),
-                /*effort*/ None,
-                /*base_instructions*/ None,
-            )
-            .await?;
-        let nazgul_thread_id = nazgul.session.thread_id;
-        self.register_spawn_agent_pane(
-            nazgul_thread_id,
-            root_thread_id,
-            // The Nazgul is the root; its logical parent is the current root node (codex-main or a
-            // prior binding). It will be auto-bound below.
-            self.spawn_root_node_id(),
-            nazgul_nickname,
-            NAZGUL_ROLE_NAME,
-            nazgul,
-            true,
-        )
-        .await;
-        // Bind the freshly spawned Nazgul as the visible root so Troll spawns and "Nazgul"
-        // dispatches route to it.
-        self.set_spawn_nazgul_pane_binding(thread_node_id(nazgul_thread_id));
-        self.persist_bound_nazgul_root_thread_metadata().await;
-
-        // Troll — GPT-5.6-Sol (OpenAI) @ xhigh under the Nazgul.
-        let troll_nickname = self.next_spawn_agent_nickname(SpawnRole::Troll);
-        let troll = app_server
-            .spawn_agent_thread(
-                &spawn_config,
-                nazgul_thread_id,
-                TROLL_ROLE.to_string(),
-                troll_nickname.clone(),
-                Self::STANDARD_TROLL_MODEL.to_string(),
-                Some(OPENAI_PROVIDER_ID.to_string()),
-                Some(ReasoningEffort::XHigh),
-                /*base_instructions*/ None,
-            )
-            .await?;
-        let troll_thread_id = troll.session.thread_id;
-        self.register_spawn_agent_pane(
-            troll_thread_id,
-            nazgul_thread_id,
-            thread_node_id(nazgul_thread_id),
-            troll_nickname,
-            TROLL_ROLE,
-            troll,
-            true,
-        )
-        .await;
-
-        // Three heterogeneous Orcs under the Troll. The runtime is persisted per logical node, so
-        // replay/materialization retains each Orc's selected provider and effort.
-        for (model, provider, effort) in Self::standard_orc_runtimes() {
-            let orc_nickname = self.next_spawn_agent_nickname(SpawnRole::Orc);
-            let orc = app_server
+        for member in crew.members {
+            let role = spawn_role_from_agent_type(&member.role_profile).ok_or_else(|| {
+                eyre!(
+                    "The built-in standard crew member {} has unsupported role {}.",
+                    member.logical_member_id,
+                    member.role_profile
+                )
+            })?;
+            let RuntimeRequest::Exact {
+                provider_id,
+                model_id,
+                reasoning_effort,
+                ..
+            } = member.runtime_request
+            else {
+                return Err(eyre!(
+                    "The built-in standard crew member {} does not have an exact runtime.",
+                    member.logical_member_id
+                ));
+            };
+            let (parent_thread_id, parent_node_id) = if let Some(parent_member_id) =
+                member.parent_member_id.as_deref()
+            {
+                spawned_members
+                        .get(parent_member_id)
+                        .cloned()
+                        .ok_or_else(|| {
+                            eyre!(
+                                "The built-in standard crew member {} references unavailable parent {parent_member_id}.",
+                                member.logical_member_id
+                            )
+                        })?
+            } else {
+                (root_thread_id, self.spawn_root_node_id())
+            };
+            let nickname = self.next_spawn_agent_nickname(role);
+            let started = app_server
                 .spawn_agent_thread(
                     &spawn_config,
-                    troll_thread_id,
-                    ORC_ROLE.to_string(),
-                    orc_nickname.clone(),
-                    model.to_string(),
-                    Some(provider.to_string()),
-                    effort,
+                    parent_thread_id,
+                    member.role_profile.clone(),
+                    nickname.clone(),
+                    model_id,
+                    Some(provider_id),
+                    reasoning_effort,
                     /*base_instructions*/ None,
                 )
                 .await?;
-            let orc_thread_id = orc.session.thread_id;
+            let thread_id = started.session.thread_id;
             self.register_spawn_agent_pane(
-                orc_thread_id,
-                troll_thread_id,
-                thread_node_id(troll_thread_id),
-                orc_nickname,
-                ORC_ROLE,
-                orc,
+                thread_id,
+                parent_thread_id,
+                parent_node_id,
+                nickname,
+                &member.role_profile,
+                started,
                 true,
             )
             .await;
+            let node_id = thread_node_id(thread_id);
+            spawned_members.insert(member.logical_member_id, (thread_id, node_id.clone()));
+            match role {
+                SpawnRole::Nazgul => {
+                    nazgul_thread_id = Some(thread_id);
+                    self.set_spawn_nazgul_pane_binding(node_id);
+                    self.persist_bound_nazgul_root_thread_metadata().await;
+                }
+                SpawnRole::Troll => troll_thread_id = Some(thread_id),
+                SpawnRole::Orc => {}
+            }
         }
 
-        Ok((nazgul_thread_id, troll_thread_id))
+        Ok((
+            nazgul_thread_id.ok_or_else(|| eyre!("The standard crew did not create a Nazgul."))?,
+            troll_thread_id.ok_or_else(|| eyre!("The standard crew did not create a Troll."))?,
+        ))
     }
     pub(crate) fn native_spawn_agent_config(&self) -> Result<crate::legacy_core::config::Config> {
         let mut spawn_config = self.config.clone();
@@ -6585,6 +6594,7 @@ mod tests {
     use codex_model_provider_info::AMBIENT_PROVIDER_ID;
     use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
     use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+    use codex_model_provider_info::OPENAI_PROVIDER_ID;
     use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
     use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
     use codex_model_provider_info::ZAI_DEFAULT_MODEL;

@@ -52,3 +52,31 @@ Broader baseline:
 - shared thread-manager lifecycle failures.
 
 These overlap the control-plane and role-graph work in later phases and must be reconciled before final qualification.
+
+## Phase 2A — Versioned crew definition
+
+Status: behavior-preserving extraction implemented; persistence gate remains open.
+
+Changes:
+
+- Added versioned `CrewSpec`, `CrewMemberSpec`, `CrewPolicy`, `RuntimeRequest`,
+  `AgentRuntimeSpec`, `AgentClass`, and retention/transport types in `codex-protocol`.
+- Added validation for schema version, stable member IDs, one root, topological parentage,
+  exact runtime completeness, selectors, and provider policy.
+- Expressed the existing standard Nazgul/Troll/three-Orc crew as `standard-v1` data.
+- Changed `/spawn` standard-crew creation to iterate that validated definition. The provider,
+  model, reasoning effort, hierarchy, nickname assignment, and pane behavior remain unchanged.
+- Kept an explicit test fixture covering Claude Plan Fable 5, Claude Plan Opus 5,
+  OpenRouter Grok 4.5, and Kimi Code K3.
+
+Passing evidence:
+
+- `just test -p codex-protocol crew`: 2 passed.
+- `just test -p codex-tui crew_presets`: 2 passed.
+- `standard_crew_quick_start_uses_the_expected_role_picker_label`: passed.
+
+Open gate:
+
+- The existing pane layout persists native thread IDs, parent edges, and resolved runtimes, but
+  it does not yet persist `CrewSpec` or stable logical-member mappings. Phase 2 is therefore not
+  complete until restart tests prove the same crew identity and runtime mapping.

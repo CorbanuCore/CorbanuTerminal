@@ -6730,8 +6730,8 @@ async fn standard_crew_quick_start_uses_the_expected_role_picker_label() {
         orc_runtimes
             .iter()
             .map(|(model, provider, effort)| (
-                *model,
-                *provider,
+                model.as_str(),
+                provider.as_str(),
                 effort
                     .as_ref()
                     .map(codex_protocol::openai_models::ReasoningEffort::as_str)

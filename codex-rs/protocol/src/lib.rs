@@ -12,6 +12,7 @@ pub mod approvals;
 pub mod capabilities;
 mod compacted_item;
 pub mod config_types;
+pub mod crew;
 pub mod dynamic_tools;
 pub mod error;
 pub mod exec_output;
