@@ -1604,3 +1604,117 @@ Disposition:
 
 - The discovery defect from Phase 8O is repaired on the new immutable candidate.
 - Start the three counted 45–60 minute sessions at zero on this exact binary and hash.
+
+## Phase 8Q — Counted free-form session 1: custom native crew
+
+Status: PASS; qualification count is 1 of 3.
+
+Session:
+
+- Coverage class: Section 15.3 item 2, custom crew with at least three provider families.
+  The qualification order is intentionally non-sequential; the standard-crew and
+  implementer-blind sessions remain.
+- Interval: `2026-07-25T16:23:00Z` through `2026-07-25T17:10:14Z`
+  (47 minutes).
+- Exact source candidate: `640c658f4`.
+- Exact binary: `/tmp/pfterminal-native-orch-640c658f4`.
+- SHA-256:
+  `568c3d5398dd847eae0b81cc1f3824432049b63bdd200d79cc5c092e9692d4b6`.
+- Fresh copied home:
+  `/tmp/pft-native-orch-640c-s1-home-20260725`.
+- Fresh benchmark worktree:
+  `/tmp/isometric-native-orch-640c-s1-20260725`.
+- Structured log:
+  `/tmp/pft-native-orch-640c-s1-logs-20260725/codex-tui.log`.
+- Root thread:
+  `019f9a15-c476-7813-a2c9-4ddc28a863cf`.
+
+Native topology:
+
+- The root received only the plain engineering objective and human runtime names. It used
+  native `spawn_agent` and related native collaboration tools exclusively; `/spawn` was not
+  used.
+- It independently created five `fork_turns="none"` workers and saturated all six execution
+  slots with the root:
+  - Maxwell, thread `019f9a16-a711-7302-a9f5-e50c14e7c175`,
+    `anthropic / claude-opus-5`.
+  - Parfit, thread `019f9a16-c110-7cc0-be42-66520f5f53e4`,
+    `anthropic / claude-fable-5`.
+  - Leibniz, thread `019f9a16-db02-7e31-a073-9da23f67da16`,
+    `kimi-code / k3`.
+  - Hegel, thread `019f9a16-f911-7b21-affa-f85616b79a17`,
+    `openrouter / x-ai/grok-4.5`.
+  - Archimedes, thread `019f9a17-1170-71b0-b062-0fb8e5d73cfa`,
+    inherited `openai / gpt-5.6-sol`.
+- Real provider traffic returned successfully on every tuple. After restart and again after
+  compaction, structured `get_model_info` and turn spans on these same thread IDs proved the
+  exact five models; generic persona text from two workers was not treated as runtime
+  authority.
+
+Free-form coverage:
+
+- The root remained addressable while root plus five workers saturated capacity. It accepted
+  natural user steering while the five investigations were active.
+- Rapid follow-up bursts, follow-ups at turn boundaries, direct conversations with multiple
+  workers, and multiple independent review rounds all completed on the original threads.
+- Kimi's overlong investigation was interrupted and resumed on the same thread. A later
+  in-flight fog implementation was also interrupted at close; its one partial file edit was
+  removed and no fog work was committed.
+- Natural reprioritization moved the campaign from responsive rendering to the independently
+  discovered keyboard inventory failure. A later five-way ranking chose fog over formation
+  for a future cycle, then stopped without retaining that unrequested second implementation.
+- A full process restart occurred while five amended-diff reviews were active. Resume
+  recovered the same root and all five worker identities. Each interrupted review resumed on
+  its original thread and returned a final disposition; no replacement workers were created.
+- `PFTERMINAL_INJECT_TURN_START_FAILURES=1` injected one retryable first-attempt
+  `turn/start` failure immediately after restart. The TUI visibly reported the fault,
+  recovered through the bounded retry path, and continued without duplicate execution.
+- Explicit `/compact` completed. The rollout records `type:"compacted"` and
+  `context_compacted`; all five original threads were subsequently addressable and executed
+  on their original runtime tuples.
+
+Benchmark result:
+
+- Real objective: adversarially inspect and improve the running isometric game using a custom
+  mixed-model native crew.
+- Commit:
+  `d6a2ab21dadea82394de0995c69bedb9773d06a1 fix(runtime): stabilize responsive canvas and inventory keyboard`.
+- The first repair removed anamorphic canvas scaling. Its browser regression covers eight
+  viewport/DPR shapes, real pointer-to-tile round trips, exact 638-by-479 floor boundaries,
+  and pathological-aspect pixel budgeting.
+- The reprioritized repair gives the inventory full modal key ownership, clears pre-held
+  camera keys, makes all 23 slots reachable through 92 deterministic transitions at desktop
+  and narrow layouts, supports real Enter and Space activation, and renders/clears visible
+  invalid-action feedback.
+- Opus requested boundary changes rather than rubber-stamping the first green tests. Fable
+  then found dead `invalidFlash` presentation. Both findings were repaired, independently
+  rerun, and closed by Opus, Fable, Grok, Kimi, and the inherited Sol test owner.
+- Final world validation, math, responsive browser, inventory browser, syntax, and diff
+  integrity checks passed. Tracked files and staging were clean at close; only the deliberate
+  untracked `node_modules` symlink remained.
+
+Invariant and finding disposition:
+
+- No crash, panic, duplicate local application, status divergence, stillborn pane, headless
+  write, notification/retry loop, assistant-prefill failure, compaction-trigger ordering
+  error, wrong-provider execution, or automatic `unknown_outcome` replay appeared.
+- One interrupted Kimi turn hit SQLite `BUSY_SNAPSHOT` while recording the provider-request
+  failure result. The guard released the lease, and the same Kimi thread acquired its next
+  lease 129 ms later. No accepted message, result, or runtime was lost. Record as a P1
+  telemetry/persistence hardening finding, not an invariant failure.
+- One provider stream disconnected once and recovered on the bounded first retry.
+- Opus emitted three malformed floating-point tool-call arguments early in the session. The
+  router rejected them before mutation, the repetition stopped, and the worker completed its
+  assignment. Record as a P2 model/tool-quality finding.
+- Plugin-manifest length/icon warnings, missing model-personality metadata warnings, and
+  missing analytics-context warnings were noisy but did not alter control-plane state.
+- Known benchmark findings remain separate: legacy P4 front-occluder gate failure, visually
+  ineffective fog, unbounded formation-slot scatter, and the architectural `world.json`
+  loading gap.
+- Root filesystem free space at close was 88 GiB.
+
+Disposition:
+
+- Session 1 passes and counts as 1 of 3.
+- Run the standard heterogeneous crew session and the implementer-blind session next, each
+  with a fresh copied home and worktree on this exact binary and hash.
