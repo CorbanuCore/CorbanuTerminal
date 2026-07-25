@@ -97,10 +97,10 @@ pub(crate) enum SpawnTaskTarget {
 
 pub(crate) enum SpawnDispatchPumpDelivery {
     Native {
+        source_thread_id: ThreadId,
         thread_id: ThreadId,
         task: String,
         delivery_id: String,
-        steer: bool,
     },
     Claude {
         pane_id: String,
@@ -1194,11 +1194,7 @@ impl App {
             String::new(),
             Some("Task".to_string()),
             Box::new(move |task| {
-                tx.send(AppEvent::SubmitSpawnAgentTask {
-                    thread_id,
-                    task,
-                    delivery_id: None,
-                });
+                tx.send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
             }),
         );
         self.chat_widget.show_custom_prompt_view(view);
@@ -1853,7 +1849,6 @@ impl App {
         self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
             thread_id: source_thread_id,
             task: correction_task.to_string(),
-            delivery_id: None,
         });
         if self.claude_panes.active_user_pane_id() == CODEX_MAIN_PANE_ID
             && self.active_thread_id == Some(source_thread_id)
@@ -2184,7 +2179,6 @@ impl App {
                 self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
                     thread_id: parent_thread_id,
                     task: trigger_prompt,
-                    delivery_id: None,
                 });
             } else {
                 if self.spawn_auto_processing_quarantined() {
@@ -2226,29 +2220,6 @@ impl App {
             queue_len = queue.len(),
             "queued child report for busy parent; will flush on parent idle"
         );
-    }
-
-    pub(crate) fn native_spawn_target_is_busy(&self, thread_id: ThreadId) -> bool {
-        let navigation_busy = self
-            .agent_navigation
-            .get(&thread_id)
-            .is_some_and(|entry| entry.is_running);
-        let status_busy = self
-            .spawn_status_by_thread
-            .get(&thread_id)
-            .is_some_and(|state| {
-                matches!(
-                    state.status,
-                    codex_app_server_protocol::CollabAgentStatus::PendingInit
-                        | codex_app_server_protocol::CollabAgentStatus::Running
-                )
-            });
-        navigation_busy || status_busy
-    }
-
-    pub(crate) fn native_spawn_target_is_waiting_for_agents(&self, thread_id: ThreadId) -> bool {
-        self.spawn_waiting_for_agents_by_thread
-            .contains_key(&thread_id)
     }
 
     pub(crate) fn logical_native_node_for_thread(&self, thread_id: ThreadId) -> String {
@@ -2303,6 +2274,10 @@ impl App {
                 notify: false,
             };
         }
+        // Freeze the current `/spawn` crew context before assigning a stable identity. A retry
+        // must replay byte-identical content even if the live roster changes after admission.
+        dispatch.task =
+            self.spawn_agent_task_for_submission(target_thread_id, dispatch.task.as_str());
         let identities = spawn_dispatch_component_identities(&dispatch.task);
         if let Some(queued) = self
             .spawn_pending_dispatches
@@ -2535,25 +2510,19 @@ impl App {
 
         let (target, adapter) = targets.into_iter().find_map(|target| {
             let adapter = match self.resolve_spawn_task_target(&target).ok()? {
-                SpawnTaskTarget::Native(thread_id)
-                    if self.native_spawn_target_is_waiting_for_agents(thread_id)
-                        || self.native_spawn_target_is_busy(thread_id) =>
-                {
+                SpawnTaskTarget::Native(thread_id) => {
+                    let source_thread_id = self
+                        .spawn_pending_dispatches
+                        .get(&target)
+                        .and_then(|queue| queue.front())
+                        .and_then(|dispatch| {
+                            self.spawn_node_backing_thread_id(&dispatch.source_pane_id)
+                        })?;
                     SpawnDispatchPumpDelivery::Native {
+                        source_thread_id,
                         thread_id,
                         task: String::new(),
                         delivery_id: String::new(),
-                        steer: true,
-                    }
-                }
-                SpawnTaskTarget::Native(thread_id)
-                    if !self.native_spawn_target_is_busy(thread_id) =>
-                {
-                    SpawnDispatchPumpDelivery::Native {
-                        thread_id,
-                        task: String::new(),
-                        delivery_id: String::new(),
-                        steer: false,
                     }
                 }
                 SpawnTaskTarget::ClaudePane(ref pane_id)
@@ -2589,12 +2558,14 @@ impl App {
 
         Some(match adapter {
             SpawnDispatchPumpDelivery::Native {
-                thread_id, steer, ..
+                source_thread_id,
+                thread_id,
+                ..
             } => SpawnDispatchPumpDelivery::Native {
+                source_thread_id,
                 thread_id,
                 task,
                 delivery_id,
-                steer,
             },
             SpawnDispatchPumpDelivery::Claude { pane_id, .. } => {
                 SpawnDispatchPumpDelivery::Claude {
@@ -2648,12 +2619,6 @@ impl App {
         }
         self.spawn_dispatch_inflight_targets.remove(target);
         self.persist_pane_state();
-    }
-
-    pub(crate) fn contain_ambiguous_spawn_dispatch(&mut self, target: &str) {
-        self.spawn_dispatch_inflight_targets.remove(target);
-        self.persist_pane_state();
-        self.request_spawn_dispatch_pump();
     }
 
     pub(crate) fn submitting_spawn_dispatches(&self) -> Vec<(String, String, String)> {
@@ -2786,7 +2751,6 @@ impl App {
                     self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
                         thread_id,
                         task: task.to_string(),
-                        delivery_id: None,
                     });
                 }
                 Ok(SpawnTaskTarget::ClaudePane(pane_id)) => {
@@ -2973,7 +2937,6 @@ impl App {
             .send_checked(AppEvent::SubmitSpawnAgentTask {
                 thread_id: parent_thread_id,
                 task: trigger_prompt,
-                delivery_id: None,
             })
         {
             return false;
@@ -5395,7 +5358,7 @@ fn write_spawn_dispatch_contract(context: &mut String) {
     );
     let _ = writeln!(
         context,
-        "If a native target pane is busy, PFTerminal steers the dispatch into its running turn; otherwise it starts a fresh turn."
+        "PFTerminal durably admits native dispatches to the target mailbox; queued work starts at the next valid turn boundary without interrupting the target's current work."
     );
     let _ = writeln!(
         context,
@@ -6236,15 +6199,6 @@ fn spawn_report_matches_child(report: &str, child_title: &str) -> bool {
 /// than letting it sit as a passive transcript line.
 fn child_report_processing_prompt(report: &str) -> String {
     format!("{CHILD_REPORT_PROCESSING_PROMPT_PREFIX}{report}")
-}
-
-pub(crate) fn child_report_from_processing_prompt(task: &str) -> Option<&str> {
-    let report = task.strip_prefix(CHILD_REPORT_PROCESSING_PROMPT_PREFIX)?;
-    if report.trim().is_empty() {
-        None
-    } else {
-        Some(report)
-    }
 }
 
 #[cfg(test)]

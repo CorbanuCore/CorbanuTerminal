@@ -1,11 +1,11 @@
 use super::*;
 
-use core_test_support::responses::ResponseMock;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_response_sequence;
+use core_test_support::responses::mount_sse_repeating;
 use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::sse_completed;
@@ -165,22 +165,31 @@ supports_websockets = false
     }
 }
 
-fn newest_user_text(request: &core_test_support::responses::ResponsesRequest) -> String {
-    let Some(item) = request
-        .input()
-        .into_iter()
-        .rev()
-        .find(|item| item.get("role").and_then(serde_json::Value::as_str) == Some("user"))
-    else {
-        return String::new();
-    };
-    item.get("content")
-        .and_then(serde_json::Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|content| content.get("text").and_then(serde_json::Value::as_str))
-        .collect::<Vec<_>>()
-        .join("\n")
+fn pending_agent_message_text(request: &core_test_support::responses::ResponsesRequest) -> String {
+    let mut messages = Vec::new();
+    for item in request.input().into_iter().rev() {
+        if item.get("type").and_then(serde_json::Value::as_str) == Some("message")
+            && item.get("role").and_then(serde_json::Value::as_str) == Some("assistant")
+        {
+            break;
+        }
+        if item.get("type").and_then(serde_json::Value::as_str) != Some("agent_message") {
+            continue;
+        }
+        let text = item
+            .get("content")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|content| content.get("text").and_then(serde_json::Value::as_str))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !text.is_empty() {
+            messages.push(text);
+        }
+    }
+    messages.reverse();
+    messages.join("\n")
 }
 
 fn run_dispatch_integration<F, Fut>(test: F) -> Result<()>
@@ -204,16 +213,10 @@ where
 }
 
 #[test]
-fn real_event_path_delivers_arbitrary_tasks_once_in_fifo_order() -> Result<()> {
+fn real_event_path_preserves_fifo_when_mailbox_coalesces_turns() -> Result<()> {
     run_dispatch_integration(|| async {
         let mock = MockServer::start().await;
-        let responses: ResponseMock = mount_sse_sequence(
-            &mock,
-            (1..=3)
-                .map(|index| sse_completed(&format!("dispatch-response-{index}")))
-                .collect(),
-        )
-        .await;
+        let responses = mount_sse_repeating(&mock, sse_completed("dispatch-response")).await;
         let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 4).await?;
         let target = fixture.spawn_target("FIFO target").await?;
         let tasks = [
@@ -228,31 +231,61 @@ fn real_event_path_delivers_arbitrary_tasks_once_in_fifo_order() -> Result<()> {
                 .send(AppEvent::SubmitSpawnAgentTask {
                     thread_id: target,
                     task: task.to_string(),
-                    delivery_id: None,
                 });
         }
 
         fixture
             .route_until(std::time::Duration::from_secs(20), |app| {
-                responses.requests().len() == tasks.len()
+                !responses.requests().is_empty()
                     && app.spawn_pending_dispatches.is_empty()
                     && app.spawn_dispatch_inflight_targets.is_empty()
+                    && app
+                        .agent_navigation
+                        .get(&target)
+                        .is_some_and(|entry| !entry.is_running)
             })
             .await?;
 
         let requests = responses.requests();
-        pretty_assertions::assert_eq!(requests.len(), tasks.len());
-        let presented = requests.iter().map(newest_user_text).collect::<Vec<_>>();
-        for (index, task) in tasks.iter().enumerate() {
-            assert!(
-                presented[index].contains(task),
-                "request {index} did not contain its FIFO task"
-            );
-            pretty_assertions::assert_eq!(
-                presented.iter().filter(|text| text.contains(task)).count(),
-                1,
-                "task {index} was presented more than once"
-            );
+        assert!(
+            (1..=tasks.len()).contains(&requests.len()),
+            "mailbox coalescing must use between one and one request per task"
+        );
+        let presented = requests
+            .iter()
+            .map(pending_agent_message_text)
+            .collect::<Vec<_>>();
+        let first_request_by_task = tasks
+            .iter()
+            .map(|task| {
+                presented
+                    .iter()
+                    .position(|body| body.contains(task))
+                    .expect("every mailbox task must reach a provider boundary")
+            })
+            .collect::<Vec<_>>();
+        pretty_assertions::assert_eq!(first_request_by_task.first(), Some(&0));
+        pretty_assertions::assert_eq!(
+            first_request_by_task.last(),
+            Some(&(requests.len().saturating_sub(1)))
+        );
+        assert!(
+            first_request_by_task
+                .windows(2)
+                .all(|pair| pair[0] <= pair[1]),
+            "mailbox tasks crossed provider request boundaries out of order"
+        );
+        for (index, pair) in first_request_by_task.windows(2).enumerate() {
+            if pair[0] == pair[1] {
+                let earlier = presented[pair[0]].find(tasks[index]).expect("earlier task");
+                let later = presented[pair[1]]
+                    .find(tasks[index + 1])
+                    .expect("later task");
+                assert!(
+                    earlier < later,
+                    "coalesced mailbox work must retain FIFO order"
+                );
+            }
         }
         fixture.server.shutdown().await?;
         Ok(())
@@ -294,7 +327,7 @@ fn completed_source_replay_does_not_reenqueue_on_real_event_path() -> Result<()>
         let presented = responses
             .requests()
             .iter()
-            .map(newest_user_text)
+            .map(pending_agent_message_text)
             .collect::<Vec<_>>();
         pretty_assertions::assert_eq!(presented.len(), 1);
         assert!(presented[0].contains(task));
@@ -340,16 +373,13 @@ fn three_real_turns_saturate_and_one_release_schedules_one_followup() -> Result<
             fixture.spawn_target("CapacityC").await?,
         ];
         for (index, target) in targets.iter().enumerate() {
-            for suffix in ["initial", "followup"] {
-                fixture
-                    .app
-                    .app_event_tx
-                    .send(AppEvent::SubmitSpawnAgentTask {
-                        thread_id: *target,
-                        task: format!("capacity-target-{index}-{suffix}"),
-                        delivery_id: None,
-                    });
-            }
+            fixture
+                .app
+                .app_event_tx
+                .send(AppEvent::SubmitSpawnAgentTask {
+                    thread_id: *target,
+                    task: format!("capacity-target-{index}-initial"),
+                });
         }
 
         fixture
@@ -362,6 +392,15 @@ fn three_real_turns_saturate_and_one_release_schedules_one_followup() -> Result<
                     })
             })
             .await?;
+        for (index, target) in targets.iter().enumerate() {
+            fixture
+                .app
+                .app_event_tx
+                .send(AppEvent::SubmitSpawnAgentTask {
+                    thread_id: *target,
+                    task: format!("capacity-target-{index}-followup"),
+                });
+        }
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
         for _ in 0..5 {
             fixture.route_once().await?;
@@ -380,7 +419,7 @@ fn three_real_turns_saturate_and_one_release_schedules_one_followup() -> Result<
         let first_four = responses
             .requests()
             .iter()
-            .map(newest_user_text)
+            .map(pending_agent_message_text)
             .collect::<Vec<_>>();
         pretty_assertions::assert_eq!(
             first_four
@@ -405,7 +444,7 @@ fn three_real_turns_saturate_and_one_release_schedules_one_followup() -> Result<
 }
 
 #[test]
-fn lost_wait_steer_response_reconciles_without_start_fallback() -> Result<()> {
+fn mailbox_delivery_wakes_waiting_target_without_turn_start_fallback() -> Result<()> {
     run_dispatch_integration(|| async {
         let mock = MockServer::start().await;
         let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 4).await?;
@@ -432,7 +471,6 @@ fn lost_wait_steer_response_reconciles_without_start_fallback() -> Result<()> {
             .send(AppEvent::SubmitSpawnAgentTask {
                 thread_id: target,
                 task: initial_task.to_string(),
-                delivery_id: None,
             });
         fixture
             .route_until(std::time::Duration::from_secs(10), |app| {
@@ -442,21 +480,13 @@ fn lost_wait_steer_response_reconciles_without_start_fallback() -> Result<()> {
             .await
             .wrap_err("waiting target never entered the real wait state")?;
 
-        let steer_task = "continue from the wait using this steered task";
-        if std::env::var("PFTERMINAL_DISPATCH_CRASH_CUT").as_deref()
-            != Ok("response_before_local_tombstone")
-        {
-            fixture
-                .server
-                .inject_lost_next_turn_steer_response_after_acceptance();
-        }
+        let steer_task = "continue from the wait using this mailbox task";
         fixture
             .app
             .app_event_tx
             .send(AppEvent::SubmitSpawnAgentTask {
                 thread_id: target,
                 task: steer_task.to_string(),
-                delivery_id: None,
             });
         fixture
             .route_until(std::time::Duration::from_secs(10), |app| {
@@ -465,24 +495,24 @@ fn lost_wait_steer_response_reconciles_without_start_fallback() -> Result<()> {
                     && app.spawn_dispatch_inflight_targets.is_empty()
             })
             .await
-            .wrap_err("lost steer response did not reconcile to an empty queue")?;
+            .wrap_err("mailbox delivery did not wake the waiting target")?;
 
         let requests = responses.requests();
         pretty_assertions::assert_eq!(
             requests.len(),
             2,
-            "an ambiguous steer response must not fall back to a new turn/start"
+            "mailbox delivery must wake the existing wait without duplicate provider turns"
         );
-        assert!(newest_user_text(&requests[0]).contains(initial_task));
+        assert!(requests[0].body_json().to_string().contains(initial_task));
         assert!(!requests[0].body_json().to_string().contains(steer_task));
         assert!(
             requests[1].body_json().to_string().contains(steer_task),
-            "the accepted steer identity must appear in the follow-up provider request; users={:?}",
+            "the mailbox task must appear in the follow-up provider request; users={:?}",
             requests[1].message_input_texts("user")
         );
         assert!(
             fixture.app.spawn_accepted_delivery_ids.len() >= 2,
-            "reconciliation must tombstone the accepted steer identity"
+            "accepted mailbox deliveries must be tombstoned locally"
         );
         fixture.server.shutdown().await?;
         Ok(())
@@ -501,7 +531,6 @@ fn queue_bound_rejection_is_visible_and_accepts_nothing() -> Result<()> {
             .send(AppEvent::SubmitSpawnAgentTask {
                 thread_id: target,
                 task: "x".repeat(crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES + 1),
-                delivery_id: None,
             });
         for _ in 0..20 {
             fixture.route_once().await?;
@@ -557,7 +586,6 @@ fn low_context_agent_compacts_and_continues_real_dispatch() -> Result<()> {
             .send(AppEvent::SubmitSpawnAgentTask {
                 thread_id: target,
                 task: before.to_string(),
-                delivery_id: None,
             });
         fixture
             .route_until(std::time::Duration::from_secs(10), |app| {
@@ -605,7 +633,6 @@ fn low_context_agent_compacts_and_continues_real_dispatch() -> Result<()> {
             .send(AppEvent::SubmitSpawnAgentTask {
                 thread_id: target,
                 task: after.to_string(),
-                delivery_id: None,
             });
         fixture
             .route_until(std::time::Duration::from_secs(10), |app| {
@@ -616,8 +643,8 @@ fn low_context_agent_compacts_and_continues_real_dispatch() -> Result<()> {
             .await?;
 
         let requests = responses.requests();
-        assert!(newest_user_text(&requests[0]).contains(before));
-        assert!(newest_user_text(&requests[2]).contains(after));
+        assert!(pending_agent_message_text(&requests[0]).contains(before));
+        assert!(pending_agent_message_text(&requests[2]).contains(after));
         pretty_assertions::assert_eq!(requests.len(), 3);
         fixture.server.shutdown().await?;
         Ok(())

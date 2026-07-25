@@ -73,7 +73,6 @@ use codex_app_server_protocol::ThreadGoalSetResponse;
 use codex_app_server_protocol::ThreadGoalStatus;
 use codex_app_server_protocol::ThreadInjectItemsParams;
 use codex_app_server_protocol::ThreadInjectItemsResponse;
-use codex_app_server_protocol::ThreadItem;
 use codex_app_server_protocol::ThreadListParams;
 use codex_app_server_protocol::ThreadListResponse;
 use codex_app_server_protocol::ThreadLoadedListParams;
@@ -291,8 +290,6 @@ pub(crate) struct AppServerSession {
     external_agent_config_import_completion_pending: AtomicBool,
     injected_turn_start_failures: usize,
     injected_spawn_agent_failures: usize,
-    #[cfg(test)]
-    drop_next_turn_steer_response_after_acceptance: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -345,14 +342,7 @@ impl AppServerSession {
             external_agent_config_import_completion_pending: AtomicBool::new(false),
             injected_turn_start_failures: injected_failure_count(TURN_START_FAULT_ENV),
             injected_spawn_agent_failures: injected_failure_count(SPAWN_AGENT_FAULT_ENV),
-            #[cfg(test)]
-            drop_next_turn_steer_response_after_acceptance: false,
         }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn inject_lost_next_turn_steer_response_after_acceptance(&mut self) {
-        self.drop_next_turn_steer_response_after_acceptance = true;
     }
 
     pub(crate) fn with_remote_cwd_override(mut self, remote_cwd_override: Option<PathBuf>) -> Self {
@@ -874,31 +864,6 @@ impl AppServerSession {
         Ok(response.thread)
     }
 
-    pub(crate) fn spawn_find_turn_for_client_message(
-        &mut self,
-        thread_id: ThreadId,
-        client_user_message_id: String,
-    ) -> tokio::task::JoinHandle<Result<Option<String>>> {
-        let request_id = self.next_request_id();
-        let request_handle = self.request_handle();
-        tokio::spawn(async move {
-            let response: ThreadReadResponse = request_handle
-                .request_typed(ClientRequest::ThreadRead {
-                    request_id,
-                    params: ThreadReadParams {
-                        thread_id: thread_id.to_string(),
-                        include_turns: true,
-                    },
-                })
-                .await
-                .wrap_err("thread/read failed during delivery reconciliation")?;
-            Ok(turn_for_client_message(
-                response.thread.turns,
-                &client_user_message_id,
-            ))
-        })
-    }
-
     pub(crate) async fn thread_archive(&mut self, thread_id: ThreadId) -> Result<()> {
         let request_id = self.next_request_id();
         let _: ThreadArchiveResponse = self
@@ -1158,54 +1123,6 @@ impl AppServerSession {
         thread_id: ThreadId,
     ) -> std::result::Result<(), TypedRequestError> {
         self.turn_interrupt(thread_id, String::new()).await
-    }
-
-    pub(crate) fn spawn_turn_steer(
-        &mut self,
-        thread_id: ThreadId,
-        turn_id: String,
-        items: Vec<UserInput>,
-        client_user_message_id: Option<String>,
-    ) -> tokio::task::JoinHandle<std::result::Result<TurnSteerResponse, TypedRequestError>> {
-        let request_id = self.next_request_id();
-        let request_handle = self.request_handle();
-        #[cfg(test)]
-        let drop_response_after_acceptance =
-            std::mem::take(&mut self.drop_next_turn_steer_response_after_acceptance);
-        #[cfg(not(test))]
-        let drop_response_after_acceptance = false;
-        tokio::spawn(async move {
-            let response = request_handle
-                .request_typed(ClientRequest::TurnSteer {
-                    request_id,
-                    params: TurnSteerParams {
-                        thread_id: thread_id.to_string(),
-                        client_user_message_id,
-                        input: items,
-                        responsesapi_client_metadata: None,
-                        additional_context: None,
-                        expected_turn_id: turn_id,
-                    },
-                })
-                .await;
-            #[cfg(test)]
-            if response.is_ok()
-                && std::env::var("PFTERMINAL_DISPATCH_CRASH_CUT").as_deref()
-                    == Ok("server_accept_before_response")
-            {
-                std::process::exit(86);
-            }
-            if drop_response_after_acceptance && response.is_ok() {
-                return Err(TypedRequestError::Transport {
-                    method: "turn/steer".to_string(),
-                    source: std::io::Error::new(
-                        std::io::ErrorKind::ConnectionReset,
-                        "injected lost response after durable acceptance",
-                    ),
-                });
-            }
-            response
-        })
     }
 
     pub(crate) async fn turn_steer(
@@ -1580,26 +1497,6 @@ async fn run_turn_start_requests(
         }
     }
     unreachable!("bounded turn/start request list always returns")
-}
-
-fn turn_for_client_message(
-    turns: impl IntoIterator<Item = Turn>,
-    client_user_message_id: &str,
-) -> Option<String> {
-    turns.into_iter().find_map(|turn| {
-        turn.items
-            .iter()
-            .any(|item| {
-                matches!(
-                    item,
-                    ThreadItem::UserMessage {
-                        client_id: Some(client_id),
-                        ..
-                    } if client_id == client_user_message_id
-                )
-            })
-            .then_some(turn.id)
-    })
 }
 
 pub(crate) async fn start_thread_with_request_handle(
@@ -2289,42 +2186,6 @@ mod tests {
             .build()
             .await
             .expect("config should build")
-    }
-
-    #[test]
-    fn delivery_reconciliation_finds_client_id_in_any_persisted_turn() {
-        let turn = |id: &str, client_id: Option<&str>| Turn {
-            id: id.to_string(),
-            items: vec![ThreadItem::UserMessage {
-                id: format!("user-{id}"),
-                client_id: client_id.map(str::to_string),
-                content: vec![UserInput::Text {
-                    text: format!("task for {id}"),
-                    text_elements: Vec::new(),
-                }],
-            }],
-            items_view: codex_app_server_protocol::TurnItemsView::Full,
-            status: codex_app_server_protocol::TurnStatus::Completed,
-            error: None,
-            started_at: None,
-            completed_at: None,
-            duration_ms: None,
-        };
-
-        assert_eq!(
-            turn_for_client_message(
-                vec![
-                    turn("turn-1", Some("other-delivery")),
-                    turn("turn-2", Some("delivery-42")),
-                ],
-                "delivery-42",
-            ),
-            Some("turn-2".to_string())
-        );
-        assert_eq!(
-            turn_for_client_message(vec![turn("turn-1", None)], "delivery-42"),
-            None
-        );
     }
 
     #[tokio::test]

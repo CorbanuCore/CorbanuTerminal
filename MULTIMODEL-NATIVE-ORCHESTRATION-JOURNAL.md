@@ -211,3 +211,40 @@ Product boundary:
 - Codex-native agents provide its lifecycle, identity, capacity, and message substrate.
 - The standard `/spawn` crew, pane navigation, provider choices, resumable identities, and role
   presentation are not replaced by Codex's ephemeral OpenAI-only delegation UX.
+
+## Phase 4B — `/spawn` native mailbox cutover
+
+Status: native `/spawn` delivery cut over; legacy Claude-pane delivery remains behind the
+compatibility adapter.
+
+Changes:
+
+- Kept `/spawn` as the persistent named mixed-model crew and pane UX.
+- Replaced the native TUI `turn/start` versus `turn/steer` delivery decision with
+  `thread/sendAgentMessage`, backed by the canonical durable native mailbox.
+- Native targets accept durable work while already running or blocked in `wait_agent`; the mailbox
+  applies it at a valid model boundary without consuming another TUI execution slot.
+- TUI crash reconciliation now resends the same stable mailbox ID. Canonical admission
+  deduplicates it; native delivery no longer scans thread history for an inferred client-message
+  witness.
+- Froze the current `/spawn` roster context into the durable task before stable-ID assignment, so
+  retries remain byte-identical while Trolls retain their named Orc roster and report context.
+- Deleted the obsolete native steer/start/reconciliation events, workers, fault flags, and helper
+  paths: 676 lines removed versus 236 added across the cutover and strengthened tests.
+- Preserved the separate Claude compatibility-pane pump. It is not native internal transport and
+  remains quarantined on uncertain outcomes.
+
+Passing evidence:
+
+- Real event-path mailbox integration: 6/6 passed.
+  - arbitrary task FIFO across valid mailbox coalescing;
+  - completed-source replay does not re-enqueue;
+  - three active child turns enforce capacity and release one follow-up;
+  - a waiting Troll wakes through the mailbox without `turn/start` fallback;
+  - oversized tasks reject before provider submission;
+  - compaction preserves subsequent dispatch.
+- `spawn_orchestration`: 26/26 passed.
+- Seeded dispatch qualification: passed.
+- Standard `/spawn` quick-start regression: passed.
+- App-server stable-ID mailbox integration: passed.
+- `cargo check -p codex-tui`: passed without new warnings.

@@ -2842,16 +2842,16 @@ async fn durable_pump_marks_native_delivery_submitting_before_adapter() {
         .select_spawn_dispatch_pump_delivery()
         .expect("idle native target is eligible");
     let crate::spawn_orchestration::SpawnDispatchPumpDelivery::Native {
+        source_thread_id,
         thread_id,
         delivery_id,
-        steer,
         ..
     } = delivery
     else {
         panic!("expected native adapter");
     };
+    assert_eq!(source_thread_id, source);
     assert_eq!(thread_id, target);
-    assert!(!steer);
     let queued = &app.spawn_pending_dispatches[&thread_node_id(target)][0];
     assert!(matches!(
         &queued.state,
@@ -2862,7 +2862,7 @@ async fn durable_pump_marks_native_delivery_submitting_before_adapter() {
 }
 
 #[tokio::test]
-async fn durable_pump_steers_work_into_a_running_native_target() {
+async fn durable_pump_accepts_work_for_a_running_native_target_via_mailbox() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let (source, target) = register_native_dispatch_pair(&mut app);
     app.agent_navigation.set_running(target, true);
@@ -2877,15 +2877,17 @@ async fn durable_pump_steers_work_into_a_running_native_target() {
 
     assert!(matches!(rx.try_recv(), Ok(AppEvent::PumpSpawnDispatches)));
     let crate::spawn_orchestration::SpawnDispatchPumpDelivery::Native {
-        thread_id, steer, ..
+        source_thread_id,
+        thread_id,
+        ..
     } = app
         .select_spawn_dispatch_pump_delivery()
-        .expect("running native target is steerable")
+        .expect("running native target accepts durable mailbox work")
     else {
         panic!("expected native adapter");
     };
+    assert_eq!(source_thread_id, source);
     assert_eq!(thread_id, target);
-    assert!(steer);
 }
 
 #[tokio::test]

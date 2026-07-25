@@ -1001,6 +1001,16 @@ pub async fn mount_sse_once(server: &MockServer, body: String) -> ResponseMock {
     response_mock
 }
 
+/// Mounts one SSE body for any number of matching requests without asserting a call count.
+///
+/// This is useful when the behavior under test may validly coalesce multiple durable inputs into
+/// one provider turn or split them across several turns.
+pub async fn mount_sse_repeating(server: &MockServer, body: String) -> ResponseMock {
+    let (mock, response_mock) = base_mock();
+    mock.respond_with(sse_response(body)).mount(server).await;
+    response_mock
+}
+
 /// Mock builder matching POST `/chat/completions` (Chat Completions wire API).
 fn chat_completions_mock() -> (MockBuilder, ResponseMock) {
     let response_mock = ResponseMock::new();

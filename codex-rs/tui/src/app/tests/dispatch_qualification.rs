@@ -233,14 +233,16 @@ async fn seeded_real_pump_sequences_preserve_dispatch_invariants() {
                             !app.spawn_dispatch_inflight_targets.contains(*node)
                                 && queue.front().is_some_and(|dispatch| {
                                     matches!(dispatch.state, DispatchState::Queued)
+                                        && app
+                                            .spawn_node_backing_thread_id(&dispatch.source_pane_id)
+                                            .is_some()
                                 })
                                 && app
                                     .resolve_spawn_task_target(node)
                                     .ok()
                                     .is_some_and(|target| match target {
-                                        crate::spawn_orchestration::SpawnTaskTarget::Native(id) => {
-                                            app.native_spawn_target_is_waiting_for_agents(id)
-                                                || !app.native_spawn_target_is_busy(id)
+                                        crate::spawn_orchestration::SpawnTaskTarget::Native(_) => {
+                                            true
                                         }
                                         _ => false,
                                     })
@@ -294,15 +296,8 @@ async fn seeded_real_pump_sequences_preserve_dispatch_invariants() {
                             6 => app
                                 .defer_spawn_dispatch_for_capacity(&selected_target, &delivery_id),
                             _ => {
-                                app.contain_ambiguous_spawn_dispatch(&selected_target);
-                                assert!(
-                                    app.submitting_spawn_dispatches()
-                                        .iter()
-                                        .any(|(node, id, _)| node == &selected_target
-                                            && id == &delivery_id)
-                                );
-                                // A delayed thread/read witness reporting absence permits the same
-                                // identified record to return to Queued without manufacturing work.
+                                // Losing the local acknowledgement returns the same stable mailbox
+                                // identity to Queued; canonical admission deduplicates the replay.
                                 app.defer_spawn_dispatch_for_capacity(
                                     &selected_target,
                                     &delivery_id,
@@ -312,7 +307,10 @@ async fn seeded_real_pump_sequences_preserve_dispatch_invariants() {
                     }
                 }
                 8 => {
-                    let busy = !app.native_spawn_target_is_busy(target);
+                    let busy = !app
+                        .agent_navigation
+                        .get(&target)
+                        .is_some_and(|entry| entry.is_running);
                     app.agent_navigation.set_running(target, busy);
                 }
                 9 => {
