@@ -1083,6 +1083,8 @@ Post-stop salvage:
   `c44e0b5` on `qual/native-orch-q1c-snaga-a2` and detached commit `4063b70` on
   `qual/native-orch-q1c-krimp-c2` before removing their worktrees. They are benchmark outputs,
   not PfTerminal candidate changes.
+- Removed the main disposable tree and all five child worktrees immediately after preserving the
+  branch refs. Root filesystem free space rose from 106 GiB to 109 GiB.
 
 Disposition:
 
