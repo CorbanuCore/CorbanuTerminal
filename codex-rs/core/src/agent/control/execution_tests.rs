@@ -1,8 +1,10 @@
 use crate::agent::AgentControl;
 use codex_protocol::error::CodexErr;
 use codex_protocol::protocol::MultiAgentVersion;
+use codex_protocol::protocol::Op;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
+use codex_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 
 fn control_with_limit(max_threads: usize) -> AgentControl {
@@ -97,6 +99,23 @@ fn execution_guards_do_not_derive_capacity_policy_from_role_names() {
         control.try_execution_guard(MultiAgentVersion::V2, &nazgul_source),
         Err(CodexErr::AgentLimitReached { max_threads: 1 })
     ));
+}
+
+#[test]
+fn human_input_is_control_plane_work_not_worker_execution() {
+    let user_input = Op::UserInput {
+        items: vec![UserInput::Text {
+            text: "Reprioritize the crew while every worker slot is occupied.".to_string(),
+            text_elements: Vec::new(),
+        }],
+        final_output_json_schema: None,
+        responsesapi_client_metadata: None,
+        additional_context: Default::default(),
+        thread_settings: Default::default(),
+    };
+
+    assert!(!super::op_starts_worker_turn(&user_input));
+    assert!(super::op_starts_worker_turn(&Op::WakePendingWork));
 }
 
 #[tokio::test]

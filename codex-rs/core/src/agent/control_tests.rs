@@ -25,6 +25,7 @@ use codex_protocol::protocol::ErrorEvent;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::InitialHistory;
 use codex_protocol::protocol::InterAgentCommunication;
+use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::ThreadSource;
@@ -2884,6 +2885,64 @@ async fn direct_thread_spawn_child_metadata_is_visible_and_addressable() {
         .await
         .expect("direct child should accept delegated input by thread id");
     assert!(!submission_id.is_empty());
+}
+
+#[tokio::test]
+async fn human_input_to_manager_is_accepted_while_worker_capacity_is_saturated() {
+    let (home, config) = test_config_with_cli_overrides(vec![
+        (
+            "features.multi_agent_v2".to_string(),
+            TomlValue::Boolean(true),
+        ),
+        (
+            "features.multi_agent_v2.max_concurrent_threads_per_session".to_string(),
+            TomlValue::Integer(2),
+        ),
+    ])
+    .await;
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (parent_thread_id, parent_thread) = harness.start_thread().await;
+    let session_control = parent_thread.codex.session.services.agent_control.clone();
+    let manager_source = role_spawn_source(parent_thread_id, 1, "/root/nazgul_angmar", "nazgul");
+    let manager = harness
+        .manager
+        .start_thread_with_options(StartThreadOptions {
+            config: harness.config.clone(),
+            initial_history: InitialHistory::New,
+            session_source: Some(manager_source.clone()),
+            thread_source: Some(ThreadSource::Subagent),
+            dynamic_tools: Vec::new(),
+            metrics_service_name: None,
+            multi_agent_mode: Some(MultiAgentMode::Proactive),
+            parent_trace: None,
+            environments: Vec::new(),
+            thread_extension_init: ExtensionDataInit::default(),
+            supports_openai_form_elicitation: false,
+        })
+        .await
+        .expect("manager thread should start");
+    let worker_reservation = session_control
+        .try_execution_guard(MultiAgentVersion::V2, &manager_source)
+        .expect("worker capacity lookup")
+        .expect("only worker slot should be reservable");
+    assert!(matches!(
+        session_control.try_execution_guard(MultiAgentVersion::V2, &manager_source),
+        Err(CodexErr::AgentLimitReached { max_threads: 1 })
+    ));
+
+    let submission_id = session_control
+        .send_input(
+            manager.thread_id,
+            text_input("Reprioritize the crew without waiting for a worker slot."),
+        )
+        .await
+        .expect("human control input must bypass autonomous worker capacity");
+    assert!(!submission_id.is_empty());
+
+    drop(worker_reservation);
+    let _ = manager.thread.submit(Op::Interrupt).await;
+    let _ = manager.thread.submit(Op::Shutdown {}).await;
+    let _ = parent_thread.submit(Op::Shutdown {}).await;
 }
 
 #[tokio::test]

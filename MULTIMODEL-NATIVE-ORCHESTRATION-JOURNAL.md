@@ -844,3 +844,57 @@ Disposition:
 - The prerequisite restart/recovery matrix now passes on the immutable candidate.
 - Qualification count remains zero by design. Begin three fresh 45–60 minute free-form sessions
   from this exact source state; any new invariant failure resets the count.
+
+## Phase 8E — Human manager input was rejected under worker saturation
+
+Status: live failure reproduced; control-plane boundary repaired; qualification count reset to
+zero.
+
+Timestamp: 2026-07-25T09:12:07Z
+
+Observed:
+
+- Fresh qualification session `/tmp/pft-native-orch-s1-home-20260725` created the standard
+  Fable/Sol/Luna/Terra/Grok crew on candidate
+  `bb43a417dbfb71e3bc23be393829d3a09f0217cc472930a5552d6937b0b593c0`.
+- The injected first `thread/spawnAgent` failure retried once and the complete crew materialized.
+- Fable used the native mailbox to start Sol, which dispatched all three Orcs. Fable then created
+  one independent native reviewer, occupying all five configured descendant execution slots.
+- The user interrupted Fable and submitted a reprioritization. `turn/start` rejected the human
+  message with `Cannot start turn: all 5 execution slots are in use.`
+- The TUI remained alive and emitted no retry flood, but spec sections 6.3, 10, and 15 explicitly
+  require the manager to remain human-addressable under saturation. The session is invalid and
+  does not count.
+
+Repair:
+
+- `AgentControl::ensure_execution_capacity_for_op` now classifies only agent-triggered mailbox
+  work and pending-work wakeups as worker execution. Human `Op::UserInput` is control-plane work.
+- Once admitted, the human-started turn still acquires the ordinary execution guard. This permits
+  the explicit control-plane turn to cross a saturated admission boundary while keeping the turn
+  visible to the same atomic capacity accounting until it ends.
+- The rule is provider-neutral and role-neutral: it does not special-case Nazgul, Troll, Orc,
+  Fable, or the reported sentence.
+
+Automated evidence:
+
+- `human_input_is_control_plane_work_not_worker_execution` passes.
+- `human_input_to_manager_is_accepted_while_worker_capacity_is_saturated` constructs a real native
+  root and manager, reserves the only worker slot, proves a second autonomous reservation is
+  rejected, and proves direct human input to the manager is still accepted.
+- The complete `agent::control::execution` filter passes: 5 passed, 0 failed.
+- `cargo check -p codex-tui`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+
+Next:
+
+- Commit the repair, stop the invalid session, salvage its small forensic evidence, and remove its
+  disposable game worktree.
+- Build a new immutable candidate and restart the three-session qualification count at zero.
+
+Wind-down:
+
+- At `2026-07-25T09:21:15Z`, stopped only tmux session `native_orch_s1`; no process rooted in its
+  temporary home or game tree remained afterward.
+- Removed disposable worktree `/tmp/isometric-native-orch-s1-20260725` immediately after its
+  failure proof completed and deleted branch `qual/native-orch-s1-20260725`.
+- Root filesystem free space after reclaim: 113 GiB.

@@ -35,7 +35,7 @@ impl AgentControl {
         thread_id: ThreadId,
         op: &Op,
     ) -> CodexResult<()> {
-        if !op_starts_turn(op) {
+        if !op_starts_worker_turn(op) {
             return Ok(());
         }
         let state = self.upgrade()?;
@@ -144,9 +144,15 @@ impl AgentExecutionLimiter {
     }
 }
 
-fn op_starts_turn(op: &Op) -> bool {
-    matches!(op, Op::UserInput { .. })
-        || matches!(op, Op::InterAgentCommunication { communication } if communication.trigger_turn)
+/// Returns whether an operation starts autonomous worker execution.
+///
+/// Human input is deliberately excluded. A user must remain able to address a
+/// persistent crew member while autonomous descendants occupy every worker
+/// slot. Once admitted, the human-started task still acquires an execution
+/// guard, so it remains visible to capacity accounting. Mailbox wakeups and
+/// agent-authored work remain bounded here.
+fn op_starts_worker_turn(op: &Op) -> bool {
+    matches!(op, Op::InterAgentCommunication { communication } if communication.trigger_turn)
         || matches!(op, Op::WakePendingWork)
 }
 
