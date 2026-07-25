@@ -231,6 +231,7 @@ async fn register_v2_wait_child(
                 agent_path: Some(AgentPath::try_from("/root/worker").expect("agent path")),
                 agent_nickname: Some("Worker".to_string()),
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             })),
             crate::agent::control::SpawnAgentOptions::default(),
         )
@@ -1809,6 +1810,7 @@ async fn multi_agent_v2_send_message_accepts_root_target_from_child() {
                 agent_path: Some(child_path.clone()),
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             crate::agent::control::SpawnAgentOptions::default(),
         )
@@ -1822,6 +1824,7 @@ async fn multi_agent_v2_send_message_accepts_root_target_from_child() {
         agent_path: Some(child_path.clone()),
         agent_nickname: None,
         agent_role: None,
+        agent_class: None,
     });
 
     SendMessageHandlerV2
@@ -1886,6 +1889,7 @@ async fn multi_agent_v2_followup_task_rejects_root_target_from_child() {
                 agent_path: Some(child_path.clone()),
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             crate::agent::control::SpawnAgentOptions::default(),
         )
@@ -1899,6 +1903,7 @@ async fn multi_agent_v2_followup_task_rejects_root_target_from_child() {
         agent_path: Some(child_path),
         agent_nickname: None,
         agent_role: None,
+        agent_class: None,
     });
 
     let Err(err) = FollowupTaskHandlerV2
@@ -2069,6 +2074,7 @@ async fn multi_agent_v2_list_agents_filters_by_relative_path_prefix() {
                 agent_path: Some(researcher_path.clone()),
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             crate::agent::control::SpawnAgentOptions::default(),
         )
@@ -2090,6 +2096,7 @@ async fn multi_agent_v2_list_agents_filters_by_relative_path_prefix() {
                 agent_path: Some(worker_path.clone()),
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             crate::agent::control::SpawnAgentOptions::default(),
         )
@@ -2102,6 +2109,7 @@ async fn multi_agent_v2_list_agents_filters_by_relative_path_prefix() {
         agent_path: Some(researcher_path),
         agent_nickname: None,
         agent_role: None,
+        agent_class: None,
     });
 
     let output = ListAgentsHandlerV2
@@ -2587,6 +2595,7 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
                 agent_path: Some(troll_path.clone()),
                 agent_nickname: Some("Burzum".to_string()),
                 agent_role: Some("troll".to_string()),
+                agent_class: None,
             })),
             thread_source: Some(ThreadSource::Subagent),
             dynamic_tools: Vec::new(),
@@ -2610,6 +2619,7 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
                 agent_path: Some(first_orc_path.clone()),
                 agent_nickname: Some("Snaga".to_string()),
                 agent_role: Some("orc".to_string()),
+                agent_class: None,
             })),
             thread_source: Some(ThreadSource::Subagent),
             dynamic_tools: Vec::new(),
@@ -2633,6 +2643,7 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
                 agent_path: Some(second_orc_path.clone()),
                 agent_nickname: Some("Ghash".to_string()),
                 agent_role: Some("orc".to_string()),
+                agent_class: None,
             })),
             thread_source: Some(ThreadSource::Subagent),
             dynamic_tools: Vec::new(),
@@ -3250,6 +3261,7 @@ async fn spawn_agent_rejects_when_depth_limit_exceeded() {
         agent_path: None,
         agent_nickname: None,
         agent_role: None,
+        agent_class: None,
     });
 
     let invocation = invocation(
@@ -3290,6 +3302,7 @@ async fn spawn_agent_allows_depth_up_to_configured_max_depth() {
         agent_path: None,
         agent_nickname: None,
         agent_role: None,
+        agent_class: None,
     });
 
     let invocation = invocation(
@@ -3547,6 +3560,7 @@ async fn multi_agent_v2_spawn_agent_ignores_configured_max_depth() {
                 agent_path: Some(parent_path.clone()),
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             crate::agent::control::SpawnAgentOptions {
                 parent_thread_id: Some(root.thread_id),
@@ -3564,6 +3578,7 @@ async fn multi_agent_v2_spawn_agent_ignores_configured_max_depth() {
         agent_path: Some(parent_path),
         agent_nickname: None,
         agent_role: None,
+        agent_class: None,
     });
 
     let invocation = invocation(
@@ -3939,6 +3954,7 @@ async fn resume_agent_rejects_when_depth_limit_exceeded() {
         agent_path: None,
         agent_nickname: None,
         agent_role: None,
+        agent_class: None,
     });
 
     let invocation = invocation(
@@ -5455,6 +5471,7 @@ async fn multi_agent_v2_interrupt_agent_rejects_self_target_by_id() {
                 agent_path: Some(child_path.clone()),
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             crate::agent::control::SpawnAgentOptions::default(),
         )
@@ -5468,6 +5485,7 @@ async fn multi_agent_v2_interrupt_agent_rejects_self_target_by_id() {
         agent_path: Some(child_path),
         agent_nickname: None,
         agent_role: None,
+        agent_class: None,
     });
 
     let err = InterruptAgentHandler
@@ -5525,6 +5543,7 @@ async fn multi_agent_v2_interrupt_agent_rejects_self_target_by_task_name() {
                 agent_path: Some(child_path.clone()),
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             crate::agent::control::SpawnAgentOptions::default(),
         )
@@ -5538,6 +5557,7 @@ async fn multi_agent_v2_interrupt_agent_rejects_self_target_by_task_name() {
         agent_path: Some(child_path.clone()),
         agent_nickname: None,
         agent_role: None,
+        agent_class: None,
     });
 
     let err = InterruptAgentHandler

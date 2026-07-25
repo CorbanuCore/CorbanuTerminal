@@ -1854,3 +1854,113 @@ Disposition:
 - Run the implementer-blind session next on a fresh copied home and worktree using this exact
   candidate binary and hash. Its driver receives only a plain user objective and ordinary
   product help; it receives no implementation details, evidence tables, or defect list.
+
+## Phase 8S — Structural audit invalidates the candidate
+
+Status: FAIL; qualification count is reset from 2 of 3 to 0 of 3.
+
+The exact candidate remained process-stable through the third, implementer-blind session,
+including resume, explicit compaction, one injected `turn/start` failure, a controlled HTTP
+429 followed by same-thread recovery, saturation, interruption, and preserved Opus 5 and
+Kimi K3 follow-ups. That evidence does not override the structural invariant below.
+
+Release-blocking duplicate terminal delivery:
+
+- Core already forwards each native child completion through the durable native mailbox as
+  one `AgentMessageKind::TerminalResult` with a stable `completion:<thread>:<turn>` message
+  identity. The two production paths are
+  `codex-rs/core/src/agent/control.rs::maybe_start_completion_watcher` and
+  `codex-rs/core/src/session/mod.rs::forward_child_completion_to_parent`.
+- The TUI separately observes the same native `TurnCompleted`, calls
+  `record_spawn_child_report_for_thread`, stores a second queue in
+  `spawn_pending_reports_by_thread`, and later calls
+  `flush_pending_reports_for_thread`. That path creates a new
+  `SubmitSpawnAgentTask`/`Assignment` with a different `dispatch-*` identity and embeds the
+  same terminal result as a `child_report`.
+- This is a second model-visible delivery mechanism, not a display-only projection. In the
+  standard-crew session, Burzum's rollout at
+  `/tmp/pft-native-orch-640c-s2-home-20260725/sessions/2026/07/25/rollout-2026-07-25T17-16-59-019f9a47-b846-74a1-991d-f33df484d1c9.jsonl`
+  contains Ghash's native `terminal_result` at line 223 with a `completion:*` identity, then
+  the same result again at line 229 as an `assignment` with a `dispatch-*` identity.
+- The standard-crew rollouts contain 48 `child_report;` payloads in addition to the native
+  final-answer terminal messages. The implementer-blind custom agents did not exhibit the
+  duplicate only because the TUI's second path is restricted to persisted crew mappings.
+
+Release-blocking authority gap:
+
+- `AgentClass::{CrewMember, EphemeralTask}` exists in
+  `codex-rs/protocol/src/crew.rs`, but no runtime, thread metadata, persistence, resume, or
+  lifecycle path uses it.
+- `/spawn` creates native app-server threads, then keeps crew classification and completion
+  wake-up behavior solely in TUI `CrewInstanceState`. Native core therefore cannot decide
+  whether one terminal mailbox event should wake a persistent manager, and the TUI compensates
+  by injecting the duplicate assignment described above.
+
+Required repair:
+
+1. Persist `AgentClass` on native child thread metadata and preserve it across resume.
+2. Make the single native `TerminalResult` mailbox event the only native completion
+   transport. For crew-member parents, that native event must request exactly one bounded
+   manager turn; ephemeral task behavior remains ordinary Codex behavior.
+3. Delete the TUI's native report queue, injection, and flush path. Keep any external-Claude
+   compatibility adapter isolated to non-native panes and display native state as a
+   projection only.
+4. Add integration regressions for idle-parent completion, busy-parent completion,
+   redelivery deduplication, restart/resume, and absence of a generated `child_report`
+   assignment.
+5. Rebuild the exact candidate and restart all three 45–60 minute sessions. No session on
+   source `640c658f4` counts after this finding.
+
+## Phase 8T — Native completion authority repair
+
+Status: implementation and focused automated gates pass; live qualification remains 0 of 3.
+
+As of `2026-07-25T19:44:03Z`:
+
+- `AgentClass` is persisted in `SubAgentSource::ThreadSpawn`, accepted by app-server
+  `thread/spawnAgent`, attached to every `CrewSpec` member, exported in the stable schema,
+  and preserved from the stored rollout across native resume.
+- Native V2 tool-created descendants are classified as `EphemeralTask`; the `/spawn`
+  `CrewSpec` path uses the exact crew ID and logical member ID as `CrewMember`.
+- Core's existing stable `completion:<child-thread>:<turn>` `TerminalResult` is now the only
+  native completion transport. A persistent `CrewMember` parent requests a manager turn from
+  that mailbox item; an unclassified human root or ephemeral task agent remains queue-only.
+- The TUI's native `spawn_pending_reports_by_thread`,
+  `record_spawn_child_report_for_thread`, and `flush_pending_reports_for_thread` machinery
+  has been deleted. Native `TurnCompleted` is now projection-only.
+- External Claude panes remain an edge adapter. Their reports enter the canonical app-server
+  mailbox with a stable SHA-256-derived ID and never create a second synthetic assignment
+  queue.
+
+Passing focused evidence:
+
+- `cargo check -p codex-core -p codex-app-server -p codex-tui --tests`.
+- `crew_child_terminal_result_uses_one_triggering_native_mailbox_message`: one pass. The test
+  emits the same child completion twice and observes exactly one triggering native
+  `TerminalResult`.
+- `resume_thread_subagent_restores_stored_metadata_and_effective_multi_agent_mode`: one pass,
+  including restored `CrewMember` class and manager auto-processing policy.
+- `native_turn_completion_is_projection_only_and_never_schedules_tui_delivery`: one pass.
+- `external_child_report_enters_native_parent_through_one_canonical_mailbox_message`: one
+  pass, including duplicate edge input and rejection of the obsolete
+  `SubmitSpawnAgentTask` route.
+- `thread_agent_message_uses_native_mailbox_and_deduplicates_stable_id`: one app-server
+  integration pass with an explicit persisted `CrewMember` class.
+- App-server protocol schema fixtures: four of four pass after normal stable-surface
+  regeneration. Experimental fixture churn was deliberately discarded.
+- Structural search finds zero remaining references to the deleted native TUI queue,
+  recorder, or flush symbols.
+
+Disk:
+
+- Focused test linking reduced root free space from 78 GiB to 49 GiB.
+- `cargo clean --profile dev` reclaimed 90.8 GiB from this worktree only; no user worktree,
+  session, or rental was touched.
+- Schema generation and its focused test left 125 GiB free. A release build may proceed
+  while retaining the 60 GiB reserve.
+
+Qualification disposition:
+
+- The old `640c658f4` sessions remain historical defect evidence and do not count.
+- No repaired candidate session has started yet. Build one exact candidate from the repaired
+  source, record its source commit and binary SHA-256, then restart the three-session count.

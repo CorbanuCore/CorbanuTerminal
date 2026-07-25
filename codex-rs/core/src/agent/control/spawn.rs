@@ -266,6 +266,7 @@ impl AgentControl {
                 depth,
                 agent_path,
                 agent_role,
+                agent_class,
                 ..
             })) => {
                 let (session_source, agent_metadata) = self.prepare_thread_spawn(
@@ -276,6 +277,7 @@ impl AgentControl {
                     agent_path,
                     agent_role,
                     /*preferred_agent_nickname*/ None,
+                    agent_class,
                 )?;
                 (Some(session_source), agent_metadata)
             }
@@ -616,6 +618,7 @@ impl AgentControl {
                             agent_path: None,
                             agent_nickname: None,
                             agent_role: None,
+                            agent_class: None,
                         });
                     match Box::pin(self.resume_single_agent_from_rollout(
                         config.clone(),
@@ -655,6 +658,7 @@ impl AgentControl {
                 include_history: true,
             })
             .await?;
+        let persisted_agent_class = stored_thread.source.get_agent_class();
         let history = stored_thread
             .history
             .ok_or_else(|| CodexErr::ThreadNotFound(thread_id))?
@@ -683,6 +687,7 @@ impl AgentControl {
                 agent_path,
                 agent_role: _,
                 agent_nickname: _,
+                agent_class,
             }) => {
                 let (resumed_agent_nickname, resumed_agent_role) =
                     if let Some(state_db_ctx) = state_db_ctx.as_ref() {
@@ -701,6 +706,7 @@ impl AgentControl {
                     agent_path,
                     resumed_agent_role,
                     resumed_agent_nickname,
+                    persisted_agent_class.or(agent_class),
                 )?
             }
             other => (other, AgentMetadata::default()),

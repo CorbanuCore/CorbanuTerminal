@@ -2818,6 +2818,11 @@ pub enum SubAgentSource {
         agent_nickname: Option<String>,
         #[serde(default, alias = "agent_type")]
         agent_role: Option<String>,
+        /// Product-level retention and addressing classification for this native thread.
+        ///
+        /// Older rollouts omit this field and remain resumable as unclassified agents.
+        #[serde(default)]
+        agent_class: Option<crate::crew::AgentClass>,
     },
     MemoryConsolidation,
     Other(String),
@@ -2889,6 +2894,15 @@ impl SessionSource {
         match self {
             SessionSource::SubAgent(SubAgentSource::ThreadSpawn { agent_path, .. }) => {
                 agent_path.clone()
+            }
+            _ => None,
+        }
+    }
+
+    pub fn get_agent_class(&self) -> Option<crate::crew::AgentClass> {
+        match self {
+            SessionSource::SubAgent(SubAgentSource::ThreadSpawn { agent_class, .. }) => {
+                agent_class.clone()
             }
             _ => None,
         }

@@ -9,6 +9,7 @@ use crate::spawn_orchestration::pane_node_id;
 use crate::spawn_orchestration::spawn_role_from_agent_type;
 use crate::spawn_orchestration::thread_node_id;
 use codex_protocol::ThreadId;
+use codex_protocol::crew::AgentClass;
 use codex_protocol::crew::CrewSpec;
 use codex_protocol::crew::RuntimeRequest;
 use color_eyre::eyre::Result;
@@ -249,11 +250,16 @@ impl App {
 
             let nickname = self.next_spawn_agent_nickname(role);
             let started = match app_server
-                .spawn_agent_thread(
+                .spawn_agent_thread_with_class(
                     &spawn_config,
                     parent_thread_id,
                     member.role_profile.clone(),
                     nickname.clone(),
+                    AgentClass::CrewMember {
+                        crew_id: crew.crew_id.clone(),
+                        logical_member_id: member.logical_member_id.clone(),
+                        human_addressable: true,
+                    },
                     model_id,
                     Some(provider_id),
                     reasoning_effort,

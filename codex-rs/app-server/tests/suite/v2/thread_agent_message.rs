@@ -9,6 +9,7 @@ use codex_app_server_protocol::ThreadSpawnAgentParams;
 use codex_app_server_protocol::ThreadSpawnAgentResponse;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
+use codex_protocol::crew::AgentClass;
 use codex_protocol::protocol::AgentMessageKind;
 use core_test_support::responses;
 use std::path::Path;
@@ -54,6 +55,11 @@ async fn thread_agent_message_uses_native_mailbox_and_deduplicates_stable_id() -
                 parent_thread_id: root.id.clone(),
                 agent_role: "worker".to_string(),
                 agent_nickname: Some("worker-a".to_string()),
+                agent_class: Some(AgentClass::CrewMember {
+                    crew_id: "native-app-server-crew".to_string(),
+                    logical_member_id: "worker-a".to_string(),
+                    human_addressable: true,
+                }),
                 thread: ThreadStartParams {
                     model: Some("mock-model".to_string()),
                     ..Default::default()

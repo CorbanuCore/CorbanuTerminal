@@ -34,6 +34,58 @@
       ],
       "type": "string"
     },
+    "AgentClass": {
+      "oneOf": [
+        {
+          "properties": {
+            "class": {
+              "enum": [
+                "crew_member"
+              ],
+              "type": "string"
+            },
+            "crew_id": {
+              "type": "string"
+            },
+            "human_addressable": {
+              "type": "boolean"
+            },
+            "logical_member_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "class",
+            "crew_id",
+            "human_addressable",
+            "logical_member_id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "assignment_id": {
+              "type": "string"
+            },
+            "class": {
+              "enum": [
+                "ephemeral_task"
+              ],
+              "type": "string"
+            },
+            "retention": {
+              "$ref": "#/definitions/RetentionPolicy"
+            }
+          },
+          "required": [
+            "assignment_id",
+            "class",
+            "retention"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "AgentMessageInputContent": {
       "oneOf": [
         {
@@ -3161,6 +3213,14 @@
           "type": "object"
         }
       ]
+    },
+    "RetentionPolicy": {
+      "enum": [
+        "close_on_completion",
+        "unload_on_completion",
+        "retain"
+      ],
+      "type": "string"
     },
     "ReviewDelivery": {
       "enum": [

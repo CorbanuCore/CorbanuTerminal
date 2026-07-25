@@ -1072,6 +1072,7 @@ mod thread_processor_behavior_tests {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             }),
             thread_source: Some(codex_protocol::protocol::ThreadSource::Subagent),
             agent_nickname: Some("atlas".to_string()),
@@ -1211,6 +1212,7 @@ mod thread_processor_behavior_tests {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             }))?;
 
         let summary = summary_from_state_db_metadata(

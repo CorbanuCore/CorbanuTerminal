@@ -395,6 +395,7 @@ async fn resumed_subagent_rejoins_loaded_parent_control_plane() {
         agent_path: Some(child_path.clone()),
         agent_nickname: Some("Burzum".to_string()),
         agent_role: Some("troll".to_string()),
+        agent_class: None,
     });
     let child = manager
         .start_thread_with_options(StartThreadOptions {
@@ -552,6 +553,7 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
         agent_path: Some(child_path.clone()),
         agent_nickname: Some("Burzum".to_string()),
         agent_role: Some("troll".to_string()),
+        agent_class: None,
     });
     let child = manager
         .start_thread_with_options(StartThreadOptions {
@@ -579,6 +581,7 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
         agent_path: Some(verifier_path.clone()),
         agent_nickname: Some("Godel".to_string()),
         agent_role: Some("verification".to_string()),
+        agent_class: None,
     });
     let mut verifier_config = config.clone();
     verifier_config.model_provider = verifier_config

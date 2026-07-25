@@ -15,18 +15,22 @@ use chrono::Utc;
 use codex_app_server_protocol::AdditionalContextEntry;
 use codex_app_server_protocol::AdditionalContextKind;
 use codex_app_server_protocol::SessionSource as AppServerSessionSource;
+use codex_app_server_protocol::ThreadAgentMessageParams;
 use codex_app_server_protocol::ThreadStatus;
 use codex_features::Feature;
 use codex_protocol::ThreadId;
 use codex_protocol::crew::RuntimeRequest;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort;
+use codex_protocol::protocol::AgentMessageKind;
 use codex_protocol::protocol::SessionSource as CoreSessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::ThreadSource as CoreThreadSource;
 use codex_state::DirectionalThreadSpawnEdgeStatus;
 use color_eyre::eyre::Result;
 use color_eyre::eyre::eyre;
+use sha2::Digest;
+use sha2::Sha256;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -728,10 +732,6 @@ impl App {
         {
             self.spawn_waiting_for_agents_by_thread
                 .insert(new_thread_id, waiting);
-        }
-        if let Some(reports) = self.spawn_pending_reports_by_thread.remove(&old_thread_id) {
-            self.spawn_pending_reports_by_thread
-                .insert(new_thread_id, reports);
         }
         if let Some(status) = self.spawn_status_by_thread.remove(&old_thread_id) {
             self.spawn_status_by_thread.insert(new_thread_id, status);
@@ -1659,38 +1659,6 @@ impl App {
         );
     }
 
-    pub(crate) fn record_spawn_child_report_for_thread(
-        &mut self,
-        thread_id: ThreadId,
-        status: codex_app_server_protocol::CollabAgentStatus,
-        result: Option<String>,
-    ) {
-        if !self.is_spawn_orchestration_thread(thread_id) {
-            return;
-        }
-        let Some(parent_node_id) = self.logical_parent_node_for_thread(thread_id) else {
-            return;
-        };
-        let Some(entry) = self.agent_navigation.get(&thread_id) else {
-            return;
-        };
-        let child_title = format_agent_picker_item_name(
-            entry.agent_nickname.as_deref(),
-            entry.agent_role.as_deref(),
-            self.primary_thread_id == Some(thread_id),
-        );
-        let child_node_id = self.logical_native_node_for_thread(thread_id);
-        let (seq, as_of) = self.reserve_spawn_report_seq(&child_node_id);
-        let report = spawn_child_report(
-            &child_title,
-            collab_status_label(&status),
-            result.as_deref(),
-            seq,
-            &as_of,
-        );
-        self.record_spawn_parent_report(parent_node_id, report);
-    }
-
     pub(crate) fn record_spawn_child_report_for_claude_pane(
         &mut self,
         pane_id: &str,
@@ -1785,7 +1753,9 @@ impl App {
             }
             return;
         }
-        // Native Codex parent thread (a spawned Nazgul/Troll) or `codex-main` (the primary thread).
+        // Native Codex parent thread (a spawned Nazgul/Troll) or `codex-main` (the primary
+        // thread). External panes adapt into the canonical native mailbox; they never create a
+        // second TUI report queue or a synthetic assignment turn.
         let codex_main_node_id = pane_node_id(CODEX_MAIN_PANE_ID);
         let parent_thread_id = if parent_node_id == codex_main_node_id {
             self.primary_thread_id
@@ -1813,62 +1783,27 @@ impl App {
             {
                 self.chat_widget.add_info_message(summary, hint);
             }
-            // Deliver the report as a real parent processing turn when the parent is idle. When the
-            // parent is mid-turn, enqueue the report instead of dropping it; it is flushed into a
-            // processing turn when the parent next goes idle (see flush_pending_reports_for_thread).
-            let is_running = self
-                .agent_navigation
-                .get(&parent_thread_id)
-                .map(|e| e.is_running)
-                .unwrap_or(false);
-            if is_running {
-                self.enqueue_pending_report(parent_thread_id, report);
-            } else if self.begin_spawn_auto_processing_turn(parent_node_id) {
-                let trigger_prompt = child_report_processing_prompt(report);
-                self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
-                    thread_id: parent_thread_id,
-                    task: trigger_prompt,
+            let source_thread_id = self.primary_thread_id.unwrap_or(parent_thread_id);
+            let digest = Sha256::digest(report.as_bytes());
+            let message_id = format!("external-report:{digest:x}");
+            let is_terminal_result = report.starts_with("child_report; ");
+            self.app_event_tx
+                .send(AppEvent::SendSpawnAgentMailboxMessage {
+                    params: ThreadAgentMessageParams {
+                        source_thread_id: source_thread_id.to_string(),
+                        target_thread_id: parent_thread_id.to_string(),
+                        message_id: Some(message_id.clone()),
+                        assignment_id: is_terminal_result.then_some(message_id),
+                        kind: if is_terminal_result {
+                            AgentMessageKind::TerminalResult
+                        } else {
+                            AgentMessageKind::Informational
+                        },
+                        content: report.to_string(),
+                        trigger_turn: true,
+                    },
                 });
-            } else {
-                if self.spawn_auto_processing_quarantined() {
-                    self.enqueue_pending_report(parent_thread_id, report);
-                    self.notify_spawn_resume_auto_processing_quarantined(
-                        parent_node_id,
-                        Some(report.to_string()),
-                    );
-                } else {
-                    self.notify_spawn_auto_processing_paused(
-                        parent_node_id,
-                        /*report_count*/ 1,
-                        Some(report.to_string()),
-                    );
-                }
-            }
         }
-    }
-
-    /// Queue a child report for a native Codex parent thread that is currently mid-turn. The queued
-    /// report is turned into a parent processing turn when the parent goes idle.
-    fn enqueue_pending_report(&mut self, parent_thread_id: ThreadId, report: &str) {
-        let queue = self
-            .spawn_pending_reports_by_thread
-            .entry(parent_thread_id)
-            .or_default();
-        // Deduplicate against the most recent queued report so a repeated identical result does not
-        // spawn redundant turns.
-        let dedup_key = spawn_report_dedup_key(report);
-        if queue
-            .back()
-            .is_some_and(|previous| spawn_report_dedup_key(previous) == dedup_key)
-        {
-            return;
-        }
-        queue.push_back(report.to_string());
-        tracing::info!(
-            thread_id = %parent_thread_id,
-            queue_len = queue.len(),
-            "queued child report for busy parent; will flush on parent idle"
-        );
     }
 
     pub(crate) fn logical_native_node_for_thread(&self, thread_id: ThreadId) -> String {
@@ -2056,74 +1991,6 @@ impl App {
             .insert(node_id.to_string(), seq);
         self.spawn_last_event_at_by_node
             .insert(node_id.to_string(), Utc::now().to_rfc3339());
-    }
-
-    /// Drain pending child reports for a native Codex parent thread that has just gone idle, turning
-    /// each into a parent processing turn. Returns true if any report was flushed.
-    ///
-    /// This is the fix for the multi-turn race: a report that arrived while the parent was mid-turn
-    /// is no longer dropped; it is processed as soon as the parent becomes idle, like a user query.
-    pub(crate) fn flush_pending_reports_for_thread(&mut self, parent_thread_id: ThreadId) -> bool {
-        // Submit the queue as a single combined processing turn so the parent reviews every pending
-        // report at once rather than starting one turn per report. Keep the queue until the event is
-        // accepted; if the later turn submission is rejected, the event handler re-queues the report
-        // body from the generated processing prompt.
-        let (body, report_count) = {
-            let Some(queue) = self.spawn_pending_reports_by_thread.get(&parent_thread_id) else {
-                return false;
-            };
-            if queue.is_empty() {
-                return false;
-            }
-            let mut reports: Vec<String> = queue.iter().cloned().collect();
-            let report_count = reports.len();
-            let body = if reports.len() == 1 {
-                reports.remove(0)
-            } else {
-                let mut combined = String::from(
-                    "Multiple child panes have reported back while you were busy. Review every report \
-                     below, triage each, dispatch follow-up work or acknowledge, and do not skip any \
-                     of them.\n\n",
-                );
-                for (index, report) in reports.into_iter().enumerate() {
-                    let _ = writeln!(combined, "## Child report {index}\n{report}\n");
-                }
-                combined
-            };
-            (body, report_count)
-        };
-        let parent_node_id = self.spawn_auto_loop_node_for_thread(parent_thread_id);
-        if !self.begin_spawn_auto_processing_turn(&parent_node_id) {
-            if self.spawn_auto_processing_quarantined() {
-                self.notify_spawn_resume_auto_processing_quarantined(&parent_node_id, Some(body));
-            } else {
-                self.notify_spawn_auto_processing_paused(&parent_node_id, report_count, Some(body));
-                if let Some(queue) = self
-                    .spawn_pending_reports_by_thread
-                    .get_mut(&parent_thread_id)
-                {
-                    queue.clear();
-                }
-            }
-            return false;
-        }
-        let trigger_prompt = child_report_processing_prompt(&body);
-        if !self
-            .app_event_tx
-            .send_checked(AppEvent::SubmitSpawnAgentTask {
-                thread_id: parent_thread_id,
-                task: trigger_prompt,
-            })
-        {
-            return false;
-        }
-        if let Some(queue) = self
-            .spawn_pending_reports_by_thread
-            .get_mut(&parent_thread_id)
-        {
-            queue.clear();
-        }
-        true
     }
 
     fn record_spawn_dispatch_queued(
@@ -2512,6 +2379,7 @@ impl App {
                     agent_path: None,
                     agent_nickname: agent_nickname.clone(),
                     agent_role: Some(agent_role.to_string()),
+                    agent_class: None,
                 })
             })
             .unwrap_or(CoreSessionSource::Cli);
@@ -5146,6 +5014,7 @@ fn ensure_claude_spawn_rollout_session_meta(
         agent_path: None,
         agent_nickname: pane.spawn_nickname.clone(),
         agent_role: Some(agent_role.to_string()),
+        agent_class: None,
     });
     append_jsonl_value(
         &path,

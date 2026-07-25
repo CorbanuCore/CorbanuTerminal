@@ -259,6 +259,23 @@ impl AgentControl {
             .ok_or(CodexErr::ThreadNotFound(agent_id))
     }
 
+    /// Whether native terminal mailbox items should wake this thread automatically.
+    ///
+    /// Persistent crew managers process child results without a TUI-side report queue.
+    /// Human-facing roots and ephemeral task agents retain ordinary Codex behavior.
+    pub(crate) async fn auto_processes_terminal_results(&self, agent_id: ThreadId) -> bool {
+        let Ok(state) = self.upgrade() else {
+            return false;
+        };
+        let Ok(thread) = state.get_thread(agent_id).await else {
+            return false;
+        };
+        matches!(
+            thread.session_source.get_agent_class(),
+            Some(codex_protocol::crew::AgentClass::CrewMember { .. })
+        )
+    }
+
     pub(crate) fn record_agent_result_status(
         &self,
         agent_id: ThreadId,
@@ -668,6 +685,7 @@ impl AgentControl {
         agent_path: Option<AgentPath>,
         agent_role: Option<String>,
         preferred_agent_nickname: Option<String>,
+        agent_class: Option<codex_protocol::crew::AgentClass>,
     ) -> CodexResult<(SessionSource, AgentMetadata)> {
         if depth == 1 {
             self.state.register_root_thread(parent_thread_id);
@@ -687,6 +705,7 @@ impl AgentControl {
             agent_path: agent_path.clone(),
             agent_nickname: agent_nickname.clone(),
             agent_role: agent_role.clone(),
+            agent_class: agent_class.clone(),
         });
         let agent_metadata = AgentMetadata {
             agent_id: None,

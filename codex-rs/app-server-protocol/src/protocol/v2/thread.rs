@@ -17,6 +17,7 @@ use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::MultiAgentMode;
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary;
+use codex_protocol::crew::AgentClass;
 pub use codex_protocol::dynamic_tools::DynamicToolFunctionSpec;
 pub use codex_protocol::dynamic_tools::DynamicToolNamespaceSpec;
 pub use codex_protocol::dynamic_tools::DynamicToolNamespaceTool;
@@ -161,6 +162,9 @@ pub struct ThreadSpawnAgentParams {
     /// Optional display name to store on the native spawned-agent thread.
     #[ts(optional = nullable)]
     pub agent_nickname: Option<String>,
+    /// Retention and addressing class to persist on the spawned native thread.
+    #[ts(optional = nullable)]
+    pub agent_class: Option<AgentClass>,
     /// Thread creation settings for the agent pane.
     #[experimental(nested)]
     pub thread: ThreadStartParams,

@@ -2023,12 +2023,17 @@ impl Session {
             .rollout_thread_trace
             .is_enabled()
             .then(|| message.clone());
+        let trigger_turn = self
+            .services
+            .agent_control
+            .auto_processes_terminal_results(parent_thread_id)
+            .await;
         let communication = InterAgentCommunication::new(
             child_agent_path.clone(),
             parent_agent_path,
             Vec::new(),
             message,
-            /*trigger_turn*/ false,
+            trigger_turn,
         )
         .with_kind(codex_protocol::protocol::AgentMessageKind::TerminalResult)
         .with_assignment_id(turn_context.sub_id.clone())

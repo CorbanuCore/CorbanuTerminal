@@ -120,6 +120,7 @@ use codex_protocol::ThreadId;
 use codex_protocol::approvals::GuardianAssessmentEvent;
 use codex_protocol::config_types::MultiAgentMode;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
+use codex_protocol::crew::AgentClass;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::ResponseItem;
@@ -625,6 +626,38 @@ impl AppServerSession {
         reasoning_effort: Option<codex_protocol::openai_models::ReasoningEffort>,
         base_instructions: Option<String>,
     ) -> Result<AppServerStartedThread> {
+        let logical_member_id = agent_nickname.clone().unwrap_or_else(|| agent_role.clone());
+        self.spawn_agent_thread_with_class(
+            config,
+            parent_thread_id,
+            agent_role,
+            agent_nickname,
+            AgentClass::CrewMember {
+                crew_id: format!("tui-spawn:{parent_thread_id}"),
+                logical_member_id,
+                human_addressable: true,
+            },
+            model,
+            model_provider,
+            reasoning_effort,
+            base_instructions,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn spawn_agent_thread_with_class(
+        &mut self,
+        config: &Config,
+        parent_thread_id: ThreadId,
+        agent_role: String,
+        agent_nickname: Option<String>,
+        agent_class: AgentClass,
+        model: String,
+        model_provider: Option<String>,
+        reasoning_effort: Option<codex_protocol::openai_models::ReasoningEffort>,
+        base_instructions: Option<String>,
+    ) -> Result<AppServerStartedThread> {
         let mut session_config = self.session_config_with_effective_service_tier(config);
         session_config.model = Some(model);
         session_config.model_reasoning_effort = reasoning_effort;
@@ -657,6 +690,7 @@ impl AppServerSession {
                             parent_thread_id: parent_thread_id.to_string(),
                             agent_role: agent_role.clone(),
                             agent_nickname: agent_nickname.clone(),
+                            agent_class: Some(agent_class.clone()),
                             thread: thread.clone(),
                         },
                     })

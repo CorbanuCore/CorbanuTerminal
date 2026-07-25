@@ -1406,6 +1406,7 @@ async fn orc_tool_surface_excludes_manager_controls() {
             ),
             agent_nickname: Some("Snaga".to_string()),
             agent_role: Some("orc".to_string()),
+            agent_class: None,
         });
     })
     .await;

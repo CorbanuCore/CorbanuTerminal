@@ -1,9 +1,11 @@
 use crate::config_types::ServiceTier;
 use crate::openai_models::ReasoningEffort;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashSet;
 use thiserror::Error;
+use ts_rs::TS;
 
 pub const CURRENT_CREW_SCHEMA_VERSION: u32 = 1;
 
@@ -205,8 +207,9 @@ impl CrewSpec {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(tag = "class", rename_all = "snake_case")]
+#[ts(tag = "class", rename_all = "snake_case", export_to = "v2/")]
 pub enum AgentClass {
     CrewMember {
         crew_id: String,
@@ -219,8 +222,9 @@ pub enum AgentClass {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case", export_to = "v2/")]
 pub enum RetentionPolicy {
     CloseOnCompletion,
     UnloadOnCompletion,

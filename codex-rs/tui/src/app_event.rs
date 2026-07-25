@@ -30,6 +30,7 @@ use codex_app_server_protocol::PluginReadResponse;
 use codex_app_server_protocol::PluginUninstallResponse;
 use codex_app_server_protocol::RateLimitResetCreditsSummary;
 use codex_app_server_protocol::SkillsListResponse;
+use codex_app_server_protocol::ThreadAgentMessageParams;
 use codex_app_server_protocol::ThreadGoalStatus;
 use codex_file_search::FileMatch;
 use codex_protocol::ThreadId;
@@ -319,6 +320,10 @@ pub(crate) enum AppEvent {
     SubmitSpawnAgentTask {
         thread_id: codex_protocol::ThreadId,
         task: String,
+    },
+    /// Deliver an edge-adapter message through the canonical native mailbox.
+    SendSpawnAgentMailboxMessage {
+        params: ThreadAgentMessageParams,
     },
     /// Start a normal turn in an existing Claude spawn pane.
     SubmitSpawnClaudePaneTask {

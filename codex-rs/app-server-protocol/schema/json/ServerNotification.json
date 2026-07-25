@@ -138,6 +138,58 @@
       },
       "type": "object"
     },
+    "AgentClass": {
+      "oneOf": [
+        {
+          "properties": {
+            "class": {
+              "enum": [
+                "crew_member"
+              ],
+              "type": "string"
+            },
+            "crew_id": {
+              "type": "string"
+            },
+            "human_addressable": {
+              "type": "boolean"
+            },
+            "logical_member_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "class",
+            "crew_id",
+            "human_addressable",
+            "logical_member_id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "assignment_id": {
+              "type": "string"
+            },
+            "class": {
+              "enum": [
+                "ephemeral_task"
+              ],
+              "type": "string"
+            },
+            "retention": {
+              "$ref": "#/definitions/RetentionPolicy"
+            }
+          },
+          "required": [
+            "assignment_id",
+            "class",
+            "retention"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "AgentMessageDeltaNotification": {
       "properties": {
         "delta": {
@@ -3153,6 +3205,14 @@
       },
       "type": "object"
     },
+    "RetentionPolicy": {
+      "enum": [
+        "close_on_completion",
+        "unload_on_completion",
+        "retain"
+      ],
+      "type": "string"
+    },
     "SandboxPolicy": {
       "oneOf": [
         {
@@ -3387,6 +3447,18 @@
           "properties": {
             "thread_spawn": {
               "properties": {
+                "agent_class": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/AgentClass"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Product-level retention and addressing classification for this native thread.\n\nOlder rollouts omit this field and remain resumable as unclassified agents."
+                },
                 "agent_nickname": {
                   "default": null,
                   "type": [

@@ -65,7 +65,6 @@ pub(super) async fn make_test_app() -> App {
         spawn_status_by_thread: HashMap::new(),
         spawn_waiting_for_agents_by_thread: HashMap::new(),
         spawn_parent_reports_by_node: HashMap::new(),
-        spawn_pending_reports_by_thread: HashMap::new(),
         spawn_dispatch_acks_by_target_task: HashMap::new(),
         spawn_next_dispatch_seq: 1,
         spawn_processed_dispatch_seq_ids: HashSet::new(),

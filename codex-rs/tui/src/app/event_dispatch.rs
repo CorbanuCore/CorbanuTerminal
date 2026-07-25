@@ -3528,6 +3528,18 @@ impl App {
                     }
                 }
             }
+            AppEvent::SendSpawnAgentMailboxMessage { params } => {
+                if let Err(err) = app_server.send_agent_message(params).await {
+                    tracing::error!(
+                        error = ?err,
+                        error_chain = %format!("{err:#}"),
+                        "failed to deliver edge-adapter report through native mailbox"
+                    );
+                    self.chat_widget.add_error_message(format!(
+                        "A child report could not be durably delivered: {err:#}"
+                    ));
+                }
+            }
             AppEvent::SubmitSpawnClaudePaneTask { pane_id, task } => {
                 if self.spawn_legacy_read_only {
                     self.chat_widget.add_error_message(

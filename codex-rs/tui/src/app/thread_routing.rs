@@ -1190,9 +1190,6 @@ impl App {
                 self.agent_navigation.set_running(thread_id, is_running);
                 self.agent_navigation
                     .set_last_result_message(thread_id, status.message.clone());
-                if !is_running && self.is_spawn_orchestration_thread(thread_id) {
-                    self.flush_pending_reports_for_thread(thread_id);
-                }
             }
 
             if self.agent_navigation.get(&thread_id).is_some() {
@@ -1773,12 +1770,6 @@ impl App {
                 },
             );
             self.agent_navigation.mark_closed(thread_id);
-            self.record_spawn_child_report_for_thread(
-                thread_id,
-                codex_app_server_protocol::CollabAgentStatus::Shutdown,
-                Some("thread closed".to_string()),
-            );
-            self.flush_pending_reports_for_thread(thread_id);
             self.persist_pane_state();
             return;
         }
@@ -1899,7 +1890,6 @@ impl App {
         } else {
             message
         };
-        let report_message = message.clone();
         self.spawn_status_by_thread.insert(
             thread_id,
             codex_app_server_protocol::CollabAgentState {
@@ -1926,16 +1916,12 @@ impl App {
                 status,
                 codex_app_server_protocol::CollabAgentStatus::Completed
             );
-            self.record_spawn_child_report_for_thread(thread_id, status, report_message);
-            // This thread just went idle. If child reports arrived while it was mid-turn, flush them
-            // now into a real processing turn so no report is silently dropped (the multi-turn race).
-            let flushed_reports = self.flush_pending_reports_for_thread(thread_id);
             let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
             if should_process_terminal_side_effects {
                 self.note_whip_target_idle_with_fire_control(
                     &node_key,
                     current_turn_message.as_deref(),
-                    !flushed_reports,
+                    true,
                     turn_succeeded,
                 );
             }

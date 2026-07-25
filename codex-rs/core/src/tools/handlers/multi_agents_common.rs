@@ -11,6 +11,8 @@ use crate::tools::context::ToolPayload;
 use codex_models_manager::manager::RefreshStrategy;
 use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
+use codex_protocol::crew::AgentClass;
+use codex_protocol::crew::RetentionPolicy;
 use codex_protocol::error::CodexErr;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ResponseInputItem;
@@ -140,6 +142,7 @@ pub(crate) fn thread_spawn_source(
     depth: i32,
     agent_role: Option<&str>,
     task_name: Option<String>,
+    assignment_id: Option<String>,
 ) -> Result<SessionSource, FunctionCallError> {
     let agent_path = task_name
         .as_deref()
@@ -157,6 +160,11 @@ pub(crate) fn thread_spawn_source(
         agent_path,
         agent_nickname: None,
         agent_role: agent_role.map(str::to_string),
+        agent_class: Some(AgentClass::EphemeralTask {
+            assignment_id: assignment_id
+                .unwrap_or_else(|| format!("thread-spawn:{}", ThreadId::new())),
+            retention: RetentionPolicy::Retain,
+        }),
     }))
 }
 

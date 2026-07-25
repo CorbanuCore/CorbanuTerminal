@@ -772,11 +772,6 @@ pub(crate) struct App {
     /// delayed completion from an older wait cannot clear a newer wait state.
     pub(crate) spawn_waiting_for_agents_by_thread: HashMap<ThreadId, (String, String)>,
     pub(crate) spawn_parent_reports_by_node: HashMap<String, VecDeque<String>>,
-    /// Child reports delivered to a native Codex parent thread that could not be turned into a
-    /// parent turn immediately because the parent was mid-turn. These are flushed (each turned
-    /// into a parent processing turn) when the parent goes idle. Keyed by parent thread id so a
-    /// flush only fires for the pane that actually became idle.
-    pub(crate) spawn_pending_reports_by_thread: HashMap<ThreadId, VecDeque<String>>,
     pub(crate) spawn_dispatch_acks_by_target_task:
         HashMap<(String, String), VecDeque<crate::spawn_orchestration::SpawnDispatchAck>>,
     pub(crate) spawn_next_dispatch_seq: u64,
@@ -1544,7 +1539,6 @@ See the PFTerminal keymap documentation for supported actions and examples."
             spawn_status_by_thread: HashMap::new(),
             spawn_waiting_for_agents_by_thread: HashMap::new(),
             spawn_parent_reports_by_node: HashMap::new(),
-            spawn_pending_reports_by_thread: HashMap::new(),
             spawn_dispatch_acks_by_target_task: HashMap::new(),
             spawn_next_dispatch_seq: restored_spawn_next_dispatch_seq,
             spawn_processed_dispatch_seq_ids: restored_spawn_processed_dispatch_seq_ids,

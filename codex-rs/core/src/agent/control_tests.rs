@@ -17,6 +17,7 @@ use codex_login::CodexAuth;
 use codex_protocol::AgentPath;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::MultiAgentMode;
+use codex_protocol::crew::AgentClass;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::MessagePhase;
 use codex_protocol::models::ResponseItem;
@@ -156,7 +157,141 @@ fn role_spawn_source(
         agent_path: Some(AgentPath::try_from(agent_path).expect("agent path")),
         agent_nickname: None,
         agent_role: Some(agent_role.to_string()),
+        agent_class: None,
     })
+}
+
+fn crew_spawn_source(
+    parent_thread_id: ThreadId,
+    depth: i32,
+    agent_path: &str,
+    agent_role: &str,
+    logical_member_id: &str,
+) -> SessionSource {
+    SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id,
+        depth,
+        agent_path: Some(AgentPath::try_from(agent_path).expect("agent path")),
+        agent_nickname: Some(logical_member_id.to_string()),
+        agent_role: Some(agent_role.to_string()),
+        agent_class: Some(AgentClass::CrewMember {
+            crew_id: "qualification-crew".to_string(),
+            logical_member_id: logical_member_id.to_string(),
+            human_addressable: true,
+        }),
+    })
+}
+
+#[tokio::test]
+async fn crew_child_terminal_result_uses_one_triggering_native_mailbox_message() {
+    let (home, config) = test_config_with_cli_overrides(vec![(
+        "features.multi_agent_v2".to_string(),
+        TomlValue::Boolean(true),
+    )])
+    .await;
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (root_thread_id, _) = harness.start_thread().await;
+    let parent_source = crew_spawn_source(root_thread_id, 1, "/root/manager", "manager", "manager");
+    let parent = harness
+        .manager
+        .start_thread_with_options(StartThreadOptions {
+            config: harness.config.clone(),
+            initial_history: InitialHistory::New,
+            session_source: Some(parent_source),
+            thread_source: Some(ThreadSource::Subagent),
+            dynamic_tools: Vec::new(),
+            metrics_service_name: None,
+            multi_agent_mode: Some(MultiAgentMode::Proactive),
+            parent_trace: None,
+            environments: Vec::new(),
+            thread_extension_init: ExtensionDataInit::default(),
+            supports_openai_form_elicitation: false,
+        })
+        .await
+        .expect("crew manager should start");
+    assert!(
+        harness
+            .control
+            .auto_processes_terminal_results(parent.thread_id)
+            .await
+    );
+
+    let child = harness
+        .manager
+        .start_thread_with_options(StartThreadOptions {
+            config: harness.config.clone(),
+            initial_history: InitialHistory::New,
+            session_source: Some(crew_spawn_source(
+                parent.thread_id,
+                2,
+                "/root/manager/worker",
+                "worker",
+                "worker",
+            )),
+            thread_source: Some(ThreadSource::Subagent),
+            dynamic_tools: Vec::new(),
+            metrics_service_name: None,
+            multi_agent_mode: Some(MultiAgentMode::Proactive),
+            parent_trace: None,
+            environments: Vec::new(),
+            thread_extension_init: ExtensionDataInit::default(),
+            supports_openai_form_elicitation: false,
+        })
+        .await
+        .expect("crew worker should start");
+    let turn = child.thread.codex.session.new_default_turn().await;
+    let completed = EventMsg::TurnComplete(TurnCompleteEvent {
+        turn_id: turn.sub_id.clone(),
+        last_agent_message: Some("crew result".to_string()),
+        completed_at: None,
+        duration_ms: None,
+        time_to_first_token_ms: None,
+    });
+    child
+        .thread
+        .codex
+        .session
+        .send_event(turn.as_ref(), completed.clone())
+        .await;
+    child
+        .thread
+        .codex
+        .session
+        .send_event(turn.as_ref(), completed)
+        .await;
+    let expected_message_id = format!("completion:{}:{}", child.thread_id, turn.sub_id);
+
+    timeout(Duration::from_secs(5), async {
+        loop {
+            let terminal_messages = harness
+                .manager
+                .captured_ops()
+                .into_iter()
+                .filter(|(thread_id, op)| {
+                    *thread_id == parent.thread_id
+                        && matches!(
+                            op,
+                            Op::InterAgentCommunication { communication }
+                                if communication.kind
+                                    == Some(codex_protocol::protocol::AgentMessageKind::TerminalResult)
+                                    && communication.trigger_turn
+                                    && communication.message_id.as_deref()
+                                        == Some(expected_message_id.as_str())
+                        )
+                })
+                .count();
+            if terminal_messages == 1 {
+                break;
+            }
+            assert!(
+                terminal_messages < 2,
+                "stable completion identity must prevent duplicate native application"
+            );
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("one triggering terminal result should reach the crew manager");
 }
 
 #[tokio::test]
@@ -765,6 +900,7 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
                 agent_path: Some(agent_path.clone()),
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             SpawnAgentOptions {
                 parent_thread_id: Some(parent_thread_id),
@@ -1219,6 +1355,7 @@ async fn resume_agent_from_rollout_does_not_reopen_v2_descendants() {
                 agent_path: Some(worker_path.clone()),
                 agent_nickname: None,
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -1235,6 +1372,7 @@ async fn resume_agent_from_rollout_does_not_reopen_v2_descendants() {
                 agent_path: Some(reviewer_path.clone()),
                 agent_nickname: None,
                 agent_role: Some("reviewer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -1326,6 +1464,7 @@ async fn encrypted_inter_agent_communication_clears_existing_last_task_message()
                 agent_path: Some(agent_path.clone()),
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             SpawnAgentOptions {
                 parent_thread_id: Some(parent_thread_id),
@@ -1420,6 +1559,7 @@ async fn spawn_thread_subagent_uses_supplied_initial_multi_agent_mode_without_hi
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             SpawnAgentOptions {
                 initial_multi_agent_mode: Some(MultiAgentMode::Proactive),
@@ -1556,6 +1696,7 @@ async fn spawn_agent_can_fork_parent_thread_history_with_sanitized_items() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             SpawnAgentOptions {
                 fork_parent_spawn_call_id: Some(parent_spawn_call_id.clone()),
@@ -1632,6 +1773,7 @@ async fn spawn_agent_can_fork_parent_thread_history_with_sanitized_items() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             SpawnAgentOptions {
                 fork_parent_spawn_call_id: Some(parent_spawn_call_id.clone()),
@@ -1777,6 +1919,7 @@ async fn spawn_agent_fork_strips_parent_usage_hints_from_compacted_history() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             SpawnAgentOptions {
                 fork_parent_spawn_call_id: Some(parent_spawn_call_id),
@@ -1847,6 +1990,7 @@ async fn spawn_agent_fork_flushes_parent_rollout_before_loading_history() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             SpawnAgentOptions {
                 fork_parent_spawn_call_id: Some(parent_spawn_call_id.clone()),
@@ -1973,6 +2117,7 @@ async fn spawn_agent_fork_last_n_turns_keeps_only_recent_turns() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             SpawnAgentOptions {
                 fork_parent_spawn_call_id: Some(parent_spawn_call_id.clone()),
@@ -2090,6 +2235,7 @@ async fn spawn_agent_fork_last_n_turns_drops_parent_startup_prefix_when_under_li
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             SpawnAgentOptions {
                 fork_parent_spawn_call_id: Some(parent_spawn_call_id),
@@ -2201,6 +2347,7 @@ async fn spawn_agent_fork_last_n_turns_strips_parent_usage_hints() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             SpawnAgentOptions {
                 fork_parent_spawn_call_id: Some(parent_spawn_call_id),
@@ -2481,6 +2628,7 @@ async fn spawn_child_completion_notifies_parent_history() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -2523,6 +2671,7 @@ async fn multi_agent_v2_completion_ignores_dead_direct_parent() {
                 agent_path: Some(worker_path.clone()),
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -2539,6 +2688,7 @@ async fn multi_agent_v2_completion_ignores_dead_direct_parent() {
                 agent_path: Some(tester_path.clone()),
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -2637,6 +2787,7 @@ async fn multi_agent_v2_completion_queues_message_for_direct_parent() {
             agent_path: Some(tester_path.clone()),
             agent_nickname: None,
             agent_role: Some("explorer".to_string()),
+            agent_class: None,
         })),
         tester_path.to_string(),
         Some(tester_path.clone()),
@@ -2722,6 +2873,7 @@ async fn completion_watcher_notifies_parent_when_child_is_missing() {
             agent_path: None,
             agent_nickname: None,
             agent_role: Some("explorer".to_string()),
+            agent_class: None,
         })),
         child_thread_id.to_string(),
         /*child_agent_path*/ None,
@@ -2765,6 +2917,7 @@ async fn spawn_thread_subagent_gets_random_nickname_in_session_source() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -2817,6 +2970,7 @@ async fn spawn_thread_subagent_uses_role_specific_nickname_candidates() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("researcher".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -2853,6 +3007,7 @@ async fn direct_thread_spawn_child_metadata_is_visible_and_addressable() {
                 agent_path: None,
                 agent_nickname: Some("Snaga".to_string()),
                 agent_role: Some("orc".to_string()),
+                agent_class: None,
             })),
             thread_source: Some(ThreadSource::Subagent),
             dynamic_tools: Vec::new(),
@@ -2967,6 +3122,7 @@ async fn direct_thread_spawn_named_child_registers_path_for_v2_targeting() {
                 agent_path: Some(troll_path.clone()),
                 agent_nickname: Some("Burzum".to_string()),
                 agent_role: Some("troll".to_string()),
+                agent_class: None,
             })),
             thread_source: Some(ThreadSource::Subagent),
             dynamic_tools: Vec::new(),
@@ -2991,6 +3147,7 @@ async fn direct_thread_spawn_named_child_registers_path_for_v2_targeting() {
                 agent_path: Some(orc_path.clone()),
                 agent_nickname: Some("Snaga".to_string()),
                 agent_role: Some("orc".to_string()),
+                agent_class: None,
             })),
             thread_source: Some(ThreadSource::Subagent),
             dynamic_tools: Vec::new(),
@@ -3118,6 +3275,11 @@ async fn resume_thread_subagent_restores_stored_metadata_and_effective_multi_age
     let (parent_thread_id, parent_thread) = harness.start_thread().await;
     let agent_path = AgentPath::from_string("/root/explorer".to_string())
         .expect("test agent path should be valid");
+    let expected_agent_class = AgentClass::CrewMember {
+        crew_id: "resume-test-crew".to_string(),
+        logical_member_id: "explorer".to_string(),
+        human_addressable: true,
+    };
 
     let child_thread_id = harness
         .control
@@ -3130,6 +3292,7 @@ async fn resume_thread_subagent_restores_stored_metadata_and_effective_multi_age
                 agent_path: Some(agent_path.clone()),
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: Some(expected_agent_class.clone()),
             })),
         )
         .await
@@ -3231,6 +3394,7 @@ async fn resume_thread_subagent_restores_stored_metadata_and_effective_multi_age
                 agent_path: Some(agent_path.clone()),
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             }),
         )
         .await
@@ -3250,7 +3414,7 @@ async fn resume_thread_subagent_restores_stored_metadata_and_effective_multi_age
         agent_path: resumed_agent_path,
         agent_nickname: resumed_nickname,
         agent_role: resumed_role,
-        ..
+        agent_class: resumed_agent_class,
     }) = resumed_snapshot.session_source
     else {
         panic!("expected thread-spawn sub-agent source");
@@ -3260,6 +3424,14 @@ async fn resume_thread_subagent_restores_stored_metadata_and_effective_multi_age
     assert_eq!(resumed_agent_path, Some(agent_path));
     assert_eq!(resumed_nickname, Some(original_nickname));
     assert_eq!(resumed_role, Some("explorer".to_string()));
+    assert_eq!(resumed_agent_class, Some(expected_agent_class));
+    assert!(
+        harness
+            .control
+            .auto_processes_terminal_results(resumed_thread_id)
+            .await,
+        "a resumed crew manager must retain native terminal-result auto-processing"
+    );
     assert_eq!(
         resumed_snapshot.multi_agent_mode,
         Some(MultiAgentMode::Proactive)
@@ -3339,6 +3511,7 @@ async fn list_agent_subtree_thread_ids_includes_anonymous_and_closed_descendants
                 agent_path: Some(worker_path.clone()),
                 agent_nickname: None,
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3358,6 +3531,7 @@ async fn list_agent_subtree_thread_ids_includes_anonymous_and_closed_descendants
                 ),
                 agent_nickname: None,
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3373,6 +3547,7 @@ async fn list_agent_subtree_thread_ids_includes_anonymous_and_closed_descendants
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3388,6 +3563,7 @@ async fn list_agent_subtree_thread_ids_includes_anonymous_and_closed_descendants
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3403,6 +3579,7 @@ async fn list_agent_subtree_thread_ids_includes_anonymous_and_closed_descendants
                 agent_path: Some(reviewer_path),
                 agent_nickname: None,
                 agent_role: Some("reviewer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3474,6 +3651,7 @@ async fn list_agent_subtree_thread_ids_finds_live_descendants_of_unloaded_root()
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3488,6 +3666,7 @@ async fn list_agent_subtree_thread_ids_finds_live_descendants_of_unloaded_root()
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3523,6 +3702,7 @@ async fn shutdown_agent_tree_closes_live_descendants() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3538,6 +3718,7 @@ async fn shutdown_agent_tree_closes_live_descendants() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3608,6 +3789,7 @@ async fn shutdown_agent_tree_closes_descendants_when_started_at_child() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3623,6 +3805,7 @@ async fn shutdown_agent_tree_closes_descendants_when_started_at_child() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3699,6 +3882,7 @@ async fn resume_agent_from_rollout_does_not_reopen_closed_descendants() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3714,6 +3898,7 @@ async fn resume_agent_from_rollout_does_not_reopen_closed_descendants() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3794,6 +3979,7 @@ async fn resume_closed_child_reopens_open_descendants() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3809,6 +3995,7 @@ async fn resume_closed_child_reopens_open_descendants() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3849,6 +4036,7 @@ async fn resume_closed_child_reopens_open_descendants() {
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             }),
         )
         .await
@@ -3891,6 +4079,7 @@ async fn resume_agent_from_rollout_reopens_open_descendants_after_manager_shutdo
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3906,6 +4095,7 @@ async fn resume_agent_from_rollout_reopens_open_descendants_after_manager_shutdo
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3982,6 +4172,7 @@ async fn resume_agent_from_rollout_uses_edge_data_when_descendant_metadata_sourc
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3997,6 +4188,7 @@ async fn resume_agent_from_rollout_uses_edge_data_when_descendant_metadata_sourc
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -4035,6 +4227,7 @@ async fn resume_agent_from_rollout_uses_edge_data_when_descendant_metadata_sourc
             agent_path: None,
             agent_nickname: None,
             agent_role: Some("worker".to_string()),
+            agent_class: None,
         }))
         .expect("stale session source should serialize");
     state_db
@@ -4113,6 +4306,7 @@ async fn resume_agent_from_rollout_keeps_missing_descendants_addressable_but_unl
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -4128,6 +4322,7 @@ async fn resume_agent_from_rollout_keeps_missing_descendants_addressable_but_unl
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             })),
         )
         .await

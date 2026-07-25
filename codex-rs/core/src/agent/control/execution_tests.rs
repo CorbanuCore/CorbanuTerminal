@@ -70,6 +70,7 @@ fn execution_guards_do_not_derive_capacity_policy_from_role_names() {
         agent_path: None,
         agent_nickname: Some("Snaga".to_string()),
         agent_role: Some("orc".to_string()),
+        agent_class: None,
     });
     let nazgul_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
         parent_thread_id: codex_protocol::ThreadId::new(),
@@ -77,6 +78,7 @@ fn execution_guards_do_not_derive_capacity_policy_from_role_names() {
         agent_path: None,
         agent_nickname: Some("Angmar".to_string()),
         agent_role: Some("nazgul".to_string()),
+        agent_class: None,
     });
 
     let _worker = control
