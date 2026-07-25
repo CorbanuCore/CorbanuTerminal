@@ -1,16 +1,9 @@
 use pretty_assertions::assert_eq;
 
 use super::DispatchState;
-use super::MAX_DISPATCH_TASK_BYTES;
-use super::MAX_GLOBAL_DISPATCH_BYTES;
-use super::MAX_GLOBAL_DISPATCH_ITEMS;
-use super::MAX_TARGET_DISPATCH_BYTES;
-use super::MAX_TARGET_DISPATCH_ITEMS;
 use super::PendingSpawnDispatch;
-use super::delivery_id;
 use super::expand_legacy_batch;
 use super::model_dispatch_origin_id;
-use super::queue_bound_violation;
 
 #[test]
 fn legacy_string_dispatch_deserializes_as_queued() {
@@ -57,25 +50,6 @@ fn legacy_batch_reader_preserves_structural_boundaries() {
 }
 
 #[test]
-fn queue_bounds_reject_only_growth_beyond_each_limit() {
-    assert_eq!(
-        queue_bound_violation(
-            MAX_DISPATCH_TASK_BYTES,
-            MAX_TARGET_DISPATCH_ITEMS - 1,
-            MAX_TARGET_DISPATCH_BYTES - MAX_DISPATCH_TASK_BYTES,
-            MAX_GLOBAL_DISPATCH_ITEMS - 1,
-            MAX_GLOBAL_DISPATCH_BYTES - MAX_DISPATCH_TASK_BYTES,
-        ),
-        None
-    );
-    assert!(queue_bound_violation(MAX_DISPATCH_TASK_BYTES + 1, 0, 0, 0, 0).is_some());
-    assert!(queue_bound_violation(1, MAX_TARGET_DISPATCH_ITEMS, 0, 0, 0).is_some());
-    assert!(queue_bound_violation(2, 0, MAX_TARGET_DISPATCH_BYTES - 1, 0, 0).is_some());
-    assert!(queue_bound_violation(1, 0, 0, MAX_GLOBAL_DISPATCH_ITEMS, 0).is_some());
-    assert!(queue_bound_violation(2, 0, 0, 0, MAX_GLOBAL_DISPATCH_BYTES - 1).is_some());
-}
-
-#[test]
 fn model_origin_uses_turn_and_ordinal_not_task_wording() {
     let first = model_dispatch_origin_id("thread:a", "turn-1", 0);
 
@@ -99,23 +73,4 @@ fn dispatch_identity_is_origin_and_pane_scoped_not_sequence_global() {
 
     assert_ne!(direct.dispatch_id, model.dispatch_id);
     assert_eq!(model.dispatch_id, replay.dispatch_id);
-}
-
-#[test]
-fn delivery_identity_is_stable_and_order_sensitive() {
-    let ordered = vec!["dispatch-1".to_string(), "dispatch-2".to_string()];
-    let reversed = vec!["dispatch-2".to_string(), "dispatch-1".to_string()];
-
-    assert_eq!(
-        delivery_id("thread:target", &ordered),
-        delivery_id("thread:target", &ordered)
-    );
-    assert_ne!(
-        delivery_id("thread:target", &ordered),
-        delivery_id("thread:target", &reversed)
-    );
-    assert_ne!(
-        delivery_id("thread:target", &ordered),
-        delivery_id("thread:other", &ordered)
-    );
 }

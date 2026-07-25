@@ -237,8 +237,6 @@ fn real_event_path_preserves_fifo_when_mailbox_coalesces_turns() -> Result<()> {
         fixture
             .route_until(std::time::Duration::from_secs(20), |app| {
                 !responses.requests().is_empty()
-                    && app.spawn_pending_dispatches.is_empty()
-                    && app.spawn_dispatch_inflight_targets.is_empty()
                     && app
                         .agent_navigation
                         .get(&target)
@@ -293,14 +291,13 @@ fn real_event_path_preserves_fifo_when_mailbox_coalesces_turns() -> Result<()> {
 }
 
 #[test]
-fn completed_source_replay_does_not_reenqueue_on_real_event_path() -> Result<()> {
+fn native_assistant_text_replay_never_becomes_mailbox_work() -> Result<()> {
     run_dispatch_integration(|| async {
         let mock = MockServer::start().await;
-        let responses = mount_sse_sequence(&mock, vec![sse_completed("replay-response")]).await;
         let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 4).await?;
         let source = fixture.spawn_agent("ReplayManager", "troll").await?;
         let target = fixture.spawn_target("ReplayTarget").await?;
-        let task = "replayed source turn must enqueue this exactly once";
+        let task = "native assistant text must never enter the mailbox";
         let notification = turn_completed_with_agent_message(
             source,
             "completed-source-turn",
@@ -316,21 +313,16 @@ fn completed_source_replay_does_not_reenqueue_on_real_event_path() -> Result<()>
             .app
             .update_spawn_status_for_thread_notification(&notification);
 
-        fixture
-            .route_until(std::time::Duration::from_secs(20), |app| {
-                responses.requests().len() == 1
-                    && app.spawn_pending_dispatches.is_empty()
-                    && app.spawn_dispatch_inflight_targets.is_empty()
-            })
-            .await?;
-
-        let presented = responses
-            .requests()
-            .iter()
-            .map(pending_agent_message_text)
-            .collect::<Vec<_>>();
-        pretty_assertions::assert_eq!(presented.len(), 1);
-        assert!(presented[0].contains(task));
+        for _ in 0..10 {
+            fixture.route_once().await?;
+        }
+        assert!(
+            mock.received_requests()
+                .await
+                .unwrap_or_default()
+                .is_empty(),
+            "native assistant prose must not be parsed as an assignment"
+        );
         pretty_assertions::assert_eq!(
             fixture.app.spawn_processed_terminal_turns.len(),
             1,
@@ -431,10 +423,8 @@ fn three_real_turns_saturate_and_one_release_schedules_one_followup() -> Result<
         );
 
         fixture
-            .route_until(std::time::Duration::from_secs(8), |app| {
+            .route_until(std::time::Duration::from_secs(8), |_| {
                 responses.requests().len() == 6
-                    && app.spawn_pending_dispatches.is_empty()
-                    && app.spawn_dispatch_inflight_targets.is_empty()
             })
             .await?;
         pretty_assertions::assert_eq!(responses.requests().len(), 6);
@@ -489,10 +479,8 @@ fn mailbox_delivery_wakes_waiting_target_without_turn_start_fallback() -> Result
                 task: steer_task.to_string(),
             });
         fixture
-            .route_until(std::time::Duration::from_secs(10), |app| {
+            .route_until(std::time::Duration::from_secs(10), |_| {
                 responses.requests().len() == 2
-                    && app.spawn_pending_dispatches.is_empty()
-                    && app.spawn_dispatch_inflight_targets.is_empty()
             })
             .await
             .wrap_err("mailbox delivery did not wake the waiting target")?;
@@ -536,8 +524,6 @@ fn queue_bound_rejection_is_visible_and_accepts_nothing() -> Result<()> {
             fixture.route_once().await?;
         }
 
-        assert!(fixture.app.spawn_pending_dispatches.is_empty());
-        assert!(fixture.app.spawn_dispatch_inflight_targets.is_empty());
         assert!(
             mock.received_requests()
                 .await
@@ -588,8 +574,8 @@ fn low_context_agent_compacts_and_continues_real_dispatch() -> Result<()> {
                 task: before.to_string(),
             });
         fixture
-            .route_until(std::time::Duration::from_secs(10), |app| {
-                responses.requests().len() == 1 && app.spawn_pending_dispatches.is_empty()
+            .route_until(std::time::Duration::from_secs(10), |_| {
+                responses.requests().len() == 1
             })
             .await?;
 
@@ -635,10 +621,8 @@ fn low_context_agent_compacts_and_continues_real_dispatch() -> Result<()> {
                 task: after.to_string(),
             });
         fixture
-            .route_until(std::time::Duration::from_secs(10), |app| {
+            .route_until(std::time::Duration::from_secs(10), |_| {
                 responses.requests().len() == 3
-                    && app.spawn_pending_dispatches.is_empty()
-                    && app.spawn_dispatch_inflight_targets.is_empty()
             })
             .await?;
 

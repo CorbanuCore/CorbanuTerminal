@@ -330,3 +330,43 @@ Product boundary:
 - `/spawn` still owns crew membership, names, role instructions, pane presentation, and exact
   provider/model/effort selection.
 - Native Codex owns provider-neutral identity, lifecycle, capacity, and mailbox mechanics.
+
+## Phase 7C — Delete the second scheduler and native text transport
+
+Status: structural deletion gates for the TUI dispatch path pass.
+
+Changes:
+
+- Removed `PumpSpawnDispatches`, its scheduled flag, in-flight target set, round-robin cursor,
+  capacity deferral, completion callback, and active queue footer.
+- Removed the active TUI-owned `spawn_pending_dispatches` state. Versioned layout fields remain
+  deserialize-only compatibility input; new writers emit them empty, and a restored layout that
+  contains queued legacy work is read-only and never replayed.
+- Removed the external-pane automatic retry path. A legacy external Claude pane accepts one direct
+  task only while idle; busy, oversized, or failed admission is explicit and non-retrying.
+- Native crew members no longer receive or emit `pfterminal_send_task` as transport. Their live
+  `/spawn` context instructs `send_message` and `followup_task` against canonical crew paths.
+- Native assistant text is never scanned for dispatch tags. The text-envelope decoder and its
+  mechanical contract are isolated in `external_plan_agent_adapter.rs` for genuinely external
+  text-only panes.
+- Removed the native malformed-tag correction loop and its per-thread retry counters.
+- Preserved `/spawn` crew creation, named roles, exact provider/model/effort runtimes, pane
+  navigation, roster injection, report rendering, and direct user task actions.
+
+Structural evidence:
+
+- Code search: 0 `PumpSpawnDispatches` / `SpawnDispatchPump` / pump-state references.
+- Code search: 0 native text-dispatch or dispatch-correction references.
+- Diff for this phase: 196 insertions and 1,613 deletions before journal updates.
+
+Passing evidence:
+
+- `cargo check -p codex-tui`.
+- TUI test build with `RUST_MIN_STACK=33554432`.
+- Real dispatch integration: 6/6, including FIFO, capacity saturation, wait wake, compaction,
+  oversize rejection, and proof that replayed native assistant tags produce zero mailbox work.
+- `spawn_orchestration`: 25/25.
+- `native_agent_text_is_never_used_as_dispatch_transport`.
+- `codex_main_bound_nazgul_turn_receives_domain_neutral_hierarchy_context`.
+- `troll_spawn_task_submission_names_existing_orc_panes`.
+- `/spawn` app regressions: 6 passed, 1 live-auth test intentionally ignored.

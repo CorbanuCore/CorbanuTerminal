@@ -2086,6 +2086,9 @@ async fn codex_main_bound_nazgul_turn_receives_domain_neutral_hierarchy_context(
     assert_eq!(entry.kind, AdditionalContextKind::Application);
     assert!(entry.value.contains("Nazgul/root pane"));
     assert!(entry.value.contains("Burzum [troll]"));
+    assert!(entry.value.contains("send_message"));
+    assert!(entry.value.contains("followup_task"));
+    assert!(!entry.value.contains("<pfterminal_send_task"));
 }
 
 #[tokio::test]
@@ -2208,7 +2211,6 @@ async fn restored_legacy_spawn_hierarchy_is_inspectable_but_rejects_mutation() {
             "legacy read-only sessions must never dispatch work"
         );
     }
-    assert!(app.spawn_pending_dispatches.is_empty());
 }
 
 #[tokio::test]
@@ -2289,20 +2291,6 @@ impl App {
             dispatches,
         );
     }
-}
-
-fn assert_dispatch_ack_report(app: &App, source_node_id: &str, seq: u64, status: &str) {
-    let reports = app
-        .spawn_parent_reports_by_node
-        .get(source_node_id)
-        .unwrap_or_else(|| panic!("missing reports for {source_node_id}"));
-    assert!(
-        reports.iter().any(|report| {
-            report.contains(&format!("dispatch_ack; #{seq}"))
-                && report.contains(&format!("status={status}"))
-        }),
-        "missing dispatch ack #{seq} status={status}; reports={reports:?}"
-    );
 }
 
 #[tokio::test]
@@ -2788,7 +2776,6 @@ async fn spawn_roster_lines_carry_dispatch_and_report_seq() {
         rx.try_recv(),
         Ok(AppEvent::SubmitSpawnAgentTask { thread_id, .. }) if thread_id == orc_thread_id
     ));
-    assert!(app.spawn_pending_dispatches.is_empty());
 
     app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
         orc_thread_id,
@@ -2811,63 +2798,6 @@ async fn spawn_roster_lines_carry_dispatch_and_report_seq() {
     assert!(reports.iter().any(|report| {
         report.contains("child_report; seq=121; as_of=") && report.contains("sequence proof done")
     }));
-}
-
-#[tokio::test]
-async fn troll_checkpoint_block_reaches_busy_nazgul_before_troll_turn_finishes() {
-    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
-    let nazgul_thread_id =
-        ThreadId::from_string("00000000-0000-0000-0000-000000000449").expect("valid thread id");
-    let (troll_thread_id, _orc_thread_id) = register_native_dispatch_pair(&mut app);
-    app.upsert_agent_picker_thread(
-        nazgul_thread_id,
-        Some("Angmar".to_string()),
-        Some("nazgul".to_string()),
-        /*is_closed*/ false,
-    );
-    app.spawn_parent_by_thread
-        .insert(troll_thread_id, nazgul_thread_id);
-    app.agent_navigation
-        .set_running(nazgul_thread_id, /*is_running*/ true);
-
-    let checkpoint = r#"Still supervising the implementation lanes.
-<pfterminal_report_parent>
-The parser gate passed at artifacts/parser-proof.json; the concurrency gate is still running.
-</pfterminal_report_parent>"#;
-    assert!(app.dispatch_native_spawn_task_blocks_from_text(
-        troll_thread_id,
-        "turn-checkpoint",
-        checkpoint,
-    ));
-    assert!(!app.dispatch_native_spawn_task_blocks_from_text(
-        troll_thread_id,
-        "turn-checkpoint",
-        checkpoint,
-    ));
-
-    let parent_node = thread_node_id(nazgul_thread_id);
-    let reports = app
-        .spawn_parent_reports_by_node
-        .get(&parent_node)
-        .expect("checkpoint should be recorded for the Nazgul");
-    assert_eq!(
-        reports.len(),
-        1,
-        "item replay must not duplicate the report"
-    );
-    assert!(reports[0].contains("status=checkpoint"));
-    assert!(reports[0].contains("artifacts/parser-proof.json"));
-    assert_eq!(
-        app.spawn_pending_reports_by_thread
-            .get(&nazgul_thread_id)
-            .map_or(0, VecDeque::len),
-        1,
-        "a busy parent must retain the checkpoint for its next processing boundary"
-    );
-    assert!(
-        drain_spawn_agent_tasks_for(&mut rx, nazgul_thread_id).is_empty(),
-        "checkpoint delivery must not start a competing parent turn"
-    );
 }
 
 #[tokio::test]
@@ -2909,7 +2839,7 @@ async fn spawn_roster_keeps_pending_queue_control_state_out_of_model_context() {
 }
 
 #[tokio::test]
-async fn oversized_native_self_dispatch_is_rejected_before_queue_accounting() {
+async fn oversized_native_self_dispatch_is_rejected_without_delivery() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let (source, _target) = register_native_dispatch_pair(&mut app);
     let source_node = thread_node_id(source);
@@ -2922,11 +2852,13 @@ async fn oversized_native_self_dispatch_is_rejected_before_queue_accounting() {
         }],
     );
 
-    assert!(!app.spawn_pending_dispatches.contains_key(&source_node));
     while let Ok(event) = rx.try_recv() {
         assert!(
-            !matches!(event, AppEvent::PumpSpawnDispatches),
-            "a rejected self-dispatch must not schedule the delivery pump"
+            !matches!(
+                event,
+                AppEvent::SubmitSpawnAgentTask { .. } | AppEvent::SubmitSpawnClaudePaneTask { .. }
+            ),
+            "a rejected self-dispatch must not schedule delivery"
         );
     }
 }
@@ -3050,53 +2982,6 @@ async fn recovered_turn_start_failure_remains_visible_in_active_pane_history() {
 }
 
 #[tokio::test]
-async fn queued_native_dispatch_fails_and_is_removed_from_persistence_when_target_closes() {
-    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
-    let (troll_thread_id, orc_thread_id) = register_native_dispatch_pair(&mut app);
-    app.primary_thread_id = Some(troll_thread_id);
-    app.agent_navigation.set_running(orc_thread_id, true);
-    let source_node_id = crate::spawn_orchestration::thread_node_id(troll_thread_id);
-
-    app.dispatch_spawn_task_blocks(
-        &source_node_id,
-        vec![crate::spawn_orchestration::SpawnTaskDispatch {
-            target: orc_thread_id.to_string(),
-            task: "fail because target closes".to_string(),
-            seq: Some(89),
-        }],
-    );
-    while rx.try_recv().is_ok() {}
-    assert_eq!(
-        app.spawn_pending_dispatches
-            .get(&thread_node_id(orc_thread_id))
-            .map_or(0, std::collections::VecDeque::len),
-        1
-    );
-
-    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
-        thread_closed_notification(orc_thread_id),
-    ));
-
-    assert_dispatch_ack_report(&app, &source_node_id, 89, "failed");
-    assert!(
-        app.spawn_pending_dispatches
-            .get(&thread_node_id(orc_thread_id))
-            .is_none_or(std::collections::VecDeque::is_empty)
-    );
-    let layout = crate::claude_panes::load_pane_layout(
-        app.config.codex_home.as_ref(),
-        Some(&troll_thread_id.to_string()),
-    )
-    .expect("pane layout should be persisted");
-    assert!(
-        !layout
-            .spawn_pending_dispatches
-            .contains_key(&orc_thread_id.to_string()),
-        "closed target queue must not persist"
-    );
-}
-
-#[tokio::test]
 async fn failed_dispatch_records_sender_visible_ack_without_fake_pane_cell() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let (troll_thread_id, _orc_thread_id) = register_native_dispatch_pair(&mut app);
@@ -3198,7 +3083,9 @@ async fn troll_spawn_task_submission_names_existing_orc_panes() {
     assert!(task.contains("Ghash [orc]"));
     assert!(task.contains(&ghash_thread_id.to_string()));
     assert!(task.contains("Do not call spawn_agent"));
-    assert!(task.contains("pfterminal_send_task"));
+    assert!(task.contains("followup_task"));
+    assert!(task.contains("send_message"));
+    assert!(!task.contains("pfterminal_send_task"));
     assert!(task.contains("Task from Sauron/Nazgul:"));
     assert!(task.ends_with("Build the site and review it."));
 }
@@ -4595,11 +4482,14 @@ async fn assignment_bad_target_retries_durable_worker_once_then_pauses() {
     ));
     while app_event_rx.try_recv().is_ok() {}
 
-    assert!(app.dispatch_native_spawn_task_blocks_from_text(
-        manager_thread_id,
-        "manager-turn-bad-target",
-        "```pfterminal-send-task\n{\"target\":\"Worker nickname that does not resolve\",\"task\":\"Audit read-only state.\"}\n```",
-    ));
+    app.dispatch_spawn_task_blocks(
+        &manager_node,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: "Worker nickname that does not resolve".to_string(),
+            task: "Audit read-only state.".to_string(),
+            seq: Some(1),
+        }],
+    );
 
     let retried_task = drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id)
         .expect("one retry should target the durable Worker ID");
@@ -5327,7 +5217,7 @@ async fn orchestrate_agent_can_pause_own_whip() {
 }
 
 #[tokio::test]
-async fn claude_adapter_delivers_one_fifo_record_without_prose_batching() {
+async fn claude_adapter_emits_direct_records_without_prose_batching() {
     let (mut app, mut rx, troll_pane_id, orc_pane_id) =
         make_child_report_auto_claude_pane_app().await;
     app.dispatch_spawn_task_blocks(
@@ -5345,27 +5235,12 @@ async fn claude_adapter_delivers_one_fifo_record_without_prose_batching() {
             },
         ],
     );
-    assert!(matches!(rx.try_recv(), Ok(AppEvent::PumpSpawnDispatches)));
-    let target = crate::spawn_orchestration::pane_node_id(&orc_pane_id);
-    assert_eq!(app.spawn_pending_dispatches[&target].len(), 2);
-    let crate::spawn_orchestration::SpawnDispatchPumpDelivery::Claude {
-        pane_id,
-        task,
-        delivery_id,
-    } = app
-        .select_spawn_dispatch_pump_delivery()
-        .expect("Claude delivery");
-    assert_eq!(pane_id, orc_pane_id);
-    assert!(task.contains("first exact task"));
-    assert!(!task.contains("second exact task"));
-    assert!(!task.contains("Multiple spawn dispatches"));
-    app.finish_spawn_dispatch_delivery(&target, &delivery_id, &task);
-    assert_eq!(app.spawn_pending_dispatches[&target].len(), 1);
-    assert!(
-        app.spawn_pending_dispatches[&target][0]
-            .task
-            .contains("second exact task")
-    );
+    let tasks = drain_claude_pane_task_events(&mut rx);
+    assert_eq!(tasks.len(), 2);
+    assert!(tasks[0].1.contains("first exact task"));
+    assert!(!tasks[0].1.contains("second exact task"));
+    assert!(tasks[1].1.contains("second exact task"));
+    assert!(!tasks[1].1.contains("Multiple spawn dispatches"));
 }
 
 #[tokio::test]
@@ -5705,242 +5580,7 @@ async fn native_nazgul_sees_live_troll_and_orc_tree_even_if_spawned_before_them(
 }
 
 #[tokio::test]
-async fn exec_wrapped_native_dispatch_sends_correction_instead_of_routing() {
-    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
-    let nazgul_thread_id =
-        ThreadId::from_string("00000000-0000-0000-0000-000000000635").expect("valid thread id");
-    let troll_thread_id =
-        ThreadId::from_string("00000000-0000-0000-0000-000000000636").expect("valid thread id");
-    let snaga_thread_id =
-        ThreadId::from_string("00000000-0000-0000-0000-000000000637").expect("valid thread id");
-
-    app.active_thread_id = Some(troll_thread_id);
-    app.upsert_agent_picker_thread(
-        nazgul_thread_id,
-        Some("Angmar".to_string()),
-        Some("nazgul".to_string()),
-        /*is_closed*/ false,
-    );
-    app.upsert_agent_picker_thread(
-        troll_thread_id,
-        Some("Burzum".to_string()),
-        Some("troll".to_string()),
-        /*is_closed*/ false,
-    );
-    app.upsert_agent_picker_thread(
-        snaga_thread_id,
-        Some("Snaga".to_string()),
-        Some("orc".to_string()),
-        /*is_closed*/ false,
-    );
-    app.spawn_parent_by_thread
-        .insert(troll_thread_id, nazgul_thread_id);
-    app.spawn_parent_by_thread
-        .insert(snaga_thread_id, troll_thread_id);
-
-    let command = r#"cat <<'DISPATCH'
-<pfterminal_send_task target="Snaga">
-Write /tmp/pfterminal-dispatch-proof.txt with exactly OK and report the path.
-</pfterminal_send_task>
-DISPATCH"#;
-    let notification = ServerNotification::TurnCompleted(TurnCompletedNotification {
-        thread_id: troll_thread_id.to_string(),
-        turn: Turn {
-            completed_at: Some(0),
-            duration_ms: Some(1),
-            ..test_turn(
-                "turn-exec-wrapped-dispatch",
-                TurnStatus::Completed,
-                vec![ThreadItem::CommandExecution {
-                    id: "command-execution-1".to_string(),
-                    command: command.to_string(),
-                    cwd: test_path_buf("/tmp/project").abs().into(),
-                    process_id: None,
-                    source: codex_app_server_protocol::CommandExecutionSource::Agent,
-                    status: codex_app_server_protocol::CommandExecutionStatus::Completed,
-                    command_actions: Vec::new(),
-                    aggregated_output: None,
-                    exit_code: Some(0),
-                    duration_ms: Some(1),
-                }],
-            )
-        },
-    });
-
-    app.update_spawn_status_for_thread_notification(&notification);
-    app.update_spawn_status_for_thread_notification(&notification);
-
-    let mut corrections = Vec::new();
-    while let Ok(event) = rx.try_recv() {
-        match event {
-            AppEvent::SubmitSpawnAgentTask { thread_id, .. } if thread_id == snaga_thread_id => {
-                panic!("exec-wrapped dispatch must not route to the Orc");
-            }
-            AppEvent::SubmitSpawnAgentTask {
-                thread_id, task, ..
-            } if thread_id == troll_thread_id => {
-                corrections.push(task);
-            }
-            _ => {}
-        }
-    }
-
-    assert_eq!(
-        corrections.len(),
-        1,
-        "duplicate TurnCompleted replay must not duplicate the correction"
-    );
-    assert!(corrections[0].contains("inside exec_command/shell text"));
-    assert!(corrections[0].contains("plain assistant message text"));
-}
-
-#[tokio::test]
-async fn malformed_dispatch_marker_in_ordinary_thread_does_not_start_correction_turn() {
-    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
-    let ordinary_thread_id =
-        ThreadId::from_string("00000000-0000-0000-0000-000000000633").expect("valid thread id");
-    let turn = test_turn(
-        "ordinary-documentation-turn",
-        TurnStatus::Completed,
-        vec![ThreadItem::AgentMessage {
-            id: "ordinary-message".to_string(),
-            text: "Document this literal: <pfterminal_send_task>example</pfterminal_send_task>"
-                .to_string(),
-            phase: None,
-            memory_citation: None,
-        }],
-    );
-
-    app.dispatch_native_spawn_task_blocks_from_turn(ordinary_thread_id, &turn);
-
-    let mut submitted_correction = false;
-    while let Ok(event) = rx.try_recv() {
-        submitted_correction |= matches!(event, AppEvent::SubmitSpawnAgentTask { .. });
-    }
-    assert!(
-        !submitted_correction,
-        "ordinary coding threads must never receive orchestration correction turns"
-    );
-}
-
-#[tokio::test]
-async fn dispatch_correction_limit_counts_only_consecutive_failures() {
-    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
-    let troll_thread_id =
-        ThreadId::from_string("00000000-0000-0000-0000-000000000634").expect("valid thread id");
-    app.upsert_agent_picker_thread(
-        troll_thread_id,
-        Some("Burzum".to_string()),
-        Some("troll".to_string()),
-        /*is_closed*/ false,
-    );
-    let malformed_message = "<pfterminal_send_task>missing target</pfterminal_send_task>";
-
-    for attempt in 0..=crate::spawn_orchestration::SPAWN_DISPATCH_CORRECTION_LIMIT_PER_THREAD {
-        let turn = test_turn(
-            &format!("malformed-{attempt}"),
-            TurnStatus::Completed,
-            vec![ThreadItem::AgentMessage {
-                id: format!("malformed-message-{attempt}"),
-                text: malformed_message.to_string(),
-                phase: None,
-                memory_citation: None,
-            }],
-        );
-        app.dispatch_native_spawn_task_blocks_from_turn(troll_thread_id, &turn);
-    }
-    let mut first_burst = 0;
-    while let Ok(event) = rx.try_recv() {
-        first_burst += usize::from(matches!(event, AppEvent::SubmitSpawnAgentTask { .. }));
-    }
-    assert_eq!(
-        first_burst,
-        crate::spawn_orchestration::SPAWN_DISPATCH_CORRECTION_LIMIT_PER_THREAD,
-        "the fourth consecutive malformed dispatch must stop the correction loop"
-    );
-
-    let ordinary_turn = test_turn(
-        "ordinary-manager-turn",
-        TurnStatus::Completed,
-        vec![ThreadItem::AgentMessage {
-            id: "ordinary-manager-message".to_string(),
-            text: "No dispatch is needed.".to_string(),
-            phase: None,
-            memory_citation: None,
-        }],
-    );
-    app.dispatch_native_spawn_task_blocks_from_turn(troll_thread_id, &ordinary_turn);
-    assert!(
-        !app.spawn_dispatch_corrections_by_thread
-            .contains_key(&troll_thread_id)
-    );
-
-    let later_malformed_turn = test_turn(
-        "later-malformed",
-        TurnStatus::Completed,
-        vec![ThreadItem::AgentMessage {
-            id: "later-malformed-message".to_string(),
-            text: malformed_message.to_string(),
-            phase: None,
-            memory_citation: None,
-        }],
-    );
-    app.dispatch_native_spawn_task_blocks_from_turn(troll_thread_id, &later_malformed_turn);
-    let mut submitted_later_correction = false;
-    while let Ok(event) = rx.try_recv() {
-        submitted_later_correction |= matches!(
-            event,
-            AppEvent::SubmitSpawnAgentTask { thread_id, .. } if thread_id == troll_thread_id
-        );
-    }
-    assert!(submitted_later_correction);
-}
-
-#[tokio::test]
-async fn bound_nazgul_freeform_dispatch_routes_without_protocol_headers() {
-    let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
-    let main_thread_id =
-        ThreadId::from_string("00000000-0000-0000-0000-000000000638").expect("valid thread id");
-    let troll_thread_id =
-        ThreadId::from_string("00000000-0000-0000-0000-000000000639").expect("valid thread id");
-    app.primary_thread_id = Some(main_thread_id);
-    app.active_thread_id = Some(main_thread_id);
-    app.bind_spawn_nazgul_pane(CODEX_MAIN_PANE_ID.to_string());
-    app.upsert_agent_picker_thread(
-        troll_thread_id,
-        Some("Burzum".to_string()),
-        Some("troll".to_string()),
-        /*is_closed*/ false,
-    );
-    app.spawn_parent_by_node.insert(
-        crate::spawn_orchestration::thread_node_id(troll_thread_id),
-        crate::spawn_orchestration::pane_node_id(CODEX_MAIN_PANE_ID),
-    );
-
-    let message = r#"<pfterminal_send_task target="Burzum">
-Resume implementation from the existing screenshots and gate logs.
-</pfterminal_send_task>"#;
-    assert!(app.dispatch_native_spawn_task_blocks_from_text(
-        main_thread_id,
-        "turn-freeform-work",
-        message,
-    ));
-    let mut task_submitted = false;
-    while let Ok(event) = rx.try_recv() {
-        task_submitted |= matches!(
-            event,
-            AppEvent::SubmitSpawnAgentTask { thread_id, .. } if thread_id == troll_thread_id
-        );
-    }
-    assert!(
-        task_submitted,
-        "natural-language work should route without a workflow mini-language"
-    );
-    assert!(app.spawn_pending_dispatches.is_empty());
-}
-
-#[tokio::test]
-async fn partial_completed_assistant_message_and_interrupted_turn_do_not_dispatch() {
+async fn native_agent_text_is_never_used_as_dispatch_transport() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let nazgul_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000648").expect("valid thread id");
@@ -5996,6 +5636,20 @@ Reply with exactly OK."#;
     assert!(
         drain_spawn_agent_task_for(&mut rx, snaga_thread_id).is_none(),
         "interrupted turn catch-all must not dispatch partial blocks"
+    );
+
+    let complete_legacy_block = r#"<pfterminal_send_task target="Snaga">
+Reply with exactly OK.
+</pfterminal_send_task>"#;
+    app.update_spawn_status_for_thread_notification(&turn_completed_with_agent_message(
+        troll_thread_id,
+        "turn-complete-legacy-block",
+        TurnStatus::Completed,
+        complete_legacy_block,
+    ));
+    assert!(
+        drain_spawn_agent_task_for(&mut rx, snaga_thread_id).is_none(),
+        "native agents must dispatch with collaboration tools, never assistant-text tags"
     );
 }
 
@@ -6155,6 +5809,9 @@ async fn active_native_nazgul_turn_receives_live_spawn_context_with_orcs() {
     assert!(context.contains("Snaga [orc]"), "got: {context}");
     assert!(context.contains("Ghash [orc]"), "got: {context}");
     assert!(!context.contains("none spawned yet"), "got: {context}");
+    assert!(context.contains("send_message"), "got: {context}");
+    assert!(context.contains("followup_task"), "got: {context}");
+    assert!(!context.contains("<pfterminal_send_task"), "got: {context}");
 }
 
 #[tokio::test]
@@ -9547,16 +9204,10 @@ async fn make_test_app() -> App {
         spawn_waiting_for_agents_by_thread: HashMap::new(),
         spawn_parent_reports_by_node: HashMap::new(),
         spawn_pending_reports_by_thread: HashMap::new(),
-        spawn_pending_dispatches: HashMap::new(),
-        spawn_dispatch_pump_scheduled: false,
-        spawn_dispatch_inflight_targets: HashSet::new(),
-        spawn_dispatch_round_robin_after: None,
         spawn_dispatch_acks_by_target_task: HashMap::new(),
         spawn_next_dispatch_seq: 1,
         spawn_processed_dispatch_seq_ids: HashSet::new(),
         spawn_processed_dispatch_origins: HashSet::new(),
-        spawn_dispatch_corrections_by_thread: HashMap::new(),
-        spawn_accepted_delivery_ids: HashSet::new(),
         spawn_processed_terminal_turns: HashSet::new(),
         spawn_auto_loop_state_by_node: HashMap::new(),
         spawn_operator_input_seen: false,
@@ -9648,16 +9299,10 @@ async fn make_test_app_with_channels() -> (
             spawn_waiting_for_agents_by_thread: HashMap::new(),
             spawn_parent_reports_by_node: HashMap::new(),
             spawn_pending_reports_by_thread: HashMap::new(),
-            spawn_pending_dispatches: HashMap::new(),
-            spawn_dispatch_pump_scheduled: false,
-            spawn_dispatch_inflight_targets: HashSet::new(),
-            spawn_dispatch_round_robin_after: None,
             spawn_dispatch_acks_by_target_task: HashMap::new(),
             spawn_next_dispatch_seq: 1,
             spawn_processed_dispatch_seq_ids: HashSet::new(),
             spawn_processed_dispatch_origins: HashSet::new(),
-            spawn_dispatch_corrections_by_thread: HashMap::new(),
-            spawn_accepted_delivery_ids: HashSet::new(),
             spawn_processed_terminal_turns: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
             spawn_operator_input_seen: false,

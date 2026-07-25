@@ -4,6 +4,7 @@
 //! output visibly and emits only bounded, mechanical messages for the canonical agent mailbox.
 
 use codex_protocol::protocol::MAX_AGENT_MESSAGE_BYTES;
+use std::fmt::Write;
 
 pub(crate) const SEND_TASK_FENCE_OPEN: &str = "```pfterminal-send-task";
 const SEND_TASK_FENCE_CLOSE: &str = "```";
@@ -73,10 +74,71 @@ pub(crate) fn extract_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTas
     (decoded.visible_text, decoded.dispatches)
 }
 
-pub(crate) fn mentions_unparsed_dispatch(original_text: &str, visible_text: &str) -> bool {
-    (original_text.contains(SEND_TASK_OPEN) && visible_text.contains(SEND_TASK_OPEN))
-        || (original_text.contains(SEND_TASK_FENCE_OPEN)
-            && visible_text.contains(SEND_TASK_FENCE_OPEN))
+pub(crate) fn write_dispatch_contract(context: &mut String) {
+    let _ = writeln!(
+        context,
+        "To send work to another spawn pane, emit a host dispatch block exactly like:"
+    );
+    let _ = writeln!(
+        context,
+        "<pfterminal_send_task target=\"EXACT_LISTED_TARGET\">\nTask text here.\n</pfterminal_send_task>"
+    );
+    let _ = writeln!(
+        context,
+        "Replace EXACT_LISTED_TARGET with an exact target from the live roster. Never target your own pane; this block assigns work to another pane and is not a reporting mechanism."
+    );
+    let _ = writeln!(
+        context,
+        "PFTerminal will route that task to the target pane. Do not claim you sent a task unless you emit a dispatch block."
+    );
+    let _ = writeln!(
+        context,
+        "Dispatches, child reports, and roster updates carry host seq numbers and timestamps; compare seq numbers rather than transcript arrival order when auditing freshness."
+    );
+    let _ = writeln!(
+        context,
+        "If the user asks you to dispatch, assign, send, or deploy work to a named pane, emit the pfterminal_send_task block immediately; do not start executing that work yourself or replace dispatch with a plan."
+    );
+    let _ = writeln!(
+        context,
+        "Listed Troll/Orc panes are routable through these host dispatch blocks. Panes marked saved-only have recovered hierarchy metadata but no loaded transcript yet."
+    );
+    let _ = writeln!(
+        context,
+        "Do not spawn fresh panes just to route work to existing listed panes; use the listed panes unless the user explicitly asks you to create more."
+    );
+    let _ = writeln!(
+        context,
+        "Dispatch blocks are plain assistant text, not Claude tools or shell commands. Use only the pfterminal_send_task host tags; never put the block inside exec_command, cat, echo, a heredoc, <invoke>, <arg_key>, <arg_value>, or tool-call syntax for dispatch."
+    );
+    let _ = writeln!(
+        context,
+        "When assigning work to multiple panes, emit one complete pfterminal_send_task block per target in the same assistant message before saying the work was sent."
+    );
+    let _ = writeln!(
+        context,
+        "Do not wrap dispatch payloads in markdown fences; task bodies may contain code fences or long config snippets and must be preserved verbatim inside the host tags."
+    );
+    let _ = writeln!(
+        context,
+        "Use exact target names, nicknames, pane ids, or thread ids from this live hierarchy."
+    );
+    let _ = writeln!(
+        context,
+        "Each turn, read this injected roster before declaring a child stalled: status=idle or status=completed means that child is finished and ready for review; has_new_report=true means its report is available in the Recent child reports section."
+    );
+    let _ = writeln!(
+        context,
+        "Never report a child pane as silent or unresponsive until you have checked its roster status and report marker. Managers delegate and review; they do not execute a listed child's assigned task themselves."
+    );
+}
+
+pub(crate) fn write_parent_report_contract(context: &mut String) {
+    let _ = writeln!(
+        context,
+        "Interim assistant commentary remains local to this legacy external pane. Its terminal \
+         answer is reported to the assigned parent automatically when the turn ends."
+    );
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

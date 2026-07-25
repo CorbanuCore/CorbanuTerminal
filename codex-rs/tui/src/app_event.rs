@@ -320,13 +320,10 @@ pub(crate) enum AppEvent {
         thread_id: codex_protocol::ThreadId,
         task: String,
     },
-    /// Run one coalesced step of the durable dispatch delivery pump.
-    PumpSpawnDispatches,
     /// Start a normal turn in an existing Claude spawn pane.
     SubmitSpawnClaudePaneTask {
         pane_id: String,
         task: String,
-        delivery_id: Option<String>,
     },
     /// Show the current orchestration tree.
     OpenSpawnStatus,

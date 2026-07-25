@@ -349,11 +349,9 @@ impl App {
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect(),
             orchestrate_next_whip_seq: self.orchestrate_next_whip_seq,
-            spawn_pending_dispatches: self
-                .spawn_pending_dispatches
-                .iter()
-                .map(|(target, queue)| (target.clone(), queue.iter().cloned().collect()))
-                .collect(),
+            // Compatibility input only. New `/spawn` work is admitted to the native mailbox and
+            // is never persisted in a second TUI-owned dispatch queue.
+            spawn_pending_dispatches: Default::default(),
             spawn_pending_dispatches_by_thread: Default::default(),
             spawn_pending_dispatches_by_pane: Default::default(),
             spawn_next_dispatch_seq: self.spawn_next_dispatch_seq.max(1),
@@ -367,15 +365,7 @@ impl App {
                 origins.sort();
                 origins
             },
-            spawn_accepted_delivery_ids: {
-                let mut deliveries = self
-                    .spawn_accepted_delivery_ids
-                    .iter()
-                    .cloned()
-                    .collect::<Vec<_>>();
-                deliveries.sort();
-                deliveries
-            },
+            spawn_accepted_delivery_ids: Vec::new(),
         };
         if let Err(err) = persist_pane_layout(self.config.codex_home.as_ref(), &layout) {
             tracing::warn!(error = %err, "failed to persist pane layout");
@@ -782,11 +772,6 @@ impl App {
                     .claude_panes
                     .filter_new_spawn_dispatches(&pane_id, dispatches);
                 self.claude_panes.finish_turn(&pane_id, &Ok(output.clone()));
-                let flushed_dispatch = self
-                    .spawn_pending_dispatches
-                    .get(&crate::spawn_orchestration::pane_node_id(&pane_id))
-                    .is_some_and(|queue| !queue.is_empty());
-                self.request_spawn_dispatch_pump();
                 let report_status = output.status.label().to_string();
                 let report_text = if output.text.trim().is_empty() {
                     output.failure_message()
@@ -818,7 +803,7 @@ impl App {
                 self.note_whip_target_idle_with_fire_control(
                     &source_node_id,
                     Some(&report_text),
-                    !flushed_dispatch,
+                    true,
                     output.status.is_success(),
                 );
                 if !output.text.trim().is_empty() {
@@ -880,16 +865,11 @@ impl App {
                 self.claude_panes.finish_turn(&pane_id, &Err(error.clone()));
                 let source_node_id = crate::spawn_orchestration::pane_node_id(&pane_id);
                 self.note_spawn_turn_completed_for_auto_loop(&source_node_id);
-                let flushed_dispatch = self
-                    .spawn_pending_dispatches
-                    .get(&crate::spawn_orchestration::pane_node_id(&pane_id))
-                    .is_some_and(|queue| !queue.is_empty());
-                self.request_spawn_dispatch_pump();
                 self.record_spawn_child_report_for_claude_pane(&pane_id, "error", Some(&error));
                 self.note_whip_target_idle_with_fire_control(
                     &source_node_id,
                     Some(&error),
-                    !flushed_dispatch,
+                    true,
                     false,
                 );
                 if self.claude_panes.active_user_pane_id() == pane_id {

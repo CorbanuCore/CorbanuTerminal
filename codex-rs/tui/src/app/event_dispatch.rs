@@ -7,7 +7,6 @@ use super::resize_reflow::trailing_run_start;
 use super::*;
 use crate::config_update::format_config_error;
 use crate::external_agent_config_migration_flow::ExternalAgentConfigMigrationFlowOutcome;
-use crate::spawn_orchestration::PendingDispatchEnqueueResult;
 use chrono::Utc;
 use codex_app_server_protocol::ThreadAgentMessageParams;
 #[cfg(target_os = "windows")]
@@ -3496,26 +3495,7 @@ impl App {
                     }
                 }
             }
-            AppEvent::PumpSpawnDispatches => {
-                if let Some(delivery) = self.select_spawn_dispatch_pump_delivery() {
-                    match delivery {
-                        crate::spawn_orchestration::SpawnDispatchPumpDelivery::Claude {
-                            pane_id,
-                            task,
-                            delivery_id,
-                        } => self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
-                            pane_id,
-                            task,
-                            delivery_id: Some(delivery_id),
-                        }),
-                    }
-                }
-            }
-            AppEvent::SubmitSpawnClaudePaneTask {
-                pane_id,
-                task,
-                delivery_id,
-            } => {
+            AppEvent::SubmitSpawnClaudePaneTask { pane_id, task } => {
                 if self.spawn_legacy_read_only {
                     self.chat_widget.add_error_message(
                         "This restored legacy /spawn hierarchy is read-only. Existing Claude panes \
@@ -3524,50 +3504,33 @@ impl App {
                     );
                     return Ok(AppRunControl::Continue);
                 }
-                if delivery_id.is_none() {
-                    let target = crate::spawn_orchestration::pane_node_id(&pane_id);
-                    let pending = self.pending_dispatch_from_registered_task(&target, task);
-                    let acks = pending.acks.clone();
-                    match self.enqueue_pending_dispatch_for_claude_pane(pane_id.clone(), pending) {
-                        PendingDispatchEnqueueResult::Queued => {
-                            self.record_spawn_dispatch_acks(
-                                &acks,
-                                "queued",
-                                "durably queued for the delivery pump",
-                                false,
-                            );
-                            self.request_spawn_dispatch_pump();
-                        }
-                        PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
-                            self.record_duplicate_pending_dispatch(&pane_id, &acks, notify);
-                        }
-                        PendingDispatchEnqueueResult::Rejected { acks, reason } => {
-                            self.record_spawn_dispatch_acks(
-                                &acks,
-                                "failed",
-                                format!("queue rejected: {reason}"),
-                                true,
-                            );
-                        }
-                    }
-                    return Ok(AppRunControl::Continue);
-                }
-                let Some(delivery_id) = delivery_id.as_deref() else {
-                    return Ok(AppRunControl::Continue);
-                };
-                if self.claude_panes.claude_pane_is_running(&pane_id) {
-                    self.defer_spawn_dispatch_for_capacity(
-                        &crate::spawn_orchestration::pane_node_id(&pane_id),
-                        delivery_id,
+                let target = crate::spawn_orchestration::pane_node_id(&pane_id);
+                if task.len() > crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES {
+                    let acks = self.take_spawn_dispatch_acks_for_task(&target, &task);
+                    let detail = format!(
+                        "task is {} bytes; maximum is {} bytes",
+                        task.len(),
+                        crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES
                     );
+                    self.record_spawn_dispatch_acks(&acks, "failed", &detail, true);
+                    self.chat_widget.add_error_message(detail);
                     return Ok(AppRunControl::Continue);
                 }
-                self.submit_claude_pane_task(pane_id.clone(), task.clone());
-                self.finish_spawn_dispatch_delivery(
-                    &crate::spawn_orchestration::pane_node_id(&pane_id),
-                    delivery_id,
-                    &task,
-                );
+                if self.claude_panes.claude_pane_is_running(&pane_id) {
+                    let acks = self.take_spawn_dispatch_acks_for_task(&target, &task);
+                    self.record_spawn_dispatch_acks(
+                        &acks,
+                        "failed",
+                        "legacy external Claude pane is busy; no secondary queue or automatic retry exists",
+                        true,
+                    );
+                    self.chat_widget.add_error_message(format!(
+                        "Cannot send task to {pane_id}: the legacy external Claude pane is busy. \
+                         Wait for it to finish or use a native Claude Plan member in /spawn."
+                    ));
+                    return Ok(AppRunControl::Continue);
+                }
+                self.submit_claude_pane_task(pane_id, task);
             }
             AppEvent::OpenSpawnStatus => {
                 self.open_spawn_status();

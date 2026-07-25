@@ -777,23 +777,11 @@ pub(crate) struct App {
     /// into a parent processing turn) when the parent goes idle. Keyed by parent thread id so a
     /// flush only fires for the pane that actually became idle.
     pub(crate) spawn_pending_reports_by_thread: HashMap<ThreadId, VecDeque<String>>,
-    /// The single durable dispatch inbox, keyed by logical target node id (`thread:`/`pane:`).
-    pub(crate) spawn_pending_dispatches:
-        HashMap<String, VecDeque<crate::spawn_orchestration::PendingSpawnDispatch>>,
-    /// Coalesces pump wakes and prevents more than one in-flight delivery per destination.
-    pub(crate) spawn_dispatch_pump_scheduled: bool,
-    pub(crate) spawn_dispatch_inflight_targets: HashSet<String>,
-    pub(crate) spawn_dispatch_round_robin_after: Option<String>,
     pub(crate) spawn_dispatch_acks_by_target_task:
         HashMap<(String, String), VecDeque<crate::spawn_orchestration::SpawnDispatchAck>>,
     pub(crate) spawn_next_dispatch_seq: u64,
     pub(crate) spawn_processed_dispatch_seq_ids: HashSet<u64>,
     pub(crate) spawn_processed_dispatch_origins: HashSet<String>,
-    /// Number of host dispatch-correction prompts submitted per source thread. Bounded so a
-    /// model that keeps emitting dispatch blocks inside shell text cannot ping-pong corrections
-    /// forever; each correction starts a fresh turn id, so turn-keyed dedup alone cannot stop it.
-    pub(crate) spawn_dispatch_corrections_by_thread: HashMap<ThreadId, usize>,
-    pub(crate) spawn_accepted_delivery_ids: HashSet<String>,
     /// Terminal turn notifications are observed both on receipt and during buffered replay. Keep
     /// orchestration side effects idempotent across those two delivery paths.
     pub(crate) spawn_processed_terminal_turns: HashSet<(ThreadId, String)>,
@@ -1378,10 +1366,11 @@ See the PFTerminal keymap documentation for supported actions and examples."
             .as_ref()
             .is_some_and(|layout| layout.spawn_nazgul_rebind_required);
         let restored_spawn_legacy_read_only = restored_pane_layout.as_ref().is_some_and(|layout| {
-            layout.spawn_crew.is_none()
-                && (layout.spawn_nazgul_pane_id.is_some()
-                    || !layout.spawn_parent_by_node.is_empty()
-                    || !layout.claude_pane_ids.is_empty())
+            !layout.spawn_pending_dispatches.is_empty()
+                || layout.spawn_crew.is_none()
+                    && (layout.spawn_nazgul_pane_id.is_some()
+                        || !layout.spawn_parent_by_node.is_empty()
+                        || !layout.claude_pane_ids.is_empty())
         });
         let mut restored_orchestrate_whips: HashMap<_, _> = restored_pane_layout
             .as_ref()
@@ -1528,33 +1517,10 @@ See the PFTerminal keymap documentation for supported actions and examples."
             spawn_waiting_for_agents_by_thread: HashMap::new(),
             spawn_parent_reports_by_node: HashMap::new(),
             spawn_pending_reports_by_thread: HashMap::new(),
-            spawn_pending_dispatches: restored_pane_layout
-                .as_ref()
-                .map(|layout| {
-                    layout
-                        .spawn_pending_dispatches
-                        .iter()
-                        .map(|(target, queue)| {
-                            (
-                                target.clone(),
-                                crate::spawn_orchestration::reconcile_restored_dispatches(queue),
-                            )
-                        })
-                        .collect()
-                })
-                .unwrap_or_default(),
-            spawn_dispatch_pump_scheduled: false,
-            spawn_dispatch_inflight_targets: HashSet::new(),
-            spawn_dispatch_round_robin_after: None,
             spawn_dispatch_acks_by_target_task: HashMap::new(),
             spawn_next_dispatch_seq: restored_spawn_next_dispatch_seq,
             spawn_processed_dispatch_seq_ids: restored_spawn_processed_dispatch_seq_ids,
             spawn_processed_dispatch_origins: restored_spawn_processed_dispatch_origins,
-            spawn_dispatch_corrections_by_thread: HashMap::new(),
-            spawn_accepted_delivery_ids: restored_pane_layout
-                .as_ref()
-                .map(|layout| layout.spawn_accepted_delivery_ids.iter().cloned().collect())
-                .unwrap_or_default(),
             spawn_processed_terminal_turns: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
             spawn_operator_input_seen: false,
@@ -1849,7 +1815,6 @@ See the PFTerminal keymap documentation for supported actions and examples."
                                     }
                                 });
                                 app.restore_native_spawn_panes_from_saved_state(&mut app_server).await;
-                                app.request_spawn_dispatch_pump();
                                 listen_for_app_server_events = true;
                                 app_server_reconnect_failure_notified = false;
                                 app.chat_widget.add_info_message(
