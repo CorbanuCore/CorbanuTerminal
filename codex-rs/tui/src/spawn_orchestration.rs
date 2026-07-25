@@ -111,6 +111,7 @@ struct SpawnThreadStateMetadata<'a> {
     agent_nickname: Option<String>,
     model: String,
     model_provider: String,
+    reasoning_effort: Option<ReasoningEffort>,
     rollout_path: Option<std::path::PathBuf>,
 }
 
@@ -2401,10 +2402,11 @@ impl App {
             /*is_closed*/ false,
         );
         let session_model = started.session.model.clone();
+        let session_reasoning_effort = started.session.reasoning_effort.clone();
         let saved_runtime = crate::dispatch_queue::SavedNativeSpawnRuntime {
             model: session_model.clone(),
             provider: started.session.model_provider_id.clone(),
-            reasoning_effort: started.session.reasoning_effort.clone(),
+            reasoning_effort: session_reasoning_effort.clone(),
         };
         self.spawn_native_runtime_by_node
             .insert(logical_node_id, saved_runtime);
@@ -2423,6 +2425,7 @@ impl App {
                 .and_then(|entry| entry.agent_nickname.clone()),
             model: session_model,
             model_provider: session_model_provider,
+            reasoning_effort: session_reasoning_effort,
             rollout_path: None,
         })
         .await;
@@ -2466,6 +2469,7 @@ impl App {
             agent_nickname: nickname,
             model,
             model_provider: self.config.model_provider_id.clone(),
+            reasoning_effort: self.chat_widget.current_reasoning_effort(),
             rollout_path: None,
         })
         .await;
@@ -2485,6 +2489,7 @@ impl App {
             agent_nickname,
             model,
             model_provider,
+            reasoning_effort,
             rollout_path,
         } = metadata_update;
         let now = Utc::now();
@@ -2531,6 +2536,7 @@ impl App {
         metadata.agent_role = Some(agent_role.to_string());
         metadata.model = Some(model);
         metadata.model_provider = model_provider;
+        metadata.reasoning_effort = reasoning_effort;
         metadata.cwd = self.config.cwd.to_path_buf();
         if parent_thread_id.is_some() {
             metadata.thread_source = Some(CoreThreadSource::Subagent);
@@ -2613,6 +2619,7 @@ impl App {
             agent_nickname: pane.spawn_nickname.clone(),
             model: profile.provider_model.to_string(),
             model_provider: "claude-code".to_string(),
+            reasoning_effort: None,
             rollout_path: Some(rollout_path),
         })
         .await;
@@ -3267,6 +3274,7 @@ impl App {
     ) {
         let session_model = started.session.model.clone();
         let session_model_provider = started.session.model_provider_id.clone();
+        let session_reasoning_effort = started.session.reasoning_effort.clone();
         let rollout_path = started.session.rollout_path.clone();
         self.upsert_agent_picker_thread(
             thread_id,
@@ -3285,6 +3293,7 @@ impl App {
             agent_nickname,
             model: session_model,
             model_provider: session_model_provider,
+            reasoning_effort: session_reasoning_effort,
             rollout_path,
         })
         .await;

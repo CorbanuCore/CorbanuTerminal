@@ -2309,6 +2309,46 @@ async fn restored_spawn_resume_uses_saved_runtime_instead_of_parent_runtime() {
 }
 
 #[tokio::test]
+async fn startup_resume_applies_persisted_runtime_before_bootstrap() {
+    let mut app = make_test_app().await;
+    let provider = app
+        .config
+        .model_providers
+        .get(CLAUDE_PLAN_PROVIDER_ID)
+        .expect("Claude Plan provider")
+        .clone();
+    app.config.model = Some("gpt-5.6-sol".to_string());
+    app.config.model_provider_id = OPENAI_PROVIDER_ID.to_string();
+    app.config.model_reasoning_effort = Some(ReasoningEffortConfig::XHigh);
+
+    let model_override = apply_persisted_resume_runtime(
+        &mut app.config,
+        Some(codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL),
+        CLAUDE_PLAN_PROVIDER_ID,
+        Some(ReasoningEffortConfig::High),
+    )
+    .expect("persisted runtime");
+
+    assert_eq!(
+        app.config.model.as_deref(),
+        Some(codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL)
+    );
+    assert_eq!(app.config.model_provider_id, CLAUDE_PLAN_PROVIDER_ID);
+    assert_eq!(app.config.model_provider, provider);
+    assert_eq!(
+        app.config.model_reasoning_effort,
+        Some(ReasoningEffortConfig::High)
+    );
+    assert_eq!(
+        model_override,
+        crate::app_server_session::ResumeModelOverride {
+            model: Some(codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL.to_string()),
+            model_provider: Some(CLAUDE_PLAN_PROVIDER_ID.to_string()),
+        }
+    );
+}
+
+#[tokio::test]
 async fn manually_assembled_multimodel_spawn_crew_is_crewspec_backed() {
     let mut app = make_test_app().await;
     app.ensure_custom_spawn_root(crate::claude_panes::CODEX_MAIN_PANE_ID)
@@ -6194,6 +6234,10 @@ async fn native_spawn_registration_persists_started_session_model_provider_pair(
     assert_eq!(metadata.agent_nickname.as_deref(), Some("Burzum"));
     assert_eq!(metadata.model.as_deref(), Some("gpt-5.5"));
     assert_eq!(metadata.model_provider, "openai");
+    assert_eq!(
+        metadata.reasoning_effort,
+        Some(ReasoningEffortConfig::XHigh)
+    );
 }
 
 #[test]

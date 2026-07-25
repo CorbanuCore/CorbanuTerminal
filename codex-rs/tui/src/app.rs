@@ -1084,6 +1084,34 @@ impl App {
             config.tui_notifications.condition,
         );
 
+        let startup_resume_model_override = match (
+            startup_resume_model_override,
+            &session_selection,
+            state_db.as_ref(),
+        ) {
+            (Some(explicit), _, _) => Some(explicit),
+            (None, SessionSelection::Resume(target), Some(state_db)) => {
+                match state_db.get_thread(target.thread_id).await {
+                    Ok(Some(metadata)) => apply_persisted_resume_runtime(
+                        &mut config,
+                        metadata.model.as_deref(),
+                        metadata.model_provider.as_str(),
+                        metadata.reasoning_effort.clone(),
+                    ),
+                    Ok(None) => None,
+                    Err(error) => {
+                        tracing::warn!(
+                            thread_id = %target.thread_id,
+                            %error,
+                            "failed to load persisted runtime for startup resume"
+                        );
+                        None
+                    }
+                }
+            }
+            (None, _, _) => None,
+        };
+
         let harness_overrides =
             normalize_harness_overrides_for_cwd(harness_overrides, &config.cwd)?;
         let bootstrap = match startup_bootstrap {
@@ -2050,6 +2078,33 @@ See the PFTerminal keymap documentation for supported actions and examples."
         })?;
         Ok(rendered_area)
     }
+}
+
+fn apply_persisted_resume_runtime(
+    config: &mut Config,
+    model: Option<&str>,
+    model_provider: &str,
+    reasoning_effort: Option<codex_protocol::openai_models::ReasoningEffort>,
+) -> Option<ResumeModelOverride> {
+    let model = model?.to_string();
+    config.model = Some(model.clone());
+    if let Some(reasoning_effort) = reasoning_effort {
+        config.model_reasoning_effort = Some(reasoning_effort);
+    }
+    if let Some(provider) = config.model_providers.get(model_provider).cloned() {
+        config.model_provider_id = model_provider.to_string();
+        config.model_provider = provider;
+    } else {
+        tracing::warn!(
+            model,
+            model_provider,
+            "persisted resume provider is not configured in this client"
+        );
+    }
+    Some(ResumeModelOverride {
+        model: Some(model),
+        model_provider: Some(model_provider.to_string()),
+    })
 }
 
 impl Drop for App {
