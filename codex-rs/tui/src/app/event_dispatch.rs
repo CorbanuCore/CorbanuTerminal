@@ -3334,6 +3334,39 @@ impl App {
                             );
                             self.persist_bound_nazgul_root_thread_metadata().await;
                         }
+                        let logical_node_id = crate::spawn_orchestration::thread_node_id(thread_id);
+                        let crew_result = if bound_as_nazgul {
+                            self.ensure_custom_spawn_root(&logical_node_id)
+                        } else {
+                            let runtime = self
+                                .spawn_native_runtime_by_node
+                                .get(&logical_node_id)
+                                .cloned()
+                                .ok_or_else(|| {
+                                    color_eyre::eyre::eyre!(
+                                        "spawned pane {logical_node_id} has no persisted runtime"
+                                    )
+                                });
+                            runtime.and_then(|runtime| {
+                                self.record_custom_spawn_member(
+                                    &logical_node_id,
+                                    &logical_parent_node_id,
+                                    role,
+                                    agent_nickname
+                                        .clone()
+                                        .unwrap_or_else(|| role.label().to_string()),
+                                    runtime,
+                                )
+                            })
+                        };
+                        if let Err(err) = crew_result {
+                            self.mark_crew_incomplete(err.to_string());
+                            self.chat_widget.add_error_message(format!(
+                                "Spawned the pane, but could not persist its crew identity: {err}"
+                            ));
+                            return Ok(AppRunControl::Continue);
+                        }
+                        self.persist_pane_state();
                         if self.active_thread_id.is_none() {
                             self.select_agent_thread_and_discard_side(tui, app_server, thread_id)
                                 .await?;

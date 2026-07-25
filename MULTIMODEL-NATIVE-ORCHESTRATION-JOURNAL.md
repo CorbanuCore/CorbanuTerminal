@@ -407,3 +407,42 @@ Product boundary:
 - These states belong to the native provider-neutral substrate. `/spawn` continues to own crew
   membership, names, hierarchy presentation, exact runtime selection, panes, and direct
   human navigation.
+
+## Phase 6B — Preserve manual `/spawn` crews and separate them from task agents
+
+Status: the native cutover retains the original `/spawn` product boundary.
+
+Timestamp: 2026-07-25T05:33:45Z
+
+Changes:
+
+- Manually assembled `/spawn` crews now create and persist a custom `CrewSpec`, including the
+  bound Nazgul root, every Troll/Orc native identity, parent edge, display name, and exact
+  provider/model/effort tuple.
+- Adding a member to a ready crew is transactional: validation and identity mapping complete on a
+  clone before the live crew state changes. Customization clears the preset identifier without
+  changing existing member identities.
+- External Claude-plan panes enter the same durable crew mapping at the adapter boundary.
+- Crew membership is determined by `CrewSpec` identity mapping, never by a role label. A normal
+  native Codex task agent remains outside `/spawn` even if its descriptive role is `orc`,
+  `troll`, or `nazgul`.
+- Restored pre-CrewSpec layouts remain inspectable and read-only. They do not become writable
+  merely because their old role labels resemble a crew.
+- Focused custom-crew logic lives in `custom_spawn_crew.rs`; `spawn_crew.rs` remains 375 lines.
+
+Passing evidence:
+
+- `cargo check -p codex-tui`.
+- TUI `/spawn` filter: 72 passed, 1 live-auth integration test intentionally ignored.
+- `manually_assembled_multimodel_spawn_crew_is_crewspec_backed`.
+- `native_task_agent_role_does_not_make_it_a_persistent_spawn_crew_member`.
+- Crew state tests: exact identity round-trip, heterogeneous member addition, duplicate mapping
+  rejection, and incomplete-state rejection.
+
+Product boundary:
+
+- `/spawn` is not deprecated or replaced. It owns persistent named crews, presets, hierarchy,
+  provider/model/effort selection, panes, navigation, and direct human control.
+- Native Codex spawning remains the mechanism for bounded task agents. Both products share native
+  identity, mailbox, execution, interruption, and recovery primitives without sharing membership
+  or retention semantics.

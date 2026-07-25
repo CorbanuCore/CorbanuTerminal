@@ -68,3 +68,55 @@ fn crew_instance_rejects_identity_reassignment_and_incomplete_ready_state() {
         })
     );
 }
+
+#[test]
+fn ready_custom_crew_can_add_heterogeneous_members_without_changing_existing_identity() {
+    let mut spec = crew_presets::standard_crew_spec();
+    spec.preset_id = None;
+    spec.members.truncate(1);
+    spec.policy.provider_allowlist = vec!["claude-plan".to_string()];
+    let mut state = CrewInstanceState::begin(spec).expect("valid root crew");
+    state
+        .record_member("nazgul", "thread:nazgul")
+        .expect("record root");
+    state.mark_ready().expect("root ready");
+
+    state
+        .add_ready_member(
+            codex_protocol::crew::CrewMemberSpec {
+                logical_member_id: "orc-1".to_string(),
+                display_name: "Kimi reviewer".to_string(),
+                role_profile: "orc".to_string(),
+                parent_member_id: Some("nazgul".to_string()),
+                runtime_request: codex_protocol::crew::RuntimeRequest::exact(
+                    "kimi-code",
+                    "k3",
+                    None,
+                ),
+            },
+            "thread:kimi",
+        )
+        .expect("add Kimi member");
+
+    assert_eq!(
+        state.member_node_by_id.get("nazgul").map(String::as_str),
+        Some("thread:nazgul")
+    );
+    assert_eq!(
+        state.member_node_by_id.get("orc-1").map(String::as_str),
+        Some("thread:kimi")
+    );
+    assert!(
+        state
+            .spec
+            .policy
+            .provider_allowlist
+            .iter()
+            .any(|provider| provider == "kimi-code")
+    );
+    state.spec.validate().expect("expanded crew remains valid");
+    let restored: CrewInstanceState =
+        serde_json::from_str(&serde_json::to_string(&state).expect("serialize expanded crew"))
+            .expect("restore expanded crew");
+    assert_eq!(restored, state);
+}

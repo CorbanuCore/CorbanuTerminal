@@ -1,3 +1,4 @@
+use codex_protocol::crew::CrewMemberSpec;
 use codex_protocol::crew::CrewSpec;
 use serde::Deserialize;
 use serde::Serialize;
@@ -98,6 +99,40 @@ impl CrewInstanceState {
             error: error.into(),
         };
     }
+
+    pub(crate) fn add_ready_member(
+        &mut self,
+        member: CrewMemberSpec,
+        node_id: &str,
+    ) -> Result<(), CrewStateError> {
+        if !matches!(self.status, CrewCreationStatus::Ready) {
+            return Err(CrewStateError::NotReady);
+        }
+        let mut next = self.clone();
+        next.spec.preset_id = None;
+        next.spec.members.push(member.clone());
+        if let codex_protocol::crew::RuntimeRequest::Exact { provider_id, .. } =
+            &member.runtime_request
+            && !next
+                .spec
+                .policy
+                .provider_allowlist
+                .iter()
+                .any(|allowed| allowed == provider_id)
+        {
+            next.spec
+                .policy
+                .provider_allowlist
+                .push(provider_id.clone());
+        }
+        next.spec
+            .validate()
+            .map_err(|err| CrewStateError::InvalidSpec(err.to_string()))?;
+        next.record_member(&member.logical_member_id, node_id)?;
+        next.mark_ready()?;
+        *self = next;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -128,6 +163,8 @@ pub(crate) enum CrewStateError {
     },
     #[error("crew is missing native nodes for members: {missing:?}")]
     MissingMembers { missing: Vec<String> },
+    #[error("crew must be ready before a member is added")]
+    NotReady,
 }
 
 #[cfg(test)]

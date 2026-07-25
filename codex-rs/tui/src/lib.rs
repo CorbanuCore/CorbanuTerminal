@@ -110,6 +110,7 @@ mod color;
 mod config_update;
 mod crew_presets;
 mod crew_state;
+mod custom_spawn_crew;
 pub(crate) mod custom_terminal;
 mod pets;
 pub use custom_terminal::Terminal;

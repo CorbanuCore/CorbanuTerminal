@@ -551,6 +551,27 @@ impl App {
                     crate::spawn_orchestration::pane_node_id(&id),
                     logical_parent_node_id.clone(),
                 );
+                let profile_config = profile.profile();
+                let logical_node_id = crate::spawn_orchestration::pane_node_id(&id);
+                if let Err(err) = self.record_custom_spawn_member(
+                    &logical_node_id,
+                    &logical_parent_node_id,
+                    role,
+                    spawn_nickname
+                        .clone()
+                        .unwrap_or_else(|| role.label().to_string()),
+                    crate::dispatch_queue::SavedNativeSpawnRuntime {
+                        model: profile_config.provider_model.to_string(),
+                        provider: format!("external-claude:{profile:?}").to_ascii_lowercase(),
+                        reasoning_effort: None,
+                    },
+                ) {
+                    self.mark_crew_incomplete(err.to_string());
+                    self.chat_widget.add_error_message(format!(
+                        "Created the pane, but could not persist its crew identity: {err}"
+                    ));
+                    return;
+                }
                 self.sync_active_agent_label();
                 self.persist_pane_state();
                 self.persist_claude_spawn_pane_state(&id, &logical_parent_node_id)

@@ -1926,7 +1926,7 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
 }
 
 #[tokio::test]
-async fn app_server_spawn_rejects_hierarchy_role_under_general_worker() -> Result<()> {
+async fn app_server_spawn_treats_hierarchy_role_as_metadata_under_general_worker() -> Result<()> {
     let app = make_test_app().await;
     let mut app_server = start_config_write_test_app_server(&app).await?;
     let main = app_server.start_thread(&app.config).await?;
@@ -1944,7 +1944,7 @@ async fn app_server_spawn_rejects_hierarchy_role_under_general_worker() -> Resul
         )
         .await?;
 
-    let error = app_server
+    let orc = app_server
         .spawn_agent_thread(
             &spawn_config,
             worker.session.thread_id,
@@ -1955,9 +1955,9 @@ async fn app_server_spawn_rejects_hierarchy_role_under_general_worker() -> Resul
             Some(ReasoningEffortConfig::High),
             /*base_instructions*/ None,
         )
-        .await
-        .expect_err("a general worker must not stamp a hierarchy role");
-    assert!(format!("{error:#}").contains("Orcs must be spawned by a Troll supervisor"));
+        .await?;
+    assert_eq!(orc.session.model, App::STANDARD_ORC_MODEL);
+    assert_eq!(orc.session.model_provider_id, OPENAI_PROVIDER_ID);
     Ok(())
 }
 
@@ -2274,6 +2274,97 @@ async fn restored_crew_validation_rejects_runtime_drift() {
         .validate_restored_crew_state()
         .expect_err("runtime drift must stop recovery");
     assert!(error.to_string().contains("runtime changed"));
+}
+
+#[tokio::test]
+async fn manually_assembled_multimodel_spawn_crew_is_crewspec_backed() {
+    let mut app = make_test_app().await;
+    app.ensure_custom_spawn_root(crate::claude_panes::CODEX_MAIN_PANE_ID)
+        .expect("bind custom root");
+    app.record_custom_spawn_member(
+        "thread:troll",
+        crate::claude_panes::CODEX_MAIN_PANE_ID,
+        crate::spawn_orchestration::SpawnRole::Troll,
+        "Burzum".to_string(),
+        crate::dispatch_queue::SavedNativeSpawnRuntime {
+            model: "claude-opus-5-plan".to_string(),
+            provider: "claude-plan".to_string(),
+            reasoning_effort: None,
+        },
+    )
+    .expect("add Opus Troll");
+    app.record_custom_spawn_member(
+        "thread:orc-kimi",
+        "thread:troll",
+        crate::spawn_orchestration::SpawnRole::Orc,
+        "Snaga".to_string(),
+        crate::dispatch_queue::SavedNativeSpawnRuntime {
+            model: "k3".to_string(),
+            provider: "kimi-code".to_string(),
+            reasoning_effort: None,
+        },
+    )
+    .expect("add Kimi Orc");
+
+    let crew = app.spawn_crew.as_ref().expect("custom crew");
+    assert!(matches!(
+        crew.status,
+        crate::crew_state::CrewCreationStatus::Ready
+    ));
+    assert_eq!(crew.spec.preset_id, None);
+    assert_eq!(crew.spec.members.len(), 3);
+    assert_eq!(
+        crew.member_node_by_id
+            .values()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec!["codex-main", "thread:orc-kimi", "thread:troll"]
+    );
+    crew.spec.validate().expect("custom crew stays valid");
+    assert!(!app.spawn_legacy_read_only);
+}
+
+#[tokio::test]
+async fn native_task_agent_role_does_not_make_it_a_persistent_spawn_crew_member() {
+    let mut app = make_test_app().await;
+    let crew_orc = ThreadId::new();
+    let task_agent = ThreadId::new();
+    app.ensure_custom_spawn_root(crate::claude_panes::CODEX_MAIN_PANE_ID)
+        .expect("bind custom root");
+    app.upsert_agent_picker_thread(
+        crew_orc,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        false,
+    );
+    app.upsert_agent_picker_thread(
+        task_agent,
+        Some("Ephemeral reviewer".to_string()),
+        Some("orc".to_string()),
+        false,
+    );
+    app.record_custom_spawn_member(
+        &crate::spawn_orchestration::thread_node_id(crew_orc),
+        crate::claude_panes::CODEX_MAIN_PANE_ID,
+        crate::spawn_orchestration::SpawnRole::Orc,
+        "Snaga".to_string(),
+        crate::dispatch_queue::SavedNativeSpawnRuntime {
+            model: "k3".to_string(),
+            provider: "kimi-code".to_string(),
+            reasoning_effort: None,
+        },
+    )
+    .expect("record durable crew member");
+
+    assert!(app.is_managed_spawn_crew_thread(crew_orc));
+    assert!(!app.is_managed_spawn_crew_thread(task_agent));
+    let crew_rows = app.spawn_tree_items(/*show_task_actions*/ false);
+    assert!(crew_rows.iter().any(|item| item.name.contains("Snaga")));
+    assert!(
+        crew_rows
+            .iter()
+            .all(|item| !item.name.contains("Ephemeral reviewer"))
+    );
 }
 
 impl App {

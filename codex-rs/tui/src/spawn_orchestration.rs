@@ -292,6 +292,10 @@ impl App {
 
     pub(crate) fn bind_spawn_nazgul_pane(&mut self, pane_id: String) {
         let title = self.nazgul_bound_display_title(&pane_id);
+        if let Err(err) = self.ensure_custom_spawn_root(&pane_id) {
+            self.chat_widget.add_error_message(err.to_string());
+            return;
+        }
         self.set_spawn_nazgul_pane_binding(pane_id);
         self.chat_widget.add_info_message(
             format!("Bound {title} as Nazgul root."),
@@ -1691,12 +1695,7 @@ impl App {
         status: &str,
         result: Option<&str>,
     ) {
-        if !self
-            .claude_panes
-            .panes()
-            .iter()
-            .any(|pane| pane.id == pane_id && pane.spawn_role.is_some())
-        {
+        if !self.spawn_node_is_persistent_crew_member(&pane_node_id(pane_id)) {
             return;
         }
         let Some(parent_node_id) = self.logical_parent_node_for_pane(pane_id) else {
@@ -3372,37 +3371,52 @@ impl App {
     }
 
     pub(crate) fn is_spawn_orchestration_thread(&self, thread_id: ThreadId) -> bool {
-        if self.is_codex_main_bound_spawn_root_thread(thread_id) {
-            return true;
-        }
-        if self.is_assignment_holder(&self.logical_native_node_for_thread(thread_id)) {
-            return true;
-        }
-        self.spawn_status_by_thread.contains_key(&thread_id)
-            || self.spawn_parent_by_thread.contains_key(&thread_id)
-            || self
-                .spawn_parent_by_thread
-                .values()
-                .any(|parent| *parent == thread_id)
-            || self.nazgul_bound_thread_id() == Some(thread_id)
-            || self
-                .agent_navigation
-                .get(&thread_id)
-                .and_then(|entry| entry.agent_role.as_deref())
-                .is_some_and(|role| {
-                    role == NAZGUL_ROLE_NAME || role == TROLL_ROLE || role == ORC_ROLE
-                })
+        let node_id = self.logical_native_node_for_thread(thread_id);
+        self.spawn_node_is_persistent_crew_member(&node_id)
+            || (self.spawn_legacy_read_only
+                && (self.spawn_status_by_thread.contains_key(&thread_id)
+                    || self.spawn_parent_by_thread.contains_key(&thread_id)
+                    || self
+                        .spawn_parent_by_thread
+                        .values()
+                        .any(|parent| *parent == thread_id)
+                    || self.nazgul_bound_thread_id() == Some(thread_id)))
     }
 
     pub(crate) fn is_managed_spawn_crew_thread(&self, thread_id: ThreadId) -> bool {
-        self.nazgul_bound_thread_id() == Some(thread_id)
-            || self
-                .agent_navigation
-                .get(&thread_id)
-                .and_then(|entry| entry.agent_role.as_deref())
-                .is_some_and(|role| {
-                    role == NAZGUL_ROLE_NAME || role == TROLL_ROLE || role == ORC_ROLE
-                })
+        self.spawn_node_is_persistent_crew_member(&self.logical_native_node_for_thread(thread_id))
+    }
+
+    fn spawn_node_is_persistent_crew_member(&self, node_id: &str) -> bool {
+        if let Some(crew) = self.spawn_crew.as_ref() {
+            return crew
+                .member_node_by_id
+                .values()
+                .any(|member_node_id| member_node_id == node_id);
+        }
+        let legacy_member = self.spawn_nazgul_pane_id.as_deref() == Some(node_id)
+            || self.spawn_parent_by_node.contains_key(node_id);
+        if self.spawn_legacy_read_only {
+            return legacy_member;
+        }
+        #[cfg(test)]
+        {
+            // Older unit fixtures predate CrewSpec and construct only the legacy edge/role maps.
+            // Production never treats those labels as writable crew membership; the explicit
+            // class-boundary regression constructs a CrewSpec and therefore exercises the real
+            // path even in tests.
+            return legacy_member
+                || node_id_thread(node_id).is_some_and(|thread_id| {
+                    self.agent_navigation
+                        .get(&thread_id)
+                        .and_then(|entry| entry.agent_role.as_deref())
+                        .is_some_and(|role| {
+                            role == NAZGUL_ROLE_NAME || role == TROLL_ROLE || role == ORC_ROLE
+                        })
+                });
+        }
+        #[cfg(not(test))]
+        false
     }
 
     fn is_codex_main_bound_spawn_root_thread(&self, thread_id: ThreadId) -> bool {
@@ -3446,7 +3460,7 @@ impl App {
     /// Human-readable title for the bound Nazgul root, covering user panes and native Codex
     /// agent threads. A thread binding is rendered with the thread's picker label so the status
     /// tree stays readable instead of showing a raw `thread:<uuid>` node id.
-    fn nazgul_bound_display_title(&self, target: &str) -> String {
+    pub(crate) fn nazgul_bound_display_title(&self, target: &str) -> String {
         if let Some(thread_id) = node_id_thread(target) {
             let entry_label = self.agent_navigation.get(&thread_id).map(|entry| {
                 format_agent_picker_item_name(
@@ -3541,6 +3555,11 @@ impl App {
             .filter(|(thread_id, entry)| {
                 !self.is_superseded_saved_native_spawn_thread(*thread_id, entry)
             })
+            .filter(|(thread_id, _)| {
+                self.spawn_node_is_persistent_crew_member(
+                    &self.logical_native_node_for_thread(*thread_id),
+                )
+            })
             .filter(|(_, entry)| entry.agent_role.as_deref() == Some(role))
             .collect()
     }
@@ -3551,6 +3570,11 @@ impl App {
             .into_iter()
             .filter(|(thread_id, entry)| {
                 !self.is_superseded_saved_native_spawn_thread(*thread_id, entry)
+            })
+            .filter(|(thread_id, _)| {
+                self.spawn_node_is_persistent_crew_member(
+                    &self.logical_native_node_for_thread(*thread_id),
+                )
             })
             .filter(|(thread_id, entry)| {
                 if entry.agent_role.as_deref() == Some(TROLL_ROLE) {
@@ -3971,7 +3995,10 @@ impl App {
         self.claude_panes
             .panes()
             .iter()
-            .filter(|pane| pane.spawn_role == Some(role))
+            .filter(|pane| {
+                pane.spawn_role == Some(role)
+                    && self.spawn_node_is_persistent_crew_member(&pane_node_id(pane.id.as_str()))
+            })
             .collect()
     }
 
