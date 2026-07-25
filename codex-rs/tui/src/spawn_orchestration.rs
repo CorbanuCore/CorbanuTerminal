@@ -3405,7 +3405,7 @@ impl App {
             // Production never treats those labels as writable crew membership; the explicit
             // class-boundary regression constructs a CrewSpec and therefore exercises the real
             // path even in tests.
-            return legacy_member
+            legacy_member
                 || node_id_thread(node_id).is_some_and(|thread_id| {
                     self.agent_navigation
                         .get(&thread_id)
@@ -3413,7 +3413,7 @@ impl App {
                         .is_some_and(|role| {
                             role == NAZGUL_ROLE_NAME || role == TROLL_ROLE || role == ORC_ROLE
                         })
-                });
+                })
         }
         #[cfg(not(test))]
         false

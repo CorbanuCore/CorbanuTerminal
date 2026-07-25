@@ -5320,7 +5320,7 @@ async fn claude_adapter_emits_direct_records_without_prose_batching() {
                 seq: Some(601),
             },
             crate::spawn_orchestration::SpawnTaskDispatch {
-                target: orc_pane_id.clone(),
+                target: orc_pane_id,
                 task: "second exact task".to_string(),
                 seq: Some(602),
             },

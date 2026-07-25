@@ -99,7 +99,7 @@ impl App {
                 )
             })?;
         let prefix = role.agent_type().unwrap_or("member");
-        let logical_member_id = (1_u64..)
+        let logical_member_id = (1_u64..=u64::MAX)
             .map(|index| format!("{prefix}-{index}"))
             .find(|candidate| {
                 !state
@@ -108,7 +108,7 @@ impl App {
                     .iter()
                     .any(|member| member.logical_member_id == *candidate)
             })
-            .expect("an unbounded member sequence has a free identifier");
+            .ok_or_else(|| eyre!("Crew has exhausted the {prefix} member identifier space."))?;
         state
             .add_ready_member(
                 CrewMemberSpec {
