@@ -22,7 +22,13 @@ use codex_features::Feature;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_model_provider::create_model_provider;
+use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
+use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+use codex_model_provider_info::KIMI_CODE_K3_MODEL;
+use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
+use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_model_provider_info::built_in_model_providers;
 use codex_protocol::AgentPath;
@@ -441,7 +447,7 @@ async fn spawn_agent_fork_context_rejects_agent_type_override() {
     assert_eq!(
         err,
         FunctionCallError::RespondToModel(
-            "Full-history forked agents inherit the parent agent type, model, and reasoning effort; omit agent_type, model, and reasoning_effort, or spawn without a full-history fork.".to_string(),
+            "Full-history forked agents inherit the parent agent type, provider, model, and reasoning effort; omit agent_type, model_provider, model, and reasoning_effort, or spawn without a full-history fork.".to_string(),
         )
     );
 }
@@ -476,7 +482,7 @@ async fn spawn_agent_fork_context_rejects_child_model_overrides() {
     assert_eq!(
         err,
             FunctionCallError::RespondToModel(
-            "Full-history forked agents inherit the parent agent type, model, and reasoning effort; omit agent_type, model, and reasoning_effort, or spawn without a full-history fork.".to_string(),
+            "Full-history forked agents inherit the parent agent type, provider, model, and reasoning effort; omit agent_type, model_provider, model, and reasoning_effort, or spawn without a full-history fork.".to_string(),
         )
     );
 }
@@ -517,6 +523,81 @@ async fn spawn_agent_rejects_cross_provider_model_override_for_zai() {
         }
         other => panic!("expected RespondToModel, got {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn spawn_agent_explicit_runtime_supports_required_multimodel_pairs() {
+    let (session, turn) = make_session_and_context().await;
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let expected = [
+        (CLAUDE_PLAN_PROVIDER_ID, CLAUDE_PLAN_MODEL),
+        (CLAUDE_PLAN_PROVIDER_ID, CLAUDE_FABLE_5_PLAN_MODEL),
+        (OPENROUTER_PROVIDER_ID, "x-ai/grok-4.5"),
+        (KIMI_CODE_PROVIDER_ID, KIMI_CODE_K3_MODEL),
+    ];
+
+    for (provider, model) in expected {
+        let mut child_config = (*turn.config).clone();
+        apply_requested_spawn_agent_runtime_overrides(
+            &session,
+            &turn,
+            &mut child_config,
+            Some(provider),
+            Some(model),
+            /*requested_reasoning_effort*/ None,
+        )
+        .await
+        .unwrap_or_else(|err| panic!("runtime {provider}/{model} should resolve: {err:?}"));
+
+        assert_eq!(child_config.model_provider_id, provider);
+        assert_eq!(
+            &child_config.model_provider,
+            providers
+                .get(provider)
+                .unwrap_or_else(|| panic!("provider {provider} should be built in"))
+        );
+        assert_eq!(child_config.model.as_deref(), Some(model));
+    }
+}
+
+#[tokio::test]
+async fn spawn_agent_explicit_runtime_rejects_incomplete_or_invalid_pairs() {
+    let (session, turn) = make_session_and_context().await;
+    let mut child_config = (*turn.config).clone();
+
+    let missing_model = apply_requested_spawn_agent_runtime_overrides(
+        &session,
+        &turn,
+        &mut child_config,
+        Some(KIMI_CODE_PROVIDER_ID),
+        /*requested_model*/ None,
+        /*requested_reasoning_effort*/ None,
+    )
+    .await
+    .expect_err("explicit provider without model should fail");
+    assert_eq!(
+        missing_model,
+        FunctionCallError::RespondToModel(
+            "spawn_agent requires `model` when `model_provider` is set; set both fields or omit both to inherit the parent runtime.".to_string()
+        )
+    );
+
+    let invalid_pair = apply_requested_spawn_agent_runtime_overrides(
+        &session,
+        &turn,
+        &mut child_config,
+        Some(KIMI_CODE_PROVIDER_ID),
+        Some("x-ai/grok-4.5"),
+        /*requested_reasoning_effort*/ None,
+    )
+    .await
+    .expect_err("provider/model mismatch should fail");
+    assert_eq!(
+        invalid_pair,
+        FunctionCallError::RespondToModel(
+            "Model `x-ai/grok-4.5` is not valid for provider `kimi-code`.".to_string()
+        )
+    );
 }
 
 #[tokio::test]
@@ -651,7 +732,7 @@ async fn multi_agent_v2_spawn_fork_turns_all_rejects_agent_type_override() {
     assert_eq!(
         err,
         FunctionCallError::RespondToModel(
-            "Full-history forked agents inherit the parent agent type, model, and reasoning effort; omit agent_type, model, and reasoning_effort, or spawn without a full-history fork.".to_string(),
+            "Full-history forked agents inherit the parent agent type, provider, model, and reasoning effort; omit agent_type, model_provider, model, and reasoning_effort, or spawn without a full-history fork.".to_string(),
         )
     );
 }
@@ -692,7 +773,7 @@ async fn multi_agent_v2_spawn_defaults_to_full_fork_and_rejects_child_model_over
     assert_eq!(
         err,
             FunctionCallError::RespondToModel(
-            "Full-history forked agents inherit the parent agent type, model, and reasoning effort; omit agent_type, model, and reasoning_effort, or spawn without a full-history fork.".to_string(),
+            "Full-history forked agents inherit the parent agent type, provider, model, and reasoning effort; omit agent_type, model_provider, model, and reasoning_effort, or spawn without a full-history fork.".to_string(),
         )
     );
 }
@@ -1281,6 +1362,68 @@ async fn spawn_agent_returns_agent_id_without_task_name() {
     assert!(result.get("task_name").is_none());
     assert!(result.get("nickname").is_some());
     assert_eq!(success, Some(true));
+}
+
+#[tokio::test]
+async fn multi_agent_v2_spawn_explicit_runtime_wins_over_role_runtime() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let role_name = install_role_with_model_override(&mut turn).await;
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = root.thread_id;
+    let mut config = (*turn.config).clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    set_turn_config(&mut turn, config);
+    let session = Arc::new(session);
+    let turn = Arc::new(turn);
+
+    let output = SpawnAgentHandlerV2::default()
+        .handle(invocation(
+            session.clone(),
+            turn.clone(),
+            "spawn_agent",
+            function_payload(json!({
+                "message": "inspect this repo",
+                "task_name": "kimi_worker",
+                "agent_type": role_name,
+                "model_provider": KIMI_CODE_PROVIDER_ID,
+                "model": KIMI_CODE_K3_MODEL,
+                "fork_turns": "none"
+            })),
+        ))
+        .await
+        .expect("explicit runtime should override role runtime");
+    let (content, _) = expect_text_output(output);
+    let result: serde_json::Value =
+        serde_json::from_str(&content).expect("spawn_agent result should be json");
+    let child_thread_id = session
+        .services
+        .agent_control
+        .resolve_agent_reference(
+            session.thread_id,
+            &turn.session_source,
+            result["task_name"]
+                .as_str()
+                .expect("task_name should be returned"),
+        )
+        .await
+        .expect("spawned task name should resolve");
+    let snapshot = manager
+        .get_thread(child_thread_id)
+        .await
+        .expect("spawned agent thread should exist")
+        .config_snapshot()
+        .await;
+
+    assert_eq!(snapshot.model_provider_id, KIMI_CODE_PROVIDER_ID);
+    assert_eq!(snapshot.model, KIMI_CODE_K3_MODEL);
 }
 
 #[tokio::test]

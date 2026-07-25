@@ -265,12 +265,17 @@ fn build_agent_shared_config(turn: &TurnContext) -> Result<Config, FunctionCallE
 
 pub(crate) fn reject_full_fork_spawn_overrides(
     agent_type: Option<&str>,
+    model_provider: Option<&str>,
     model: Option<&str>,
     reasoning_effort: Option<ReasoningEffort>,
 ) -> Result<(), FunctionCallError> {
-    if agent_type.is_some() || model.is_some() || reasoning_effort.is_some() {
+    if agent_type.is_some()
+        || model_provider.is_some()
+        || model.is_some()
+        || reasoning_effort.is_some()
+    {
         return Err(FunctionCallError::RespondToModel(
-            "Full-history forked agents inherit the parent agent type, model, and reasoning effort; omit agent_type, model, and reasoning_effort, or spawn without a full-history fork.".to_string(),
+            "Full-history forked agents inherit the parent agent type, provider, model, and reasoning effort; omit agent_type, model_provider, model, and reasoning_effort, or spawn without a full-history fork.".to_string(),
         ));
     }
     Ok(())
@@ -378,6 +383,81 @@ pub(crate) async fn apply_requested_spawn_agent_model_overrides(
             &reasoning_effort,
         )?;
         config.model_reasoning_effort = Some(reasoning_effort);
+    }
+
+    Ok(())
+}
+
+pub(crate) async fn apply_requested_spawn_agent_runtime_overrides(
+    session: &Session,
+    turn: &TurnContext,
+    config: &mut Config,
+    requested_provider: Option<&str>,
+    requested_model: Option<&str>,
+    requested_reasoning_effort: Option<ReasoningEffort>,
+) -> Result<(), FunctionCallError> {
+    let requested_provider = requested_provider
+        .map(str::trim)
+        .filter(|provider| !provider.is_empty());
+    if requested_provider.is_none() {
+        return apply_requested_spawn_agent_model_overrides(
+            session,
+            turn,
+            config,
+            requested_model,
+            requested_reasoning_effort,
+        )
+        .await;
+    }
+
+    let Some(requested_provider) = requested_provider else {
+        return Ok(());
+    };
+    let requested_model = requested_model
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .ok_or_else(|| {
+            FunctionCallError::RespondToModel(
+                "spawn_agent requires `model` when `model_provider` is set; set both fields or omit both to inherit the parent runtime.".to_string(),
+            )
+        })?;
+    let provider = config
+        .model_providers
+        .get(requested_provider)
+        .cloned()
+        .ok_or_else(|| {
+            FunctionCallError::RespondToModel(format!(
+                "Unknown model provider `{requested_provider}` for spawn_agent."
+            ))
+        })?;
+    let resolved_model = codex_model_provider_info::resolve_model_for_provider(
+        Some(requested_model.to_string()),
+        requested_provider,
+    );
+    if resolved_model.as_deref() != Some(requested_model) {
+        return Err(FunctionCallError::RespondToModel(format!(
+            "Model `{requested_model}` is not valid for provider `{requested_provider}`."
+        )));
+    }
+
+    config.model_provider_id = requested_provider.to_string();
+    config.model_provider = provider;
+    config.model = Some(requested_model.to_string());
+
+    let selected_model_info = session
+        .services
+        .models_manager
+        .get_model_info(requested_model, &config.to_models_manager_config())
+        .await;
+    if let Some(reasoning_effort) = requested_reasoning_effort {
+        validate_spawn_agent_reasoning_effort(
+            requested_model,
+            &selected_model_info.supported_reasoning_levels,
+            &reasoning_effort,
+        )?;
+        config.model_reasoning_effort = Some(reasoning_effort);
+    } else {
+        config.model_reasoning_effort = selected_model_info.default_reasoning_level;
     }
 
     Ok(())

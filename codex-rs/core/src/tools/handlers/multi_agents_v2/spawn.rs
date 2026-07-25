@@ -79,21 +79,23 @@ async fn handle_spawn_agent(
     if matches!(fork_mode, Some(SpawnAgentForkMode::FullHistory)) {
         reject_full_fork_spawn_overrides(
             role_name,
+            args.model_provider.as_deref(),
             args.model.as_deref(),
             args.reasoning_effort.clone(),
         )?;
     } else {
-        apply_requested_spawn_agent_model_overrides(
+        apply_role_to_config(&mut config, role_name)
+            .await
+            .map_err(FunctionCallError::RespondToModel)?;
+        apply_requested_spawn_agent_runtime_overrides(
             &session,
             turn.as_ref(),
             &mut config,
+            args.model_provider.as_deref(),
             args.model.as_deref(),
             args.reasoning_effort.clone(),
         )
         .await?;
-        apply_role_to_config(&mut config, role_name)
-            .await
-            .map_err(FunctionCallError::RespondToModel)?;
     }
     apply_spawn_agent_service_tier(
         &session,
@@ -215,6 +217,7 @@ struct SpawnAgentArgs {
     message: String,
     task_name: String,
     agent_type: Option<String>,
+    model_provider: Option<String>,
     model: Option<String>,
     reasoning_effort: Option<ReasoningEffort>,
     service_tier: Option<String>,

@@ -70,7 +70,7 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
     assert!(description.contains("Spawns an agent to work on the specified task."));
     assert!(description.contains("The spawned agent will have the same tools as you"));
     assert!(!description.contains("max_concurrent_threads_per_session"));
-    assert!(description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE));
+    assert!(description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2));
     assert!(
         description
             .contains("Available model overrides (optional; inherited parent model is preferred):")
@@ -102,6 +102,12 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
     );
     assert_eq!(
         properties
+            .get("model_provider")
+            .and_then(|schema| schema.description.as_deref()),
+        Some(SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION)
+    );
+    assert_eq!(
+        properties
             .get("service_tier")
             .and_then(|schema| schema.description.as_deref()),
         Some(SPAWN_AGENT_SERVICE_TIER_OVERRIDE_DESCRIPTION)
@@ -130,8 +136,11 @@ fn spawn_agent_tool_v1_keeps_legacy_fork_context_field() {
         panic!("spawn_agent v1 should be a namespace tool");
     };
     assert_eq!(namespace.name, MULTI_AGENT_V1_NAMESPACE);
-    let Some(ResponsesApiNamespaceTool::Function(ResponsesApiTool { parameters, .. })) =
-        namespace.tools.first()
+    let Some(ResponsesApiNamespaceTool::Function(ResponsesApiTool {
+        description,
+        parameters,
+        ..
+    })) = namespace.tools.first()
     else {
         panic!("spawn_agent should be a namespace function tool");
     };
@@ -144,6 +153,7 @@ fn spawn_agent_tool_v1_keeps_legacy_fork_context_field() {
         .as_ref()
         .expect("spawn_agent should use object params");
 
+    assert!(description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V1));
     assert!(properties.contains_key("fork_context"));
     assert!(!properties.contains_key("fork_turns"));
     assert_eq!(
@@ -242,9 +252,10 @@ fn spawn_agent_tool_hides_service_tier_with_spawn_metadata() {
 
     assert!(!properties.contains_key("agent_type"));
     assert!(!properties.contains_key("model"));
+    assert!(!properties.contains_key("model_provider"));
     assert!(!properties.contains_key("reasoning_effort"));
     assert!(!properties.contains_key("service_tier"));
-    assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE));
+    assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2));
     assert!(!description.contains("Available model overrides"));
 }
 

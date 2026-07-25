@@ -93,6 +93,7 @@ async fn handle_spawn_agent(
     if args.fork_context {
         reject_full_fork_spawn_overrides(
             role_name,
+            /*model_provider*/ None,
             args.model.as_deref(),
             args.reasoning_effort.clone(),
         )?;
