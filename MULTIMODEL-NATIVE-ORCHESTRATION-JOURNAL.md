@@ -1330,3 +1330,37 @@ Disposition:
 - Build a new immutable candidate after the broader Anthropic client suite passes.
 - Prove the same Fable native thread can perform a tool call, accept a follow-up, and continue
   without prefill rejection before restarting the three 45–60 minute sessions.
+
+## Phase 8M — Rebuilt candidate passes the live native Fable continuation seam
+
+Status: targeted live seam PASS; long-session qualification remains 0 of 3.
+
+Timestamp: 2026-07-25T15:01:14Z
+
+Candidate:
+
+- Exact binary: `/tmp/pfterminal-native-orch-b07ee141e`.
+- SHA-256:
+  `74a20e9ffe75bf299b4e135134988e935ba0c96a2ba490c5d8993293bc9df408`.
+- Source commit: `b07ee141e2`.
+- Fresh copied home: `/tmp/pft-native-orch-fable-seam-home-20260725`.
+- Structured log:
+  `/tmp/pft-native-orch-fable-seam-logs-20260725/codex-tui.log`.
+
+Live proof:
+
+- A Sol root used native `spawn_agent`, not `/spawn`, to create
+  `/root/fable_history_probe` on thread
+  `019f99ca-fb7d-7d61-95e8-1d00bd17bf94`.
+- The persisted exact runtime was `anthropic / claude-fable-5 / high`; live provider requests
+  reported `claude-fable-5` and returned HTTP 200.
+- The first turn executed multiple shell tools and completed with `FABLE_FIRST_OK`.
+- Native `followup_task` targeted the same agent path and thread. The follow-up executed another
+  shell tool and completed with `FABLE_FOLLOWUP_OK`.
+- The log contains no assistant-prefill or “conversation must end with a user message” error.
+  No replacement agent, provider substitution, or new thread was used.
+
+Disposition:
+
+- The exact live seam that invalidated `a786872cc` is repaired on `b07ee141e2`.
+- Restart the full three-session Section 15.3 count on the immutable candidate above.
