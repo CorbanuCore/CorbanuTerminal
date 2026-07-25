@@ -6166,7 +6166,16 @@ async fn bound_nazgul_root_persists_role_metadata_to_state_db() {
         ThreadId::from_string("00000000-0000-0000-0000-000000000236").expect("valid thread id");
     app.primary_thread_id = Some(root_thread_id);
     app.active_thread_id = Some(root_thread_id);
-    app.set_spawn_nazgul_pane_binding(crate::spawn_orchestration::thread_node_id(root_thread_id));
+    let root_node_id = crate::spawn_orchestration::thread_node_id(root_thread_id);
+    app.spawn_native_runtime_by_node.insert(
+        root_node_id.clone(),
+        crate::dispatch_queue::SavedNativeSpawnRuntime {
+            model: codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL.to_string(),
+            provider: CLAUDE_PLAN_PROVIDER_ID.to_string(),
+            reasoning_effort: Some(ReasoningEffortConfig::High),
+        },
+    );
+    app.set_spawn_nazgul_pane_binding(root_node_id);
 
     app.persist_bound_nazgul_root_thread_metadata().await;
 
@@ -6177,6 +6186,12 @@ async fn bound_nazgul_root_persists_role_metadata_to_state_db() {
         .expect("root row should be persisted");
     assert_eq!(metadata.agent_role.as_deref(), Some("nazgul"));
     assert_eq!(metadata.agent_nickname.as_deref(), Some("Main"));
+    assert_eq!(
+        metadata.model.as_deref(),
+        Some(codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL)
+    );
+    assert_eq!(metadata.model_provider, CLAUDE_PLAN_PROVIDER_ID);
+    assert_eq!(metadata.reasoning_effort, Some(ReasoningEffortConfig::High));
 }
 
 #[tokio::test]

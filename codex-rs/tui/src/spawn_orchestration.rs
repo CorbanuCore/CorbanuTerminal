@@ -2461,15 +2461,26 @@ impl App {
                     self.next_spawn_agent_nickname(SpawnRole::Nazgul)
                 }
             });
-        let model = self.chat_widget.current_model().to_string();
+        let saved_runtime = self
+            .spawn_native_runtime_by_node
+            .get(&thread_node_id(root_thread_id));
+        let model = saved_runtime
+            .map(|runtime| runtime.model.clone())
+            .unwrap_or_else(|| self.chat_widget.current_model().to_string());
+        let model_provider = saved_runtime
+            .map(|runtime| runtime.provider.clone())
+            .unwrap_or_else(|| self.config.model_provider_id.clone());
+        let reasoning_effort = saved_runtime
+            .and_then(|runtime| runtime.reasoning_effort.clone())
+            .or_else(|| self.chat_widget.current_reasoning_effort());
         self.persist_spawn_thread_state_metadata(SpawnThreadStateMetadata {
             thread_id: root_thread_id,
             parent_thread_id: None,
             agent_role: NAZGUL_ROLE_NAME,
             agent_nickname: nickname,
             model,
-            model_provider: self.config.model_provider_id.clone(),
-            reasoning_effort: self.chat_widget.current_reasoning_effort(),
+            model_provider,
+            reasoning_effort,
             rollout_path: None,
         })
         .await;
