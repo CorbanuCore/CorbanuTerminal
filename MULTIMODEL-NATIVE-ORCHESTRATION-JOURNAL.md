@@ -938,3 +938,54 @@ Disposition:
 - Stopped only tmux session `native_orch_satfix` after evidence collection. Four child jobs exited
   with the TUI; one known orphaned sleep PID was terminated explicitly, leaving no process rooted
   in the temporary home or workspace.
+
+## Phase 8G — Standard-crew free-form rehearsal exceeded the qualification window
+
+Status: useful adversarial evidence, but not a counted Section 15.3 pass.
+
+Timestamp: 2026-07-25T12:31:00Z
+
+Candidate and environment:
+
+- Exact binary: `/tmp/pfterminal-native-orch-e1d05c033`.
+- SHA-256: `a4b382c91a1c2f42061742dfe86d0ae8500e6ace430ec68442bf676eea5e0685`.
+- Fresh home: `/tmp/pft-native-orch-q1-home-20260725`.
+- Structured log: `/tmp/pft-native-orch-q1-logs-20260725/codex-tui.log`.
+- Disposable game branch: `qual/native-orch-q1-20260725`.
+- Game base: `0394dda07d066827a5b9a6ae977d617e3e47aba9`.
+
+Observed:
+
+- The first injected `thread/spawnAgent` failure fired at
+  `2026-07-25T09:29:10.846928Z`; the bounded retry created the full crew without a stillborn
+  member or notification flood.
+- Direct resume of the explicit manager preserved
+  `claude-plan / claude-fable-5-plan / high`.
+- The standard Sol/Luna/Terra/Grok descendants materialized with their configured runtimes.
+  Provider logs show real turns for Fable, Sol, Luna, Terra, and Grok rather than labels alone.
+- The manager discovered that port 8444 belonged to an unrelated repository, rejected that false
+  environment assumption, started the game on its own port, and drove real browser inspection.
+- A natural human reprioritization submitted during the campaign was retained and applied at the
+  next turn boundary. The manager continued using native follow-up and crew dispatch.
+- A real upstream ChatGPT-backend 503 interval affected several descendants. The manager and Troll
+  kept the campaign live, reassigned the smallest critical work, and did not duplicate accepted
+  work or change providers.
+- The campaign produced three benchmark commits:
+  `0d53ce2`, `44c48f6`, and `f33f02e`. The manager rejected and rolled back two visual changes
+  that failed live-composite review instead of accepting metric-only improvements.
+- The TUI stayed alive and the manager remained addressable. No `Cannot start turn`, execution-slot
+  rejection, compaction-trigger ordering error, assistant-prefill error, modified-thinking error,
+  panic, or retry-notification flood was observed.
+
+Disposition:
+
+- The reported active duration was `1h 16m 25s`, outside the specification's explicit 45–60
+  minute window. It is therefore a rehearsal, not qualification session 1.
+- The three-session count remains zero. Replacement sessions will receive a closeout instruction
+  at 45 minutes and a hard observer stop before 60 minutes.
+- The benchmark commits remain reachable from branch `qual/native-orch-q1-20260725`; generated
+  proof artifacts in the disposable worktree are not product changes and will be reclaimed after
+  this journal entry.
+- Tmux session `native_orch_q1` was stopped and disposable worktree
+  `/tmp/isometric-native-orch-q1-20260725` was removed after evidence capture. Root filesystem
+  free space remained 108 GiB.
