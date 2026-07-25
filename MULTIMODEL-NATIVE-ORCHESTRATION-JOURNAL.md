@@ -124,3 +124,60 @@ Remaining distinction:
   - `just fmt`
   - `just test -p codex-core ensure_v2_agent_loaded_reloads_registered_unloaded_agent`
     — 1 passed.
+
+## Phase 3B — Canonical durable native mailbox
+
+Status: native-capable delivery path implemented and qualified; the external-plan adapter and
+legacy TUI queue cutover remain Phase 4/6 work.
+
+Commits:
+
+- `969dd0755 feat: add durable native agent mailbox state`
+- `ddaf1ff9c feat: route native agents through durable mailbox`
+
+Changes:
+
+- Added stable message IDs, optional assignment IDs, typed message kinds, timestamps, and one
+  32 KiB provider-neutral body bound to `InterAgentCommunication`.
+- Added SQLite mailbox admission and explicit lifecycle states:
+  `admitted`, `ready`, `submitting`, `submitted`, `provider_running`, `retryable_failure`,
+  `unknown_outcome`, `applied`, `cancelled`, and `terminal_failure`.
+- Admission is idempotent by stable message ID and rejects reuse of an ID for different content
+  or recipients.
+- Native V2 spawn assignments, messages, follow-ups, control requests, and terminal results now
+  use one plaintext provider-neutral envelope. OpenAI encrypted tool arguments are no longer the
+  V2 internal transport because other providers cannot consume that opaque value.
+- Initial V2 spawn assignments now enter the same durable mailbox as later follow-ups. They no
+  longer bypass admission or reject before queueing solely because all worker turns are occupied.
+- Active-turn capacity uses an atomic reservation. Saturated mailbox work remains accepted and is
+  woken by capacity release rather than a retry timer.
+- Unloaded heterogeneous targets resume with their own persisted provider/model/effort, never the
+  sender's runtime.
+- Restart recovery requeues deterministically safe local states and quarantines
+  `submitting`/`provider_running` as `unknown_outcome`; those states are not automatically replayed.
+- Local rollout application is deduplicated by stable message ID, including the crash seam between
+  rollout flush and mailbox acknowledgement.
+- Terminal result IDs are deterministic per child thread and turn, so repeated transport applies
+  once locally.
+- Status previews omit full task bodies; credentials and full task text are not added to logs.
+
+Passing evidence:
+
+- `just test -p codex-protocol`: 243 passed.
+- `just test -p codex-state`: 175 passed.
+- `durable_agent_mailbox_deduplicates_and_marks_applied_after_rollout_flush`.
+- `ensure_v2_agent_loaded_reloads_registered_unloaded_agent`.
+- `direct_spawn_troll_can_followup_task_two_named_orc_children`.
+- `capacity_waiter_unblocks_after_atomic_worker_reservation_is_released`.
+- `message_content_rejects_empty_and_oversized_messages`.
+- `provider_neutral_multi_agent_v2_spawn_sends_agent_message_to_child`: 12 consecutive
+  no-retry passes after replacing a substring matcher that could capture unrelated requests.
+- `just fix -p codex-protocol`, `just fix -p codex-state`, and `just fix -p codex-core`.
+
+Broader V2 result:
+
+- `just test -p codex-core multi_agent_v2`: 71 passed, 3 failed.
+- The remaining failures are unchanged baseline fixtures: configured thread-cap expectation
+  `3` versus current default `5`, a Troll fixture attempting to spawn a non-Orc, and a depth-2
+  fixture whose parent is depth 0. They are retained as explicit Phase 7 role/depth cleanup work;
+  no mailbox or provider-neutral delivery test remains failing.
