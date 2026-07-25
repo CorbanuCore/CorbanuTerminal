@@ -50,6 +50,8 @@ use codex_app_server_protocol::ReviewTarget;
 use codex_app_server_protocol::SkillsListParams;
 use codex_app_server_protocol::SkillsListResponse;
 use codex_app_server_protocol::Thread;
+use codex_app_server_protocol::ThreadAgentMessageParams;
+use codex_app_server_protocol::ThreadAgentMessageResponse;
 use codex_app_server_protocol::ThreadApproveGuardianDeniedActionParams;
 use codex_app_server_protocol::ThreadApproveGuardianDeniedActionResponse;
 use codex_app_server_protocol::ThreadArchiveParams;
@@ -692,6 +694,17 @@ impl AppServerSession {
             }
         };
         started_thread_from_spawn_agent_response(response, config, self.thread_params_mode()).await
+    }
+
+    pub(crate) async fn send_agent_message(
+        &mut self,
+        params: ThreadAgentMessageParams,
+    ) -> Result<ThreadAgentMessageResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::ThreadAgentMessage { request_id, params })
+            .await
+            .wrap_err("thread/sendAgentMessage failed")
     }
 
     pub(crate) async fn resume_thread(

@@ -39,6 +39,15 @@ async fn mailbox_admission_is_idempotent_and_recoverable() {
             .expect("duplicate admission"),
         AgentMailboxAdmission::Existing(AgentMailboxPhase::Admitted)
     );
+    let mut timestamp_retry = message.clone();
+    timestamp_retry.created_at_ms = Some(9_999);
+    assert_eq!(
+        runtime
+            .admit_agent_message(recipient, &timestamp_retry, 1_001)
+            .await
+            .expect("server timestamp must not alter logical identity"),
+        AgentMailboxAdmission::Existing(AgentMailboxPhase::Admitted)
+    );
     assert!(
         runtime
             .transition_agent_message(

@@ -116,8 +116,10 @@ WHERE message_id = ?
         .await?;
         let stored_recipient: String = row.try_get("recipient_thread_id")?;
         let stored_communication: String = row.try_get("communication_json")?;
+        let stored_communication =
+            serde_json::from_str::<InterAgentCommunication>(&stored_communication)?;
         if stored_recipient != recipient_thread_id.to_string()
-            || stored_communication != communication_json
+            || !same_logical_message(&stored_communication, communication)
         {
             anyhow::bail!(
                 "agent mailbox message_id `{message_id}` conflicts with a different message"
@@ -208,6 +210,22 @@ WHERE message_id = ?
         .rows_affected();
         Ok(rows_affected == 1)
     }
+}
+
+/// A server-generated observation timestamp is not part of a logical message's identity.
+///
+/// Clients retry with the stable message ID and semantic payload; they are not required to
+/// persist a timestamp that the server generated on their behalf. Every field that can alter
+/// routing, model-visible content, delivery behavior, or attribution remains collision-checked.
+fn same_logical_message(
+    stored: &InterAgentCommunication,
+    incoming: &InterAgentCommunication,
+) -> bool {
+    let mut stored = stored.clone();
+    let mut incoming = incoming.clone();
+    stored.created_at_ms = None;
+    incoming.created_at_ms = None;
+    stored == incoming
 }
 
 #[cfg(test)]

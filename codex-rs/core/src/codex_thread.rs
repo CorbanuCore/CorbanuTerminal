@@ -21,8 +21,10 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::AdditionalContextEntry;
+use codex_protocol::protocol::AgentMessageKind;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::Event;
+use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::RolloutItem;
@@ -267,6 +269,73 @@ impl CodexThread {
         self.codex
             .submit_user_input_with_client_user_message_id(op, trace, client_user_message_id)
             .await
+    }
+
+    /// Durably enqueue a provider-neutral message for another native agent in this thread's tree.
+    ///
+    /// Persistent crew products use this bridge rather than maintaining their own dispatch queue.
+    /// It routes through the same mailbox as model-issued `send_message` and `followup_task`.
+    pub async fn send_agent_message(
+        &self,
+        target_thread_id: ThreadId,
+        content: String,
+        trigger_turn: bool,
+        message_id: Option<String>,
+        assignment_id: Option<String>,
+        kind: AgentMessageKind,
+    ) -> CodexResult<String> {
+        if message_id.as_ref().is_some_and(|id| id.trim().is_empty()) {
+            return Err(CodexErr::InvalidRequest(
+                "agent mailbox message_id must not be empty".to_string(),
+            ));
+        }
+        if assignment_id
+            .as_ref()
+            .is_some_and(|id| id.trim().is_empty())
+        {
+            return Err(CodexErr::InvalidRequest(
+                "agent mailbox assignment_id must not be empty".to_string(),
+            ));
+        }
+
+        let control = &self.codex.session.services.agent_control;
+        let target = control.ensure_agent_known(target_thread_id)?;
+        let recipient = target.agent_path.ok_or_else(|| {
+            CodexErr::InvalidRequest(format!(
+                "target agent {target_thread_id} is missing an agent path"
+            ))
+        })?;
+        let author = self
+            .session_source
+            .get_agent_path()
+            .unwrap_or_else(codex_protocol::AgentPath::root);
+        let mut communication =
+            InterAgentCommunication::new(author, recipient, Vec::new(), content, trigger_turn);
+        if let Some(message_id) = message_id {
+            communication.message_id = Some(message_id);
+        }
+        communication.assignment_id = assignment_id;
+        communication.kind = Some(kind);
+        communication
+            .validate_mailbox_body()
+            .map_err(CodexErr::InvalidRequest)?;
+        let stable_message_id = communication
+            .message_id
+            .clone()
+            .ok_or_else(|| CodexErr::Fatal("agent mailbox message has no identity".to_string()))?;
+
+        // Admission precedes potentially fallible reload work so a stable, acknowledged item can
+        // be reconciled if the target runtime becomes unavailable at this boundary.
+        control
+            .admit_inter_agent_communication(target_thread_id, &communication)
+            .await?;
+        control
+            .ensure_v2_agent_loaded(self.config().await.as_ref().clone(), target_thread_id)
+            .await?;
+        control
+            .send_inter_agent_communication(target_thread_id, communication)
+            .await?;
+        Ok(stable_message_id)
     }
 
     /// Persist whether this thread is eligible for future memory generation.

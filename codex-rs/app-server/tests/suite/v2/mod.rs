@@ -56,6 +56,7 @@ mod review;
 mod safety_check_downgrade;
 mod skills_list;
 mod sleep;
+mod thread_agent_message;
 mod thread_archive;
 mod thread_delete;
 mod thread_fork;

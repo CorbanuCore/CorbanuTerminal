@@ -485,6 +485,45 @@ impl ThreadRequestProcessor {
         .map(|()| None)
     }
 
+    pub(crate) async fn thread_agent_message(
+        &self,
+        params: ThreadAgentMessageParams,
+    ) -> Result<ThreadAgentMessageResponse, JSONRPCErrorError> {
+        let ThreadAgentMessageParams {
+            source_thread_id,
+            target_thread_id,
+            message_id,
+            assignment_id,
+            kind,
+            content,
+            trigger_turn,
+        } = params;
+        let (source_thread_id, source_thread) = self.load_thread(&source_thread_id).await?;
+        let target_thread_id = ThreadId::from_string(&target_thread_id)
+            .map_err(|err| invalid_request(format!("invalid target thread id: {err}")))?;
+        let message_id = source_thread
+            .send_agent_message(
+                target_thread_id,
+                content,
+                trigger_turn,
+                message_id,
+                assignment_id,
+                kind,
+            )
+            .await
+            .map_err(|err| {
+                core_thread_write_error(
+                    &format!("send agent message from {source_thread_id} to {target_thread_id}"),
+                    err,
+                )
+            })?;
+        Ok(ThreadAgentMessageResponse {
+            message_id,
+            target_thread_id: target_thread_id.to_string(),
+            trigger_turn,
+        })
+    }
+
     pub(crate) async fn thread_unsubscribe(
         &self,
         request_id: &ConnectionRequestId,
