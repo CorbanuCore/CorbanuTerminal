@@ -1287,6 +1287,26 @@ async fn resume_agent_from_rollout_does_not_reopen_v2_descendants() {
     );
     assert_thread_not_loaded(&resumed_manager, worker_thread_id).await;
     assert_thread_not_loaded(&resumed_manager, reviewer_thread_id).await;
+    assert_eq!(
+        resumed_control
+            .get_agent_metadata_for_path(&worker_path)
+            .and_then(|metadata| metadata.agent_id),
+        Some(worker_thread_id)
+    );
+    assert_eq!(
+        resumed_control
+            .get_agent_metadata_for_path(&reviewer_path)
+            .and_then(|metadata| metadata.agent_id),
+        Some(reviewer_thread_id)
+    );
+    assert_eq!(
+        resumed_control.get_status(worker_thread_id).await,
+        AgentStatus::Unloaded
+    );
+    assert_eq!(
+        resumed_control.get_status(reviewer_thread_id).await,
+        AgentStatus::Unloaded
+    );
 }
 
 #[tokio::test]
@@ -2957,6 +2977,13 @@ async fn direct_thread_spawn_named_child_registers_path_for_v2_targeting() {
         "troll context should expose the child nickname, got {context:?}"
     );
 
+    troll_control
+        .send_input(
+            orc.thread_id,
+            text_input("build the animated website shell"),
+        )
+        .await
+        .expect("direct named child should accept a task");
     troll_control.record_agent_result_status(
         orc.thread_id,
         &AgentStatus::Completed(Some(
@@ -4012,7 +4039,7 @@ async fn resume_agent_from_rollout_uses_edge_data_when_descendant_metadata_sourc
 }
 
 #[tokio::test]
-async fn resume_agent_from_rollout_skips_descendants_when_parent_resume_fails() {
+async fn resume_agent_from_rollout_keeps_missing_descendants_addressable_but_unloaded() {
     let harness = AgentControlHarness::new().await;
     let (parent_thread_id, parent_thread) = harness.start_thread().await;
 
@@ -4094,11 +4121,11 @@ async fn resume_agent_from_rollout_skips_descendants_when_parent_resume_fails() 
     );
     assert_eq!(
         harness.control.get_status(child_thread_id).await,
-        AgentStatus::NotFound
+        AgentStatus::Unloaded
     );
     assert_eq!(
         harness.control.get_status(grandchild_thread_id).await,
-        AgentStatus::NotFound
+        AgentStatus::Unloaded
     );
 
     let _ = harness

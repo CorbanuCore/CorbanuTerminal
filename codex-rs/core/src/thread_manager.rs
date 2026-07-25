@@ -743,11 +743,11 @@ impl ThreadManager {
             .agent_control_for_session_source(&config, &session_source)
             .await;
         let initial_multi_agent_mode = initial_history.get_latest_effective_multi_agent_mode();
-        Box::pin(self.state.spawn_thread_with_source(
+        let resumed_thread = Box::pin(self.state.spawn_thread_with_source(
             config,
             initial_history,
             auth_manager,
-            agent_control,
+            agent_control.clone(),
             session_source,
             /*parent_thread_id*/ None,
             /*forked_from_thread_id*/ None,
@@ -763,7 +763,11 @@ impl ThreadManager {
             supports_openai_form_elicitation,
             /*user_shell_override*/ None,
         ))
-        .await
+        .await?;
+        agent_control
+            .restore_persisted_agent_subtree(resumed_thread.thread_id)
+            .await?;
+        Ok(resumed_thread)
     }
 
     pub(crate) async fn start_thread_with_user_shell_override_for_tests(
@@ -1542,10 +1546,17 @@ impl ThreadManagerState {
         let new_thread = self
             .finalize_thread_spawn(codex, thread_id, tracked_session_source)
             .await?;
-        agent_control.register_thread_spawn_metadata(
-            new_thread.thread_id,
-            &new_thread.thread.session_source,
-        );
+        if is_resumed_thread {
+            agent_control.restore_thread_spawn_metadata(
+                new_thread.thread_id,
+                &new_thread.thread.session_source,
+            );
+        } else {
+            agent_control.register_thread_spawn_metadata(
+                new_thread.thread_id,
+                &new_thread.thread.session_source,
+            );
+        }
         if is_resumed_thread {
             new_thread.thread.emit_thread_resume_lifecycle().await;
         }

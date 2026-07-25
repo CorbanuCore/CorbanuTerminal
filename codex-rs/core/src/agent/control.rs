@@ -219,7 +219,11 @@ impl AgentControl {
             return AgentStatus::NotFound;
         };
         let Ok(thread) = state.get_thread(agent_id).await else {
-            return AgentStatus::NotFound;
+            return if self.state.agent_metadata_for_thread(agent_id).is_some() {
+                AgentStatus::Unloaded
+            } else {
+                AgentStatus::NotFound
+            };
         };
         thread.agent_status().await
     }
@@ -292,6 +296,80 @@ impl AgentControl {
             last_task_message: None,
             last_result_message: None,
         });
+    }
+
+    pub(crate) fn restore_thread_spawn_metadata(
+        &self,
+        thread_id: ThreadId,
+        session_source: &SessionSource,
+    ) {
+        let SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            agent_path,
+            agent_nickname,
+            agent_role,
+            ..
+        }) = session_source
+        else {
+            return;
+        };
+        self.state.restore_spawned_thread(AgentMetadata {
+            agent_id: Some(thread_id),
+            agent_path: agent_path.clone(),
+            agent_nickname: agent_nickname.clone(),
+            agent_role: agent_role.clone(),
+            last_task_message: None,
+            last_result_message: None,
+        });
+    }
+
+    pub(crate) async fn restore_persisted_agent_subtree(
+        &self,
+        root_thread_id: ThreadId,
+    ) -> CodexResult<()> {
+        let state = self.upgrade()?;
+        let Some(state_db) = state.state_db() else {
+            return Ok(());
+        };
+        let descendant_ids = match state_db
+            .list_thread_spawn_descendants_with_status(
+                root_thread_id,
+                DirectionalThreadSpawnEdgeStatus::Open,
+            )
+            .await
+        {
+            Ok(descendant_ids) => descendant_ids,
+            Err(err) => {
+                warn!(
+                    %root_thread_id,
+                    %err,
+                    "failed to enumerate persisted agent subtree during resume"
+                );
+                return Ok(());
+            }
+        };
+        for thread_id in descendant_ids {
+            let stored_thread = match state
+                .read_stored_thread(ReadThreadParams {
+                    thread_id,
+                    include_archived: true,
+                    include_history: false,
+                })
+                .await
+            {
+                Ok(stored_thread) => stored_thread,
+                Err(err) => {
+                    warn!(
+                        %root_thread_id,
+                        %thread_id,
+                        %err,
+                        "failed to restore one persisted agent during resume"
+                    );
+                    continue;
+                }
+            };
+            self.restore_thread_spawn_metadata(thread_id, &stored_thread.source);
+        }
+        Ok(())
     }
 
     pub(crate) async fn list_live_agent_subtree_thread_ids(
@@ -464,16 +542,16 @@ impl AgentControl {
                 continue;
             }
 
-            let Ok(thread) = state.get_thread(thread_id).await else {
-                continue;
-            };
             let agent_name = metadata
                 .agent_path
                 .as_ref()
                 .map(ToString::to_string)
                 .unwrap_or_else(|| thread_id.to_string());
             let last_task_message = metadata.last_task_message.clone();
-            let agent_status = thread.agent_status().await;
+            let agent_status = match state.get_thread(thread_id).await {
+                Ok(thread) => thread.agent_status().await,
+                Err(_) => AgentStatus::Unloaded,
+            };
             let last_result_message = metadata
                 .last_result_message
                 .clone()
@@ -841,7 +919,10 @@ fn result_message_from_status(status: &AgentStatus) -> Option<String> {
         ),
         AgentStatus::Shutdown => Some("Agent shut down.".to_string()),
         AgentStatus::NotFound => Some("Agent was not found.".to_string()),
-        AgentStatus::PendingInit | AgentStatus::Running | AgentStatus::Interrupted => None,
+        AgentStatus::PendingInit
+        | AgentStatus::Unloaded
+        | AgentStatus::Running
+        | AgentStatus::Interrupted => None,
     }
 }
 

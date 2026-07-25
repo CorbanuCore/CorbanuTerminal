@@ -276,6 +276,34 @@ impl AgentRegistry {
         active_agents.agent_tree.insert(key, agent_metadata);
     }
 
+    pub(crate) fn restore_spawned_thread(&self, agent_metadata: AgentMetadata) {
+        let Some(thread_id) = agent_metadata.agent_id else {
+            return;
+        };
+        let key = agent_metadata
+            .agent_path
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_else(|| format!("thread:{thread_id}"));
+        let mut active_agents = self
+            .active_agents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let is_new_non_root = !active_agents.agent_tree.contains_key(&key)
+            && !agent_metadata
+                .agent_path
+                .as_ref()
+                .is_some_and(AgentPath::is_root);
+        if let Some(agent_nickname) = agent_metadata.agent_nickname.clone() {
+            active_agents.used_agent_nicknames.insert(agent_nickname);
+        }
+        active_agents.agent_tree.insert(key, agent_metadata);
+        drop(active_agents);
+        if is_new_non_root {
+            self.total_count.fetch_add(1, Ordering::AcqRel);
+        }
+    }
+
     fn reserve_agent_nickname(&self, names: &[&str], preferred: Option<&str>) -> Option<String> {
         let mut active_agents = self
             .active_agents

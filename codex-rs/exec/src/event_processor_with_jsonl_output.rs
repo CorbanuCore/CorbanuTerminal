@@ -262,6 +262,9 @@ impl EventProcessorWithJsonOutput {
                                         codex_app_server_protocol::CollabAgentStatus::PendingInit => {
                                             CollabAgentStatus::PendingInit
                                         }
+                                        codex_app_server_protocol::CollabAgentStatus::Unloaded => {
+                                            CollabAgentStatus::Unloaded
+                                        }
                                         codex_app_server_protocol::CollabAgentStatus::Running => {
                                             CollabAgentStatus::Running
                                         }

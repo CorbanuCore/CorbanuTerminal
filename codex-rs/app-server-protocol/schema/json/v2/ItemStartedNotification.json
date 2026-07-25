@@ -44,6 +44,7 @@
     "CollabAgentStatus": {
       "enum": [
         "pendingInit",
+        "unloaded",
         "running",
         "interrupted",
         "completed",
@@ -1036,8 +1037,20 @@
         },
         {
           "properties": {
+            "agentNickname": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "agentPath": {
               "type": "string"
+            },
+            "agentRole": {
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "agentThreadId": {
               "type": "string"

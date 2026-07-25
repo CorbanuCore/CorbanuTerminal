@@ -585,3 +585,54 @@ Live evidence:
   `provider=openai model=gpt-5.6-sol`.
 - Fable explicitly reported `No files edited, no agents spawned`; the live tree contained one
   Burzum path.
+
+## Phase 6F — Preserve active native descendants across process restart
+
+Status: automated repair passes; the exact live failure replay is pending the rebuilt binary.
+
+Timestamp: 2026-07-25T07:21:00Z
+
+Discovery:
+
+- Fresh qualification session 1 used root
+  `019f9802-e35a-7802-99c1-ffa60a97fa71`, Fable Nazgul
+  `019f9803-64f7-77f2-b9f7-f618f084737e`, Sol Troll
+  `019f9803-65aa-7ad1-b38b-897338d8928c`, Luna/Terra/Grok Orcs, and the Troll-created
+  ephemeral verifier Godel `019f980d-0ffd-7150-abc9-1906f81fe372`.
+- The session exercised rapid native follow-ups, four-slot saturation, direct human input to a
+  busy Troll, an interrupted Opus turn, Fable compaction, and a process restart with an injected
+  bounded `turn/start` failure.
+- CrewSpec restored every persistent `/spawn` member with its original runtime, but Godel
+  disappeared from `list_agents` after restart. The open thread-spawn edge and rollout still
+  existed; only the new process's in-memory registry had forgotten the accepted native work.
+- Qualification session 1 is invalid and the three-session count is reset. Its source tree is
+  disposable evidence, not a passing qualification result.
+
+Repair:
+
+- Persisted open descendants are reconstructed into the resumed tree's shared `AgentControl`
+  without eagerly opening a provider process.
+- A persisted, addressable, non-resident agent has the explicit non-final status `Unloaded`.
+  It remains visible in native listings and JSON/app-server/TUI representations.
+- Sending work to an unloaded agent uses the existing V2 lazy-residency path, which reloads the
+  exact persisted provider, model, reasoning effort, identity, and history before delivery.
+- Restored paths remain reserved, restored capacity is counted once, and later loading the same
+  thread does not double-count it.
+- A stale descendant record is logged and skipped without preventing the user's root session from
+  opening.
+- `/spawn` membership is unchanged: CrewSpec still owns the named persistent crew; generic native
+  descendants remain native task agents and do not become crew members.
+
+Automated evidence:
+
+- Workspace `cargo check --workspace` passes.
+- Core registry filter: 17 passed, including
+  `restored_threads_are_counted_once_and_keep_their_path_reserved`.
+- Core AgentControl filter: 55 passed, including
+  `resume_agent_from_rollout_does_not_reopen_v2_descendants` and the missing-rollout boundary.
+- `resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime` passes. It resumes only
+  the root, proves child and grandchild are visible but not resident, then addresses the
+  grandchild and proves it reloads as `openrouter` / `x-ai/grok-4.5`.
+- App-server protocol library: 246 passed; the `unloaded` wire value is covered directly.
+- TUI multi-agent filter: 5 passed.
+- Exec library: 59 passed; JSONL output preserves the `unloaded` state.

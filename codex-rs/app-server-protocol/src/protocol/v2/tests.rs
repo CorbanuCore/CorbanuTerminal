@@ -311,6 +311,25 @@ fn collab_agent_state_maps_interrupted_status() {
 }
 
 #[test]
+fn collab_agent_state_maps_unloaded_status() {
+    let state = CollabAgentState::from(CoreAgentStatus::Unloaded);
+    assert_eq!(
+        state,
+        CollabAgentState {
+            status: CollabAgentStatus::Unloaded,
+            message: None,
+        }
+    );
+    assert_eq!(
+        serde_json::to_value(state).expect("serialize unloaded state"),
+        json!({
+            "status": "unloaded",
+            "message": null,
+        })
+    );
+}
+
+#[test]
 fn external_agent_config_plugins_details_round_trip() {
     let item: ExternalAgentConfigMigrationItem = serde_json::from_value(json!({
         "itemType": "PLUGINS",

@@ -1,4 +1,5 @@
 use super::*;
+use crate::agent::AgentStatus;
 use crate::config::test_config;
 use crate::init_state_db;
 use crate::installation_id::INSTALLATION_ID_FILENAME;
@@ -509,6 +510,229 @@ async fn resumed_subagent_rejoins_loaded_parent_control_plane() {
         )
         .await
         .expect_err("a restored live path must not be replaced");
+    assert_matches!(
+        duplicate,
+        CodexErr::UnsupportedOperation(message)
+            if message.contains("agent path `/root/troll_burzum` already exists")
+    );
+}
+
+#[tokio::test]
+async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    config
+        .features
+        .enable(Feature::Sqlite)
+        .expect("sqlite should be available in tests");
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("multi-agent v2 should be available in tests");
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    let state_db = init_state_db(&config).await;
+
+    let manager = ThreadManager::with_models_provider_home_and_state_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        state_db.clone(),
+    );
+    let parent = manager
+        .start_thread(config.clone())
+        .await
+        .expect("start parent thread");
+    let child_path = AgentPath::try_from("/root/troll_burzum").expect("child path");
+    let child_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: parent.thread_id,
+        depth: 1,
+        agent_path: Some(child_path.clone()),
+        agent_nickname: Some("Burzum".to_string()),
+        agent_role: Some("troll".to_string()),
+    });
+    let child = manager
+        .start_thread_with_options(StartThreadOptions {
+            config: config.clone(),
+            initial_history: InitialHistory::New,
+            session_source: Some(child_source.clone()),
+            thread_source: Some(ThreadSource::Subagent),
+            dynamic_tools: Vec::new(),
+            metrics_service_name: None,
+            multi_agent_mode: Some(MultiAgentMode::Proactive),
+            parent_trace: None,
+            environments: Vec::new(),
+            thread_extension_init: Default::default(),
+            supports_openai_form_elicitation: false,
+        })
+        .await
+        .expect("start child thread");
+
+    let verifier_path = child_path
+        .join("verification_reassign")
+        .expect("verifier path");
+    let verifier_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: child.thread_id,
+        depth: 2,
+        agent_path: Some(verifier_path.clone()),
+        agent_nickname: Some("Godel".to_string()),
+        agent_role: Some("verification".to_string()),
+    });
+    let mut verifier_config = config.clone();
+    verifier_config.model_provider = verifier_config
+        .model_providers
+        .get("openrouter")
+        .cloned()
+        .expect("OpenRouter provider");
+    verifier_config.model_provider_id = "openrouter".to_string();
+    verifier_config.model = Some("x-ai/grok-4.5".to_string());
+    let verifier = manager
+        .start_thread_with_options(StartThreadOptions {
+            config: verifier_config,
+            initial_history: InitialHistory::New,
+            session_source: Some(verifier_source),
+            thread_source: Some(ThreadSource::Subagent),
+            dynamic_tools: Vec::new(),
+            metrics_service_name: None,
+            multi_agent_mode: Some(MultiAgentMode::Proactive),
+            parent_trace: None,
+            environments: Vec::new(),
+            thread_extension_init: Default::default(),
+            supports_openai_form_elicitation: false,
+        })
+        .await
+        .expect("start verifier thread");
+
+    for (thread, message) in [
+        (&parent.thread, "persist parent"),
+        (&child.thread, "persist child"),
+        (&verifier.thread, "persist verifier"),
+    ] {
+        thread
+            .inject_user_message_without_turn(message.to_string())
+            .await;
+        thread.codex.session.ensure_rollout_materialized().await;
+        thread
+            .codex
+            .session
+            .flush_rollout()
+            .await
+            .expect("flush rollout");
+    }
+    let stored_verifier = manager
+        .update_thread_metadata(
+            verifier.thread_id,
+            ThreadMetadataPatch {
+                model_provider: Some("openrouter".to_string()),
+                model: Some("x-ai/grok-4.5".to_string()),
+                ..Default::default()
+            },
+            /*include_archived*/ true,
+        )
+        .await
+        .expect("persist verifier runtime metadata");
+    assert_eq!(stored_verifier.model_provider, "openrouter");
+    assert_eq!(stored_verifier.model.as_deref(), Some("x-ai/grok-4.5"));
+    let parent_rollout = parent.thread.rollout_path().expect("parent rollout path");
+    let parent_id = parent.thread_id;
+    let child_id = child.thread_id;
+    let verifier_id = verifier.thread_id;
+
+    let shutdown = manager
+        .shutdown_all_threads_bounded(Duration::from_secs(10))
+        .await;
+    assert!(shutdown.submit_failed.is_empty());
+    assert!(shutdown.timed_out.is_empty());
+
+    let resumed_manager = ThreadManager::with_models_provider_home_and_state_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        state_db,
+    );
+    let auth_manager =
+        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let resumed_parent = resumed_manager
+        .resume_thread_from_rollout(
+            config.clone(),
+            parent_rollout,
+            auth_manager,
+            /*parent_trace*/ None,
+            /*supports_openai_form_elicitation*/ false,
+        )
+        .await
+        .expect("resume only the root thread");
+    assert_eq!(resumed_parent.thread_id, parent_id);
+
+    let control = resumed_parent
+        .thread
+        .codex
+        .session
+        .services
+        .agent_control
+        .clone();
+    assert_eq!(
+        control
+            .get_agent_metadata_for_path(&child_path)
+            .and_then(|metadata| metadata.agent_id),
+        Some(child_id)
+    );
+    assert_eq!(
+        control
+            .get_agent_metadata_for_path(&verifier_path)
+            .and_then(|metadata| metadata.agent_id),
+        Some(verifier_id)
+    );
+    assert_eq!(control.get_status(child_id).await, AgentStatus::Unloaded);
+    assert_eq!(control.get_status(verifier_id).await, AgentStatus::Unloaded);
+    assert!(matches!(
+        resumed_manager.get_thread(child_id).await,
+        Err(CodexErr::ThreadNotFound(id)) if id == child_id
+    ));
+    assert!(matches!(
+        resumed_manager.get_thread(verifier_id).await,
+        Err(CodexErr::ThreadNotFound(id)) if id == verifier_id
+    ));
+
+    let listed = control
+        .list_agents(&SessionSource::Cli, /*path_prefix*/ None)
+        .await
+        .expect("list restored descendants");
+    assert!(listed.iter().any(|agent| {
+        agent.agent_name == child_path.as_str() && agent.agent_status == AgentStatus::Unloaded
+    }));
+    assert!(listed.iter().any(|agent| {
+        agent.agent_name == verifier_path.as_str()
+            && agent.agent_status == AgentStatus::Unloaded
+            && agent.agent_nickname.as_deref() == Some("Godel")
+    }));
+
+    control
+        .ensure_v2_agent_loaded(config.clone(), verifier_id)
+        .await
+        .expect("addressing the restored verifier should load it");
+    let verifier_snapshot = control
+        .get_agent_config_snapshot(verifier_id)
+        .await
+        .expect("loaded verifier config");
+    assert_eq!(verifier_snapshot.model_provider_id, "openrouter");
+    assert_eq!(verifier_snapshot.model, "x-ai/grok-4.5");
+
+    let duplicate = control
+        .spawn_agent(
+            config,
+            vec![UserInput::Text {
+                text: "duplicate work".to_string(),
+                text_elements: Vec::new(),
+            }]
+            .into(),
+            Some(child_source),
+        )
+        .await
+        .expect_err("a restored unloaded path must remain reserved");
     assert_matches!(
         duplicate,
         CodexErr::UnsupportedOperation(message)

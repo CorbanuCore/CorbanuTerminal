@@ -172,6 +172,13 @@
           "type": "object"
         },
         {
+          "description": "The request exceeded the provider plan's entitlement (e.g. context size).",
+          "enum": [
+            "planEntitlementExceeded"
+          ],
+          "type": "string"
+        },
+        {
           "additionalProperties": false,
           "description": "The response SSE stream disconnected in the middle of a turn before completion.",
           "properties": {
@@ -263,6 +270,7 @@
     "CollabAgentStatus": {
       "enum": [
         "pendingInit",
+        "unloaded",
         "running",
         "interrupted",
         "completed",
@@ -1680,8 +1688,20 @@
         },
         {
           "properties": {
+            "agentNickname": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "agentPath": {
               "type": "string"
+            },
+            "agentRole": {
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "agentThreadId": {
               "type": "string"

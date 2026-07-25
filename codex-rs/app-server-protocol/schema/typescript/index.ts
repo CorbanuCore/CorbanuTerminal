@@ -2,6 +2,7 @@
 
 export type { AbsolutePathBuf } from "./AbsolutePathBuf";
 export type { AgentMessageInputContent } from "./AgentMessageInputContent";
+export type { AgentMessageKind } from "./AgentMessageKind";
 export type { AgentPath } from "./AgentPath";
 export type { AmazonBedrockCredentialSource } from "./AmazonBedrockCredentialSource";
 export type { ApplyPatchApprovalParams } from "./ApplyPatchApprovalParams";

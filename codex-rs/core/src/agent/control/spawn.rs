@@ -575,6 +575,8 @@ impl AgentControl {
         if config.multi_agent_version_from_features() == MultiAgentVersion::V2
             || resumed_multi_agent_version == MultiAgentVersion::V2
         {
+            self.restore_persisted_agent_subtree(resumed_thread_id)
+                .await?;
             return Ok(resumed_thread_id);
         }
         let Ok(resumed_thread) = state.get_thread(resumed_thread_id).await else {

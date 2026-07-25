@@ -38,7 +38,10 @@ pub(crate) fn format_inter_agent_completion_message(
         }
         AgentStatus::Shutdown => "Agent shut down.".to_string(),
         AgentStatus::NotFound => "Agent was not found.".to_string(),
-        AgentStatus::PendingInit | AgentStatus::Running | AgentStatus::Interrupted => return None,
+        AgentStatus::PendingInit
+        | AgentStatus::Unloaded
+        | AgentStatus::Running
+        | AgentStatus::Interrupted => return None,
     };
     Some(InterAgentCompletionMessage::new(task_name, sender, payload).render())
 }
@@ -87,6 +90,7 @@ pub(crate) fn format_subagent_context_line(
 fn subagent_status_label(status: &AgentStatus) -> &'static str {
     match status {
         AgentStatus::PendingInit => "pending",
+        AgentStatus::Unloaded => "unloaded",
         AgentStatus::Running => "running",
         AgentStatus::Interrupted => "interrupted",
         AgentStatus::Completed(_) => "done",

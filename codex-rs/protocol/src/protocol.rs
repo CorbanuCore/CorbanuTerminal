@@ -1746,6 +1746,8 @@ pub enum AgentStatus {
     /// Agent is waiting for initialization.
     #[default]
     PendingInit,
+    /// Agent is persisted and addressable, but is not currently resident in this process.
+    Unloaded,
     /// Agent is currently running.
     Running,
     /// Agent's current turn was interrupted and it may receive more input.

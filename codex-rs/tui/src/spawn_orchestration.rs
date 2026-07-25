@@ -5288,6 +5288,7 @@ fn spawn_status_label(status: &codex_app_server_protocol::CollabAgentState) -> &
 fn collab_status_label(status: &codex_app_server_protocol::CollabAgentStatus) -> &'static str {
     match *status {
         codex_app_server_protocol::CollabAgentStatus::PendingInit => "pending",
+        codex_app_server_protocol::CollabAgentStatus::Unloaded => "unloaded",
         codex_app_server_protocol::CollabAgentStatus::Running => "running",
         codex_app_server_protocol::CollabAgentStatus::Interrupted => "interrupted",
         codex_app_server_protocol::CollabAgentStatus::Completed => "completed",

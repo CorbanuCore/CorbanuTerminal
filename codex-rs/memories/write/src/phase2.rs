@@ -532,7 +532,10 @@ pub(super) fn get_watermark(
 fn is_final_agent_status(status: &AgentStatus) -> bool {
     !matches!(
         status,
-        AgentStatus::PendingInit | AgentStatus::Running | AgentStatus::Interrupted
+        AgentStatus::PendingInit
+            | AgentStatus::Unloaded
+            | AgentStatus::Running
+            | AgentStatus::Interrupted
     )
 }
 
