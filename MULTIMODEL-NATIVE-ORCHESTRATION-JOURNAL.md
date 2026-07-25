@@ -1364,3 +1364,118 @@ Disposition:
 
 - The exact live seam that invalidated `a786872cc` is repaired on `b07ee141e2`.
 - Restart the full three-session Section 15.3 count on the immutable candidate above.
+
+## Phase 8N — Qualification restart session 1
+
+Status: PASS; qualification count is 1 of 3 on the rebuilt immutable candidate.
+
+Session interval: 2026-07-25T15:03:38Z through 2026-07-25T15:49:06Z
+(45 minutes 28 seconds).
+
+Candidate and isolation:
+
+- Exact binary: `/tmp/pfterminal-native-orch-b07ee141e`.
+- SHA-256:
+  `74a20e9ffe75bf299b4e135134988e935ba0c96a2ba490c5d8993293bc9df408`.
+- Source commit: `b07ee141e2`.
+- Fresh copied home: `/tmp/pft-native-orch-r1-b07ee-home-20260725`.
+- Fresh game worktree:
+  `/tmp/isometric-native-orch-r1-b07ee-20260725`.
+- Structured log:
+  `/tmp/pft-native-orch-r1-b07ee-logs-20260725/codex-tui.log`.
+- Root thread: `019f99cd-af34-7fc3-8662-49f098e4f414`.
+- Injected-fault mode:
+  `PFTERMINAL_INJECT_SPAWN_AGENT_FAILURES=1`.
+
+Live heterogeneous topology:
+
+- Standard `/spawn` created one Fable Plan Nazgul, one Sol Troll, and Luna, Grok 4.5,
+  and Terra Orcs. The first `thread/spawnAgent` request was deliberately failed. The
+  bounded retry created exactly one crew; no duplicate or stillborn worker appeared.
+- Fable Plan:
+  `019f99ce-75c9-7730-8a0b-1eb67651bbcc`.
+- Sol:
+  `019f99ce-7689-7f90-bb97-d3713f29b456`.
+- Luna:
+  `019f99ce-7754-7252-8141-259a97d6031d`.
+- Grok 4.5:
+  `019f99ce-7905-7e42-863b-457850f31699`.
+- Terra:
+  `019f99ce-7825-7ea3-bd2c-88d50f901386`.
+- The root then used native `spawn_agent`, not `/spawn`, to add three exact-runtime
+  independent reviewers:
+  - Kimi Code K3/high, Hypatia, thread
+    `019f99d0-1764-7283-8c7f-e022e4ec1e5f`.
+  - Anthropic API Fable 5/high, Popper, thread
+    `019f99d9-14f5-72c2-bbdc-d4c1a663d8fb`.
+  - Anthropic API Opus 5/xhigh, Sagan, thread
+    `019f99ed-8451-7ad1-bf0b-dca0c929a7a7`.
+- Provider traffic returned HTTP 200 and reported the exact requested Kimi K3,
+  Anthropic Fable 5, Anthropic Opus 5, and OpenRouter Grok 4.5 models. There was no
+  silent provider or model substitution.
+
+Free-form lifecycle coverage:
+
+- All three Orc lanes were concurrently active under the Troll while the root remained
+  addressable. The user naturally reprioritized work while the topology was saturated;
+  the hierarchy accepted and propagated the change without cancelling workers.
+- The root directly interacted with or followed up the Troll, every Orc, Kimi, Fable,
+  and Opus workers.
+- Burzum was interrupted and resumed on the same thread before completing its manager
+  review.
+- The root queued `/compact` while busy, interrupted at a natural boundary, and compacted.
+  Durable proof is in
+  `/tmp/pft-native-orch-r1-b07ee-home-20260725/sessions/2026/07/25/rollout-2026-07-25T15-03-41-019f99cd-af34-7fc3-8662-49f098e4f414.jsonl`,
+  which records `type:"compacted"` and `context_compacted` at
+  `2026-07-25T15:27:30Z`.
+- The PfTerminal process was then stopped and the exact root was resumed with the exact
+  candidate, copied home, and game worktree. It recovered the same Burzum, Ghash, Snaga,
+  Krimp, Kimi, and Fable thread IDs and persisted runtime tuples without recreating them.
+- Fresh post-restart Kimi and Fable requests returned successful provider traffic on their
+  original threads. The repaired Anthropic Fable thread performed tool-bearing work,
+  accepted same-thread follow-up, and continued after the process restart without an
+  assistant-prefill rejection.
+- Sagan completed an independent exact Anthropic Opus 5 review after multiple shell-tool
+  calls and returned PASS on the frozen benchmark commit.
+
+Benchmark result:
+
+- Real objective: improve the isometric game's keyboard accessibility, semantic controls,
+  loot interaction, combat feedback, focus management, and reduced-motion behavior.
+- Frozen benchmark commit:
+  `92083cb runtime: harden accessible interaction and motion`.
+- The game worktree was clean at close.
+- Final manager and Opus gates passed: syntax, world validation, math, interaction
+  contract, combat feedback, the browser interaction gate across both worlds and both
+  motion modes, and `gate:p3`.
+- Hypatia and Popper produced useful earlier red reviews. Their reported focus, motion,
+  shell-recursion, and combat-setup defects were subsequently repaired, but those two
+  reviewers did not issue new final PASS verdicts. This record does not claim otherwise.
+- The complete legacy `npm run gates` suite was not rerun. Earlier `g4` and `g9` magenta
+  pixel probes remained known pre-existing benchmark baseline failures and are not claimed
+  green.
+- Transient benchmark evidence was preserved outside Git at
+  `/tmp/ember-campaign-evidence-8zMAbv`.
+
+Fault and invariant disposition:
+
+- Expected injected fault: the first `thread/spawnAgent` request. It was bounded and did
+  not duplicate work.
+- Environmental auth failure: the standard Fable Plan credential lacked a usable refresh
+  token. Its bounded attempts failed accurately and in isolation. Native Anthropic API
+  Fable remained live and proved the required provider path.
+- Two root request-shape errors were rejected before mutation and corrected once: malformed
+  Kimi tool arguments, and a Fable full-history spawn combined with an explicit runtime
+  override.
+- No `turn/start` failure, assistant-prefill rejection, compaction-trigger ordering error,
+  crash, panic, headless write, stillborn pane, duplicate local apply, provider mismatch,
+  unbounded retry loop, status divergence, or automatic `unknown_outcome` replay appeared.
+- The TUI remained alive through the 45-minute floor and stopped cleanly at
+  `2026-07-25T15:49:06Z`.
+- Root filesystem free space at close was 101 GiB.
+
+Disposition:
+
+- Session 1 passes and counts as 1 of 3.
+- Session 2 must use a fresh copied home and custom native `spawn_agent` crew only, with no
+  `/spawn` crew creation, on this exact binary and hash.
