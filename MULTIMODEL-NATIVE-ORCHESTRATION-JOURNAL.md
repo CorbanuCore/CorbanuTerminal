@@ -1718,3 +1718,139 @@ Disposition:
 - Session 1 passes and counts as 1 of 3.
 - Run the standard heterogeneous crew session and the implementer-blind session next, each
   with a fresh copied home and worktree on this exact binary and hash.
+
+## Phase 8R — Counted free-form session 2: standard heterogeneous crew
+
+Status: PASS; qualification count is 2 of 3.
+
+Session:
+
+- Coverage class: Section 15.3 item 1, the standard heterogeneous crew.
+- Interval: `2026-07-25T17:15:57Z` through `2026-07-25T18:12:18Z`
+  (56 minutes).
+- Exact source candidate: `640c658f4`.
+- Exact binary: `/tmp/pfterminal-native-orch-640c658f4`.
+- SHA-256:
+  `568c3d5398dd847eae0b81cc1f3824432049b63bdd200d79cc5c092e9692d4b6`.
+- Fresh copied home:
+  `/tmp/pft-native-orch-640c-s2-home-20260725`.
+- Fresh benchmark worktree:
+  `/tmp/tih-native-orch-640c-s2-20260725`.
+- Structured log:
+  `/tmp/pft-native-orch-q2-logs-20260725/codex-tui.log`.
+- Root thread:
+  `019f9a47-1525-7f71-89c8-dfba801757e5`.
+
+Native topology:
+
+- The root used the ordinary standard-crew control. The persisted native crew was:
+  - Angmar, thread `019f9a47-b7ab-70a0-bc7d-784aa57e538d`,
+    `anthropic / claude-fable-5-plan`.
+  - Burzum, thread `019f9a47-b846-74a1-991d-f33df484d1c9`,
+    `openai / gpt-5.6-sol`.
+  - Snaga, thread `019f9a47-b907-7e21-891d-a6aef3cab618`,
+    `openai / gpt-5.6-luna`.
+  - Ghash, thread `019f9a47-b9e5-7b92-8d54-c9708277fb27`,
+    `openai / gpt-5.6-terra`.
+  - Krimp, thread `019f9a47-babb-72e3-b685-27434da7b309`,
+    `openrouter / x-ai/grok-4.5`.
+- Fable Plan could not authenticate because the copied qualification home did not contain a
+  portable Claude Code OAuth refresh token. The UI surfaced that exact corrective action.
+  The original Angmar identity was retained and never silently changed to another runtime.
+- The root briefly created an unauthorized replacement CTO,
+  `019f9a49-773b-7751-a037-27d7ec4ccd6d` on `gpt-5.4`. Operator steering
+  stopped it before hierarchy work and required preservation of the original failed Fable
+  identity. This is model behavior caught by the product's addressable control plane, not a
+  runtime substitution by the host.
+
+Free-form coverage:
+
+- Real objective: improve the text-improvement harness while preserving cross-project
+  isolation and its existing CLI contract.
+- All three Orcs worked concurrently on non-overlapping audits. The root naturally
+  reprioritized after the first implementation broke historical `round --reuse` behavior,
+  reopened acceptance, and sent the same Snaga thread through two evidence-driven rework
+  rounds.
+- Rapid two-message steering, turn-boundary follow-ups, direct conversations with Burzum,
+  Snaga, Ghash, and Krimp, and a same-thread follow-up after an older report all completed in
+  order.
+- The process was killed at `17:42:53Z` while Snaga's rework was active. Resume on the same
+  home and candidate restored the exact root and worker IDs; Burzum resumed on its original
+  thread.
+- Explicit `/compact` completed in about 61 seconds on the exact root. `/goal resume`
+  preserved the post-compaction campaign state.
+- An explicit operator interruption preserved state.
+- All four available working crew turns were occupied with read-only work. The root remained
+  responsive under saturation and messaged Burzum successfully without creating a new
+  thread.
+- `PFTERMINAL_INJECT_SPAWN_AGENT_FAILURES=1` caused the initial standard-crew creation fault
+  and bounded recovery. After restart, `PFTERMINAL_INJECT_TURN_START_FAILURES=1` caused one
+  attempt-one `turn/start` failure at `17:57:47Z`; attempt two succeeded without duplicate
+  application.
+
+Strict provider-fault proof:
+
+- The session resumed before its 60-minute ceiling with a local OpenAI-chat-compatible
+  qualification provider configured as `qual-fault / qualification-fault-model`. A native
+  worker was created once as Linnaeus, thread
+  `019f9a75-dfeb-71d0-93e7-03bfdc8eb9fd`.
+- The controlled provider returned one HTTP 429 with `Retry-After: 1` and request ID
+  `qual-injected-429`. The worker reported the retryable provider failure to its parent; the
+  TUI, root, and worker identity remained alive.
+- A later native `followup_task` reused the same worker and provider tuple. The provider
+  returned valid streamed chat output, and the worker reported:
+  `Provider retry recovered; native worker is responsive.`
+- Fixture event evidence is
+  `/tmp/pft-qualification-fault-provider-events.jsonl`; the exact fixture source is
+  `/tmp/pft_qualification_fault_provider.py`.
+- Two fixture bring-up attempts failed before reaching the intended HTTP seam: the first
+  fixture process was not persistently supervised, and the first success response used a
+  non-streaming JSON body where the client required chat SSE. Both failures were visible,
+  did not mutate the benchmark, and were corrected in the qualification fixture rather than
+  product code. They do not count as product recovery evidence; only the subsequent
+  recorded 429 and same-worker streamed recovery count.
+
+Benchmark result:
+
+- Commit:
+  `928d4b2cfa0b74a635b78ed897fc9179813be7f1 Fix project-scoped evaluation reuse`.
+- Eleven files changed, with 353 insertions and 72 deletions. The repair enforces
+  project-scoped score uniqueness, reads, cache reuse, migration, and exact historical
+  run-index materialization.
+- Focused tests passed 7 of 7; the full suite passed 44 of 44; compile and diff-integrity
+  checks passed.
+- A real v2-to-v3 migration retained IDs `7`, `11`, and `19`, preserved the named index, and
+  retained colliding alpha/beta rows independently.
+- Ghash independently reviewed the final rework. The root caught both an arbitrary zip
+  pairing defect and a single-source-group reuse defect before accepting it.
+- Phase 2 OpenRouter streaming findings remained read-only and deferred at
+  `/tmp/ghash_sse_contract.txt`, `/tmp/krimp_stream_readonly.txt`, and
+  `/tmp/snaga_stream_readonly.txt`.
+- Worktree and index were clean at close.
+
+Invariant and finding disposition:
+
+- No panic, fatal signal, stack overflow, compaction-trigger ordering failure, assistant
+  prefill failure, `unknown_outcome`, headless write, stillborn pane, duplicate local
+  application, status divergence, or unbounded notification/retry loop appeared.
+- The watcher exited silently early. The uncovered interval `17:18:04Z` through
+  `17:23:08Z` was manually audited against the same signatures before the watcher was
+  restarted. Its final alert file contained only the expected injected attempt-one
+  `turn/start` failure.
+- Three parent checkpoints to unavailable Angmar produced 54 duplicated ERROR telemetry rows
+  for three user-visible Fable auth failures. Record as a P1 telemetry-fanout defect; it did
+  not duplicate a task, retry invisibly, or change the selected provider.
+- Eleven model/tool validation errors were bounded and non-mutating: invalid full-history
+  runtime override requests, waits without children, one timeout below the minimum, two
+  stale patch contexts, and three missing wait cell IDs.
+- A model-policy false positive on adversarial terminology paused the campaign. Neutral
+  clarification plus `/goal resume` preserved state. Record as an external model-policy
+  finding.
+- Root filesystem free space at close was 87 GiB.
+
+Disposition:
+
+- Session 2 passes and counts as 2 of 3.
+- Run the implementer-blind session next on a fresh copied home and worktree using this exact
+  candidate binary and hash. Its driver receives only a plain user objective and ordinary
+  product help; it receives no implementation details, evidence tables, or defect list.
