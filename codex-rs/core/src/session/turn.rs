@@ -112,6 +112,7 @@ use codex_protocol::protocol::ModelResponseCompletedEvent;
 use codex_protocol::protocol::PlanDeltaEvent;
 use codex_protocol::protocol::ReasoningContentDeltaEvent;
 use codex_protocol::protocol::ReasoningRawContentDeltaEvent;
+use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TurnDiffEvent;
 use codex_protocol::protocol::WarningEvent;
@@ -2416,6 +2417,9 @@ fn provider_request_active_lease_needed(
     preflight: &ProviderRequestPreflight,
     last_token_usage: Option<&TokenUsage>,
 ) -> bool {
+    if !provider_request_lease_applies_to_session(&turn_context.session_source) {
+        return false;
+    }
     if !provider_uses_request_lease(
         turn_context.config.model_provider_id.as_str(),
         turn_context.provider.info().is_openai(),
@@ -2425,6 +2429,17 @@ fn provider_request_active_lease_needed(
     let large_request = preflight.input_tokens >= THIRD_PARTY_PREFLIGHT_WARNING_INPUT_TOKENS
         || preflight.request_bytes >= THIRD_PARTY_PREFLIGHT_WARNING_REQUEST_BYTES;
     large_request && !third_party_cache_looks_healthy(last_token_usage)
+}
+
+/// The cross-process lease exists to stop many autonomous sub-agents from
+/// hammering one metered third-party key. A human-driven session is
+/// control-plane work, not worker execution: it must stay able to reach its
+/// manager while sub-agents saturate that key, so it never waits on the
+/// shared lease. This mirrors the worker/control-plane split that
+/// `AgentControl` already applies to execution capacity, and is neutral to
+/// provider, model, and role name.
+fn provider_request_lease_applies_to_session(session_source: &SessionSource) -> bool {
+    matches!(session_source, SessionSource::SubAgent(_))
 }
 
 fn provider_uses_request_lease(provider_id: &str, is_openai: bool) -> bool {
