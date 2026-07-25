@@ -989,3 +989,96 @@ Disposition:
 - Tmux session `native_orch_q1` was stopped and disposable worktree
   `/tmp/isometric-native-orch-q1-20260725` was removed after evidence capture. Root filesystem
   free space remained 108 GiB.
+
+## Phase 8H — Counted free-form session 1 passes, including native mixed-provider agents
+
+Status: Section 15.3 session 1 PASS; qualification count is 1 of 3.
+
+Timestamp: 2026-07-25T13:26:24Z
+
+Candidate and duration:
+
+- Exact binary: `/tmp/pfterminal-native-orch-e1d05c033`.
+- SHA-256: `a4b382c91a1c2f42061742dfe86d0ae8500e6ace430ec68442bf676eea5e0685`.
+- Fresh home: `/tmp/pft-native-orch-q1c-home-20260725`.
+- Structured log: `/tmp/pft-native-orch-q1c-logs-20260725/codex-tui.log`.
+- Real objective interval: `2026-07-25T12:40:02Z` through
+  `2026-07-25T13:26:24Z` (46 minutes 22 seconds).
+- Benchmark branch: `qual/native-orch-q1c-20260725`, based on
+  `0394dda07d066827a5b9a6ae977d617e3e47aba9`.
+
+Native orchestration evidence:
+
+- `/spawn` was used only to materialize the required standard CrewSpec. The Fable manager then
+  used ordinary native Codex collaboration tools for assignments, follow-ups, mailbox waits, and
+  three independent task agents.
+- Native Kimi agent `/root/nazgul_angmar/reviewer_k3`, thread
+  `019f9956-6dfa-7283-a74f-e7b190a4c1ef`, was created with
+  `kimi-code / k3 / high`. Provider logs show successful Kimi chat-completions requests and real
+  browser/tool work.
+- Native Opus agent `/root/nazgul_angmar/reviewer_opus_plan`, thread
+  `019f9962-e83d-7e33-8132-940114967bc9`, was created with
+  `claude-plan / claude-opus-5-plan / high`. The Anthropic endpoint returned 200 and reported
+  `claude-opus-5`; the agent delivered a substantive independent gate review.
+- Native Grok agent `/root/nazgul_angmar/reviewer_grok`, thread
+  `019f9966-4349-7690-a494-0ea6eecb0c8a`, was created with
+  `openrouter / x-ai/grok-4.5 / high`. OpenRouter returned 200. Its first terminal answer was a
+  premature progress statement; native `followup_task` resumed the same agent and obtained the
+  required four-section report without replacement or duplicated local application.
+- These task agents were not CrewSpec members and never appeared as Troll/Orc replacements. They
+  shared native thread identity, execution capacity, mailbox delivery, and completion handling
+  with the standard crew.
+
+Required free-form coverage:
+
+- Natural reprioritization arrived during Fable tool activity and was applied once at the next
+  turn boundary. Burzum rapidly dispatched all three Orc lanes and used later follow-ups for
+  evidence rework.
+- The human addressed Burzum and Snaga directly through the roster. Both returned terse durable
+  state; Snaga reported commit `66a04a0` and explicitly confirmed the restart lost nothing.
+- The process was stopped and resumed against the same Fable root. Crew thread IDs, worktrees,
+  provider/model/effort tuples, queued work, and accepted results survived. No replacement crew
+  appeared.
+- Explicit `/compact` completed with `Context compacted`; no compaction-trigger ordering,
+  assistant-prefill, or modified-thinking error appeared.
+- The configured first `thread/spawnAgent` retryable fault fired before crew creation. The bounded
+  retry materialized the crew without a stillborn member or notification flood.
+- The first Grok native spawn was rejected cleanly at the resident-agent limit. After Opus
+  completed and unloaded, the same Grok spawn succeeded. Later the manager reported all six
+  execution slots occupied.
+- While 6/6 slots were active, direct human input to Fable was accepted. Fable replied:
+  `6/6 slots active ... I remain fully addressable; all lanes running undisturbed.`
+- Fable, Sol, Luna, Terra, Kimi, Opus, and Grok all executed real provider turns. No provider
+  silently changed.
+
+Benchmark outcome and product findings:
+
+- Durable branch commits are `ab19c83`, `15a4d60`, and `5d9e35c`. The work produced real
+  before/after gait evidence, an eight-beat two-world player-journey harness, and independent
+  visual/gameplay captures under `artifacts/session29-review-k3/`.
+- Burzum rejected two metric-only submissions before integration: idle before/after captures that
+  were byte-identical, and a route-stall predicate that stopped a legitimate long route early.
+- Opus found that the run-gait renderer branch was test-hook reachable but not yet driven by
+  ordinary gameplay. Kimi reproduced distant attack-approach failure and N/NW silent stalls.
+  These are benchmark product findings, not PfTerminal orchestration failures.
+- Grok's progress-only first terminal result is a model-quality/product finding. The native
+  follow-up path worked and delivered the cached report; there was no lost message, duplicate
+  application, or control-plane failure.
+
+Invariant watcher and wind-down:
+
+- No `Cannot start turn`, turn/start failure, compaction ordering error, assistant-prefill error,
+  modified-thinking error, panic, fatal runtime error, `unknown_outcome` auto-replay, headless
+  write, or retry-notification flood occurred.
+- The observer sent a no-new-work closeout after 43 minutes and stopped the TUI at 46 minutes
+  22 seconds. Tmux exited and no process remained rooted in the fresh home, benchmark tree, or
+  child worktrees.
+- Benchmark commits remain reachable from `qual/native-orch-q1c-20260725`. Generated proof
+  artifacts are temporary and may be reclaimed after this journal is committed.
+- Root filesystem free space before reclaim was 106 GiB.
+
+Disposition:
+
+- Session 1 counts. The exact candidate remains immutable.
+- Session 2 must create its custom heterogeneous agents directly through native `spawn_agent`
+  runtime overrides; `/spawn` must not be used for agent creation in that session.
