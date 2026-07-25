@@ -2069,3 +2069,42 @@ Qualification disposition:
 - Commit this repair, build one exact binary from that commit, run a short copied-home replay
   against the old ambiguous mailbox as seam proof, then begin three fresh 45–60 minute
   sessions on the same immutable binary.
+
+## Phase 8W — Immutable candidate and copied-home recovery seam
+
+Status: PASS; counted qualification may begin.
+
+Candidate:
+
+- Source commit: `4243b5e82` (`fix: reconcile native mailbox on root resume`).
+- Immutable binary: `/tmp/pfterminal-native-orch-4243b5e82`.
+- Binary SHA-256:
+  `a3181e939aa4df842894683e3c0f075a2034cd906b8dd0f750f99649c1e292de`.
+- Binary size: 1,343,139,312 bytes; mode `0555`.
+- Release build completed successfully. Its only diagnostic was the known unrelated
+  `unused_mut` warning in `app-server/src/lib.rs`.
+
+Copied-home seam:
+
+- Source evidence home remained
+  `/tmp/pft-native-orch-205588630-s1-home-20260725`.
+- The candidate resumed root `019f9ada-93e6-7473-834d-0920fb82064d` from the isolated copy
+  `/tmp/pft-native-orch-4243b5e82-seam-home-20260725`.
+- Before resume, the source database held 50 `completed`, eight `provider_running`, and 16
+  `unknown_outcome` rows. Seven of the eight `provider_running` rows were addressed to the
+  resumed root; the eighth belonged to an unloaded child.
+- After resume, the copied database held 50 `completed`, one `provider_running`, and 23
+  `unknown_outcome` rows. All seven root-addressed ambiguous rows transitioned to
+  `unknown_outcome`; the unloaded child's row was left untouched for its own lazy-load
+  recovery boundary.
+- The root opened normally and displayed its prior transcript. No turn was started, no
+  ambiguous mailbox item was replayed, and the original root rollout remained byte-identical
+  at SHA-256 `0434cc651c1622cf2c017403d3acab65dd06d8ff2c111c3ffa18dfce67e868bc`.
+- The seam TUI was then closed cleanly.
+
+Qualification disposition:
+
+- Count is still 0 of 3 because this was a targeted recovery seam, not a fresh endurance
+  session.
+- All three counted sessions must use the exact binary and SHA-256 above. Any code or binary
+  change resets the count.
