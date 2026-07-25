@@ -677,10 +677,18 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
     let harness = AgentControlHarness::new_with_config(home, config).await;
     let (parent_thread_id, _parent_thread) = harness.start_thread().await;
     let agent_path = AgentPath::try_from("/root/worker").expect("agent path");
+    let mut child_config = harness.config.clone();
+    child_config.model_provider = child_config
+        .model_providers
+        .get("openrouter")
+        .cloned()
+        .expect("OpenRouter provider");
+    child_config.model_provider_id = "openrouter".to_string();
+    child_config.model = Some("x-ai/grok-4.5".to_string());
     let spawned_agent = harness
         .control
         .spawn_agent_with_metadata(
-            harness.config.clone(),
+            child_config,
             text_input("hello child"),
             Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
                 parent_thread_id,
@@ -736,6 +744,15 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
         .get_thread(spawned_agent.thread_id)
         .await
         .expect("reloaded child thread should exist");
+    let reloaded_snapshot = harness
+        .manager
+        .get_thread(spawned_agent.thread_id)
+        .await
+        .expect("reloaded child thread should exist")
+        .config_snapshot()
+        .await;
+    assert_eq!(reloaded_snapshot.model_provider_id, "openrouter");
+    assert_eq!(reloaded_snapshot.model, "x-ai/grok-4.5");
 
     let communication = InterAgentCommunication::new(
         AgentPath::root(),

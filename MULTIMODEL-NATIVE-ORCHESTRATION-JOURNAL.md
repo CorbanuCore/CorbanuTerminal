@@ -112,3 +112,15 @@ Remaining distinction:
 - This proves durable crew metadata and idempotent creation decisions. Kill-and-resume against
   live native threads, strict stale-layout rejection, and legacy read-only fallback remain Phase 5
   requirements and are not claimed complete here.
+## Phase 3A — Target-runtime-safe native reload
+
+- Fixed `AgentControl::ensure_v2_agent_loaded` so an unloaded agent is resumed with the provider,
+  model, and reasoning effort stored on that target thread. The caller's current runtime is used
+  only as the base configuration and can no longer overwrite a heterogeneous target.
+- Added a regression that spawns an OpenRouter Grok 4.5 child, unloads it, asks an Ambient parent
+  configuration to reload it, and proves the restored tuple remains
+  `openrouter / x-ai/grok-4.5`.
+- Verification:
+  - `just fmt`
+  - `just test -p codex-core ensure_v2_agent_loaded_reloads_registered_unloaded_agent`
+    — 1 passed.

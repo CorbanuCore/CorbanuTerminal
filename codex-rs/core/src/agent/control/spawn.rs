@@ -91,7 +91,7 @@ impl AgentControl {
 
     pub(crate) async fn ensure_v2_agent_loaded(
         &self,
-        config: Config,
+        mut config: Config,
         thread_id: ThreadId,
     ) -> CodexResult<()> {
         let state = self.upgrade()?;
@@ -110,6 +110,25 @@ impl AgentControl {
                 include_history: true,
             })
             .await?;
+        let stored_model = stored_thread.model.clone().ok_or_else(|| {
+            CodexErr::InvalidRequest(format!(
+                "cannot resume agent {thread_id}: its persisted runtime has no model"
+            ))
+        })?;
+        let stored_provider = config
+            .model_providers
+            .get(&stored_thread.model_provider)
+            .cloned()
+            .ok_or_else(|| {
+                CodexErr::InvalidRequest(format!(
+                    "cannot resume agent {thread_id}: persisted provider `{}` is not configured",
+                    stored_thread.model_provider
+                ))
+            })?;
+        config.model = Some(stored_model);
+        config.model_provider_id = stored_thread.model_provider;
+        config.model_provider = stored_provider;
+        config.model_reasoning_effort = stored_thread.reasoning_effort.clone();
         let stored_source = stored_thread.source.clone();
         let stored_parent_thread_id = stored_thread.parent_thread_id;
         let history = stored_thread
