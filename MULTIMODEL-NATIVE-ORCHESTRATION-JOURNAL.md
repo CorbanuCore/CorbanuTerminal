@@ -1548,3 +1548,59 @@ Disposition:
   discover and create the requested four external runtimes without operator-provided provider
   IDs.
 - Restart all three 45–60 minute sessions on that rebuilt candidate.
+
+## Phase 8P — Rebuilt runtime-discovery seam passes live
+
+Status: PASS; qualification count remains 0 of 3 pending the long sessions.
+
+Timestamp: 2026-07-25T16:20:00Z
+
+Candidate:
+
+- Source commit: `640c658f4` (`fix: expose exact native agent runtimes`).
+- Immutable binary: `/tmp/pfterminal-native-orch-640c658f4`.
+- SHA-256:
+  `568c3d5398dd847eae0b81cc1f3824432049b63bdd200d79cc5c092e9692d4b6`.
+- Structured log:
+  `/tmp/pft-native-orch-discovery5-640c-logs-20260725/codex-tui.log`.
+- Fresh isolated home:
+  `/tmp/pft-native-orch-discovery5-640c-home-20260725`.
+- Root thread: `019f9a11-fb5a-78c0-9ed0-c4309d87d43d`.
+
+Live test:
+
+- The Sol root received only human-facing runtime names: Anthropic API Opus 5, Anthropic API
+  Fable 5, Kimi Code K3, and OpenRouter Grok 4.5. The prompt explicitly prohibited source or
+  configuration inspection, runtime substitution, and `/spawn`; it did not provide provider
+  IDs or model slugs.
+- From the native `spawn_agent` contract, the root independently selected and successfully
+  created these exact tuples with `fork_turns="none"`:
+  - `anthropic / claude-opus-5`
+  - `anthropic / claude-fable-5`
+  - `kimi-code / k3`
+  - `openrouter / x-ai/grok-4.5`
+- All four children completed a real provider-backed read-only UTC probe. The final native
+  `list_agents` snapshot showed all four as completed.
+- The exact provider/model pairs are present in the structured `spawn_agent` tool calls and
+  accepted tool results. Opus and Fable also self-reported their exact identities. Kimi
+  self-reported its Kimi runtime; Grok intentionally found no provider/model shell environment
+  variables, so those two identities are established from persisted native runtime requests
+  and provider traffic rather than task labels or shell variables.
+
+Qualification harness notes:
+
+- Two preliminary attempts correctly created the exact native records but could not execute
+  provider requests because an empty isolated home did not receive provider environment
+  credentials. A copied Claude Plan configuration also lacked its non-portable OAuth refresh
+  token. Neither attempt changed product code or counts as a product failure.
+- The passing attempt used a fresh isolated OpenAI-authenticated home and injected Anthropic,
+  Kimi, and OpenRouter credentials at process start through the canonical read-only vault
+  auth-helper. Credential values were neither printed nor copied into the isolated home.
+- This is the same credential boundary used by the prior live qualification. It separates
+  product runtime selection from test-environment authentication while still exercising real
+  provider traffic.
+
+Disposition:
+
+- The discovery defect from Phase 8O is repaired on the new immutable candidate.
+- Start the three counted 45–60 minute sessions at zero on this exact binary and hash.
