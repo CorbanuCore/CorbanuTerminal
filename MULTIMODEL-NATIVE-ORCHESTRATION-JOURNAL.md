@@ -1077,6 +1077,13 @@ Invariant watcher and wind-down:
   artifacts are temporary and may be reclaimed after this journal is committed.
 - Root filesystem free space before reclaim was 106 GiB.
 
+Post-stop salvage:
+
+- Two descendants completed commits during the bounded closeout. Preserved detached commit
+  `c44e0b5` on `qual/native-orch-q1c-snaga-a2` and detached commit `4063b70` on
+  `qual/native-orch-q1c-krimp-c2` before removing their worktrees. They are benchmark outputs,
+  not PfTerminal candidate changes.
+
 Disposition:
 
 - Session 1 counts. The exact candidate remains immutable.
