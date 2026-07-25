@@ -484,3 +484,52 @@ Passing evidence:
   ignored.
 - Live restart of root `019f97d5-ce22-7b31-aa22-f04656bbe782` restored Angmar, Burzum, Snaga,
   Ghash, and Krimp with no read-only recovery error.
+
+## Phase 6D — Claude Plan tool-result replay repair
+
+Status: the live Fable member continues across the request shape that previously killed its turn.
+
+Timestamp: 2026-07-25T06:25:59Z
+
+Discovery:
+
+- During the real isometric-game objective, Fable twice failed immediately after a tool call with
+  `This model does not support assistant message prefill. The conversation must end with a user
+  message.`
+- Capturing the actual outbound request proved that it already ended in a user message. The
+  rejected shape was narrower:
+  `assistant[thinking, tool_use, text] -> user[tool_result]`.
+- Ordinary tool continuations in the same session ended
+  `assistant[thinking, tool_use] -> user[tool_result]` and were accepted.
+
+Repair:
+
+- Claude Plan request construction now appends request-local `Continue.` text only when the
+  terminal user message contains tool results exclusively and the preceding assistant message has
+  non-empty text after its final tool call.
+- Durable rollout history, signed thinking blocks, ordinary tool-result turns, Anthropic API-key
+  traffic, and every non-Claude provider remain unchanged.
+
+Automated evidence:
+
+- Anthropic-focused core filter: 21 passed, 0 failed.
+- `anthropic_request_normalizes_tool_result_after_trailing_assistant_text`.
+- `anthropic_request_leaves_normal_tool_result_continuations_unchanged`.
+- `anthropic_api_request_does_not_apply_claude_plan_tool_result_repair`.
+- `claude_plan_request_normalizes_child_mail_after_completed_assistant_turn`.
+- `cargo check -p codex-core`.
+- `just fix -p codex-core`; only the pre-existing `responses_retry` argument-count warning remains.
+
+Live evidence:
+
+- Exact binary:
+  `/home/pfrpc/repos/PfTerminal-telegram-hardening/codex-rs/target/debug/pfterminal`.
+- Root `019f97d5-ce22-7b31-aa22-f04656bbe782`; Fable member
+  `019f97d6-2bef-7643-a554-fc33ddd64ead`; tmux session `native_orch_qual_1`.
+- Request SHA-256 `bfed0e0f6b2478a3fc1c7ea1f04c96b55caa3832141da214fa6f53b64b74e0c1`
+  replayed `assistant[thinking, tool_use, text] -> user[tool_result, text("Continue.")]`;
+  Fable accepted the tool result and continued.
+- Request SHA-256 `8ea24633ebbf77abdb713650d345bcf882ef9fcd6d76011729d8b7c41bcd78d2`
+  independently repeated the same repaired shape; Fable continued again with no 400.
+- The live turn subsequently performed additional shell, image, and search calls while preserving
+  the same standard `/spawn` crew and exact runtime.

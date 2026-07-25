@@ -255,6 +255,162 @@ fn claude_plan_request_normalizes_child_mail_after_completed_assistant_turn() {
 }
 
 #[test]
+fn anthropic_request_normalizes_tool_result_after_trailing_assistant_text() {
+    let mut messages = vec![
+        json!({"role": "user", "content": [{"type": "text", "text": "Inspect the game."}]}),
+        json!({
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "thinking",
+                    "thinking": "Inspect the renderer.",
+                    "signature": "signed-thinking"
+                },
+                {
+                    "type": "tool_use",
+                    "id": "toolu_probe",
+                    "name": "exec_command",
+                    "input": {"cmd": "rg debugTint"}
+                },
+                {
+                    "type": "text",
+                    "text": "I will inspect the result next."
+                }
+            ],
+        }),
+        json!({
+            "role": "user",
+            "content": [{
+                "type": "tool_result",
+                "tool_use_id": "toolu_probe",
+                "content": "renderer.ts:42"
+            }],
+        }),
+    ];
+
+    super::ensure_anthropic_messages_end_with_user_turn(
+        &mut messages,
+        /* repair_claude_plan_tool_result_prefill */ true,
+    );
+
+    assert_eq!(
+        messages.last(),
+        Some(&json!({
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_probe",
+                    "content": "renderer.ts:42"
+                },
+                {
+                    "type": "text",
+                    "text": "Continue."
+                }
+            ],
+        }))
+    );
+}
+
+#[test]
+fn anthropic_request_leaves_normal_tool_result_continuations_unchanged() {
+    let cases = [
+        vec![
+            json!({"role": "user", "content": [{"type": "text", "text": "Inspect the game."}]}),
+            json!({
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "I will inspect it."},
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_probe",
+                        "name": "exec_command",
+                        "input": {"cmd": "rg debugTint"}
+                    }
+                ],
+            }),
+            json!({
+                "role": "user",
+                "content": [{
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_probe",
+                    "content": "renderer.ts:42"
+                }],
+            }),
+        ],
+        vec![
+            json!({"role": "user", "content": [{"type": "text", "text": "Inspect the game."}]}),
+            json!({
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_probe",
+                        "name": "exec_command",
+                        "input": {"cmd": "rg debugTint"}
+                    },
+                    {"type": "text", "text": "I will inspect the result next."}
+                ],
+            }),
+            json!({
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "toolu_probe",
+                        "content": "renderer.ts:42"
+                    },
+                    {"type": "text", "text": "Focus on the foreground layer."}
+                ],
+            }),
+        ],
+    ];
+
+    for mut messages in cases {
+        let original = messages.clone();
+        super::ensure_anthropic_messages_end_with_user_turn(
+            &mut messages,
+            /* repair_claude_plan_tool_result_prefill */ true,
+        );
+        assert_eq!(messages, original);
+    }
+}
+
+#[test]
+fn anthropic_api_request_does_not_apply_claude_plan_tool_result_repair() {
+    let mut messages = vec![
+        json!({
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "toolu_probe",
+                    "name": "exec_command",
+                    "input": {"cmd": "rg debugTint"}
+                },
+                {"type": "text", "text": "I will inspect the result next."}
+            ],
+        }),
+        json!({
+            "role": "user",
+            "content": [{
+                "type": "tool_result",
+                "tool_use_id": "toolu_probe",
+                "content": "renderer.ts:42"
+            }],
+        }),
+    ];
+    let original = messages.clone();
+
+    super::ensure_anthropic_messages_end_with_user_turn(
+        &mut messages,
+        /* repair_claude_plan_tool_result_prefill */ false,
+    );
+
+    assert_eq!(messages, original);
+}
+
+#[test]
 fn anthropic_history_repair_removes_only_latest_incomplete_signed_response() {
     let older_assistant = json!({
         "role": "assistant",
