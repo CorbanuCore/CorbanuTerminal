@@ -11017,7 +11017,7 @@ max_threads = 3
     );
     assert_eq!(
         config.effective_agent_max_threads(MultiAgentVersion::V2),
-        Some(3)
+        Some(5)
     );
 
     Ok(())

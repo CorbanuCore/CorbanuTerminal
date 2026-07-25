@@ -305,3 +305,28 @@ Passing evidence:
 - `bound_nazgul_freeform_dispatch_routes_without_protocol_headers`.
 - `cargo test -p codex-tui --lib --no-run` with the repository stack setting.
 - `cargo check -p codex-tui`.
+
+## Phase 7B — Native orchestration remains role-neutral
+
+Status: the complete native V2 handler suite passes after removing the last role-name
+authorization check.
+
+Changes:
+
+- Removed the core rule that denied manager tools solely because an agent's display role was
+  `orc`. Role names remain behavioral profiles selected by `/spawn`; they are not capabilities.
+- Deleted tests that encoded Nazgul/Troll/Orc as a second authorization graph inside Codex.
+- Repaired adjacent V2 test fixtures so their parent/depth tuples describe real identity trees.
+- Corrected the rejected `agents.max_threads` fixture: V2 rejects the incompatible legacy key and
+  retains the configured V2 default of five, rather than silently honoring three.
+
+Passing evidence:
+
+- `RUST_MIN_STACK=33554432 cargo test -p codex-core --lib multi_agent_v2 --
+  --test-threads=1`: 66 passed, 0 failed.
+
+Product boundary:
+
+- `/spawn` still owns crew membership, names, role instructions, pane presentation, and exact
+  provider/model/effort selection.
+- Native Codex owns provider-neutral identity, lifecycle, capacity, and mailbox mechanics.

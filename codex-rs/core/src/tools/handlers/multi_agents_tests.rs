@@ -2053,7 +2053,7 @@ async fn multi_agent_v2_list_agents_filters_by_relative_path_prefix() {
 
     let researcher_path = AgentPath::from_string("/root/researcher".to_string()).expect("path");
     let worker_path = AgentPath::from_string("/root/researcher/worker".to_string()).expect("path");
-    session
+    let researcher = session
         .services
         .agent_control
         .spawn_agent_with_metadata(
@@ -2085,7 +2085,7 @@ async fn multi_agent_v2_list_agents_filters_by_relative_path_prefix() {
             }]
             .into(),
             Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-                parent_thread_id: root.thread_id,
+                parent_thread_id: researcher.thread_id,
                 depth: 2,
                 agent_path: Some(worker_path.clone()),
                 agent_nickname: None,
@@ -3512,126 +3512,6 @@ fn spawn_agent_allows_troll_to_spawn_orc() {
 }
 
 #[tokio::test]
-async fn spawn_agent_rejects_invalid_spawn_orchestration_graphs() {
-    let (mut session, turn) = make_session_and_context().await;
-    session.services.agent_control = thread_manager().agent_control();
-    let Err(root_orc_err) = SpawnAgentHandler::default()
-        .handle(invocation(
-            Arc::new(session),
-            Arc::new(turn),
-            "spawn_agent",
-            function_payload(json!({"message": "do work", "agent_type": "orc"})),
-        ))
-        .await
-    else {
-        panic!("root should not spawn orc directly");
-    };
-    assert_eq!(
-        root_orc_err,
-        FunctionCallError::RespondToModel(
-            "Orcs must be spawned by a Troll supervisor.".to_string()
-        )
-    );
-
-    let (mut session, mut turn) = make_session_and_context().await;
-    session.services.agent_control = thread_manager().agent_control();
-    turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-        parent_thread_id: session.thread_id,
-        depth: 1,
-        agent_path: None,
-        agent_nickname: None,
-        agent_role: Some("troll".to_string()),
-    });
-    let Err(troll_troll_err) = SpawnAgentHandler::default()
-        .handle(invocation(
-            Arc::new(session),
-            Arc::new(turn),
-            "spawn_agent",
-            function_payload(json!({"message": "supervise work", "agent_type": "troll"})),
-        ))
-        .await
-    else {
-        panic!("troll should not spawn troll");
-    };
-    assert_eq!(
-        troll_troll_err,
-        FunctionCallError::RespondToModel("Trolls may only spawn Orc agents.".to_string())
-    );
-
-    let (mut session, mut turn) = make_session_and_context().await;
-    session.services.agent_control = thread_manager().agent_control();
-    turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-        parent_thread_id: session.thread_id,
-        depth: 2,
-        agent_path: None,
-        agent_nickname: None,
-        agent_role: Some("orc".to_string()),
-    });
-    let Err(orc_spawn_err) = SpawnAgentHandler::default()
-        .handle(invocation(
-            Arc::new(session),
-            Arc::new(turn),
-            "spawn_agent",
-            function_payload(json!({"message": "delegate", "agent_type": "worker"})),
-        ))
-        .await
-    else {
-        panic!("orc should not spawn anything");
-    };
-    assert_eq!(
-        orc_spawn_err,
-        FunctionCallError::RespondToModel("Orcs cannot spawn child agents.".to_string())
-    );
-
-    let (mut session, turn) = make_session_and_context().await;
-    session.services.agent_control = thread_manager().agent_control();
-    let Err(nazgul_worker_err) = SpawnAgentHandler::default()
-        .handle(invocation(
-            Arc::new(session),
-            Arc::new(turn),
-            "spawn_agent",
-            function_payload(json!({"message": "bind pane", "agent_type": "nazgul"})),
-        ))
-        .await
-    else {
-        panic!("nazgul should not be spawned as worker");
-    };
-    assert_eq!(
-        nazgul_worker_err,
-        FunctionCallError::RespondToModel(
-            "Nazgul is a host-owned root pane. Use /spawn to create or bind it.".to_string()
-        )
-    );
-}
-
-#[tokio::test]
-async fn multi_agent_v2_spawn_agent_rejects_host_owned_roles() {
-    let (mut session, turn) = make_session_and_context().await;
-    session.services.agent_control = thread_manager().agent_control();
-    let Err(err) = SpawnAgentHandlerV2::default()
-        .handle(invocation(
-            Arc::new(session),
-            Arc::new(turn),
-            "spawn_agent",
-            function_payload(json!({
-                "message": "create a second supervisor",
-                "task_name": "nazgul",
-                "agent_type": "nazgul"
-            })),
-        ))
-        .await
-    else {
-        panic!("v2 model tool must not create the host-owned Nazgul");
-    };
-    assert_eq!(
-        err,
-        FunctionCallError::RespondToModel(
-            "Nazgul is a host-owned root pane. Use /spawn to create or bind it.".to_string()
-        )
-    );
-}
-
-#[tokio::test]
 async fn multi_agent_v2_spawn_agent_ignores_configured_max_depth() {
     #[derive(Debug, Deserialize)]
     struct SpawnAgentResult {
@@ -4253,92 +4133,6 @@ async fn multi_agent_v2_wait_agent_rejects_agent_without_eligible_children() {
         err,
         FunctionCallError::RespondToModel(
             "wait_agent rejected: this agent has no eligible child agents; return the result to its parent instead"
-                .to_string()
-        )
-    );
-}
-
-#[tokio::test]
-async fn multi_agent_v2_wait_agent_rejects_orc_at_runtime_boundary() {
-    let (mut session, mut turn) = make_session_and_context().await;
-    let manager = thread_manager();
-    let root = manager
-        .start_thread((*turn.config).clone())
-        .await
-        .expect("root thread should start");
-    session.services.agent_control = manager.agent_control();
-    session.thread_id = ThreadId::new();
-    let mut config = (*turn.config).clone();
-    config
-        .features
-        .enable(Feature::MultiAgentV2)
-        .expect("test config should allow feature update");
-    set_turn_config(&mut turn, config);
-    turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-        parent_thread_id: root.thread_id,
-        depth: 2,
-        agent_path: Some(AgentPath::try_from("/root/troll_burzum/orc_snaga").expect("agent path")),
-        agent_nickname: Some("Snaga".to_string()),
-        agent_role: Some("orc".to_string()),
-    });
-
-    let err = WaitAgentHandlerV2::default()
-        .handle(invocation(
-            Arc::new(session),
-            Arc::new(turn),
-            "wait_agent",
-            function_payload(json!({})),
-        ))
-        .await
-        .err()
-        .expect("Orc wait_agent call must be rejected by the executor");
-    assert_eq!(
-        err,
-        FunctionCallError::RespondToModel(
-            "wait_agent rejected by the runtime: caller role orc has no manager tools; return your report to your parent Troll instead"
-                .to_string()
-        )
-    );
-}
-
-#[tokio::test]
-async fn multi_agent_v2_wait_agent_orc_role_rejection_precedes_argument_validation() {
-    let (mut session, mut turn) = make_session_and_context().await;
-    let manager = thread_manager();
-    let root = manager
-        .start_thread((*turn.config).clone())
-        .await
-        .expect("root thread should start");
-    session.services.agent_control = manager.agent_control();
-    session.thread_id = ThreadId::new();
-    let mut config = (*turn.config).clone();
-    config
-        .features
-        .enable(Feature::MultiAgentV2)
-        .expect("test config should allow feature update");
-    set_turn_config(&mut turn, config);
-    turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-        parent_thread_id: root.thread_id,
-        depth: 2,
-        agent_path: Some(AgentPath::try_from("/root/troll_burzum/orc_snaga").expect("agent path")),
-        agent_nickname: Some("Snaga".to_string()),
-        agent_role: Some("orc".to_string()),
-    });
-
-    let err = WaitAgentHandlerV2::default()
-        .handle(invocation(
-            Arc::new(session),
-            Arc::new(turn),
-            "wait_agent",
-            function_payload(json!({"ids": ["not-an-agent-id"]})),
-        ))
-        .await
-        .err()
-        .expect("Orc wait_agent call must be rejected before parsing manager-only arguments");
-    assert_eq!(
-        err,
-        FunctionCallError::RespondToModel(
-            "wait_agent rejected by the runtime: caller role orc has no manager tools; return your report to your parent Troll instead"
                 .to_string()
         )
     );
@@ -5391,13 +5185,7 @@ async fn multi_agent_v2_interrupt_target_receives_full_control_and_process_tuple
         .enable(Feature::MultiAgentV2)
         .expect("test config should allow feature update");
     set_turn_config(&mut turn, config);
-    turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-        parent_thread_id: ThreadId::new(),
-        depth: 1,
-        agent_path: Some(AgentPath::try_from("/root/troll_burzum").expect("actor path")),
-        agent_nickname: Some("Burzum".to_string()),
-        agent_role: Some("troll".to_string()),
-    });
+    turn.session_source = SessionSource::Cli;
     let session = Arc::new(session);
     let turn = Arc::new(turn);
 
@@ -5459,7 +5247,7 @@ async fn multi_agent_v2_interrupt_target_receives_full_control_and_process_tuple
             })
             .expect("target pane must receive the interrupt audit");
     let expected = format!(
-        "Actor: Burzum [troll] · /root/troll_burzum\nTarget: {worker_nickname} · /root/troll_burzum/worker\nReason: verification scope changed after review\nSuperseding task/dispatch: dispatch #22: audit only the committed candidate\nProcess effect: model turn aborted; active turn-owned tool processes receive SIGTERM cleanup before abort; durable unified-exec background processes are preserved and remain inspectable in /ps"
+        "Actor: /root\nTarget: {worker_nickname} · /root/worker\nReason: verification scope changed after review\nSuperseding task/dispatch: dispatch #22: audit only the committed candidate\nProcess effect: model turn aborted; active turn-owned tool processes receive SIGTERM cleanup before abort; durable unified-exec background processes are preserved and remain inspectable in /ps"
     );
     assert!(
         target_audit.encrypted_content.is_none(),

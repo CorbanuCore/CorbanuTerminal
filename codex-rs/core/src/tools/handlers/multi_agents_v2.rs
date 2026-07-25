@@ -63,19 +63,11 @@ pub(super) fn communication_from_model_tool_message(
 }
 
 pub(super) fn ensure_manager_tool_allowed(
-    turn: &TurnContext,
-    tool_name: &str,
+    _turn: &TurnContext,
+    _tool_name: &str,
 ) -> Result<(), FunctionCallError> {
-    if turn
-        .session_source
-        .get_agent_role()
-        .as_deref()
-        .is_some_and(|role| role.eq_ignore_ascii_case("orc"))
-    {
-        return Err(FunctionCallError::RespondToModel(format!(
-            "{tool_name} rejected by the runtime: caller role orc has no manager tools; return your report to your parent Troll instead"
-        )));
-    }
+    // Role names are behavioral profiles and UI labels, not authorization tokens. Delegation
+    // permissions belong to the crew policy at the PfTerminal control-plane boundary.
     Ok(())
 }
 
