@@ -2234,7 +2234,9 @@ async fn restored_crew_validation_rejects_runtime_drift() {
         crate::dispatch_queue::SavedNativeSpawnRuntime {
             provider: "openai".to_string(),
             model: "gpt-5.6-sol".to_string(),
-            reasoning_effort: None,
+            // `None` in CrewSpec means use the provider/model default. Recovery records the
+            // resolved effort and must not mistake that resolution for runtime drift.
+            reasoning_effort: Some(ReasoningEffortConfig::High),
         },
     );
     let spec = codex_protocol::crew::CrewSpec {
@@ -2274,6 +2276,36 @@ async fn restored_crew_validation_rejects_runtime_drift() {
         .validate_restored_crew_state()
         .expect_err("runtime drift must stop recovery");
     assert!(error.to_string().contains("runtime changed"));
+}
+
+#[tokio::test]
+async fn restored_spawn_resume_uses_saved_runtime_instead_of_parent_runtime() {
+    let mut app = make_test_app().await;
+    app.config.model = Some(codex_model_provider_info::CLAUDE_PLAN_MODEL.to_string());
+    app.config.model_reasoning_effort = Some(ReasoningEffortConfig::High);
+    let saved_runtime = crate::dispatch_queue::SavedNativeSpawnRuntime {
+        provider: CLAUDE_PLAN_PROVIDER_ID.to_string(),
+        model: codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL.to_string(),
+        reasoning_effort: Some(ReasoningEffortConfig::High),
+    };
+
+    let (resume_config, model_override) = app.native_spawn_resume_request(Some(&saved_runtime));
+
+    assert_eq!(
+        resume_config.model.as_deref(),
+        Some(codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL)
+    );
+    assert_eq!(
+        resume_config.model_reasoning_effort,
+        Some(ReasoningEffortConfig::High)
+    );
+    assert_eq!(
+        model_override,
+        Some(crate::app_server_session::ResumeModelOverride {
+            model: Some(codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL.to_string()),
+            model_provider: Some(CLAUDE_PLAN_PROVIDER_ID.to_string()),
+        })
+    );
 }
 
 #[tokio::test]

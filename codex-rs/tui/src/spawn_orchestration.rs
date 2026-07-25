@@ -1,6 +1,7 @@
 use crate::app::App;
 use crate::app_event::AppEvent;
 use crate::app_server_session::AppServerSession;
+use crate::app_server_session::ResumeModelOverride;
 use crate::bottom_pane::SelectionItem;
 use crate::bottom_pane::SelectionViewParams;
 use crate::bottom_pane::custom_prompt_view::CustomPromptView;
@@ -2961,20 +2962,57 @@ impl App {
         if self.thread_has_loaded_session(thread_id) {
             return true;
         }
+        let logical_node_id = self.logical_native_node_for_thread(thread_id);
+        let saved_runtime = self
+            .spawn_native_runtime_by_node
+            .get(&logical_node_id)
+            .cloned();
+        let (resume_config, model_override) =
+            self.native_spawn_resume_request(saved_runtime.as_ref());
         match app_server
-            .resume_thread(self.config.clone(), thread_id, /*model_override*/ None)
+            .resume_thread(resume_config, thread_id, model_override)
             .await
         {
             Ok(started) => {
-                let model = started.session.model.clone();
-                self.spawn_native_runtime_by_node.insert(
-                    self.logical_native_node_for_thread(thread_id),
-                    crate::dispatch_queue::SavedNativeSpawnRuntime {
-                        model: model.clone(),
-                        provider: started.session.model_provider_id.clone(),
-                        reasoning_effort: started.session.reasoning_effort.clone(),
-                    },
-                );
+                let restored_runtime = crate::dispatch_queue::SavedNativeSpawnRuntime {
+                    model: started.session.model.clone(),
+                    provider: started.session.model_provider_id.clone(),
+                    reasoning_effort: started.session.reasoning_effort.clone(),
+                };
+                if let Some(saved_runtime) = saved_runtime.as_ref()
+                    && (restored_runtime.model != saved_runtime.model
+                        || restored_runtime.provider != saved_runtime.provider
+                        || saved_runtime
+                            .reasoning_effort
+                            .as_ref()
+                            .is_some_and(|expected| {
+                                restored_runtime.reasoning_effort.as_ref() != Some(expected)
+                            }))
+                {
+                    let error = format!(
+                        "restored runtime changed from {}/{} {:?} to {}/{} {:?}",
+                        saved_runtime.provider,
+                        saved_runtime.model,
+                        saved_runtime.reasoning_effort,
+                        restored_runtime.provider,
+                        restored_runtime.model,
+                        restored_runtime.reasoning_effort
+                    );
+                    tracing::error!(
+                        thread_id = %thread_id,
+                        logical_node_id,
+                        %error,
+                        "refusing restored native spawn runtime drift"
+                    );
+                    self.chat_widget.add_error_message(format!(
+                        "Failed to attach restored pane {}: {error}",
+                        self.thread_label(thread_id)
+                    ));
+                    return false;
+                }
+                let model = restored_runtime.model.clone();
+                self.spawn_native_runtime_by_node
+                    .insert(logical_node_id, restored_runtime);
                 let channel = self.ensure_thread_channel(thread_id);
                 channel.set_session(started.session, started.turns).await;
                 self.agent_navigation.set_model(thread_id, Some(model));
@@ -2993,6 +3031,22 @@ impl App {
                 false
             }
         }
+    }
+
+    pub(crate) fn native_spawn_resume_request(
+        &self,
+        saved_runtime: Option<&crate::dispatch_queue::SavedNativeSpawnRuntime>,
+    ) -> (codex_core::config::Config, Option<ResumeModelOverride>) {
+        let mut resume_config = self.config.clone();
+        let model_override = saved_runtime.map(|runtime| {
+            resume_config.model = Some(runtime.model.clone());
+            resume_config.model_reasoning_effort = runtime.reasoning_effort.clone();
+            ResumeModelOverride {
+                model: Some(runtime.model.clone()),
+                model_provider: Some(runtime.provider.clone()),
+            }
+        });
+        (resume_config, model_override)
     }
 
     async fn recover_native_spawn_edges_from_saved_context(

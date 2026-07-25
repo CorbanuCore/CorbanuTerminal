@@ -109,7 +109,9 @@ impl App {
                 })?;
             if runtime.provider != *provider_id
                 || runtime.model != *model_id
-                || runtime.reasoning_effort != *reasoning_effort
+                || reasoning_effort
+                    .as_ref()
+                    .is_some_and(|expected| runtime.reasoning_effort.as_ref() != Some(expected))
             {
                 return Err(eyre!(
                     "restored crew member {} runtime changed from {}/{} {:?} to {}/{} {:?}",
@@ -343,7 +345,8 @@ impl App {
             })?;
         if saved_runtime.provider != provider_id
             || saved_runtime.model != model_id
-            || saved_runtime.reasoning_effort.as_ref() != reasoning_effort
+            || reasoning_effort
+                .is_some_and(|expected| saved_runtime.reasoning_effort.as_ref() != Some(expected))
         {
             return Err(eyre!(
                 "Crew member {logical_member_id} was persisted as {}/{} {:?}, not the requested {provider_id}/{model_id} {:?}. Explicitly migrate the runtime instead of silently changing it.",

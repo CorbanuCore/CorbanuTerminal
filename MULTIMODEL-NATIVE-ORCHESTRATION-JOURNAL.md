@@ -446,3 +446,41 @@ Product boundary:
 - Native Codex spawning remains the mechanism for bounded task agents. Both products share native
   identity, mailbox, execution, interruption, and recovery primitives without sharing membership
   or retention semantics.
+
+## Phase 6C — Live-discovered exact-runtime recovery repair
+
+Status: same-session process restart preserves the `/spawn` crew and its selected runtimes.
+
+Timestamp: 2026-07-25T06:04:24Z
+
+Discovery:
+
+- A fresh standard crew correctly created Fable, GPT-5.6-Sol, GPT-5.6-Luna, GPT-5.6-Terra, and
+  Grok 4.5 members.
+- Resuming the same root session in a new process initially marked the crew read-only. Recovery
+  had resumed every child using the current parent pane's Opus runtime, then overwritten the
+  crew-owned saved runtime with the resume response.
+- A `None` reasoning effort in `CrewSpec` means use the selected provider/model's resolved
+  default. Recovery incorrectly treated the resulting concrete effort as drift.
+
+Repair:
+
+- Restored native `/spawn` panes now resume with the provider, model, and resolved reasoning
+  effort already persisted for that logical crew node.
+- The returned runtime is checked before the restored session is attached. Provider/model drift,
+  or drift from an explicitly requested reasoning effort, fails closed without mutating the
+  saved crew runtime.
+- Provider-resolved effort is accepted when the `CrewSpec` intentionally leaves effort
+  unspecified.
+- Starting a different root session still shows no old crew; crew state remains session-scoped.
+
+Passing evidence:
+
+- `restored_spawn_resume_uses_saved_runtime_instead_of_parent_runtime`.
+- `restored_crew_validation_rejects_runtime_drift`, expanded to prove a provider-resolved effort
+  is accepted when the specification leaves effort unspecified.
+- `thread_resume_params_forward_explicit_model_override`.
+- `/spawn` filter with `RUST_MIN_STACK=33554432`: 73 passed, 0 failed, 1 credentialed live test
+  ignored.
+- Live restart of root `019f97d5-ce22-7b31-aa22-f04656bbe782` restored Angmar, Burzum, Snaga,
+  Ghash, and Krimp with no read-only recovery error.
