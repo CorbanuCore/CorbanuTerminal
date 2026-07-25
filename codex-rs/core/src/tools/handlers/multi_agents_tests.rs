@@ -1563,7 +1563,12 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
     let spawn_result: SpawnAgentResult =
         serde_json::from_str(&content).expect("spawn result should parse");
     assert_eq!(spawn_result.task_name, "/root/test_process");
-    assert_eq!(spawn_result.nickname, None);
+    assert!(
+        spawn_result
+            .nickname
+            .as_deref()
+            .is_some_and(|nickname| !nickname.is_empty())
+    );
 
     let child_thread_id = session
         .services
@@ -3115,7 +3120,12 @@ async fn multi_agent_v2_spawn_omits_agent_id_when_named() {
 
     assert!(result.get("agent_id").is_none());
     assert_eq!(result["task_name"], "/root/test_process");
-    assert!(result.get("nickname").is_none());
+    assert!(
+        result
+            .get("nickname")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|nickname| !nickname.is_empty())
+    );
     assert_eq!(success, Some(true));
 }
 
@@ -3599,7 +3609,12 @@ async fn multi_agent_v2_spawn_agent_ignores_configured_max_depth() {
     let result: SpawnAgentResult =
         serde_json::from_str(&content).expect("spawn_agent result should be json");
     assert_eq!(result.task_name, "/root/parent/child");
-    assert_eq!(result.nickname, None);
+    assert!(
+        result
+            .nickname
+            .as_deref()
+            .is_some_and(|nickname| !nickname.is_empty())
+    );
     assert_eq!(success, Some(true));
 }
 
@@ -5349,7 +5364,7 @@ async fn multi_agent_v2_interrupt_agent_accepts_unloaded_task_name_target() {
     let (content, success) = expect_text_output(output);
     let result: InterruptAgentResult =
         serde_json::from_str(&content).expect("interrupt_agent result should be json");
-    assert_eq!(result.previous_status, AgentStatus::NotFound);
+    assert_eq!(result.previous_status, AgentStatus::Unloaded);
     assert_eq!(success, Some(true));
 
     let open_children = state_db
@@ -5381,8 +5396,14 @@ async fn multi_agent_v2_interrupt_agent_accepts_unloaded_task_name_target() {
     let (content, _) = expect_text_output(output);
     let result: ListAgentsResult =
         serde_json::from_str(&content).expect("list_agents result should be json");
-    assert_eq!(result.agents.len(), 1);
+    assert_eq!(result.agents.len(), 2);
     assert_eq!(result.agents[0].agent_name, "/root");
+    let unloaded_worker = result
+        .agents
+        .iter()
+        .find(|agent| agent.agent_name == "/root/worker")
+        .expect("unloaded worker should remain visible");
+    assert_eq!(unloaded_worker.agent_status, json!("unloaded"));
 }
 
 #[tokio::test]

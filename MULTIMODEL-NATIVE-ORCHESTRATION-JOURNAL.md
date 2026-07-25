@@ -1964,3 +1964,108 @@ Qualification disposition:
 - The old `640c658f4` sessions remain historical defect evidence and do not count.
 - No repaired candidate session has started yet. Build one exact candidate from the repaired
   source, record its source commit and binary SHA-256, then restart the three-session count.
+
+## Phase 8U — Repaired-candidate session 1 reset: root mailbox recovery was skipped
+
+Status: INVARIANT FAILURE; qualification remains 0 of 3.
+
+Session:
+
+- Interval: successful credential-backed process from `2026-07-25T20:02:29Z` through
+  `2026-07-25T20:50:01Z` (47 minutes 32 seconds).
+- Source commit: `205588630` (`fix: unify native crew completion delivery`).
+- Immutable binary: `/tmp/pfterminal-native-orch-205588630`.
+- Binary SHA-256:
+  `e089f87da8629ab4386e49a0643fe3f61b73f4d64c153644de7a00aab172b43f`.
+- Fresh copied home:
+  `/tmp/pft-native-orch-205588630-s1-home-20260725`.
+- Fresh benchmark worktree:
+  `/tmp/tih-native-orch-205588630-s1-20260725`.
+- Root thread:
+  `019f9ada-93e6-7473-834d-0920fb82064d`.
+
+Useful live evidence:
+
+- Native `spawn_agent` created and repeatedly reused the exact required runtimes:
+  `anthropic / claude-opus-5`, `anthropic / claude-fable-5`,
+  `openrouter / x-ai/grok-4.5`, and `kimi-code / k3`.
+- The tree reached the effective native thread limit. Two additional spawns failed cleanly
+  with `agent thread limit reached`; the manager remained addressable, listed the tree, and
+  queued control-plane mail to an existing worker.
+- A process kill and exact-binary resume preserved every original native identity and runtime.
+- One injected `turn/start` failure recovered on the bounded retry.
+- A one-shot local provider returned HTTP 429 once. The same
+  `qual-fault / qualification-fault-model` thread recovered on exactly one follow-up; provider
+  evidence is `/tmp/pft-native-orch-205588630-s1-fault-events.jsonl`.
+- Explicit compaction persisted `compacted` and `context_compacted` events. The compacted root
+  subsequently reused Opus, Fable, Grok, and Kimi on their original threads.
+- The root mailbox rollout contains 33 terminal-result records with 33 unique stable IDs and
+  zero legacy `child_report;` payloads.
+- The real text-improvement-harness objective produced commits `5f0c02e` and `75ec154`, 71
+  warning-clean tests, two passing 32-seed stress reruns, and a clean Git object graph.
+- The external watcher heartbeat remained live after repair of the qualification harness; its
+  alert file stayed empty. A full post-session structured-log and rollout signature scan found
+  no panic, fatal signal, compaction-order error, assistant-prefill failure, notification loop,
+  stillborn pane, or automatic unknown-outcome replay.
+
+Release-blocking finding:
+
+- The final `pfterminal_state_5.sqlite` audit found eight root-addressed mailbox rows still in
+  `provider_running` after the deliberate process restart and 16 quarantined
+  `unknown_outcome` rows. All 74 message IDs and all 41 assignment IDs were unique, so this
+  was not duplicate delivery.
+- `AgentControl::recover_inter_agent_communications` correctly quarantines `submitting` and
+  `provider_running` work, but its only production caller is the lazy child reload path in
+  `codex-rs/core/src/agent/control/spawn.rs`.
+- Resuming the human root thread does not invoke mailbox recovery for that root. Root-addressed
+  ambiguous rows can therefore remain `provider_running` indefinitely instead of entering
+  `unknown_outcome`, producing persisted lifecycle/status divergence.
+- The session does not count despite its otherwise successful live coverage. Repair the
+  root-resume boundary, add a regression that resumes a root with `provider_running` mail and
+  proves quarantine without replay, rebuild an immutable candidate, and restart all three
+  sessions at zero.
+
+## Phase 8V — Root-resume recovery repair and adjacent native lifecycle audit
+
+Status: PASS; repaired source is ready for a new immutable candidate.
+
+Repair:
+
+- `ThreadManager::resume_thread_with_history` now calls
+  `AgentControl::recover_inter_agent_communications` after restoring the persisted subtree.
+  Child lazy reload already performed this reconciliation; the human root now crosses the
+  same recovery boundary.
+- A root-resume regression persists a root-addressed mailbox item through
+  `ready -> submitting -> submitted -> provider_running`, shuts down the original manager,
+  resumes from the rollout and same SQLite state, and proves:
+  `provider_running -> unknown_outcome` and no application of the ambiguous message ID to
+  resumed history.
+- The broad native V2 suite exposed an adjacent unloaded-worker defect. `interrupt_agent`
+  resolved the persisted identity and correctly returned `Unloaded`, but then attempted to
+  deliver a live control message to the nonresident thread and converted the valid no-op into
+  an error. Live audit-message delivery is now skipped only for `Unloaded` and `NotFound`;
+  the persisted worker remains visible and its open spawn edge remains unchanged.
+- Three stale native-spawn assertions now enforce the intended stable non-empty nickname
+  result rather than expecting nickname metadata to be absent.
+
+Passing evidence:
+
+- `resumed_root_quarantines_provider_running_mail_without_replay`: one pass.
+- Adjacent recovery tests: five of five pass
+  (`resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime`,
+  `resumed_subagent_rejoins_loaded_parent_control_plane`,
+  `durable_agent_mailbox_deduplicates_and_completes_after_rollout_flush`,
+  `ensure_v2_agent_loaded_reloads_registered_unloaded_agent`, and
+  `resume_thread_subagent_restores_stored_metadata_and_effective_multi_agent_mode`).
+- Native V2 filtered suite: 71 of 71 pass after fixing the unloaded interrupt boundary and
+  aligning stable-identity assertions.
+- `cargo check -p codex-core -p codex-app-server -p codex-tui --tests`: pass.
+- `just fmt`: pass.
+- Root filesystem free space after the dev compile gate: 103 GiB.
+
+Qualification disposition:
+
+- Count remains 0 of 3. No evidence from candidate `205588630` is promoted.
+- Commit this repair, build one exact binary from that commit, run a short copied-home replay
+  against the old ambiguous mailbox as seam proof, then begin three fresh 45–60 minute
+  sessions on the same immutable binary.

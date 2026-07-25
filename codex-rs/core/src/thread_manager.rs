@@ -767,6 +767,13 @@ impl ThreadManager {
         agent_control
             .restore_persisted_agent_subtree(resumed_thread.thread_id)
             .await?;
+        // Root-thread resume is also a provider/process recovery boundary. Child reloads
+        // reconcile their own mailbox in `ensure_v2_agent_loaded`, but the human root does not
+        // pass through that path. Reconcile it explicitly so ambiguous in-flight work is
+        // quarantined and safe local work is resumed exactly once.
+        agent_control
+            .recover_inter_agent_communications(resumed_thread.thread_id)
+            .await?;
         Ok(resumed_thread)
     }
 

@@ -20,6 +20,7 @@ use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::protocol::AgentMessageEvent;
 use codex_protocol::protocol::InitialHistory;
+use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::InternalSessionSource;
 use codex_protocol::protocol::ResumedHistory;
 use codex_protocol::protocol::SessionSource;
@@ -740,6 +741,151 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
         duplicate,
         CodexErr::UnsupportedOperation(message)
             if message.contains("agent path `/root/troll_burzum` already exists")
+    );
+}
+
+#[tokio::test]
+async fn resumed_root_quarantines_provider_running_mail_without_replay() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    config
+        .features
+        .enable(Feature::Sqlite)
+        .expect("sqlite should be available in tests");
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("multi-agent v2 should be available in tests");
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    let state_db = init_state_db(&config).await;
+    let state_runtime = state_db
+        .clone()
+        .expect("sqlite state runtime should be available");
+
+    let manager = ThreadManager::with_models_provider_home_and_state_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        state_db.clone(),
+    );
+    let root = manager
+        .start_thread(config.clone())
+        .await
+        .expect("start root thread");
+    root.thread
+        .inject_user_message_without_turn("persist root".to_string())
+        .await;
+    root.thread
+        .codex
+        .session
+        .ensure_rollout_materialized()
+        .await;
+    root.thread
+        .codex
+        .session
+        .flush_rollout()
+        .await
+        .expect("flush root rollout");
+    let root_rollout = root.thread.rollout_path().expect("root rollout path");
+    let root_id = root.thread_id;
+
+    let ambiguous = InterAgentCommunication::new(
+        AgentPath::try_from("/root/worker").expect("worker path"),
+        AgentPath::root(),
+        Vec::new(),
+        "provider outcome is ambiguous".to_string(),
+        /*trigger_turn*/ true,
+    );
+    let message_id = ambiguous
+        .message_id
+        .as_deref()
+        .expect("stable message id")
+        .to_string();
+    let control = root.thread.codex.session.services.agent_control.clone();
+    control
+        .admit_inter_agent_communication(root_id, &ambiguous)
+        .await
+        .expect("admit root mailbox message");
+    assert!(
+        state_runtime
+            .begin_agent_message_submission(
+                &message_id,
+                codex_state::AgentMailboxPhase::Ready,
+                "root-provider-attempt",
+                1_000,
+            )
+            .await
+            .expect("begin root submission")
+    );
+    assert!(
+        state_runtime
+            .transition_agent_message(
+                &message_id,
+                codex_state::AgentMailboxPhase::Submitting,
+                codex_state::AgentMailboxPhase::Submitted,
+                1_001,
+            )
+            .await
+            .expect("mark root message submitted")
+    );
+    assert!(
+        state_runtime
+            .transition_agent_message(
+                &message_id,
+                codex_state::AgentMailboxPhase::Submitted,
+                codex_state::AgentMailboxPhase::ProviderRunning,
+                1_002,
+            )
+            .await
+            .expect("mark root provider running")
+    );
+
+    let shutdown = manager
+        .shutdown_all_threads_bounded(Duration::from_secs(10))
+        .await;
+    assert!(shutdown.submit_failed.is_empty());
+    assert!(shutdown.timed_out.is_empty());
+
+    let resumed_manager = ThreadManager::with_models_provider_home_and_state_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        state_db.clone(),
+    );
+    let auth_manager =
+        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let resumed_root = resumed_manager
+        .resume_thread_from_rollout(
+            config,
+            root_rollout,
+            auth_manager,
+            /*parent_trace*/ None,
+            /*supports_openai_form_elicitation*/ false,
+        )
+        .await
+        .expect("resume root thread");
+    assert_eq!(resumed_root.thread_id, root_id);
+    assert_eq!(
+        state_runtime
+            .get_agent_message(&message_id)
+            .await
+            .expect("mailbox lookup")
+            .expect("mailbox row")
+            .phase,
+        codex_state::AgentMailboxPhase::UnknownOutcome
+    );
+    assert!(
+        !resumed_root
+            .thread
+            .codex
+            .session
+            .has_applied_agent_message_id(&message_id)
+            .await,
+        "ambiguous root mail must not be replayed into local history"
     );
 }
 
