@@ -295,10 +295,7 @@ fn anthropic_request_normalizes_tool_result_after_trailing_assistant_text() {
         }),
     ];
 
-    super::ensure_anthropic_messages_end_with_user_turn(
-        &mut messages,
-        /* repair_claude_plan_tool_result_prefill */ true,
-    );
+    super::ensure_anthropic_messages_end_with_user_turn(&mut messages);
 
     assert_eq!(
         messages.last(),
@@ -375,16 +372,13 @@ fn anthropic_request_leaves_normal_tool_result_continuations_unchanged() {
 
     for mut messages in cases {
         let original = messages.clone();
-        super::ensure_anthropic_messages_end_with_user_turn(
-            &mut messages,
-            /* repair_claude_plan_tool_result_prefill */ true,
-        );
+        super::ensure_anthropic_messages_end_with_user_turn(&mut messages);
         assert_eq!(messages, original);
     }
 }
 
 #[test]
-fn anthropic_api_request_does_not_apply_claude_plan_tool_result_repair() {
+fn anthropic_api_request_repairs_tool_result_after_trailing_assistant_text() {
     let mut messages = vec![
         json!({
             "role": "assistant",
@@ -407,14 +401,92 @@ fn anthropic_api_request_does_not_apply_claude_plan_tool_result_repair() {
             }],
         }),
     ];
-    let original = messages.clone();
+    super::ensure_anthropic_messages_end_with_user_turn(&mut messages);
 
-    super::ensure_anthropic_messages_end_with_user_turn(
-        &mut messages,
-        /* repair_claude_plan_tool_result_prefill */ false,
+    assert_eq!(
+        messages.last(),
+        Some(&json!({
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_probe",
+                    "content": "renderer.ts:42"
+                },
+                {
+                    "type": "text",
+                    "text": "Continue."
+                }
+            ],
+        }))
     );
+}
 
-    assert_eq!(messages, original);
+#[test]
+fn anthropic_fable_request_repairs_live_tool_then_commentary_history_shape() {
+    let prompt = super::Prompt {
+        input: vec![
+            ResponseItem::Message {
+                id: None,
+                role: "user".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "Inspect the accessibility gate.".to_string(),
+                }],
+                phase: None,
+                metadata: None,
+            },
+            ResponseItem::FunctionCall {
+                id: None,
+                name: "exec_command".to_string(),
+                namespace: None,
+                arguments: r#"{"cmd":"node test/accessibility.test.mjs"}"#.to_string(),
+                call_id: "toolu_live_fable".to_string(),
+                metadata: None,
+            },
+            ResponseItem::Message {
+                id: None,
+                role: "assistant".to_string(),
+                content: vec![ContentItem::OutputText {
+                    text: "I am checking the result now.".to_string(),
+                }],
+                phase: None,
+                metadata: None,
+            },
+            ResponseItem::FunctionCallOutput {
+                id: None,
+                call_id: "toolu_live_fable".to_string(),
+                output: FunctionCallOutputPayload::from_text("accessibility: ok".to_string()),
+                metadata: None,
+            },
+        ],
+        ..Default::default()
+    };
+
+    let request = test_model_client(SessionSource::Cli)
+        .build_anthropic_messages_request(&prompt, &test_claude_fable_model_info(), None)
+        .expect("Anthropic API-key Fable request");
+    let last_content = request
+        .messages
+        .last()
+        .and_then(|message| message.get("content"))
+        .and_then(serde_json::Value::as_array)
+        .expect("terminal user content");
+
+    assert_eq!(
+        last_content
+            .iter()
+            .filter_map(|block| block.get("type").and_then(serde_json::Value::as_str))
+            .collect::<Vec<_>>(),
+        vec!["tool_result", "text"],
+        "the request must end in explicit user continuation, not an assistant-prefill shape"
+    );
+    assert_eq!(
+        last_content
+            .last()
+            .and_then(|block| block.get("text"))
+            .and_then(serde_json::Value::as_str),
+        Some("Continue.")
+    );
 }
 
 #[test]

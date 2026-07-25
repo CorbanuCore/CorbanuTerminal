@@ -1272,3 +1272,61 @@ Disposition:
 - Session 1 counts on the exact rebuilt candidate.
 - Session 2 must not use `/spawn` to create its crew. It must use native `spawn_agent` runtime
   overrides to create a custom crew spanning at least three provider families.
+
+## Phase 8L — Count reset: Anthropic API native follow-up exposed assistant-prefill history
+
+Status: INVARIANT FAILURE; qualification count reset from 1 of 3 to 0 of 3.
+
+Timestamp: 2026-07-25T14:50:42Z
+
+Failed candidate and session:
+
+- Exact binary: `/tmp/pfterminal-native-orch-a786872cc`.
+- SHA-256:
+  `0ec2cc672677257aa1686fb102926b0ab91f69315f905b31e72f280f95520569`.
+- Source commit: `a786872cc`.
+- Fresh copied home: `/tmp/pft-native-orch-q2-home-20260725`.
+- Structured log: `/tmp/pft-native-orch-q2-logs-20260725/codex-tui.log`.
+- Root thread: `019f99bb-3085-76b3-8e22-d5d6e0f72c32`.
+- Native Fable thread: `019f99bc-4301-7250-936d-23a1545862f0`.
+- Session interval before stop: `2026-07-25T14:43:28Z` through approximately
+  `2026-07-25T14:51:30Z`.
+
+Observed failure:
+
+- The custom crew was created exclusively through native `spawn_agent` runtime overrides:
+  Anthropic Opus 5, Anthropic Fable 5, Kimi K3, OpenRouter Grok 4.5, and OpenAI Terra.
+- Provider logs confirmed the requested models on live requests. The root remained addressable
+  under six-slot saturation and applied one natural reprioritization without cancelling workers.
+- After Fable emitted a tool call followed by assistant commentary, the tool result was persisted
+  and the same native agent received a follow-up. Anthropic API rejected the request twice with
+  `invalid_request_error: This model does not support assistant message prefill. The conversation
+  must end with a user message.`
+- This was not an injected fault or provider outage. Durable history was converted into a request
+  shape the Anthropic API rejected, making the same native Fable identity unable to continue.
+  Section 6 lifecycle/delivery and Section 15.3 therefore require a fix and a full count reset.
+
+Root cause and repair:
+
+- `ensure_anthropic_messages_end_with_user_turn` already repaired the exact
+  `tool_use -> trailing assistant text -> tool_result-only user turn` shape, but the repair was
+  gated by `is_claude_plan`.
+- Live evidence proves Anthropic API-key Fable enforces the same message-shape constraint.
+- The request-local normalizer now applies this narrow mechanical repair to every Anthropic
+  transport. It does not modify durable history, inject provider-specific prompt policy, or alter
+  normal histories whose assistant message ends in `tool_use`.
+- Added a request-builder regression that recreates the live ResponseItem sequence against the
+  Anthropic API-key Fable model and asserts a terminal user continuation after the tool result.
+
+Initial verification:
+
+- `cargo fmt --all -- --check` passes.
+- Three focused history-shape tests pass.
+- The full Fable request-builder regression
+  `anthropic_fable_request_repairs_live_tool_then_commentary_history_shape` passes.
+
+Disposition:
+
+- Build a new immutable candidate after the broader Anthropic client suite passes.
+- Prove the same Fable native thread can perform a tool call, accept a follow-up, and continue
+  without prefill rejection before restarting the three 45–60 minute sessions.

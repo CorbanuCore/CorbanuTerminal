@@ -1510,7 +1510,7 @@ impl ModelClient {
         if repair_incomplete_latest_assistant {
             remove_latest_signed_thinking_assistant_message(&mut messages);
         }
-        ensure_anthropic_messages_end_with_user_turn(&mut messages, is_claude_plan);
+        ensure_anthropic_messages_end_with_user_turn(&mut messages);
         apply_anthropic_cache_control_to_last_user_messages(&mut messages, &cache_control);
 
         let tools = create_tools_json_for_anthropic_messages(&prompt.tools, &cache_control)?;
@@ -3653,30 +3653,28 @@ fn is_anthropic_signed_thinking_history_rejection(error: &ApiError) -> bool {
         && (message.contains("thinking") || message.contains("redacted_thinking"))
 }
 
-/// Anthropic rejects assistant-prefill requests for Claude Plan models.
+/// Anthropic rejects assistant-prefill requests.
 ///
 /// Some durable items, including incoming collaboration mail, are intentionally omitted by the
 /// Anthropic adapter. When such an item arrives immediately after a completed model turn, the
 /// omission can expose that completed assistant message as the terminal request message. Keep the
 /// repair request-local so durable history and the operator-visible transcript remain unchanged.
 ///
-/// Claude Plan also rejects a tool-result-only user turn when the preceding assistant message has
-/// text after its final tool call. Although the request ends in a user message, the gateway treats
-/// that shape as an attempt to continue the assistant prefill. Add an explicit user continuation
-/// only for that exact protocol shape. A normal assistant message whose final block is `tool_use`
-/// remains untouched.
-fn ensure_anthropic_messages_end_with_user_turn(
-    messages: &mut Vec<Value>,
-    repair_claude_plan_tool_result_prefill: bool,
-) {
+/// Anthropic transports also reject a tool-result-only user turn when the preceding assistant
+/// message has text after its final tool call. This is not specific to Claude Plan: Anthropic
+/// API-key models enforce the same message-shape constraint. Although the request ends in a user
+/// message, the service treats that shape as an attempt to continue the assistant prefill. Add an
+/// explicit user continuation only for that exact protocol shape. A normal assistant message whose
+/// final block is `tool_use` remains untouched.
+fn ensure_anthropic_messages_end_with_user_turn(messages: &mut Vec<Value>) {
     let ends_with_assistant = messages
         .last()
         .and_then(|message| message.get("role"))
         .and_then(Value::as_str)
         == Some("assistant");
-    let needs_claude_plan_tool_result_repair = repair_claude_plan_tool_result_prefill
-        && terminal_anthropic_tool_result_follows_trailing_assistant_text(messages);
-    if !(ends_with_assistant || needs_claude_plan_tool_result_repair) {
+    let needs_tool_result_repair =
+        terminal_anthropic_tool_result_follows_trailing_assistant_text(messages);
+    if !(ends_with_assistant || needs_tool_result_repair) {
         return;
     }
 
