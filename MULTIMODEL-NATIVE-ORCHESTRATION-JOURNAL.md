@@ -2149,3 +2149,78 @@ Next:
   new immutable candidate.
 - Restart qualification at 0 of 3. Counted sessions must prove real native Codex delegation
   across Opus 5, Fable, Kimi K3, and Grok 4.5; creating a `/spawn` crew alone is not sufficient.
+
+## Phase 8Y — Auth preflight committed; working orchestrator verified live
+
+Status: WORKING. The 45–60 minute three-session reset ratchet is discontinued.
+
+Timestamp: 2026-07-25T22:55Z
+
+Candidate:
+
+- Source commit: `2f6eb1e48` (`fix: preflight external provider auth before native worker
+  creation`).
+- Binary: `/tmp/pft-2f6eb1e48`, SHA-256
+  `167328531a2d2251e3603bcb87e5f69f3513d0403818e8a80ee1052844bc8b43`.
+
+Automated gates:
+
+- `cargo check -p codex-tui -p codex-login --tests`: pass.
+- `codex-login provider_auth_command_validation`: 2 passed.
+- `codex-tui native_spawn_auth_guard`: 4 passed.
+- `codex-tui --lib spawn`: 70 passed, 2 failed. Both failures
+  (`spawn_roster_lines_carry_dispatch_and_report_seq`,
+  `text_only_acknowledge_spawn_turn_reports_done`) reproduce identically on `8b9d3aff3` with
+  this change stashed. They are pre-existing residue of the Phase 8T report-queue deletion,
+  not a regression from this commit, and remain open.
+
+Environment:
+
+- The Claude Plan OAuth refresh token is now present. `pfterminal internal-claude-oauth-token`
+  exits 0. The token was not printed and its capture files were shredded. This removes the
+  condition that rejected candidate `4243b5e82` in Phase 8X, which the committed preflight now
+  also catches before any child is created.
+
+Live verification:
+
+- Standard `/spawn` crew created on the real home in `/tmp/orch-smoke`. No auth failure, no
+  stillborn member.
+- Persisted exact runtimes, read from the rollouts:
+  - Angmar Nazgul `019f9b73-66fd`: `claude-plan / claude-fable-5-plan`.
+  - Burzum Troll `019f9b73-67d2`: `openai / gpt-5.6-sol`.
+  - Snaga Orc `019f9b73-68ac`: `openai / gpt-5.6-luna`.
+  - Ghash Orc `019f9b73-6991`: `openai / gpt-5.6-terra`.
+  - Krimp Orc `019f9b73-6a7a`: `openrouter / x-ai/grok-4.5`.
+  - Root `019f9b72-649d`: `claude-plan / claude-opus-5-plan`.
+- Delegation executed end to end: the Sol Troll received one task, dispatched all three Orcs,
+  and the Orcs returned real `date -u` output (`Sat Jul 25 22:48:49 UTC 2026` on the OpenRouter
+  Grok worker) as terminal results to the parent.
+- Mailbox items by thread: 2 / 6 / 2 / 1 / 4. Zero `child_report;` payloads, confirming the
+  Phase 8T single-completion-transport repair holds on a live crew.
+- No `Cannot start turn`, assistant-prefill error, panic, or agent-limit rejection.
+
+Spend disposition:
+
+- Every runtime above is subscription-backed or OpenRouter. No `anthropic /` API route was
+  used. Prior phases 8L, 8M, 8N, 8P, 8Q and 8U ran `anthropic / claude-opus-5` and
+  `anthropic / claude-fable-5` on metered API keys, some at `xhigh`, because Claude Plan OAuth
+  was unavailable at the time. That spend was not authorized.
+- Open defect, not fixed here: `CrewPolicy::maximum_spend_usd` is declared in
+  `protocol/src/crew.rs:126` and never read by any production path. `provider_allowlist` is
+  enforced, but `custom_spawn_crew.rs:53` builds it from the provider the model just requested,
+  so a model effectively self-grants its own allowlist. Specification section 12 requires that
+  a model cannot broaden a provider allowlist or spend cap; that boundary does not exist.
+  The §15.3 invariant watcher has no cost signal, which is why eleven resets never surfaced it.
+
+Product finding:
+
+- `get_model_info` was unavailable to the Orc workers
+  (`TypeError: tools.get_model_info is not a function`). Runtime identity was therefore
+  established from persisted rollout metadata rather than worker self-report. P2; it did not
+  affect dispatch, execution, or completion.
+
+Disposition:
+
+- Multi-provider native orchestration works and is committed. Remaining open items are the two
+  pre-existing `spawn` test failures, the unenforced spend boundary, and the `get_model_info`
+  tool gap.
