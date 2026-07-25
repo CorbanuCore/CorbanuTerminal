@@ -282,6 +282,7 @@ struct ListedAgentResult {
 
 #[derive(Debug, Deserialize)]
 struct MessageToolResult {
+    message_id: String,
     target_thread_id: String,
     agent_path: String,
     agent_nickname: Option<String>,
@@ -1591,8 +1592,8 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
                     if communication.author == AgentPath::root()
                         && communication.recipient.as_str() == "/root/test_process"
                         && communication.other_recipients.is_empty()
-                        && communication.content.is_empty()
-                        && communication.encrypted_content.as_deref() == Some("encrypted-spawn-message")
+                        && communication.content == "encrypted-spawn-message"
+                        && communication.encrypted_content.is_none()
                         && communication
                             .metadata
                             .as_ref()
@@ -1618,6 +1619,7 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
     assert_eq!(success, Some(true));
     let send_result: MessageToolResult =
         serde_json::from_str(&content).expect("send_message result should parse");
+    assert!(!send_result.message_id.is_empty());
     assert_eq!(send_result.target_thread_id, child_thread_id.to_string());
     assert_eq!(send_result.agent_path, "/root/test_process");
     assert_eq!(send_result.delivery, "queued");
@@ -1628,8 +1630,8 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
             .agent_control
             .get_agent_metadata(child_thread_id)
             .and_then(|metadata| metadata.last_task_message),
-        None,
-        "opaque encrypted tool payloads must never become human-readable task previews"
+        Some("encrypted-send-message".to_string()),
+        "provider-neutral messages should remain visible in task previews"
     );
 
     assert!(manager.captured_ops().iter().any(|(id, op)| {
@@ -1640,8 +1642,8 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
                     if communication.author == AgentPath::root()
                         && communication.recipient.as_str() == "/root/test_process"
                         && communication.other_recipients.is_empty()
-                        && communication.content.is_empty()
-                        && communication.encrypted_content.as_deref() == Some("encrypted-send-message")
+                        && communication.content == "encrypted-send-message"
+                        && communication.encrypted_content.is_none()
                         && communication
                             .metadata
                             .as_ref()
@@ -1843,8 +1845,8 @@ async fn multi_agent_v2_send_message_accepts_root_target_from_child() {
                     if communication.author == child_path
                         && communication.recipient == AgentPath::root()
                         && communication.other_recipients.is_empty()
-                        && communication.content.is_empty()
-                        && communication.encrypted_content.as_deref() == Some("encrypted-done")
+                        && communication.content == "encrypted-done"
+                        && communication.encrypted_content.is_none()
                         && !communication.trigger_turn
             )
     }));
@@ -1934,7 +1936,7 @@ async fn multi_agent_v2_followup_task_rejects_root_target_from_child() {
 }
 
 #[tokio::test]
-async fn multi_agent_v2_list_agents_returns_completed_status_without_encrypted_spawn_preview() {
+async fn multi_agent_v2_list_agents_returns_completed_status_with_plaintext_spawn_preview() {
     let (mut session, mut turn) = make_session_and_context().await;
     let manager = thread_manager();
     let root = manager
@@ -2027,7 +2029,10 @@ async fn multi_agent_v2_list_agents_returns_completed_status_without_encrypted_s
             .is_some_and(|nickname| !nickname.is_empty())
     );
     assert_eq!(worker.agent_role, None);
-    assert_eq!(worker.last_task_message, None);
+    assert_eq!(
+        worker.last_task_message.as_deref(),
+        Some("inspect this repo")
+    );
     assert_eq!(worker.last_result_message.as_deref(), Some("done"));
     assert_eq!(success, Some(true));
 }
@@ -2381,8 +2386,8 @@ async fn multi_agent_v2_send_message_rejects_interrupt_parameter() {
             if communication.author == AgentPath::root()
                 && communication.recipient.as_str() == "/root/worker"
                 && communication.other_recipients.is_empty()
-                && communication.content.is_empty()
-                && communication.encrypted_content.as_deref() == Some("continue")
+                && communication.content == "continue"
+                && communication.encrypted_content.is_none()
                 && !communication.trigger_turn
     )));
 }
@@ -2466,7 +2471,8 @@ async fn multi_agent_v2_followup_task_completion_notifies_parent_on_every_turn()
                 Op::InterAgentCommunication { communication }
                     if communication.author == AgentPath::root()
                         && communication.recipient == worker_path
-                        && communication.encrypted_content.as_deref() == Some("continue")
+                        && communication.content == "continue"
+                        && communication.encrypted_content.is_none()
                         && communication
                             .metadata
                             .as_ref()
@@ -2713,8 +2719,8 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
                     if communication.author == troll_path
                         && communication.recipient == first_orc_path
                         && communication.other_recipients.is_empty()
-                        && communication.content.is_empty()
-                        && communication.encrypted_content.as_deref() == Some(first_delegated_message)
+                        && communication.content == first_delegated_message
+                        && communication.encrypted_content.is_none()
                         && communication
                             .metadata
                             .as_ref()
@@ -2731,8 +2737,8 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
                     if communication.author == troll_path
                         && communication.recipient == second_orc_path
                         && communication.other_recipients.is_empty()
-                        && communication.content.is_empty()
-                        && communication.encrypted_content.as_deref() == Some(second_delegated_message)
+                        && communication.content == second_delegated_message
+                        && communication.encrypted_content.is_none()
                         && communication
                             .metadata
                             .as_ref()
@@ -2742,7 +2748,7 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
             )
     }));
 
-    let captured_ops_before_capacity_rejection = manager.captured_ops().len();
+    let captured_ops_before_capacity_queue = manager.captured_ops().len();
     let max_threads = turn
         .config
         .effective_agent_max_threads(MultiAgentVersion::V2)
@@ -2767,18 +2773,16 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
             })),
         ))
         .await
-        .expect("expected capacity pressure should be a normal unsuccessful tool result");
+        .expect("capacity pressure should not reject mailbox admission");
     let (capacity_message, success) = expect_text_output(capacity_output);
-    assert_eq!(success, Some(false));
-    assert_eq!(
-        capacity_message,
-        format!(
-            "capacity unavailable: maximum {max_threads} agent turns are active; task was not accepted; wait for capacity before retrying"
-        )
-    );
+    assert_eq!(success, Some(true));
+    let queued_delivery: MessageToolResult =
+        serde_json::from_str(&capacity_message).expect("queued delivery result");
+    assert_eq!(queued_delivery.delivery, "followup_task_sent");
+    assert!(queued_delivery.triggered_turn);
     assert_eq!(
         manager.captured_ops().len(),
-        captured_ops_before_capacity_rejection
+        captured_ops_before_capacity_queue + 1
     );
     drop(execution_guards);
 
@@ -2808,14 +2812,15 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
         agent.agent_name == first_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Snaga")
             && agent.agent_role.as_deref() == Some("orc")
-            && agent.last_task_message.is_none()
+            && agent.last_task_message.as_deref()
+                == Some("Start another task while every execution slot is occupied.")
             && agent.last_result_message.as_deref() == Some("animation shell complete")
     }));
     assert!(result.agents.iter().any(|agent| {
         agent.agent_name == second_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Ghash")
             && agent.agent_role.as_deref() == Some("orc")
-            && agent.last_task_message.is_none()
+            && agent.last_task_message.as_deref() == Some(second_delegated_message)
             && agent.last_result_message.as_deref() == Some("formula checks complete")
     }));
     let context = session
@@ -2827,7 +2832,7 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
         context.contains("orc_snaga: Snaga"),
         "Troll context should name the first Orc, got {context:?}"
     );
-    assert!(!context.contains(first_delegated_message));
+    assert!(context.contains("Start another task while every execution slot is occupied."));
     assert!(
         context.contains("animation shell complete"),
         "Troll context should expose the first Orc result, got {context:?}"
@@ -2836,7 +2841,7 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
         context.contains("orc_ghash: Ghash"),
         "Troll context should name the second Orc, got {context:?}"
     );
-    assert!(!context.contains(second_delegated_message));
+    assert!(context.contains(second_delegated_message));
     assert!(
         context.contains("formula checks complete"),
         "Troll context should expose the second Orc result, got {context:?}"
@@ -2878,7 +2883,8 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
                 Op::InterAgentCommunication { communication }
                     if communication.author == troll_path
                         && communication.recipient == first_orc_path
-                        && communication.encrypted_content.as_deref() == Some(first_improvement_message)
+                        && communication.content == first_improvement_message
+                        && communication.encrypted_content.is_none()
                         && communication.trigger_turn
             )
     }));
@@ -2889,7 +2895,8 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
                 Op::InterAgentCommunication { communication }
                     if communication.author == troll_path
                         && communication.recipient == second_orc_path
-                        && communication.encrypted_content.as_deref() == Some(second_improvement_message)
+                        && communication.content == second_improvement_message
+                        && communication.encrypted_content.is_none()
                         && communication.trigger_turn
             )
     }));
@@ -2910,13 +2917,13 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
     assert!(result.agents.iter().any(|agent| {
         agent.agent_name == first_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Snaga")
-            && agent.last_task_message.is_none()
+            && agent.last_task_message.as_deref() == Some(first_improvement_message)
             && agent.last_result_message.as_deref() == Some("animation shell complete")
     }));
     assert!(result.agents.iter().any(|agent| {
         agent.agent_name == second_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Ghash")
-            && agent.last_task_message.is_none()
+            && agent.last_task_message.as_deref() == Some(second_improvement_message)
             && agent.last_result_message.as_deref() == Some("formula checks complete")
     }));
     let context = session
@@ -2924,11 +2931,11 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
         .agent_control
         .format_environment_context_subagents(troll.thread_id)
         .await;
-    assert!(!context.contains(first_improvement_message));
-    assert!(!context.contains(second_improvement_message));
+    assert!(context.contains(first_improvement_message));
+    assert!(context.contains(second_improvement_message));
     assert!(
         context.contains("animation shell complete") && context.contains("formula checks complete"),
-        "encrypted rework payloads should not replace readable result previews, got {context:?}"
+        "provider-neutral rework and result previews should remain readable, got {context:?}"
     );
 }
 

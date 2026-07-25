@@ -2029,7 +2029,13 @@ impl Session {
             Vec::new(),
             message,
             /*trigger_turn*/ false,
-        );
+        )
+        .with_kind(codex_protocol::protocol::AgentMessageKind::TerminalResult)
+        .with_assignment_id(turn_context.sub_id.clone())
+        .with_message_id(format!(
+            "completion:{}:{}",
+            self.thread_id, turn_context.sub_id
+        ));
         if let Err(err) = self
             .services
             .agent_control
@@ -2952,6 +2958,26 @@ impl Session {
         turn_context: &TurnContext,
         communication: InterAgentCommunication,
     ) {
+        let message_id = communication.message_id.clone();
+        if let Some(message_id) = message_id.as_ref()
+            && !self
+                .applied_agent_message_ids
+                .lock()
+                .await
+                .insert(message_id.clone())
+        {
+            if let Some(state_db) = self.state_db()
+                && let Err(err) = state_db
+                    .mark_agent_message_applied(
+                        message_id,
+                        crate::turn_timing::now_unix_timestamp_ms(),
+                    )
+                    .await
+            {
+                warn!(%err, %message_id, "failed to acknowledge deduplicated agent mailbox message");
+            }
+            return;
+        }
         let response_item = communication.to_model_input_item();
         let items = self.prepare_conversation_items_for_history(
             turn_context,
@@ -2967,6 +2993,30 @@ impl Session {
         }
         self.persist_rollout_items(&[RolloutItem::InterAgentCommunication(communication)])
             .await;
+        if let Some(message_id) = message_id
+            && let Some(state_db) = self.state_db()
+        {
+            match self.flush_rollout().await {
+                Ok(()) => {
+                    if let Err(err) = state_db
+                        .mark_agent_message_applied(
+                            &message_id,
+                            crate::turn_timing::now_unix_timestamp_ms(),
+                        )
+                        .await
+                    {
+                        warn!(%err, %message_id, "failed to mark agent mailbox message applied");
+                    }
+                }
+                Err(err) => {
+                    warn!(
+                        %err,
+                        %message_id,
+                        "leaving agent mailbox message recoverable because its rollout did not flush"
+                    );
+                }
+            }
+        }
         self.send_raw_response_items(turn_context, items).await;
         // Plaintext inter-agent controls are operator-visible transcript content. Raw response
         // notifications preserve provider compatibility, but app-server clients render the

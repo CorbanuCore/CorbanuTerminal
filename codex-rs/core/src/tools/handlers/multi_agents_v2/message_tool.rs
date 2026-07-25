@@ -6,9 +6,9 @@
 use super::*;
 use crate::tools::context::FunctionToolOutput;
 use crate::turn_timing::now_unix_timestamp_ms;
-use codex_protocol::error::CodexErr;
 use codex_protocol::models::ResponseItemMetadata;
 use codex_protocol::protocol::InterAgentCommunication;
+use codex_protocol::protocol::MAX_AGENT_MESSAGE_BYTES;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MessageDeliveryMode {
@@ -50,6 +50,7 @@ pub(crate) struct FollowupTaskArgs {
 
 #[derive(Debug, Serialize)]
 struct MessageToolResult {
+    message_id: String,
     target_thread_id: String,
     agent_path: String,
     agent_nickname: Option<String>,
@@ -63,6 +64,12 @@ fn message_content(message: String) -> Result<String, FunctionCallError> {
         return Err(FunctionCallError::RespondToModel(
             "Empty message can't be sent to an agent".to_string(),
         ));
+    }
+    let message_len = message.len();
+    if message_len > MAX_AGENT_MESSAGE_BYTES {
+        return Err(FunctionCallError::RespondToModel(format!(
+            "agent message is {message_len} bytes; maximum is {MAX_AGENT_MESSAGE_BYTES} bytes"
+        )));
     }
     Ok(message)
 }
@@ -103,13 +110,6 @@ pub(crate) async fn handle_message_string_tool(
     let receiver_agent_path = receiver_agent.agent_path.clone().ok_or_else(|| {
         FunctionCallError::RespondToModel("target agent is missing an agent_path".to_string())
     })?;
-    let resume_config = build_agent_resume_config(turn.as_ref())?;
-    session
-        .services
-        .agent_control
-        .ensure_v2_agent_loaded(resume_config, receiver_thread_id)
-        .await
-        .map_err(|err| collab_agent_error(receiver_thread_id, err))?;
     let author = turn
         .session_source
         .get_agent_path()
@@ -120,30 +120,38 @@ pub(crate) async fn handle_message_string_tool(
         message,
         &turn.config.model_provider_id,
     );
+    communication.kind = Some(match mode {
+        MessageDeliveryMode::QueueOnly => codex_protocol::protocol::AgentMessageKind::Informational,
+        MessageDeliveryMode::TriggerTurn => codex_protocol::protocol::AgentMessageKind::FollowUp,
+    });
+    let message_id = communication.ensure_message_identity().to_string();
     communication
         .metadata
         .get_or_insert_with(ResponseItemMetadata::default)
         .source_call_id = Some(call_id.clone());
-    let result = session
+    let communication = mode.apply(communication);
+    session
         .services
         .agent_control
-        .send_inter_agent_communication(receiver_thread_id, mode.apply(communication))
-        .await;
-    match result {
-        Err(CodexErr::AgentLimitReached { max_threads }) => {
-            return Ok(FunctionToolOutput::from_text(
-                format!(
-                    "capacity unavailable: maximum {max_threads} agent turns are active; task was not accepted; wait for capacity before retrying"
-                ),
-                Some(false),
-            ));
-        }
-        Err(err) => return Err(collab_agent_error(receiver_thread_id, err)),
-        Ok(_) => {}
-    }
-    // V2 messages are opaque encrypted Responses payloads. Recording that wire value as a
-    // human-readable task preview leaks ciphertext into list_agents and /spawn status, and can
-    // overwrite the plaintext preview already owned by the TUI dispatch path.
+        .admit_inter_agent_communication(receiver_thread_id, &communication)
+        .await
+        .map_err(|err| collab_agent_error(receiver_thread_id, err))?;
+    let resume_config = build_agent_resume_config(turn.as_ref())?;
+    session
+        .services
+        .agent_control
+        .ensure_v2_agent_loaded(resume_config, receiver_thread_id)
+        .await
+        .map_err(|err| collab_agent_error(receiver_thread_id, err))?;
+    session
+        .services
+        .agent_control
+        .send_inter_agent_communication(receiver_thread_id, communication)
+        .await
+        .map_err(|err| collab_agent_error(receiver_thread_id, err))?;
+    // The canonical mailbox body is deliberately absent from status previews. `list_agents`
+    // reports lifecycle and identity without duplicating task text into another persistence or
+    // rendering path.
     let task_preview = None;
     session
         .send_event(
@@ -163,6 +171,7 @@ pub(crate) async fn handle_message_string_tool(
         .await;
 
     let result = MessageToolResult {
+        message_id,
         target_thread_id: receiver_thread_id.to_string(),
         agent_path: receiver_agent_path.to_string(),
         agent_nickname: receiver_agent.agent_nickname,
@@ -177,4 +186,22 @@ pub(crate) async fn handle_message_string_tool(
         tool_output_json_text(&result, "agent_message"),
         Some(true),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn message_content_rejects_empty_and_oversized_messages() {
+        assert!(message_content(" ".to_string()).is_err());
+        assert!(message_content("x".repeat(MAX_AGENT_MESSAGE_BYTES)).is_ok());
+        assert_eq!(
+            message_content("x".repeat(MAX_AGENT_MESSAGE_BYTES + 1)),
+            Err(FunctionCallError::RespondToModel(format!(
+                "agent message is {} bytes; maximum is {MAX_AGENT_MESSAGE_BYTES} bytes",
+                MAX_AGENT_MESSAGE_BYTES + 1
+            )))
+        );
+    }
 }

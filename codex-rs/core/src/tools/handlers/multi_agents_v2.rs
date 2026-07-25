@@ -12,6 +12,7 @@ use crate::tools::handlers::multi_agents_common::*;
 use crate::tools::handlers::parse_arguments;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::ToolExecutor;
+#[cfg(test)]
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_protocol::AgentPath;
 use codex_protocol::models::ResponseInputItem;
@@ -46,29 +47,19 @@ pub(super) fn communication_from_model_tool_message(
     author: AgentPath,
     recipient: AgentPath,
     message: String,
-    provider_id: &str,
+    _provider_id: &str,
 ) -> InterAgentCommunication {
-    if provider_id == OPENAI_PROVIDER_ID {
-        InterAgentCommunication::new_encrypted(
-            author,
-            recipient,
-            Vec::new(),
-            message,
-            /*trigger_turn*/ true,
-        )
-    } else {
-        // The encrypted-string JSON-schema extension is specific to the OpenAI Responses
-        // transport. Other providers return ordinary text for the same tool argument. Never
-        // label that text as encrypted content: an OpenAI recipient will deterministically
-        // reject the next turn as invalid_encrypted_content.
-        InterAgentCommunication::new(
-            author,
-            recipient,
-            Vec::new(),
-            message,
-            /*trigger_turn*/ true,
-        )
-    }
+    // A durable heterogeneous mailbox must be able to deliver the same message to any provider.
+    // OpenAI's encrypted-string tool extension produces an opaque value that non-OpenAI
+    // recipients cannot consume, so the canonical V2 bus intentionally carries bounded
+    // plaintext and keeps it out of previews and logs.
+    InterAgentCommunication::new(
+        author,
+        recipient,
+        Vec::new(),
+        message,
+        /*trigger_turn*/ true,
+    )
 }
 
 pub(super) fn ensure_manager_tool_allowed(
@@ -93,7 +84,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn openai_collaboration_tool_payload_remains_encrypted() {
+    fn openai_collaboration_tool_payload_is_provider_neutral_plaintext() {
         let communication = communication_from_model_tool_message(
             AgentPath::root(),
             AgentPath::try_from("/root/worker").expect("agent path"),
@@ -101,11 +92,8 @@ mod tests {
             OPENAI_PROVIDER_ID,
         );
 
-        assert!(communication.content.is_empty());
-        assert_eq!(
-            communication.encrypted_content.as_deref(),
-            Some("opaque-ciphertext")
-        );
+        assert_eq!(communication.content, "opaque-ciphertext");
+        assert_eq!(communication.encrypted_content, None);
     }
 
     #[test]

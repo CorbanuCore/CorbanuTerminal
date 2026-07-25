@@ -670,6 +670,66 @@ async fn send_inter_agent_communication_without_turn_queues_message_without_trig
 }
 
 #[tokio::test]
+async fn durable_agent_mailbox_deduplicates_and_marks_applied_after_rollout_flush() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::Sqlite);
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (thread_id, thread) = harness.start_thread().await;
+    let communication = InterAgentCommunication::new(
+        AgentPath::root(),
+        AgentPath::try_from("/root/worker").expect("agent path"),
+        Vec::new(),
+        "one durable message".to_string(),
+        /*trigger_turn*/ false,
+    );
+
+    harness
+        .control
+        .send_inter_agent_communication(thread_id, communication.clone())
+        .await
+        .expect("first mailbox submission");
+    let captured_after_first = harness.manager.captured_ops().len();
+    harness
+        .control
+        .send_inter_agent_communication(thread_id, communication.clone())
+        .await
+        .expect("duplicate mailbox submission");
+    assert_eq!(harness.manager.captured_ops().len(), captured_after_first);
+
+    let state_db = harness.state_db.as_ref().expect("state db");
+    let pending = state_db
+        .list_recoverable_agent_messages(thread_id)
+        .await
+        .expect("recoverable mailbox");
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].phase, codex_state::AgentMailboxPhase::Submitted);
+    let turn_context = thread.codex.session.new_default_turn().await;
+    thread
+        .codex
+        .session
+        .record_inter_agent_communication(turn_context.as_ref(), communication.clone())
+        .await;
+    let history_after_first_application = thread.codex.session.clone_history().await;
+    thread
+        .codex
+        .session
+        .record_inter_agent_communication(turn_context.as_ref(), communication)
+        .await;
+    assert_eq!(
+        thread.codex.session.clone_history().await.raw_items(),
+        history_after_first_application.raw_items(),
+        "the same stable message ID must be materialized into local history once"
+    );
+    assert_eq!(
+        state_db
+            .list_recoverable_agent_messages(thread_id)
+            .await
+            .expect("applied mailbox"),
+        Vec::new()
+    );
+}
+
+#[tokio::test]
 async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
     let (home, mut config) = test_config().await;
     let _ = config.features.enable(Feature::MultiAgentV2);
@@ -716,6 +776,48 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
         )])
         .await
         .expect("child rollout should persist with v2 metadata");
+    let recovery_communication = InterAgentCommunication::new(
+        AgentPath::root(),
+        agent_path.clone(),
+        Vec::new(),
+        "recover this admitted message".to_string(),
+        /*trigger_turn*/ false,
+    );
+    harness
+        .control
+        .admit_inter_agent_communication(spawned_agent.thread_id, &recovery_communication)
+        .await
+        .expect("durable mailbox admission");
+    let ambiguous_communication = InterAgentCommunication::new(
+        AgentPath::root(),
+        agent_path.clone(),
+        Vec::new(),
+        "do not replay this ambiguous message".to_string(),
+        /*trigger_turn*/ true,
+    );
+    harness
+        .control
+        .admit_inter_agent_communication(spawned_agent.thread_id, &ambiguous_communication)
+        .await
+        .expect("ambiguous mailbox admission");
+    let ambiguous_message_id = ambiguous_communication
+        .message_id
+        .as_deref()
+        .expect("message id");
+    assert!(
+        harness
+            .state_db
+            .as_ref()
+            .expect("state db")
+            .transition_agent_message(
+                ambiguous_message_id,
+                codex_state::AgentMailboxPhase::Ready,
+                codex_state::AgentMailboxPhase::Submitting,
+                1_000,
+            )
+            .await
+            .expect("submitting transition")
+    );
     child_thread
         .shutdown_and_wait()
         .await
@@ -753,6 +855,52 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
         .await;
     assert_eq!(reloaded_snapshot.model_provider_id, "openrouter");
     assert_eq!(reloaded_snapshot.model, "x-ai/grok-4.5");
+    assert_eq!(
+        harness
+            .manager
+            .captured_ops()
+            .iter()
+            .filter(|(thread_id, op)| {
+                *thread_id == spawned_agent.thread_id
+                    && matches!(
+                        op,
+                        Op::InterAgentCommunication { communication }
+                            if communication == &recovery_communication
+                    )
+            })
+            .count(),
+        1
+    );
+    assert_eq!(
+        harness
+            .manager
+            .captured_ops()
+            .iter()
+            .filter(|(thread_id, op)| {
+                *thread_id == spawned_agent.thread_id
+                    && matches!(
+                        op,
+                        Op::InterAgentCommunication { communication }
+                            if communication == &ambiguous_communication
+                    )
+            })
+            .count(),
+        0
+    );
+    let ambiguous_row = harness
+        .state_db
+        .as_ref()
+        .expect("state db")
+        .list_recoverable_agent_messages(spawned_agent.thread_id)
+        .await
+        .expect("recoverable mailbox")
+        .into_iter()
+        .find(|message| message.communication.message_id.as_deref() == Some(ambiguous_message_id))
+        .expect("ambiguous mailbox row");
+    assert_eq!(
+        ambiguous_row.phase,
+        codex_state::AgentMailboxPhase::UnknownOutcome
+    );
 
     let communication = InterAgentCommunication::new(
         AgentPath::root(),
@@ -2221,27 +2369,24 @@ async fn multi_agent_v2_completion_queues_message_for_direct_parent() {
         &AgentStatus::Completed(Some("done".to_string())),
     )
     .expect("completed status should render");
-    let expected = (
-        worker_thread_id,
-        Op::InterAgentCommunication {
-            communication: InterAgentCommunication::new(
-                tester_path.clone(),
-                worker_path.clone(),
-                Vec::new(),
-                expected_message.clone(),
-                /*trigger_turn*/ false,
-            ),
-        },
-    );
-
     timeout(Duration::from_secs(5), async {
         loop {
             let captured = harness
                 .manager
                 .captured_ops()
                 .into_iter()
-                .find(|entry| *entry == expected);
-            if captured == Some(expected.clone()) {
+                .any(|(thread_id, op)| {
+                    thread_id == worker_thread_id
+                        && matches!(
+                            op,
+                            Op::InterAgentCommunication { communication }
+                                if communication.author == tester_path
+                                    && communication.recipient == worker_path
+                                    && communication.content == expected_message
+                                    && !communication.trigger_turn
+                        )
+                });
+            if captured {
                 break;
             }
             sleep(Duration::from_millis(10)).await;

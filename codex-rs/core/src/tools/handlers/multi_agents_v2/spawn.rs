@@ -9,6 +9,7 @@ use crate::tools::handlers::multi_agents_spec::create_spawn_agent_tool_v2;
 use crate::turn_timing::now_unix_timestamp_ms;
 use codex_protocol::AgentPath;
 use codex_protocol::models::ResponseItemMetadata;
+use codex_protocol::protocol::AgentMessageKind;
 use codex_protocol::protocol::Op;
 use codex_tools::ToolSpec;
 
@@ -136,7 +137,12 @@ async fn handle_spawn_agent(
                         new_agent_path.clone(),
                         message,
                         &turn.config.model_provider_id,
-                    );
+                    )
+                    .with_kind(AgentMessageKind::Assignment)
+                    .with_assignment_id(call_id.clone());
+                    communication
+                        .validate_mailbox_body()
+                        .map_err(FunctionCallError::RespondToModel)?;
                     communication
                         .metadata
                         .get_or_insert_with(ResponseItemMetadata::default)

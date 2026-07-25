@@ -56,6 +56,7 @@ const LAST_RESULT_MESSAGE_MAX_CHARS: usize = 500;
 
 mod execution;
 mod legacy;
+mod mailbox;
 mod residency;
 mod spawn;
 
@@ -174,29 +175,6 @@ impl AgentControl {
                 state,
                 state.send_op(agent_id, initial_operation).await,
             )
-            .await;
-        if result.is_ok() {
-            match last_task_message {
-                Some(last_task_message) => self
-                    .state
-                    .update_last_task_message(agent_id, last_task_message),
-                None => self.state.clear_last_task_message(agent_id),
-            }
-        }
-        result
-    }
-
-    pub(crate) async fn send_inter_agent_communication(
-        &self,
-        agent_id: ThreadId,
-        communication: InterAgentCommunication,
-    ) -> CodexResult<String> {
-        let last_task_message = last_task_message_from_communication(&communication);
-        let state = self.upgrade()?;
-        let op = Op::InterAgentCommunication { communication };
-        self.ensure_execution_capacity_for_op(agent_id, &op).await?;
-        let result = self
-            .handle_thread_request_result(agent_id, &state, state.send_op(agent_id, op).await)
             .await;
         if result.is_ok() {
             match last_task_message {
@@ -585,7 +563,8 @@ impl AgentControl {
                     Vec::new(),
                     message,
                     /*trigger_turn*/ false,
-                );
+                )
+                .with_kind(codex_protocol::protocol::AgentMessageKind::TerminalResult);
                 let _ = control
                     .send_inter_agent_communication(parent_thread_id, communication)
                     .await;

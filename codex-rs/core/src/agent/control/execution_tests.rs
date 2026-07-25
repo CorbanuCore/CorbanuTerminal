@@ -97,3 +97,41 @@ fn execution_guards_reserve_nazgul_control_path_under_worker_saturation() {
         "Nazgul control turns must not consume worker capacity"
     );
 }
+
+#[tokio::test]
+async fn capacity_waiter_unblocks_after_atomic_worker_reservation_is_released() {
+    let control = control_with_limit(/*max_threads*/ 1);
+    let source = SessionSource::SubAgent(SubAgentSource::Other("worker".to_string()));
+    let reservation = control
+        .try_execution_guard(MultiAgentVersion::V2, &source)
+        .expect("first reservation")
+        .expect("worker reservation");
+    assert!(matches!(
+        control.try_execution_guard(MultiAgentVersion::V2, &source),
+        Err(CodexErr::AgentLimitReached { max_threads: 1 })
+    ));
+
+    let waiting_control = control.clone();
+    let waiter = tokio::spawn(async move {
+        waiting_control.wait_for_execution_capacity().await;
+        waiting_control
+            .try_execution_guard(MultiAgentVersion::V2, &source)
+            .expect("reservation after wake")
+            .expect("worker reservation after wake")
+    });
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(25), async {
+            while !waiter.is_finished() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .is_err()
+    );
+    drop(reservation);
+    let resumed_reservation = tokio::time::timeout(std::time::Duration::from_secs(1), waiter)
+        .await
+        .expect("capacity waiter should wake")
+        .expect("capacity waiter task");
+    drop(resumed_reservation);
+}

@@ -175,6 +175,8 @@ impl AgentControl {
             Ok(reloaded_thread) => {
                 residency_slot.commit(reloaded_thread.thread_id);
                 state.notify_thread_created(reloaded_thread.thread_id);
+                self.recover_inter_agent_communications(reloaded_thread.thread_id)
+                    .await?;
                 Ok(())
             }
             Err(err) => {
@@ -232,7 +234,10 @@ impl AgentControl {
             )
             .map_err(CodexErr::InvalidRequest)?;
         }
-        if let Some(session_source) = session_source.as_ref() {
+        let initial_operation_uses_v2_mailbox = multi_agent_version == MultiAgentVersion::V2
+            && matches!(initial_operation, Op::InterAgentCommunication { .. });
+        if !initial_operation_uses_v2_mailbox && let Some(session_source) = session_source.as_ref()
+        {
             self.ensure_execution_capacity(multi_agent_version, session_source)?;
         }
         let agent_max_threads = config.effective_agent_max_threads(multi_agent_version);
@@ -379,8 +384,22 @@ impl AgentControl {
         )
         .await;
 
-        self.send_input_after_capacity_check(new_thread.thread_id, &state, initial_operation)
-            .await?;
+        match initial_operation {
+            Op::InterAgentCommunication { communication }
+                if multi_agent_version == MultiAgentVersion::V2 =>
+            {
+                self.send_inter_agent_communication(new_thread.thread_id, communication)
+                    .await?;
+            }
+            initial_operation => {
+                self.send_input_after_capacity_check(
+                    new_thread.thread_id,
+                    &state,
+                    initial_operation,
+                )
+                .await?;
+            }
+        }
         if multi_agent_version != MultiAgentVersion::V2 {
             let child_reference = agent_metadata
                 .agent_path

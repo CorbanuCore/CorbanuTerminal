@@ -6,6 +6,8 @@ use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::user_input::UserInput;
 use std::collections::VecDeque;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use tokio::sync::Mutex;
 use tokio::sync::watch;
 
@@ -35,6 +37,7 @@ pub(crate) struct TurnInputQueue {
 pub(crate) struct InputQueue {
     activity_tx: watch::Sender<InputQueueActivity>,
     mailbox_pending_mails: Mutex<VecDeque<InterAgentCommunication>>,
+    capacity_wait_scheduled: AtomicBool,
 }
 
 impl InputQueue {
@@ -43,6 +46,7 @@ impl InputQueue {
         Self {
             activity_tx,
             mailbox_pending_mails: Mutex::new(VecDeque::new()),
+            capacity_wait_scheduled: AtomicBool::new(false),
         }
     }
 
@@ -90,6 +94,16 @@ impl InputQueue {
             .await
             .iter()
             .any(|mail| mail.trigger_turn)
+    }
+
+    pub(crate) fn try_schedule_capacity_wait(&self) -> bool {
+        self.capacity_wait_scheduled
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
+
+    pub(crate) fn finish_capacity_wait(&self) {
+        self.capacity_wait_scheduled.store(false, Ordering::Release);
     }
 
     pub(crate) async fn drain_mailbox_input_items(&self) -> Vec<TurnInput> {

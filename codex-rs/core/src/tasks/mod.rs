@@ -22,6 +22,7 @@ use tracing::trace;
 use tracing::trace_span;
 use tracing::warn;
 
+use crate::agent::control::AgentExecutionGuard;
 use crate::codex_thread::BackgroundTerminalInfo;
 use crate::config::Config;
 use crate::context::ContextualUserFragment;
@@ -329,6 +330,21 @@ impl Session {
         input: Vec<TurnInput>,
         task: T,
     ) {
+        let agent_execution_guard = self.services.agent_control.execution_guard(
+            turn_context.multi_agent_version,
+            &turn_context.session_source,
+        );
+        self.start_task_with_execution_guard(turn_context, input, task, agent_execution_guard)
+            .await;
+    }
+
+    async fn start_task_with_execution_guard<T: SessionTask + Send + Sync + 'static>(
+        self: &Arc<Self>,
+        turn_context: Arc<TurnContext>,
+        input: Vec<TurnInput>,
+        task: T,
+        agent_execution_guard: Option<AgentExecutionGuard>,
+    ) {
         let task: Arc<dyn AnySessionTask> = Arc::new(task);
         let task_kind = task.kind();
         let span_name = task.span_name();
@@ -369,10 +385,6 @@ impl Session {
         let mut active = self.active_turn.lock().await;
         let turn = active.get_or_insert_with(ActiveTurn::default);
         debug_assert!(turn.task.is_none());
-        let agent_execution_guard = self.services.agent_control.execution_guard(
-            turn_context.multi_agent_version,
-            &turn_context.session_source,
-        );
         let done_clone = Arc::clone(&done);
         let session_ctx = Arc::new(SessionTaskContext::new(
             Arc::clone(self),
@@ -475,6 +487,33 @@ impl Session {
             return;
         }
 
+        let turn_context = self.new_default_turn_with_sub_id(sub_id).await;
+        let agent_execution_guard = match self.services.agent_control.try_execution_guard(
+            turn_context.multi_agent_version,
+            &turn_context.session_source,
+        ) {
+            Ok(guard) => guard,
+            Err(CodexErr::AgentLimitReached { .. }) => {
+                if self.input_queue.try_schedule_capacity_wait() {
+                    let session = Arc::clone(self);
+                    tokio::spawn(async move {
+                        session
+                            .services
+                            .agent_control
+                            .wait_for_execution_capacity()
+                            .await;
+                        session.input_queue.finish_capacity_wait();
+                        session.submit_pending_work_wake().await;
+                    });
+                }
+                return;
+            }
+            Err(err) => {
+                warn!(%err, "failed to reserve execution capacity for pending mailbox work");
+                return;
+            }
+        };
+
         {
             let mut active_turn = self.active_turn.lock().await;
             if active_turn.is_some() {
@@ -483,11 +522,15 @@ impl Session {
             *active_turn = Some(ActiveTurn::default());
         }
 
-        let turn_context = self.new_default_turn_with_sub_id(sub_id).await;
         self.maybe_emit_unknown_model_warning_for_turn(turn_context.as_ref())
             .await;
-        self.start_task(turn_context, Vec::new(), RegularTask::new())
-            .await;
+        self.start_task_with_execution_guard(
+            turn_context,
+            Vec::new(),
+            RegularTask::new(),
+            agent_execution_guard,
+        )
+        .await;
     }
 
     pub async fn abort_all_tasks(self: &Arc<Self>, reason: TurnAbortReason) {

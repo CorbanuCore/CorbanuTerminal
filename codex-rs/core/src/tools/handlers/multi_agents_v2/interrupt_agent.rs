@@ -134,7 +134,8 @@ async fn handle_interrupt_agent(
             Vec::new(),
             format!("CONTROL EVENT — INTERRUPT\n{audit_copy}"),
             /*trigger_turn*/ true,
-        );
+        )
+        .with_kind(codex_protocol::protocol::AgentMessageKind::ControlRequest);
         communication
             .metadata
             .get_or_insert_with(ResponseItemMetadata::default)
