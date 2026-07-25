@@ -8,6 +8,7 @@ use crate::bottom_pane::popup_consts::standard_popup_hint_line;
 use crate::claude_panes::CODEX_MAIN_PANE_ID;
 use crate::claude_panes::ClaudeProviderProfileKind;
 use crate::crew_presets;
+use crate::external_plan_agent_adapter::mentions_unparsed_dispatch;
 use crate::multi_agents::agent_picker_status_dot_spans;
 use crate::multi_agents::format_agent_picker_item_name;
 use chrono::Utc;
@@ -38,10 +39,12 @@ use std::sync::Arc;
 const NAZGUL_ROLE_NAME: &str = "nazgul";
 const TROLL_ROLE: &str = "troll";
 const ORC_ROLE: &str = "orc";
-const SEND_TASK_FENCE_OPEN: &str = "```pfterminal-send-task";
-const SEND_TASK_FENCE_CLOSE: &str = "```";
-const SEND_TASK_OPEN: &str = "<pfterminal_send_task";
-const SEND_TASK_CLOSE: &str = "</pfterminal_send_task>";
+#[cfg(test)]
+use crate::external_plan_agent_adapter::SEND_TASK_FENCE_OPEN;
+#[cfg(test)]
+use crate::external_plan_agent_adapter::SEND_TASK_OPEN;
+pub(crate) use crate::external_plan_agent_adapter::SpawnTaskDispatch;
+pub(crate) use crate::external_plan_agent_adapter::extract_spawn_task_dispatches;
 const REPORT_PARENT_OPEN: &str = "<pfterminal_report_parent>";
 const REPORT_PARENT_CLOSE: &str = "</pfterminal_report_parent>";
 const EXEC_WRAPPED_DISPATCH_CORRECTION_TASK: &str = "PFTerminal host correction: you emitted a <pfterminal_send_task> dispatch block inside exec_command/shell text, so it was not routed to the target pane. Re-emit the same dispatch now as plain assistant message text, not inside a shell command, cat, echo, heredoc, markdown fence, or tool call. Do not claim it was sent until the plain-text block appears.";
@@ -74,13 +77,6 @@ pub(crate) struct SpawnAutoLoopState {
     pub(crate) auto_turn_running: bool,
     /// The currently running auto turn already dispatched (already counted toward the chain).
     pub(crate) auto_turn_dispatched: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SpawnTaskDispatch {
-    pub(crate) target: String,
-    pub(crate) task: String,
-    pub(crate) seq: Option<u64>,
 }
 
 pub(crate) use crate::dispatch_queue::PendingDispatchEnqueueResult;
@@ -6004,13 +6000,6 @@ fn claude_turn_index_from_artifact_path(path: &Path) -> Option<u64> {
         .and_then(|value| value.parse::<u64>().ok())
 }
 
-pub(crate) fn extract_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTaskDispatch>) {
-    let (visible, mut dispatches) = extract_fenced_spawn_task_dispatches(text);
-    let (visible, legacy_dispatches) = extract_xmlish_spawn_task_dispatches(&visible);
-    dispatches.extend(legacy_dispatches);
-    (visible, dispatches)
-}
-
 fn extract_spawn_parent_reports(text: &str) -> Vec<String> {
     let mut reports = Vec::new();
     let mut rest = text;
@@ -6044,158 +6033,7 @@ fn turn_contains_exec_wrapped_spawn_task_dispatch(turn: &codex_app_server_protoc
 /// dispatch, i.e. the model emitted a block that was too malformed to parse (missing/empty
 /// target or task). The surviving block stays in `visible`, so compare against the original.
 fn turn_mentions_spawn_task_dispatch(original_text: &str, visible_text: &str) -> bool {
-    (original_text.contains(SEND_TASK_OPEN) && visible_text.contains(SEND_TASK_OPEN))
-        || (original_text.contains(SEND_TASK_FENCE_OPEN)
-            && visible_text.contains(SEND_TASK_FENCE_OPEN))
-}
-
-fn extract_fenced_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTaskDispatch>) {
-    let mut visible = String::new();
-    let mut dispatches = Vec::new();
-    let mut rest = text;
-
-    while let Some(start_index) = rest.find(SEND_TASK_FENCE_OPEN) {
-        visible.push_str(&rest[..start_index]);
-        let block = &rest[start_index..];
-        let Some(header_end) = block.find('\n') else {
-            visible.push_str(block);
-            rest = "";
-            break;
-        };
-        let header = &block[..header_end];
-        let content_start = header_end + 1;
-        let Some(close_index) = block[content_start..].find(SEND_TASK_FENCE_CLOSE) else {
-            visible.push_str(block);
-            rest = "";
-            break;
-        };
-        let content_end = content_start + close_index;
-        let content = &block[content_start..content_end];
-        let after_close = content_end + SEND_TASK_FENCE_CLOSE.len();
-
-        if let Some(dispatch) = fenced_dispatch_from_parts(header, content) {
-            dispatches.push(dispatch);
-        } else {
-            // Keep malformed blocks visible: silently stripping them makes the model's claimed
-            // dispatch vanish with no host feedback and no chance to correct the format.
-            visible.push_str(&block[..after_close]);
-        }
-
-        rest = &block[after_close..];
-    }
-    visible.push_str(rest);
-    (visible.trim().to_string(), dispatches)
-}
-
-fn extract_xmlish_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTaskDispatch>) {
-    let mut visible = String::new();
-    let mut dispatches = Vec::new();
-    let mut rest = text;
-
-    while let Some(start_index) = rest.find(SEND_TASK_OPEN) {
-        visible.push_str(&rest[..start_index]);
-        let block = &rest[start_index..];
-        let Some(tag_end) = block.find('>') else {
-            visible.push_str(block);
-            rest = "";
-            break;
-        };
-        let tag = &block[..=tag_end];
-        let content_start = tag_end + 1;
-        let Some(close_index) = block[content_start..].find(SEND_TASK_CLOSE) else {
-            visible.push_str(block);
-            rest = "";
-            break;
-        };
-        let content_end = content_start + close_index;
-        let content = block[content_start..content_end].trim();
-        let after_close = content_end + SEND_TASK_CLOSE.len();
-
-        if let Some(target) = xmlish_attr_value(tag, "target")
-            && !target.trim().is_empty()
-            && !content.is_empty()
-        {
-            dispatches.push(SpawnTaskDispatch {
-                target: target.trim().to_string(),
-                task: content.to_string(),
-                seq: None,
-            });
-        } else {
-            // Keep malformed blocks visible (see the fenced extractor above).
-            visible.push_str(&block[..after_close]);
-        }
-
-        rest = &block[after_close..];
-    }
-    visible.push_str(rest);
-    (visible.trim().to_string(), dispatches)
-}
-
-fn fenced_dispatch_from_parts(header: &str, content: &str) -> Option<SpawnTaskDispatch> {
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(content.trim()) {
-        let target = value.get("target")?.as_str()?.trim().to_string();
-        let task = value.get("task")?.as_str()?.trim().to_string();
-        let seq = value.get("seq").and_then(serde_json::Value::as_u64);
-        return (!target.is_empty() && !task.is_empty()).then_some(SpawnTaskDispatch {
-            target,
-            task,
-            seq,
-        });
-    }
-
-    let mut target = yamlish_field_value(header, "target");
-    let mut task_lines = Vec::new();
-    let mut consumed_task_marker = false;
-
-    for line in content.lines() {
-        if target.is_none()
-            && let Some(value) = yamlish_field_value(line, "target")
-        {
-            target = Some(value);
-            continue;
-        }
-
-        if !consumed_task_marker && let Some(value) = yamlish_field_value(line, "task") {
-            consumed_task_marker = true;
-            if !value.trim().is_empty() {
-                task_lines.push(value);
-            }
-            continue;
-        }
-
-        if task_lines.is_empty() && line.trim().is_empty() {
-            continue;
-        }
-        task_lines.push(line.to_string());
-    }
-
-    let target = target?.trim().to_string();
-    let task = task_lines.join("\n").trim().to_string();
-    (!target.is_empty() && !task.is_empty()).then_some(SpawnTaskDispatch {
-        target,
-        task,
-        seq: None,
-    })
-}
-
-fn yamlish_field_value(line: &str, field: &str) -> Option<String> {
-    let (key, value) = line.split_once(':')?;
-    key.trim()
-        .eq_ignore_ascii_case(field)
-        .then(|| value.trim().to_string())
-}
-
-fn xmlish_attr_value(tag: &str, attr: &str) -> Option<String> {
-    let needle = format!("{attr}=");
-    let start = tag.find(&needle)? + needle.len();
-    let mut chars = tag[start..].chars();
-    let quote = chars.next()?;
-    if quote != '"' && quote != '\'' {
-        return None;
-    }
-    let value_start = start + quote.len_utf8();
-    let value_end = tag[value_start..].find(quote)? + value_start;
-    Some(tag[value_start..value_end].to_string())
+    mentions_unparsed_dispatch(original_text, visible_text)
 }
 
 fn section_item(name: &str) -> SelectionItem {

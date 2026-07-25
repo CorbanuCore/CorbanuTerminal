@@ -181,3 +181,33 @@ Broader V2 result:
   `3` versus current default `5`, a Troll fixture attempting to spawn a non-Orc, and a depth-2
   fixture whose parent is depth 0. They are retained as explicit Phase 7 role/depth cleanup work;
   no mailbox or provider-neutral delivery test remains failing.
+
+## Phase 4A — External-plan compatibility boundary
+
+Status: compatibility decoder isolated; `/spawn` native-delivery cutover remains in progress.
+
+Changes:
+
+- Moved Claude Plan and other text-only runtime envelope decoding out of the 12k-line
+  `spawn_orchestration.rs` into the focused 290-line `external_plan_agent_adapter.rs`.
+- Kept the text envelopes strictly at the provider edge. Native agents and the canonical mailbox
+  do not use XML-ish or fenced transport internally.
+- Decode order now matches source order across mixed legacy XML-ish and fenced messages.
+- Enforced the canonical 32 KiB agent-message bound before edge messages can enter routing.
+- Malformed and oversized envelopes remain visible to the operator and carry an explicit decode
+  failure. They are never silently stripped or treated as successful dispatches.
+- Preserved the existing extraction API temporarily so the `/spawn` pane UX and routing behavior
+  remain unchanged while native delivery is cut over beneath it.
+
+Passing evidence:
+
+- `external_plan_agent_adapter`: 2 passed.
+- `spawn_task_dispatch`: 4 passed.
+- `cargo check -p codex-tui`: passed.
+
+Product boundary:
+
+- PfTerminal `/spawn` remains the persistent named mixed-model crew product.
+- Codex-native agents provide its lifecycle, identity, capacity, and message substrate.
+- The standard `/spawn` crew, pane navigation, provider choices, resumable identities, and role
+  presentation are not replaced by Codex's ephemeral OpenAI-only delegation UX.

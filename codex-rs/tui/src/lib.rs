@@ -125,6 +125,7 @@ mod external_agent_config_migration;
 mod external_agent_config_migration_flow;
 mod external_agent_config_migration_model;
 mod external_editor;
+mod external_plan_agent_adapter;
 mod file_search;
 mod frames;
 mod get_git_diff;
