@@ -1261,13 +1261,6 @@ impl ThreadRequestProcessor {
                         config.agent_max_depth
                     )));
                 }
-                let parent_role = parent_snapshot.session_source.get_agent_role();
-                codex_core::config::validate_thread_spawn_role_graph(
-                    parent_role.as_deref(),
-                    agent_role.as_deref(),
-                    depth,
-                )
-                .map_err(invalid_request)?;
                 Some(CoreSessionSource::SubAgent(
                     CoreSubAgentSource::ThreadSpawn {
                         parent_thread_id,

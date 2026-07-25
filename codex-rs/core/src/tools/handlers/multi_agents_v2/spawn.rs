@@ -71,7 +71,6 @@ async fn handle_spawn_agent(
     let initial_operation = parse_collab_input(Some(args.message), /*items*/ None)?;
     let session_source = turn.session_source.clone();
     let child_depth = next_thread_spawn_depth(&session_source);
-    validate_model_spawn_role_graph(&session_source, role_name, child_depth)?;
     let mut config =
         build_agent_spawn_config(&session.get_base_instructions().await, turn.as_ref())?;
     if let Some(service_tier) = args.service_tier.as_ref() {

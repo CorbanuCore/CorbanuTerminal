@@ -31,36 +31,6 @@ pub(crate) const MIN_WAIT_TIMEOUT_MS: i64 = DEFAULT_MULTI_AGENT_V2_MIN_WAIT_TIME
 pub(crate) const DEFAULT_WAIT_TIMEOUT_MS: i64 = 30_000;
 pub(crate) const MAX_WAIT_TIMEOUT_MS: i64 = HARD_MAX_MULTI_AGENT_V2_TIMEOUT_MS;
 
-/// Applies the model-facing hierarchy policy before the central spawn boundary validates the
-/// resulting `SessionSource`. Models cannot create the host-owned Nazgul pane or use the
-/// root-parented Orc shape reserved for non-native supervisor panes.
-pub(crate) fn validate_model_spawn_role_graph(
-    parent_session_source: &SessionSource,
-    requested_role: Option<&str>,
-    child_depth: i32,
-) -> Result<(), FunctionCallError> {
-    let parent_role = parent_session_source.get_agent_role();
-    let target_role = requested_role
-        .map(|role| role.trim().to_ascii_lowercase())
-        .filter(|role| !role.is_empty());
-    if target_role.as_deref() == Some(crate::agent::role::NAZGUL_ROLE_NAME) {
-        return Err(FunctionCallError::RespondToModel(
-            "Nazgul is a host-owned root pane. Use /spawn to create or bind it.".to_string(),
-        ));
-    }
-    if parent_role.is_none() && target_role.as_deref() == Some(crate::agent::role::ORC_ROLE_NAME) {
-        return Err(FunctionCallError::RespondToModel(
-            "Orcs must be spawned by a Troll supervisor.".to_string(),
-        ));
-    }
-    crate::agent::role::validate_thread_spawn_role_graph(
-        parent_role.as_deref(),
-        requested_role,
-        child_depth,
-    )
-    .map_err(FunctionCallError::RespondToModel)
-}
-
 pub(crate) fn function_arguments(payload: ToolPayload) -> Result<String, FunctionCallError> {
     match payload {
         ToolPayload::Function { arguments } => Ok(arguments),

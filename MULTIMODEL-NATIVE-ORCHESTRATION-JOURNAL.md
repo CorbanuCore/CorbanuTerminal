@@ -248,3 +248,27 @@ Passing evidence:
 - Standard `/spawn` quick-start regression: passed.
 - App-server stable-ID mailbox integration: passed.
 - `cargo check -p codex-tui`: passed without new warnings.
+
+## Phase 7A — Role profiles are not core authorization
+
+Status: role-specific core depth and capacity rules removed; `/spawn` crew shape remains data in
+the versioned `CrewSpec`.
+
+Changes:
+
+- Removed the Nazgul/Troll/Orc role graph validator from model-facing spawn, direct app-server
+  spawn, and the central native spawn boundary.
+- Kept the provider-neutral structural depth invariant: a child still must be exactly one native
+  level below its actual parent and remain within `agents.max_depth`.
+- Removed the special Nazgul execution-slot bypass. A role label can no longer forge control-plane
+  capacity. Mailbox admission remains available under saturation; execution is scheduled by the
+  same native limiter as every other sub-agent.
+- Kept the named role profiles and their instructions for `/spawn` presentation. This change does
+  not remove the standard crew, pane navigation, or mixed-model runtime selection.
+
+Passing evidence:
+
+- `execution_guards_do_not_derive_capacity_policy_from_role_names`.
+- `spawn_agent_internal_treats_roles_as_profiles_and_enforces_structural_depth` with
+  `RUST_MIN_STACK=33554432` (the repository's known test-harness stack requirement).
+- `cargo check -p codex-core -p codex-app-server`.

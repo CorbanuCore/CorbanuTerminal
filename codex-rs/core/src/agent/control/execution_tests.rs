@@ -60,7 +60,7 @@ fn execution_guards_ignore_root_and_v1_turns() {
 }
 
 #[test]
-fn execution_guards_reserve_nazgul_control_path_under_worker_saturation() {
+fn execution_guards_do_not_derive_capacity_policy_from_role_names() {
     let control = control_with_limit(/*max_threads*/ 1);
     let worker_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
         parent_thread_id: codex_protocol::ThreadId::new(),
@@ -87,15 +87,16 @@ fn execution_guards_reserve_nazgul_control_path_under_worker_saturation() {
     };
     assert_eq!(max_threads, 1);
 
-    control
-        .ensure_execution_capacity(MultiAgentVersion::V2, &nazgul_source)
-        .expect("Nazgul control turns must bypass saturated worker capacity");
-    assert!(
-        control
-            .execution_guard(MultiAgentVersion::V2, &nazgul_source)
-            .is_none(),
-        "Nazgul control turns must not consume worker capacity"
-    );
+    let Err(CodexErr::AgentLimitReached { max_threads }) =
+        control.ensure_execution_capacity(MultiAgentVersion::V2, &nazgul_source)
+    else {
+        panic!("display roles must not bypass native execution capacity");
+    };
+    assert_eq!(max_threads, 1);
+    assert!(matches!(
+        control.try_execution_guard(MultiAgentVersion::V2, &nazgul_source),
+        Err(CodexErr::AgentLimitReached { max_threads: 1 })
+    ));
 }
 
 #[tokio::test]

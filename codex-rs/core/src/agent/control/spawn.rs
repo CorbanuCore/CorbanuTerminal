@@ -210,7 +210,6 @@ impl AgentControl {
         if let Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
             parent_thread_id,
             depth,
-            agent_role,
             ..
         })) = session_source.as_ref()
         {
@@ -226,13 +225,6 @@ impl AgentControl {
                     "spawn depth {depth} does not follow parent depth {parent_depth}"
                 )));
             }
-            let parent_role = parent_snapshot.session_source.get_agent_role();
-            crate::agent::role::validate_thread_spawn_role_graph(
-                parent_role.as_deref(),
-                agent_role.as_deref(),
-                expected_depth,
-            )
-            .map_err(CodexErr::InvalidRequest)?;
         }
         let initial_operation_uses_v2_mailbox = multi_agent_version == MultiAgentVersion::V2
             && matches!(initial_operation, Op::InterAgentCommunication { .. });
