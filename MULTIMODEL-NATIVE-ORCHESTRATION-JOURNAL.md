@@ -1179,3 +1179,96 @@ Disposition:
 - The generalized native runtime-override boundary is now proven live.
 - Begin the three counted 45–60 minute free-form sessions on this exact candidate. Any invariant
   failure resets the count.
+
+## Phase 8K — Counted session 1 passes on the rebuilt candidate
+
+Status: Section 15.3 session 1 PASS; qualification count is 1 of 3.
+
+Timestamp: 2026-07-25T14:31:20Z
+
+Candidate and duration:
+
+- Exact binary: `/tmp/pfterminal-native-orch-a786872cc`.
+- SHA-256:
+  `0ec2cc672677257aa1686fb102926b0ab91f69315f905b31e72f280f95520569`.
+- Source commit: `a786872cc`.
+- Fresh copied home: `/tmp/pft-native-orch-q1e-home-20260725`.
+- Structured log: `/tmp/pft-native-orch-q1e-logs-20260725/codex-tui.log`.
+- Real session interval: `2026-07-25T13:45:27Z` through
+  `2026-07-25T14:31:20Z` (45 minutes 53 seconds).
+- Benchmark branch: `qual/native-orch-q1e-20260725`.
+
+Runtime and native-agent evidence:
+
+- The standard preset materialized Fable Nazgul
+  `019f9986-8e1d-70d1-aee4-3a3706cf11eb`, Sol Troll
+  `019f9986-8ed6-78b0-90c7-393dec8a4e3f`, Luna Orc
+  `019f9986-8f9b-7711-a43f-c41083cf4dbb`, Terra Orc
+  `019f9986-9067-79c1-8aa1-192617b98bc9`, and Grok 4.5 Orc
+  `019f9986-911f-7362-a734-41d6241a6e87`.
+- A separate native reviewer `/root/nazgul_angmar/reviewer_k3`, thread
+  `019f998a-de18-78a0-b681-1a08b5b20cef`, ran with persisted
+  `kimi-code / k3 / high` runtime metadata. It was not a preset member or a relabelled Orc.
+- After the PfTerminal process restart, native `followup_task` resumed that same Kimi thread.
+  Its rollout retained `model=k3` and `effort=high`; it emitted `KIMI_RESTART_OK` and completed
+  a substantive independent review.
+- Logs show real provider traffic for Fable, Sol, Luna, Terra, Grok, and Kimi. Every server-reported
+  model matched the requested model; no runtime silently migrated.
+
+Required free-form coverage:
+
+- The crew pursued a real game objective: diagnose and improve visible ground-plate banding,
+  implement a deterministic render fix, build a frozen gate, inspect live gameplay, and conduct
+  an independent review.
+- Rapid dispatch created three concurrent Orc lanes plus the native Kimi reviewer. Natural
+  reprioritization and follow-ups were applied at turn boundaries.
+- The user directly addressed multiple members while all six execution slots were occupied.
+  Burzum and the Orcs remained addressable; no worker was cancelled merely to accept control
+  input.
+- Snaga and Burzum both compacted successfully. Their stable thread IDs continued afterward and
+  no `compaction_trigger`, assistant-prefill, or modified-thinking error appeared.
+- The process was stopped and explicitly resumed from root
+  `019f9986-10e9-7703-9da5-cdf20e184e44`. The same crew and Kimi thread IDs, provider tuples,
+  shared branch, and accepted work survived.
+- The configured first `thread/spawnAgent` fault fired at
+  `2026-07-25T14:01:23Z`; the bounded retry created exactly one native user pane without a
+  stillborn pane or notification flood.
+- The native Kimi reviewer was explicitly interrupted near completion, resumed on the same
+  thread, restored its turn-owned temporary changes, and produced one final report.
+- The final accepted human closeout turn encountered a normal-closure Sol websocket disconnect.
+  The bounded reconnect replayed the provider request within the same local turn ID and returned
+  exactly one closeout response. No local message or assignment was duplicated.
+
+Environmental and benchmark findings:
+
+- The host Claude-plan OAuth refresh token expired during the session. Fable stopped with an
+  actionable missing-refresh-token error; PfTerminal did not change its provider or credential,
+  and Sol/Kimi/Grok/OpenAI lanes continued. This is the Section 15.3 environmental-failure case,
+  not an invariant failure.
+- The prescribed seam metric unexpectedly passed before the game fix. The agents did not weaken
+  its thresholds; they recorded the deviation and used the frozen baseline as a non-regression
+  ceiling.
+- The D1 live game gate returned 0/8 at both parent `67798ae` and patch `a0427ff`, while its
+  unchanged self-test passed 8/8. `gate:p9` likewise failed identically before and after. These
+  are benchmark/harness product findings, not PfTerminal control-plane failures.
+
+Outputs and invariant audit:
+
+- Benchmark commits: `67798ae`, `a0427ff`, `13bfdbb`, `d7aa344`, `e387b38`, and evidence
+  preservation commit `63c88ea`.
+- Independent Kimi review:
+  `artifacts/session-29/review/review.md` on branch `qual/native-orch-q1e-20260725`.
+- No crash, `turn/start` failure, execution-slot rejection, headless write, status divergence,
+  duplicate local application, provider mismatch, stillborn pane, unbounded retry loop, or
+  automatic `unknown_outcome` replay appeared in the structured log.
+- Burzum's closeout reported no lost or duplicated accepted message and preserved all four worker
+  thread IDs. The only reported control-plane-impacting event was the isolated, accurately
+  classified Fable authentication failure.
+- The two 377 MiB comparison worktrees were removed as soon as their paired proof completed.
+  Root filesystem free space remained 107 GiB.
+
+Disposition:
+
+- Session 1 counts on the exact rebuilt candidate.
+- Session 2 must not use `/spawn` to create its crew. It must use native `spawn_agent` runtime
+  overrides to create a custom crew spanning at least three provider families.
