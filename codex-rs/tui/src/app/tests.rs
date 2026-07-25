@@ -2399,6 +2399,93 @@ async fn native_task_agent_role_does_not_make_it_a_persistent_spawn_crew_member(
     );
 }
 
+#[tokio::test]
+async fn crewspec_restore_prunes_unrelated_native_tree_but_keeps_crew_descendants() {
+    let mut app = make_test_app().await;
+    let crew_orc = ThreadId::new();
+    let crew_descendant = ThreadId::new();
+    let unrelated_main = ThreadId::new();
+    let unrelated_descendant = ThreadId::new();
+    let crew_orc_node = thread_node_id(crew_orc);
+    let crew_descendant_node = thread_node_id(crew_descendant);
+    let unrelated_main_node = thread_node_id(unrelated_main);
+    let unrelated_descendant_node = thread_node_id(unrelated_descendant);
+
+    app.ensure_custom_spawn_root(CODEX_MAIN_PANE_ID)
+        .expect("bind custom root");
+    app.record_custom_spawn_member(
+        &crew_orc_node,
+        CODEX_MAIN_PANE_ID,
+        crate::spawn_orchestration::SpawnRole::Orc,
+        "Snaga".to_string(),
+        crate::dispatch_queue::SavedNativeSpawnRuntime {
+            model: "k3".to_string(),
+            provider: "kimi-code".to_string(),
+            reasoning_effort: None,
+        },
+    )
+    .expect("record crew Orc");
+
+    app.spawn_parent_by_node
+        .insert(crew_orc_node.clone(), CODEX_MAIN_PANE_ID.to_string());
+    app.spawn_parent_by_node
+        .insert(crew_descendant_node.clone(), crew_orc_node.clone());
+    app.spawn_parent_by_node.insert(
+        unrelated_main_node.clone(),
+        crate::spawn_orchestration::pane_node_id(CODEX_MAIN_PANE_ID),
+    );
+    app.spawn_parent_by_node.insert(
+        unrelated_descendant_node.clone(),
+        unrelated_main_node.clone(),
+    );
+
+    for (node_id, thread_id) in [
+        (&crew_orc_node, crew_orc),
+        (&crew_descendant_node, crew_descendant),
+        (&unrelated_main_node, unrelated_main),
+        (&unrelated_descendant_node, unrelated_descendant),
+    ] {
+        app.spawn_native_endpoint_by_node
+            .insert(node_id.clone(), thread_id);
+        app.spawn_native_runtime_by_node.insert(
+            node_id.clone(),
+            crate::dispatch_queue::SavedNativeSpawnRuntime {
+                model: "fixture".to_string(),
+                provider: "fixture".to_string(),
+                reasoning_effort: None,
+            },
+        );
+    }
+
+    app.prune_noncrew_native_spawn_recovery_nodes();
+
+    assert_eq!(
+        app.spawn_parent_by_node.get(&crew_orc_node),
+        Some(&CODEX_MAIN_PANE_ID.to_string())
+    );
+    assert_eq!(
+        app.spawn_parent_by_node.get(&crew_descendant_node),
+        Some(&crew_orc_node)
+    );
+    assert!(!app.spawn_parent_by_node.contains_key(&unrelated_main_node));
+    assert!(
+        !app.spawn_parent_by_node
+            .contains_key(&unrelated_descendant_node)
+    );
+    assert!(
+        app.spawn_native_endpoint_by_node
+            .contains_key(&crew_descendant_node)
+    );
+    assert!(
+        !app.spawn_native_endpoint_by_node
+            .contains_key(&unrelated_main_node)
+    );
+    assert!(
+        !app.spawn_native_runtime_by_node
+            .contains_key(&unrelated_descendant_node)
+    );
+}
+
 impl App {
     /// Test adapter for older unit fixtures. Production has no direct-dispatch bypass: this helper
     /// enters through the same stable model-origin path used by completed agent turns.

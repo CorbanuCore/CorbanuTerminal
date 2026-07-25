@@ -693,3 +693,90 @@ Disposition:
 - Repair the chat adapter so canonical typed collaboration mail becomes user-role provider input
   while untyped display/transcript agent messages remain excluded. Add generalized regressions and
   restart the three-session count from zero on a new immutable binary.
+
+## Phase 8B — External-provider mailbox repair and exact live replay
+
+Status: repaired and live-replayed in both directions; qualification count remains zero.
+
+Timestamp: 2026-07-25T08:22:15Z
+
+Repair:
+
+- Canonical typed `AgentMessage` collaboration items now map to a user-role protocol envelope at
+  the external-provider adapter edge. The envelope carries validated sender and recipient agent
+  paths plus the plaintext message.
+- Legacy untyped display/transcript `AgentMessage` items remain omitted, so transcript rendering
+  cannot become provider input accidentally.
+- The same mapping is applied to Chat Completions and Anthropic Messages. Native Responses
+  transport is unchanged.
+- Tests cover typed collaboration delivery and untyped omission for generic chat completions,
+  OpenRouter, and Claude Plan.
+- Commit `07150c78e` contains the adapter repair.
+
+Automated evidence:
+
+- All 50 `client::tests::` pass.
+- `chat_completions_maps_typed_collaboration_mail_to_user_input`,
+  `chat_completions_omits_untyped_agent_messages_from_history`,
+  `openrouter_request_includes_typed_collaboration_mail`, and
+  `claude_plan_request_maps_typed_child_mail_to_user_input` pass.
+- The pending-input filter, `just fix -p codex-core`, `just fmt`, and
+  `cargo check -p codex-tui` pass.
+
+Exact live replay:
+
+- Immutable binary:
+  `/tmp/pfterminal-native-orch-07150c78e`.
+- Binary SHA-256:
+  `f42604ca2a2209cc729d0ccf499661d4f6978a330d936f9792e1ccfa30d179b3`.
+- Fable resumed the exact failed crew and used `followup_task` on existing Krimp path
+  `/root/nazgul_angmar/troll_burzum/orc_krimp`.
+- Durable message ID `019f9851-e25d-78c0-a54c-fd217f95420a` asked Krimp to make no edits and
+  return exactly `MAILBOX_FIX_OK`.
+- Krimp's OpenRouter `x-ai/grok-4.5` rollout explicitly reasoned from the received mailbox message,
+  returned `MAILBOX_FIX_OK`, and completed with that exact result.
+- Fable received the child result and reported Krimp's exact `MAILBOX_FIX_OK` response. This proves
+  both the OpenRouter inbound mapping and the Claude Plan inbound result mapping on real provider
+  requests.
+
+## Phase 8C — Fresh qualification reset: native task tree leaked into CrewSpec recovery
+
+Status: repair passes focused automated qualification; exact restart replay pending.
+
+Timestamp: 2026-07-25T08:22:15Z
+
+Observed:
+
+- The exact mailbox replay also reproduced a restart warning for unmaterialized root thread
+  `019f983a-ab0b-7020-8863-ce74e9d24485`:
+  `thread/read failed` followed by `thread/resume failed: no rollout found`.
+- The root was created before its first user turn, so it legitimately had no rollout. It was not a
+  `/spawn` crew member, but recovery had inserted it beside the explicit Fable CrewSpec root.
+- On a later resume, the leaked edge made role inference classify the unrelated root as a Troll
+  and materialize a replacement endpoint. This violated the crew/task-agent class boundary and
+  invalidated the candidate.
+
+Repair:
+
+- CrewSpec-backed recovery no longer infers another root from the currently resumed primary
+  thread. Root inference remains only for legacy layouts without a CrewSpec.
+- Recovery seeds retention from explicit CrewSpec member mappings, then retains only native
+  descendants reachable from those members. Unrelated top-level native trees remain native task
+  agents and are recovered by the native registry, not reclassified as `/spawn` panes.
+- Existing layouts written by the faulty path are repaired during restore: leaked parent edges,
+  `/spawn` runtime entries, and `/spawn` endpoint mappings are pruned before any attach or
+  materialization attempt.
+
+Automated evidence:
+
+- `crewspec_restore_prunes_unrelated_native_tree_but_keeps_crew_descendants` passes. It proves a
+  real crew descendant remains routable while an unrelated native root and its descendant are
+  removed from `/spawn` recovery state.
+- `/spawn` filter: 73 passed, 0 failed, 1 credentialed live test intentionally ignored.
+- `native_task_agent_role_does_not_make_it_a_persistent_spawn_crew_member` passes.
+- `cargo check -p codex-tui`, `just fmt`, and `git diff --check` pass.
+
+Disposition:
+
+- Qualification count remains zero. Build a new immutable candidate, replay this exact broken
+  layout without restore errors or phantom panes, then begin all three free-form sessions again.

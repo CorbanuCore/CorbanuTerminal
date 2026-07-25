@@ -2700,6 +2700,7 @@ impl App {
         let saved_metadata = self.saved_spawn_metadata_from_loaded_rollouts().await;
         self.recover_native_spawn_edges_from_saved_context(&saved_metadata)
             .await;
+        self.prune_noncrew_native_spawn_recovery_nodes();
         let logical_thread_ids = native_spawn_thread_ids_from_saved_state(
             self.spawn_nazgul_pane_id.as_deref(),
             &self.spawn_parent_by_node,
@@ -3064,11 +3065,17 @@ impl App {
             return;
         }
 
-        self.spawn_nazgul_pane_id
-            .get_or_insert_with(|| thread_node_id(primary_thread_id));
-        self.spawn_parent_by_node
-            .entry(thread_node_id(primary_thread_id))
-            .or_insert_with(|| pane_node_id(CODEX_MAIN_PANE_ID));
+        // Only legacy layouts infer their root from the resumed primary thread. A CrewSpec-backed
+        // hierarchy already has an explicit logical root. Treating the current primary thread as
+        // another crew node leaks ordinary Codex sessions into `/spawn`; an unmaterialized main
+        // thread can then be restored as a phantom Troll after restart.
+        if self.spawn_crew.is_none() {
+            self.spawn_nazgul_pane_id
+                .get_or_insert_with(|| thread_node_id(primary_thread_id));
+            self.spawn_parent_by_node
+                .entry(thread_node_id(primary_thread_id))
+                .or_insert_with(|| pane_node_id(CODEX_MAIN_PANE_ID));
+        }
         let existing_identities = self
             .current_saved_spawn_child_identities(saved_metadata)
             .await;
@@ -3077,6 +3084,61 @@ impl App {
             recovered_edges,
             saved_metadata,
             existing_identities,
+        );
+    }
+
+    /// Keeps a CrewSpec-backed restore rooted in explicit crew membership.
+    ///
+    /// Native Codex task-agent navigation and `/spawn` share thread primitives, but they do not
+    /// share retention semantics. Older recovery code could persist an unrelated primary thread
+    /// beside the crew root. Restore only explicit members and native descendants reachable from
+    /// those members; unrelated top-level native trees remain native task agents and are recovered
+    /// by the native agent registry instead of being reclassified as crew panes.
+    pub(crate) fn prune_noncrew_native_spawn_recovery_nodes(&mut self) {
+        let Some(crew) = self.spawn_crew.as_ref() else {
+            return;
+        };
+        let crew_id = crew.spec.crew_id.clone();
+
+        let mut retained = crew
+            .member_node_by_id
+            .values()
+            .cloned()
+            .collect::<HashSet<_>>();
+        loop {
+            let discovered = self
+                .spawn_parent_by_node
+                .iter()
+                .filter(|(_, parent_node_id)| retained.contains(*parent_node_id))
+                .map(|(child_node_id, _)| child_node_id.clone())
+                .filter(|child_node_id| !retained.contains(child_node_id))
+                .collect::<Vec<_>>();
+            if discovered.is_empty() {
+                break;
+            }
+            retained.extend(discovered);
+        }
+
+        let removed = self
+            .spawn_parent_by_node
+            .keys()
+            .filter(|node_id| !retained.contains(*node_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        if removed.is_empty() {
+            return;
+        }
+
+        self.spawn_parent_by_node
+            .retain(|child_node_id, _| retained.contains(child_node_id));
+        self.spawn_native_runtime_by_node
+            .retain(|node_id, _| retained.contains(node_id));
+        self.spawn_native_endpoint_by_node
+            .retain(|node_id, _| retained.contains(node_id));
+        tracing::warn!(
+            removed_nodes = ?removed,
+            crew_id = %crew_id,
+            "pruned native task nodes that were incorrectly persisted as /spawn crew nodes"
         );
     }
 
