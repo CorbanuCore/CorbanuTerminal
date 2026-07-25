@@ -7,27 +7,32 @@ use super::*;
 use crate::bottom_pane::SelectionTab;
 use crate::spawn_orchestration::SpawnRole;
 use crate::spawn_orchestration::spawn_reasoning_effort_for_role;
-use codex_model_provider_info::AMAZON_BEDROCK_GPT_5_4_MODEL_ID;
+#[cfg(test)]
 use codex_model_provider_info::AMAZON_BEDROCK_GPT_5_5_MODEL_ID;
+#[cfg(test)]
 use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::AMBIENT_KIMI_K2_7_CODE_MODEL;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
+#[cfg(test)]
 use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
+#[cfg(test)]
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
+#[cfg(test)]
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
+#[cfg(test)]
 use codex_model_provider_info::CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL;
+#[cfg(test)]
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
-use codex_model_provider_info::KIMI_CODE_K3_MODEL;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
+#[cfg(test)]
 use codex_model_provider_info::META_DEFAULT_MODEL;
 use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
@@ -42,12 +47,15 @@ use codex_protocol::openai_models::ReasoningEffortPreset;
 #[cfg(test)]
 use codex_protocol::openai_models::default_input_modalities;
 
-const OPENROUTER_MINIMAX_M3_MODEL: &str = "minimax/minimax-m3";
+#[cfg(test)]
 const OPENROUTER_OWL_ALPHA_MODEL: &str = "openrouter/owl-alpha";
-const OPENROUTER_GEMINI_3_5_FLASH_MODEL: &str = "google/gemini-3.5-flash";
+#[cfg(test)]
 const OPENROUTER_GROK_4_5_MODEL: &str = "x-ai/grok-4.5";
+#[cfg(test)]
 const OPENROUTER_DEEPSEEK_V4_PRO_MODEL: &str = "deepseek/deepseek-v4-pro";
+#[cfg(test)]
 const OPENROUTER_TENCENT_HY3_FREE_MODEL: &str = "tencent/hy3:free";
+#[cfg(test)]
 const OPENROUTER_KIMI_K3_MODEL: &str = "moonshotai/kimi-k3";
 const OPENAI_GPT_5_5_MODEL: &str = "gpt-5.5";
 const OPENAI_GPT_5_6_SOL_MODEL: &str = "gpt-5.6-sol";
@@ -313,57 +321,7 @@ impl ChatWidget {
     }
 
     pub(crate) fn model_provider_for_selection(model: &str) -> Option<String> {
-        let trimmed = model.trim();
-        if trimmed == BASETEN_DEFAULT_MODEL {
-            return Some(BASETEN_PROVIDER_ID.to_string());
-        }
-        if trimmed == AMBIENT_DEFAULT_MODEL
-            || trimmed == AMBIENT_KIMI_K2_7_CODE_MODEL
-            || trimmed.starts_with("ambient/")
-            || trimmed.starts_with("zai-org/")
-        {
-            return Some(AMBIENT_PROVIDER_ID.to_string());
-        }
-        if trimmed == KIMI_CODE_K3_MODEL {
-            return Some(KIMI_CODE_PROVIDER_ID.to_string());
-        }
-        if trimmed == ZAI_DEFAULT_MODEL || trimmed.starts_with("glm-") {
-            return Some(ZAI_PROVIDER_ID.to_string());
-        }
-        if matches!(
-            trimmed,
-            CLAUDE_PLAN_MODEL | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL | CLAUDE_FABLE_5_PLAN_MODEL
-        ) {
-            return Some(CLAUDE_PLAN_PROVIDER_ID.to_string());
-        }
-        if trimmed == ANTHROPIC_DEFAULT_MODEL || trimmed.starts_with("claude-") {
-            return Some(ANTHROPIC_PROVIDER_ID.to_string());
-        }
-        if trimmed == OPENROUTER_DEFAULT_MODEL {
-            return Some(OPENROUTER_ANTHROPIC_PROVIDER_ID.to_string());
-        }
-        if trimmed == META_DEFAULT_MODEL {
-            return Some(META_PROVIDER_ID.to_string());
-        }
-        if Self::is_openrouter_model(trimmed) {
-            return Some(OPENROUTER_PROVIDER_ID.to_string());
-        }
-        if trimmed == VERCEL_GLM_5_2_FAST_MODEL {
-            return Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID.to_string());
-        }
-        if Self::is_vercel_model(trimmed) {
-            return Some(VERCEL_PROVIDER_ID.to_string());
-        }
-        if matches!(
-            trimmed,
-            AMAZON_BEDROCK_GPT_5_5_MODEL_ID | AMAZON_BEDROCK_GPT_5_4_MODEL_ID
-        ) {
-            return Some(AMAZON_BEDROCK_PROVIDER_ID.to_string());
-        }
-        if trimmed.starts_with("gpt-") || trimmed.starts_with("codex-auto-") {
-            return Some(OPENAI_PROVIDER_ID.to_string());
-        }
-        None
+        codex_model_provider_info::canonical_catalog_provider(model).map(str::to_string)
     }
 
     fn resolved_model_provider(&self, model: &str) -> Option<String> {
@@ -375,24 +333,6 @@ impl ChatWidget {
         self.model_catalog
             .provider_for_model(model)
             .or_else(|| Self::model_provider_for_selection(model))
-    }
-
-    fn is_openrouter_model(model: &str) -> bool {
-        matches!(
-            model,
-            OPENROUTER_DEFAULT_MODEL
-                | OPENROUTER_MINIMAX_M3_MODEL
-                | OPENROUTER_OWL_ALPHA_MODEL
-                | OPENROUTER_GEMINI_3_5_FLASH_MODEL
-                | OPENROUTER_GROK_4_5_MODEL
-                | OPENROUTER_DEEPSEEK_V4_PRO_MODEL
-                | OPENROUTER_TENCENT_HY3_FREE_MODEL
-                | OPENROUTER_KIMI_K3_MODEL
-        )
-    }
-
-    fn is_vercel_model(model: &str) -> bool {
-        matches!(model, VERCEL_DEFAULT_MODEL | VERCEL_GLM_5_2_FAST_MODEL)
     }
 
     fn auto_model_order(model: &str) -> usize {

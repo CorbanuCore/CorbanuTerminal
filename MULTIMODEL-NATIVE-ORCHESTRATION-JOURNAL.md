@@ -1479,3 +1479,72 @@ Disposition:
 - Session 1 passes and counts as 1 of 3.
 - Session 2 must use a fresh copied home and custom native `spawn_agent` crew only, with no
   `/spawn` crew creation, on this exact binary and hash.
+
+## Phase 8O — Native runtime discovery failure and generalized repair
+
+Status: INVARIANT FAILURE; qualification count reset from 1 of 3 to 0 of 3.
+
+Failed candidate session:
+
+- Exact binary: `/tmp/pfterminal-native-orch-b07ee141e`.
+- SHA-256:
+  `74a20e9ffe75bf299b4e135134988e935ba0c96a2ba490c5d8993293bc9df408`.
+- Source commit: `b07ee141e2`.
+- Session interval: `2026-07-25T15:51:27Z` through
+  `2026-07-25T15:54:11Z`.
+- Fresh copied home: `/tmp/pft-native-orch-r2-b07ee-home-20260725`.
+- Fresh game worktree:
+  `/tmp/isometric-native-orch-r2-b07ee-20260725`.
+- Structured log:
+  `/tmp/pft-native-orch-r2-b07ee-logs-20260725/codex-tui.log`.
+- Root thread: `019f99f9-6b6d-7112-8400-c20082b5dbd1`.
+
+Observed failure:
+
+- The plain objective required a custom crew created only through native `spawn_agent`,
+  spanning Anthropic Opus 5, Anthropic Fable 5, Kimi Code K3, OpenRouter Grok 4.5, and an
+  inherited Sol worker.
+- The native tool contract exposed only the first five picker-visible model summaries and did
+  not pair model slugs with provider IDs. Kimi, Grok, Opus, and Fable were absent from that
+  bounded description.
+- The Sol driver correctly recognized that Kimi and Grok were not exposed, then guessed
+  `anthropic / claude-opus-5-plan`. Validation rejected it because plan models belong to the
+  separate `claude-plan` provider. It next guessed provider `claude-code`, which is a display
+  concept rather than a registered provider ID and was also rejected.
+- Both failures occurred before mutation, so no child was created and the injected provider
+  fault did not fire. The backend could run the requested exact tuples, as session 1 proved,
+  but an uncoached native driver could not discover the identifiers needed to request them.
+- This violates the provider-neutral runtime-selection acceptance bar. A backend-only ability
+  that depends on the test operator supplying hidden provider/model strings is not a usable
+  native orchestration product.
+
+Generalized repair:
+
+- Added `canonical_catalog_provider` to the shared provider registry. It maps every shipped
+  picker-visible catalog route to one canonical known-good provider while explicitly allowing
+  gateways and user-defined providers to serve additional routes.
+- The native tool planner annotates model presets from that shared registry before constructing
+  the `spawn_agent` contract. This repairs the discovery boundary without embedding game
+  prompts or the four qualification examples into agent instructions.
+- Replaced the five verbose model summaries with a compact list of up to 32 exact
+  `model_provider / model` tuples plus supported efforts and service tiers. All 23 currently
+  picker-visible bundled models fit under the bound.
+- The TUI model picker now reuses the same canonical registry instead of maintaining a second
+  provider-routing table.
+- Added generalized coverage for catalog ownership, unknown/private models, compact exact
+  runtime formatting, reasoning-effort truncation, visibility, and the bounded list.
+
+Automated verification:
+
+- `cargo fmt --all -- --check`: PASS.
+- `cargo test -p codex-model-provider-info`: PASS, 49 tests.
+- `cargo test -p codex-core spawn_agent_tool_ --lib`: PASS, 5 tests.
+- `cargo test -p codex-tui model_provider_for_selection --lib`: PASS.
+- `cargo check -p codex-tui`: PASS without code warnings.
+
+Disposition:
+
+- Commit the repair, build a new immutable candidate, and prove that a fresh Sol driver can
+  discover and create the requested four external runtimes without operator-provided provider
+  IDs.
+- Restart all three 45–60 minute sessions on that rebuilt candidate.

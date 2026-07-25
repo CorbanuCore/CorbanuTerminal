@@ -18,7 +18,7 @@ const SPAWN_AGENT_MODEL_OVERRIDE_DESCRIPTION: &str =
 const SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION: &str = "Provider override for the new agent. Set this together with `model`; omit both to inherit the parent runtime.";
 const SPAWN_AGENT_SERVICE_TIER_OVERRIDE_DESCRIPTION: &str =
     "Service tier override for the new agent. Omit unless explicitly requested.";
-const MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION: usize = 5;
+const MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION: usize = 32;
 const MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION: usize = 64;
 
 #[derive(Debug, Clone, Default)]
@@ -891,18 +891,25 @@ fn spawn_agent_models_description(models: &[ModelPreset]) -> String {
             let service_tiers_suffix = if service_tiers.is_empty() {
                 String::new()
             } else {
-                format!(" Service tiers: {service_tiers}.")
+                format!(" tiers: {service_tiers};")
             };
             let model_slug = &model.model;
-            let description = &model.description;
-            format!(
-                "- `{model_slug}`: {description}{reasoning_efforts_suffix}{service_tiers_suffix}"
-            )
+            let runtime = model.provider_id.as_deref().map_or_else(
+                || format!("model `{model_slug}` (provider inherited)"),
+                |provider| format!("`{provider}` / `{model_slug}`"),
+            );
+            let reasoning_efforts_suffix = reasoning_efforts_suffix
+                .strip_prefix(" Reasoning efforts: ")
+                .and_then(|suffix| suffix.strip_suffix('.'))
+                .map_or_else(String::new, |efforts| format!(" efforts: {efforts};"));
+            format!("- {runtime};{reasoning_efforts_suffix}{service_tiers_suffix}")
+                .trim_end_matches(';')
+                .to_string()
         })
         .collect::<Vec<_>>()
         .join("\n");
     format!(
-        "Available model overrides (optional; inherited parent model is preferred):\n{model_descriptions}"
+        "Available exact runtime overrides (optional; omit both fields to inherit the parent runtime). Pass the provider as `model_provider` and the model as `model`:\n{model_descriptions}"
     )
 }
 

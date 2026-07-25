@@ -39,11 +39,10 @@ fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
 
 #[test]
 fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
+    let mut visible = model_preset("visible", /*show_in_picker*/ true);
+    visible.provider_id = Some("example-provider".to_string());
     let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
-        available_models: vec![
-            model_preset("visible", /*show_in_picker*/ true),
-            model_preset("hidden", /*show_in_picker*/ false),
-        ],
+        available_models: vec![visible, model_preset("hidden", /*show_in_picker*/ false)],
         agent_type_description: "role help".to_string(),
         hide_agent_type_model_reasoning: false,
         include_usage_hint: true,
@@ -72,11 +71,12 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
     assert!(!description.contains("max_concurrent_threads_per_session"));
     assert!(description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2));
     assert!(
-        description
-            .contains("Available model overrides (optional; inherited parent model is preferred):")
+        description.contains(
+            "Available exact runtime overrides (optional; omit both fields to inherit the parent runtime)."
+        )
     );
     assert!(description.contains(
-        "- `visible-model`: visible description Reasoning efforts: xhigh (default). Service tiers: priority."
+        "- `example-provider` / `visible-model`; efforts: xhigh (default); tiers: priority"
     ));
     assert!(!description.contains("hidden-model"));
     assert!(properties.contains_key("task_name"));
@@ -178,15 +178,11 @@ fn spawn_agent_tool_v1_keeps_legacy_fork_context_field() {
 
 #[test]
 fn spawn_agent_tool_caps_visible_model_summaries() {
+    let available_models = (0..=MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION)
+        .map(|index| model_preset(&format!("model-{index}"), /*show_in_picker*/ true))
+        .collect();
     let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
-        available_models: vec![
-            model_preset("first", /*show_in_picker*/ true),
-            model_preset("second", /*show_in_picker*/ true),
-            model_preset("third", /*show_in_picker*/ true),
-            model_preset("fourth", /*show_in_picker*/ true),
-            model_preset("fifth", /*show_in_picker*/ true),
-            model_preset("sixth", /*show_in_picker*/ true),
-        ],
+        available_models,
         agent_type_description: "role help".to_string(),
         hide_agent_type_model_reasoning: false,
         include_usage_hint: true,
@@ -197,13 +193,12 @@ fn spawn_agent_tool_caps_visible_model_summaries() {
         panic!("spawn_agent should be a function tool");
     };
 
-    for model in ["first", "second", "third", "fourth", "fifth"] {
-        assert!(
-            description.contains(&format!("`{model}-model`")),
-            "expected {model} model summary in spawn_agent description: {description:?}"
-        );
-    }
-    assert!(!description.contains("`sixth-model`"));
+    let last_visible = MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION - 1;
+    assert!(description.contains(&format!("`model-{last_visible}-model`")));
+    assert!(!description.contains(&format!(
+        "`model-{}-model`",
+        MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION
+    )));
 }
 
 #[test]
@@ -221,7 +216,7 @@ fn spawn_agent_tool_caps_reasoning_effort_value_length() {
     assert_eq!(
         spawn_agent_models_description(&[model]),
         format!(
-            "Available model overrides (optional; inherited parent model is preferred):\n- `visible-model`: visible description Reasoning efforts: {} (default). Service tiers: priority.",
+            "Available exact runtime overrides (optional; omit both fields to inherit the parent runtime). Pass the provider as `model_provider` and the model as `model`:\n- model `visible-model` (provider inherited); efforts: {} (default); tiers: priority",
             "é".repeat(MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION)
         )
     );

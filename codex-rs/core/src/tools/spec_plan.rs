@@ -1159,7 +1159,14 @@ fn spawn_agent_available_models(turn_context: &TurnContext) -> Vec<ModelPreset> 
     if third_party_provider_without_spawn_model_switching(turn_context) {
         return Vec::new();
     }
-    turn_context.available_models.clone()
+    let mut models = turn_context.available_models.clone();
+    for model in &mut models {
+        if model.provider_id.is_none() {
+            model.provider_id = codex_model_provider_info::canonical_catalog_provider(&model.model)
+                .map(str::to_string);
+        }
+    }
+    models
 }
 
 fn third_party_provider_without_spawn_model_switching(turn_context: &TurnContext) -> bool {
