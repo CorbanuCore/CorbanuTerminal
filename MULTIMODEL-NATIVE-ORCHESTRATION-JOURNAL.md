@@ -741,7 +741,7 @@ Exact live replay:
 
 ## Phase 8C — Fresh qualification reset: native task tree leaked into CrewSpec recovery
 
-Status: repair passes focused automated qualification; exact restart replay pending.
+Status: repaired; exact fresh restart replay passed.
 
 Timestamp: 2026-07-25T08:22:15Z
 
@@ -776,7 +776,71 @@ Automated evidence:
 - `native_task_agent_role_does_not_make_it_a_persistent_spawn_crew_member` passes.
 - `cargo check -p codex-tui`, `just fmt`, and `git diff --check` pass.
 
+Exact replay:
+
+- A fresh home with no prior sessions created a standard CrewSpec before the primary root had any
+  model turn or rollout.
+- The saved `/spawn` map contained only the explicit Fable Nazgul, Sol Troll, and three Orcs.
+  The unmaterialized primary remained a native registry root and did not enter CrewSpec recovery.
+- Restarting from the Fable thread produced no pane restore errors, no replacement panes, and no
+  duplicate crew members. Native `list_agents` showed the native `/root`, the one explicit Nazgul,
+  one Troll, and three unloaded Orc descendants.
+
+## Phase 8D — Exact crew runtime was overwritten at the bind/resume boundary
+
+Status: repaired and exact provider-replayed; qualification count remains zero.
+
+Timestamp: 2026-07-25T08:51:07Z
+
+Observed:
+
+- The first fresh restart replay showed `claude-opus-5-plan high` after directly resuming the
+  explicit Fable Nazgul. A controlled provider turn confirmed that it actually sampled Opus, so
+  this was not a cosmetic startup banner.
+- The CrewSpec and pane runtime map still held the correct
+  `claude-plan / claude-fable-5-plan / high` tuple.
+- Two persistence boundaries were incomplete:
+  `SpawnThreadStateMetadata` omitted reasoning effort, and binding a separate native Nazgul root
+  overwrote its saved Fable runtime with the currently focused parent pane's Opus runtime.
+- Generic startup resume also waited for the app-server fallback path instead of applying the
+  state database's exact tuple before provider bootstrap.
+
+Repair:
+
+- Native spawn registration now persists provider, model, and reasoning effort together.
+- Bound native roots prefer their own saved runtime tuple; the focused parent pane is only a
+  fallback when no native runtime exists.
+- Startup resume reads the persisted thread tuple before bootstrap and applies it as an explicit
+  resume override unless the user supplied an explicit model/provider override.
+- Commits `12dc2160f` and `0fb731874` contain the repair.
+
+Automated evidence:
+
+- `startup_resume_applies_persisted_runtime_before_bootstrap` passes.
+- `native_spawn_registration_persists_started_session_model_provider_pair` now asserts persisted
+  `xhigh` effort in addition to provider and model.
+- `bound_nazgul_root_persists_role_metadata_to_state_db` proves a focused Opus parent cannot
+  overwrite a bound Fable root's provider/model/effort.
+- The 73-test `/spawn` suite passes with `RUST_MIN_STACK=33554432`; the repository's known default
+  test-thread stack overflow is avoided without skipping any of these tests.
+- `cargo check -p codex-tui`, `just fmt`, and `git diff --check` pass.
+
+Exact replay:
+
+- Candidate binary: `/tmp/pfterminal-native-orch-0fb731874`.
+- SHA-256: `bb43a417dbfb71e3bc23be393829d3a09f0217cc472930a5552d6937b0b593c0`.
+- Fresh home: `/tmp/pft-native-orch-runtime-replay4`.
+- The standard crew was created before any primary-root model turn. SQLite immediately held:
+  Fable/high Nazgul, Sol/xhigh Troll, Luna/xhigh Orc, Terra/xhigh Orc, and Grok/high Orc.
+- After process termination, direct resume of Fable thread
+  `019f9876-c834-7cf2-87f9-19d1b6986860` rendered `Claude Fable 5 Plan high`.
+- The controlled turn returned `FABLE_RESUME_OK`. Provider logs contain
+  `model=claude-fable-5-plan` and no `claude-opus-5-plan` for that turn.
+- `list_agents` showed exactly the native root plus the five CrewSpec members. The three unloaded
+  descendants retained their original canonical paths; no phantom or replacement child appeared.
+
 Disposition:
 
-- Qualification count remains zero. Build a new immutable candidate, replay this exact broken
-  layout without restore errors or phantom panes, then begin all three free-form sessions again.
+- The prerequisite restart/recovery matrix now passes on the immutable candidate.
+- Qualification count remains zero by design. Begin three fresh 45–60 minute free-form sessions
+  from this exact source state; any new invariant failure resets the count.
