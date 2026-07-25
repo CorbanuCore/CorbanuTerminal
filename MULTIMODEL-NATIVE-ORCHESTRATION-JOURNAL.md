@@ -898,3 +898,43 @@ Wind-down:
 - Removed disposable worktree `/tmp/isometric-native-orch-s1-20260725` immediately after its
   failure proof completed and deleted branch `qual/native-orch-s1-20260725`.
 - Root filesystem free space after reclaim: 113 GiB.
+
+Replacement candidate:
+
+- Repair commit: `e1d05c033`.
+- Binary: `/tmp/pfterminal-native-orch-e1d05c033`.
+- SHA-256: `a4b382c91a1c2f42061742dfe86d0ae8500e6ace430ec68442bf676eea5e0685`.
+- Root filesystem free space after the build: 109 GiB.
+- This candidate supersedes `bb43a417dbfb71e3bc23be393829d3a09f0217cc472930a5552d6937b0b593c0`;
+  no qualification result from the superseded binary counts.
+
+## Phase 8F — Exact live saturation seam passes on the replacement candidate
+
+Status: prerequisite seam pass; long-session qualification count remains zero.
+
+Timestamp: 2026-07-25T09:27:41Z
+
+Evidence:
+
+- Fresh home `/tmp/pft-native-orch-satfix-home-20260725` created the standard CrewSpec, then
+  directly resumed its persisted Nazgul thread as `claude-plan / claude-fable-5-plan / high`.
+- Fable used native `followup_task` to start Sol Troll Burzum and native `spawn_agent` to create
+  independent reviewer `/root/nazgul_angmar/epicurus`.
+- Burzum started Luna, Terra, and Grok Orcs. `/spawn status` showed Burzum, Snaga, Ghash, and
+  Krimp all `running`; the native reviewer was also `running`.
+- Process evidence at the control boundary showed four independent `sleep 600` jobs plus Burzum's
+  active supervising turn, occupying all five configured descendant execution slots.
+- While those five turns were active, direct human input to the idle Fable manager was accepted at
+  `2026-07-25T09:27:20.455Z`; Fable returned `MANAGER_CONTROL_OK` at
+  `2026-07-25T09:27:24.256Z`.
+- Logs contain no `AgentLimitReached`, `Cannot start turn`, or execution-slot rejection for the
+  control turn.
+
+Disposition:
+
+- The exact crash-shaped boundary that invalidated the first session now passes live.
+- This short seam test is not one of the required 45–60 minute free-form qualification sessions.
+  Begin the three-session count at zero on this same candidate hash.
+- Stopped only tmux session `native_orch_satfix` after evidence collection. Four child jobs exited
+  with the TUI; one known orphaned sleep PID was terminated explicitly, leaving no process rooted
+  in the temporary home or workspace.
