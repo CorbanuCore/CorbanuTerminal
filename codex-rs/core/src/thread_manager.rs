@@ -728,7 +728,6 @@ impl ThreadManager {
         parent_trace: Option<W3cTraceContext>,
         supports_openai_form_elicitation: bool,
     ) -> CodexResult<NewThread> {
-        let agent_control = self.agent_control_for_config(&config);
         let environments = default_thread_environment_selections(
             self.state.environment_manager.as_ref(),
             &config.cwd,
@@ -736,6 +735,13 @@ impl ThreadManager {
         let (session_source, thread_source) = initial_history
             .get_resumed_session_sources()
             .unwrap_or_else(|| (self.state.session_source.clone(), None));
+        // A restored thread-spawn child must rejoin its loaded parent's control plane. Giving
+        // every resumed child a fresh AgentControl leaves persisted siblings invisible to
+        // list/send/follow-up operations and permits a duplicate path to be spawned over them.
+        // Root threads still receive a fresh tree-scoped control.
+        let agent_control = self
+            .agent_control_for_session_source(&config, &session_source)
+            .await;
         let initial_multi_agent_mode = initial_history.get_latest_effective_multi_agent_mode();
         Box::pin(self.state.spawn_thread_with_source(
             config,

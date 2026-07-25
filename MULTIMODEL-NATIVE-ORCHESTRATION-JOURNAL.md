@@ -533,3 +533,55 @@ Live evidence:
   independently repeated the same repaired shape; Fable continued again with no 400.
 - The live turn subsequently performed additional shell, image, and search calls while preserving
   the same standard `/spawn` crew and exact runtime.
+
+## Phase 6E — Rejoin restored crew members to one native control plane
+
+Status: a restored `/spawn` hierarchy is one live native agent tree, not merely a set of panes.
+
+Timestamp: 2026-07-25T06:36:19Z
+
+Discovery:
+
+- After process recovery, `/spawn` showed the original Burzum, Snaga, Ghash, and Krimp threads, but
+  Fable's native collaboration registry could not resolve the existing Burzum path.
+- Fable's failed follow-up led it to create a replacement at the same canonical path. This proved
+  that TUI crew restoration and native collaboration restoration were not yet the same operation.
+- Fresh child creation already shared the parent's `AgentControl`. The split occurred only during
+  generic `thread/resume`, which allocated a new control for every restored thread.
+
+Repair:
+
+- Generic thread resume now reads the persisted session source first. A thread-spawn child rejoins
+  the loaded parent's `AgentControl`; a root thread still receives a new tree-scoped control.
+- Existing registration on successful resume restores the child's canonical path and metadata in
+  that shared registry. Native path reservation therefore rejects a replacement at an already-live
+  crew path.
+- `/spawn` continues to own crew membership and presentation. This change repairs the native
+  lifecycle substrate beneath it.
+
+Automated evidence:
+
+- `resumed_subagent_rejoins_loaded_parent_control_plane` passes. It restarts a parent and named
+  child from persisted rollouts, proves both sessions share one control-plane identity, proves the
+  child path resolves from each side, and proves a duplicate `/root/troll_burzum` spawn is rejected.
+- `cargo check -p codex-core` passes.
+- The known pre-existing
+  `resume_thread_subagent_restores_stored_metadata_and_effective_multi_agent_mode` timing race
+  failed once and passed twice without code changes; it does not exercise generic
+  `ThreadManager::resume_thread_with_history`.
+
+Live evidence:
+
+- Exact debug binary was rebuilt, then root `019f97d5-ce22-7b31-aa22-f04656bbe782` and its crew were
+  resumed in tmux session `native_orch_registry_probe`.
+- Fable's `list_agents` returned:
+  `/root/nazgul_angmar`,
+  `/root/nazgul_angmar/troll_burzum`,
+  `/root/nazgul_angmar/troll_burzum/orc_snaga`,
+  `/root/nazgul_angmar/troll_burzum/orc_ghash`, and
+  `/root/nazgul_angmar/troll_burzum/orc_krimp`.
+- Fable used `followup_task` on the existing Burzum path. The original thread
+  `019f97d6-2cae-7ab0-a008-5ece5f704fcf` completed the turn and returned
+  `provider=openai model=gpt-5.6-sol`.
+- Fable explicitly reported `No files edited, no agents spawned`; the live tree contained one
+  Burzum path.

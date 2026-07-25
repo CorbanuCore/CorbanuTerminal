@@ -7,8 +7,10 @@ use crate::session::session::SessionSettingsUpdate;
 use crate::session::tests::make_session_and_context;
 use crate::tasks::InterruptedTurnHistoryMarker;
 use crate::tasks::interrupted_turn_history_marker;
+use assert_matches::assert_matches;
 use codex_extension_api::empty_extension_registry;
 use codex_models_manager::manager::RefreshStrategy;
+use codex_protocol::AgentPath;
 use codex_protocol::capabilities::CapabilityRootLocation;
 use codex_protocol::capabilities::SelectedCapabilityRoot;
 use codex_protocol::models::ContentItem;
@@ -23,6 +25,7 @@ use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::ThreadSource;
 use codex_protocol::protocol::TurnStartedEvent;
 use codex_protocol::protocol::UserMessageEvent;
+use codex_protocol::user_input::UserInput;
 use codex_utils_path_uri::PathUri;
 use core_test_support::PathBufExt;
 use core_test_support::PathExt;
@@ -364,6 +367,153 @@ async fn start_thread_keeps_internal_threads_hidden_from_normal_lookups() {
     assert!(report.submit_failed.is_empty());
     assert!(report.timed_out.is_empty());
     assert!(manager.list_thread_ids().await.is_empty());
+}
+
+#[tokio::test]
+async fn resumed_subagent_rejoins_loaded_parent_control_plane() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+
+    let manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    );
+    let parent = manager
+        .start_thread(config.clone())
+        .await
+        .expect("start parent thread");
+    let child_path = AgentPath::try_from("/root/troll_burzum").expect("child path");
+    let child_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: parent.thread_id,
+        depth: 1,
+        agent_path: Some(child_path.clone()),
+        agent_nickname: Some("Burzum".to_string()),
+        agent_role: Some("troll".to_string()),
+    });
+    let child = manager
+        .start_thread_with_options(StartThreadOptions {
+            config: config.clone(),
+            initial_history: InitialHistory::New,
+            session_source: Some(child_source.clone()),
+            thread_source: Some(ThreadSource::Subagent),
+            dynamic_tools: Vec::new(),
+            metrics_service_name: None,
+            multi_agent_mode: Some(MultiAgentMode::Proactive),
+            parent_trace: None,
+            environments: Vec::new(),
+            thread_extension_init: Default::default(),
+            supports_openai_form_elicitation: false,
+        })
+        .await
+        .expect("start child thread");
+
+    for (thread, message) in [
+        (&parent.thread, "persist parent"),
+        (&child.thread, "persist child"),
+    ] {
+        thread
+            .inject_user_message_without_turn(message.to_string())
+            .await;
+        thread.codex.session.ensure_rollout_materialized().await;
+        thread
+            .codex
+            .session
+            .flush_rollout()
+            .await
+            .expect("flush rollout");
+    }
+    let parent_rollout = parent.thread.rollout_path().expect("parent rollout path");
+    let child_rollout = child.thread.rollout_path().expect("child rollout path");
+    let parent_id = parent.thread_id;
+    let child_id = child.thread_id;
+
+    let shutdown = manager
+        .shutdown_all_threads_bounded(Duration::from_secs(10))
+        .await;
+    assert!(shutdown.submit_failed.is_empty());
+    assert!(shutdown.timed_out.is_empty());
+
+    let resumed_manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    );
+    let auth_manager =
+        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let resumed_parent = resumed_manager
+        .resume_thread_from_rollout(
+            config.clone(),
+            parent_rollout,
+            auth_manager.clone(),
+            /*parent_trace*/ None,
+            /*supports_openai_form_elicitation*/ false,
+        )
+        .await
+        .expect("resume parent first");
+    assert_eq!(resumed_parent.thread_id, parent_id);
+    let resumed_child = resumed_manager
+        .resume_thread_from_rollout(
+            config.clone(),
+            child_rollout,
+            auth_manager,
+            /*parent_trace*/ None,
+            /*supports_openai_form_elicitation*/ false,
+        )
+        .await
+        .expect("resume child after parent");
+    assert_eq!(resumed_child.thread_id, child_id);
+
+    let parent_control = resumed_parent
+        .thread
+        .codex
+        .session
+        .services
+        .agent_control
+        .clone();
+    let child_control = resumed_child
+        .thread
+        .codex
+        .session
+        .services
+        .agent_control
+        .clone();
+    assert_eq!(parent_control.session_id(), child_control.session_id());
+    assert_eq!(
+        parent_control
+            .get_agent_metadata_for_path(&child_path)
+            .and_then(|metadata| metadata.agent_id),
+        Some(child_id)
+    );
+    assert_eq!(
+        child_control
+            .get_agent_metadata_for_path(&child_path)
+            .and_then(|metadata| metadata.agent_id),
+        Some(child_id)
+    );
+
+    let duplicate = parent_control
+        .spawn_agent(
+            config,
+            vec![UserInput::Text {
+                text: "duplicate work".to_string(),
+                text_elements: Vec::new(),
+            }]
+            .into(),
+            Some(child_source),
+        )
+        .await
+        .expect_err("a restored live path must not be replaced");
+    assert_matches!(
+        duplicate,
+        CodexErr::UnsupportedOperation(message)
+            if message.contains("agent path `/root/troll_burzum` already exists")
+    );
 }
 
 #[tokio::test]
