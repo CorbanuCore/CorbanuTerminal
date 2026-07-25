@@ -129,7 +129,7 @@ impl App {
         Ok(())
     }
 
-    fn ensure_crew_providers_ready(&self, crew: &CrewSpec) -> Result<()> {
+    async fn ensure_crew_providers_ready(&self, crew: &CrewSpec) -> Result<()> {
         crew.validate()
             .map_err(|err| eyre!("The requested crew is invalid: {err}"))?;
         let mut checked_providers = HashSet::new();
@@ -141,7 +141,8 @@ impl App {
                 ));
             };
             if checked_providers.insert(provider_id.clone()) {
-                self.ensure_native_spawn_provider_ready(Some(provider_id))?;
+                self.ensure_native_spawn_provider_ready(Some(provider_id))
+                    .await?;
             }
         }
         Ok(())
@@ -165,7 +166,7 @@ impl App {
             .or(self.active_thread_id)
             .ok_or_else(|| eyre!("Cannot create a crew before Codex Main has started."))?;
         let spawn_config = self.native_spawn_agent_config()?;
-        self.ensure_crew_providers_ready(&crew)?;
+        self.ensure_crew_providers_ready(&crew).await?;
         match self.spawn_crew.as_mut() {
             Some(existing)
                 if existing.spec.schema_version == crew.schema_version

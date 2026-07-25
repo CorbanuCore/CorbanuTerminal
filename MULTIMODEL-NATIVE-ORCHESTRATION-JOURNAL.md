@@ -2108,3 +2108,44 @@ Qualification disposition:
   session.
 - All three counted sessions must use the exact binary and SHA-256 above. Any code or binary
   change resets the count.
+
+## Phase 8X — First candidate rejection: external provider auth was not preflighted
+
+Status: CANDIDATE REJECTED at 2026-07-25T21:42:42Z; count remains 0 of 3.
+
+Observed failure:
+
+- A fresh home and fresh text-improvement-harness worktree started immutable candidate
+  `4243b5e82` in tmux session `pft_native_4243_s1`.
+- The TUI created the complete standard native crew. The Nazgul pane showed the exact
+  `claude-fable-5-plan` runtime.
+- An injected first `turn/start` failure recovered after one bounded retry as intended.
+- The actual turn then failed before doing repository work because the Claude Plan external
+  bearer command reported that its OAuth refresh token was missing.
+- No qualification credit is claimed. The TUI and watcher were stopped after evidence
+  collection.
+
+Boundary diagnosis:
+
+- Native provider readiness checked OpenAI account auth and vault/environment API keys.
+- It did not execute providers' configured `ModelProviderAuthInfo` command. Therefore a
+  provider such as Claude Plan could pass crew preflight, create every child, and fail only
+  when the first turn attempted to obtain a bearer token.
+- This violates the specification's requirement to identify unavailable runtimes before
+  worker creation. It is also evidence that merely exercising the `/spawn` UI is not proof
+  that Codex-native cross-model delegation can execute real work.
+
+Repair in progress:
+
+- `codex-login` now exposes a token-redacting external-auth validation helper.
+- Crew creation, direct native worker creation, and restored-worker materialization all await
+  the same generic provider readiness check before creating a child.
+- Targeted external-auth validation tests pass 2 of 2.
+- Native spawn auth-guard tests pass 4 of 4, including an unavailable external bearer command.
+
+Next:
+
+- Complete the adjacent automated gates, commit the repair, reclaim build space, and build a
+  new immutable candidate.
+- Restart qualification at 0 of 3. Counted sessions must prove real native Codex delegation
+  across Opus 5, Fable, Kimi K3, and Grok 4.5; creating a `/spawn` crew alone is not sufficient.

@@ -178,6 +178,12 @@ async fn run_provider_auth_command(
     Ok(access_token)
 }
 
+/// Verifies that a provider's external bearer-token command can currently
+/// produce a usable token without exposing that token to the caller.
+pub async fn validate_provider_auth_command(config: &ModelProviderAuthInfo) -> io::Result<()> {
+    run_provider_auth_command(config, false).await.map(drop)
+}
+
 fn resolve_provider_auth_program(command: &str, cwd: &Path) -> io::Result<PathBuf> {
     let path = Path::new(command);
     if path.is_absolute() {

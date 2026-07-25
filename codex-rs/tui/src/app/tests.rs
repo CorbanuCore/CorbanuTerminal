@@ -5875,6 +5875,40 @@ async fn native_spawn_auth_guard_accepts_provider_key_storage() -> Result<()> {
 }
 
 #[tokio::test]
+async fn native_spawn_auth_guard_rejects_unavailable_external_bearer_command() {
+    let mut app = make_test_app().await;
+    let mut provider = app
+        .config
+        .model_providers
+        .get(CLAUDE_PLAN_PROVIDER_ID)
+        .expect("Claude Plan provider should be configured")
+        .clone();
+    provider
+        .auth
+        .as_mut()
+        .expect("Claude Plan provider should use external bearer auth")
+        .command = app
+        .config
+        .codex_home
+        .join("missing-provider-auth-command")
+        .display()
+        .to_string();
+    app.config
+        .model_providers
+        .insert(CLAUDE_PLAN_PROVIDER_ID.to_string(), provider);
+
+    let error = app
+        .ensure_native_spawn_provider_ready(Some(CLAUDE_PLAN_PROVIDER_ID))
+        .await
+        .expect_err("unavailable external bearer auth should be rejected before native spawn");
+    let message = error.to_string();
+
+    assert!(message.contains("Claude Plan"));
+    assert!(message.contains("provider authentication is unavailable"));
+    assert!(message.contains("failed to start"));
+}
+
+#[tokio::test]
 async fn native_spawn_auth_guard_uses_selected_provider_after_onboarding() -> Result<()> {
     let mut app = make_test_app().await;
     let provider = app

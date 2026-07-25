@@ -1094,6 +1094,26 @@ async fn external_bearer_only_auth_manager_returns_none_when_command_fails() {
 }
 
 #[tokio::test]
+async fn provider_auth_command_validation_accepts_a_usable_token_without_returning_it() {
+    let script = ProviderAuthScript::new(&["provider-token"]).unwrap();
+
+    crate::auth::validate_provider_auth_command(&script.auth_config())
+        .await
+        .expect("usable provider auth command should pass preflight");
+}
+
+#[tokio::test]
+async fn provider_auth_command_validation_preserves_actionable_failures() {
+    let script = ProviderAuthScript::new_failing().unwrap();
+
+    let error = crate::auth::validate_provider_auth_command(&script.auth_config())
+        .await
+        .expect_err("failing provider auth command should fail preflight");
+
+    assert!(error.to_string().contains("exited with status"));
+}
+
+#[tokio::test]
 async fn unauthorized_recovery_uses_external_refresh_for_bearer_manager() {
     let script = ProviderAuthScript::new(&["provider-token", "refreshed-provider-token"]).unwrap();
     let mut auth_config = script.auth_config();

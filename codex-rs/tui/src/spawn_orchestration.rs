@@ -587,7 +587,8 @@ impl App {
                     reasoning_effort,
                 }
             };
-            self.ensure_native_spawn_provider_ready(Some(&runtime.provider))?;
+            self.ensure_native_spawn_provider_ready(Some(&runtime.provider))
+                .await?;
             let spawn_config = self.native_spawn_agent_config()?;
             let started = app_server
                 .spawn_agent_thread(
@@ -2187,12 +2188,31 @@ impl App {
         Ok(spawn_config)
     }
 
-    pub(crate) fn ensure_native_spawn_provider_ready(
+    pub(crate) async fn ensure_native_spawn_provider_ready(
         &self,
         provider_id: Option<&str>,
     ) -> Result<()> {
         if let Some(message) = self.native_spawn_provider_auth_error(provider_id) {
             return Err(eyre!("{message}"));
+        }
+
+        let provider_id = provider_id.unwrap_or(self.config.model_provider_id.as_str());
+        let provider = if provider_id == self.config.model_provider_id {
+            Some(&self.config.model_provider)
+        } else {
+            self.config.model_providers.get(provider_id)
+        };
+        if let Some(provider) = provider
+            && let Some(auth) = provider.auth.as_ref()
+        {
+            let provider_name = provider_display_name(provider_id, provider.name.as_str());
+            codex_login::validate_provider_auth_command(auth)
+                .await
+                .map_err(|err| {
+                    eyre!(
+                        "Cannot run native Codex worker on {provider_name}; provider authentication is unavailable: {err}"
+                    )
+                })?;
         }
         Ok(())
     }

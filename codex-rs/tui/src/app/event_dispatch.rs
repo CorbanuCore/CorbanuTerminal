@@ -3289,7 +3289,10 @@ impl App {
                     self.logical_parent_node_for_spawn(role, parent_node_id.as_deref());
                 let agent_nickname =
                     agent_nickname.or_else(|| self.next_spawn_agent_nickname(role));
-                if let Err(err) = self.ensure_native_spawn_provider_ready(provider.as_deref()) {
+                if let Err(err) = self
+                    .ensure_native_spawn_provider_ready(provider.as_deref())
+                    .await
+                {
                     self.chat_widget.add_error_message(err.to_string());
                     return Ok(AppRunControl::Continue);
                 }
