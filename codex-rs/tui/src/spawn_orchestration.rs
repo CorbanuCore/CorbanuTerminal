@@ -2233,10 +2233,7 @@ impl App {
             .keys()
             .cloned()
             .collect::<Vec<_>>();
-        if !providers
-            .iter()
-            .any(|id| *id == self.config.model_provider_id)
-        {
+        if !providers.contains(&self.config.model_provider_id) {
             providers.push(self.config.model_provider_id.clone());
         }
         providers.sort();
@@ -3449,6 +3446,7 @@ impl App {
     pub(crate) fn is_spawn_orchestration_thread(&self, thread_id: ThreadId) -> bool {
         let node_id = self.logical_native_node_for_thread(thread_id);
         self.spawn_node_is_persistent_crew_member(&node_id)
+            || self.is_active_assignment_participant(&node_id)
             || (self.spawn_legacy_read_only
                 && (self.spawn_status_by_thread.contains_key(&thread_id)
                     || self.spawn_parent_by_thread.contains_key(&thread_id)

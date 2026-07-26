@@ -2012,6 +2012,15 @@ impl App {
         })
     }
 
+    pub(crate) fn is_active_assignment_participant(&self, node_id: &str) -> bool {
+        let node_id = normalize_orchestrate_node_id(node_id);
+        self.orchestrate_whips.values().any(|whip| {
+            whip.is_assignment()
+                && whip.state == WhipState::Armed
+                && (whip.target == node_id || whip.holder.as_deref() == Some(node_id.as_str()))
+        })
+    }
+
     pub(crate) fn assignment_dispatch_target_for_holder(
         &self,
         holder_node_id: &str,

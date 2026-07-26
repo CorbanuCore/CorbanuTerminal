@@ -153,6 +153,20 @@ fn thread_manager() -> ThreadManager {
     )
 }
 
+async fn install_live_root(
+    session: &mut crate::session::session::Session,
+    turn: &TurnContext,
+) -> ThreadManager {
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = root.thread_id;
+    manager
+}
+
 fn set_turn_to_openai_provider(turn: &mut TurnContext) {
     let provider_info =
         built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)
@@ -440,8 +454,6 @@ async fn spawn_agent_uses_explorer_role_and_preserves_approval_policy() {
     }
 
     let (mut session, mut turn) = make_session_and_context().await;
-    let manager = thread_manager();
-    session.services.agent_control = manager.agent_control();
     let mut config = (*turn.config).clone();
     let provider_info =
         built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)["ollama"].clone();
@@ -457,6 +469,7 @@ async fn spawn_agent_uses_explorer_role_and_preserves_approval_policy() {
         .expect("approval policy should be set");
     turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
     turn.config = Arc::new(config);
+    let manager = install_live_root(&mut session, &turn).await;
 
     let invocation = invocation(
         Arc::new(session),
@@ -1413,8 +1426,7 @@ async fn multi_agent_v2_spawn_partial_fork_turns_allows_agent_type_override() {
 #[tokio::test]
 async fn spawn_agent_returns_agent_id_without_task_name() {
     let (mut session, turn) = make_session_and_context().await;
-    let manager = thread_manager();
-    session.services.agent_control = manager.agent_control();
+    let _manager = install_live_root(&mut session, &turn).await;
 
     let output = SpawnAgentHandler::default()
         .handle(invocation(
@@ -3246,8 +3258,6 @@ async fn spawn_agent_reapplies_runtime_sandbox_after_role_config() {
     }
 
     let (mut session, mut turn) = make_session_and_context().await;
-    let manager = thread_manager();
-    session.services.agent_control = manager.agent_control();
     let expected_sandbox = turn.config.legacy_sandbox_policy();
     #[allow(deprecated)]
     let mut expected_file_system_sandbox_policy =
@@ -3278,6 +3288,7 @@ async fn spawn_agent_reapplies_runtime_sandbox_after_role_config() {
         turn.config.permissions.effective_permission_profile(),
         "test requires a runtime profile override that differs from base config"
     );
+    let manager = install_live_root(&mut session, &turn).await;
 
     let invocation = invocation(
         Arc::new(session),
@@ -3371,14 +3382,38 @@ async fn spawn_agent_allows_depth_up_to_configured_max_depth() {
     }
 
     let (mut session, mut turn) = make_session_and_context().await;
-    let manager = thread_manager();
-    session.services.agent_control = manager.agent_control();
-
     let mut config = (*turn.config).clone();
     config.agent_max_depth = DEFAULT_AGENT_MAX_DEPTH + 1;
     turn.config = Arc::new(config);
     turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
         parent_thread_id: session.thread_id,
+        depth: DEFAULT_AGENT_MAX_DEPTH,
+        agent_path: None,
+        agent_nickname: None,
+        agent_role: None,
+        agent_class: None,
+    });
+    let manager = thread_manager();
+    let parent = manager
+        .start_thread_with_options(StartThreadOptions {
+            config: (*turn.config).clone(),
+            initial_history: InitialHistory::New,
+            session_source: Some(turn.session_source.clone()),
+            thread_source: Some(ThreadSource::Subagent),
+            dynamic_tools: Vec::new(),
+            metrics_service_name: None,
+            multi_agent_mode: None,
+            parent_trace: None,
+            environments: Vec::new(),
+            thread_extension_init: ExtensionDataInit::default(),
+            supports_openai_form_elicitation: false,
+        })
+        .await
+        .expect("live parent at the configured depth should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = parent.thread_id;
+    turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: ThreadId::new(),
         depth: DEFAULT_AGENT_MAX_DEPTH,
         agent_path: None,
         agent_nickname: None,
@@ -3421,8 +3456,7 @@ async fn spawn_agent_allows_root_to_spawn_troll() {
     let config = (*turn.config).clone();
     let expected_model = turn.model_info.slug.clone();
     let expected_provider = turn.config.model_provider_id.clone();
-    let manager = thread_manager();
-    session.services.agent_control = manager.agent_control();
+    let manager = install_live_root(&mut session, &turn).await;
 
     let invocation = invocation(
         Arc::new(session),
@@ -3479,8 +3513,7 @@ fn spawn_agent_allows_troll_to_spawn_orc() {
                 let config = (*turn.config).clone();
                 let expected_model = turn.model_info.slug.clone();
                 let expected_provider = turn.config.model_provider_id.clone();
-                let manager = thread_manager();
-                session.services.agent_control = manager.agent_control();
+                let manager = install_live_root(&mut session, &turn).await;
 
                 let troll_output = SpawnAgentHandler::default()
                     .handle(invocation(

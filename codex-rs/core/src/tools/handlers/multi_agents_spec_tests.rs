@@ -196,8 +196,7 @@ fn spawn_agent_tool_caps_visible_model_summaries() {
     let last_visible = MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION - 1;
     assert!(description.contains(&format!("`model-{last_visible}-model`")));
     assert!(!description.contains(&format!(
-        "`model-{}-model`",
-        MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION
+        "`model-{MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION}-model`"
     )));
 }
 

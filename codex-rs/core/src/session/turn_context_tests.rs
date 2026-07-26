@@ -55,15 +55,19 @@ fn concurrent_failures_have_one_activation_transition() {
     let state = Arc::new(ModelEditProtocolState::default());
     let barrier = Arc::new(Barrier::new(CALLERS));
     let transitions = std::thread::scope(|scope| {
-        (0..CALLERS)
-            .map(|_| {
-                let state = Arc::clone(&state);
-                let barrier = Arc::clone(&barrier);
-                scope.spawn(move || {
-                    barrier.wait();
-                    state.record_grammar_failure()
-                })
-            })
+        // Spawn every caller before joining any of them. Joining inside a lazy iterator would
+        // block the first caller at the barrier before the remaining callers exist.
+        let mut handles = Vec::with_capacity(CALLERS);
+        for _ in 0..CALLERS {
+            let state = Arc::clone(&state);
+            let barrier = Arc::clone(&barrier);
+            handles.push(scope.spawn(move || {
+                barrier.wait();
+                state.record_grammar_failure()
+            }));
+        }
+        handles
+            .into_iter()
             .map(|handle| handle.join().expect("failure recorder should not panic"))
             .collect::<Vec<_>>()
     });

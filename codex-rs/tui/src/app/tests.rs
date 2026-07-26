@@ -4208,6 +4208,14 @@ async fn assignment_manager_empty_completion_retries_current_turn_once_then_paus
         "attach {worker_node} empty-manager --mode review --holder {manager_node} --for 1h"
     ));
     while app_event_rx.try_recv().is_ok() {}
+    assert!(
+        app.is_spawn_orchestration_thread(manager_thread_id),
+        "an active native assignment Manager must receive terminal lifecycle events"
+    );
+    assert!(
+        app.is_spawn_orchestration_thread(worker_thread_id),
+        "an active native assignment Worker must receive terminal lifecycle events"
+    );
 
     // This is the incident shape: the picker still has an older visible answer, but the current
     // provider turn completes without an AgentMessage item.

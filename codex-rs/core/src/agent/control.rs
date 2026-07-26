@@ -705,7 +705,7 @@ impl AgentControl {
             agent_path: agent_path.clone(),
             agent_nickname: agent_nickname.clone(),
             agent_role: agent_role.clone(),
-            agent_class: agent_class.clone(),
+            agent_class,
         });
         let agent_metadata = AgentMetadata {
             agent_id: None,

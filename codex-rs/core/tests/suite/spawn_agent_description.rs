@@ -179,13 +179,16 @@ async fn spawn_agent_description_lists_visible_models_and_reasoning_efforts() ->
         spawn_agent_description(&body).expect("spawn_agent description should be present");
 
     assert!(
-        description.contains("- `visible-model`: Fast and capable"),
-        "expected visible model summary in spawn_agent description: {description:?}"
+        description.contains(
+            "- model `visible-model` (provider inherited); vision; efforts: low, medium (default), high; tiers: priority"
+        ),
+        "expected visible inherited runtime metadata in spawn_agent description: {description:?}"
     );
     assert!(
-        description
-            .contains("Available model overrides (optional; inherited parent model is preferred):"),
-        "expected model choices to be framed as overrides in spawn_agent description: {description:?}"
+        description.contains(
+            "Available exact runtime overrides (optional; omit both fields to inherit the parent runtime). Pass the provider as `model_provider` and the model as `model`."
+        ),
+        "expected provider/model choices to be framed as exact runtime pairs: {description:?}"
     );
     assert!(
         description.contains(
@@ -200,11 +203,11 @@ async fn spawn_agent_description_lists_visible_models_and_reasoning_efforts() ->
         "expected model override usage guidance in spawn_agent description: {description:?}"
     );
     assert!(
-        description.contains("Reasoning efforts: low, medium (default), high."),
+        description.contains("efforts: low, medium (default), high"),
         "expected default reasoning effort in spawn_agent description: {description:?}"
     );
     assert!(
-        description.contains("Service tiers: priority."),
+        description.contains("tiers: priority"),
         "expected service tier guidance in spawn_agent description: {description:?}"
     );
     assert!(

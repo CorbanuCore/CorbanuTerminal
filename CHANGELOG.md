@@ -1,3 +1,44 @@
+# PFTerminal 0.1.23
+
+## Added
+
+- Native multimodel orchestration now supports durable v2 mailboxes, persisted
+  crew identity and runtime metadata, exact provider/model overrides, bounded
+  worker residency, and root/descendant recovery across resume.
+- Spawn-time runtime metadata now exposes billing class, model tier, estimated
+  token cost, reasoning efforts, service tiers, and vision capability so agent
+  allocation can distinguish plan capacity from metered API spend.
+
+## Fixed
+
+- Anthropic Messages and chat-completions streams that terminate without text,
+  reasoning, or a tool call now fail the turn instead of reporting a successful
+  empty completion. Assignment managers therefore enter the normal
+  retry/error path rather than silently completing and leaving their pane
+  unresponsive.
+- Anthropic prompt-cache tool definitions remain stable across ordinary turns.
+  The edit fallback activates as state after repeated grammar failures instead
+  of mutating the advertised tool schema, while structured edit/write tools
+  remain available as stable low-frequency fallbacks.
+- Native mailbox delivery, provider-auth preflight, restored descendant
+  identity, root resume reconciliation, and manager addressability under worker
+  saturation now share the same native scheduling path.
+
+## Qualification status
+
+- Provider adapter tests cover empty Anthropic/chat streams and tool-only
+  completions. Prompt-cache, structured-edit/write, spawn runtime, hierarchy,
+  sandbox, and model-economics regressions pass on the release candidate.
+- Native orchestration qualification covers required Claude, Grok, Fable, and
+  Kimi runtime mappings plus live mailbox/resume evidence recorded in the
+  multimodel orchestration journal.
+
+Previous release: 0.1.22.
+
+The changelog can be found on the [releases page](https://github.com/agtico/PfTerminal/releases).
+
+---
+
 # PFTerminal 0.1.22
 
 ## Added
