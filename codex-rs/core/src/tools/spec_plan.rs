@@ -50,7 +50,7 @@ use crate::tools::handlers::multi_agents_v2::ListAgentsHandler as ListAgentsHand
 use crate::tools::handlers::multi_agents_v2::SendMessageHandler as SendMessageHandlerV2;
 use crate::tools::handlers::multi_agents_v2::SpawnAgentHandler as SpawnAgentHandlerV2;
 use crate::tools::handlers::multi_agents_v2::WaitAgentHandler as WaitAgentHandlerV2;
-use crate::tools::handlers::structured_edit_protocol_enabled;
+use crate::tools::handlers::native_structured_edit_protocol_enabled;
 use crate::tools::handlers::view_image_spec::ViewImageToolOptions;
 use crate::tools::hosted_spec::WebSearchToolOptions;
 use crate::tools::hosted_spec::create_image_generation_tool;
@@ -751,19 +751,19 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mut
         ));
     }
 
-    if environment_mode.has_environment()
-        && edit_tools_allowed_by_permission_profile(turn_context)
-        && structured_edit_protocol_enabled(turn_context)
+    if environment_mode.has_environment() && edit_tools_allowed_by_permission_profile(turn_context)
     {
         let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
-        planned_tools.add(StructuredEditHandler::new(include_environment_id));
-        planned_tools.add(StructuredWriteHandler::new(include_environment_id));
-    } else if environment_mode.has_environment()
-        && edit_tools_allowed_by_permission_profile(turn_context)
-        && turn_context.model_info.apply_patch_tool_type.is_some()
-    {
-        let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
-        planned_tools.add(ApplyPatchHandler::new(include_environment_id));
+        if native_structured_edit_protocol_enabled(turn_context) {
+            planned_tools.add(StructuredEditHandler::new(include_environment_id));
+            planned_tools.add(StructuredWriteHandler::new(include_environment_id));
+        } else if turn_context.model_info.apply_patch_tool_type.is_some() {
+            // Runtime fallback policy may reject strict patches, but it must never rebuild
+            // the model-visible edit inventory and invalidate the provider's cached prefix.
+            planned_tools.add(ApplyPatchHandler::new(include_environment_id));
+            planned_tools.add(StructuredEditHandler::new(include_environment_id));
+            planned_tools.add(StructuredWriteHandler::new(include_environment_id));
+        }
     }
 
     if turn_context

@@ -127,6 +127,7 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
     let TestCodex {
         codex,
         config,
+        cwd,
         thread_manager,
         ..
     } = test_codex()
@@ -156,6 +157,8 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
         )
         .await
         .base_instructions;
+    let (first_sandbox_policy, first_permission_profile) =
+        turn_permission_fields(PermissionProfile::Disabled, cwd.path());
 
     codex
         .submit(Op::UserInput {
@@ -166,11 +169,19 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: Default::default(),
+            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                environments: Some(local_selections(cwd.abs())),
+                approval_policy: Some(AskForApproval::Never),
+                sandbox_policy: Some(first_sandbox_policy),
+                permission_profile: first_permission_profile,
+                ..Default::default()
+            },
         })
         .await?;
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
+    let (second_sandbox_policy, second_permission_profile) =
+        turn_permission_fields(PermissionProfile::Disabled, cwd.path());
     codex
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
@@ -180,7 +191,13 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: Default::default(),
+            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                environments: Some(local_selections(cwd.abs())),
+                approval_policy: Some(AskForApproval::Never),
+                sandbox_policy: Some(second_sandbox_policy),
+                permission_profile: second_permission_profile,
+                ..Default::default()
+            },
         })
         .await?;
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
@@ -194,6 +211,8 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
         "update_plan",
         "request_user_input",
         "apply_patch",
+        "structured_edit",
+        "structured_write",
         "view_image",
         "tool_search",
         "web_search",

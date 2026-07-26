@@ -42,12 +42,88 @@ impl TurnSkillsContext {
 
 pub(crate) type ShellSnapshotTask = Shared<BoxFuture<'static, Option<Arc<ShellSnapshotFile>>>>;
 
-const STRICT_APPLY_PATCH_FALLBACK_FAILURE_THRESHOLD: u8 = 2;
+const STRICT_APPLY_PATCH_ONE_GRAMMAR_FAILURE: u8 = 1;
+const STRICT_APPLY_PATCH_FALLBACK_ACTIVE: u8 = 2;
 
 #[derive(Debug, Default)]
 pub(crate) struct ModelEditProtocolState {
-    strict_apply_patch_failures: AtomicU8,
-    structured_edit_fallback_enabled: AtomicBool,
+    strict_apply_patch_grammar_state: AtomicU8,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PatchFallbackTransition {
+    Unchanged { consecutive_failures: u8 },
+    Activated { consecutive_failures: u8 },
+}
+
+impl PatchFallbackTransition {
+    pub(crate) fn consecutive_failures(self) -> u8 {
+        match self {
+            Self::Unchanged {
+                consecutive_failures,
+            }
+            | Self::Activated {
+                consecutive_failures,
+            } => consecutive_failures,
+        }
+    }
+}
+
+impl ModelEditProtocolState {
+    fn record_grammar_failure(&self) -> PatchFallbackTransition {
+        let mut current = self
+            .strict_apply_patch_grammar_state
+            .load(Ordering::Acquire);
+        loop {
+            if current >= STRICT_APPLY_PATCH_FALLBACK_ACTIVE {
+                return PatchFallbackTransition::Unchanged {
+                    consecutive_failures: STRICT_APPLY_PATCH_FALLBACK_ACTIVE,
+                };
+            }
+            let next = current.saturating_add(1);
+            match self.strict_apply_patch_grammar_state.compare_exchange(
+                current,
+                next,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) if next == STRICT_APPLY_PATCH_FALLBACK_ACTIVE => {
+                    return PatchFallbackTransition::Activated {
+                        consecutive_failures: next,
+                    };
+                }
+                Ok(_) => {
+                    return PatchFallbackTransition::Unchanged {
+                        consecutive_failures: next,
+                    };
+                }
+                Err(observed) => current = observed,
+            }
+        }
+    }
+
+    fn record_parse_success(&self) {
+        let mut current = self
+            .strict_apply_patch_grammar_state
+            .load(Ordering::Acquire);
+        while current == STRICT_APPLY_PATCH_ONE_GRAMMAR_FAILURE {
+            match self.strict_apply_patch_grammar_state.compare_exchange(
+                current,
+                0,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => return,
+                Err(observed) => current = observed,
+            }
+        }
+    }
+
+    fn fallback_enabled(&self) -> bool {
+        self.strict_apply_patch_grammar_state
+            .load(Ordering::Acquire)
+            >= STRICT_APPLY_PATCH_FALLBACK_ACTIVE
+    }
 }
 
 #[derive(Debug, Default)]
@@ -230,24 +306,16 @@ impl TurnContext {
         ToolEnvironmentMode::from_count(self.environments.turn_environments.len())
     }
 
-    pub(crate) fn record_strict_apply_patch_failure(&self) -> u8 {
-        let failures = self
-            .model_edit_protocol_state
-            .strict_apply_patch_failures
-            .fetch_add(1, Ordering::AcqRel)
-            .saturating_add(1);
-        if failures >= STRICT_APPLY_PATCH_FALLBACK_FAILURE_THRESHOLD {
-            self.model_edit_protocol_state
-                .structured_edit_fallback_enabled
-                .store(true, Ordering::Release);
-        }
-        failures
+    pub(crate) fn record_strict_apply_patch_grammar_failure(&self) -> PatchFallbackTransition {
+        self.model_edit_protocol_state.record_grammar_failure()
+    }
+
+    pub(crate) fn record_strict_apply_patch_parse_success(&self) {
+        self.model_edit_protocol_state.record_parse_success();
     }
 
     pub(crate) fn structured_edit_fallback_enabled(&self) -> bool {
-        self.model_edit_protocol_state
-            .structured_edit_fallback_enabled
-            .load(Ordering::Acquire)
+        self.model_edit_protocol_state.fallback_enabled()
     }
 
     pub(crate) fn set_explicit_shell_command_budget(&self, limit: u64) {
@@ -987,3 +1055,7 @@ impl Session {
         state.session_configuration.clone()
     }
 }
+
+#[cfg(test)]
+#[path = "turn_context_tests.rs"]
+mod tests;

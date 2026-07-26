@@ -8,6 +8,7 @@ use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
 use crate::tools::context::boxed_tool_output;
 use crate::tools::handlers::apply_granted_turn_permissions;
+use crate::tools::handlers::apply_patch::InterceptedPatchSource;
 use crate::tools::handlers::apply_patch::intercept_apply_patch;
 use crate::tools::handlers::implicit_granted_permissions;
 use crate::tools::handlers::normalize_and_validate_additional_permissions;
@@ -320,6 +321,7 @@ impl ExecCommandHandler {
             Some(&tracker),
             &context.call_id,
             "exec_command",
+            InterceptedPatchSource::StrictShell,
         )
         .await?
         {

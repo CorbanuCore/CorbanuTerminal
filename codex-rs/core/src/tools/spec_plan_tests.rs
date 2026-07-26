@@ -742,7 +742,7 @@ async fn glm_model_slug_uses_structured_edit_tools_instead_of_apply_patch() {
 }
 
 #[tokio::test]
-async fn repeated_strict_patch_failures_switch_turn_to_structured_edit_tools() {
+async fn strict_patch_fallback_keeps_model_visible_edit_tools_stable() {
     let initial = probe(|turn| {
         turn.permission_profile = PermissionProfile::workspace_write();
         use_openai_provider(turn);
@@ -751,23 +751,31 @@ async fn repeated_strict_patch_failures_switch_turn_to_structured_edit_tools() {
     })
     .await;
 
-    initial.assert_visible_contains(&["apply_patch"]);
-    initial.assert_visible_lacks(&["structured_edit", "structured_write"]);
+    initial.assert_visible_contains(&["apply_patch", "structured_edit", "structured_write"]);
+    initial.assert_registered_contains(&["apply_patch", "structured_edit", "structured_write"]);
 
     let fallback = probe(|turn| {
         turn.permission_profile = PermissionProfile::workspace_write();
         use_openai_provider(turn);
         turn.model_info.slug = "gpt-5.2".to_string();
         turn.model_info.apply_patch_tool_type = Some(ApplyPatchToolType::Freeform);
-        assert_eq!(turn.record_strict_apply_patch_failure(), 1);
-        assert_eq!(turn.record_strict_apply_patch_failure(), 2);
+        assert_eq!(
+            turn.record_strict_apply_patch_grammar_failure()
+                .consecutive_failures(),
+            1
+        );
+        assert_eq!(
+            turn.record_strict_apply_patch_grammar_failure()
+                .consecutive_failures(),
+            2
+        );
     })
     .await;
 
-    fallback.assert_visible_contains(&["structured_edit", "structured_write"]);
-    fallback.assert_registered_contains(&["structured_edit", "structured_write"]);
-    fallback.assert_visible_lacks(&["apply_patch"]);
-    fallback.assert_registered_lacks(&["apply_patch"]);
+    fallback.assert_visible_contains(&["apply_patch", "structured_edit", "structured_write"]);
+    fallback.assert_registered_contains(&["apply_patch", "structured_edit", "structured_write"]);
+    assert_eq!(initial.visible_specs, fallback.visible_specs);
+    assert_eq!(initial.registered_names, fallback.registered_names);
 }
 
 #[tokio::test]

@@ -557,6 +557,18 @@ impl AnthropicStreamState {
         }
     }
 
+    /// Whether this stream carried anything the caller can act on.
+    ///
+    /// A tool-only turn is ordinary and produces no assistant text, so emptiness
+    /// must be judged across every output channel rather than by message text alone.
+    fn produced_model_output(&self) -> bool {
+        self.message_added
+            || self.reasoning_added
+            || !self.tool_calls.is_empty()
+            || !self.server_tool_uses.is_empty()
+            || !self.web_search_results.is_empty()
+    }
+
     async fn emit_text_delta(
         &mut self,
         text: String,
@@ -839,6 +851,20 @@ impl AnthropicStreamState {
 
     async fn complete(&mut self, tx_event: &mpsc::Sender<Result<ResponseEvent, ApiError>>) {
         let response_id = self.response_id();
+        // A stream that reaches `message_stop` having produced no assistant text, no
+        // reasoning, and no tool call carries no model output. Reporting it as a
+        // completed turn makes a degenerate response indistinguishable from real work:
+        // the caller records a finished turn, a sub-agent reports success to its
+        // parent, and the assignment is silently dropped. Surface it as a stream
+        // failure so the existing retry path decides what to do.
+        if !self.produced_model_output() {
+            let _ = tx_event
+                .send(Err(ApiError::Stream(
+                    "Anthropic messages stream completed without any model output".to_string(),
+                )))
+                .await;
+            return;
+        }
         if !self.finish_reasoning_item(tx_event).await {
             return;
         }
@@ -1047,6 +1073,79 @@ mod tests {
             events.push(event);
         }
         events
+    }
+
+    #[tokio::test]
+    async fn empty_stream_is_a_failure_not_a_completed_turn() {
+        // message_start -> stop_reason -> message_stop with no content block at all.
+        // The provider produced nothing; reporting Completed here would record a
+        // finished turn and let a sub-agent report success having done no work.
+        for stop_reason in ["end_turn", "tool_use", "pause_turn"] {
+            let events = collect_events(&[
+                format!(
+                    "event: message_start\ndata: {{\"type\":\"message_start\",\"message\":{{\"id\":\"msg_1\",\"model\":\"claude-fable-5\",\"usage\":{{\"input_tokens\":9,\"output_tokens\":0}}}}}}\n\n"
+                )
+                .as_bytes(),
+                format!(
+                    "event: message_delta\ndata: {{\"type\":\"message_delta\",\"delta\":{{\"stop_reason\":\"{stop_reason}\"}},\"usage\":{{\"input_tokens\":9,\"output_tokens\":0}}}}\n\n"
+                )
+                .as_bytes(),
+                b"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+            ])
+            .await;
+
+            assert!(
+                !events
+                    .iter()
+                    .any(|event| matches!(event, Ok(ResponseEvent::Completed { .. }))),
+                "{stop_reason}: an empty stream must not report a completed turn: {events:?}"
+            );
+            assert!(
+                events.iter().any(|event| matches!(event, Err(_))),
+                "{stop_reason}: an empty stream must surface a failure: {events:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn tool_only_stream_still_completes() {
+        // A turn that emits only a tool call carries no assistant text. That is
+        // ordinary and must keep completing, so the emptiness guard cannot key on
+        // message text alone.
+        let events = collect_events(&[
+            br#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_1","model":"claude-fable-5","usage":{"input_tokens":1,"output_tokens":1}}}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"shell","input":{}}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{}"}}
+
+"#,
+            br#"event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+"#,
+            br#"event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":1,"output_tokens":3}}
+
+"#,
+            br#"event: message_stop
+data: {"type":"message_stop"}
+
+"#,
+        ])
+        .await;
+
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, Ok(ResponseEvent::Completed { .. }))),
+            "a tool-only turn must still complete: {events:?}"
+        );
     }
 
     #[tokio::test]

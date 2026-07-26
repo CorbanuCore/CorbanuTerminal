@@ -746,6 +746,27 @@ impl ChatStreamState {
     }
 
     async fn complete(mut self, tx_event: &mpsc::Sender<Result<ResponseEvent, ApiError>>) {
+        // Same boundary as the Anthropic adapter: a stream that terminates having
+        // produced no assistant text, no reasoning, and no tool call carries no model
+        // output, and reporting it as a completed turn hides a failed turn as a
+        // successful one. The in-stream silence timeout only covers streams that stall;
+        // this covers streams that close cleanly with nothing in them.
+        // `message_added` only flips once a text delta is actually emitted, and a
+        // serialized function call deliberately withholds that emission while buffering
+        // the text, so emptiness must be judged on the buffered text rather than on
+        // whether a message item was announced.
+        if self.message_text.is_empty()
+            && self.reasoning_text.is_empty()
+            && !self.reasoning_added
+            && self.tool_calls.is_empty()
+        {
+            let _ = tx_event
+                .send(Err(ApiError::Stream(
+                    "chat completions stream completed without any model output".to_string(),
+                )))
+                .await;
+            return;
+        }
         let response_id = self.response_id();
         let message_id = format!("msg_{response_id}");
         let token_usage = self.token_usage.take();
@@ -1526,10 +1547,16 @@ mod tests {
         ];
 
         for (raw, expected_reason, expected_end_turn) in cases {
+            // Carry one content token. This test covers finish-reason classification;
+            // a stream with no content at all is a separate failure case and is
+            // rejected before a finish reason is ever classified.
+            let content = content_event("chatcmpl-finish", "ok");
             let terminal = format!(
                 "data: {{\"id\":\"chatcmpl-finish\",\"choices\":[{{\"delta\":{{}},\"finish_reason\":\"{raw}\"}}]}}\n\n"
             );
-            let events = collect_events(&[terminal.as_bytes(), b"data: [DONE]\n\n"]).await;
+            let events =
+                collect_events(&[content.as_slice(), terminal.as_bytes(), b"data: [DONE]\n\n"])
+                    .await;
             assert_matches!(
                 events.last(),
                 Some(Ok(ResponseEvent::Completed {

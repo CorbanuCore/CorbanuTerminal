@@ -2287,6 +2287,33 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
         "Anthropic Messages rejects more than four cache_control blocks"
     );
 
+    let mut extended_prompt = prompt.clone();
+    extended_prompt.input.push(ResponseItem::Message {
+        id: None,
+        role: "user".to_string(),
+        content: vec![ContentItem::InputText {
+            text: "third user after fallback policy changed".to_string(),
+        }],
+        phase: None,
+        metadata: None,
+    });
+    let extended_request = client
+        .build_anthropic_messages_request(
+            &extended_prompt,
+            &model_info,
+            Some(ReasoningEffortConfig::XHigh),
+        )
+        .expect("extended Anthropic messages request");
+    assert_eq!(
+        request.tools, extended_request.tools,
+        "append-only message growth must not change parsed Anthropic tools"
+    );
+    assert_eq!(
+        serde_json::to_vec(&request.tools).expect("serialize initial Anthropic tools"),
+        serde_json::to_vec(&extended_request.tools).expect("serialize extended Anthropic tools"),
+        "append-only message growth must not change production-serialized Anthropic tool bytes"
+    );
+
     let max_request = client
         .build_anthropic_messages_request(
             &prompt,
