@@ -172,7 +172,31 @@ No action.
 
 ## Fact 7 — What may be spent
 
-**No owner. This is the most serious gap in the list.**
+**Owner: `agents.provider_allowlist`, as of commit `3996f17a9`.** Partially
+closed; the spend *cap* remains unowned.
+
+What was repaired:
+
+- `agents.provider_allowlist` is operator policy, enforced at
+  `ensure_native_spawn_provider_ready` — the single chokepoint already shared by
+  `/spawn` crew creation, custom-crew members, and native `spawn_agent` task
+  agents. Native task agents were previously outside `CrewPolicy` entirely,
+  which is the path that actually spent the money.
+- `crew_state.rs::add_ready_member` no longer pushes a member's provider into
+  the allowlist before validating. A member on an unauthorized provider is
+  refused and crew state is left untouched.
+- A custom crew declares `authorized_spawn_providers()` rather than the first
+  runtime a model happened to request.
+- Unset remains unrestricted, so existing configurations are unchanged.
+
+What remains open:
+
+- `maximum_spend_usd` still has zero production readers. Enforcing a dollar cap
+  needs per-turn cost accounting that does not exist yet; provider authorization
+  was the reachable half.
+- There is still no cost signal in any watcher or status surface.
+
+Original finding, retained:
 
 `CrewPolicy` declares the fields and nothing enforces them:
 
@@ -192,22 +216,16 @@ qualification sessions ran `anthropic / claude-opus-5` and
 was not authorized. The section 15.3 invariant watcher has no cost signal, which
 is why eleven resets never surfaced it.
 
-**Action.**
-1. Make the allowlist authoritative rather than derived. It is set by the
-   operator for the session; `custom_spawn_crew.rs:53` intersects with it
-   instead of defining it.
-2. Enforce `maximum_spend_usd`, or gate provider *class* (subscription-backed
-   vs. metered) at `ensure_native_spawn_provider_ready`, which is already the
-   single chokepoint for all three creation paths.
-3. Default the native `spawn_agent` catalog to subscription-backed routes.
-   Metered providers become opt-in per session.
+**Remaining action.** Add per-turn cost accounting and enforce
+`maximum_spend_usd` against it, or delete the field so it stops implying a
+guarantee that does not exist.
 
 ---
 
 ## Ordered work
 
-1. **Fact 7, spend.** No owner at all, and it costs real money today. Smallest
-   fix with the largest exposure.
+1. ~~**Fact 7, spend.**~~ Provider authorization closed in `3996f17a9`. Spend
+   cap still unowned.
 2. **Fact 1, admission.** Five gates to one decision. Retires the failure family
    that produced 8E and tonight's lease block, and stops the next one.
 3. **Fact 3, parentage.** Delete two of three parentage maps.
