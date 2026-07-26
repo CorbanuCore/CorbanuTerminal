@@ -880,6 +880,11 @@ pub struct Config {
 
     /// User-configured maximum number of agent threads that can be open concurrently.
     pub agent_max_threads: Option<usize>,
+    /// Operator-authorized provider IDs for spawned agents.
+    ///
+    /// `None` means unrestricted. When set, this is the ceiling for every
+    /// agent-creation path and a model cannot broaden it.
+    pub agent_provider_allowlist: Option<Vec<String>>,
     /// Maximum runtime in seconds for agent job workers before they are failed.
     pub agent_job_max_runtime_seconds: Option<u64>,
 
@@ -3631,6 +3636,26 @@ impl Config {
                 "agents.max_threads must be at least 1",
             ));
         }
+        let agent_provider_allowlist = cfg
+            .agents
+            .as_ref()
+            .and_then(|agents| agents.provider_allowlist.clone())
+            .map(|providers| {
+                providers
+                    .into_iter()
+                    .map(|provider| provider.trim().to_string())
+                    .filter(|provider| !provider.is_empty())
+                    .collect::<Vec<_>>()
+            });
+        if agent_provider_allowlist
+            .as_ref()
+            .is_some_and(Vec::is_empty)
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "agents.provider_allowlist must name at least one provider when set",
+            ));
+        }
         let agent_max_depth = cfg
             .agents
             .as_ref()
@@ -4036,6 +4061,7 @@ impl Config {
                 .collect(),
             tool_output_token_limit: cfg.tool_output_token_limit,
             agent_max_threads,
+            agent_provider_allowlist,
             agent_max_depth,
             agent_roles,
             memories: memories_config,

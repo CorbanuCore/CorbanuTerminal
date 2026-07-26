@@ -7836,6 +7836,7 @@ async fn load_config_rejects_missing_agent_role_config_file() -> std::io::Result
             max_depth: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
+            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {
@@ -8758,6 +8759,7 @@ async fn load_config_resolves_agent_interrupt_message() -> std::io::Result<()> {
     let cfg = ConfigToml {
         agents: Some(AgentsToml {
             interrupt_message: Some(false),
+            provider_allowlist: None,
             ..Default::default()
         }),
         ..Default::default()
@@ -8784,6 +8786,7 @@ async fn load_config_normalizes_agent_role_nickname_candidates() -> std::io::Res
             max_depth: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
+            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {
@@ -8827,6 +8830,7 @@ async fn load_config_rejects_empty_agent_role_nickname_candidates() -> std::io::
             max_depth: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
+            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {
@@ -8864,6 +8868,7 @@ async fn load_config_rejects_duplicate_agent_role_nickname_candidates() -> std::
             max_depth: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
+            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {
@@ -8901,6 +8906,7 @@ async fn load_config_rejects_unsafe_agent_role_nickname_candidates() -> std::io:
             max_depth: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
+            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {

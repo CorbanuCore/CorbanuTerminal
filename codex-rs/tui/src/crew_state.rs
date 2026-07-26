@@ -111,20 +111,6 @@ impl CrewInstanceState {
         let mut next = self.clone();
         next.spec.preset_id = None;
         next.spec.members.push(member.clone());
-        if let codex_protocol::crew::RuntimeRequest::Exact { provider_id, .. } =
-            &member.runtime_request
-            && !next
-                .spec
-                .policy
-                .provider_allowlist
-                .iter()
-                .any(|allowed| allowed == provider_id)
-        {
-            next.spec
-                .policy
-                .provider_allowlist
-                .push(provider_id.clone());
-        }
         next.spec
             .validate()
             .map_err(|err| CrewStateError::InvalidSpec(err.to_string()))?;

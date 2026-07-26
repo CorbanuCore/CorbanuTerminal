@@ -74,7 +74,7 @@ fn ready_custom_crew_can_add_heterogeneous_members_without_changing_existing_ide
     let mut spec = crew_presets::standard_crew_spec();
     spec.preset_id = None;
     spec.members.truncate(1);
-    spec.policy.provider_allowlist = vec!["claude-plan".to_string()];
+    spec.policy.provider_allowlist = vec!["claude-plan".to_string(), "kimi-code".to_string()];
     let mut state = CrewInstanceState::begin(spec).expect("valid root crew");
     state
         .record_member("nazgul", "thread:nazgul")
@@ -106,17 +106,59 @@ fn ready_custom_crew_can_add_heterogeneous_members_without_changing_existing_ide
         state.member_node_by_id.get("orc-1").map(String::as_str),
         Some("thread:kimi")
     );
-    assert!(
-        state
-            .spec
-            .policy
-            .provider_allowlist
-            .iter()
-            .any(|provider| provider == "kimi-code")
+    // The operator-authorized ceiling is unchanged by adding a member. A crew
+    // policy is authorization, not a record of what was requested.
+    assert_eq!(
+        state.spec.policy.provider_allowlist,
+        vec!["claude-plan".to_string(), "kimi-code".to_string()]
     );
     state.spec.validate().expect("expanded crew remains valid");
     let restored: CrewInstanceState =
         serde_json::from_str(&serde_json::to_string(&state).expect("serialize expanded crew"))
             .expect("restore expanded crew");
     assert_eq!(restored, state);
+}
+
+#[test]
+fn adding_a_member_cannot_broaden_the_crew_provider_allowlist() {
+    let mut spec = crew_presets::standard_crew_spec();
+    spec.preset_id = None;
+    spec.members.truncate(1);
+    spec.policy.provider_allowlist = vec!["claude-plan".to_string()];
+    let mut state = CrewInstanceState::begin(spec).expect("valid root crew");
+    state
+        .record_member("nazgul", "thread:nazgul")
+        .expect("record root");
+    state.mark_ready().expect("root ready");
+    let before = state.clone();
+
+    // Every unauthorized runtime is refused, not one example. A model chooses a
+    // runtime; only operator policy authorizes one.
+    for (member_id, provider, model, node) in [
+        ("orc-1", "kimi-code", "k3", "thread:kimi"),
+        ("orc-2", "anthropic", "claude-opus-5", "thread:opus"),
+        ("orc-3", "openrouter", "x-ai/grok-4.5", "thread:grok"),
+    ] {
+        let error = state
+            .add_ready_member(
+                codex_protocol::crew::CrewMemberSpec {
+                    logical_member_id: member_id.to_string(),
+                    display_name: format!("{provider} member"),
+                    role_profile: "orc".to_string(),
+                    parent_member_id: Some("nazgul".to_string()),
+                    runtime_request: codex_protocol::crew::RuntimeRequest::exact(
+                        provider, model, None,
+                    ),
+                },
+                node,
+            )
+            .expect_err("unauthorized provider must not join the crew");
+        assert!(
+            error.to_string().contains(provider),
+            "rejection should name {provider}, got: {error}"
+        );
+    }
+
+    // A refused addition leaves crew identity, membership, and policy untouched.
+    assert_eq!(state, before);
 }

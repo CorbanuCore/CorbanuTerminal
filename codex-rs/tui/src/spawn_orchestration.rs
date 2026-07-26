@@ -2192,6 +2192,8 @@ impl App {
         &self,
         provider_id: Option<&str>,
     ) -> Result<()> {
+        self.ensure_native_spawn_provider_authorized(provider_id)?;
+
         if let Some(message) = self.native_spawn_provider_auth_error(provider_id) {
             return Err(eyre!("{message}"));
         }
@@ -2215,6 +2217,56 @@ impl App {
                 })?;
         }
         Ok(())
+    }
+
+    /// The operator-authorized provider set a new crew policy may declare.
+    ///
+    /// Falls back to every configured provider when no explicit policy is set, which
+    /// preserves unrestricted behavior without letting a model author the ceiling.
+    pub(crate) fn authorized_spawn_providers(&self) -> Vec<String> {
+        if let Some(allowlist) = self.config.agent_provider_allowlist.as_ref() {
+            return allowlist.clone();
+        }
+        let mut providers = self
+            .config
+            .model_providers
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        if !providers
+            .iter()
+            .any(|id| *id == self.config.model_provider_id)
+        {
+            providers.push(self.config.model_provider_id.clone());
+        }
+        providers.sort();
+        providers
+    }
+
+    /// Operator spend policy. `agents.provider_allowlist` is the ceiling for every
+    /// agent-creation path: `/spawn` crews, custom crews, and native `spawn_agent`
+    /// task agents. A model selects a runtime; it never authorizes one.
+    pub(crate) fn ensure_native_spawn_provider_authorized(
+        &self,
+        provider_id: Option<&str>,
+    ) -> Result<()> {
+        let Some(allowlist) = self.config.agent_provider_allowlist.as_ref() else {
+            return Ok(());
+        };
+        let provider_id = provider_id.unwrap_or(self.config.model_provider_id.as_str());
+        if allowlist.iter().any(|allowed| allowed == provider_id) {
+            return Ok(());
+        }
+        let provider_name = self
+            .config
+            .model_providers
+            .get(provider_id)
+            .map(|provider| provider_display_name(provider_id, provider.name.as_str()))
+            .unwrap_or_else(|| provider_id.to_string());
+        Err(eyre!(
+            "Cannot run a native Codex worker on {provider_name}: provider `{provider_id}` is not in `agents.provider_allowlist` ({}). Add it to that setting to authorize spend on this provider.",
+            allowlist.join(", ")
+        ))
     }
 
     pub(crate) fn native_spawn_provider_auth_error(

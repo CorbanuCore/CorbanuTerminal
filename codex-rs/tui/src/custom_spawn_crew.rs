@@ -50,7 +50,7 @@ impl App {
             policy: CrewPolicy {
                 delegation_mode: DelegationMode::Proactive,
                 allow_ephemeral_descendants: true,
-                provider_allowlist: vec![runtime.provider],
+                provider_allowlist: self.authorized_spawn_providers(),
                 maximum_spend_usd: None,
             },
         };

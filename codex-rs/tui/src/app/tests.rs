@@ -84,8 +84,10 @@ use codex_app_server_protocol::TurnStatus;
 use codex_app_server_protocol::UserInput;
 use codex_app_server_protocol::UserInput as AppServerUserInput;
 use codex_app_server_protocol::WarningNotification;
+use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_API_KEY_ENV_VAR;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
@@ -5851,6 +5853,63 @@ async fn native_spawn_auth_guard_blocks_unauthenticated_openai() {
 
     assert!(error.contains("OpenAI"));
     assert!(error.contains("not configured"));
+}
+
+#[tokio::test]
+async fn spawn_provider_allowlist_is_operator_policy_not_model_choice() {
+    let mut app = make_test_app().await;
+    app.config.agent_provider_allowlist = Some(vec![
+        CLAUDE_PLAN_PROVIDER_ID.to_string(),
+        OPENAI_PROVIDER_ID.to_string(),
+    ]);
+
+    // Authorized providers pass regardless of which path asked for them.
+    for provider in [CLAUDE_PLAN_PROVIDER_ID, OPENAI_PROVIDER_ID] {
+        app.ensure_native_spawn_provider_authorized(Some(provider))
+            .unwrap_or_else(|err| panic!("{provider} should be authorized: {err}"));
+    }
+
+    // Every unauthorized provider is refused, not just the one that caused the
+    // original incident. This is the class: a model selects a runtime, it never
+    // authorizes one.
+    for provider in [
+        ANTHROPIC_PROVIDER_ID,
+        OPENROUTER_PROVIDER_ID,
+        KIMI_CODE_PROVIDER_ID,
+        VERCEL_PROVIDER_ID,
+    ] {
+        let error = app
+            .ensure_native_spawn_provider_authorized(Some(provider))
+            .expect_err("unauthorized provider must be refused")
+            .to_string();
+        assert!(
+            error.contains("agents.provider_allowlist"),
+            "{provider} rejection should name the operator setting, got: {error}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn spawn_provider_allowlist_unset_stays_unrestricted() {
+    let app = make_test_app().await;
+    assert!(app.config.agent_provider_allowlist.is_none());
+
+    for provider in [
+        ANTHROPIC_PROVIDER_ID,
+        OPENROUTER_PROVIDER_ID,
+        KIMI_CODE_PROVIDER_ID,
+    ] {
+        app.ensure_native_spawn_provider_authorized(Some(provider))
+            .unwrap_or_else(|err| panic!("{provider} should be unrestricted: {err}"));
+    }
+
+    // The declared ceiling for a new custom crew comes from configured providers,
+    // never from whichever runtime a model happened to request first.
+    let authorized = app.authorized_spawn_providers();
+    assert!(
+        authorized.len() > 1,
+        "expected configured providers, got {authorized:?}"
+    );
 }
 
 #[tokio::test]
