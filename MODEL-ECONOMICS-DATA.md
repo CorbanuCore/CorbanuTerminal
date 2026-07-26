@@ -1,0 +1,67 @@
+# Model Economics Reference (researched 2026-07-26)
+
+Source data for the spawn-time model catalog. Prices are USD per 1M tokens,
+list rate, from vendor pricing pages and aggregator listings as of 2026-07-26.
+Verify before treating as billing truth.
+
+Billing class:
+- `plan`   = covered by a subscription/account already paid for (no per-token charge to the user)
+- `metered`= pay-per-token API key
+- `local`  = user-owned rented GPU, already paid for by the hour
+
+| slug | provider | billing | in $/M | out $/M | cached in $/M | vision | ctx |
+|---|---|---|---:|---:|---:|:---:|---:|
+| claude-opus-5-plan | claude-plan | plan | — | — | — | yes | 1.0M |
+| claude-fable-5-plan | claude-plan | plan | — | — | — | yes | 1.0M |
+| gpt-5.6-sol | openai (ChatGPT auth) | plan | — | — | — | yes | 372K |
+| gpt-5.6-terra | openai (ChatGPT auth) | plan | — | — | — | yes | 372K |
+| gpt-5.6-luna | openai (ChatGPT auth) | plan | — | — | — | yes | 372K |
+| claude-opus-5 | anthropic | metered | 5.00 | 25.00 | 0.50 | yes | 1.0M |
+| claude-fable-5 | anthropic | metered | 10.00 | 50.00 | 1.00 | yes | 1.0M |
+| gpt-5.6-sol (API) | openai (API key) | metered | 5.00 | 30.00 | 0.50 | yes | 1.05M |
+| gpt-5.6-terra (API) | openai (API key) | metered | 2.50 | 15.00 | 0.25 | yes | 1.05M |
+| gpt-5.6-luna (API) | openai (API key) | metered | 1.00 | 6.00 | 0.10 | yes | 1.05M |
+| gpt-5.5 | openai (API key) | metered | 5.00 | 30.00 | 0.50 | yes | 272K |
+| k3 | kimi-code | metered | 3.00 | 15.00 | 0.30 | yes | 262K |
+| moonshotai/kimi-k3 | openrouter | metered | 3.00 | 15.00 | 0.30 | yes | 1.05M |
+| moonshotai/kimi-k2.7-code | ambient | metered | 0.95 | 4.00 | 0.19 | yes | 262K |
+| x-ai/grok-4.5 | openrouter | metered | 2.00 | 6.00 | 0.50 | yes | 500K |
+| glm-5.2 | zai | metered | 1.40 | 4.40 | — | no | 1.0M |
+| z-ai/glm-5.2 | ambient | metered | ~1.40 | ~4.40 | — | no | 202K |
+| zai/glm-5.2 | vercel | metered | ~1.40 | ~4.40 | — | no | 1.05M |
+| zai/glm-5.2-fast | vercel | metered | ~1.40 | ~4.40 | — | no | 1.05M |
+| zai-org/GLM-5.2 | baseten | metered | ~1.40 | ~4.40 | — | no | 1.05M |
+| deepseek/deepseek-v4-pro | openrouter | metered | 0.435 | 0.87 | — | no | 1.05M |
+| minimax/minimax-m3 | openrouter | metered | 0.60 | 2.40 | — | yes | 1.05M |
+| tencent/hy3:free | openrouter | metered | 0.00 | 0.00 | — | no | 262K |
+| google/gemini-3.5-flash | openrouter | metered | UNKNOWN | UNKNOWN | — | yes | 1.05M |
+| openrouter/owl-alpha | openrouter | metered | UNKNOWN | UNKNOWN | — | no | 1.05M |
+| muse-spark-1.1 | meta | metered | UNKNOWN | UNKNOWN | — | yes | 1.05M |
+| deepseek-ai/DeepSeek-V4-Flash | gpu-* | local | 0 | 0 | — | no | — |
+| huihui-ai/Huihui-GLM-5.2-abliterated-GGUF | gpu-* | local | 0 | 0 | — | no | — |
+
+## Cost tiers (for allocation guidance)
+
+- `free`    — plan-covered or local GPU. Prefer for all routine work.
+- `low`     — under $1/M input: deepseek-v4-pro, minimax-m3, hy3
+- `medium`  — $1-3/M input: glm-5.2, grok-4.5, k3, gpt-5.6-terra/luna API
+- `high`    — $5+/M input: claude-opus-5, gpt-5.6-sol API, gpt-5.5
+- `premium` — $10+/M input: claude-fable-5
+
+## Notes that matter for allocation
+
+- Output dominates agent cost. Claude Fable 5 output is $50/M; Grok 4.5 is $6/M.
+- Kimi K3 always reasons at max effort; every reasoning token bills at $15/M.
+- Cached input is 10x cheaper on most providers. Long-lived agents with stable
+  system prompts are much cheaper than the list rate implies.
+- Vision is NOT universal: the GLM-5.2 family and DeepSeek V4 Pro are text-only.
+  Kimi K3, Grok 4.5, MiniMax M3, all GPT-5.x, and all Claude models accept images.
+- `-plan` model slugs route through `claude-plan` (subscription). The identical
+  model without the suffix routes through `anthropic` (metered). This is the
+  single most expensive naming footgun in the catalog.
+
+## Unverified
+
+`google/gemini-3.5-flash`, `openrouter/owl-alpha`, `muse-spark-1.1`, and the exact
+gateway markups for Ambient/Vercel/Baseten GLM routes were not confirmed. Do not
+present these as authoritative until checked.
