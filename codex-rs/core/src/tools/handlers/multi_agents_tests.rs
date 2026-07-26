@@ -204,6 +204,77 @@ fn set_turn_config(turn: &mut TurnContext, config: crate::config::Config) {
     turn.config = Arc::new(config);
 }
 
+#[tokio::test]
+async fn spawn_model_switch_cannot_route_around_the_provider_allowlist() {
+    let (session, mut turn) = make_session_and_context().await;
+    set_turn_to_openai_provider(&mut turn);
+
+    // A bare `model` with no `model_provider` still selects a provider: the catalog
+    // correction re-routes the child onto whichever provider owns that model. Whatever
+    // the outcome, the child must never end up on a provider the operator did not
+    // authorize.
+    let allowlist = vec!["claude-plan".to_string(), "openai".to_string()];
+    for model in ["claude-fable-5", "claude-opus-5", "x-ai/grok-4.5", "k3"] {
+        let mut config = (*turn.config).clone();
+        config.agent_provider_allowlist = Some(allowlist.clone());
+        let parent_provider = config.model_provider_id.clone();
+
+        let result = apply_requested_spawn_agent_model_overrides(
+            &session,
+            &turn,
+            &mut config,
+            Some(model),
+            None,
+        )
+        .await;
+
+        match result {
+            Ok(()) => assert!(
+                allowlist.contains(&config.model_provider_id),
+                "model `{model}` left the child on unauthorized provider `{}`",
+                config.model_provider_id
+            ),
+            Err(FunctionCallError::RespondToModel(message)) => assert_eq!(
+                config.model_provider_id, parent_provider,
+                "refused switch for `{model}` must not mutate the provider: {message}"
+            ),
+            Err(other) => panic!("unexpected error kind for `{model}`: {other:?}"),
+        }
+    }
+}
+
+#[tokio::test]
+async fn spawn_provider_authorization_is_operator_policy_in_core() {
+    use crate::tools::handlers::multi_agents_common::ensure_spawn_provider_authorized;
+
+    let (_session, turn) = make_session_and_context().await;
+    let mut config = (*turn.config).clone();
+    config.agent_provider_allowlist = None;
+    // Unset stays unrestricted.
+    for provider in ["anthropic", "openrouter", "kimi-code"] {
+        ensure_spawn_provider_authorized(&config, provider)
+            .unwrap_or_else(|err| panic!("{provider} should be unrestricted: {err:?}"));
+    }
+
+    config.agent_provider_allowlist = Some(vec!["claude-plan".to_string(), "openai".to_string()]);
+    for provider in ["claude-plan", "openai"] {
+        ensure_spawn_provider_authorized(&config, provider)
+            .unwrap_or_else(|err| panic!("{provider} should be authorized: {err:?}"));
+    }
+    // The whole unauthorized class is refused, not one reported example.
+    for provider in ["anthropic", "openrouter", "kimi-code", "zai", "vercel"] {
+        let err = ensure_spawn_provider_authorized(&config, provider)
+            .expect_err("unauthorized provider must be refused before child creation");
+        let FunctionCallError::RespondToModel(message) = err else {
+            panic!("expected a model-visible refusal for {provider}");
+        };
+        assert!(
+            message.contains("agents.provider_allowlist") && message.contains(provider),
+            "refusal for {provider} should name the provider and the policy: {message}"
+        );
+    }
+}
+
 async fn register_v2_wait_child(
     session: &mut crate::session::session::Session,
     turn: &TurnContext,

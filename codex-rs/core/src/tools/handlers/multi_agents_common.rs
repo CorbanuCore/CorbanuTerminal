@@ -287,6 +287,31 @@ pub(crate) fn apply_spawn_agent_runtime_overrides(
     Ok(())
 }
 
+/// Operator spend policy for model-driven agent creation.
+///
+/// `agents.provider_allowlist` is authorization, not preference. A model selects a
+/// runtime; only the operator authorizes one. This is enforced in core because the
+/// model-facing spawn path never crosses the TUI, and it is neutral to provider,
+/// model, and role name.
+pub(crate) fn ensure_spawn_provider_authorized(
+    config: &Config,
+    provider_id: &str,
+) -> Result<(), FunctionCallError> {
+    let Some(allowlist) = config.agent_provider_allowlist.as_ref() else {
+        return Ok(());
+    };
+    if allowlist.iter().any(|allowed| allowed == provider_id) {
+        return Ok(());
+    }
+    Err(FunctionCallError::RespondToModel(format!(
+        "Provider `{provider_id}` is not authorized for spawned agents. \
+Authorized providers: {}. This is operator policy set in `agents.provider_allowlist`; \
+it cannot be changed from a task and must not be worked around by selecting a different \
+model that routes to an unauthorized provider.",
+        allowlist.join(", ")
+    )))
+}
+
 pub(crate) async fn apply_requested_spawn_agent_model_overrides(
     session: &Session,
     turn: &TurnContext,
@@ -331,6 +356,11 @@ pub(crate) async fn apply_requested_spawn_agent_model_overrides(
             &config.model_provider_id,
         ) && let Some(info) = config.model_providers.get(corrected)
         {
+            // A model switch can re-route the child onto another provider. That is still
+            // a provider selection and must clear the same operator policy as an explicit
+            // one. Authorize before mutating, so a refused switch cannot leave the child
+            // pointed at an unauthorized provider.
+            ensure_spawn_provider_authorized(config, corrected)?;
             tracing::warn!(
                 model = %selected_model_name,
                 parent_provider = %config.model_provider_id,
@@ -408,6 +438,7 @@ pub(crate) async fn apply_requested_spawn_agent_runtime_overrides(
                 "Unknown model provider `{requested_provider}` for spawn_agent."
             ))
         })?;
+    ensure_spawn_provider_authorized(config, requested_provider)?;
     let resolved_model = codex_model_provider_info::resolve_model_for_provider(
         Some(requested_model.to_string()),
         requested_provider,
