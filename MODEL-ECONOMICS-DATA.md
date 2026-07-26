@@ -5,17 +5,23 @@ list rate, from vendor pricing pages and aggregator listings as of 2026-07-26.
 Verify before treating as billing truth.
 
 Billing class:
-- `plan`   = covered by a subscription/account already paid for (no per-token charge to the user)
+- `plan`   = drawn from a subscription pool. **NOT free.** Plan capacity is a
+  finite shared weekly allowance. Models draw against it at different rates
+  (Claude Fable 5 weighs ~2x an Opus session and is additionally capped at ~50%
+  of the pool). When the pool is exhausted, usage can overflow to metered
+  credits billed at API rates on the *same provider id*, which `provider_allowlist`
+  cannot detect. Prefer plan routes, but still prefer the cheapest plan runtime
+  that can do the job.
 - `metered`= pay-per-token API key
 - `local`  = user-owned rented GPU, already paid for by the hour
 
 | slug | provider | billing | in $/M | out $/M | cached in $/M | vision | ctx |
 |---|---|---|---:|---:|---:|:---:|---:|
-| claude-opus-5-plan | claude-plan | plan | — | — | — | yes | 1.0M |
-| claude-fable-5-plan | claude-plan | plan | — | — | — | yes | 1.0M |
-| gpt-5.6-sol | openai (ChatGPT auth) | plan | — | — | — | yes | 372K |
-| gpt-5.6-terra | openai (ChatGPT auth) | plan | — | — | — | yes | 372K |
-| gpt-5.6-luna | openai (ChatGPT auth) | plan | — | — | — | yes | 372K |
+| claude-opus-5-plan | claude-plan | plan (burn 1.0x) | — | — | — | yes | 1.0M |
+| claude-fable-5-plan | claude-plan | plan (burn 2.0x, 50% cap) | — | — | — | yes | 1.0M |
+| gpt-5.6-sol | openai (ChatGPT auth) | plan (burn 1.0x) | — | — | — | yes | 372K |
+| gpt-5.6-terra | openai (ChatGPT auth) | plan (burn 0.5x) | — | — | — | yes | 372K |
+| gpt-5.6-luna | openai (ChatGPT auth) | plan (burn 0.2x) | — | — | — | yes | 372K |
 | claude-opus-5 | anthropic | metered | 5.00 | 25.00 | 0.50 | yes | 1.0M |
 | claude-fable-5 | anthropic | metered | 10.00 | 50.00 | 1.00 | yes | 1.0M |
 | gpt-5.6-sol (API) | openai (API key) | metered | 5.00 | 30.00 | 0.50 | yes | 1.05M |
@@ -42,7 +48,8 @@ Billing class:
 
 ## Cost tiers (for allocation guidance)
 
-- `free`    — plan-covered or local GPU. Prefer for all routine work.
+- `plan`    — drawn from subscription capacity. Preferred, but finite; burn
+  weight still matters. Local GPU is the only genuinely free tier.
 - `low`     — under $1/M input: deepseek-v4-pro, minimax-m3, hy3
 - `medium`  — $1-3/M input: glm-5.2, grok-4.5, k3, gpt-5.6-terra/luna API
 - `high`    — $5+/M input: claude-opus-5, gpt-5.6-sol API, gpt-5.5
@@ -59,6 +66,13 @@ Billing class:
 - `-plan` model slugs route through `claude-plan` (subscription). The identical
   model without the suffix routes through `anthropic` (metered). This is the
   single most expensive naming footgun in the catalog.
+
+## Correction history
+
+An earlier revision listed plan routes with `—` for cost, which read as free.
+That was wrong: plan capacity is finite, Fable draws roughly double an Opus
+session against it, and exhaustion overflows into metered credits automatically.
+Burn weights above replace that.
 
 ## Unverified
 

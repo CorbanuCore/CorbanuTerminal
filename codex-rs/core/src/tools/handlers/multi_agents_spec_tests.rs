@@ -76,7 +76,7 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
         )
     );
     assert!(description.contains(
-        "- `example-provider` / `visible-model`; efforts: xhigh (default); tiers: priority"
+        "- `example-provider` / `visible-model`; text-only; efforts: xhigh (default); tiers: priority"
     ));
     assert!(!description.contains("hidden-model"));
     assert!(properties.contains_key("task_name"));
@@ -213,13 +213,12 @@ fn spawn_agent_tool_caps_reasoning_effort_value_length() {
         description: "Model-defined".to_string(),
     }];
 
-    assert_eq!(
-        spawn_agent_models_description(&[model]),
-        format!(
-            "Available exact runtime overrides (optional; omit both fields to inherit the parent runtime). Pass the provider as `model_provider` and the model as `model`:\n- model `visible-model` (provider inherited); efforts: {} (default); tiers: priority",
-            "é".repeat(MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION)
-        )
-    );
+    // The point of this test is the effort-string truncation, so assert the model
+    // line rather than pinning the whole guidance header.
+    assert!(spawn_agent_models_description(&[model]).ends_with(&format!(
+        "- model `visible-model` (provider inherited); text-only; efforts: {} (default); tiers: priority",
+        "é".repeat(MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION)
+    )));
 }
 
 #[test]

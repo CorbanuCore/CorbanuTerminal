@@ -1,3 +1,4 @@
+use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelPreset;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiNamespace;
@@ -898,18 +899,52 @@ fn spawn_agent_models_description(models: &[ModelPreset]) -> String {
                 || format!("model `{model_slug}` (provider inherited)"),
                 |provider| format!("`{provider}` / `{model_slug}`"),
             );
+            let economics_suffix = model
+                .provider_id
+                .as_deref()
+                .and_then(|provider| {
+                    codex_model_provider_info::model_economics::economics_for(provider, model_slug)
+                })
+                .map_or_else(String::new, |economics| {
+                    let billing = match (
+                        economics.plan_burn_weight,
+                        economics.input_usd_per_mtok,
+                        economics.output_usd_per_mtok,
+                    ) {
+                        // Plan capacity is a finite shared pool, so state the drain
+                        // rate rather than a price. It is never free.
+                        (Some(burn), _, _) => format!("plan, burn {burn}x"),
+                        (None, Some(input), Some(output)) => {
+                            format!("metered ${input}/${output} per M tok")
+                        }
+                        _ => "billing unknown".to_string(),
+                    };
+                    format!(" {billing}, {};", economics.tier.as_str())
+                });
+            let vision_suffix = if model
+                .input_modalities
+                .iter()
+                .any(|modality| matches!(modality, InputModality::Image))
+            {
+                " vision;"
+            } else {
+                " text-only;"
+            };
             let reasoning_efforts_suffix = reasoning_efforts_suffix
                 .strip_prefix(" Reasoning efforts: ")
                 .and_then(|suffix| suffix.strip_suffix('.'))
                 .map_or_else(String::new, |efforts| format!(" efforts: {efforts};"));
-            format!("- {runtime};{reasoning_efforts_suffix}{service_tiers_suffix}")
+            format!(
+                "- {runtime};{economics_suffix}{vision_suffix}{reasoning_efforts_suffix}{service_tiers_suffix}"
+            )
                 .trim_end_matches(';')
                 .to_string()
         })
         .collect::<Vec<_>>()
         .join("\n");
     format!(
-        "Available exact runtime overrides (optional; omit both fields to inherit the parent runtime). Pass the provider as `model_provider` and the model as `model`:\n{model_descriptions}"
+        "Available exact runtime overrides (optional; omit both fields to inherit the parent runtime). Pass the provider as `model_provider` and the model as `model`.\n\
+Allocation guidance: prefer `plan` runtimes over `metered` ones. Plan capacity is a finite shared pool rather than free, so within it still match the model to the work: `frontier` for genuinely hard reasoning, `balanced` for ordinary engineering, `fast` for mechanical or well-specified work. Reserve `metered` runtimes for work a plan runtime cannot do, and note that a `-plan` model slug and its otherwise identical metered twin are one word apart. `text-only` runtimes cannot accept images.\n{model_descriptions}"
     )
 }
 
