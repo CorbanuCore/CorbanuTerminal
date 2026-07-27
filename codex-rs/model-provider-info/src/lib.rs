@@ -131,6 +131,24 @@ pub const BASETEN_API_KEY_ENV_VAR: &str = "BASETEN_API_KEY";
 const VERCEL_PROVIDER_NAME: &str = "Vercel";
 pub const VERCEL_PROVIDER_ID: &str = "vercel";
 pub const VERCEL_BASE_URL: &str = "https://ai-gateway.vercel.sh/v1";
+const VERCEL_GATEWAY_HOST: &str = "ai-gateway.vercel.sh";
+
+/// Host-only comparison: the gateway is reachable under several path prefixes
+/// (`/v1`, `/v1/messages`, `/v1/responses`) and with or without a trailing
+/// slash, and none of that changes the routing behaviour we need to correct.
+fn is_vercel_gateway_base_url(base_url: &str) -> bool {
+    let without_scheme = base_url
+        .trim()
+        .split_once("://")
+        .map_or(base_url.trim(), |(_, rest)| rest);
+    let host = without_scheme
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default();
+    let host = host.rsplit_once('@').map_or(host, |(_, rest)| rest);
+    let host = host.split_once(':').map_or(host, |(host, _)| host);
+    host.eq_ignore_ascii_case(VERCEL_GATEWAY_HOST)
+}
 const VERCEL_ANTHROPIC_PROVIDER_NAME: &str = "Vercel Anthropic";
 pub const VERCEL_ANTHROPIC_PROVIDER_ID: &str = "vercel-anthropic";
 const VERCEL_ANTHROPIC_FAST_PROVIDER_NAME: &str = "Vercel Anthropic Fast";
@@ -1319,12 +1337,18 @@ impl ModelProviderInfo {
     }
 
     /// True for every provider that talks to the Vercel AI Gateway, regardless
-    /// of wire format. The gateway fans third-party model slugs out to whatever
-    /// upstream host it prefers, so all of these need upstream pinning.
+    /// of wire format or provider name. The gateway fans third-party model
+    /// slugs out to whatever upstream host it prefers, so all of these need
+    /// upstream pinning.
+    ///
+    /// This is keyed on the endpoint rather than the display name so that a
+    /// user-defined `[model_providers.*]` entry aimed at the gateway is
+    /// covered, and so that an unrelated provider someone happens to call
+    /// "Vercel" is not.
     pub fn is_vercel_gateway(&self) -> bool {
-        self.name == VERCEL_PROVIDER_NAME
-            || self.name == VERCEL_ANTHROPIC_PROVIDER_NAME
-            || self.name == VERCEL_ANTHROPIC_FAST_PROVIDER_NAME
+        self.base_url
+            .as_deref()
+            .is_some_and(is_vercel_gateway_base_url)
     }
 
     pub fn is_amazon_bedrock(&self) -> bool {

@@ -896,6 +896,7 @@ mod tests {
             reasoning: Some(json!({ "effort": "medium" })),
             provider: None,
             plugins: None,
+            provider_options: None,
         };
 
         let serialized = serde_json::to_value(&request).expect("serialize request");
@@ -936,6 +937,7 @@ mod tests {
                 "require_parameters": true,
             })),
             plugins: None,
+            provider_options: None,
         };
 
         let body = serde_json::to_value(&request).expect("serialize request");
@@ -1041,6 +1043,7 @@ mod tests {
             emit_usage: ambient.then_some(true),
             enable_thinking: None,
             reasoning_effort: None,
+            provider_options: None,
         }
     }
 

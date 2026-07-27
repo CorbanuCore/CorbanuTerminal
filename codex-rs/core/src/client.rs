@@ -1101,17 +1101,7 @@ impl ModelClient {
     fn ambient_zai_reasoning_effort(
         effort: Option<&ReasoningEffortConfig>,
     ) -> Option<&'static str> {
-        match effort {
-            Some(ReasoningEffortConfig::Custom(value))
-                if matches!(
-                    value.as_str(),
-                    "deep" | "max" | "xhigh" | "extra_high" | "extra-high"
-                ) =>
-            {
-                Some("max")
-            }
-            _ => None,
-        }
+        wants_deep_reasoning(effort).then_some("max")
     }
 
     fn baseten_reasoning_effort(
@@ -1196,19 +1186,33 @@ impl ModelClient {
     ) -> Option<Value> {
         let supports_reasoning = model_info.default_reasoning_level.is_some()
             || !model_info.supported_reasoning_levels.is_empty();
-        let effort = supports_reasoning
-            .then(|| {
-                effort
-                    .or(model_info.default_reasoning_level.as_ref())
-                    .map(ReasoningEffortConfig::as_str)
-            })
-            .flatten();
+        if !supports_reasoning {
+            // OpenRouter omits the reasoning capability for models that do not
+            // reason, and `provider.require_parameters` restricts routing to
+            // upstreams that support every parameter supplied. Sending a
+            // reasoning object to such a model can make otherwise valid routes
+            // ineligible, so stay silent rather than assert a default.
+            return None;
+        }
+        let effort = effort
+            .or(model_info.default_reasoning_level.as_ref())
+            .map(ReasoningEffortConfig::as_str);
         match effort {
             // Do not use `{"exclude": true}` here: it suppresses the reasoning
             // text while still billing the tokens.
             None | Some("none") => Some(json!({ "enabled": false })),
             Some(effort) => Some(json!({ "effort": effort })),
         }
+    }
+
+    /// The Chat wire needs the same disable the Responses and Anthropic wires
+    /// send. Pinning the upstream only guarantees the instruction reaches a
+    /// host that obeys it; it is not itself an instruction.
+    fn vercel_reasoning(model_info: &ModelInfo, effort: Option<&ReasoningEffortConfig>) -> Value {
+        let deep = wants_deep_reasoning(effort.or(model_info.default_reasoning_level.as_ref()));
+        // The gateway publishes `high` and `xhigh` for these slugs, so do not
+        // forward an effort level it does not accept.
+        json!({ "effort": if deep { "xhigh" } else { "none" } })
     }
 
     /// Ambient publishes OpenRouter's `ReasoningConfiguration` shape and does
@@ -1265,12 +1269,11 @@ impl ModelClient {
             .flatten();
         // Same rule the Ambient, Z.AI and Anthropic paths already use: these
         // models think only when deep reasoning was asked for explicitly.
-        let vercel_wants_thinking = Self::ambient_zai_reasoning_effort(
+        let vercel_wants_thinking = wants_deep_reasoning(
             effort
                 .as_ref()
                 .or(model_info.default_reasoning_level.as_ref()),
-        )
-        .is_some();
+        );
         let mut reasoning = if uses_zai_reasoning {
             None
         } else {
@@ -1439,13 +1442,6 @@ impl ModelClient {
             .info()
             .is_zai()
             .then_some(ambient_reasoning_effort.is_some());
-        let provider_reasoning = if self.state.provider.info().is_openrouter() {
-            Self::openrouter_reasoning(model_info, effort.as_ref())
-        } else if self.state.provider.info().is_ambient() {
-            Some(Self::ambient_reasoning(ambient_reasoning_effort.as_deref()))
-        } else {
-            None
-        };
         let response_format = prompt.output_schema.as_ref().map(|schema| {
             json!({
                 "type": "json_schema",
@@ -1463,6 +1459,22 @@ impl ModelClient {
 
         let upstream_model =
             chat_completions_upstream_model(&model_info.slug, self.state.provider.info());
+        let vercel_provider_options = self
+            .state
+            .provider
+            .info()
+            .is_vercel_gateway()
+            .then(|| vercel_gateway_provider_options(upstream_model))
+            .flatten();
+        let provider_reasoning = if self.state.provider.info().is_openrouter() {
+            Self::openrouter_reasoning(model_info, effort.as_ref())
+        } else if self.state.provider.info().is_ambient() {
+            Some(Self::ambient_reasoning(ambient_reasoning_effort.as_deref()))
+        } else if vercel_provider_options.is_some() {
+            Some(Self::vercel_reasoning(model_info, effort.as_ref()))
+        } else {
+            None
+        };
         let baseten_reasoning_effort = self
             .state
             .provider
@@ -1527,13 +1539,7 @@ impl ModelClient {
             reasoning: provider_reasoning,
             provider: self.state.provider.info().chat_completions_provider.clone(),
             plugins: openrouter_web_plugins,
-            provider_options: self
-                .state
-                .provider
-                .info()
-                .is_vercel_gateway()
-                .then(|| vercel_gateway_provider_options(upstream_model))
-                .flatten(),
+            provider_options: vercel_provider_options,
         })
     }
 
@@ -3962,21 +3968,30 @@ fn vercel_gateway_provider_options(model: &str) -> Option<Value> {
     })
 }
 
-fn anthropic_thinking_for_effort(effort: Option<&ReasoningEffortConfig>) -> Option<Value> {
+/// True when the caller explicitly asked for deep reasoning.
+///
+/// The catalog exposes this level as `"xhigh"`, which deserializes to the
+/// first-class `XHigh` variant rather than `Custom("xhigh")`. Matching only on
+/// `Custom` therefore ignored every user who picked Deep in the model picker,
+/// on every provider that routes through here.
+fn wants_deep_reasoning(effort: Option<&ReasoningEffortConfig>) -> bool {
     match effort {
-        Some(ReasoningEffortConfig::Custom(value))
-            if matches!(
-                value.as_str(),
-                "deep" | "max" | "xhigh" | "extra_high" | "extra-high"
-            ) =>
-        {
-            Some(json!({
-                "type": "enabled",
-                "budget_tokens": 16_000,
-            }))
-        }
-        _ => None,
+        Some(ReasoningEffortConfig::XHigh) => true,
+        Some(ReasoningEffortConfig::Custom(value)) => matches!(
+            value.as_str(),
+            "deep" | "max" | "xhigh" | "extra_high" | "extra-high"
+        ),
+        _ => false,
     }
+}
+
+fn anthropic_thinking_for_effort(effort: Option<&ReasoningEffortConfig>) -> Option<Value> {
+    wants_deep_reasoning(effort).then(|| {
+        json!({
+            "type": "enabled",
+            "budget_tokens": 16_000,
+        })
+    })
 }
 
 fn create_tools_json_for_anthropic_messages(

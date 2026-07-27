@@ -1860,8 +1860,11 @@ fn ambient_responses_request_disables_thinking_unless_deep_reasoning_is_explicit
     assert_eq!(deep.reasoning, None);
     assert_eq!(deep.thinking_budget, None);
     assert_eq!(deep.emit_usage, Some(true));
-    assert_eq!(deep.enable_thinking, Some(false));
-    assert_eq!(deep.reasoning_effort, None);
+    // `xhigh` is the catalog spelling of Deep and deserializes to the XHigh
+    // variant, so picking Deep has to turn reasoning on. It previously matched
+    // only `Custom("xhigh")` and silently did nothing.
+    assert_eq!(deep.enable_thinking, Some(true));
+    assert_eq!(deep.reasoning_effort.as_deref(), Some("max"));
 
     let max = client
         .build_responses_request(
@@ -1925,8 +1928,11 @@ fn ambient_chat_completions_request_disables_thinking_unless_deep_reasoning_is_e
         .expect("deep Ambient chat request");
     assert_eq!(deep.emit_usage, Some(true));
     assert_eq!(deep.enable_thinking, None);
-    assert_eq!(deep.reasoning, Some(json!({ "enabled": false })));
-    assert_eq!(deep.reasoning_effort, None);
+    assert_eq!(
+        deep.reasoning,
+        Some(json!({ "enabled": true, "effort": "max" }))
+    );
+    assert_eq!(deep.reasoning_effort.as_deref(), Some("max"));
     assert_eq!(deep.prompt_cache_key, None);
 
     let max = client
@@ -2079,6 +2085,124 @@ fn vercel_gateway_leaves_first_party_slugs_unpinned() {
 
     assert_eq!(request.provider_options, None);
     assert_eq!(request.thinking, None);
+}
+
+/// Deep reasoning must survive every wire. The catalog spells this level
+/// `xhigh`, which is the `XHigh` variant and not `Custom("xhigh")`.
+#[test]
+fn vercel_gateway_honours_explicit_deep_reasoning_on_every_wire() {
+    let anthropic_request = test_client(ModelProviderInfo::create_vercel_anthropic_fast_provider())
+        .build_anthropic_messages_request(
+            &test_prompt(),
+            &test_vercel_glm_model_info("zai/glm-5.2-fast"),
+            Some(ReasoningEffortConfig::XHigh),
+        )
+        .expect("deep vercel anthropic request");
+    assert_eq!(
+        anthropic_request.provider_options,
+        Some(json!({ "gateway": { "only": ["zai"] } }))
+    );
+    assert_eq!(
+        anthropic_request.thinking,
+        Some(json!({ "type": "enabled", "budget_tokens": 16_000 }))
+    );
+
+    let provider_info = ModelProviderInfo::create_vercel_provider();
+    let api_provider = provider_info
+        .to_api_provider(Some(AuthMode::ApiKey))
+        .expect("Vercel API provider");
+    let client = test_client(provider_info);
+    let responses_metadata = test_responses_metadata_for_client(
+        &client,
+        Some("turn-1"),
+        "window-1".to_string(),
+        None,
+        TestCodexResponsesRequestKind::Turn,
+    );
+    let responses_request = client
+        .build_responses_request(
+            &api_provider,
+            &test_prompt(),
+            &test_vercel_glm_model_info("zai/glm-5.2"),
+            Some(ReasoningEffortConfig::XHigh),
+            ReasoningSummaryConfig::None,
+            None,
+            &responses_metadata,
+        )
+        .expect("deep vercel responses request");
+    assert_eq!(
+        responses_request
+            .reasoning
+            .as_ref()
+            .and_then(|reasoning| reasoning.effort.clone()),
+        Some(ReasoningEffortConfig::XHigh)
+    );
+
+    let chat_request = test_client(vercel_chat_provider())
+        .build_chat_completions_request(
+            &test_prompt(),
+            &test_vercel_glm_model_info("zai/glm-5.2"),
+            Some(ReasoningEffortConfig::XHigh),
+        )
+        .expect("deep vercel chat request");
+    assert_eq!(chat_request.reasoning, Some(json!({ "effort": "xhigh" })));
+}
+
+/// A user-defined provider aimed at the gateway is still the gateway. Detection
+/// is on the endpoint, not the display name.
+fn vercel_chat_provider() -> ModelProviderInfo {
+    let mut provider = ModelProviderInfo::create_vercel_provider();
+    provider.name = "my-own-gateway".to_string();
+    provider.wire_api = WireApi::Chat;
+    provider
+}
+
+/// The pin alone is not an instruction. Without a native toggle the Chat wire
+/// keeps paying for reasoning on a correctly pinned request.
+#[test]
+fn vercel_chat_wire_pins_vendor_upstream_and_disables_reasoning() {
+    let request = test_client(vercel_chat_provider())
+        .build_chat_completions_request(
+            &test_prompt(),
+            &test_vercel_glm_model_info("zai/glm-5.2"),
+            None,
+        )
+        .expect("vercel chat request");
+
+    assert_eq!(
+        request.provider_options,
+        Some(json!({ "gateway": { "only": ["zai"] } }))
+    );
+    assert_eq!(request.reasoning, Some(json!({ "effort": "none" })));
+    assert_eq!(request.enable_thinking, None);
+}
+
+#[test]
+fn vercel_gateway_detection_ignores_provider_display_name() {
+    let mut renamed = ModelProviderInfo::create_vercel_anthropic_fast_provider();
+    renamed.name = "house-gateway".to_string();
+    assert!(renamed.is_vercel_gateway());
+
+    let mut impostor = ModelProviderInfo::create_openrouter_provider();
+    impostor.name = "Vercel".to_string();
+    assert!(!impostor.is_vercel_gateway());
+}
+
+/// OpenRouter omits the reasoning capability for models that do not reason, and
+/// `provider.require_parameters` drops upstreams that cannot honour every
+/// parameter sent. Asserting a default on such a model can make otherwise valid
+/// routes ineligible.
+#[test]
+fn openrouter_omits_reasoning_for_models_without_the_capability() {
+    let mut model_info = test_openrouter_gemini_model_info();
+    model_info.default_reasoning_level = None;
+    model_info.supported_reasoning_levels = Vec::new();
+
+    let request = test_client(ModelProviderInfo::create_openrouter_provider())
+        .build_chat_completions_request(&test_prompt(), &model_info, None)
+        .expect("non-reasoning OpenRouter chat request");
+
+    assert_eq!(request.reasoning, None);
 }
 
 #[test]
@@ -2380,7 +2504,10 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
     let request = client
         .build_anthropic_messages_request(&prompt, &model_info, Some(ReasoningEffortConfig::XHigh))
         .expect("Anthropic messages request");
-    assert_eq!(request.thinking, None);
+    assert_eq!(
+        request.thinking,
+        Some(json!({ "type": "enabled", "budget_tokens": 16_000 }))
+    );
 
     let body = serde_json::to_value(&request).expect("serialize request");
     assert_eq!(
