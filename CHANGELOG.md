@@ -8,6 +8,10 @@
 - Spawn-time runtime metadata now exposes billing class, model tier, estimated
   token cost, reasoning efforts, service tiers, and vision capability so agent
   allocation can distinguish plan capacity from metered API spend.
+- The canonical model catalogue now owns orchestration eligibility, capability
+  tier, vision support, reasoning effort, and typed billing metadata. Spawn
+  guidance is generated from that catalogue and prefers compatible plan-backed
+  runtimes before metered routes when policy allows.
 
 ## Fixed
 
@@ -23,12 +27,22 @@
 - Native mailbox delivery, provider-auth preflight, restored descendant
   identity, root resume reconciliation, and manager addressability under worker
   saturation now share the same native scheduling path.
+- Native spawn paths now enforce exact provider/model catalogue membership and
+  operator authorization. Full-history forks inherit their parent's runtime;
+  fresh or partial forks may use an explicit eligible override. GPT-5.5 is
+  classified as legacy and is never selected for orchestration.
+- Child turns stop with a visible bounded-budget warning after the configured
+  model-request limit instead of looping indefinitely. The default limit is 24
+  model requests per child turn.
 
 ## Qualification status
 
 - Provider adapter tests cover empty Anthropic/chat streams and tool-only
   completions. Prompt-cache, structured-edit/write, spawn runtime, hierarchy,
   sandbox, and model-economics regressions pass on the release candidate.
+- Model-catalogue, provider/model authorization, runtime inheritance,
+  model-aware spawn-description, and bounded child-turn regressions pass on the
+  release candidate.
 - Native orchestration qualification covers required Claude, Grok, Fable, and
   Kimi runtime mappings plus live mailbox/resume evidence recorded in the
   multimodel orchestration journal.

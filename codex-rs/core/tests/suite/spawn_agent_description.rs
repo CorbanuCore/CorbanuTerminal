@@ -50,6 +50,7 @@ fn test_model_info(
 ) -> ModelInfo {
     ModelInfo {
         slug: slug.to_string(),
+        orchestration: None,
         display_name: display_name.to_string(),
         description: Some(description.to_string()),
         default_reasoning_level: Some(default_reasoning_level),
@@ -180,15 +181,26 @@ async fn spawn_agent_description_lists_visible_models_and_reasoning_efforts() ->
 
     assert!(
         description.contains(
-            "- model `visible-model` (provider inherited); vision; efforts: low, medium (default), high; tiers: priority"
+            "- `ambient` / `z-ai/glm-5.2`; metered $0.76/$2.42 per M tok, balanced; text-only; efforts: medium (default), xhigh"
         ),
-        "expected visible inherited runtime metadata in spawn_agent description: {description:?}"
+        "expected an eligible exact provider route in spawn_agent description: {description:?}"
     );
     assert!(
         description.contains(
-            "Available exact runtime overrides (optional; omit both fields to inherit the parent runtime). Pass the provider as `model_provider` and the model as `model`."
+            "Available authorized exact runtime overrides (optional; omit both fields to inherit the current runtime). Pass the provider as `model_provider` and the model as `model`."
         ),
         "expected provider/model choices to be framed as exact runtime pairs: {description:?}"
+    );
+    assert!(
+        description
+            .contains("Current inherited runtime: `ambient` / `visible-model`; effort medium."),
+        "expected the exact parent runtime in the spawn catalogue: {description:?}"
+    );
+    assert!(
+        description.contains(
+            "Default allocation policy: compare the task with this catalogue before every spawn."
+        ),
+        "expected model-aware default allocation policy: {description:?}"
     );
     assert!(
         description.contains(
@@ -203,12 +215,8 @@ async fn spawn_agent_description_lists_visible_models_and_reasoning_efforts() ->
         "expected model override usage guidance in spawn_agent description: {description:?}"
     );
     assert!(
-        description.contains("efforts: low, medium (default), high"),
-        "expected default reasoning effort in spawn_agent description: {description:?}"
-    );
-    assert!(
-        description.contains("tiers: priority"),
-        "expected service tier guidance in spawn_agent description: {description:?}"
+        !description.contains("- model `visible-model`"),
+        "remote models without orchestration policy must fail closed as overrides: {description:?}"
     );
     assert!(
         !description.contains("hidden-model"),
@@ -233,6 +241,109 @@ async fn spawn_agent_description_lists_visible_models_and_reasoning_efforts() ->
     assert!(
         !description.contains("A mini model can solve many tasks faster than the main model."),
         "spawn_agent description should not encourage choosing a smaller model by default: {description:?}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spawn_agent_description_filters_policy_and_marks_sol_ultra_frontier() -> Result<()> {
+    let server = start_mock_server().await;
+    let frontier_efforts = vec![
+        ReasoningEffortPreset {
+            effort: ReasoningEffort::High,
+            description: "Deep work".to_string(),
+        },
+        ReasoningEffortPreset {
+            effort: ReasoningEffort::Custom("max".to_string()),
+            description: "Maximum reasoning".to_string(),
+        },
+        ReasoningEffortPreset {
+            effort: ReasoningEffort::Custom("ultra".to_string()),
+            description: "Maximum reasoning with automatic delegation".to_string(),
+        },
+    ];
+    mount_models_once(
+        &server,
+        ModelsResponse {
+            models: vec![
+                test_model_info(
+                    "gpt-5.6-sol",
+                    "GPT-5.6-Sol",
+                    "Frontier coding model",
+                    ModelVisibility::List,
+                    ReasoningEffort::High,
+                    frontier_efforts.clone(),
+                    Vec::new(),
+                ),
+                test_model_info(
+                    "k3",
+                    "Kimi K3",
+                    "Frontier code model",
+                    ModelVisibility::List,
+                    ReasoningEffort::High,
+                    frontier_efforts,
+                    Vec::new(),
+                ),
+                test_model_info(
+                    "gpt-5.5",
+                    "GPT-5.5",
+                    "Superseded coding model",
+                    ModelVisibility::List,
+                    ReasoningEffort::High,
+                    vec![ReasoningEffortPreset {
+                        effort: ReasoningEffort::High,
+                        description: "Deep work".to_string(),
+                    }],
+                    Vec::new(),
+                ),
+            ],
+        },
+    )
+    .await;
+    let resp_mock = mount_sse_once(
+        &server,
+        sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
+    )
+    .await;
+
+    let mut builder = test_codex()
+        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+        .with_model("gpt-5.6-sol")
+        .with_config(|config| {
+            config.model_provider_id = "openai".to_string();
+            config
+                .features
+                .enable(Feature::Collab)
+                .expect("test config should allow feature update");
+            config.multi_agent_v2.hide_spawn_agent_metadata = false;
+            config.agent_provider_allowlist = Some(vec!["openai".to_string()]);
+        });
+    let test = builder.build(&server).await?;
+    wait_for_model_available(&test.thread_manager.get_models_manager(), "gpt-5.6-sol").await;
+
+    test.submit_turn("hello").await?;
+
+    let description = spawn_agent_description(&resp_mock.single_request().body_json())
+        .expect("spawn_agent description should be present");
+    assert!(
+        description.contains(
+            "`openai` / `gpt-5.6-sol`; plan, burn 1x, frontier; frontier efforts: max, ultra (ultra includes automatic delegation)"
+        ),
+        "expected authorized Sol frontier allocation metadata: {description:?}"
+    );
+    assert!(
+        !description.contains("`kimi-code` / `k3`"),
+        "operator-disallowed providers must not be advertised as available: {description:?}"
+    );
+    assert!(
+        !description.contains("`openai` / `gpt-5.5`"),
+        "catalogue-disabled GPT-5.5 must not be advertised as spawnable: {description:?}"
+    );
+    assert!(
+        description
+            .contains("If the user names a provider or model, treat it as an exact constraint"),
+        "expected exact-model no-substitution policy: {description:?}"
     );
 
     Ok(())

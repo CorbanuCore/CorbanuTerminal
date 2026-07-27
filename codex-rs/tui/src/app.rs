@@ -158,6 +158,9 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::InputModality;
 #[cfg(test)]
 use codex_protocol::openai_models::ModelAvailabilityNux;
+use codex_protocol::openai_models::ModelBilling;
+use codex_protocol::openai_models::ModelCapabilityTier;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ModelUpgrade;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
@@ -866,6 +869,11 @@ fn gpu_runtime_model_preset(provider: &codex_state::GpuRuntimeProvider) -> Optio
         id: format!("{}:{}", provider.provider_id, provider.model_id),
         model: provider.model_id.clone(),
         provider_id: Some(provider.provider_id.clone()),
+        orchestration: Some(ModelOrchestrationMetadata::Eligible {
+            provider_id: provider.provider_id.clone(),
+            capability: ModelCapabilityTier::Balanced,
+            billing: ModelBilling::Local,
+        }),
         display_name: provider.model_id.clone(),
         description: format!(
             "{} · active GPU rental {} · ${:.4}/hour",

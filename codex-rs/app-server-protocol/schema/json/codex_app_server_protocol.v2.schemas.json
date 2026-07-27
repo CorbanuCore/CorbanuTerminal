@@ -8923,6 +8923,17 @@
         "model": {
           "type": "string"
         },
+        "orchestration": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ModelOrchestrationMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Canonical provider, capability, and billing policy used for spawned work.\n\nThis field is always present on the wire. `null` means the route is not trusted for orchestration; clients must not infer eligibility from its display name."
+        },
         "serviceTiers": {
           "default": [],
           "items": {
@@ -8980,6 +8991,194 @@
       ],
       "type": "object"
     },
+    "ModelBilling": {
+      "description": "Billing data for an exact provider/model route.\n\nMonetary values use milli-USD per million tokens so catalogue metadata remains exact, serializable, and equality-comparable without floating point.",
+      "oneOf": [
+        {
+          "properties": {
+            "kind": {
+              "enum": [
+                "plan"
+              ],
+              "type": "string"
+            },
+            "relative_burn_millis": {
+              "description": "Relative subscription-pool burn where 1000 means 1.0x.",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "relative_burn_millis"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Subscription-pool burn changes by time of day.\n\nThe normal peak/off-peak schedule remains present when a temporary promotion is active so clients can stop applying the discount after `promotion_valid_through_utc` without a catalogue release.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "plan_schedule"
+              ],
+              "type": "string"
+            },
+            "off_peak_relative_burn_millis": {
+              "description": "Normal off-peak relative burn where 1000 means 1.0x.",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "peak_end_utc_hour": {
+              "description": "Exclusive peak-window end, expressed as an hour in UTC.",
+              "format": "uint8",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "peak_relative_burn_millis": {
+              "description": "Peak relative burn where 1000 means 1.0x.",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "peak_start_utc_hour": {
+              "description": "Inclusive peak-window start, expressed as an hour in UTC.",
+              "format": "uint8",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "promotion_valid_through_utc": {
+              "default": null,
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "promotional_off_peak_relative_burn_millis": {
+              "default": null,
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "off_peak_relative_burn_millis",
+            "peak_end_utc_hour",
+            "peak_relative_burn_millis",
+            "peak_start_utc_hour"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "cached_input_milli_usd_per_million_tokens": {
+              "default": null,
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "input_milli_usd_per_million_tokens": {
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "kind": {
+              "enum": [
+                "metered"
+              ],
+              "type": "string"
+            },
+            "output_milli_usd_per_million_tokens": {
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "input_milli_usd_per_million_tokens",
+            "kind",
+            "output_milli_usd_per_million_tokens"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The same provider/model route can use subscription capacity or API-key billing.\n\nBoth sides are exact. Runtime consumers resolve the active side from authentication; catalogue consumers that do not know authentication must present both, never guess.",
+          "properties": {
+            "api_key_cached_input_milli_usd_per_million_tokens": {
+              "default": null,
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "api_key_input_milli_usd_per_million_tokens": {
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "api_key_output_milli_usd_per_million_tokens": {
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "kind": {
+              "enum": [
+                "auth_dependent"
+              ],
+              "type": "string"
+            },
+            "plan_relative_burn_millis": {
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "api_key_input_milli_usd_per_million_tokens",
+            "api_key_output_milli_usd_per_million_tokens",
+            "kind",
+            "plan_relative_burn_millis"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "enum": [
+                "local"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "title": "LocalModelBilling",
+          "type": "object"
+        }
+      ]
+    },
+    "ModelCapabilityTier": {
+      "description": "Capability class used by orchestration when matching a model to spawned work.",
+      "enum": [
+        "frontier",
+        "balanced",
+        "fast",
+        "legacy",
+        "unclassified"
+      ],
+      "type": "string"
+    },
     "ModelListParams": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
@@ -9032,6 +9231,65 @@
       ],
       "title": "ModelListResponse",
       "type": "object"
+    },
+    "ModelOrchestrationMetadata": {
+      "description": "Canonical spawn-allocation metadata carried with a model through every catalogue layer.",
+      "oneOf": [
+        {
+          "description": "Spawnable models must declare exact billing and capability metadata.",
+          "properties": {
+            "billing": {
+              "$ref": "#/definitions/ModelBilling"
+            },
+            "capability": {
+              "$ref": "#/definitions/ModelCapabilityTier"
+            },
+            "provider_id": {
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "eligible"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "billing",
+            "capability",
+            "provider_id",
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Non-spawnable models remain visible for existing sessions and manual use.",
+          "properties": {
+            "capability": {
+              "$ref": "#/definitions/ModelCapabilityTier"
+            },
+            "provider_id": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "disabled"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "capability",
+            "provider_id",
+            "reason",
+            "status"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "ModelProviderCapabilitiesReadParams": {
       "$schema": "http://json-schema.org/draft-07/schema#",

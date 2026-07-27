@@ -14,6 +14,7 @@ fn model_with_shell_type(shell_type: ConfigShellToolType) -> ModelInfo {
         slug: "test-model".to_string(),
         display_name: "Test Model".to_string(),
         description: None,
+        orchestration: None,
         default_reasoning_level: None,
         supported_reasoning_levels: Vec::new(),
         shell_type,

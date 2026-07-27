@@ -191,6 +191,151 @@ pub struct ModelServiceTier {
     pub description: String,
 }
 
+/// Capability class used by orchestration when matching a model to spawned work.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq, Display)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum ModelCapabilityTier {
+    Frontier,
+    Balanced,
+    Fast,
+    Legacy,
+    Unclassified,
+}
+
+/// Billing data for an exact provider/model route.
+///
+/// Monetary values use milli-USD per million tokens so catalogue metadata remains exact,
+/// serializable, and equality-comparable without floating point.
+#[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ModelBilling {
+    Plan {
+        /// Relative subscription-pool burn where 1000 means 1.0x.
+        relative_burn_millis: u32,
+    },
+    /// Subscription-pool burn changes by time of day.
+    ///
+    /// The normal peak/off-peak schedule remains present when a temporary promotion is active so
+    /// clients can stop applying the discount after `promotion_valid_through_utc` without a
+    /// catalogue release.
+    PlanSchedule {
+        /// Normal off-peak relative burn where 1000 means 1.0x.
+        off_peak_relative_burn_millis: u32,
+        /// Peak relative burn where 1000 means 1.0x.
+        peak_relative_burn_millis: u32,
+        /// Inclusive peak-window start, expressed as an hour in UTC.
+        peak_start_utc_hour: u8,
+        /// Exclusive peak-window end, expressed as an hour in UTC.
+        peak_end_utc_hour: u8,
+        #[serde(default)]
+        promotional_off_peak_relative_burn_millis: Option<u32>,
+        #[serde(default)]
+        promotion_valid_through_utc: Option<String>,
+    },
+    Metered {
+        input_milli_usd_per_million_tokens: u32,
+        output_milli_usd_per_million_tokens: u32,
+        #[serde(default)]
+        cached_input_milli_usd_per_million_tokens: Option<u32>,
+    },
+    /// The same provider/model route can use subscription capacity or API-key billing.
+    ///
+    /// Both sides are exact. Runtime consumers resolve the active side from authentication;
+    /// catalogue consumers that do not know authentication must present both, never guess.
+    AuthDependent {
+        plan_relative_burn_millis: u32,
+        api_key_input_milli_usd_per_million_tokens: u32,
+        api_key_output_milli_usd_per_million_tokens: u32,
+        #[serde(default)]
+        api_key_cached_input_milli_usd_per_million_tokens: Option<u32>,
+    },
+    Local,
+}
+
+impl ModelBilling {
+    /// Resolve an auth-dependent row for a runtime that knows its active OpenAI auth mode.
+    pub fn resolve_auth_mode(&self, api_key: bool) -> Self {
+        match self {
+            Self::AuthDependent {
+                plan_relative_burn_millis: _,
+                api_key_input_milli_usd_per_million_tokens,
+                api_key_output_milli_usd_per_million_tokens,
+                api_key_cached_input_milli_usd_per_million_tokens,
+            } if api_key => Self::Metered {
+                input_milli_usd_per_million_tokens: *api_key_input_milli_usd_per_million_tokens,
+                output_milli_usd_per_million_tokens: *api_key_output_milli_usd_per_million_tokens,
+                cached_input_milli_usd_per_million_tokens:
+                    *api_key_cached_input_milli_usd_per_million_tokens,
+            },
+            Self::AuthDependent {
+                plan_relative_burn_millis,
+                ..
+            } => Self::Plan {
+                relative_burn_millis: *plan_relative_burn_millis,
+            },
+            billing => billing.clone(),
+        }
+    }
+}
+
+/// Canonical spawn-allocation metadata carried with a model through every catalogue layer.
+#[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum ModelOrchestrationMetadata {
+    /// Spawnable models must declare exact billing and capability metadata.
+    Eligible {
+        provider_id: String,
+        capability: ModelCapabilityTier,
+        billing: ModelBilling,
+    },
+    /// Non-spawnable models remain visible for existing sessions and manual use.
+    Disabled {
+        provider_id: String,
+        capability: ModelCapabilityTier,
+        reason: String,
+    },
+}
+
+impl ModelOrchestrationMetadata {
+    pub fn provider_id(&self) -> &str {
+        match self {
+            Self::Eligible { provider_id, .. } | Self::Disabled { provider_id, .. } => provider_id,
+        }
+    }
+
+    pub fn capability(&self) -> ModelCapabilityTier {
+        match self {
+            Self::Eligible { capability, .. } | Self::Disabled { capability, .. } => *capability,
+        }
+    }
+
+    pub fn billing(&self) -> Option<&ModelBilling> {
+        match self {
+            Self::Eligible { billing, .. } => Some(billing),
+            Self::Disabled { .. } => None,
+        }
+    }
+
+    /// Resolve auth-dependent billing without changing provider/capability policy.
+    pub fn resolve_billing_auth_mode(&mut self, api_key: bool) {
+        if let Self::Eligible { billing, .. } = self {
+            *billing = billing.resolve_auth_mode(api_key);
+        }
+    }
+
+    pub fn is_spawn_eligible(&self) -> bool {
+        matches!(self, Self::Eligible { .. })
+    }
+
+    pub fn disabled_reason(&self) -> Option<&str> {
+        match self {
+            Self::Eligible { .. } => None,
+            Self::Disabled { reason, .. } => Some(reason),
+        }
+    }
+}
+
 /// Metadata describing a Codex-supported model.
 #[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema, PartialEq)]
 pub struct ModelPreset {
@@ -201,6 +346,9 @@ pub struct ModelPreset {
     /// Provider that owns this catalog entry when model naming alone is not authoritative.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_id: Option<String>,
+    /// Canonical cost, capability, and spawn-policy metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orchestration: Option<ModelOrchestrationMetadata>,
     /// Display name shown in UIs.
     pub display_name: String,
     /// Short human description shown in UIs.
@@ -350,6 +498,9 @@ const fn default_effective_context_window_percent() -> i64 {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, TS, JsonSchema)]
 pub struct ModelInfo {
     pub slug: String,
+    /// Canonical cost, capability, and spawn-policy metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orchestration: Option<ModelOrchestrationMetadata>,
     pub display_name: String,
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -557,10 +708,15 @@ pub struct ModelsResponse {
 impl From<ModelInfo> for ModelPreset {
     fn from(info: ModelInfo) -> Self {
         let supports_personality = info.supports_personality();
+        let provider_id = info
+            .orchestration
+            .as_ref()
+            .map(|metadata| metadata.provider_id().to_string());
         ModelPreset {
             id: info.slug.clone(),
             model: info.slug.clone(),
-            provider_id: None,
+            provider_id,
+            orchestration: info.orchestration,
             display_name: info.display_name,
             description: info.description.unwrap_or_default(),
             default_reasoning_effort: info
@@ -653,6 +809,7 @@ mod tests {
             slug: "test-model".to_string(),
             display_name: "Test Model".to_string(),
             description: None,
+            orchestration: None,
             default_reasoning_level: None,
             supported_reasoning_levels: vec![],
             shell_type: ConfigShellToolType::ShellCommand,

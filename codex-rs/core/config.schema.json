@@ -1712,6 +1712,12 @@
           "minimum": 1.0,
           "type": "integer"
         },
+        "max_subagent_model_requests_per_turn": {
+          "description": "Hard per-turn sampling-request ceiling for non-root agents.",
+          "format": "uint",
+          "minimum": 2.0,
+          "type": "integer"
+        },
         "max_wait_timeout_ms": {
           "format": "int64",
           "maximum": 3600000.0,

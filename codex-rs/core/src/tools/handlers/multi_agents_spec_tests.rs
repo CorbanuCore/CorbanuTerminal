@@ -1,4 +1,7 @@
 use super::*;
+use codex_protocol::openai_models::ModelBilling;
+use codex_protocol::openai_models::ModelCapabilityTier;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ModelServiceTier;
 use codex_protocol::openai_models::ReasoningEffort;
@@ -13,6 +16,7 @@ fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
         id: id.to_string(),
         model: format!("{id}-model"),
         provider_id: None,
+        orchestration: None,
         display_name: format!("{id} display"),
         description: format!("{id} description"),
         default_reasoning_effort: ReasoningEffort::XHigh,
@@ -43,6 +47,7 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
     visible.provider_id = Some("example-provider".to_string());
     let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
         available_models: vec![visible, model_preset("hidden", /*show_in_picker*/ false)],
+        inherited_runtime: None,
         agent_type_description: "role help".to_string(),
         hide_agent_type_model_reasoning: false,
         include_usage_hint: true,
@@ -72,7 +77,7 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
     assert!(description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2));
     assert!(
         description.contains(
-            "Available exact runtime overrides (optional; omit both fields to inherit the parent runtime)."
+            "Available authorized exact runtime overrides (optional; omit both fields to inherit the current runtime)."
         )
     );
     assert!(description.contains(
@@ -118,7 +123,65 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
     );
     assert_eq!(
         output_schema.expect("spawn_agent output schema")["required"],
-        json!(["task_name", "nickname"])
+        json!([
+            "task_name",
+            "nickname",
+            "model_provider",
+            "model",
+            "reasoning_effort",
+            "service_tier"
+        ])
+    );
+}
+
+#[test]
+fn spawn_agent_catalog_exposes_parent_runtime_and_frontier_effort_policy() {
+    let mut sol = model_preset("sol", /*show_in_picker*/ true);
+    sol.model = "gpt-5.6-sol".to_string();
+    sol.provider_id = Some("openai".to_string());
+    sol.orchestration = Some(ModelOrchestrationMetadata::Eligible {
+        provider_id: "openai".to_string(),
+        capability: ModelCapabilityTier::Frontier,
+        billing: ModelBilling::Plan {
+            relative_burn_millis: 1_000,
+        },
+    });
+    sol.supported_reasoning_efforts.extend([
+        ReasoningEffortPreset {
+            effort: ReasoningEffort::Custom("max".to_string()),
+            description: "Maximum reasoning".to_string(),
+        },
+        ReasoningEffortPreset {
+            effort: ReasoningEffort::Custom("ultra".to_string()),
+            description: "Maximum reasoning with automatic delegation".to_string(),
+        },
+    ]);
+    let inherited_runtime = SpawnAgentRuntime {
+        model_provider: "claude-plan".to_string(),
+        model: "claude-opus-5-plan".to_string(),
+        reasoning_effort: Some(ReasoningEffort::High),
+        service_tier: None,
+    };
+
+    let description = spawn_agent_models_description(&[sol], Some(&inherited_runtime));
+
+    assert!(
+        description.contains(
+            "Current inherited runtime: `claude-plan` / `claude-opus-5-plan`; effort high."
+        )
+    );
+    assert!(description.contains(
+        "Default allocation policy: compare the task with this catalogue before every spawn."
+    ));
+    assert!(description.contains(
+        "Prefer an authorized `plan` runtime over a `metered` runtime when both can do the work"
+    ));
+    assert!(description.contains(
+        "`openai` / `gpt-5.6-sol`; plan, burn 1x, frontier; frontier efforts: max, ultra (ultra includes automatic delegation)"
+    ));
+    assert!(
+        description
+            .contains("If the user names a provider or model, treat it as an exact constraint")
     );
 }
 
@@ -126,6 +189,7 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
 fn spawn_agent_tool_v1_keeps_legacy_fork_context_field() {
     let tool = create_spawn_agent_tool_v1(SpawnAgentToolOptions {
         available_models: Vec::new(),
+        inherited_runtime: None,
         agent_type_description: "role help".to_string(),
         hide_agent_type_model_reasoning: false,
         include_usage_hint: true,
@@ -183,6 +247,7 @@ fn spawn_agent_tool_caps_visible_model_summaries() {
         .collect();
     let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
         available_models,
+        inherited_runtime: None,
         agent_type_description: "role help".to_string(),
         hide_agent_type_model_reasoning: false,
         include_usage_hint: true,
@@ -214,8 +279,8 @@ fn spawn_agent_tool_caps_reasoning_effort_value_length() {
 
     // The point of this test is the effort-string truncation, so assert the model
     // line rather than pinning the whole guidance header.
-    assert!(spawn_agent_models_description(&[model]).ends_with(&format!(
-        "- model `visible-model` (provider inherited); text-only; efforts: {} (default); tiers: priority",
+    assert!(spawn_agent_models_description(&[model], None).ends_with(&format!(
+        "- model `visible-model` (provider unspecified; not a cross-provider route); text-only; efforts: {} (default); tiers: priority",
         "é".repeat(MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION)
     )));
 }
@@ -224,6 +289,7 @@ fn spawn_agent_tool_caps_reasoning_effort_value_length() {
 fn spawn_agent_tool_hides_service_tier_with_spawn_metadata() {
     let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
         available_models: vec![model_preset("visible", /*show_in_picker*/ true)],
+        inherited_runtime: None,
         agent_type_description: "role help".to_string(),
         hide_agent_type_model_reasoning: true,
         include_usage_hint: true,

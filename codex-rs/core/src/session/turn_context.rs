@@ -695,7 +695,22 @@ impl Session {
         let auth_manager_for_context = auth_manager.clone();
         let provider_for_context = create_model_provider(provider, auth_manager);
         let session_telemetry_for_context = session_telemetry;
-        let available_models = models_manager.try_list_models().unwrap_or_default();
+        let mut available_models = models_manager.try_list_models().unwrap_or_default();
+        let runtime_provider_id = per_turn_config.model_provider_id.clone();
+        if runtime_provider_id.starts_with("gpu-")
+            && !available_models
+                .iter()
+                .any(|preset| preset.model == model_info.slug)
+        {
+            let mut preset = ModelPreset::from(model_info.clone());
+            preset.provider_id = Some(runtime_provider_id.clone());
+            preset.orchestration = Some(ModelOrchestrationMetadata::Eligible {
+                provider_id: runtime_provider_id,
+                capability: ModelCapabilityTier::Balanced,
+                billing: ModelBilling::Local,
+            });
+            available_models.push(preset);
+        }
         let unified_exec_shell_mode = UnifiedExecShellMode::for_session(
             codex_tools::unified_exec_feature_mode_for_features(per_turn_config.features.get()),
             crate::tools::tool_user_shell_type(user_shell),

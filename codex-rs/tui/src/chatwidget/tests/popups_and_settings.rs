@@ -3025,6 +3025,7 @@ async fn spawn_single_effort_model_creates_directly_for_troll() {
         id: "single-effort".to_string(),
         model: "gpt-5.6-sol".to_string(),
         provider_id: None,
+        orchestration: None,
         display_name: "Single Effort".to_string(),
         description: "test".to_string(),
         default_reasoning_effort: ReasoningEffort::High,
@@ -3169,6 +3170,7 @@ async fn model_picker_hides_show_in_picker_false_models_from_cache() {
         id: slug.to_string(),
         model: slug.to_string(),
         provider_id: None,
+        orchestration: None,
         display_name: slug.to_string(),
         description: format!("{slug} description"),
         default_reasoning_effort: ReasoningEffortConfig::Medium,
@@ -3257,7 +3259,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         "expected Kimi Code provider tab in /model picker:\n{popup}"
     );
     assert!(
-        popup.contains("Ambient's default GLM 5.2 coding model."),
+        popup.contains("Ambient: GLM 5.2 - $0.76/M input, $0.14/M cached input, $2.42/M output."),
         "expected Ambient model description in /model picker:\n{popup}"
     );
     assert!(
@@ -3265,7 +3267,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         "expected Ambient Kimi K2.7 Code in /model picker:\n{popup}"
     );
     assert!(
-        popup.contains("Ambient's Kimi K2.7 Code model."),
+        popup.contains("Ambient: Kimi K2.7 Code - $0.73/M input"),
         "expected Ambient Kimi description in /model picker:\n{popup}"
     );
     assert!(
@@ -3346,7 +3348,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     );
     assert!(
         baseten_popup
-            .contains("Baseten: GLM 5.2 - $1.50/M input, $0.30/M cached input, $4.50/M output."),
+            .contains("Baseten: GLM 5.2 - $1.40/M input, $0.14/M cached input, $4.40/M output."),
         "expected Baseten GLM price description in /model picker:\n{baseten_popup}"
     );
     let (mut kimi_chat, _kimi_rx, _kimi_op_rx) =
@@ -3407,7 +3409,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     );
     assert!(
         vercel_fast_popup.contains(
-            "Vercel: GLM 5.2 Fast - $3.00/M input, $0.50/M cached input, $10.25/M output."
+            "Vercel: GLM 5.2 Fast - $2.10/M input, $0.21/M cached input, $6.60/M output."
         ),
         "expected Vercel GLM Fast price description in /model picker:\n{vercel_fast_popup}"
     );
@@ -3427,7 +3429,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         "expected MiniMax M3 in /model picker:\n{minimax_popup}"
     );
     assert!(
-        minimax_popup.contains("OpenRouter: MiniMax M3 - $0.30/M input, $1.20/M output."),
+        minimax_popup.contains("OpenRouter: MiniMax M3 - $0.60/M input, $2.40/M output."),
         "expected MiniMax M3 price description in /model picker:\n{minimax_popup}"
     );
     assert!(
@@ -3902,6 +3904,7 @@ async fn single_reasoning_option_skips_selection() {
         id: "model-with-single-reasoning".to_string(),
         model: "model-with-single-reasoning".to_string(),
         provider_id: None,
+        orchestration: None,
         display_name: "model-with-single-reasoning".to_string(),
         description: "".to_string(),
         default_reasoning_effort: ReasoningEffortConfig::High,

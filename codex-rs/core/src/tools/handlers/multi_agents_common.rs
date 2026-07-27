@@ -307,9 +307,61 @@ pub(crate) fn ensure_spawn_provider_authorized(
         "Provider `{provider_id}` is not authorized for spawned agents. \
 Authorized providers: {}. This is operator policy set in `agents.provider_allowlist`; \
 it cannot be changed from a task and must not be worked around by selecting a different \
-model that routes to an unauthorized provider.",
+model that routes to an unauthorized provider. Do not spawn a substitute runtime in this \
+turn; report the refusal and obtain the user's explicit consent before trying a fallback.",
         allowlist.join(", ")
     )))
+}
+
+/// Catalogue lifecycle policy for newly spawned work.
+///
+/// This runs on the fully resolved child config so inherited runtimes, role overrides,
+/// model-only switches, and explicit provider/model pairs all cross the same boundary.
+pub(crate) async fn ensure_spawn_runtime_eligible(
+    session: &Session,
+    config: &Config,
+) -> Result<(), FunctionCallError> {
+    let model = config.model.as_deref().ok_or_else(|| {
+        FunctionCallError::RespondToModel(
+            "spawn_agent could not resolve the child model for catalogue policy".to_string(),
+        )
+    })?;
+    let model_info = session
+        .services
+        .models_manager
+        .get_model_info(model, &config.to_models_manager_config())
+        .await;
+    // GPU rental routes are dynamic runtime records, not static vendor catalogue rows. Their
+    // reserved provider id is created only from a ready state-db rental record, and local billing
+    // means no additional per-token spend. Keep this dynamic trust source separate from the
+    // bundled provider/model catalogue instead of inventing one row per rental.
+    if config.model_provider_id.starts_with("gpu-")
+        && config
+            .model_providers
+            .contains_key(&config.model_provider_id)
+    {
+        return Ok(());
+    }
+    let metadata = model_info.orchestration.as_ref().ok_or_else(|| {
+        FunctionCallError::RespondToModel(format!(
+            "Runtime `{}` / `{model}` has no orchestration metadata in the active model catalogue and cannot receive spawned work.",
+            config.model_provider_id
+        ))
+    })?;
+    if metadata.provider_id() != config.model_provider_id {
+        return Err(FunctionCallError::RespondToModel(format!(
+            "Runtime `{}` / `{model}` does not match its model catalogue provider `{}` and cannot receive spawned work. In MultiAgentV2, pass the exact catalogue `model_provider` together with `model`; legacy V1 cannot express a cross-provider override.",
+            config.model_provider_id,
+            metadata.provider_id()
+        )));
+    }
+    if let Some(reason) = metadata.disabled_reason() {
+        return Err(FunctionCallError::RespondToModel(format!(
+            "Runtime `{}` / `{model}` is disabled for spawned agents by model catalogue policy: {reason}.",
+            config.model_provider_id
+        )));
+    }
+    Ok(())
 }
 
 pub(crate) async fn apply_requested_spawn_agent_model_overrides(

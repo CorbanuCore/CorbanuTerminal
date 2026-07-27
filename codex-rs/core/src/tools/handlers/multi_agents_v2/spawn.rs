@@ -105,6 +105,15 @@ async fn handle_spawn_agent(
     )
     .await?;
     apply_spawn_agent_runtime_overrides(&mut config, turn.as_ref())?;
+    ensure_spawn_provider_authorized(&config, &config.model_provider_id)?;
+    ensure_spawn_runtime_eligible(&session, &config).await?;
+    let resolved_model_provider = config.model_provider_id.clone();
+    let resolved_model = config
+        .model
+        .clone()
+        .unwrap_or_else(|| turn.model_info.slug.clone());
+    let resolved_reasoning_effort = config.model_reasoning_effort.clone();
+    let resolved_service_tier = config.service_tier.clone();
 
     let spawn_source = thread_spawn_source(
         session.thread_id,
@@ -207,6 +216,10 @@ async fn handle_spawn_agent(
         Ok(SpawnAgentResult::WithNickname {
             task_name,
             nickname,
+            model_provider: resolved_model_provider,
+            model: resolved_model,
+            reasoning_effort: resolved_reasoning_effort,
+            service_tier: resolved_service_tier,
         })
     }
 }
@@ -274,6 +287,10 @@ pub(crate) enum SpawnAgentResult {
     WithNickname {
         task_name: String,
         nickname: Option<String>,
+        model_provider: String,
+        model: String,
+        reasoning_effort: Option<ReasoningEffort>,
+        service_tier: Option<String>,
     },
     HiddenMetadata {
         task_name: String,

@@ -11,9 +11,13 @@ use codex_login::ExternalAuthRefreshContext;
 use codex_login::ExternalAuthTokens;
 use codex_login::TokenData;
 use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::ModelBilling;
+use codex_protocol::openai_models::ModelCapabilityTier;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::ReasoningEffort;
+use codex_protocol::openai_models::ReasoningEffortPreset;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::collections::VecDeque;
@@ -480,6 +484,58 @@ async fn chatgpt_cache_does_not_evict_pfterminal_provider_models() {
 }
 
 #[tokio::test]
+async fn remote_model_overlay_preserves_bundled_orchestration_metadata() {
+    let mut remote_models = vec![remote_model(
+        "gpt-5.6-sol",
+        "Remote Sol",
+        /*priority*/ 0,
+    )];
+    remote_models[0].orchestration = Some(ModelOrchestrationMetadata::Disabled {
+        provider_id: "attacker-provider".to_string(),
+        capability: ModelCapabilityTier::Legacy,
+        reason: "remote payload attempted to replace local policy".to_string(),
+    });
+    remote_models[0].supported_reasoning_levels = vec![ReasoningEffortPreset {
+        effort: ReasoningEffort::Custom("untrusted-expensive-mode".to_string()),
+        description: "remote-only effort".to_string(),
+    }];
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(vec![remote_models]);
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+
+    manager
+        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .await
+        .expect("refresh succeeds");
+
+    let sol = manager
+        .get_remote_models()
+        .await
+        .into_iter()
+        .find(|model| model.slug == "gpt-5.6-sol")
+        .expect("remote overlay should retain Sol");
+    assert_eq!(
+        sol.orchestration,
+        Some(ModelOrchestrationMetadata::Eligible {
+            provider_id: "openai".to_string(),
+            capability: ModelCapabilityTier::Frontier,
+            billing: ModelBilling::AuthDependent {
+                plan_relative_burn_millis: 1_000,
+                api_key_input_milli_usd_per_million_tokens: 5_000,
+                api_key_output_milli_usd_per_million_tokens: 30_000,
+                api_key_cached_input_milli_usd_per_million_tokens: Some(500),
+            },
+        })
+    );
+    assert!(
+        sol.supported_reasoning_levels
+            .iter()
+            .all(|preset| preset.effort.as_str() != "untrusted-expensive-mode"),
+        "remote discovery must not broaden the bundled effort policy"
+    );
+}
+
+#[tokio::test]
 async fn get_model_info_keeps_bundled_models_when_chatgpt_remote_is_present() {
     let remote_models = vec![remote_model(
         "chatgpt-merged-model-info",
@@ -600,14 +656,15 @@ async fn chatgpt_catalog_shows_server_advertised_gpt_5_6_models() {
             .iter()
             .any(|model| model.model == "gpt-5.6-sol" && model.is_default)
     );
+    let sol = available
+        .iter()
+        .find(|model| model.model == "gpt-5.6-sol")
+        .expect("server-advertised Sol should be available");
     assert!(
-        available
-            .iter()
-            .filter(|model| model.model.starts_with("gpt-5.6-"))
-            .flat_map(|model| &model.supported_reasoning_efforts)
-            .all(|level| {
-                !matches!(&level.effort, ReasoningEffort::Custom(value) if value == "ultra")
-            })
+        sol.supported_reasoning_efforts.iter().any(
+            |level| matches!(&level.effort, ReasoningEffort::Custom(value) if value == "ultra")
+        ),
+        "runtime model metadata must preserve server-advertised custom efforts"
     );
     let advertised = available
         .into_iter()
@@ -1261,6 +1318,137 @@ fn bundled_models_json_contains_gpt_5_6_family_metadata() {
 }
 
 #[test]
+fn bundled_models_have_complete_orchestration_contracts() {
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+
+    for model in &response.models {
+        let metadata = model.orchestration.as_ref().unwrap_or_else(|| {
+            panic!(
+                "bundled model {} must explicitly be eligible or disabled for orchestration",
+                model.slug
+            )
+        });
+        assert!(
+            !metadata.provider_id().is_empty(),
+            "{} must identify its exact provider route",
+            model.slug
+        );
+        match metadata {
+            ModelOrchestrationMetadata::Eligible { billing, .. } => match billing {
+                ModelBilling::Plan {
+                    relative_burn_millis,
+                } => assert!(
+                    *relative_burn_millis > 0,
+                    "{} must have a positive relative plan burn",
+                    model.slug
+                ),
+                ModelBilling::PlanSchedule {
+                    off_peak_relative_burn_millis,
+                    peak_relative_burn_millis,
+                    peak_start_utc_hour,
+                    peak_end_utc_hour,
+                    promotional_off_peak_relative_burn_millis,
+                    promotion_valid_through_utc,
+                } => {
+                    assert!(
+                        *off_peak_relative_burn_millis > 0 && *peak_relative_burn_millis > 0,
+                        "{} must have positive scheduled plan burn",
+                        model.slug
+                    );
+                    assert!(
+                        *peak_start_utc_hour < 24
+                            && *peak_end_utc_hour <= 24
+                            && peak_start_utc_hour < peak_end_utc_hour,
+                        "{} must have a valid UTC peak window",
+                        model.slug
+                    );
+                    assert_eq!(
+                        promotional_off_peak_relative_burn_millis.is_some(),
+                        promotion_valid_through_utc.is_some(),
+                        "{} must specify both promotion burn and expiry or neither",
+                        model.slug
+                    );
+                }
+                // Both values are required by the enum; zero remains valid for an
+                // explicitly free metered route.
+                ModelBilling::Metered { .. } => {}
+                ModelBilling::AuthDependent { .. } => {}
+                ModelBilling::Local => {}
+            },
+            ModelOrchestrationMetadata::Disabled { reason, .. } => assert!(
+                !reason.trim().is_empty(),
+                "{} must explain why it cannot receive spawned work",
+                model.slug
+            ),
+        }
+    }
+}
+
+#[test]
+fn bundled_orchestration_policy_distinguishes_gpt_5_6_tiers_and_disables_gpt_5_5() {
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+    let metadata = |slug: &str| {
+        response
+            .models
+            .iter()
+            .find(|model| model.slug == slug)
+            .and_then(|model| model.orchestration.clone())
+            .unwrap_or_else(|| panic!("{slug} must have orchestration metadata"))
+    };
+
+    assert_eq!(
+        metadata("gpt-5.6-sol"),
+        ModelOrchestrationMetadata::Eligible {
+            provider_id: "openai".to_string(),
+            capability: ModelCapabilityTier::Frontier,
+            billing: ModelBilling::AuthDependent {
+                plan_relative_burn_millis: 1_000,
+                api_key_input_milli_usd_per_million_tokens: 5_000,
+                api_key_output_milli_usd_per_million_tokens: 30_000,
+                api_key_cached_input_milli_usd_per_million_tokens: Some(500),
+            },
+        }
+    );
+    assert_eq!(
+        metadata("gpt-5.6-terra"),
+        ModelOrchestrationMetadata::Eligible {
+            provider_id: "openai".to_string(),
+            capability: ModelCapabilityTier::Balanced,
+            billing: ModelBilling::AuthDependent {
+                plan_relative_burn_millis: 500,
+                api_key_input_milli_usd_per_million_tokens: 2_500,
+                api_key_output_milli_usd_per_million_tokens: 15_000,
+                api_key_cached_input_milli_usd_per_million_tokens: Some(250),
+            },
+        }
+    );
+    assert_eq!(
+        metadata("gpt-5.6-luna"),
+        ModelOrchestrationMetadata::Eligible {
+            provider_id: "openai".to_string(),
+            capability: ModelCapabilityTier::Fast,
+            billing: ModelBilling::AuthDependent {
+                plan_relative_burn_millis: 200,
+                api_key_input_milli_usd_per_million_tokens: 1_000,
+                api_key_output_milli_usd_per_million_tokens: 6_000,
+                api_key_cached_input_milli_usd_per_million_tokens: Some(100),
+            },
+        }
+    );
+    assert_eq!(
+        metadata("gpt-5.5"),
+        ModelOrchestrationMetadata::Disabled {
+            provider_id: "openai".to_string(),
+            capability: ModelCapabilityTier::Legacy,
+            reason: "superseded by GPT-5.6 and lower capability than Sol, Terra, and Luna"
+                .to_string(),
+        }
+    );
+}
+
+#[test]
 fn bundled_models_json_contains_ambient_models() {
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
@@ -1680,7 +1868,7 @@ fn bundled_models_json_contains_openrouter_models() {
             .description
             .as_deref()
             .unwrap_or_default()
-            .contains("$1.50/M input, $0.30/M cached input, $4.50/M output")
+            .contains("$1.40/M input, $0.14/M cached input, $4.40/M output")
     );
 
     let vercel_glm = response
@@ -1738,7 +1926,7 @@ fn bundled_models_json_contains_openrouter_models() {
             .description
             .as_deref()
             .unwrap_or_default()
-            .contains("$3.00/M input, $0.50/M cached input, $10.25/M output")
+            .contains("$2.10/M input, $0.21/M cached input, $6.60/M output")
     );
 
     let openrouter_gemini = response

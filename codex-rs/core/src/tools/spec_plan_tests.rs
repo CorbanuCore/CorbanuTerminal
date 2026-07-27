@@ -1379,6 +1379,50 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
 }
 
 #[tokio::test]
+async fn multi_agent_v2_advertises_cross_provider_catalog_from_third_party_parent() {
+    let v2 = probe(|turn| {
+        use_openrouter_provider(turn);
+        turn.available_models = crate::test_support::all_model_presets().clone();
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+        update_config(turn, |config| {
+            config.agent_provider_allowlist = Some(vec![
+                OPENROUTER_PROVIDER_ID.to_string(),
+                OPENAI_PROVIDER_ID.to_string(),
+            ]);
+        });
+    })
+    .await;
+    let v2_description = match v2.visible_spec("spawn_agent") {
+        ToolSpec::Function(tool) => tool.description.as_str(),
+        other => panic!("expected v2 spawn_agent function spec, got {other:?}"),
+    };
+    assert!(
+        v2_description.contains("`openai` / `gpt-5.6-sol`"),
+        "v2 managers on third-party providers need the authorized cross-provider catalog"
+    );
+    assert!(
+        !v2_description.contains("`openai` / `gpt-5.5`"),
+        "catalogue-disabled models must not be advertised for spawned work"
+    );
+
+    let v1 = probe(|turn| {
+        use_openrouter_provider(turn);
+        turn.available_models = crate::test_support::all_model_presets().clone();
+        set_feature(turn, Feature::Collab, /*enabled*/ true);
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
+    })
+    .await;
+    let v1_description = match v1.visible_spec("spawn_agent_v1") {
+        ToolSpec::Function(tool) => tool.description.as_str(),
+        other => panic!("expected flattened v1 spawn_agent function spec, got {other:?}"),
+    };
+    assert!(
+        !v1_description.contains("`openai` / `gpt-5.6-sol`"),
+        "v1 must not advertise provider/model pairs its model-only schema cannot select"
+    );
+}
+
+#[tokio::test]
 async fn multi_agent_v2_message_schemas_are_provider_neutral_plaintext() {
     let plan = probe(|turn| {
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);

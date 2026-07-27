@@ -1138,6 +1138,7 @@ impl Default for CurrentTimeReminderConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct MultiAgentV2Config {
     pub max_concurrent_threads_per_session: usize,
+    pub max_subagent_model_requests_per_turn: usize,
     pub min_wait_timeout_ms: i64,
     pub max_wait_timeout_ms: i64,
     pub default_wait_timeout_ms: i64,
@@ -1154,6 +1155,7 @@ impl MultiAgentV2Config {
     fn defaults_for_max_concurrency(max_concurrent_threads_per_session: usize) -> Self {
         Self {
             max_concurrent_threads_per_session,
+            max_subagent_model_requests_per_turn: 24,
             min_wait_timeout_ms: DEFAULT_MULTI_AGENT_V2_MIN_WAIT_TIMEOUT_MS,
             max_wait_timeout_ms: DEFAULT_MULTI_AGENT_V2_MAX_WAIT_TIMEOUT_MS,
             default_wait_timeout_ms: DEFAULT_MULTI_AGENT_V2_DEFAULT_WAIT_TIMEOUT_MS,
@@ -1514,6 +1516,11 @@ impl Config {
             Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "agents.max_threads cannot be set when features.multi_agent_v2 is enabled",
+            ))
+        } else if self.multi_agent_v2.max_subagent_model_requests_per_turn < 2 {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "features.multi_agent_v2.max_subagent_model_requests_per_turn must be at least 2",
             ))
         } else {
             Ok(())
@@ -2662,6 +2669,9 @@ fn resolve_multi_agent_v2_config(config_toml: &ConfigToml) -> MultiAgentV2Config
         .unwrap_or(DEFAULT_MULTI_AGENT_V2_MAX_CONCURRENT_THREADS_PER_SESSION);
     let default =
         MultiAgentV2Config::defaults_for_max_concurrency(max_concurrent_threads_per_session);
+    let max_subagent_model_requests_per_turn = base
+        .and_then(|config| config.max_subagent_model_requests_per_turn)
+        .unwrap_or(default.max_subagent_model_requests_per_turn);
     let min_wait_timeout_ms = base
         .and_then(|config| config.min_wait_timeout_ms)
         .unwrap_or(default.min_wait_timeout_ms);
@@ -2699,6 +2709,7 @@ fn resolve_multi_agent_v2_config(config_toml: &ConfigToml) -> MultiAgentV2Config
 
     MultiAgentV2Config {
         max_concurrent_threads_per_session,
+        max_subagent_model_requests_per_turn,
         min_wait_timeout_ms,
         max_wait_timeout_ms,
         default_wait_timeout_ms,

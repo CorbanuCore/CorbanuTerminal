@@ -117,6 +117,8 @@ async fn handle_spawn_agent(
     )
     .await?;
     apply_spawn_agent_runtime_overrides(&mut config, turn.as_ref())?;
+    ensure_spawn_provider_authorized(&config, &config.model_provider_id)?;
+    ensure_spawn_runtime_eligible(&session, &config).await?;
 
     let result = Box::pin(session.services.agent_control.spawn_agent_with_metadata(
         config,

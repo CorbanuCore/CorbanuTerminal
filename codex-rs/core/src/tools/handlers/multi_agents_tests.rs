@@ -191,8 +191,8 @@ async fn install_role_with_model_override(turn: &mut TurnContext) -> String {
         .join("fork-context-role.toml");
     tokio::fs::write(
         &role_config_path,
-        r#"model = "gpt-5-role-override"
-model_provider = "ollama"
+        r#"model = "gpt-5.6-sol"
+model_provider = "openai"
 model_reasoning_effort = "minimal"
 "#,
     )
@@ -287,6 +287,106 @@ async fn spawn_provider_authorization_is_operator_policy_in_core() {
             "refusal for {provider} should name the provider and the policy: {message}"
         );
     }
+}
+
+#[tokio::test]
+async fn spawn_runtime_catalogue_policy_rejects_disabled_missing_and_mismatched_routes() {
+    use crate::tools::handlers::multi_agents_common::ensure_spawn_runtime_eligible;
+
+    let (session, turn) = make_session_and_context().await;
+    let mut config = (*turn.config).clone();
+
+    config.model = Some("gpt-5.5".to_string());
+    config.model_provider_id = OPENAI_PROVIDER_ID.to_string();
+    let disabled = ensure_spawn_runtime_eligible(&session, &config)
+        .await
+        .expect_err("catalogue-disabled models must not receive spawned work");
+    assert!(
+        matches!(
+            &disabled,
+            FunctionCallError::RespondToModel(message)
+                if message.contains("disabled for spawned agents")
+                    && message.contains("superseded by GPT-5.6")
+        ),
+        "unexpected disabled-model error: {disabled:?}"
+    );
+
+    config.model = Some("unlisted-model-without-policy".to_string());
+    let missing = ensure_spawn_runtime_eligible(&session, &config)
+        .await
+        .expect_err("uncatalogued models must fail closed");
+    assert!(
+        matches!(
+            &missing,
+            FunctionCallError::RespondToModel(message)
+                if message.contains("has no orchestration metadata")
+        ),
+        "unexpected missing-policy error: {missing:?}"
+    );
+
+    config.model = Some("gpt-5.6-sol".to_string());
+    config.model_provider_id = KIMI_CODE_PROVIDER_ID.to_string();
+    let mismatched = ensure_spawn_runtime_eligible(&session, &config)
+        .await
+        .expect_err("provider/model catalogue mismatches must fail closed");
+    assert!(
+        matches!(
+            &mismatched,
+            FunctionCallError::RespondToModel(message)
+                if message.contains("does not match its model catalogue provider `openai`")
+        ),
+        "unexpected provider mismatch error: {mismatched:?}"
+    );
+}
+
+#[tokio::test]
+async fn multi_agent_v2_inherited_runtime_must_clear_provider_policy() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let provider_info =
+        built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)
+            [KIMI_CODE_PROVIDER_ID]
+            .clone();
+    let mut config = (*turn.config).clone();
+    config.model_provider_id = KIMI_CODE_PROVIDER_ID.to_string();
+    config.model_provider = provider_info.clone();
+    config.agent_provider_allowlist = Some(vec![OPENAI_PROVIDER_ID.to_string()]);
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+    set_turn_config(&mut turn, config);
+
+    let manager = thread_manager();
+    let root = manager
+        .start_thread((*turn.config).clone())
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = root.thread_id;
+
+    let result = SpawnAgentHandlerV2::default()
+        .handle(invocation(
+            Arc::new(session),
+            Arc::new(turn),
+            "spawn_agent",
+            function_payload(json!({
+                "message": "review this repository",
+                "task_name": "reviewer",
+                "fork_turns": "none"
+            })),
+        ))
+        .await;
+    let Err(err) = result else {
+        panic!("inherited providers must not bypass the allowlist");
+    };
+
+    assert_eq!(
+        err,
+        FunctionCallError::RespondToModel(
+            "Provider `kimi-code` is not authorized for spawned agents. Authorized providers: openai. This is operator policy set in `agents.provider_allowlist`; it cannot be changed from a task and must not be worked around by selecting a different model that routes to an unauthorized provider. Do not spawn a substitute runtime in this turn; report the refusal and obtain the user's explicit consent before trying a fallback.".to_string()
+        )
+    );
 }
 
 async fn register_v2_wait_child(
@@ -455,10 +555,6 @@ async fn spawn_agent_uses_explorer_role_and_preserves_approval_policy() {
 
     let (mut session, mut turn) = make_session_and_context().await;
     let mut config = (*turn.config).clone();
-    let provider_info =
-        built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)["ollama"].clone();
-    config.model_provider_id = "ollama".to_string();
-    config.model_provider = provider_info.clone();
     config
         .permissions
         .approval_policy
@@ -467,7 +563,6 @@ async fn spawn_agent_uses_explorer_role_and_preserves_approval_policy() {
     turn.approval_policy
         .set(AskForApproval::OnRequest)
         .expect("approval policy should be set");
-    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
     turn.config = Arc::new(config);
     let manager = install_live_root(&mut session, &turn).await;
 
@@ -501,7 +596,7 @@ async fn spawn_agent_uses_explorer_role_and_preserves_approval_policy() {
         .config_snapshot()
         .await;
     assert_eq!(snapshot.approval_policy, AskForApproval::OnRequest);
-    assert_eq!(snapshot.model_provider_id, "ollama");
+    assert_eq!(snapshot.model_provider_id, "ambient");
 }
 
 #[tokio::test]
@@ -687,12 +782,7 @@ async fn spawn_agent_explicit_runtime_rejects_incomplete_or_invalid_pairs() {
 }
 
 #[tokio::test]
-async fn spawn_agent_allows_catalog_mapped_model_override_for_zai() {
-    #[derive(Debug, Deserialize)]
-    struct SpawnAgentResult {
-        agent_id: String,
-    }
-
+async fn spawn_agent_rejects_catalog_disabled_model_override_for_zai() {
     let (mut session, mut turn) = make_session_and_context().await;
     let provider_info =
         built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)[ZAI_PROVIDER_ID]
@@ -713,7 +803,7 @@ async fn spawn_agent_allows_catalog_mapped_model_override_for_zai() {
     session.services.agent_control = manager.agent_control();
     session.thread_id = root.thread_id;
 
-    let output = SpawnAgentHandler::default()
+    let result = SpawnAgentHandler::default()
         .handle(invocation(
             Arc::new(session),
             Arc::new(turn),
@@ -723,20 +813,16 @@ async fn spawn_agent_allows_catalog_mapped_model_override_for_zai() {
                 "model": "gpt-5.5"
             })),
         ))
-        .await
-        .expect("Z.AI spawn should allow a catalog-mapped OpenAI model override");
-    let (content, success) = expect_text_output(output);
-    let result: SpawnAgentResult =
-        serde_json::from_str(&content).expect("spawn_agent result should be json");
-    let snapshot = manager
-        .get_thread(parse_agent_id(&result.agent_id))
-        .await
-        .expect("spawned agent thread should exist")
-        .config_snapshot()
         .await;
-    assert_eq!(snapshot.model, "gpt-5.5");
-    assert_eq!(snapshot.model_provider_id, OPENAI_PROVIDER_ID);
-    assert_eq!(success, Some(true));
+    let Err(err) = result else {
+        panic!("catalogue-disabled GPT-5.5 must not receive spawned work");
+    };
+    assert_eq!(
+        err,
+        FunctionCallError::RespondToModel(
+            "Runtime `openai` / `gpt-5.5` is disabled for spawned agents by model catalogue policy: superseded by GPT-5.6 and lower capability than Sol, Terra, and Luna.".to_string()
+        )
+    );
 }
 
 #[tokio::test]
@@ -889,7 +975,7 @@ async fn spawn_agent_service_tier_override_validates_the_effective_child_model()
                 "spawn_agent",
                 function_payload(json!({
                     "message": "inspect this repo",
-                    "model": "gpt-5.4",
+                    "model": "gpt-5.6-sol",
                     "service_tier": ServiceTier::Fast.request_value()
                 })),
             ))
@@ -921,7 +1007,7 @@ async fn spawn_agent_service_tier_override_validates_the_effective_child_model()
                 "spawn_agent",
                 function_payload(json!({
                     "message": "inspect this repo",
-                    "model": "gpt-5.4",
+                    "model": "gpt-5.6-sol",
                     "service_tier": "turbo"
                 })),
             ))
@@ -932,7 +1018,7 @@ async fn spawn_agent_service_tier_override_validates_the_effective_child_model()
         assert_eq!(
             err,
             FunctionCallError::RespondToModel(
-                "Service tier `turbo` is not supported for model `gpt-5.4`. Supported service tiers: priority"
+                "Service tier `turbo` is not supported for model `gpt-5.6-sol`. Supported service tiers: priority"
                     .to_string()
             )
         );
@@ -976,7 +1062,7 @@ async fn spawn_agent_service_tier_inheritance_preserves_supported_or_configured_
     {
         let (mut session, turn) = make_session_and_context().await;
         let mut turn = turn
-            .with_model("gpt-5.4".to_string(), &session.services.models_manager)
+            .with_model("gpt-5.6-sol".to_string(), &session.services.models_manager)
             .await;
         set_turn_to_openai_provider(&mut turn);
         let mut config = (*turn.config).clone();
@@ -1018,7 +1104,7 @@ async fn spawn_agent_service_tier_inheritance_preserves_supported_or_configured_
     {
         let (mut session, turn) = make_session_and_context().await;
         let mut turn = turn
-            .with_model("gpt-5.4".to_string(), &session.services.models_manager)
+            .with_model("gpt-5.6-sol".to_string(), &session.services.models_manager)
             .await;
         set_turn_to_openai_provider(&mut turn);
         let mut config = (*turn.config).clone();
@@ -1039,7 +1125,7 @@ async fn spawn_agent_service_tier_inheritance_preserves_supported_or_configured_
                 "spawn_agent",
                 function_payload(json!({
                     "message": "inspect this repo",
-                    "model": "gpt-5.3-codex"
+                    "model": "k3"
                 })),
             ))
             .await
@@ -1070,7 +1156,7 @@ async fn spawn_agent_service_tier_inheritance_preserves_supported_or_configured_
             .join("service-tier-role.toml");
         tokio::fs::write(
             &role_config_path,
-            r#"model = "gpt-5.4"
+            r#"model = "gpt-5.6-sol"
 service_tier = "priority"
 "#,
         )
@@ -1134,7 +1220,7 @@ async fn spawn_agent_role_service_tier_falls_back_to_supported_parent_tier() {
 
     let (mut session, turn) = make_session_and_context().await;
     let mut turn = turn
-        .with_model("gpt-5.4".to_string(), &session.services.models_manager)
+        .with_model("gpt-5.6-sol".to_string(), &session.services.models_manager)
         .await;
     set_turn_to_openai_provider(&mut turn);
     tokio::fs::create_dir_all(&turn.config.codex_home)
@@ -1143,7 +1229,7 @@ async fn spawn_agent_role_service_tier_falls_back_to_supported_parent_tier() {
     let role_config_path = turn.config.codex_home.as_path().join("tiered-role.toml");
     tokio::fs::write(
         &role_config_path,
-        r#"model = "gpt-5.4"
+        r#"model = "gpt-5.6-sol"
 service_tier = "turbo"
 "#,
     )
@@ -1208,7 +1294,7 @@ async fn spawn_agent_role_service_tier_does_not_hide_invalid_spawn_request() {
     let role_config_path = turn.config.codex_home.as_path().join("tiered-role.toml");
     tokio::fs::write(
         &role_config_path,
-        r#"model = "gpt-5.4"
+        r#"model = "gpt-5.6-sol"
 service_tier = "priority"
 "#,
     )
@@ -1243,7 +1329,7 @@ service_tier = "priority"
     assert_eq!(
         result.err(),
         Some(FunctionCallError::RespondToModel(
-            "Service tier `turbo` is not supported for model `gpt-5.4`. Supported service tiers: priority"
+            "Service tier `turbo` is not supported for model `gpt-5.6-sol`. Supported service tiers: priority"
                 .to_string()
         ))
     );
@@ -1258,7 +1344,7 @@ async fn spawn_agent_full_history_fork_accepts_explicit_service_tier() {
 
     let (mut session, turn) = make_session_and_context().await;
     let mut turn = turn
-        .with_model("gpt-5.4".to_string(), &session.services.models_manager)
+        .with_model("gpt-5.6-sol".to_string(), &session.services.models_manager)
         .await;
     set_turn_to_openai_provider(&mut turn);
     let manager = thread_manager();
@@ -1307,7 +1393,7 @@ async fn multi_agent_v2_full_history_fork_accepts_explicit_service_tier() {
 
     let (mut session, turn) = make_session_and_context().await;
     let mut turn = turn
-        .with_model("gpt-5.4".to_string(), &session.services.models_manager)
+        .with_model("gpt-5.6-sol".to_string(), &session.services.models_manager)
         .await;
     set_turn_to_openai_provider(&mut turn);
     let mut config = (*turn.config).clone();
@@ -1418,8 +1504,8 @@ async fn multi_agent_v2_spawn_partial_fork_turns_allows_agent_type_override() {
         .config_snapshot()
         .await;
 
-    assert_eq!(snapshot.model, "gpt-5-role-override");
-    assert_eq!(snapshot.model_provider_id, "ollama");
+    assert_eq!(snapshot.model, "gpt-5.6-sol");
+    assert_eq!(snapshot.model_provider_id, "openai");
     assert_eq!(snapshot.reasoning_effort, Some(ReasoningEffort::Minimal));
 }
 
@@ -1488,6 +1574,8 @@ async fn multi_agent_v2_spawn_explicit_runtime_wins_over_role_runtime() {
     let (content, _) = expect_text_output(output);
     let result: serde_json::Value =
         serde_json::from_str(&content).expect("spawn_agent result should be json");
+    assert_eq!(result["model_provider"], KIMI_CODE_PROVIDER_ID);
+    assert_eq!(result["model"], KIMI_CODE_K3_MODEL);
     let child_thread_id = session
         .services
         .agent_control
@@ -1605,9 +1693,16 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
     struct SpawnAgentResult {
         task_name: String,
         nickname: Option<String>,
+        model_provider: String,
+        model: String,
+        reasoning_effort: Option<ReasoningEffort>,
+        service_tier: Option<String>,
     }
 
-    let (mut session, mut turn) = make_session_and_context().await;
+    let (mut session, turn) = make_session_and_context().await;
+    let mut turn = turn
+        .with_model("gpt-5.6-sol".to_string(), &session.services.models_manager)
+        .await;
     set_turn_to_openai_provider(&mut turn);
     let manager = thread_manager();
     let root = manager
@@ -1652,6 +1747,15 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
             .as_deref()
             .is_some_and(|nickname| !nickname.is_empty())
     );
+    assert_eq!(spawn_result.model_provider, OPENAI_PROVIDER_ID);
+    assert_eq!(spawn_result.model, turn.model_info.slug);
+    assert_eq!(
+        spawn_result.reasoning_effort,
+        turn.reasoning_effort
+            .clone()
+            .or_else(|| turn.model_info.default_reasoning_level.clone())
+    );
+    assert_eq!(spawn_result.service_tier, turn.config.service_tier);
 
     let child_thread_id = session
         .services
@@ -3171,6 +3275,8 @@ async fn multi_agent_v2_interrupted_turn_does_not_notify_parent() {
 #[tokio::test]
 async fn multi_agent_v2_spawn_omits_agent_id_when_named() {
     let (mut session, mut turn) = make_session_and_context().await;
+    let expected_model_provider = turn.config.model_provider_id.clone();
+    let expected_model = turn.model_info.slug.clone();
     let manager = thread_manager();
     let root = manager
         .start_thread((*turn.config).clone())
@@ -3200,6 +3306,8 @@ async fn multi_agent_v2_spawn_omits_agent_id_when_named() {
     let (content, success) = expect_text_output(output);
     let result: serde_json::Value =
         serde_json::from_str(&content).expect("spawn_agent result should be json");
+    assert_eq!(result["model_provider"], expected_model_provider);
+    assert_eq!(result["model"], expected_model);
 
     assert!(result.get("agent_id").is_none());
     assert_eq!(result["task_name"], "/root/test_process");

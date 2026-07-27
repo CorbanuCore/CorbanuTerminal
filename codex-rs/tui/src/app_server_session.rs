@@ -1591,7 +1591,11 @@ fn model_preset_from_api_model(model: ApiModel) -> ModelPreset {
     ModelPreset {
         id: model.id,
         model: model.model,
-        provider_id: None,
+        provider_id: model
+            .orchestration
+            .as_ref()
+            .map(|metadata| metadata.provider_id().to_string()),
+        orchestration: model.orchestration,
         display_name: model.display_name,
         description: model.description,
         default_reasoning_effort: model.default_reasoning_effort,

@@ -3,6 +3,8 @@ use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::built_in_model_providers;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
+use codex_protocol::protocol::SessionSource;
+use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::user_input::UserInput;
 use core_test_support::responses::sse_response;
 use core_test_support::skip_if_no_network;
@@ -22,6 +24,7 @@ const OBJECTIVE: &str = "Inspect the repository and finish the requested repair.
 const PROGRESS_RESPONSE: &str = "I found the relevant code. Next I will add the regression tests.";
 const FINAL_RESPONSE: &str = "Done. I repaired the boundary and added regression coverage.";
 const CONTINUE_INSTRUCTION_FRAGMENT: &str = "previous response was a progress checkpoint";
+const SUBAGENT_FINAL_REQUEST_FRAGMENT: &str = "final model request allowed for this sub-agent turn";
 
 #[derive(Default)]
 struct ProgressToolFinalResponder {
@@ -96,6 +99,18 @@ impl Respond for RepeatedMalformedAssessmentResponder {
 #[derive(Default)]
 struct MalformedAssessmentWithoutProgressResponder {
     calls: AtomicUsize,
+}
+
+#[derive(Default)]
+struct EndlessToolResponder {
+    calls: AtomicUsize,
+}
+
+impl Respond for EndlessToolResponder {
+    fn respond(&self, _request: &Request) -> ResponseTemplate {
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        sse_response(tool_call_sse(format!("call-budget-{call}").as_str()))
+    }
 }
 
 #[derive(Default)]
@@ -409,6 +424,57 @@ async fn repeated_assessment_failure_continues_while_tools_make_progress() {
                 .contains(CONTINUE_INSTRUCTION_FRAGMENT))
             .count(),
         2
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn subagent_turn_hard_stops_after_configured_model_request_limit() {
+    skip_if_no_network!();
+
+    let server = wiremock::MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path_regex(".*/chat/completions$"))
+        .respond_with(EndlessToolResponder::default())
+        .expect(3)
+        .mount(&server)
+        .await;
+
+    let provider = kimi_provider(&server);
+    let test = test_codex()
+        .with_session_source(SessionSource::SubAgent(SubAgentSource::Other(
+            "bounded-agent-test".to_string(),
+        )))
+        .with_config(move |config| {
+            config.model = Some("k3".to_string());
+            config.model_provider_id = KIMI_CODE_PROVIDER_ID.to_string();
+            config.model_provider = provider;
+            config.multi_agent_v2.max_subagent_model_requests_per_turn = 3;
+        })
+        .build(&server)
+        .await
+        .expect("build bounded subagent test session");
+
+    let events = submit_turn(&test).await;
+    assert!(events.iter().any(|event| {
+        matches!(
+            event,
+            EventMsg::Warning(warning)
+                if warning.message
+                    == "Sub-agent turn stopped after the configured limit of 3 model requests. Review the last reported progress and send a focused follow-up task if more work is required."
+        )
+    }));
+
+    let requests = server.received_requests().await.expect("recorded requests");
+    assert_eq!(requests.len(), 3);
+    assert!(
+        String::from_utf8_lossy(&requests[2].body).contains(SUBAGENT_FINAL_REQUEST_FRAGMENT),
+        "the final allowed request must be told to return a result instead of calling more tools"
+    );
+    assert!(
+        requests[..2].iter().all(|request| {
+            !String::from_utf8_lossy(&request.body).contains(SUBAGENT_FINAL_REQUEST_FRAGMENT)
+        }),
+        "finalization guidance must not be injected before the last allowed request"
     );
 }
 
