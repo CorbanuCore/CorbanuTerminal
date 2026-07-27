@@ -58,6 +58,16 @@ jobs:
           codex-rs/target/dev-small/pfterminal --version
           codex-rs/target/dev-small/pfterminal-walletd --help >/dev/null
 
+      - name: Compile codex-api test targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check \
+            --manifest-path codex-rs/Cargo.toml \
+            --profile dev-small \
+            --tests \
+            --package codex-api
+
       - name: Build and smoke-test PFTerminal package
         shell: bash
         run: |
