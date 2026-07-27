@@ -343,6 +343,7 @@ fn responses_request_properties_match(
         emit_usage: previous_emit_usage,
         enable_thinking: previous_enable_thinking,
         reasoning_effort: previous_zai_reasoning_effort,
+        provider_options: previous_provider_options,
     } = previous;
     let ResponsesApiRequest {
         model: current_model,
@@ -364,6 +365,7 @@ fn responses_request_properties_match(
         emit_usage: current_emit_usage,
         enable_thinking: current_enable_thinking,
         reasoning_effort: current_zai_reasoning_effort,
+        provider_options: current_provider_options,
     } = current;
 
     previous_model == current_model
@@ -382,6 +384,7 @@ fn responses_request_properties_match(
         && previous_emit_usage == current_emit_usage
         && previous_enable_thinking == current_enable_thinking
         && previous_zai_reasoning_effort == current_zai_reasoning_effort
+        && previous_provider_options == current_provider_options
 }
 
 fn incremental_items_for_request(
@@ -1180,22 +1183,42 @@ impl ModelClient {
         Some(mapped.to_string())
     }
 
+    /// OpenRouter's unified `reasoning` object is the only thinking control it
+    /// honours. `enable_thinking` and `thinking.type` are silently dropped, so
+    /// a model with reasoning on by default kept thinking on every turn while
+    /// we believed we had disabled it (measured 2026-07-27: GLM 5.2 143 tok
+    /// with our old field vs 3 tok with `reasoning.enabled=false`; Kimi K3 73
+    /// vs 8). Absent or `none` effort therefore has to serialize as an
+    /// explicit `{"enabled": false}` rather than as an omitted field.
     fn openrouter_reasoning(
         model_info: &ModelInfo,
         effort: Option<&ReasoningEffortConfig>,
     ) -> Option<Value> {
         let supports_reasoning = model_info.default_reasoning_level.is_some()
             || !model_info.supported_reasoning_levels.is_empty();
-        if !supports_reasoning {
-            return None;
+        let effort = supports_reasoning
+            .then(|| {
+                effort
+                    .or(model_info.default_reasoning_level.as_ref())
+                    .map(ReasoningEffortConfig::as_str)
+            })
+            .flatten();
+        match effort {
+            // Do not use `{"exclude": true}` here: it suppresses the reasoning
+            // text while still billing the tokens.
+            None | Some("none") => Some(json!({ "enabled": false })),
+            Some(effort) => Some(json!({ "effort": effort })),
         }
+    }
 
-        let effort = effort
-            .or(model_info.default_reasoning_level.as_ref())
-            .map(ReasoningEffortConfig::as_str)?;
-        Some(json!({
-            "effort": effort,
-        }))
+    /// Ambient publishes OpenRouter's `ReasoningConfiguration` shape and does
+    /// not implement `enable_thinking` at all — the field appears zero times in
+    /// their OpenAPI spec, so every request we sent kept thinking on.
+    fn ambient_reasoning(effort: Option<&str>) -> Value {
+        match effort {
+            Some(effort) => json!({ "enabled": true, "effort": effort }),
+            None => json!({ "enabled": false }),
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1233,11 +1256,50 @@ impl ModelClient {
             .flatten();
         let ambient_enable_thinking =
             uses_zai_reasoning.then_some(ambient_reasoning_effort.is_some());
-        let reasoning = if uses_zai_reasoning {
+        let vercel_provider_options = self
+            .state
+            .provider
+            .info()
+            .is_vercel_gateway()
+            .then(|| vercel_gateway_provider_options(&model_info.slug))
+            .flatten();
+        // Same rule the Ambient, Z.AI and Anthropic paths already use: these
+        // models think only when deep reasoning was asked for explicitly.
+        let vercel_wants_thinking = Self::ambient_zai_reasoning_effort(
+            effort
+                .as_ref()
+                .or(model_info.default_reasoning_level.as_ref()),
+        )
+        .is_some();
+        let mut reasoning = if uses_zai_reasoning {
             None
         } else {
             Self::build_reasoning(model_info, effort, summary)
         };
+        // A pinned third-party slug still has to be told not to think; the pin
+        // only makes the instruction reach a host that obeys it. The gateway
+        // advertises `high` and `xhigh` for these slugs, so do not forward an
+        // effort level it does not publish.
+        if vercel_provider_options.is_some() {
+            let vercel_effort = if vercel_wants_thinking {
+                ReasoningEffortConfig::XHigh
+            } else {
+                ReasoningEffortConfig::None
+            };
+            match reasoning.as_mut() {
+                Some(reasoning) => reasoning.effort = Some(vercel_effort),
+                None => {
+                    reasoning = Some(Reasoning {
+                        enabled: None,
+                        effort: Some(vercel_effort),
+                        max_tokens: None,
+                        summary: None,
+                        exclude: None,
+                        context: None,
+                    });
+                }
+            }
+        }
         let include = if !uses_zai_reasoning && reasoning.is_some() {
             vec!["reasoning.encrypted_content".to_string()]
         } else {
@@ -1286,6 +1348,7 @@ impl ModelClient {
             emit_usage: uses_zai_reasoning.then_some(true),
             enable_thinking: ambient_enable_thinking,
             reasoning_effort: ambient_reasoning_effort,
+            provider_options: vercel_provider_options,
         };
         Ok(request)
     }
@@ -1367,15 +1430,22 @@ impl ModelClient {
                 .map(str::to_string)
             })
             .flatten();
-        let ambient_enable_thinking =
-            uses_zai_reasoning.then_some(ambient_reasoning_effort.is_some());
-        let openrouter_reasoning = self
+        // `enable_thinking` is honoured by Z.AI direct only. Ambient takes the
+        // `reasoning` object instead; sending both would leave the ignored
+        // field on the wire for no reason.
+        let ambient_enable_thinking = self
             .state
             .provider
             .info()
-            .is_openrouter()
-            .then(|| Self::openrouter_reasoning(model_info, effort.as_ref()))
-            .flatten();
+            .is_zai()
+            .then_some(ambient_reasoning_effort.is_some());
+        let provider_reasoning = if self.state.provider.info().is_openrouter() {
+            Self::openrouter_reasoning(model_info, effort.as_ref())
+        } else if self.state.provider.info().is_ambient() {
+            Some(Self::ambient_reasoning(ambient_reasoning_effort.as_deref()))
+        } else {
+            None
+        };
         let response_format = prompt.output_schema.as_ref().map(|schema| {
             json!({
                 "type": "json_schema",
@@ -1454,9 +1524,16 @@ impl ModelClient {
                 .or(baseten_reasoning_effort)
                 .or(kimi_code_reasoning_effort)
                 .or(native_deepseek_reasoning_effort),
-            reasoning: openrouter_reasoning,
+            reasoning: provider_reasoning,
             provider: self.state.provider.info().chat_completions_provider.clone(),
             plugins: openrouter_web_plugins,
+            provider_options: self
+                .state
+                .provider
+                .info()
+                .is_vercel_gateway()
+                .then(|| vercel_gateway_provider_options(upstream_model))
+                .flatten(),
         })
     }
 
@@ -1516,12 +1593,25 @@ impl ModelClient {
         let tools = create_tools_json_for_anthropic_messages(&prompt.tools, &cache_control)?;
         let tool_choice = (!tools.is_empty()).then(|| json!({ "type": "auto" }));
         let upstream_model = anthropic_upstream_model(&model_info.slug);
-        let (thinking, output_config) = anthropic_reasoning_for_model_and_effort(
+        let (mut thinking, output_config) = anthropic_reasoning_for_model_and_effort(
             upstream_model,
             effort
                 .as_ref()
                 .or(model_info.default_reasoning_level.as_ref()),
         );
+        let provider_options = self
+            .state
+            .provider
+            .info()
+            .is_vercel_gateway()
+            .then(|| vercel_gateway_provider_options(upstream_model))
+            .flatten();
+        // Third-party slugs on this wire think by default, so an omitted
+        // `thinking` block is not the same as thinking off. Only Anthropic's
+        // own models treat the omission that way.
+        if provider_options.is_some() && thinking.is_none() {
+            thinking = Some(json!({ "type": "disabled" }));
+        }
 
         Ok(AnthropicMessagesRequest {
             model: upstream_model.to_string(),
@@ -1533,6 +1623,7 @@ impl ModelClient {
             max_tokens: ANTHROPIC_MESSAGES_DEFAULT_MAX_TOKENS,
             thinking,
             output_config,
+            provider_options,
         })
     }
 
@@ -3840,6 +3931,35 @@ fn anthropic_adaptive_effort_value(effort: &ReasoningEffortConfig) -> Option<Str
         }
         _ => None,
     }
+}
+
+/// The Vercel AI Gateway serves third-party model slugs from whichever upstream
+/// host it prefers — `zai/*` defaults to Fireworks — and those hosts silently
+/// drop every thinking toggle the gateway forwards. The vendor's own API is
+/// itself a pinnable upstream, and pinning to it restores the toggle.
+///
+/// Measured 2026-07-27 on `zai/glm-5.2` and `zai/glm-5.2-fast`, all three wire
+/// formats, n=3 each: unpinned 88-194 completion tokens with 54-130 of
+/// reasoning regardless of parameter shape; pinned to `zai` with thinking off,
+/// 3 completion tokens and 0 reasoning.
+///
+/// Pins are validated server-side, so an unknown upstream fails with HTTP 400
+/// rather than degrading silently. Only pin slugs whose vendor is known to be
+/// an available upstream.
+fn vercel_gateway_vendor_pin(model: &str) -> Option<&'static str> {
+    match model.split('/').next()?.trim() {
+        "zai" => Some("zai"),
+        "moonshotai" => Some("moonshotai"),
+        _ => None,
+    }
+}
+
+fn vercel_gateway_provider_options(model: &str) -> Option<Value> {
+    vercel_gateway_vendor_pin(model).map(|upstream| {
+        json!({
+            "gateway": { "only": [upstream] },
+        })
+    })
 }
 
 fn anthropic_thinking_for_effort(effort: Option<&ReasoningEffortConfig>) -> Option<Value> {

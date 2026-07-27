@@ -279,6 +279,9 @@ pub struct ResponsesApiRequest {
     pub emit_usage: Option<bool>,
     pub enable_thinking: Option<bool>,
     pub reasoning_effort: Option<String>,
+    /// Gateway-level routing/provider controls, serialized as `providerOptions`.
+    /// Used by the Vercel AI Gateway to pin an upstream host.
+    pub provider_options: Option<serde_json::Value>,
 }
 
 impl ResponsesApiRequest {
@@ -307,6 +310,7 @@ impl Serialize for ResponsesApiRequest {
         field_count += usize::from(self.emit_usage.is_some());
         field_count += usize::from(self.enable_thinking.is_some());
         field_count += usize::from(self.reasoning_effort.is_some());
+        field_count += usize::from(self.provider_options.is_some());
 
         let mut state = serializer.serialize_struct("ResponsesApiRequest", field_count)?;
         state.serialize_field("model", &self.model)?;
@@ -353,6 +357,9 @@ impl Serialize for ResponsesApiRequest {
         }
         if let Some(reasoning_effort) = &self.reasoning_effort {
             state.serialize_field("reasoning_effort", reasoning_effort)?;
+        }
+        if let Some(provider_options) = &self.provider_options {
+            state.serialize_field("providerOptions", provider_options)?;
         }
         state.end()
     }
@@ -528,6 +535,9 @@ pub struct ChatCompletionsRequest {
     pub provider: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plugins: Option<Vec<Value>>,
+    /// Gateway-level routing/provider controls (Vercel AI Gateway).
+    #[serde(rename = "providerOptions", skip_serializing_if = "Option::is_none")]
+    pub provider_options: Option<Value>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
@@ -551,6 +561,9 @@ pub struct AnthropicMessagesRequest {
     pub thinking: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_config: Option<Value>,
+    /// Gateway-level routing/provider controls (Vercel AI Gateway).
+    #[serde(rename = "providerOptions", skip_serializing_if = "Option::is_none")]
+    pub provider_options: Option<Value>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]

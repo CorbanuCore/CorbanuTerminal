@@ -1318,6 +1318,15 @@ impl ModelProviderInfo {
         self.name == VERCEL_PROVIDER_NAME
     }
 
+    /// True for every provider that talks to the Vercel AI Gateway, regardless
+    /// of wire format. The gateway fans third-party model slugs out to whatever
+    /// upstream host it prefers, so all of these need upstream pinning.
+    pub fn is_vercel_gateway(&self) -> bool {
+        self.name == VERCEL_PROVIDER_NAME
+            || self.name == VERCEL_ANTHROPIC_PROVIDER_NAME
+            || self.name == VERCEL_ANTHROPIC_FAST_PROVIDER_NAME
+    }
+
     pub fn is_amazon_bedrock(&self) -> bool {
         self.name == AMAZON_BEDROCK_PROVIDER_NAME
     }
