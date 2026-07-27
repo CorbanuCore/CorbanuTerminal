@@ -1427,6 +1427,13 @@ impl App {
                         ack.seq,
                     );
                     self.note_whip_holder_dispatched(source_pane_id, &target_node_id);
+                    if let Some(origin_id) = ack.origin_id.as_deref() {
+                        // Reserve at host admission, before the asynchronous AppEvent is handled.
+                        // ItemCompleted and TurnCompleted can arrive back-to-back, and both may
+                        // expose the same model dispatch.
+                        self.spawn_processed_dispatch_origins
+                            .insert(origin_id.to_string());
+                    }
                     self.register_spawn_dispatch_acks_for_task(&target_node_id, &task, vec![ack]);
                     self.app_event_tx
                         .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
@@ -1491,6 +1498,10 @@ impl App {
                         ack.seq,
                     );
                     self.note_whip_holder_dispatched(source_pane_id, &target_node_id);
+                    if let Some(origin_id) = ack.origin_id.as_deref() {
+                        self.spawn_processed_dispatch_origins
+                            .insert(origin_id.to_string());
+                    }
                     self.register_spawn_dispatch_acks_for_task(&target_node_id, &task, vec![ack]);
                     self.app_event_tx
                         .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task });
@@ -1529,11 +1540,28 @@ impl App {
         }
         let mut assistant_text = String::new();
         for item in &turn.items {
-            if let codex_app_server_protocol::ThreadItem::AgentMessage { text, .. } = item {
+            if let codex_app_server_protocol::ThreadItem::AgentMessage {
+                id, text, phase, ..
+            } = item
+            {
+                // Core represents injected inter-agent instructions as commentary AgentMessages.
+                // They are model input rendered for context, not assistant-authored host commands.
+                if matches!(
+                    phase,
+                    Some(codex_protocol::models::MessagePhase::Commentary)
+                ) {
+                    continue;
+                }
                 if !assistant_text.is_empty() {
                     assistant_text.push('\n');
                 }
                 assistant_text.push_str(text);
+                self.dispatch_native_spawn_task_blocks_from_item(
+                    source_thread_id,
+                    &turn.id,
+                    id,
+                    text,
+                );
             }
         }
         let source_node_id = if self.is_codex_main_bound_spawn_root_thread(source_thread_id) {
@@ -1542,6 +1570,37 @@ impl App {
             thread_node_id(source_thread_id)
         };
         self.dispatch_orchestrate_blocks_from_text(&source_node_id, &assistant_text);
+    }
+
+    pub(crate) fn dispatch_native_spawn_task_blocks_from_item(
+        &mut self,
+        source_thread_id: ThreadId,
+        turn_id: &str,
+        item_id: &str,
+        assistant_text: &str,
+    ) -> bool {
+        let physical_source_node_id = thread_node_id(source_thread_id);
+        if !self.is_spawn_orchestration_thread(source_thread_id)
+            && !self.is_assignment_holder(&physical_source_node_id)
+        {
+            return false;
+        }
+        let (_visible, dispatches) = extract_spawn_task_dispatches(assistant_text);
+        if dispatches.is_empty() {
+            return false;
+        }
+        let source_node_id = self.spawn_auto_loop_node_for_thread(source_thread_id);
+        // ItemCompleted and TurnCompleted both carry this stable item identity. Include it in the
+        // origin key so ingress can dispatch immediately while terminal replay remains idempotent,
+        // including turns that contain more than one assistant-message item.
+        let item_turn_id = format!("{turn_id}:{item_id}");
+        self.dispatch_spawn_task_blocks_from_model_turn(
+            &source_node_id,
+            &source_node_id,
+            &item_turn_id,
+            dispatches,
+        );
+        true
     }
 
     /// Canonical loop-breaker state key for a native spawn thread.
@@ -1882,10 +1941,19 @@ impl App {
     ) {
         let detail = detail.as_ref();
         let acks = self.take_spawn_dispatch_acks_for_task(target_node_id, task);
+        self.release_spawn_dispatch_origins(&acks);
         for ack in &acks {
             self.note_assignment_dispatch_failure(&ack.source_node_id, detail, false);
         }
         self.record_spawn_dispatch_acks(&acks, "failed", detail, true);
+    }
+
+    pub(crate) fn release_spawn_dispatch_origins(&mut self, acks: &[SpawnDispatchAck]) {
+        for ack in acks {
+            if let Some(origin_id) = ack.origin_id.as_deref() {
+                self.spawn_processed_dispatch_origins.remove(origin_id);
+            }
+        }
     }
 
     pub(crate) fn record_spawn_dispatch_acks(
@@ -3446,7 +3514,7 @@ impl App {
     pub(crate) fn is_spawn_orchestration_thread(&self, thread_id: ThreadId) -> bool {
         let node_id = self.logical_native_node_for_thread(thread_id);
         self.spawn_node_is_persistent_crew_member(&node_id)
-            || self.is_active_assignment_participant(&node_id)
+            || self.is_orchestration_participant(&node_id)
             || (self.spawn_legacy_read_only
                 && (self.spawn_status_by_thread.contains_key(&thread_id)
                     || self.spawn_parent_by_thread.contains_key(&thread_id)

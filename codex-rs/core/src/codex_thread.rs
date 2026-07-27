@@ -299,16 +299,30 @@ impl CodexThread {
         }
 
         let control = &self.codex.session.services.agent_control;
-        let target = control.ensure_agent_known(target_thread_id)?;
-        let recipient = target.agent_path.ok_or_else(|| {
-            CodexErr::InvalidRequest(format!(
-                "target agent {target_thread_id} is missing an agent path"
-            ))
-        })?;
         let author = self
             .session_source
             .get_agent_path()
             .unwrap_or_else(codex_protocol::AgentPath::root);
+        let recipient = match control.ensure_agent_known(target_thread_id) {
+            Ok(target) => target.agent_path.ok_or_else(|| {
+                CodexErr::InvalidRequest(format!(
+                    "target agent {target_thread_id} is missing an agent path"
+                ))
+            })?,
+            Err(CodexErr::ThreadNotFound(_))
+                if self.session_source.parent_thread_id() == Some(target_thread_id) =>
+            {
+                let parent_path = author
+                    .as_str()
+                    .rsplit_once('/')
+                    .map(|(parent, _)| parent)
+                    .filter(|parent| !parent.is_empty())
+                    .unwrap_or(codex_protocol::AgentPath::ROOT);
+                codex_protocol::AgentPath::try_from(parent_path)
+                    .map_err(CodexErr::InvalidRequest)?
+            }
+            Err(err) => return Err(err),
+        };
         let mut communication =
             InterAgentCommunication::new(author, recipient, Vec::new(), content, trigger_turn);
         if let Some(message_id) = message_id {

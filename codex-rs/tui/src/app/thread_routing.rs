@@ -1837,11 +1837,22 @@ impl App {
                 // dispatch immediately so dispatch-then-wait works; interrupted/truncated turns
                 // never emit ItemCompleted for that message, and TurnCompleted remains a deduped
                 // catch-all for completed turns.
-                if let codex_app_server_protocol::ThreadItem::AgentMessage { text, .. } =
-                    &notification.item
+                if let codex_app_server_protocol::ThreadItem::AgentMessage {
+                    id, text, phase, ..
+                } = &notification.item
+                    && !matches!(
+                        phase,
+                        Some(codex_protocol::models::MessagePhase::Commentary)
+                    )
                 {
                     let source_node_id = self.spawn_auto_loop_node_for_thread(thread_id);
                     self.dispatch_orchestrate_blocks_from_text(&source_node_id, text);
+                    self.dispatch_native_spawn_task_blocks_from_item(
+                        thread_id,
+                        &notification.turn_id,
+                        id,
+                        text,
+                    );
                 }
                 return;
             }
@@ -2031,7 +2042,12 @@ impl App {
 
 fn spawn_turn_result_message(turn: &codex_app_server_protocol::Turn) -> Option<String> {
     let agent_text = turn.items.iter().rev().find_map(|item| match item {
-        codex_app_server_protocol::ThreadItem::AgentMessage { text, .. } => {
+        codex_app_server_protocol::ThreadItem::AgentMessage { text, phase, .. }
+            if !matches!(
+                phase,
+                Some(codex_protocol::models::MessagePhase::Commentary)
+            ) =>
+        {
             let trimmed = text.trim();
             (!trimmed.is_empty()).then_some(trimmed)
         }

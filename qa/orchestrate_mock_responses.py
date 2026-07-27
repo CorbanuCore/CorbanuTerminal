@@ -21,18 +21,36 @@ def all_text(value: object) -> str:
     return ""
 
 
+def message_text(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "\n".join(message_text(item) for item in value)
+    if isinstance(value, dict):
+        text = value.get("text")
+        if isinstance(text, str):
+            return text
+        return message_text(value.get("content"))
+    return ""
+
+
 def durable_target(text: str) -> str | None:
     matches = re.findall(r'(?:"target"\s*:\s*"|target `)(thread:[0-9a-f-]{36})', text)
     return matches[-1] if matches else None
 
 
-def latest_user_text(body: dict[str, object]) -> str:
+def latest_instruction_text(body: dict[str, object]) -> str:
     inputs = body.get("input")
     if not isinstance(inputs, list):
         return ""
     for item in reversed(inputs):
-        if isinstance(item, dict) and item.get("role") == "user":
-            return all_text(item.get("content"))
+        if not isinstance(item, dict):
+            continue
+        if item.get("role") != "user" and item.get("type") != "agent_message":
+            continue
+        text = message_text(item.get("content"))
+        if text.strip() != "Continue.":
+            return text
     return ""
 
 
@@ -60,7 +78,7 @@ class State:
 
     def response_for(self, body: dict[str, object]) -> str | None:
         text = all_text(body)
-        latest = latest_user_text(body)
+        latest = latest_instruction_text(body)
         lower = latest.lower()
         target = durable_target(text)
         mode = self.mode()
@@ -77,7 +95,10 @@ class State:
         if "qa_bad_dispatch" in lower and target:
             return dispatch("Worker nickname that cannot resolve", "QA forced bad-target dispatch")
         if "pfterminal-send-task" in lower:
-            if "draft and save the spec with the user" in lower:
+            if "draft and save the spec with the user" in lower or (
+                "draft mode:" in lower
+                and "spec source: draft with manager" in lower
+            ):
                 return "Draft prepared. Reply QA_APPROVE_DRAFT to approve and start execution."
             if "spec below is locked" in lower and target:
                 return dispatch(target, "QA_WORK_CYCLE_1")

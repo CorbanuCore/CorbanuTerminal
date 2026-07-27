@@ -3439,6 +3439,15 @@ impl App {
                         !matches!(crew.status, crate::crew_state::CrewCreationStatus::Ready)
                     })
                 {
+                    let target_node_id = self.logical_native_node_for_thread(thread_id);
+                    let acks = self.take_spawn_dispatch_acks_for_task(&target_node_id, task.trim());
+                    self.release_spawn_dispatch_origins(&acks);
+                    self.record_spawn_dispatch_acks(
+                        &acks,
+                        "failed",
+                        "crew identity or creation state is not reconciled",
+                        true,
+                    );
                     self.chat_widget.add_error_message(
                         "This /spawn hierarchy is read-only until its crew identity and creation \
                          state are reconciled."
@@ -3519,6 +3528,7 @@ impl App {
                         self.persist_pane_state();
                     }
                     Err(error) => {
+                        self.release_spawn_dispatch_origins(&acks);
                         self.record_spawn_dispatch_acks(
                             &acks,
                             "failed",
@@ -3555,6 +3565,7 @@ impl App {
                 let target = crate::spawn_orchestration::pane_node_id(&pane_id);
                 if task.len() > crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES {
                     let acks = self.take_spawn_dispatch_acks_for_task(&target, &task);
+                    self.release_spawn_dispatch_origins(&acks);
                     let detail = format!(
                         "task is {} bytes; maximum is {} bytes",
                         task.len(),
@@ -3566,6 +3577,7 @@ impl App {
                 }
                 if self.claude_panes.claude_pane_is_running(&pane_id) {
                     let acks = self.take_spawn_dispatch_acks_for_task(&target, &task);
+                    self.release_spawn_dispatch_origins(&acks);
                     self.record_spawn_dispatch_acks(
                         &acks,
                         "failed",

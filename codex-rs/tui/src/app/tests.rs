@@ -3795,6 +3795,33 @@ async fn orchestrate_auto_whip_fires_once_for_idle_sweep() {
 }
 
 #[tokio::test]
+async fn native_legacy_whip_target_receives_orchestration_lifecycle() {
+    let (mut app, _app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "keep-going", "# whip: keep-going\nContinue the work.");
+    let worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000467").expect("worker id");
+    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
+
+    app.handle_orchestrate_command(format!(
+        "attach {worker_node} keep-going --mode auto --holder none --max 2"
+    ));
+
+    assert!(
+        app.is_spawn_orchestration_thread(worker_thread_id),
+        "an armed native legacy-whip target must receive completion lifecycle events"
+    );
+    app.orchestrate_whips
+        .get_mut("whip-1")
+        .expect("legacy whip")
+        .state = crate::orchestrate::WhipState::Exhausted;
+    assert!(
+        app.is_spawn_orchestration_thread(worker_thread_id),
+        "an exhausted whip target must remain classified until its terminal turn arrives"
+    );
+}
+
+#[tokio::test]
 async fn orchestrate_stop_marker_pauses_before_fire() {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
     write_test_whip(
@@ -4274,6 +4301,109 @@ async fn assignment_manager_empty_completion_retries_current_turn_once_then_paus
             .get("assignment-1")
             .map(|whip| whip.state),
         Some(crate::orchestrate::WhipState::Paused)
+    );
+}
+
+#[tokio::test]
+async fn inactive_assignment_manager_completed_dispatch_reaches_worker_once() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(
+        &app,
+        "native-manager-dispatch",
+        "Manager must dispatch the implementation to Worker.",
+    );
+    let manager_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000465").expect("manager id");
+    let worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000466").expect("worker id");
+    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
+    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
+    let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
+    app.handle_orchestrate_command(format!(
+        "attach {worker_node} native-manager-dispatch --mode review --holder {manager_node} --for 1h"
+    ));
+    while app_event_rx.try_recv().is_ok() {}
+
+    let dispatch = format!(
+        "```pfterminal-send-task\n{{\"target\":\"{worker_node}\",\"task\":\"Review the branch and report concrete defects.\"}}\n```"
+    );
+    let ServerNotification::ItemCompleted(mut injected_instruction) = item_completed_notification(
+        manager_thread_id,
+        "manager-dispatch-1",
+        "injected-manager-brief",
+        &dispatch,
+    ) else {
+        unreachable!("helper returns ItemCompleted");
+    };
+    let ThreadItem::AgentMessage { phase, .. } = &mut injected_instruction.item else {
+        unreachable!("helper returns AgentMessage");
+    };
+    *phase = Some(codex_protocol::models::MessagePhase::Commentary);
+    app.enqueue_thread_notification(
+        manager_thread_id,
+        ServerNotification::ItemCompleted(injected_instruction),
+    )
+    .await
+    .expect("enqueue injected Manager instruction");
+    assert!(
+        drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id).is_none(),
+        "an injected inter-agent instruction must never execute its example host block"
+    );
+    assert!(matches!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Drafting,
+            ..
+        })
+    ));
+
+    app.enqueue_thread_notification(
+        manager_thread_id,
+        item_completed_notification(
+            manager_thread_id,
+            "manager-dispatch-1",
+            "agent-message-1",
+            &dispatch,
+        ),
+    )
+    .await
+    .expect("enqueue inactive Manager message completion");
+    let delivered = drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id)
+        .expect("completed Manager message should reach Worker at notification ingress");
+    assert!(delivered.contains("Review the branch and report concrete defects."));
+
+    let completed = turn_completed_with_agent_message(
+        manager_thread_id,
+        "manager-dispatch-1",
+        TurnStatus::Completed,
+        &dispatch,
+    );
+    app.enqueue_thread_notification(manager_thread_id, completed.clone())
+        .await
+        .expect("enqueue inactive Manager completion");
+    assert!(
+        drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id).is_none(),
+        "TurnCompleted must reconcile with the already dispatched ItemCompleted"
+    );
+    assert!(matches!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Executing,
+            ..
+        })
+    ));
+
+    app.enqueue_thread_notification(manager_thread_id, completed)
+        .await
+        .expect("replay inactive Manager completion");
+    assert!(
+        drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id).is_none(),
+        "terminal notification replay must not dispatch the same task twice"
     );
 }
 

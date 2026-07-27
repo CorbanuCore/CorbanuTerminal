@@ -76,7 +76,7 @@ async fn thread_agent_message_uses_native_mailbox_and_deduplicates_stable_id() -
         to_response::<ThreadSpawnAgentResponse>(child_response)?;
 
     let params = ThreadAgentMessageParams {
-        source_thread_id: root.id,
+        source_thread_id: root.id.clone(),
         target_thread_id: child.id.clone(),
         message_id: Some("message-stable-1".to_string()),
         assignment_id: Some("assignment-stable-1".to_string()),
@@ -133,6 +133,43 @@ async fn thread_agent_message_uses_native_mailbox_and_deduplicates_stable_id() -
         1,
         "a duplicate stable message id must not start another provider turn"
     );
+
+    let reverse_response_mock = responses::mount_sse_once(
+        &server,
+        responses::sse(vec![
+            responses::ev_response_created("resp-2"),
+            responses::ev_assistant_message("msg-2", "parent accepted"),
+            responses::ev_completed("resp-2"),
+        ]),
+    )
+    .await;
+    let reverse_request = app
+        .send_raw_request(
+            "thread/sendAgentMessage",
+            Some(serde_json::to_value(ThreadAgentMessageParams {
+                source_thread_id: child.id,
+                target_thread_id: root.id.clone(),
+                message_id: Some("message-child-to-root-1".to_string()),
+                assignment_id: Some("assignment-child-to-root-1".to_string()),
+                kind: AgentMessageKind::Assignment,
+                content: "Apply the child review to the root task.".to_string(),
+                trigger_turn: true,
+            })?),
+        )
+        .await?;
+    let reverse_response: JSONRPCResponse = timeout(
+        DEFAULT_TIMEOUT,
+        app.read_stream_until_response_message(RequestId::Integer(reverse_request)),
+    )
+    .await??;
+    let reverse_receipt = to_response::<ThreadAgentMessageResponse>(reverse_response)?;
+    assert_eq!(reverse_receipt.target_thread_id, root.id);
+    timeout(
+        DEFAULT_TIMEOUT,
+        app.read_stream_until_notification_message("turn/completed"),
+    )
+    .await??;
+    assert_eq!(reverse_response_mock.requests().len(), 1);
 
     Ok(())
 }
