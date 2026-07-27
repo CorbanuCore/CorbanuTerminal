@@ -42,6 +42,11 @@ pub(crate) struct Session {
     pub(crate) conversation: Arc<RealtimeConversationManager>,
     pub(crate) active_turn: Mutex<Option<ActiveTurn>>,
     pub(crate) input_queue: InputQueue,
+    /// Stable mailbox IDs already materialized into this thread's model-visible history.
+    ///
+    /// This is seeded from persisted rollout items on resume so a crash between rollout flush
+    /// and mailbox acknowledgement cannot apply the same message to local history twice.
+    pub(crate) applied_agent_message_ids: Mutex<HashSet<String>>,
     pub(crate) guardian_review_session: GuardianReviewSessionManager,
     pub(crate) services: SessionServices,
     pub(super) next_internal_sub_id: AtomicU64,
@@ -550,6 +555,15 @@ impl Session {
             }
             InitialHistory::Resumed(resumed_history) => resumed_history.conversation_id,
         };
+        let mut applied_agent_message_ids = HashSet::new();
+        initial_history.scan_rollout_items(|item| {
+            if let RolloutItem::InterAgentCommunication(communication) = item
+                && let Some(message_id) = communication.message_id.as_ref()
+            {
+                applied_agent_message_ids.insert(message_id.clone());
+            }
+            false
+        });
         let time_provider = crate::current_time::resolve_time_provider(
             config.current_time_reminder.as_ref(),
             external_time_provider,
@@ -1103,6 +1117,7 @@ impl Session {
                 conversation: Arc::new(RealtimeConversationManager::new()),
                 active_turn: Mutex::new(None),
                 input_queue: InputQueue::new(),
+                applied_agent_message_ids: Mutex::new(applied_agent_message_ids),
                 guardian_review_session: GuardianReviewSessionManager::default(),
                 services,
                 next_internal_sub_id: AtomicU64::new(0),

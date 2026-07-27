@@ -1,4 +1,8 @@
+use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::ModelBilling;
+use codex_protocol::openai_models::ModelCapabilityTier;
 use codex_protocol::openai_models::ModelPreset;
+use codex_protocol::openai_models::ReasoningEffort;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiNamespace;
 use codex_tools::ResponsesApiNamespaceTool;
@@ -11,21 +15,32 @@ use std::collections::BTreeMap;
 pub const MULTI_AGENT_V1_NAMESPACE: &str = "multi_agent_v1";
 const MULTI_AGENT_V1_NAMESPACE_DESCRIPTION: &str = "Tools for spawning and managing sub-agents.";
 
-const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE: &str = "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed.";
+const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V1: &str = "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed.";
+const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2: &str = "Spawned agents inherit your current provider and model by default. Omit both `model_provider` and `model` to inherit that runtime. To use another runtime, set both fields explicitly.";
 const SPAWN_AGENT_MODEL_OVERRIDE_DESCRIPTION: &str =
     "Model override for the new agent. Omit unless an explicit override is needed.";
+const SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION: &str = "Provider override for the new agent. Set this together with `model`; omit both to inherit the parent runtime.";
 const SPAWN_AGENT_SERVICE_TIER_OVERRIDE_DESCRIPTION: &str =
     "Service tier override for the new agent. Omit unless explicitly requested.";
-const MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION: usize = 5;
+const MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION: usize = 32;
 const MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION: usize = 64;
 
 #[derive(Debug, Clone, Default)]
 pub struct SpawnAgentToolOptions {
     pub available_models: Vec<ModelPreset>,
+    pub inherited_runtime: Option<SpawnAgentRuntime>,
     pub agent_type_description: String,
     pub hide_agent_type_model_reasoning: bool,
     pub include_usage_hint: bool,
     pub usage_hint_text: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpawnAgentRuntime {
+    pub model_provider: String,
+    pub model: String,
+    pub reasoning_effort: Option<ReasoningEffort>,
+    pub service_tier: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,10 +61,14 @@ impl Default for WaitAgentTimeoutOptions {
 }
 
 pub fn create_spawn_agent_tool_v1(options: SpawnAgentToolOptions) -> ToolSpec {
-    let available_models_description = (!options.hide_agent_type_model_reasoning)
-        .then(|| spawn_agent_models_description(&options.available_models));
-    let inherited_model_guidance =
-        (!options.hide_agent_type_model_reasoning).then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE);
+    let available_models_description = (!options.hide_agent_type_model_reasoning).then(|| {
+        spawn_agent_models_description(
+            &options.available_models,
+            options.inherited_runtime.as_ref(),
+        )
+    });
+    let inherited_model_guidance = (!options.hide_agent_type_model_reasoning)
+        .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V1);
     let return_value_description =
         "Returns the spawned agent id plus the user-facing nickname when available.";
     let mut properties = spawn_agent_common_properties_v1(&options.agent_type_description);
@@ -78,10 +97,14 @@ pub fn create_spawn_agent_tool_v1(options: SpawnAgentToolOptions) -> ToolSpec {
 }
 
 pub fn create_spawn_agent_tool_v2(options: SpawnAgentToolOptions) -> ToolSpec {
-    let available_models_description = (!options.hide_agent_type_model_reasoning)
-        .then(|| spawn_agent_models_description(&options.available_models));
-    let inherited_model_guidance =
-        (!options.hide_agent_type_model_reasoning).then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE);
+    let available_models_description = (!options.hide_agent_type_model_reasoning).then(|| {
+        spawn_agent_models_description(
+            &options.available_models,
+            options.inherited_runtime.as_ref(),
+        )
+    });
+    let inherited_model_guidance = (!options.hide_agent_type_model_reasoning)
+        .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2);
     let mut properties = spawn_agent_common_properties_v2(&options.agent_type_description);
     if options.hide_agent_type_model_reasoning {
         hide_spawn_agent_metadata_options(&mut properties);
@@ -165,8 +188,7 @@ pub fn create_send_message_tool() -> ToolSpec {
             "message".to_string(),
             JsonSchema::string(Some(
                 "Message text to queue on the target agent.".to_string(),
-            ))
-            .with_encrypted(),
+            )),
         ),
     ]);
 
@@ -198,8 +220,7 @@ pub fn create_followup_task_tool() -> ToolSpec {
             "message".to_string(),
             JsonSchema::string(Some(
                 "Message text to send to the target agent.".to_string(),
-            ))
-            .with_encrypted(),
+            )),
         ),
     ]);
 
@@ -437,9 +458,32 @@ fn spawn_agent_output_schema_v2(hide_agent_metadata: bool) -> Value {
             "nickname": {
                 "type": ["string", "null"],
                 "description": "User-facing nickname for the spawned agent when available."
+            },
+            "model_provider": {
+                "type": "string",
+                "description": "Resolved provider used by the spawned agent."
+            },
+            "model": {
+                "type": "string",
+                "description": "Resolved model used by the spawned agent."
+            },
+            "reasoning_effort": {
+                "type": ["string", "null"],
+                "description": "Resolved reasoning effort used by the spawned agent."
+            },
+            "service_tier": {
+                "type": ["string", "null"],
+                "description": "Resolved service tier used by the spawned agent."
             }
         },
-        "required": ["task_name", "nickname"],
+        "required": [
+            "task_name",
+            "nickname",
+            "model_provider",
+            "model",
+            "reasoning_effort",
+            "service_tier"
+        ],
         "additionalProperties": false
     })
 }
@@ -694,8 +738,7 @@ fn spawn_agent_common_properties_v2(agent_type_description: &str) -> BTreeMap<St
             "message".to_string(),
             JsonSchema::string(Some(
                 "Initial plain-text task for the new agent.".to_string(),
-            ))
-            .with_encrypted(),
+            )),
         ),
         (
             "agent_type".to_string(),
@@ -712,6 +755,12 @@ fn spawn_agent_common_properties_v2(agent_type_description: &str) -> BTreeMap<St
             "model".to_string(),
             JsonSchema::string(Some(
                 SPAWN_AGENT_MODEL_OVERRIDE_DESCRIPTION.to_string(),
+            )),
+        ),
+        (
+            "model_provider".to_string(),
+            JsonSchema::string(Some(
+                SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION.to_string(),
             )),
         ),
         (
@@ -733,6 +782,7 @@ fn spawn_agent_common_properties_v2(agent_type_description: &str) -> BTreeMap<St
 fn hide_spawn_agent_metadata_options(properties: &mut BTreeMap<String, JsonSchema>) {
     properties.remove("agent_type");
     properties.remove("model");
+    properties.remove("model_provider");
     properties.remove("reasoning_effort");
     properties.remove("service_tier");
 }
@@ -837,14 +887,36 @@ Note that passing `fork_turns="none"` will not pass any surrounding context to t
     tool_description
 }
 
-fn spawn_agent_models_description(models: &[ModelPreset]) -> String {
+fn spawn_agent_models_description(
+    models: &[ModelPreset],
+    inherited_runtime: Option<&SpawnAgentRuntime>,
+) -> String {
+    let inherited_runtime = inherited_runtime.map_or_else(
+        || "Current inherited runtime: unavailable.".to_string(),
+        |runtime| {
+            let effort = runtime
+                .reasoning_effort
+                .as_ref()
+                .map_or("provider default", ReasoningEffort::as_str);
+            let service_tier = runtime
+                .service_tier
+                .as_deref()
+                .map_or_else(String::new, |tier| format!("; service tier {tier}"));
+            format!(
+                "Current inherited runtime: `{}` / `{}`; effort {effort}{service_tier}.",
+                runtime.model_provider, runtime.model
+            )
+        },
+    );
     let visible_models: Vec<&ModelPreset> = models
         .iter()
         .filter(|model| model.show_in_picker)
         .take(MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION)
         .collect();
     if visible_models.is_empty() {
-        return "No picker-visible model overrides are currently loaded.".to_string();
+        return format!(
+            "{inherited_runtime}\nNo authorized picker-visible model overrides are currently loaded."
+        );
     }
 
     let model_descriptions = visible_models
@@ -885,19 +957,133 @@ fn spawn_agent_models_description(models: &[ModelPreset]) -> String {
             let service_tiers_suffix = if service_tiers.is_empty() {
                 String::new()
             } else {
-                format!(" Service tiers: {service_tiers}.")
+                format!(" tiers: {service_tiers};")
             };
             let model_slug = &model.model;
-            let description = &model.description;
+            let runtime = model.provider_id.as_deref().map_or_else(
+                || format!("model `{model_slug}` (provider unspecified; not a cross-provider route)"),
+                |provider| format!("`{provider}` / `{model_slug}`"),
+            );
+            let economics_suffix = model
+                .orchestration
+                .as_ref()
+                .and_then(|metadata| metadata.billing().map(|billing| (metadata, billing)))
+                .map_or_else(String::new, |(metadata, billing)| {
+                    let billing = match billing {
+                        ModelBilling::Plan {
+                            relative_burn_millis,
+                        } => {
+                            format!("plan, burn {}x", format_millis(*relative_burn_millis))
+                        }
+                        ModelBilling::PlanSchedule {
+                            off_peak_relative_burn_millis,
+                            peak_relative_burn_millis,
+                            peak_start_utc_hour,
+                            peak_end_utc_hour,
+                            promotional_off_peak_relative_burn_millis,
+                            promotion_valid_through_utc,
+                        } => {
+                            let promotion = promotional_off_peak_relative_burn_millis
+                                .zip(promotion_valid_through_utc.as_deref())
+                                .map_or_else(String::new, |(burn, valid_through)| {
+                                    format!(
+                                        ", promotional off-peak {}x through {valid_through}",
+                                        format_millis(burn)
+                                    )
+                                });
+                            format!(
+                                "plan, normal off-peak {}x / peak {}x at {:02}:00-{:02}:00 UTC{}",
+                                format_millis(*off_peak_relative_burn_millis),
+                                format_millis(*peak_relative_burn_millis),
+                                peak_start_utc_hour,
+                                peak_end_utc_hour,
+                                promotion
+                            )
+                        }
+                        ModelBilling::Metered {
+                            input_milli_usd_per_million_tokens,
+                            output_milli_usd_per_million_tokens,
+                            ..
+                        } => format!(
+                            "metered ${}/${} per M tok",
+                            format_millis(*input_milli_usd_per_million_tokens),
+                            format_millis(*output_milli_usd_per_million_tokens)
+                        ),
+                        ModelBilling::AuthDependent {
+                            plan_relative_burn_millis,
+                            api_key_input_milli_usd_per_million_tokens,
+                            api_key_output_milli_usd_per_million_tokens,
+                            ..
+                        } => format!(
+                            "auth-dependent: subscription burn {}x or API ${}/${} per M tok",
+                            format_millis(*plan_relative_burn_millis),
+                            format_millis(*api_key_input_milli_usd_per_million_tokens),
+                            format_millis(*api_key_output_milli_usd_per_million_tokens)
+                        ),
+                        ModelBilling::Local => "local".to_string(),
+                    };
+                    format!(" {billing}, {};", metadata.capability())
+                });
+            let frontier_effort_suffix = model
+                .orchestration
+                .as_ref()
+                .filter(|metadata| metadata.capability() == ModelCapabilityTier::Frontier)
+                .and_then(|_| {
+                    let frontier_efforts = model
+                        .supported_reasoning_efforts
+                        .iter()
+                        .filter_map(|preset| {
+                            let effort = preset.effort.as_str();
+                            matches!(effort, "max" | "ultra").then_some(effort)
+                        })
+                        .collect::<Vec<_>>();
+                    (!frontier_efforts.is_empty()).then(|| {
+                        format!(
+                            " frontier efforts: {}{};",
+                            frontier_efforts.join(", "),
+                            if frontier_efforts
+                                .contains(&"ultra") { " (ultra includes automatic delegation)" } else { Default::default() }
+                        )
+                    })
+                })
+                .unwrap_or_default();
+            let vision_suffix = if model
+                .input_modalities
+                .iter()
+                .any(|modality| matches!(modality, InputModality::Image))
+            {
+                " vision;"
+            } else {
+                " text-only;"
+            };
+            let reasoning_efforts_suffix = reasoning_efforts_suffix
+                .strip_prefix(" Reasoning efforts: ")
+                .and_then(|suffix| suffix.strip_suffix('.'))
+                .map_or_else(String::new, |efforts| format!(" efforts: {efforts};"));
             format!(
-                "- `{model_slug}`: {description}{reasoning_efforts_suffix}{service_tiers_suffix}"
+                "- {runtime};{economics_suffix}{frontier_effort_suffix}{vision_suffix}{reasoning_efforts_suffix}{service_tiers_suffix}"
             )
+                .trim_end_matches(';')
+                .to_string()
         })
         .collect::<Vec<_>>()
         .join("\n");
     format!(
-        "Available model overrides (optional; inherited parent model is preferred):\n{model_descriptions}"
+        "{inherited_runtime}\n\
+Available authorized exact runtime overrides (optional; omit both fields to inherit the current runtime). Pass the provider as `model_provider` and the model as `model`.\n\
+Default allocation policy: compare the task with this catalogue before every spawn. Prefer an authorized `plan` runtime over a `metered` runtime when both can do the work, then choose the lowest-burn capable plan runtime. Use `fast` for mechanical or tightly specified work, `balanced` for ordinary engineering, and `frontier` only for genuinely hard reasoning, planning, or review. For frontier models with `max` or `ultra`, reserve those efforts for frontier work; `ultra` is the orchestration setting when automatic delegation is actually needed. Vision work requires a `vision` runtime; never send images to `text-only`. Plan capacity is finite, not free. If the user names a provider or model, treat it as an exact constraint: if it is unavailable or unauthorized, report that failure and do not substitute another runtime without the user's explicit consent.\n{model_descriptions}"
     )
+}
+
+fn format_millis(value: u32) -> String {
+    let whole = value / 1000;
+    let remainder = value % 1000;
+    if remainder == 0 {
+        return whole.to_string();
+    }
+    format!("{whole}.{remainder:03}")
+        .trim_end_matches('0')
+        .to_string()
 }
 
 fn wait_agent_tool_parameters_v1(options: WaitAgentTimeoutOptions) -> JsonSchema {

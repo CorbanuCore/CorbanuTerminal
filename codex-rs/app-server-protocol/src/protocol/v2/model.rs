@@ -1,6 +1,7 @@
 use super::shared::v2_enum_from_core;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelAvailabilityNux as CoreModelAvailabilityNux;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::default_input_modalities;
 use codex_protocol::protocol::ModelRerouteReason as CoreModelRerouteReason;
@@ -87,6 +88,11 @@ pub struct Model {
     pub availability_nux: Option<ModelAvailabilityNux>,
     pub display_name: String,
     pub description: String,
+    /// Canonical provider, capability, and billing policy used for spawned work.
+    ///
+    /// This field is always present on the wire. `null` means the route is not trusted for
+    /// orchestration; clients must not infer eligibility from its display name.
+    pub orchestration: Option<ModelOrchestrationMetadata>,
     pub hidden: bool,
     pub supported_reasoning_efforts: Vec<ReasoningEffortOption>,
     pub default_reasoning_effort: ReasoningEffort,

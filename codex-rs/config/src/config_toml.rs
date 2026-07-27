@@ -725,6 +725,19 @@ pub struct AgentsToml {
     /// Defaults to true.
     pub interrupt_message: Option<bool>,
 
+    /// Provider IDs that spawned agents are permitted to run on.
+    ///
+    /// This is operator policy and is the ceiling for every agent-creation path:
+    /// `/spawn` crews, custom crews, and native `spawn_agent` task agents. A model
+    /// cannot broaden it. When unset, any configured provider may be used.
+    ///
+    /// Example:
+    /// ```toml
+    /// [agents]
+    /// provider_allowlist = ["claude-plan", "openai"]
+    /// ```
+    pub provider_allowlist: Option<Vec<String>>,
+
     /// User-defined role declarations keyed by role name.
     ///
     /// Example:

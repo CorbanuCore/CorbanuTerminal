@@ -9,11 +9,13 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
+use tokio::sync::Notify;
 
 #[derive(Default)]
 pub(super) struct AgentExecutionLimiter {
     active: AtomicUsize,
     max_threads: OnceLock<usize>,
+    capacity_changed: Notify,
 }
 
 pub(crate) struct AgentExecutionGuard {
@@ -23,6 +25,7 @@ pub(crate) struct AgentExecutionGuard {
 impl Drop for AgentExecutionGuard {
     fn drop(&mut self) {
         self.limiter.active.fetch_sub(1, Ordering::AcqRel);
+        self.limiter.capacity_changed.notify_waiters();
     }
 }
 
@@ -32,7 +35,7 @@ impl AgentControl {
         thread_id: ThreadId,
         op: &Op,
     ) -> CodexResult<()> {
-        if !op_starts_turn(op) {
+        if !op_starts_worker_turn(op) {
             return Ok(());
         }
         let state = self.upgrade()?;
@@ -71,6 +74,26 @@ impl AgentControl {
         is_execution_limited(multi_agent_version, session_source)
             .then(|| Arc::clone(&self.agent_execution_limiter).guard())
     }
+
+    pub(crate) fn try_execution_guard(
+        &self,
+        multi_agent_version: MultiAgentVersion,
+        session_source: &SessionSource,
+    ) -> CodexResult<Option<AgentExecutionGuard>> {
+        if !is_execution_limited(multi_agent_version, session_source) {
+            return Ok(None);
+        }
+        Arc::clone(&self.agent_execution_limiter)
+            .try_guard()
+            .map(Some)
+            .ok_or_else(|| CodexErr::AgentLimitReached {
+                max_threads: self.agent_execution_limiter.max_threads(),
+            })
+    }
+
+    pub(crate) async fn wait_for_execution_capacity(&self) {
+        self.agent_execution_limiter.wait_for_capacity().await;
+    }
 }
 
 impl AgentExecutionLimiter {
@@ -90,11 +113,46 @@ impl AgentExecutionLimiter {
         self.active.fetch_add(1, Ordering::AcqRel);
         AgentExecutionGuard { limiter: self }
     }
+
+    fn try_guard(self: Arc<Self>) -> Option<AgentExecutionGuard> {
+        let max_threads = self.max_threads();
+        let mut active = self.active.load(Ordering::Acquire);
+        loop {
+            if active >= max_threads {
+                return None;
+            }
+            match self.active.compare_exchange_weak(
+                active,
+                active + 1,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => return Some(AgentExecutionGuard { limiter: self }),
+                Err(next) => active = next,
+            }
+        }
+    }
+
+    async fn wait_for_capacity(&self) {
+        loop {
+            let notified = self.capacity_changed.notified();
+            if self.has_capacity() {
+                return;
+            }
+            notified.await;
+        }
+    }
 }
 
-fn op_starts_turn(op: &Op) -> bool {
-    matches!(op, Op::UserInput { .. })
-        || matches!(op, Op::InterAgentCommunication { communication } if communication.trigger_turn)
+/// Returns whether an operation starts autonomous worker execution.
+///
+/// Human input is deliberately excluded. A user must remain able to address a
+/// persistent crew member while autonomous descendants occupy every worker
+/// slot. Once admitted, the human-started task still acquires an execution
+/// guard, so it remains visible to capacity accounting. Mailbox wakeups and
+/// agent-authored work remain bounded here.
+fn op_starts_worker_turn(op: &Op) -> bool {
+    matches!(op, Op::InterAgentCommunication { communication } if communication.trigger_turn)
         || matches!(op, Op::WakePendingWork)
 }
 
@@ -104,13 +162,6 @@ fn is_execution_limited(
 ) -> bool {
     multi_agent_version == MultiAgentVersion::V2
         && matches!(session_source, SessionSource::SubAgent(_))
-        && !matches!(
-            session_source,
-            SessionSource::SubAgent(codex_protocol::protocol::SubAgentSource::ThreadSpawn {
-                agent_role: Some(agent_role),
-                ..
-            }) if agent_role == "nazgul"
-        )
 }
 
 #[cfg(test)]

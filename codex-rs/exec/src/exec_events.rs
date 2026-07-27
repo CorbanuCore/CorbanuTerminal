@@ -229,6 +229,7 @@ pub enum CollabTool {
 #[serde(rename_all = "snake_case")]
 pub enum CollabAgentStatus {
     PendingInit,
+    Unloaded,
     Running,
     Interrupted,
     Completed,

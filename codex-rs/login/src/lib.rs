@@ -60,6 +60,7 @@ pub use auth::read_codex_access_token_from_env;
 pub use auth::read_openai_api_key_from_env;
 pub use auth::save_auth;
 pub use auth::suppress_provider_api_key;
+pub use auth::validate_provider_auth_command;
 pub use auth_env_telemetry::AuthEnvTelemetry;
 pub use auth_env_telemetry::collect_auth_env_telemetry;
 pub use token_data::TokenData;

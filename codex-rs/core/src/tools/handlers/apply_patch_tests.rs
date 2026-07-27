@@ -41,6 +41,37 @@ async fn invocation_for_payload(payload: ToolPayload) -> ToolInvocation {
     }
 }
 
+async fn intercept_for_test(
+    command: &[String],
+    session: Arc<Session>,
+    turn: Arc<TurnContext>,
+    turn_environment: TurnEnvironment,
+) -> Result<Option<FunctionToolOutput>, FunctionCallError> {
+    let cwd = turn_environment.cwd().clone();
+    let fs = turn_environment.environment.get_filesystem();
+    intercept_apply_patch(
+        command,
+        &cwd,
+        fs.as_ref(),
+        turn_environment,
+        session,
+        turn,
+        /*tracker*/ None,
+        "shell-apply-patch-test",
+        "exec_command",
+        InterceptedPatchSource::StrictShell,
+    )
+    .await
+}
+
+fn response_error(result: Result<Option<FunctionToolOutput>, FunctionCallError>) -> String {
+    match result {
+        Err(FunctionCallError::RespondToModel(message)) => message,
+        Err(_) => panic!("expected RespondToModel error"),
+        Ok(_) => panic!("expected tool error"),
+    }
+}
+
 #[tokio::test]
 async fn pre_tool_use_payload_uses_freeform_patch_input() {
     let patch = sample_patch();
@@ -259,6 +290,88 @@ async fn approval_keys_include_move_destination() {
 
     let keys = file_paths_for_action(&action);
     assert_eq!(keys.len(), 2);
+}
+
+#[tokio::test]
+async fn shell_intercept_uses_consecutive_grammar_failures_and_rejects_after_fallback() {
+    let (session, turn) = make_session_and_context().await;
+    let session = Arc::new(session);
+    let turn = Arc::new(turn);
+    let turn_environment = turn
+        .environments
+        .primary()
+        .cloned()
+        .expect("test turn should have a primary environment");
+    let malformed = vec![
+        "apply_patch".to_string(),
+        "*** Begin Patch\n*** Update File: broken.txt\n*** End Patch".to_string(),
+    ];
+
+    response_error(
+        intercept_for_test(
+            &malformed,
+            Arc::clone(&session),
+            Arc::clone(&turn),
+            turn_environment.clone(),
+        )
+        .await,
+    );
+    assert!(!turn.structured_edit_fallback_enabled());
+
+    let valid_but_implicit = vec![sample_patch().to_string()];
+    response_error(
+        intercept_for_test(
+            &valid_but_implicit,
+            Arc::clone(&session),
+            Arc::clone(&turn),
+            turn_environment.clone(),
+        )
+        .await,
+    );
+    assert!(!turn.structured_edit_fallback_enabled());
+
+    response_error(
+        intercept_for_test(
+            &malformed,
+            Arc::clone(&session),
+            Arc::clone(&turn),
+            turn_environment.clone(),
+        )
+        .await,
+    );
+    assert!(!turn.structured_edit_fallback_enabled());
+    let activation = response_error(
+        intercept_for_test(
+            &malformed,
+            Arc::clone(&session),
+            Arc::clone(&turn),
+            turn_environment.clone(),
+        )
+        .await,
+    );
+    assert!(activation.contains(STRUCTURED_EDIT_FALLBACK_GUIDANCE));
+    assert!(turn.structured_edit_fallback_enabled());
+
+    let rejected = vec!["apply_patch".to_string(), sample_patch().to_string()];
+    let rejection = response_error(
+        intercept_for_test(
+            &rejected,
+            Arc::clone(&session),
+            Arc::clone(&turn),
+            turn_environment.clone(),
+        )
+        .await,
+    );
+    assert!(rejection.contains(STRUCTURED_EDIT_FALLBACK_GUIDANCE));
+    assert!(
+        !turn_environment
+            .cwd()
+            .join("hello.txt")
+            .expect("valid child path")
+            .to_path_buf()
+            .exists(),
+        "fallback rejection must occur before filesystem mutation"
+    );
 }
 
 #[test]

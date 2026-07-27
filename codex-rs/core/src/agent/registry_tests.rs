@@ -51,6 +51,7 @@ fn thread_spawn_depth_increments_and_enforces_limit() {
         agent_path: None,
         agent_nickname: None,
         agent_role: None,
+        agent_class: None,
     });
     let child_depth = next_thread_spawn_depth(&session_source);
     assert_eq!(child_depth, 2);
@@ -156,6 +157,38 @@ fn release_is_idempotent_for_registered_threads() {
     let reservation = registry
         .reserve_spawn_slot(Some(1))
         .expect("slot released after second thread removal");
+    drop(reservation);
+}
+
+#[test]
+fn restored_threads_are_counted_once_and_keep_their_path_reserved() {
+    let registry = Arc::new(AgentRegistry::default());
+    let thread_id = ThreadId::new();
+    let path = agent_path("/root/worker");
+    let metadata = AgentMetadata {
+        agent_id: Some(thread_id),
+        agent_path: Some(path.clone()),
+        agent_nickname: Some("Worker".to_string()),
+        ..Default::default()
+    };
+
+    registry.restore_spawned_thread(metadata.clone());
+    registry.restore_spawned_thread(metadata);
+
+    assert_eq!(registry.agent_id_for_path(&path), Some(thread_id));
+    let err = match registry.reserve_spawn_slot(Some(1)) {
+        Ok(_) => panic!("the restored thread must consume exactly one configured slot"),
+        Err(err) => err,
+    };
+    let CodexErr::AgentLimitReached { max_threads } = err else {
+        panic!("expected CodexErr::AgentLimitReached");
+    };
+    assert_eq!(max_threads, 1);
+
+    registry.release_spawned_thread(thread_id);
+    let reservation = registry
+        .reserve_spawn_slot(Some(1))
+        .expect("releasing the restored thread should free its single slot");
     drop(reservation);
 }
 

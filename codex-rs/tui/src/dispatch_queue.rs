@@ -12,10 +12,6 @@ pub(crate) struct SavedNativeSpawnRuntime {
 }
 
 pub(crate) const MAX_DISPATCH_TASK_BYTES: usize = 32 * 1024;
-pub(crate) const MAX_TARGET_DISPATCH_ITEMS: usize = 256;
-pub(crate) const MAX_TARGET_DISPATCH_BYTES: usize = 2 * 1024 * 1024;
-pub(crate) const MAX_GLOBAL_DISPATCH_ITEMS: usize = 1024;
-pub(crate) const MAX_GLOBAL_DISPATCH_BYTES: usize = 8 * 1024 * 1024;
 
 const LEGACY_BATCH_HEADER: &str = "Multiple spawn dispatches were queued while you were busy. Execute each task below in order, do not skip any task, and treat every section as assigned work.\n\n";
 
@@ -25,21 +21,10 @@ pub(crate) struct SpawnDispatchAck {
     pub(crate) source_node_id: String,
     pub(crate) target_node_id: String,
     pub(crate) target_title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) origin_id: Option<String>,
     #[serde(default)]
     pub(crate) attempt: u8,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum PendingDispatchEnqueueResult {
-    Queued,
-    Duplicate {
-        acks: Vec<SpawnDispatchAck>,
-        notify: bool,
-    },
-    Rejected {
-        acks: Vec<SpawnDispatchAck>,
-        reason: String,
-    },
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -163,10 +148,6 @@ impl PendingSpawnDispatch {
             self.target_pane_id = target_pane_id.to_string();
         }
     }
-
-    pub(crate) fn payload_bytes(&self) -> usize {
-        self.task.len()
-    }
 }
 
 impl<'de> Deserialize<'de> for PendingSpawnDispatch {
@@ -243,50 +224,6 @@ pub(crate) fn expand_legacy_batch(task: &str) -> Option<Vec<String>> {
     (!tasks.is_empty()).then_some(tasks)
 }
 
-pub(crate) fn queue_payload_bytes<'a>(
-    dispatches: impl IntoIterator<Item = &'a PendingSpawnDispatch>,
-) -> usize {
-    dispatches
-        .into_iter()
-        .map(PendingSpawnDispatch::payload_bytes)
-        .sum()
-}
-
-pub(crate) fn queue_bound_violation(
-    task_bytes: usize,
-    target_items: usize,
-    target_bytes: usize,
-    global_items: usize,
-    global_bytes: usize,
-) -> Option<String> {
-    if task_bytes > MAX_DISPATCH_TASK_BYTES {
-        return Some(format!(
-            "task is {task_bytes} bytes; maximum is {MAX_DISPATCH_TASK_BYTES} bytes"
-        ));
-    }
-    if target_items >= MAX_TARGET_DISPATCH_ITEMS {
-        return Some(format!(
-            "target queue contains {target_items} items; maximum is {MAX_TARGET_DISPATCH_ITEMS}"
-        ));
-    }
-    if target_bytes.saturating_add(task_bytes) > MAX_TARGET_DISPATCH_BYTES {
-        return Some(format!(
-            "target queue would exceed {MAX_TARGET_DISPATCH_BYTES} bytes"
-        ));
-    }
-    if global_items >= MAX_GLOBAL_DISPATCH_ITEMS {
-        return Some(format!(
-            "global queue contains {global_items} items; maximum is {MAX_GLOBAL_DISPATCH_ITEMS}"
-        ));
-    }
-    if global_bytes.saturating_add(task_bytes) > MAX_GLOBAL_DISPATCH_BYTES {
-        return Some(format!(
-            "global queue would exceed {MAX_GLOBAL_DISPATCH_BYTES} bytes"
-        ));
-    }
-    None
-}
-
 pub(crate) fn model_dispatch_origin_id(
     source_pane_id: &str,
     source_turn_id: &str,
@@ -299,36 +236,6 @@ pub(crate) fn model_dispatch_origin_id(
     digest.update([0]);
     digest.update(ordinal.to_le_bytes());
     format!("model-origin-{:x}", digest.finalize())
-}
-
-pub(crate) fn model_payload_dispatch_origin_id(
-    source_pane_id: &str,
-    source_turn_id: &str,
-    target: &str,
-    task: &str,
-    ordinal: u32,
-) -> String {
-    let mut digest = Sha256::new();
-    digest.update(source_pane_id.as_bytes());
-    digest.update([0]);
-    digest.update(source_turn_id.as_bytes());
-    digest.update([0]);
-    digest.update(target.as_bytes());
-    digest.update([0]);
-    digest.update(task.as_bytes());
-    digest.update([0]);
-    digest.update(ordinal.to_le_bytes());
-    format!("model-payload-origin-{:x}", digest.finalize())
-}
-
-pub(crate) fn delivery_id(target_pane_id: &str, ordered_dispatch_ids: &[String]) -> String {
-    let mut digest = Sha256::new();
-    digest.update(target_pane_id.as_bytes());
-    for dispatch_id in ordered_dispatch_ids {
-        digest.update([0]);
-        digest.update(dispatch_id.as_bytes());
-    }
-    format!("delivery-{:x}", digest.finalize())
 }
 
 fn now_ms() -> i64 {

@@ -7,6 +7,7 @@ fn preset(model: &str, provider_id: Option<&str>) -> ModelPreset {
         id: model.to_string(),
         model: model.to_string(),
         provider_id: provider_id.map(str::to_string),
+        orchestration: None,
         display_name: model.to_string(),
         description: String::new(),
         default_reasoning_effort: ReasoningEffort::None,

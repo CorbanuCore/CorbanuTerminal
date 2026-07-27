@@ -65,7 +65,6 @@ async fn handle_spawn_agent(
     let session_source = turn.session_source.clone();
     let child_depth = next_thread_spawn_depth(&session_source);
     let max_depth = turn.config.agent_max_depth;
-    validate_model_spawn_role_graph(&session_source, role_name, child_depth)?;
     if exceeds_thread_spawn_depth_limit(child_depth, max_depth) {
         return Err(FunctionCallError::RespondToModel(
             "Agent depth limit reached. Solve the task yourself.".to_string(),
@@ -93,6 +92,7 @@ async fn handle_spawn_agent(
     if args.fork_context {
         reject_full_fork_spawn_overrides(
             role_name,
+            /*model_provider*/ None,
             args.model.as_deref(),
             args.reasoning_effort.clone(),
         )?;
@@ -117,6 +117,8 @@ async fn handle_spawn_agent(
     )
     .await?;
     apply_spawn_agent_runtime_overrides(&mut config, turn.as_ref())?;
+    ensure_spawn_provider_authorized(&config, &config.model_provider_id)?;
+    ensure_spawn_runtime_eligible(&session, &config).await?;
 
     let result = Box::pin(session.services.agent_control.spawn_agent_with_metadata(
         config,
@@ -127,6 +129,7 @@ async fn handle_spawn_agent(
             child_depth,
             role_name,
             /*task_name*/ None,
+            Some(call_id.clone()),
         )?),
         SpawnAgentOptions {
             fork_parent_spawn_call_id: args.fork_context.then(|| call_id.clone()),

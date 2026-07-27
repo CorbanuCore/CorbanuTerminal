@@ -184,7 +184,8 @@ impl Handler {
                     "WATCHDOG ESCALATION — {current_path} reached {consecutive_empty_waits} consecutive empty waits. Automatic polling is now blocked; dispatch real work or end the manager turn."
                 ),
                 /*trigger_turn*/ true,
-            );
+            )
+            .with_kind(codex_protocol::protocol::AgentMessageKind::ControlRequest);
             session
                 .services
                 .agent_control

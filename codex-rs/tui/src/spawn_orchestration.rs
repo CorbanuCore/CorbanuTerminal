@@ -1,33 +1,36 @@
 use crate::app::App;
 use crate::app_event::AppEvent;
 use crate::app_server_session::AppServerSession;
+use crate::app_server_session::ResumeModelOverride;
 use crate::bottom_pane::SelectionItem;
 use crate::bottom_pane::SelectionViewParams;
 use crate::bottom_pane::custom_prompt_view::CustomPromptView;
 use crate::bottom_pane::popup_consts::standard_popup_hint_line;
 use crate::claude_panes::CODEX_MAIN_PANE_ID;
 use crate::claude_panes::ClaudeProviderProfileKind;
+use crate::crew_presets;
 use crate::multi_agents::agent_picker_status_dot_spans;
 use crate::multi_agents::format_agent_picker_item_name;
 use chrono::Utc;
 use codex_app_server_protocol::AdditionalContextEntry;
 use codex_app_server_protocol::AdditionalContextKind;
 use codex_app_server_protocol::SessionSource as AppServerSessionSource;
+use codex_app_server_protocol::ThreadAgentMessageParams;
 use codex_app_server_protocol::ThreadStatus;
 use codex_features::Feature;
-use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
-use codex_model_provider_info::OPENAI_PROVIDER_ID;
-use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_protocol::ThreadId;
+use codex_protocol::crew::RuntimeRequest;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort;
+use codex_protocol::protocol::AgentMessageKind;
 use codex_protocol::protocol::SessionSource as CoreSessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::ThreadSource as CoreThreadSource;
 use codex_state::DirectionalThreadSpawnEdgeStatus;
 use color_eyre::eyre::Result;
 use color_eyre::eyre::eyre;
+use sha2::Digest;
+use sha2::Sha256;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -40,20 +43,13 @@ use std::sync::Arc;
 const NAZGUL_ROLE_NAME: &str = "nazgul";
 const TROLL_ROLE: &str = "troll";
 const ORC_ROLE: &str = "orc";
-const SEND_TASK_FENCE_OPEN: &str = "```pfterminal-send-task";
-const SEND_TASK_FENCE_CLOSE: &str = "```";
-const SEND_TASK_OPEN: &str = "<pfterminal_send_task";
-const SEND_TASK_CLOSE: &str = "</pfterminal_send_task>";
-const REPORT_PARENT_OPEN: &str = "<pfterminal_report_parent>";
-const REPORT_PARENT_CLOSE: &str = "</pfterminal_report_parent>";
-const EXEC_WRAPPED_DISPATCH_CORRECTION_TASK: &str = "PFTerminal host correction: you emitted a <pfterminal_send_task> dispatch block inside exec_command/shell text, so it was not routed to the target pane. Re-emit the same dispatch now as plain assistant message text, not inside a shell command, cat, echo, heredoc, markdown fence, or tool call. Do not claim it was sent until the plain-text block appears.";
-const MALFORMED_DISPATCH_CORRECTION_TASK: &str = "PFTerminal host correction: your last turn contained a <pfterminal_send_task> block that could not be routed (missing or empty target, or empty task). Re-emit the dispatch now as a complete plain-text block with a non-empty target from the live roster and a non-empty task body.";
-pub(crate) const SPAWN_DISPATCH_CORRECTION_LIMIT_PER_THREAD: usize = 3;
+#[cfg(test)]
+use crate::external_plan_agent_adapter::SEND_TASK_FENCE_OPEN;
+#[cfg(test)]
+use crate::external_plan_agent_adapter::SEND_TASK_OPEN;
+pub(crate) use crate::external_plan_agent_adapter::SpawnTaskDispatch;
+pub(crate) use crate::external_plan_agent_adapter::extract_spawn_task_dispatches;
 const SPAWN_PARENT_REPORT_LIMIT: usize = 12;
-#[cfg(test)]
-const SPAWN_PROCESSED_DISPATCH_TURN_LIMIT: usize = 1024;
-#[cfg(test)]
-const SPAWN_PROCESSED_DISPATCH_TURN_RETAIN: usize = SPAWN_PROCESSED_DISPATCH_TURN_LIMIT / 2;
 const SPAWN_PROCESSED_DISPATCH_SEQ_RETAIN: usize = 256;
 const SPAWN_REPORT_RESULT_MAX_CHARS: usize = 12_000;
 /// Loop breaker: maximum consecutive auto-triggered child-report processing turns that may each
@@ -78,41 +74,13 @@ pub(crate) struct SpawnAutoLoopState {
     pub(crate) auto_turn_dispatched: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SpawnTaskDispatch {
-    pub(crate) target: String,
-    pub(crate) task: String,
-    pub(crate) seq: Option<u64>,
-}
-
-pub(crate) use crate::dispatch_queue::PendingDispatchEnqueueResult;
 pub(crate) use crate::dispatch_queue::PendingSpawnDispatch;
 pub(crate) use crate::dispatch_queue::SpawnDispatchAck;
-
-pub(crate) fn reconcile_restored_dispatches(
-    dispatches: &[PendingSpawnDispatch],
-) -> VecDeque<PendingSpawnDispatch> {
-    dispatches.iter().cloned().collect()
-}
 
 pub(crate) enum SpawnTaskTarget {
     Native(ThreadId),
     ClaudePane(String),
     UnavailableNative(ThreadId),
-}
-
-pub(crate) enum SpawnDispatchPumpDelivery {
-    Native {
-        thread_id: ThreadId,
-        task: String,
-        delivery_id: String,
-        steer: bool,
-    },
-    Claude {
-        pane_id: String,
-        task: String,
-        delivery_id: String,
-    },
 }
 
 pub(crate) fn bounded_spawn_processed_dispatch_seq_ids(
@@ -147,6 +115,7 @@ struct SpawnThreadStateMetadata<'a> {
     agent_nickname: Option<String>,
     model: String,
     model_provider: String,
+    reasoning_effort: Option<ReasoningEffort>,
     rollout_path: Option<std::path::PathBuf>,
 }
 
@@ -194,7 +163,7 @@ impl SpawnRole {
     }
 }
 
-fn spawn_role_from_agent_type(agent_type: &str) -> Option<SpawnRole> {
+pub(crate) fn spawn_role_from_agent_type(agent_type: &str) -> Option<SpawnRole> {
     match agent_type {
         NAZGUL_ROLE_NAME => Some(SpawnRole::Nazgul),
         TROLL_ROLE => Some(SpawnRole::Troll),
@@ -329,6 +298,10 @@ impl App {
 
     pub(crate) fn bind_spawn_nazgul_pane(&mut self, pane_id: String) {
         let title = self.nazgul_bound_display_title(&pane_id);
+        if let Err(err) = self.ensure_custom_spawn_root(&pane_id) {
+            self.chat_widget.add_error_message(err.to_string());
+            return;
+        }
         self.set_spawn_nazgul_pane_binding(pane_id);
         self.chat_widget.add_info_message(
             format!("Bound {title} as Nazgul root."),
@@ -379,7 +352,7 @@ impl App {
 
     pub(crate) fn spawn_context_for_user_pane(&self, pane_id: &str) -> Option<String> {
         if self.spawn_nazgul_pane_id.as_deref() == Some(pane_id) {
-            return Some(self.render_nazgul_spawn_context(pane_id));
+            return Some(self.render_nazgul_spawn_context(pane_id, /*native_transport*/ false));
         }
         let pane = self
             .claude_panes
@@ -399,7 +372,12 @@ impl App {
     /// Troll and two Orcs now exist even though none were present when it was spawned.
     pub(crate) fn spawn_context_for_thread(&self, thread_id: ThreadId) -> Option<String> {
         if self.is_codex_main_bound_spawn_root_thread(thread_id) {
-            return Some(self.render_nazgul_spawn_context(CODEX_MAIN_PANE_ID));
+            return Some(
+                self.render_nazgul_spawn_context(
+                    CODEX_MAIN_PANE_ID,
+                    /*native_transport*/ true,
+                ),
+            );
         }
         let role = self
             .agent_navigation
@@ -415,7 +393,7 @@ impl App {
         match role {
             NAZGUL_ROLE_NAME => {
                 Some(self.render_nazgul_spawn_context_with_title(
-                    label, /*include_role_prompt*/ false,
+                    label, /*include_role_prompt*/ false, /*native_transport*/ true,
                 ))
             }
             TROLL_ROLE => Some(self.render_troll_spawn_context_for_thread(thread_id, label)),
@@ -591,20 +569,26 @@ impl App {
                     self.thread_label(old_thread_id)
                 ));
             };
-            let runtime = self
-                .spawn_native_runtime_by_node
-                .get(&old_node_id)
-                .cloned()
-                .unwrap_or_else(|| {
-                    let (model, provider, reasoning_effort) =
-                        Self::standard_native_spawn_runtime_for_role(role);
-                    crate::dispatch_queue::SavedNativeSpawnRuntime {
-                        model: model.to_string(),
-                        provider: provider.to_string(),
-                        reasoning_effort,
-                    }
-                });
-            self.ensure_native_spawn_provider_ready(Some(&runtime.provider))?;
+            let runtime = if let Some(runtime) = self.spawn_native_runtime_by_node.get(&old_node_id)
+            {
+                runtime.clone()
+            } else {
+                let (model, provider, reasoning_effort) =
+                        Self::standard_native_spawn_runtime_for_role(role).ok_or_else(|| {
+                            eyre!(
+                                "Cannot materialize {}: the standard crew is missing an exact runtime for role {}.",
+                                self.thread_label(old_thread_id),
+                                role.label()
+                            )
+                        })?;
+                crate::dispatch_queue::SavedNativeSpawnRuntime {
+                    model,
+                    provider,
+                    reasoning_effort,
+                }
+            };
+            self.ensure_native_spawn_provider_ready(Some(&runtime.provider))
+                .await?;
             let spawn_config = self.native_spawn_agent_config()?;
             let started = app_server
                 .spawn_agent_thread(
@@ -665,20 +649,20 @@ impl App {
 
     fn standard_native_spawn_runtime_for_role(
         role: SpawnRole,
-    ) -> (&'static str, &'static str, Option<ReasoningEffort>) {
-        match role {
-            SpawnRole::Nazgul => (Self::STANDARD_NAZGUL_MODEL, CLAUDE_PLAN_PROVIDER_ID, None),
-            SpawnRole::Troll => (
-                Self::STANDARD_TROLL_MODEL,
-                OPENAI_PROVIDER_ID,
-                Some(ReasoningEffort::XHigh),
-            ),
-            SpawnRole::Orc => (
-                Self::STANDARD_ORC_MODEL,
-                OPENAI_PROVIDER_ID,
-                Some(ReasoningEffort::XHigh),
-            ),
-        }
+    ) -> Option<(String, String, Option<ReasoningEffort>)> {
+        crew_presets::standard_crew_spec()
+            .members
+            .into_iter()
+            .find(|member| member.role_profile == role.agent_type().unwrap_or_default())
+            .and_then(|member| match member.runtime_request {
+                RuntimeRequest::Exact {
+                    provider_id,
+                    model_id,
+                    reasoning_effort,
+                    ..
+                } => Some((model_id, provider_id, reasoning_effort)),
+                RuntimeRequest::Selector { .. } => None,
+            })
     }
 
     pub(crate) fn replace_saved_native_spawn_thread(
@@ -743,49 +727,12 @@ impl App {
             self.orchestrate_idle_generation_by_target
                 .insert(new_node_id.clone(), generation);
         }
-        if let Some(mut queue) = self.spawn_pending_dispatches.remove(&old_node_id) {
-            for dispatch in &mut queue {
-                dispatch.target_pane_id = new_node_id.clone();
-                for ack in &mut dispatch.acks {
-                    if ack.target_node_id == old_node_id {
-                        ack.target_node_id = new_node_id.clone();
-                    }
-                }
-            }
-            self.spawn_pending_dispatches
-                .entry(new_node_id.clone())
-                .or_default()
-                .append(&mut queue);
-        }
-        for queue in self.spawn_pending_dispatches.values_mut() {
-            for dispatch in queue {
-                if dispatch.source_pane_id == old_node_id {
-                    dispatch.source_pane_id = new_node_id.clone();
-                }
-                for ack in &mut dispatch.acks {
-                    if ack.source_node_id == old_node_id {
-                        ack.source_node_id = new_node_id.clone();
-                    }
-                }
-            }
-        }
-        if self.spawn_dispatch_inflight_targets.remove(&old_node_id) {
-            self.spawn_dispatch_inflight_targets
-                .insert(new_node_id.clone());
-        }
-        if self.spawn_dispatch_round_robin_after.as_deref() == Some(old_node_id.as_str()) {
-            self.spawn_dispatch_round_robin_after = Some(new_node_id.clone());
-        }
         if let Some(waiting) = self
             .spawn_waiting_for_agents_by_thread
             .remove(&old_thread_id)
         {
             self.spawn_waiting_for_agents_by_thread
                 .insert(new_thread_id, waiting);
-        }
-        if let Some(reports) = self.spawn_pending_reports_by_thread.remove(&old_thread_id) {
-            self.spawn_pending_reports_by_thread
-                .insert(new_thread_id, reports);
         }
         if let Some(status) = self.spawn_status_by_thread.remove(&old_thread_id) {
             self.spawn_status_by_thread.insert(new_thread_id, status);
@@ -957,8 +904,8 @@ impl App {
             context,
             "Report Orcs used, what each did, evidence, issues forced back for rework, and remaining risk."
         );
-        write_spawn_dispatch_contract(&mut context);
-        write_spawn_parent_report_contract(&mut context);
+        write_native_spawn_dispatch_contract(&mut context);
+        write_native_spawn_parent_report_contract(&mut context);
         let _ = writeln!(context, "Orcs assigned to you:");
         let (orcs, claude_orcs) = self.spawn_orc_children_for_node(&troll_node_id);
         if orcs.is_empty() && claude_orcs.is_empty() {
@@ -1195,11 +1142,7 @@ impl App {
             String::new(),
             Some("Task".to_string()),
             Box::new(move |task| {
-                tx.send(AppEvent::SubmitSpawnAgentTask {
-                    thread_id,
-                    task,
-                    delivery_id: None,
-                });
+                tx.send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
             }),
         );
         self.chat_widget.show_custom_prompt_view(view);
@@ -1228,7 +1171,7 @@ impl App {
             context,
             "You are receiving this task through /spawn as {troll_name}."
         );
-        write_spawn_parent_report_contract(&mut context);
+        write_native_spawn_parent_report_contract(&mut context);
         let troll_node_id = self.logical_native_node_for_thread(thread_id);
         let (orcs, claude_orcs) = self.spawn_orc_children_for_node(&troll_node_id);
         let has_orcs = !orcs.is_empty() || !claude_orcs.is_empty();
@@ -1264,7 +1207,8 @@ impl App {
             );
             let _ = writeln!(
                 context,
-                "Assign work by emitting one pfterminal_send_task host dispatch block per target. Target the exact listed name, thread id, pane id, or canonical_task_name."
+                "Assign work with followup_task for an idle/completed target or send_message for a \
+                 running target. Address the exact canonical_task_name shown above."
             );
             let _ = writeln!(
                 context,
@@ -1298,7 +1242,6 @@ impl App {
                 tx.send(AppEvent::SubmitSpawnClaudePaneTask {
                     pane_id: pane_id.clone(),
                     task,
-                    delivery_id: None,
                 });
             }),
         );
@@ -1328,40 +1271,24 @@ impl App {
         self.dispatch_spawn_task_blocks_with_origins(source_pane_id, dispatches);
     }
 
-    fn dispatch_spawn_task_blocks_from_model_item(
-        &mut self,
-        source_pane_id: &str,
-        logical_source_id: &str,
-        source_turn_id: &str,
-        dispatches: Vec<SpawnTaskDispatch>,
-    ) {
-        let dispatches = dispatches
-            .into_iter()
-            .enumerate()
-            .filter_map(|(ordinal, dispatch)| {
-                // App-server live item notifications and the later durable turn snapshot can
-                // assign different transport item IDs to the same assistant message. Derive the
-                // origin from the canonical dispatch payload instead so both views reconcile.
-                // An exact same-payload retry in one model turn is intentionally one dispatch.
-                let origin_id = crate::dispatch_queue::model_payload_dispatch_origin_id(
-                    logical_source_id,
-                    source_turn_id,
-                    &dispatch.target,
-                    &dispatch.task,
-                    ordinal as u32,
-                );
-                (!self.spawn_processed_dispatch_origins.contains(&origin_id))
-                    .then_some((dispatch, Some(origin_id)))
-            })
-            .collect::<Vec<_>>();
-        self.dispatch_spawn_task_blocks_with_origins(source_pane_id, dispatches);
-    }
-
     fn dispatch_spawn_task_blocks_with_origins(
         &mut self,
         source_pane_id: &str,
         dispatches: Vec<(SpawnTaskDispatch, Option<String>)>,
     ) {
+        if self.spawn_legacy_read_only
+            || self.spawn_crew.as_ref().is_some_and(|crew| {
+                !matches!(crew.status, crate::crew_state::CrewCreationStatus::Ready)
+            })
+        {
+            self.chat_widget.add_error_message(
+                "This /spawn hierarchy is read-only because its native identities, parentage, or \
+                 creation state are not fully reconciled. Repair or explicitly recreate the crew \
+                 before dispatching work."
+                    .to_string(),
+            );
+            return;
+        }
         self.clear_stale_nazgul_binding();
         let source_thread_id = node_id_thread(source_pane_id);
         let source_is_active = self.claude_panes.active_user_pane_id() == source_pane_id
@@ -1470,6 +1397,11 @@ impl App {
                         label.clone(),
                         dispatch.seq,
                     );
+                    ack.origin_id = Some(
+                        origin_id
+                            .clone()
+                            .unwrap_or_else(|| format!("host-seq-{:020}", ack.seq)),
+                    );
                     ack.attempt = attempt;
                     if target_node_id == source_pane_id
                         && !self.is_assignment_holder(source_pane_id)
@@ -1495,44 +1427,16 @@ impl App {
                         ack.seq,
                     );
                     self.note_whip_holder_dispatched(source_pane_id, &target_node_id);
-                    let mut pending = PendingSpawnDispatch::new(task, vec![ack.clone()]);
-                    pending.origin.origin_id = origin_id
-                        .clone()
-                        .unwrap_or_else(|| format!("host-seq-{:020}", ack.seq));
-                    match self.enqueue_pending_dispatch_for_thread(thread_id, pending) {
-                        PendingDispatchEnqueueResult::Queued => {
-                            self.record_spawn_dispatch_acks(
-                                &[ack],
-                                "queued",
-                                "durably queued for the delivery pump",
-                                false,
-                            );
-                            self.record_spawn_dispatch_queued(
-                                source_pane_id,
-                                source_is_active,
-                                &format!("Queued task for {label}."),
-                                &dispatch.task,
-                            );
-                            self.request_spawn_dispatch_pump();
-                        }
-                        PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
-                            self.record_duplicate_pending_dispatch(&label, &acks, notify);
-                        }
-                        PendingDispatchEnqueueResult::Rejected { acks, reason } => {
-                            self.record_spawn_dispatch_acks(
-                                &acks,
-                                "failed",
-                                format!("queue rejected: {reason}"),
-                                true,
-                            );
-                            self.record_spawn_dispatch_error(
-                                source_pane_id,
-                                source_is_active,
-                                format!("Cannot queue task for {label}: {reason}"),
-                            );
-                            continue;
-                        }
+                    if let Some(origin_id) = ack.origin_id.as_deref() {
+                        // Reserve at host admission, before the asynchronous AppEvent is handled.
+                        // ItemCompleted and TurnCompleted can arrive back-to-back, and both may
+                        // expose the same model dispatch.
+                        self.spawn_processed_dispatch_origins
+                            .insert(origin_id.to_string());
                     }
+                    self.register_spawn_dispatch_acks_for_task(&target_node_id, &task, vec![ack]);
+                    self.app_event_tx
+                        .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
                     any_queued = true;
                 }
                 Ok(SpawnTaskTarget::UnavailableNative(thread_id)) => {
@@ -1581,6 +1485,11 @@ impl App {
                         title.clone(),
                         dispatch.seq,
                     );
+                    ack.origin_id = Some(
+                        origin_id
+                            .clone()
+                            .unwrap_or_else(|| format!("host-seq-{:020}", ack.seq)),
+                    );
                     ack.attempt = attempt;
                     let task = task_with_dispatch_provenance(
                         &dispatch.task,
@@ -1589,44 +1498,19 @@ impl App {
                         ack.seq,
                     );
                     self.note_whip_holder_dispatched(source_pane_id, &target_node_id);
-                    let mut pending = PendingSpawnDispatch::new(task, vec![ack.clone()]);
-                    pending.origin.origin_id = origin_id
-                        .clone()
-                        .unwrap_or_else(|| format!("host-seq-{:020}", ack.seq));
-                    match self.enqueue_pending_dispatch_for_claude_pane(pane_id, pending) {
-                        PendingDispatchEnqueueResult::Queued => {
-                            self.record_spawn_dispatch_acks(
-                                &[ack],
-                                "queued",
-                                "durably queued for the delivery pump",
-                                false,
-                            );
-                            self.record_spawn_dispatch_queued(
-                                source_pane_id,
-                                source_is_active,
-                                &format!("Queued task for {title}."),
-                                &dispatch.task,
-                            );
-                            self.request_spawn_dispatch_pump();
-                        }
-                        PendingDispatchEnqueueResult::Duplicate { acks, notify } => {
-                            self.record_duplicate_pending_dispatch(&title, &acks, notify);
-                        }
-                        PendingDispatchEnqueueResult::Rejected { acks, reason } => {
-                            self.record_spawn_dispatch_acks(
-                                &acks,
-                                "failed",
-                                format!("queue rejected: {reason}"),
-                                true,
-                            );
-                            self.record_spawn_dispatch_error(
-                                source_pane_id,
-                                source_is_active,
-                                format!("Cannot queue task for {title}: {reason}"),
-                            );
-                            continue;
-                        }
+                    if let Some(origin_id) = ack.origin_id.as_deref() {
+                        self.spawn_processed_dispatch_origins
+                            .insert(origin_id.to_string());
                     }
+                    self.register_spawn_dispatch_acks_for_task(&target_node_id, &task, vec![ack]);
+                    self.app_event_tx
+                        .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task });
+                    self.record_spawn_dispatch_queued(
+                        source_pane_id,
+                        source_is_active,
+                        &format!("Sent task to {title}."),
+                        &dispatch.task,
+                    );
                     any_queued = true;
                 }
                 Err(err) => {
@@ -1646,26 +1530,38 @@ impl App {
         }
     }
 
-    pub(crate) fn dispatch_native_spawn_task_blocks_from_turn(
+    pub(crate) fn process_native_completed_turn_for_orchestration(
         &mut self,
         source_thread_id: ThreadId,
         turn: &codex_app_server_protocol::Turn,
     ) {
-        // Dispatch only from cleanly completed turns. Interrupted, failed, and in-progress turns
-        // must never dispatch: an interrupted generation can contain a complete-looking
-        // pfterminal_send_task block whose task text was truncated mid-thought.
         if turn.status != codex_app_server_protocol::TurnStatus::Completed {
             return;
         }
-        let correction_eligible = self.is_spawn_orchestration_thread(source_thread_id);
         let mut assistant_text = String::new();
         for item in &turn.items {
-            if let codex_app_server_protocol::ThreadItem::AgentMessage { text, .. } = item {
+            if let codex_app_server_protocol::ThreadItem::AgentMessage {
+                id, text, phase, ..
+            } = item
+            {
+                // Core represents injected inter-agent instructions as commentary AgentMessages.
+                // They are model input rendered for context, not assistant-authored host commands.
+                if matches!(
+                    phase,
+                    Some(codex_protocol::models::MessagePhase::Commentary)
+                ) {
+                    continue;
+                }
                 if !assistant_text.is_empty() {
                     assistant_text.push('\n');
                 }
                 assistant_text.push_str(text);
-                self.dispatch_native_spawn_task_blocks_from_item(source_thread_id, &turn.id, text);
+                self.dispatch_native_spawn_task_blocks_from_item(
+                    source_thread_id,
+                    &turn.id,
+                    id,
+                    text,
+                );
             }
         }
         let source_node_id = if self.is_codex_main_bound_spawn_root_thread(source_thread_id) {
@@ -1674,199 +1570,40 @@ impl App {
             thread_node_id(source_thread_id)
         };
         self.dispatch_orchestrate_blocks_from_text(&source_node_id, &assistant_text);
-        let (visible, dispatches) = extract_spawn_task_dispatches(&assistant_text);
-        if !dispatches.is_empty() {
-            self.spawn_dispatch_corrections_by_thread
-                .remove(&source_thread_id);
-            return;
-        }
-        if !correction_eligible {
-            self.spawn_dispatch_corrections_by_thread
-                .remove(&source_thread_id);
-            return;
-        }
-        if turn_contains_exec_wrapped_spawn_task_dispatch(turn) {
-            self.correct_spawn_task_dispatch(
-                source_thread_id,
-                &turn.id,
-                EXEC_WRAPPED_DISPATCH_CORRECTION_TASK,
-            );
-        } else if turn_mentions_spawn_task_dispatch(&assistant_text, &visible) {
-            self.correct_spawn_task_dispatch(
-                source_thread_id,
-                &turn.id,
-                MALFORMED_DISPATCH_CORRECTION_TASK,
-            );
-        } else {
-            self.spawn_dispatch_corrections_by_thread
-                .remove(&source_thread_id);
-        }
     }
 
     pub(crate) fn dispatch_native_spawn_task_blocks_from_item(
         &mut self,
         source_thread_id: ThreadId,
         turn_id: &str,
+        item_id: &str,
         assistant_text: &str,
     ) -> bool {
-        let source_node_id = thread_node_id(source_thread_id);
+        let physical_source_node_id = thread_node_id(source_thread_id);
         if !self.is_spawn_orchestration_thread(source_thread_id)
-            && !self.is_assignment_holder(&source_node_id)
+            && !self.is_assignment_holder(&physical_source_node_id)
         {
             return false;
         }
-        if assistant_text.trim().is_empty() {
-            return false;
-        }
-        let reported = self.record_native_spawn_parent_reports_from_item(
-            source_thread_id,
-            turn_id,
-            assistant_text,
-        );
         let (_visible, dispatches) = extract_spawn_task_dispatches(assistant_text);
         if dispatches.is_empty() {
-            return reported;
-        }
-        let source_node_id = if self.is_codex_main_bound_spawn_root_thread(source_thread_id) {
-            self.spawn_root_node_id()
-        } else {
-            source_node_id
-        };
-        self.dispatch_spawn_task_blocks_from_model_item(
-            &source_node_id,
-            &source_node_id,
-            turn_id,
-            dispatches,
-        );
-        true
-    }
-
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn dispatch_native_spawn_task_blocks_from_text(
-        &mut self,
-        source_thread_id: ThreadId,
-        turn_id: &str,
-        assistant_text: &str,
-    ) -> bool {
-        let source_node_id = thread_node_id(source_thread_id);
-        if !self.is_spawn_orchestration_thread(source_thread_id)
-            && !self.is_assignment_holder(&source_node_id)
-        {
             return false;
         }
-        if assistant_text.trim().is_empty() {
-            return false;
-        }
-        let reported = self.record_native_spawn_parent_reports_from_item(
-            source_thread_id,
-            turn_id,
-            assistant_text,
-        );
-        let (_visible, dispatches) = extract_spawn_task_dispatches(assistant_text);
-        if dispatches.is_empty() {
-            return reported;
-        }
-        let source_node_id = if self.is_codex_main_bound_spawn_root_thread(source_thread_id) {
-            self.spawn_root_node_id()
-        } else {
-            source_node_id
-        };
+        let source_node_id = self.spawn_auto_loop_node_for_thread(source_thread_id);
+        // ItemCompleted and TurnCompleted both carry this stable item identity. Include it in the
+        // origin key so ingress can dispatch immediately while terminal replay remains idempotent,
+        // including turns that contain more than one assistant-message item.
+        let item_turn_id = format!("{turn_id}:{item_id}");
         self.dispatch_spawn_task_blocks_from_model_turn(
             &source_node_id,
             &source_node_id,
-            turn_id,
+            &item_turn_id,
             dispatches,
         );
         true
     }
 
-    fn record_native_spawn_parent_reports_from_item(
-        &mut self,
-        source_thread_id: ThreadId,
-        turn_id: &str,
-        assistant_text: &str,
-    ) -> bool {
-        let reports = extract_spawn_parent_reports(assistant_text);
-        if reports.is_empty() {
-            return false;
-        }
-        let source_node_id = self.logical_native_node_for_thread(source_thread_id);
-        let Some(parent_node_id) = self.logical_parent_node_for_thread(source_thread_id) else {
-            return false;
-        };
-        let child_title = self.thread_label(source_thread_id);
-        let mut recorded = false;
-        for (ordinal, value) in reports.into_iter().enumerate() {
-            let origin_id = crate::dispatch_queue::model_payload_dispatch_origin_id(
-                &source_node_id,
-                turn_id,
-                "__parent_report__",
-                &value,
-                ordinal as u32,
-            );
-            if !self.spawn_processed_dispatch_origins.insert(origin_id) {
-                continue;
-            }
-            let (seq, as_of) = self.reserve_spawn_report_seq(&source_node_id);
-            let report = spawn_child_report(&child_title, "checkpoint", Some(&value), seq, &as_of);
-            self.record_spawn_parent_report(parent_node_id.clone(), report);
-            recorded = true;
-        }
-        if recorded {
-            self.persist_pane_state();
-        }
-        recorded
-    }
-
-    /// Submits a host correction asking the model to re-emit a dispatch it malformed or wrapped
-    /// in shell text. Corrections are bounded per thread: each correction starts a fresh turn
-    /// id, so turn-keyed dedup alone cannot stop a model that keeps repeating the mistake.
-    fn correct_spawn_task_dispatch(
-        &mut self,
-        source_thread_id: ThreadId,
-        turn_id: &str,
-        correction_task: &str,
-    ) {
-        if !self.mark_spawn_task_dispatch_processed(source_thread_id, turn_id, u32::MAX) {
-            return;
-        }
-        let corrections = self
-            .spawn_dispatch_corrections_by_thread
-            .entry(source_thread_id)
-            .or_insert(0);
-        if *corrections >= SPAWN_DISPATCH_CORRECTION_LIMIT_PER_THREAD {
-            tracing::warn!(
-                thread_id = %source_thread_id,
-                corrections = *corrections,
-                "spawn dispatch correction limit reached; leaving dispatch unrouted"
-            );
-            if self.claude_panes.active_user_pane_id() == CODEX_MAIN_PANE_ID
-                && self.active_thread_id == Some(source_thread_id)
-            {
-                self.chat_widget.add_error_message(format!(
-                    "Dispatch correction limit reached for {}; re-emit the task manually.",
-                    self.thread_label(source_thread_id)
-                ));
-            }
-            return;
-        }
-        *corrections += 1;
-        self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
-            thread_id: source_thread_id,
-            task: correction_task.to_string(),
-            delivery_id: None,
-        });
-        if self.claude_panes.active_user_pane_id() == CODEX_MAIN_PANE_ID
-            && self.active_thread_id == Some(source_thread_id)
-        {
-            self.chat_widget
-                .add_error_message(correction_task.to_string());
-        }
-    }
-
-    /// Canonical loop-breaker state key for a native spawn thread; mirrors the source-node
-    /// mapping used by dispatch_native_spawn_task_blocks_from_text so turn events and dispatch
-    /// attribution land on the same key.
+    /// Canonical loop-breaker state key for a native spawn thread.
     pub(crate) fn spawn_auto_loop_node_for_thread(&self, thread_id: ThreadId) -> String {
         if self.is_codex_main_bound_spawn_root_thread(thread_id) {
             self.spawn_root_node_id()
@@ -1982,78 +1719,13 @@ impl App {
         );
     }
 
-    fn mark_spawn_task_dispatch_processed(
-        &mut self,
-        source_thread_id: ThreadId,
-        turn_id: &str,
-        ordinal: u32,
-    ) -> bool {
-        let origin_id = self.spawn_task_dispatch_origin_id(source_thread_id, turn_id, ordinal);
-        let inserted = self.spawn_processed_dispatch_origins.insert(origin_id);
-        if inserted {
-            self.persist_pane_state();
-        }
-        inserted
-    }
-
-    fn spawn_task_dispatch_origin_id(
-        &self,
-        source_thread_id: ThreadId,
-        turn_id: &str,
-        ordinal: u32,
-    ) -> String {
-        let source_pane_id = if self.is_codex_main_bound_spawn_root_thread(source_thread_id) {
-            self.spawn_root_node_id()
-        } else {
-            thread_node_id(source_thread_id)
-        };
-        crate::dispatch_queue::model_dispatch_origin_id(&source_pane_id, turn_id, ordinal)
-    }
-
-    pub(crate) fn record_spawn_child_report_for_thread(
-        &mut self,
-        thread_id: ThreadId,
-        status: codex_app_server_protocol::CollabAgentStatus,
-        result: Option<String>,
-    ) {
-        if !self.is_spawn_orchestration_thread(thread_id) {
-            return;
-        }
-        let Some(parent_node_id) = self.logical_parent_node_for_thread(thread_id) else {
-            return;
-        };
-        let Some(entry) = self.agent_navigation.get(&thread_id) else {
-            return;
-        };
-        let child_title = format_agent_picker_item_name(
-            entry.agent_nickname.as_deref(),
-            entry.agent_role.as_deref(),
-            self.primary_thread_id == Some(thread_id),
-        );
-        let child_node_id = self.logical_native_node_for_thread(thread_id);
-        let (seq, as_of) = self.reserve_spawn_report_seq(&child_node_id);
-        let report = spawn_child_report(
-            &child_title,
-            collab_status_label(&status),
-            result.as_deref(),
-            seq,
-            &as_of,
-        );
-        self.record_spawn_parent_report(parent_node_id, report);
-    }
-
     pub(crate) fn record_spawn_child_report_for_claude_pane(
         &mut self,
         pane_id: &str,
         status: &str,
         result: Option<&str>,
     ) {
-        if !self
-            .claude_panes
-            .panes()
-            .iter()
-            .any(|pane| pane.id == pane_id && pane.spawn_role.is_some())
-        {
+        if !self.spawn_node_is_persistent_crew_member(&pane_node_id(pane_id)) {
             return;
         }
         let Some(parent_node_id) = self.logical_parent_node_for_pane(pane_id) else {
@@ -2123,7 +1795,6 @@ impl App {
                     self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
                         pane_id: parent_pane_id.to_string(),
                         task: trigger_prompt,
-                        delivery_id: None,
                     });
                 } else {
                     if self.spawn_auto_processing_quarantined() {
@@ -2142,7 +1813,9 @@ impl App {
             }
             return;
         }
-        // Native Codex parent thread (a spawned Nazgul/Troll) or `codex-main` (the primary thread).
+        // Native Codex parent thread (a spawned Nazgul/Troll) or `codex-main` (the primary
+        // thread). External panes adapt into the canonical native mailbox; they never create a
+        // second TUI report queue or a synthetic assignment turn.
         let codex_main_node_id = pane_node_id(CODEX_MAIN_PANE_ID);
         let parent_thread_id = if parent_node_id == codex_main_node_id {
             self.primary_thread_id
@@ -2170,86 +1843,27 @@ impl App {
             {
                 self.chat_widget.add_info_message(summary, hint);
             }
-            // Deliver the report as a real parent processing turn when the parent is idle. When the
-            // parent is mid-turn, enqueue the report instead of dropping it; it is flushed into a
-            // processing turn when the parent next goes idle (see flush_pending_reports_for_thread).
-            let is_running = self
-                .agent_navigation
-                .get(&parent_thread_id)
-                .map(|e| e.is_running)
-                .unwrap_or(false);
-            if is_running {
-                self.enqueue_pending_report(parent_thread_id, report);
-            } else if self.begin_spawn_auto_processing_turn(parent_node_id) {
-                let trigger_prompt = child_report_processing_prompt(report);
-                self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
-                    thread_id: parent_thread_id,
-                    task: trigger_prompt,
-                    delivery_id: None,
+            let source_thread_id = self.primary_thread_id.unwrap_or(parent_thread_id);
+            let digest = Sha256::digest(report.as_bytes());
+            let message_id = format!("external-report:{digest:x}");
+            let is_terminal_result = report.starts_with("child_report; ");
+            self.app_event_tx
+                .send(AppEvent::SendSpawnAgentMailboxMessage {
+                    params: ThreadAgentMessageParams {
+                        source_thread_id: source_thread_id.to_string(),
+                        target_thread_id: parent_thread_id.to_string(),
+                        message_id: Some(message_id.clone()),
+                        assignment_id: is_terminal_result.then_some(message_id),
+                        kind: if is_terminal_result {
+                            AgentMessageKind::TerminalResult
+                        } else {
+                            AgentMessageKind::Informational
+                        },
+                        content: report.to_string(),
+                        trigger_turn: true,
+                    },
                 });
-            } else {
-                if self.spawn_auto_processing_quarantined() {
-                    self.enqueue_pending_report(parent_thread_id, report);
-                    self.notify_spawn_resume_auto_processing_quarantined(
-                        parent_node_id,
-                        Some(report.to_string()),
-                    );
-                } else {
-                    self.notify_spawn_auto_processing_paused(
-                        parent_node_id,
-                        /*report_count*/ 1,
-                        Some(report.to_string()),
-                    );
-                }
-            }
         }
-    }
-
-    /// Queue a child report for a native Codex parent thread that is currently mid-turn. The queued
-    /// report is turned into a parent processing turn when the parent goes idle.
-    fn enqueue_pending_report(&mut self, parent_thread_id: ThreadId, report: &str) {
-        let queue = self
-            .spawn_pending_reports_by_thread
-            .entry(parent_thread_id)
-            .or_default();
-        // Deduplicate against the most recent queued report so a repeated identical result does not
-        // spawn redundant turns.
-        let dedup_key = spawn_report_dedup_key(report);
-        if queue
-            .back()
-            .is_some_and(|previous| spawn_report_dedup_key(previous) == dedup_key)
-        {
-            return;
-        }
-        queue.push_back(report.to_string());
-        tracing::info!(
-            thread_id = %parent_thread_id,
-            queue_len = queue.len(),
-            "queued child report for busy parent; will flush on parent idle"
-        );
-    }
-
-    pub(crate) fn native_spawn_target_is_busy(&self, thread_id: ThreadId) -> bool {
-        let navigation_busy = self
-            .agent_navigation
-            .get(&thread_id)
-            .is_some_and(|entry| entry.is_running);
-        let status_busy = self
-            .spawn_status_by_thread
-            .get(&thread_id)
-            .is_some_and(|state| {
-                matches!(
-                    state.status,
-                    codex_app_server_protocol::CollabAgentStatus::PendingInit
-                        | codex_app_server_protocol::CollabAgentStatus::Running
-                )
-            });
-        navigation_busy || status_busy
-    }
-
-    pub(crate) fn native_spawn_target_is_waiting_for_agents(&self, thread_id: ThreadId) -> bool {
-        self.spawn_waiting_for_agents_by_thread
-            .contains_key(&thread_id)
     }
 
     pub(crate) fn logical_native_node_for_thread(&self, thread_id: ThreadId) -> String {
@@ -2257,440 +1871,6 @@ impl App {
             .iter()
             .find_map(|(node, endpoint)| (*endpoint == thread_id).then(|| node.clone()))
             .unwrap_or_else(|| thread_node_id(thread_id))
-    }
-
-    pub(crate) fn active_spawn_dispatch_queue_usage(&self) -> Option<(usize, usize)> {
-        let node_id = if self.claude_panes.active_user_pane_id() != CODEX_MAIN_PANE_ID {
-            let pane_id = self.claude_panes.active_user_pane_id();
-            self.claude_panes
-                .panes()
-                .iter()
-                .any(|pane| pane.id == pane_id && pane.spawn_role.is_some())
-                .then(|| pane_node_id(pane_id))?
-        } else {
-            let thread_id = self.active_thread_id.or(self.chat_widget.thread_id())?;
-            let is_spawn_pane = self.nazgul_bound_thread_id() == Some(thread_id)
-                || self
-                    .agent_navigation
-                    .get(&thread_id)
-                    .and_then(|entry| entry.agent_role.as_deref())
-                    .is_some_and(|role| {
-                        role == NAZGUL_ROLE_NAME || role == TROLL_ROLE || role == ORC_ROLE
-                    });
-            is_spawn_pane.then(|| self.logical_native_node_for_thread(thread_id))?
-        };
-        let queue = self.spawn_pending_dispatches.get(&node_id);
-        Some(queue.map_or((0, 0), |queue| {
-            (
-                queue.len(),
-                crate::dispatch_queue::queue_payload_bytes(queue),
-            )
-        }))
-    }
-
-    pub(crate) fn enqueue_pending_dispatch_for_thread(
-        &mut self,
-        target_thread_id: ThreadId,
-        mut dispatch: PendingSpawnDispatch,
-    ) -> PendingDispatchEnqueueResult {
-        let target_node_id = self.logical_native_node_for_thread(target_thread_id);
-        if !dispatch.origin.origin_id.is_empty()
-            && self
-                .spawn_processed_dispatch_origins
-                .contains(&dispatch.origin.origin_id)
-        {
-            return PendingDispatchEnqueueResult::Duplicate {
-                acks: dispatch.acks,
-                notify: false,
-            };
-        }
-        let identities = spawn_dispatch_component_identities(&dispatch.task);
-        if let Some(queued) = self
-            .spawn_pending_dispatches
-            .get_mut(&target_node_id)
-            .and_then(|queue| {
-                queue.iter_mut().find(|queued| {
-                    let queued_identities = spawn_dispatch_component_identities(&queued.task);
-                    identities
-                        .iter()
-                        .any(|identity| queued_identities.contains(identity))
-                })
-            })
-        {
-            let notify = !queued.duplicate_suppressed_notified;
-            queued.duplicate_suppressed_notified = true;
-            self.persist_pane_state();
-            return PendingDispatchEnqueueResult::Duplicate {
-                acks: dispatch.acks,
-                notify,
-            };
-        }
-        let (target_items, target_bytes) = self
-            .spawn_pending_dispatches
-            .get(&target_node_id)
-            .map_or((0, 0), |queue| {
-                (
-                    queue.len(),
-                    crate::dispatch_queue::queue_payload_bytes(queue),
-                )
-            });
-        let (global_items, global_bytes) = self.pending_dispatch_queue_usage();
-        if let Some(reason) = crate::dispatch_queue::queue_bound_violation(
-            dispatch.payload_bytes(),
-            target_items,
-            target_bytes,
-            global_items,
-            global_bytes,
-        ) {
-            return PendingDispatchEnqueueResult::Rejected {
-                acks: dispatch.acks,
-                reason,
-            };
-        }
-        let seq = dispatch
-            .acks
-            .first()
-            .map(|ack| ack.seq)
-            .unwrap_or_else(|| self.reserve_spawn_dispatch_seq_without_persist());
-        let source_pane_id = dispatch
-            .acks
-            .first()
-            .map(|ack| ack.source_node_id.clone())
-            .unwrap_or_else(|| pane_node_id(CODEX_MAIN_PANE_ID));
-        dispatch.assign_identity(seq, &source_pane_id, &target_node_id, None);
-        self.spawn_processed_dispatch_origins
-            .insert(dispatch.origin.origin_id.clone());
-        if dispatch.origin.origin_id.starts_with("host-seq-") {
-            self.spawn_processed_dispatch_seq_ids
-                .extend(dispatch.acks.iter().map(|ack| ack.seq));
-        }
-        self.evict_spawn_processed_dispatch_seq_ids();
-        let queue = self
-            .spawn_pending_dispatches
-            .entry(target_node_id)
-            .or_default();
-        queue.push_back(dispatch);
-        tracing::info!(
-            thread_id = %target_thread_id,
-            queue_len = queue.len(),
-            "queued spawn dispatch for busy native target; will flush on target idle"
-        );
-        self.persist_pane_state();
-        PendingDispatchEnqueueResult::Queued
-    }
-
-    pub(crate) fn enqueue_pending_dispatch_for_claude_pane(
-        &mut self,
-        pane_id: String,
-        mut dispatch: PendingSpawnDispatch,
-    ) -> PendingDispatchEnqueueResult {
-        let target_node_id = pane_node_id(&pane_id);
-        if !dispatch.origin.origin_id.is_empty()
-            && self
-                .spawn_processed_dispatch_origins
-                .contains(&dispatch.origin.origin_id)
-        {
-            return PendingDispatchEnqueueResult::Duplicate {
-                acks: dispatch.acks,
-                notify: false,
-            };
-        }
-        if self
-            .spawn_pending_dispatches
-            .get(&target_node_id)
-            .is_some_and(|queue| {
-                queue
-                    .iter()
-                    .any(|queued| queued.task.trim() == dispatch.task.trim())
-            })
-        {
-            return PendingDispatchEnqueueResult::Duplicate {
-                acks: dispatch.acks,
-                notify: true,
-            };
-        }
-        let (target_items, target_bytes) = self
-            .spawn_pending_dispatches
-            .get(&target_node_id)
-            .map_or((0, 0), |queue| {
-                (
-                    queue.len(),
-                    crate::dispatch_queue::queue_payload_bytes(queue),
-                )
-            });
-        let (global_items, global_bytes) = self.pending_dispatch_queue_usage();
-        if let Some(reason) = crate::dispatch_queue::queue_bound_violation(
-            dispatch.payload_bytes(),
-            target_items,
-            target_bytes,
-            global_items,
-            global_bytes,
-        ) {
-            return PendingDispatchEnqueueResult::Rejected {
-                acks: dispatch.acks,
-                reason,
-            };
-        }
-        let seq = dispatch
-            .acks
-            .first()
-            .map(|ack| ack.seq)
-            .unwrap_or_else(|| self.reserve_spawn_dispatch_seq_without_persist());
-        let source_pane_id = dispatch
-            .acks
-            .first()
-            .map(|ack| ack.source_node_id.clone())
-            .unwrap_or_else(|| pane_node_id(CODEX_MAIN_PANE_ID));
-        dispatch.assign_identity(seq, &source_pane_id, &target_node_id, None);
-        self.spawn_processed_dispatch_origins
-            .insert(dispatch.origin.origin_id.clone());
-        if dispatch.origin.origin_id.starts_with("host-seq-") {
-            self.spawn_processed_dispatch_seq_ids
-                .extend(dispatch.acks.iter().map(|ack| ack.seq));
-        }
-        self.evict_spawn_processed_dispatch_seq_ids();
-        let queue = self
-            .spawn_pending_dispatches
-            .entry(target_node_id)
-            .or_default();
-        queue.push_back(dispatch);
-        tracing::info!(
-            pane_id = %pane_id,
-            queue_len = queue.len(),
-            "queued spawn dispatch for busy Claude pane; will flush on pane idle"
-        );
-        self.persist_pane_state();
-        PendingDispatchEnqueueResult::Queued
-    }
-
-    fn pending_dispatch_queue_usage(&self) -> (usize, usize) {
-        let dispatches = self
-            .spawn_pending_dispatches
-            .values()
-            .flat_map(|queue| queue.iter());
-        let mut items = 0;
-        let mut bytes = 0usize;
-        for dispatch in dispatches {
-            items += 1;
-            bytes = bytes.saturating_add(dispatch.payload_bytes());
-        }
-        (items, bytes)
-    }
-
-    pub(crate) fn record_duplicate_pending_dispatch(
-        &mut self,
-        label: &str,
-        acks: &[SpawnDispatchAck],
-        notify: bool,
-    ) {
-        self.record_spawn_dispatch_acks(
-            acks,
-            "duplicate_suppressed",
-            "an identical task is already pending for this target",
-            false,
-        );
-        if notify {
-            self.chat_widget.add_info_message(
-                format!("Duplicate task for {label} suppressed."),
-                Some(
-                    "An identical task is already pending; PFTerminal will deliver one copy."
-                        .to_string(),
-                ),
-            );
-        }
-    }
-
-    pub(crate) fn request_spawn_dispatch_pump(&mut self) {
-        if self.spawn_dispatch_pump_scheduled {
-            return;
-        }
-        self.spawn_dispatch_pump_scheduled = true;
-        self.app_event_tx.send(AppEvent::PumpSpawnDispatches);
-    }
-
-    /// Selects one destination in stable round-robin order and durably marks one FIFO item as
-    /// Submitting before any adapter is invoked. A one-item request is a valid bounded structured
-    /// batch and keeps Claude's non-idempotent transport out of native batching semantics.
-    pub(crate) fn select_spawn_dispatch_pump_delivery(
-        &mut self,
-    ) -> Option<SpawnDispatchPumpDelivery> {
-        self.clear_stale_nazgul_binding();
-        self.spawn_dispatch_pump_scheduled = false;
-        let mut targets = self
-            .spawn_pending_dispatches
-            .iter()
-            .filter(|(target, queue)| {
-                !self.spawn_dispatch_inflight_targets.contains(*target)
-                    && queue.front().is_some_and(|dispatch| {
-                        matches!(dispatch.state, crate::dispatch_queue::DispatchState::Queued)
-                    })
-            })
-            .map(|(target, _)| target.clone())
-            .collect::<Vec<_>>();
-        targets.sort();
-        if let Some(after) = self.spawn_dispatch_round_robin_after.as_deref()
-            && let Some(index) = targets.iter().position(|target| target.as_str() > after)
-        {
-            targets.rotate_left(index);
-        }
-
-        let (target, adapter) = targets.into_iter().find_map(|target| {
-            let adapter = match self.resolve_spawn_task_target(&target).ok()? {
-                SpawnTaskTarget::Native(thread_id)
-                    if self.native_spawn_target_is_waiting_for_agents(thread_id)
-                        || self.native_spawn_target_is_busy(thread_id) =>
-                {
-                    SpawnDispatchPumpDelivery::Native {
-                        thread_id,
-                        task: String::new(),
-                        delivery_id: String::new(),
-                        steer: true,
-                    }
-                }
-                SpawnTaskTarget::Native(thread_id)
-                    if !self.native_spawn_target_is_busy(thread_id) =>
-                {
-                    SpawnDispatchPumpDelivery::Native {
-                        thread_id,
-                        task: String::new(),
-                        delivery_id: String::new(),
-                        steer: false,
-                    }
-                }
-                SpawnTaskTarget::ClaudePane(ref pane_id)
-                    if !self.claude_panes.claude_pane_is_running(pane_id) =>
-                {
-                    SpawnDispatchPumpDelivery::Claude {
-                        pane_id: pane_id.clone(),
-                        task: String::new(),
-                        delivery_id: String::new(),
-                    }
-                }
-                _ => return None,
-            };
-            Some((target, adapter))
-        })?;
-
-        let dispatch = self
-            .spawn_pending_dispatches
-            .get_mut(&target)
-            .and_then(|queue| queue.front_mut())?;
-        let ordered_dispatch_ids = vec![dispatch.dispatch_id.clone()];
-        let delivery_id = crate::dispatch_queue::delivery_id(&target, &ordered_dispatch_ids);
-        dispatch.state = crate::dispatch_queue::DispatchState::Submitting {
-            delivery_id: delivery_id.clone(),
-            ordered_dispatch_ids,
-        };
-        let task = dispatch.task.clone();
-        let acks = dispatch.acks.clone();
-        self.spawn_dispatch_inflight_targets.insert(target.clone());
-        self.spawn_dispatch_round_robin_after = Some(target.clone());
-        self.register_spawn_dispatch_acks_for_task(&target, &task, acks);
-        self.persist_pane_state();
-
-        Some(match adapter {
-            SpawnDispatchPumpDelivery::Native {
-                thread_id, steer, ..
-            } => SpawnDispatchPumpDelivery::Native {
-                thread_id,
-                task,
-                delivery_id,
-                steer,
-            },
-            SpawnDispatchPumpDelivery::Claude { pane_id, .. } => {
-                SpawnDispatchPumpDelivery::Claude {
-                    pane_id,
-                    task,
-                    delivery_id,
-                }
-            }
-        })
-    }
-
-    pub(crate) fn finish_spawn_dispatch_delivery(
-        &mut self,
-        target: &str,
-        delivery_id: &str,
-        task: &str,
-    ) {
-        if let Some(queue) = self.spawn_pending_dispatches.get_mut(target)
-            && queue.front().is_some_and(|dispatch| {
-                matches!(
-                    &dispatch.state,
-                    crate::dispatch_queue::DispatchState::Submitting { delivery_id: id, .. }
-                        if id == delivery_id
-                )
-            })
-        {
-            queue.pop_front();
-        }
-        self.spawn_pending_dispatches
-            .retain(|_, queue| !queue.is_empty());
-        self.spawn_dispatch_inflight_targets.remove(target);
-        self.spawn_accepted_delivery_ids
-            .insert(delivery_id.to_string());
-        self.record_spawn_dispatch_delivered_for_task(target, task);
-        self.persist_pane_state();
-        self.request_spawn_dispatch_pump();
-    }
-
-    pub(crate) fn defer_spawn_dispatch_for_capacity(&mut self, target: &str, delivery_id: &str) {
-        if let Some(dispatch) = self
-            .spawn_pending_dispatches
-            .get_mut(target)
-            .and_then(|queue| queue.front_mut())
-            && matches!(
-                &dispatch.state,
-                crate::dispatch_queue::DispatchState::Submitting { delivery_id: id, .. }
-                    if id == delivery_id
-            )
-        {
-            dispatch.state = crate::dispatch_queue::DispatchState::Queued;
-        }
-        self.spawn_dispatch_inflight_targets.remove(target);
-        self.persist_pane_state();
-    }
-
-    pub(crate) fn contain_ambiguous_spawn_dispatch(&mut self, target: &str) {
-        self.spawn_dispatch_inflight_targets.remove(target);
-        self.persist_pane_state();
-        self.request_spawn_dispatch_pump();
-    }
-
-    pub(crate) fn submitting_spawn_dispatches(&self) -> Vec<(String, String, String)> {
-        self.spawn_pending_dispatches
-            .iter()
-            .filter_map(|(target, queue)| {
-                let dispatch = queue.front()?;
-                let crate::dispatch_queue::DispatchState::Submitting { delivery_id, .. } =
-                    &dispatch.state
-                else {
-                    return None;
-                };
-                (!self.spawn_dispatch_inflight_targets.contains(target))
-                    .then(|| (target.clone(), delivery_id.clone(), dispatch.task.clone()))
-            })
-            .collect()
-    }
-
-    pub(crate) fn fail_pending_dispatches_for_thread(
-        &mut self,
-        target_thread_id: ThreadId,
-        detail: impl AsRef<str>,
-    ) -> bool {
-        let Some(queue) = self
-            .spawn_pending_dispatches
-            .remove(&self.logical_native_node_for_thread(target_thread_id))
-        else {
-            return false;
-        };
-        let acks = queue
-            .into_iter()
-            .flat_map(|dispatch| dispatch.acks)
-            .collect::<Vec<_>>();
-        self.record_spawn_dispatch_acks(&acks, "failed", detail.as_ref(), true);
-        self.persist_pane_state();
-        true
     }
 
     pub(crate) fn pending_dispatch_from_registered_task(
@@ -2720,7 +1900,7 @@ impl App {
             .extend(acks);
     }
 
-    fn take_spawn_dispatch_acks_for_task(
+    pub(crate) fn take_spawn_dispatch_acks_for_task(
         &mut self,
         target_node_id: &str,
         task: &str,
@@ -2741,9 +1921,16 @@ impl App {
     ) {
         let acks = self.take_spawn_dispatch_acks_for_task(target_node_id, task);
         for ack in &acks {
+            if let Some(origin_id) = ack.origin_id.as_deref() {
+                self.spawn_processed_dispatch_origins
+                    .insert(origin_id.to_string());
+            }
+            self.spawn_processed_dispatch_seq_ids.insert(ack.seq);
             self.note_assignment_dispatch_delivered(&ack.source_node_id);
         }
+        self.evict_spawn_processed_dispatch_seq_ids();
         self.record_spawn_dispatch_acks(&acks, "delivered", "target turn started", false);
+        self.persist_pane_state();
     }
 
     pub(crate) fn record_spawn_dispatch_failed_for_task(
@@ -2754,62 +1941,17 @@ impl App {
     ) {
         let detail = detail.as_ref();
         let acks = self.take_spawn_dispatch_acks_for_task(target_node_id, task);
-        let mut retry_acks = Vec::new();
+        self.release_spawn_dispatch_origins(&acks);
         for ack in &acks {
-            let Some((_, durable_target)) =
-                self.assignment_dispatch_target_for_holder(&ack.source_node_id)
-            else {
-                continue;
-            };
-            if ack.attempt == 0 {
-                self.note_assignment_dispatch_failure(&ack.source_node_id, detail, true);
-                let mut retry_ack = ack.clone();
-                retry_ack.target_node_id = durable_target.clone();
-                retry_ack.target_title = self
-                    .spawn_node_title(&durable_target)
-                    .unwrap_or_else(|| durable_target.clone());
-                retry_ack.attempt = 1;
-                retry_acks.push(retry_ack);
-            } else {
-                self.note_assignment_dispatch_failure(&ack.source_node_id, detail, false);
-            }
+            self.note_assignment_dispatch_failure(&ack.source_node_id, detail, false);
         }
         self.record_spawn_dispatch_acks(&acks, "failed", detail, true);
-        for retry_ack in retry_acks {
-            match self.resolve_spawn_task_target(&retry_ack.target_node_id) {
-                Ok(SpawnTaskTarget::Native(thread_id)) => {
-                    let target_node_id = retry_ack.target_node_id.clone();
-                    self.register_spawn_dispatch_acks_for_task(
-                        &target_node_id,
-                        task,
-                        vec![retry_ack],
-                    );
-                    self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
-                        thread_id,
-                        task: task.to_string(),
-                        delivery_id: None,
-                    });
-                }
-                Ok(SpawnTaskTarget::ClaudePane(pane_id)) => {
-                    let target_node_id = retry_ack.target_node_id.clone();
-                    self.register_spawn_dispatch_acks_for_task(
-                        &target_node_id,
-                        task,
-                        vec![retry_ack],
-                    );
-                    self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
-                        pane_id,
-                        task: task.to_string(),
-                        delivery_id: None,
-                    });
-                }
-                Ok(SpawnTaskTarget::UnavailableNative(_)) | Err(_) => {
-                    self.note_assignment_dispatch_failure(
-                        &retry_ack.source_node_id,
-                        "durable Worker ID is unavailable",
-                        false,
-                    );
-                }
+    }
+
+    pub(crate) fn release_spawn_dispatch_origins(&mut self, acks: &[SpawnDispatchAck]) {
+        for ack in acks {
+            if let Some(origin_id) = ack.origin_id.as_deref() {
+                self.spawn_processed_dispatch_origins.remove(origin_id);
             }
         }
     }
@@ -2858,6 +2000,7 @@ impl App {
             source_node_id: source_node_id.to_string(),
             target_node_id,
             target_title,
+            origin_id: None,
             attempt: 0,
         }
     }
@@ -2871,7 +2014,7 @@ impl App {
         reserved
     }
 
-    fn reserve_spawn_dispatch_seq_without_persist(&mut self) -> u64 {
+    pub(crate) fn reserve_spawn_dispatch_seq_without_persist(&mut self) -> u64 {
         self.reserve_spawn_dispatch_seq_value_without_persist(None)
     }
 
@@ -2884,7 +2027,7 @@ impl App {
         reserved
     }
 
-    fn evict_spawn_processed_dispatch_seq_ids(&mut self) {
+    pub(crate) fn evict_spawn_processed_dispatch_seq_ids(&mut self) {
         self.spawn_processed_dispatch_seq_ids = bounded_spawn_processed_dispatch_seq_ids(
             self.spawn_processed_dispatch_seq_ids.iter().copied(),
             self.spawn_next_dispatch_seq,
@@ -2917,75 +2060,6 @@ impl App {
             .insert(node_id.to_string(), seq);
         self.spawn_last_event_at_by_node
             .insert(node_id.to_string(), Utc::now().to_rfc3339());
-    }
-
-    /// Drain pending child reports for a native Codex parent thread that has just gone idle, turning
-    /// each into a parent processing turn. Returns true if any report was flushed.
-    ///
-    /// This is the fix for the multi-turn race: a report that arrived while the parent was mid-turn
-    /// is no longer dropped; it is processed as soon as the parent becomes idle, like a user query.
-    pub(crate) fn flush_pending_reports_for_thread(&mut self, parent_thread_id: ThreadId) -> bool {
-        // Submit the queue as a single combined processing turn so the parent reviews every pending
-        // report at once rather than starting one turn per report. Keep the queue until the event is
-        // accepted; if the later turn submission is rejected, the event handler re-queues the report
-        // body from the generated processing prompt.
-        let (body, report_count) = {
-            let Some(queue) = self.spawn_pending_reports_by_thread.get(&parent_thread_id) else {
-                return false;
-            };
-            if queue.is_empty() {
-                return false;
-            }
-            let mut reports: Vec<String> = queue.iter().cloned().collect();
-            let report_count = reports.len();
-            let body = if reports.len() == 1 {
-                reports.remove(0)
-            } else {
-                let mut combined = String::from(
-                    "Multiple child panes have reported back while you were busy. Review every report \
-                     below, triage each, dispatch follow-up work or acknowledge, and do not skip any \
-                     of them.\n\n",
-                );
-                for (index, report) in reports.into_iter().enumerate() {
-                    let _ = writeln!(combined, "## Child report {index}\n{report}\n");
-                }
-                combined
-            };
-            (body, report_count)
-        };
-        let parent_node_id = self.spawn_auto_loop_node_for_thread(parent_thread_id);
-        if !self.begin_spawn_auto_processing_turn(&parent_node_id) {
-            if self.spawn_auto_processing_quarantined() {
-                self.notify_spawn_resume_auto_processing_quarantined(&parent_node_id, Some(body));
-            } else {
-                self.notify_spawn_auto_processing_paused(&parent_node_id, report_count, Some(body));
-                if let Some(queue) = self
-                    .spawn_pending_reports_by_thread
-                    .get_mut(&parent_thread_id)
-                {
-                    queue.clear();
-                }
-            }
-            return false;
-        }
-        let trigger_prompt = child_report_processing_prompt(&body);
-        if !self
-            .app_event_tx
-            .send_checked(AppEvent::SubmitSpawnAgentTask {
-                thread_id: parent_thread_id,
-                task: trigger_prompt,
-                delivery_id: None,
-            })
-        {
-            return false;
-        }
-        if let Some(queue) = self
-            .spawn_pending_reports_by_thread
-            .get_mut(&parent_thread_id)
-        {
-            queue.clear();
-        }
-        true
     }
 
     fn record_spawn_dispatch_queued(
@@ -3133,142 +2207,35 @@ impl App {
     ///   Orc 1: GPT-5.6-Luna (OpenAI) @ xhigh
     ///   Orc 2: GPT-5.6-Terra (OpenAI) @ xhigh
     ///   Orc 3: Grok 4.5 (OpenRouter) @ provider default
-    pub(crate) const STANDARD_NAZGUL_MODEL: &'static str = CLAUDE_FABLE_5_PLAN_MODEL;
-    pub(crate) const STANDARD_TROLL_MODEL: &'static str = "gpt-5.6-sol";
-    pub(crate) const STANDARD_ORC_MODEL: &'static str = "gpt-5.6-luna";
-    pub(crate) const STANDARD_ORC_2_MODEL: &'static str = "gpt-5.6-terra";
-    pub(crate) const STANDARD_ORC_3_MODEL: &'static str = "x-ai/grok-4.5";
+    #[cfg(test)]
+    pub(crate) const STANDARD_NAZGUL_MODEL: &'static str = crew_presets::STANDARD_NAZGUL_MODEL;
+    #[cfg(test)]
+    pub(crate) const STANDARD_TROLL_MODEL: &'static str = crew_presets::STANDARD_TROLL_MODEL;
+    #[cfg(test)]
+    pub(crate) const STANDARD_ORC_MODEL: &'static str = crew_presets::STANDARD_ORC_MODEL;
+    #[cfg(test)]
+    pub(crate) const STANDARD_ORC_2_MODEL: &'static str = crew_presets::STANDARD_ORC_2_MODEL;
+    #[cfg(test)]
+    pub(crate) const STANDARD_ORC_3_MODEL: &'static str = crew_presets::STANDARD_ORC_3_MODEL;
 
-    pub(crate) fn standard_orc_runtimes()
-    -> [(&'static str, &'static str, Option<ReasoningEffort>); 3] {
-        [
-            (
-                Self::STANDARD_ORC_MODEL,
-                OPENAI_PROVIDER_ID,
-                Some(ReasoningEffort::XHigh),
-            ),
-            (
-                Self::STANDARD_ORC_2_MODEL,
-                OPENAI_PROVIDER_ID,
-                Some(ReasoningEffort::XHigh),
-            ),
-            (Self::STANDARD_ORC_3_MODEL, OPENROUTER_PROVIDER_ID, None),
-        ]
+    #[cfg(test)]
+    pub(crate) fn standard_orc_runtimes() -> Vec<(String, String, Option<ReasoningEffort>)> {
+        crew_presets::standard_crew_spec()
+            .members
+            .into_iter()
+            .filter(|member| member.role_profile == ORC_ROLE)
+            .filter_map(|member| match member.runtime_request {
+                RuntimeRequest::Exact {
+                    provider_id,
+                    model_id,
+                    reasoning_effort,
+                    ..
+                } => Some((model_id, provider_id, reasoning_effort)),
+                RuntimeRequest::Selector { .. } => None,
+            })
+            .collect()
     }
 
-    pub(crate) fn ensure_standard_crew_providers_ready(&self) -> Result<()> {
-        // Preflight every provider before creating the root Nazgul. Without this, a missing Troll
-        // or Orc credential leaves a half-created crew with only the already-bound Nazgul pane.
-        for provider_id in [
-            CLAUDE_PLAN_PROVIDER_ID,
-            OPENAI_PROVIDER_ID,
-            OPENROUTER_PROVIDER_ID,
-        ] {
-            self.ensure_native_spawn_provider_ready(Some(provider_id))?;
-        }
-        Ok(())
-    }
-
-    pub(crate) async fn create_spawn_standard_crew(
-        &mut self,
-        app_server: &mut AppServerSession,
-    ) -> Result<(ThreadId, ThreadId)> {
-        let root_thread_id = self
-            .primary_thread_id
-            .or(self.active_thread_id)
-            .ok_or_else(|| eyre!("Cannot create standard crew before Codex Main has started."))?;
-        let spawn_config = self.native_spawn_agent_config()?;
-        self.ensure_standard_crew_providers_ready()?;
-
-        // Nazgul — Claude Fable 5 Plan, root, loaded through the built-in Nazgul role config.
-        let nazgul_nickname = self.next_spawn_agent_nickname(SpawnRole::Nazgul);
-        let nazgul = app_server
-            .spawn_agent_thread(
-                &spawn_config,
-                root_thread_id,
-                NAZGUL_ROLE_NAME.to_string(),
-                nazgul_nickname.clone(),
-                Self::STANDARD_NAZGUL_MODEL.to_string(),
-                Some(CLAUDE_PLAN_PROVIDER_ID.to_string()),
-                /*effort*/ None,
-                /*base_instructions*/ None,
-            )
-            .await?;
-        let nazgul_thread_id = nazgul.session.thread_id;
-        self.register_spawn_agent_pane(
-            nazgul_thread_id,
-            root_thread_id,
-            // The Nazgul is the root; its logical parent is the current root node (codex-main or a
-            // prior binding). It will be auto-bound below.
-            self.spawn_root_node_id(),
-            nazgul_nickname,
-            NAZGUL_ROLE_NAME,
-            nazgul,
-            true,
-        )
-        .await;
-        // Bind the freshly spawned Nazgul as the visible root so Troll spawns and "Nazgul"
-        // dispatches route to it.
-        self.set_spawn_nazgul_pane_binding(thread_node_id(nazgul_thread_id));
-        self.persist_bound_nazgul_root_thread_metadata().await;
-
-        // Troll — GPT-5.6-Sol (OpenAI) @ xhigh under the Nazgul.
-        let troll_nickname = self.next_spawn_agent_nickname(SpawnRole::Troll);
-        let troll = app_server
-            .spawn_agent_thread(
-                &spawn_config,
-                nazgul_thread_id,
-                TROLL_ROLE.to_string(),
-                troll_nickname.clone(),
-                Self::STANDARD_TROLL_MODEL.to_string(),
-                Some(OPENAI_PROVIDER_ID.to_string()),
-                Some(ReasoningEffort::XHigh),
-                /*base_instructions*/ None,
-            )
-            .await?;
-        let troll_thread_id = troll.session.thread_id;
-        self.register_spawn_agent_pane(
-            troll_thread_id,
-            nazgul_thread_id,
-            thread_node_id(nazgul_thread_id),
-            troll_nickname,
-            TROLL_ROLE,
-            troll,
-            true,
-        )
-        .await;
-
-        // Three heterogeneous Orcs under the Troll. The runtime is persisted per logical node, so
-        // replay/materialization retains each Orc's selected provider and effort.
-        for (model, provider, effort) in Self::standard_orc_runtimes() {
-            let orc_nickname = self.next_spawn_agent_nickname(SpawnRole::Orc);
-            let orc = app_server
-                .spawn_agent_thread(
-                    &spawn_config,
-                    troll_thread_id,
-                    ORC_ROLE.to_string(),
-                    orc_nickname.clone(),
-                    model.to_string(),
-                    Some(provider.to_string()),
-                    effort,
-                    /*base_instructions*/ None,
-                )
-                .await?;
-            let orc_thread_id = orc.session.thread_id;
-            self.register_spawn_agent_pane(
-                orc_thread_id,
-                troll_thread_id,
-                thread_node_id(troll_thread_id),
-                orc_nickname,
-                ORC_ROLE,
-                orc,
-                true,
-            )
-            .await;
-        }
-
-        Ok((nazgul_thread_id, troll_thread_id))
-    }
     pub(crate) fn native_spawn_agent_config(&self) -> Result<crate::legacy_core::config::Config> {
         let mut spawn_config = self.config.clone();
         spawn_config.service_tier = self.chat_widget.configured_service_tier();
@@ -3289,14 +2256,82 @@ impl App {
         Ok(spawn_config)
     }
 
-    pub(crate) fn ensure_native_spawn_provider_ready(
+    pub(crate) async fn ensure_native_spawn_provider_ready(
         &self,
         provider_id: Option<&str>,
     ) -> Result<()> {
+        self.ensure_native_spawn_provider_authorized(provider_id)?;
+
         if let Some(message) = self.native_spawn_provider_auth_error(provider_id) {
             return Err(eyre!("{message}"));
         }
+
+        let provider_id = provider_id.unwrap_or(self.config.model_provider_id.as_str());
+        let provider = if provider_id == self.config.model_provider_id {
+            Some(&self.config.model_provider)
+        } else {
+            self.config.model_providers.get(provider_id)
+        };
+        if let Some(provider) = provider
+            && let Some(auth) = provider.auth.as_ref()
+        {
+            let provider_name = provider_display_name(provider_id, provider.name.as_str());
+            codex_login::validate_provider_auth_command(auth)
+                .await
+                .map_err(|err| {
+                    eyre!(
+                        "Cannot run native Codex worker on {provider_name}; provider authentication is unavailable: {err}"
+                    )
+                })?;
+        }
         Ok(())
+    }
+
+    /// The operator-authorized provider set a new crew policy may declare.
+    ///
+    /// Falls back to every configured provider when no explicit policy is set, which
+    /// preserves unrestricted behavior without letting a model author the ceiling.
+    pub(crate) fn authorized_spawn_providers(&self) -> Vec<String> {
+        if let Some(allowlist) = self.config.agent_provider_allowlist.as_ref() {
+            return allowlist.clone();
+        }
+        let mut providers = self
+            .config
+            .model_providers
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        if !providers.contains(&self.config.model_provider_id) {
+            providers.push(self.config.model_provider_id.clone());
+        }
+        providers.sort();
+        providers
+    }
+
+    /// Operator spend policy. `agents.provider_allowlist` is the ceiling for every
+    /// agent-creation path: `/spawn` crews, custom crews, and native `spawn_agent`
+    /// task agents. A model selects a runtime; it never authorizes one.
+    pub(crate) fn ensure_native_spawn_provider_authorized(
+        &self,
+        provider_id: Option<&str>,
+    ) -> Result<()> {
+        let Some(allowlist) = self.config.agent_provider_allowlist.as_ref() else {
+            return Ok(());
+        };
+        let provider_id = provider_id.unwrap_or(self.config.model_provider_id.as_str());
+        if allowlist.iter().any(|allowed| allowed == provider_id) {
+            return Ok(());
+        }
+        let provider_name = self
+            .config
+            .model_providers
+            .get(provider_id)
+            .map(|provider| provider_display_name(provider_id, provider.name.as_str()))
+            .unwrap_or_else(|| provider_id.to_string());
+        Err(eyre!(
+            "Cannot run a native Codex worker on {provider_name}: provider `{provider_id}` is not in `agents.provider_allowlist` ({}). Add it to that setting to authorize spend on this provider.",
+            allowlist.join(", ")
+        ))
     }
 
     pub(crate) fn native_spawn_provider_auth_error(
@@ -3371,10 +2406,11 @@ impl App {
             /*is_closed*/ false,
         );
         let session_model = started.session.model.clone();
+        let session_reasoning_effort = started.session.reasoning_effort.clone();
         let saved_runtime = crate::dispatch_queue::SavedNativeSpawnRuntime {
             model: session_model.clone(),
             provider: started.session.model_provider_id.clone(),
-            reasoning_effort: started.session.reasoning_effort.clone(),
+            reasoning_effort: session_reasoning_effort.clone(),
         };
         self.spawn_native_runtime_by_node
             .insert(logical_node_id, saved_runtime);
@@ -3393,6 +2429,7 @@ impl App {
                 .and_then(|entry| entry.agent_nickname.clone()),
             model: session_model,
             model_provider: session_model_provider,
+            reasoning_effort: session_reasoning_effort,
             rollout_path: None,
         })
         .await;
@@ -3428,14 +2465,26 @@ impl App {
                     self.next_spawn_agent_nickname(SpawnRole::Nazgul)
                 }
             });
-        let model = self.chat_widget.current_model().to_string();
+        let saved_runtime = self
+            .spawn_native_runtime_by_node
+            .get(&thread_node_id(root_thread_id));
+        let model = saved_runtime
+            .map(|runtime| runtime.model.clone())
+            .unwrap_or_else(|| self.chat_widget.current_model().to_string());
+        let model_provider = saved_runtime
+            .map(|runtime| runtime.provider.clone())
+            .unwrap_or_else(|| self.config.model_provider_id.clone());
+        let reasoning_effort = saved_runtime
+            .and_then(|runtime| runtime.reasoning_effort.clone())
+            .or_else(|| self.chat_widget.current_reasoning_effort());
         self.persist_spawn_thread_state_metadata(SpawnThreadStateMetadata {
             thread_id: root_thread_id,
             parent_thread_id: None,
             agent_role: NAZGUL_ROLE_NAME,
             agent_nickname: nickname,
             model,
-            model_provider: self.config.model_provider_id.clone(),
+            model_provider,
+            reasoning_effort,
             rollout_path: None,
         })
         .await;
@@ -3455,6 +2504,7 @@ impl App {
             agent_nickname,
             model,
             model_provider,
+            reasoning_effort,
             rollout_path,
         } = metadata_update;
         let now = Utc::now();
@@ -3466,6 +2516,7 @@ impl App {
                     agent_path: None,
                     agent_nickname: agent_nickname.clone(),
                     agent_role: Some(agent_role.to_string()),
+                    agent_class: None,
                 })
             })
             .unwrap_or(CoreSessionSource::Cli);
@@ -3501,6 +2552,7 @@ impl App {
         metadata.agent_role = Some(agent_role.to_string());
         metadata.model = Some(model);
         metadata.model_provider = model_provider;
+        metadata.reasoning_effort = reasoning_effort;
         metadata.cwd = self.config.cwd.to_path_buf();
         if parent_thread_id.is_some() {
             metadata.thread_source = Some(CoreThreadSource::Subagent);
@@ -3583,6 +2635,7 @@ impl App {
             agent_nickname: pane.spawn_nickname.clone(),
             model: profile.provider_model.to_string(),
             model_provider: "claude-code".to_string(),
+            reasoning_effort: None,
             rollout_path: Some(rollout_path),
         })
         .await;
@@ -3659,9 +2712,18 @@ impl App {
         &mut self,
         app_server: &mut AppServerSession,
     ) {
+        if self.spawn_legacy_read_only {
+            self.chat_widget.add_error_message(
+                "Restored a legacy /spawn hierarchy in read-only mode. Existing panes remain \
+                 inspectable, but PfTerminal will not dispatch or replay work until you create a \
+                 new CrewSpec-backed crew."
+                    .to_string(),
+            );
+        }
         let saved_metadata = self.saved_spawn_metadata_from_loaded_rollouts().await;
         self.recover_native_spawn_edges_from_saved_context(&saved_metadata)
             .await;
+        self.prune_noncrew_native_spawn_recovery_nodes();
         let logical_thread_ids = native_spawn_thread_ids_from_saved_state(
             self.spawn_nazgul_pane_id.as_deref(),
             &self.spawn_parent_by_node,
@@ -3826,13 +2888,19 @@ impl App {
         self.prune_superseded_saved_native_spawn_threads();
         self.prune_duplicate_live_native_spawn_threads();
         self.clear_stale_nazgul_binding();
+        if let Err(error) = self.validate_restored_crew_state() {
+            tracing::error!(%error, "restored crew state rejected");
+            self.mark_crew_incomplete(error.to_string());
+            self.chat_widget.add_error_message(format!(
+                "Crew recovery is read-only until repaired: {error}"
+            ));
+        }
         if let Err(error) = self.validate_spawn_restore_invariants() {
             tracing::error!(%error, "spawn restoration invariant rejected");
             self.chat_widget
                 .add_error_message(format!("Spawn restoration is degraded: {error}"));
         }
         self.persist_pane_state();
-        self.request_spawn_dispatch_pump();
         self.sync_active_agent_label();
     }
 
@@ -3859,42 +2927,6 @@ impl App {
                     "visible pane {} has no live routing endpoint",
                     self.thread_label(thread_id)
                 ));
-            }
-        }
-        for (target, queue) in &self.spawn_pending_dispatches {
-            if self.resolve_spawn_task_target(target).is_err() {
-                return Err(eyre!("dispatch inbox references unknown target {target}"));
-            }
-            for dispatch in queue {
-                let source_known = dispatch.source_pane_id == pane_node_id(CODEX_MAIN_PANE_ID)
-                    || self
-                        .spawn_native_endpoint_by_node
-                        .contains_key(&dispatch.source_pane_id)
-                    || node_id_pane(&dispatch.source_pane_id).is_some();
-                if !source_known {
-                    return Err(eyre!(
-                        "dispatch {} references unknown source {}",
-                        dispatch.dispatch_id,
-                        dispatch.source_pane_id
-                    ));
-                }
-                if let crate::dispatch_queue::DispatchState::Submitting { delivery_id, .. } =
-                    &dispatch.state
-                    && delivery_id.is_empty()
-                {
-                    return Err(eyre!(
-                        "submitting dispatch {} has no delivery identity",
-                        dispatch.dispatch_id
-                    ));
-                }
-                if let crate::dispatch_queue::DispatchState::Accepted { delivery_id, .. } =
-                    &dispatch.state
-                    && !self.spawn_accepted_delivery_ids.contains(delivery_id)
-                {
-                    return Err(eyre!(
-                        "accepted delivery {delivery_id} has no durable tombstone"
-                    ));
-                }
             }
         }
         Ok(())
@@ -3954,20 +2986,57 @@ impl App {
         if self.thread_has_loaded_session(thread_id) {
             return true;
         }
+        let logical_node_id = self.logical_native_node_for_thread(thread_id);
+        let saved_runtime = self
+            .spawn_native_runtime_by_node
+            .get(&logical_node_id)
+            .cloned();
+        let (resume_config, model_override) =
+            self.native_spawn_resume_request(saved_runtime.as_ref());
         match app_server
-            .resume_thread(self.config.clone(), thread_id, /*model_override*/ None)
+            .resume_thread(resume_config, thread_id, model_override)
             .await
         {
             Ok(started) => {
-                let model = started.session.model.clone();
-                self.spawn_native_runtime_by_node.insert(
-                    self.logical_native_node_for_thread(thread_id),
-                    crate::dispatch_queue::SavedNativeSpawnRuntime {
-                        model: model.clone(),
-                        provider: started.session.model_provider_id.clone(),
-                        reasoning_effort: started.session.reasoning_effort.clone(),
-                    },
-                );
+                let restored_runtime = crate::dispatch_queue::SavedNativeSpawnRuntime {
+                    model: started.session.model.clone(),
+                    provider: started.session.model_provider_id.clone(),
+                    reasoning_effort: started.session.reasoning_effort.clone(),
+                };
+                if let Some(saved_runtime) = saved_runtime.as_ref()
+                    && (restored_runtime.model != saved_runtime.model
+                        || restored_runtime.provider != saved_runtime.provider
+                        || saved_runtime
+                            .reasoning_effort
+                            .as_ref()
+                            .is_some_and(|expected| {
+                                restored_runtime.reasoning_effort.as_ref() != Some(expected)
+                            }))
+                {
+                    let error = format!(
+                        "restored runtime changed from {}/{} {:?} to {}/{} {:?}",
+                        saved_runtime.provider,
+                        saved_runtime.model,
+                        saved_runtime.reasoning_effort,
+                        restored_runtime.provider,
+                        restored_runtime.model,
+                        restored_runtime.reasoning_effort
+                    );
+                    tracing::error!(
+                        thread_id = %thread_id,
+                        logical_node_id,
+                        %error,
+                        "refusing restored native spawn runtime drift"
+                    );
+                    self.chat_widget.add_error_message(format!(
+                        "Failed to attach restored pane {}: {error}",
+                        self.thread_label(thread_id)
+                    ));
+                    return false;
+                }
+                let model = restored_runtime.model.clone();
+                self.spawn_native_runtime_by_node
+                    .insert(logical_node_id, restored_runtime);
                 let channel = self.ensure_thread_channel(thread_id);
                 channel.set_session(started.session, started.turns).await;
                 self.agent_navigation.set_model(thread_id, Some(model));
@@ -3988,6 +3057,22 @@ impl App {
         }
     }
 
+    pub(crate) fn native_spawn_resume_request(
+        &self,
+        saved_runtime: Option<&crate::dispatch_queue::SavedNativeSpawnRuntime>,
+    ) -> (codex_core::config::Config, Option<ResumeModelOverride>) {
+        let mut resume_config = self.config.clone();
+        let model_override = saved_runtime.map(|runtime| {
+            resume_config.model = Some(runtime.model.clone());
+            resume_config.model_reasoning_effort = runtime.reasoning_effort.clone();
+            ResumeModelOverride {
+                model: Some(runtime.model.clone()),
+                model_provider: Some(runtime.provider.clone()),
+            }
+        });
+        (resume_config, model_override)
+    }
+
     async fn recover_native_spawn_edges_from_saved_context(
         &mut self,
         saved_metadata: &HashMap<ThreadId, SavedSpawnThreadMetadata>,
@@ -4003,11 +3088,17 @@ impl App {
             return;
         }
 
-        self.spawn_nazgul_pane_id
-            .get_or_insert_with(|| thread_node_id(primary_thread_id));
-        self.spawn_parent_by_node
-            .entry(thread_node_id(primary_thread_id))
-            .or_insert_with(|| pane_node_id(CODEX_MAIN_PANE_ID));
+        // Only legacy layouts infer their root from the resumed primary thread. A CrewSpec-backed
+        // hierarchy already has an explicit logical root. Treating the current primary thread as
+        // another crew node leaks ordinary Codex sessions into `/spawn`; an unmaterialized main
+        // thread can then be restored as a phantom Troll after restart.
+        if self.spawn_crew.is_none() {
+            self.spawn_nazgul_pane_id
+                .get_or_insert_with(|| thread_node_id(primary_thread_id));
+            self.spawn_parent_by_node
+                .entry(thread_node_id(primary_thread_id))
+                .or_insert_with(|| pane_node_id(CODEX_MAIN_PANE_ID));
+        }
         let existing_identities = self
             .current_saved_spawn_child_identities(saved_metadata)
             .await;
@@ -4016,6 +3107,61 @@ impl App {
             recovered_edges,
             saved_metadata,
             existing_identities,
+        );
+    }
+
+    /// Keeps a CrewSpec-backed restore rooted in explicit crew membership.
+    ///
+    /// Native Codex task-agent navigation and `/spawn` share thread primitives, but they do not
+    /// share retention semantics. Older recovery code could persist an unrelated primary thread
+    /// beside the crew root. Restore only explicit members and native descendants reachable from
+    /// those members; unrelated top-level native trees remain native task agents and are recovered
+    /// by the native agent registry instead of being reclassified as crew panes.
+    pub(crate) fn prune_noncrew_native_spawn_recovery_nodes(&mut self) {
+        let Some(crew) = self.spawn_crew.as_ref() else {
+            return;
+        };
+        let crew_id = crew.spec.crew_id.clone();
+
+        let mut retained = crew
+            .member_node_by_id
+            .values()
+            .cloned()
+            .collect::<HashSet<_>>();
+        loop {
+            let discovered = self
+                .spawn_parent_by_node
+                .iter()
+                .filter(|(_, parent_node_id)| retained.contains(*parent_node_id))
+                .map(|(child_node_id, _)| child_node_id.clone())
+                .filter(|child_node_id| !retained.contains(child_node_id))
+                .collect::<Vec<_>>();
+            if discovered.is_empty() {
+                break;
+            }
+            retained.extend(discovered);
+        }
+
+        let removed = self
+            .spawn_parent_by_node
+            .keys()
+            .filter(|node_id| !retained.contains(*node_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        if removed.is_empty() {
+            return;
+        }
+
+        self.spawn_parent_by_node
+            .retain(|child_node_id, _| retained.contains(child_node_id));
+        self.spawn_native_runtime_by_node
+            .retain(|node_id, _| retained.contains(node_id));
+        self.spawn_native_endpoint_by_node
+            .retain(|node_id, _| retained.contains(node_id));
+        tracing::warn!(
+            removed_nodes = ?removed,
+            crew_id = %crew_id,
+            "pruned native task nodes that were incorrectly persisted as /spawn crew nodes"
         );
     }
 
@@ -4144,6 +3290,7 @@ impl App {
     ) {
         let session_model = started.session.model.clone();
         let session_model_provider = started.session.model_provider_id.clone();
+        let session_reasoning_effort = started.session.reasoning_effort.clone();
         let rollout_path = started.session.rollout_path.clone();
         self.upsert_agent_picker_thread(
             thread_id,
@@ -4162,6 +3309,7 @@ impl App {
             agent_nickname,
             model: session_model,
             model_provider: session_model_provider,
+            reasoning_effort: session_reasoning_effort,
             rollout_path,
         })
         .await;
@@ -4364,37 +3512,53 @@ impl App {
     }
 
     pub(crate) fn is_spawn_orchestration_thread(&self, thread_id: ThreadId) -> bool {
-        if self.is_codex_main_bound_spawn_root_thread(thread_id) {
-            return true;
-        }
-        if self.is_assignment_holder(&self.logical_native_node_for_thread(thread_id)) {
-            return true;
-        }
-        self.spawn_status_by_thread.contains_key(&thread_id)
-            || self.spawn_parent_by_thread.contains_key(&thread_id)
-            || self
-                .spawn_parent_by_thread
-                .values()
-                .any(|parent| *parent == thread_id)
-            || self.nazgul_bound_thread_id() == Some(thread_id)
-            || self
-                .agent_navigation
-                .get(&thread_id)
-                .and_then(|entry| entry.agent_role.as_deref())
-                .is_some_and(|role| {
-                    role == NAZGUL_ROLE_NAME || role == TROLL_ROLE || role == ORC_ROLE
-                })
+        let node_id = self.logical_native_node_for_thread(thread_id);
+        self.spawn_node_is_persistent_crew_member(&node_id)
+            || self.is_orchestration_participant(&node_id)
+            || (self.spawn_legacy_read_only
+                && (self.spawn_status_by_thread.contains_key(&thread_id)
+                    || self.spawn_parent_by_thread.contains_key(&thread_id)
+                    || self
+                        .spawn_parent_by_thread
+                        .values()
+                        .any(|parent| *parent == thread_id)
+                    || self.nazgul_bound_thread_id() == Some(thread_id)))
     }
 
     pub(crate) fn is_managed_spawn_crew_thread(&self, thread_id: ThreadId) -> bool {
-        self.nazgul_bound_thread_id() == Some(thread_id)
-            || self
-                .agent_navigation
-                .get(&thread_id)
-                .and_then(|entry| entry.agent_role.as_deref())
-                .is_some_and(|role| {
-                    role == NAZGUL_ROLE_NAME || role == TROLL_ROLE || role == ORC_ROLE
+        self.spawn_node_is_persistent_crew_member(&self.logical_native_node_for_thread(thread_id))
+    }
+
+    fn spawn_node_is_persistent_crew_member(&self, node_id: &str) -> bool {
+        if let Some(crew) = self.spawn_crew.as_ref() {
+            return crew
+                .member_node_by_id
+                .values()
+                .any(|member_node_id| member_node_id == node_id);
+        }
+        let legacy_member = self.spawn_nazgul_pane_id.as_deref() == Some(node_id)
+            || self.spawn_parent_by_node.contains_key(node_id);
+        if self.spawn_legacy_read_only {
+            return legacy_member;
+        }
+        #[cfg(test)]
+        {
+            // Older unit fixtures predate CrewSpec and construct only the legacy edge/role maps.
+            // Production never treats those labels as writable crew membership; the explicit
+            // class-boundary regression constructs a CrewSpec and therefore exercises the real
+            // path even in tests.
+            legacy_member
+                || node_id_thread(node_id).is_some_and(|thread_id| {
+                    self.agent_navigation
+                        .get(&thread_id)
+                        .and_then(|entry| entry.agent_role.as_deref())
+                        .is_some_and(|role| {
+                            role == NAZGUL_ROLE_NAME || role == TROLL_ROLE || role == ORC_ROLE
+                        })
                 })
+        }
+        #[cfg(not(test))]
+        false
     }
 
     fn is_codex_main_bound_spawn_root_thread(&self, thread_id: ThreadId) -> bool {
@@ -4438,7 +3602,7 @@ impl App {
     /// Human-readable title for the bound Nazgul root, covering user panes and native Codex
     /// agent threads. A thread binding is rendered with the thread's picker label so the status
     /// tree stays readable instead of showing a raw `thread:<uuid>` node id.
-    fn nazgul_bound_display_title(&self, target: &str) -> String {
+    pub(crate) fn nazgul_bound_display_title(&self, target: &str) -> String {
         if let Some(thread_id) = node_id_thread(target) {
             let entry_label = self.agent_navigation.get(&thread_id).map(|entry| {
                 format_agent_picker_item_name(
@@ -4533,6 +3697,11 @@ impl App {
             .filter(|(thread_id, entry)| {
                 !self.is_superseded_saved_native_spawn_thread(*thread_id, entry)
             })
+            .filter(|(thread_id, _)| {
+                self.spawn_node_is_persistent_crew_member(
+                    &self.logical_native_node_for_thread(*thread_id),
+                )
+            })
             .filter(|(_, entry)| entry.agent_role.as_deref() == Some(role))
             .collect()
     }
@@ -4543,6 +3712,11 @@ impl App {
             .into_iter()
             .filter(|(thread_id, entry)| {
                 !self.is_superseded_saved_native_spawn_thread(*thread_id, entry)
+            })
+            .filter(|(thread_id, _)| {
+                self.spawn_node_is_persistent_crew_member(
+                    &self.logical_native_node_for_thread(*thread_id),
+                )
             })
             .filter(|(thread_id, entry)| {
                 if entry.agent_role.as_deref() == Some(TROLL_ROLE) {
@@ -4656,7 +3830,7 @@ impl App {
         false
     }
 
-    fn spawn_node_backing_thread_id(&self, node_id: &str) -> Option<ThreadId> {
+    pub(crate) fn spawn_node_backing_thread_id(&self, node_id: &str) -> Option<ThreadId> {
         if node_id == pane_node_id(CODEX_MAIN_PANE_ID) || node_id == CODEX_MAIN_PANE_ID {
             return self.primary_thread_id;
         }
@@ -4963,7 +4137,10 @@ impl App {
         self.claude_panes
             .panes()
             .iter()
-            .filter(|pane| pane.spawn_role == Some(role))
+            .filter(|pane| {
+                pane.spawn_role == Some(role)
+                    && self.spawn_node_is_persistent_crew_member(&pane_node_id(pane.id.as_str()))
+            })
             .collect()
     }
 
@@ -5093,8 +4270,8 @@ impl App {
             context,
             "Report Orcs used, what each did, evidence, issues forced back for rework, and remaining risk."
         );
-        write_spawn_dispatch_contract(&mut context);
-        write_spawn_parent_report_contract(&mut context);
+        crate::external_plan_agent_adapter::write_dispatch_contract(&mut context);
+        crate::external_plan_agent_adapter::write_parent_report_contract(&mut context);
         let _ = writeln!(context, "Orcs assigned to you:");
         let (orcs, claude_orcs) = self.spawn_orc_children_for_node(&troll_node_id);
         if orcs.is_empty() && claude_orcs.is_empty() {
@@ -5144,10 +4321,11 @@ impl App {
         context
     }
 
-    fn render_nazgul_spawn_context(&self, bound_pane_id: &str) -> String {
+    fn render_nazgul_spawn_context(&self, bound_pane_id: &str, native_transport: bool) -> String {
         self.render_nazgul_spawn_context_with_title(
             self.user_pane_title(bound_pane_id),
             /*include_role_prompt*/ true,
+            native_transport,
         )
     }
 
@@ -5155,6 +4333,7 @@ impl App {
         &self,
         root_pane_title: String,
         include_role_prompt: bool,
+        native_transport: bool,
     ) -> String {
         let mut context = String::new();
         let _ = writeln!(context, "<pfterminal_spawn_context>");
@@ -5238,7 +4417,11 @@ impl App {
             context,
             "When asked about Trolls or Orcs, answer from this live hierarchy."
         );
-        write_spawn_dispatch_contract(&mut context);
+        if native_transport {
+            write_native_spawn_dispatch_contract(&mut context);
+        } else {
+            crate::external_plan_agent_adapter::write_dispatch_contract(&mut context);
+        }
 
         let trolls = self.spawn_troll_threads();
         let claude_trolls = self.claude_spawn_panes(SpawnRole::Troll);
@@ -5484,81 +4667,46 @@ impl App {
     }
 }
 
-fn write_spawn_dispatch_contract(context: &mut String) {
+fn write_native_spawn_dispatch_contract(context: &mut String) {
     let _ = writeln!(
         context,
-        "To send work to another spawn pane, emit a host dispatch block exactly like:"
+        "Use the native collaboration tools to communicate with existing crew members."
     );
     let _ = writeln!(
         context,
-        "<pfterminal_send_task target=\"EXACT_LISTED_TARGET\">\nTask text here.\n</pfterminal_send_task>"
+        "Address a member by the canonical task path shown in the live roster. Use send_message to \
+         add information to a running turn, and followup_task to assign a new turn to an idle or \
+         completed member."
     );
     let _ = writeln!(
         context,
-        "Replace EXACT_LISTED_TARGET with an exact target from the live roster. Never target your own pane; this block assigns work to another pane and is not a reporting mechanism."
+        "A successful tool result is the delivery acknowledgement. Do not claim work was sent \
+         based only on prose, and do not emit legacy pfterminal_send_task tags from a native pane."
     );
     let _ = writeln!(
         context,
-        "PFTerminal will route that task to the target pane. Do not claim you sent a task unless you emit a dispatch block."
+        "Do not spawn a duplicate member merely to route work to an existing listed member. \
+         Dispatches and roster updates carry stable native identity and lifecycle state."
     );
     let _ = writeln!(
         context,
-        "If a native target pane is busy, PFTerminal steers the dispatch into its running turn; otherwise it starts a fresh turn."
+        "Each turn, read this injected roster before declaring a child stalled: status=idle or \
+         status=completed means that child is finished and ready for review; has_new_report=true \
+         means its report is available in the Recent child reports section."
     );
     let _ = writeln!(
         context,
-        "Dispatches, child reports, and roster updates carry host seq numbers and timestamps; compare seq numbers rather than transcript arrival order when auditing freshness."
-    );
-    let _ = writeln!(
-        context,
-        "If Sauron asks you to dispatch, assign, send, or deploy work to a named pane, emit the pfterminal_send_task block immediately; do not start executing that work yourself or replace dispatch with a plan."
-    );
-    let _ = writeln!(
-        context,
-        "Listed Troll/Orc panes are routable through these host dispatch blocks. Panes marked saved-only have recovered hierarchy metadata but no loaded transcript yet; dispatching a task to them materializes the pane."
-    );
-    let _ = writeln!(
-        context,
-        "Do not spawn fresh panes just to route work to existing listed panes; use the listed panes unless Sauron explicitly asks you to create more."
-    );
-    let _ = writeln!(
-        context,
-        "Dispatch blocks are plain assistant text, not Claude tools or shell commands. Use only the pfterminal_send_task host tags; never put the block inside exec_command, cat, echo, a heredoc, <invoke>, <arg_key>, <arg_value>, or tool-call syntax for dispatch."
-    );
-    let _ = writeln!(
-        context,
-        "When assigning work to multiple panes, emit one complete pfterminal_send_task block per target in the same assistant message before saying the work was sent."
-    );
-    let _ = writeln!(
-        context,
-        "Do not wrap dispatch payloads in markdown fences; task bodies may contain code fences or long config snippets and must be preserved verbatim inside the host tags."
-    );
-    let _ = writeln!(
-        context,
-        "Use exact target names, nicknames, pane ids, or thread ids from this live hierarchy."
-    );
-    let _ = writeln!(
-        context,
-        "Each turn, read this injected roster before declaring a child stalled: status=idle or status=completed means that child is finished and ready for review; has_new_report=true means its report is available in the Recent child reports section."
-    );
-    let _ = writeln!(
-        context,
-        "Never report a child pane as silent or unresponsive until you have checked its roster status and report marker. Managers delegate and review; they do not execute a listed child's assigned task themselves."
+        "Never report a child pane as silent or unresponsive until you have checked its roster \
+         status and report marker. Managers delegate and review; they do not execute a listed \
+         child's assigned task themselves."
     );
 }
 
-fn write_spawn_parent_report_contract(context: &mut String) {
+fn write_native_spawn_parent_report_contract(context: &mut String) {
     let _ = writeln!(
         context,
-        "Interim assistant commentary remains local to this pane. To report a checkpoint to your assigned parent before this turn ends, emit:"
-    );
-    let _ = writeln!(
-        context,
-        "<pfterminal_report_parent>\nConcise checkpoint with evidence paths and remaining work.\n</pfterminal_report_parent>"
-    );
-    let _ = writeln!(
-        context,
-        "PFTerminal routes that checkpoint to the assigned parent immediately. Do not use pfterminal_send_task to report to your parent or to yourself. A terminal answer is still reported automatically when the turn ends."
+        "Use send_message with your parent's canonical task path for an interim checkpoint. Your \
+         terminal answer is reported to the parent automatically when the turn ends."
     );
 }
 
@@ -5971,20 +5119,6 @@ fn spawn_dispatch_task_ack_key(task: &str) -> String {
     task.trim().to_string()
 }
 
-fn spawn_dispatch_task_identity(task: &str) -> &str {
-    let task = task.trim();
-    if task.starts_with("Assigned by ")
-        && let Some((_, body)) = task.split_once("\n\n")
-    {
-        return body.trim();
-    }
-    task
-}
-
-fn spawn_dispatch_component_identities(task: &str) -> Vec<String> {
-    vec![spawn_dispatch_task_identity(task).to_string()]
-}
-
 fn claude_spawn_rollout_path(pane: &crate::claude_panes::ClaudePane) -> std::path::PathBuf {
     pane.artifact_dir.join("spawn-thread-rollout.jsonl")
 }
@@ -6018,6 +5152,7 @@ fn ensure_claude_spawn_rollout_session_meta(
         agent_path: None,
         agent_nickname: pane.spawn_nickname.clone(),
         agent_role: Some(agent_role.to_string()),
+        agent_class: None,
     });
     append_jsonl_value(
         &path,
@@ -6106,200 +5241,6 @@ fn claude_turn_index_from_artifact_path(path: &Path) -> Option<u64> {
     name.strip_prefix("turn-")?
         .strip_suffix(".jsonl")
         .and_then(|value| value.parse::<u64>().ok())
-}
-
-pub(crate) fn extract_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTaskDispatch>) {
-    let (visible, mut dispatches) = extract_fenced_spawn_task_dispatches(text);
-    let (visible, legacy_dispatches) = extract_xmlish_spawn_task_dispatches(&visible);
-    dispatches.extend(legacy_dispatches);
-    (visible, dispatches)
-}
-
-fn extract_spawn_parent_reports(text: &str) -> Vec<String> {
-    let mut reports = Vec::new();
-    let mut rest = text;
-    while let Some(start_index) = rest.find(REPORT_PARENT_OPEN) {
-        let content_start = start_index + REPORT_PARENT_OPEN.len();
-        let Some(close_index) = rest[content_start..].find(REPORT_PARENT_CLOSE) else {
-            break;
-        };
-        let content_end = content_start + close_index;
-        let content = rest[content_start..content_end].trim();
-        if !content.is_empty() {
-            reports.push(content.to_string());
-        }
-        rest = &rest[content_end + REPORT_PARENT_CLOSE.len()..];
-    }
-    reports
-}
-
-fn turn_contains_exec_wrapped_spawn_task_dispatch(turn: &codex_app_server_protocol::Turn) -> bool {
-    turn.items.iter().any(|item| {
-        if let codex_app_server_protocol::ThreadItem::CommandExecution { command, .. } = item {
-            let (_visible, dispatches) = extract_spawn_task_dispatches(command);
-            !dispatches.is_empty()
-        } else {
-            false
-        }
-    })
-}
-
-/// True when the assistant text mentions a dispatch marker but extraction produced no routable
-/// dispatch, i.e. the model emitted a block that was too malformed to parse (missing/empty
-/// target or task). The surviving block stays in `visible`, so compare against the original.
-fn turn_mentions_spawn_task_dispatch(original_text: &str, visible_text: &str) -> bool {
-    (original_text.contains(SEND_TASK_OPEN) && visible_text.contains(SEND_TASK_OPEN))
-        || (original_text.contains(SEND_TASK_FENCE_OPEN)
-            && visible_text.contains(SEND_TASK_FENCE_OPEN))
-}
-
-fn extract_fenced_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTaskDispatch>) {
-    let mut visible = String::new();
-    let mut dispatches = Vec::new();
-    let mut rest = text;
-
-    while let Some(start_index) = rest.find(SEND_TASK_FENCE_OPEN) {
-        visible.push_str(&rest[..start_index]);
-        let block = &rest[start_index..];
-        let Some(header_end) = block.find('\n') else {
-            visible.push_str(block);
-            rest = "";
-            break;
-        };
-        let header = &block[..header_end];
-        let content_start = header_end + 1;
-        let Some(close_index) = block[content_start..].find(SEND_TASK_FENCE_CLOSE) else {
-            visible.push_str(block);
-            rest = "";
-            break;
-        };
-        let content_end = content_start + close_index;
-        let content = &block[content_start..content_end];
-        let after_close = content_end + SEND_TASK_FENCE_CLOSE.len();
-
-        if let Some(dispatch) = fenced_dispatch_from_parts(header, content) {
-            dispatches.push(dispatch);
-        } else {
-            // Keep malformed blocks visible: silently stripping them makes the model's claimed
-            // dispatch vanish with no host feedback and no chance to correct the format.
-            visible.push_str(&block[..after_close]);
-        }
-
-        rest = &block[after_close..];
-    }
-    visible.push_str(rest);
-    (visible.trim().to_string(), dispatches)
-}
-
-fn extract_xmlish_spawn_task_dispatches(text: &str) -> (String, Vec<SpawnTaskDispatch>) {
-    let mut visible = String::new();
-    let mut dispatches = Vec::new();
-    let mut rest = text;
-
-    while let Some(start_index) = rest.find(SEND_TASK_OPEN) {
-        visible.push_str(&rest[..start_index]);
-        let block = &rest[start_index..];
-        let Some(tag_end) = block.find('>') else {
-            visible.push_str(block);
-            rest = "";
-            break;
-        };
-        let tag = &block[..=tag_end];
-        let content_start = tag_end + 1;
-        let Some(close_index) = block[content_start..].find(SEND_TASK_CLOSE) else {
-            visible.push_str(block);
-            rest = "";
-            break;
-        };
-        let content_end = content_start + close_index;
-        let content = block[content_start..content_end].trim();
-        let after_close = content_end + SEND_TASK_CLOSE.len();
-
-        if let Some(target) = xmlish_attr_value(tag, "target")
-            && !target.trim().is_empty()
-            && !content.is_empty()
-        {
-            dispatches.push(SpawnTaskDispatch {
-                target: target.trim().to_string(),
-                task: content.to_string(),
-                seq: None,
-            });
-        } else {
-            // Keep malformed blocks visible (see the fenced extractor above).
-            visible.push_str(&block[..after_close]);
-        }
-
-        rest = &block[after_close..];
-    }
-    visible.push_str(rest);
-    (visible.trim().to_string(), dispatches)
-}
-
-fn fenced_dispatch_from_parts(header: &str, content: &str) -> Option<SpawnTaskDispatch> {
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(content.trim()) {
-        let target = value.get("target")?.as_str()?.trim().to_string();
-        let task = value.get("task")?.as_str()?.trim().to_string();
-        let seq = value.get("seq").and_then(serde_json::Value::as_u64);
-        return (!target.is_empty() && !task.is_empty()).then_some(SpawnTaskDispatch {
-            target,
-            task,
-            seq,
-        });
-    }
-
-    let mut target = yamlish_field_value(header, "target");
-    let mut task_lines = Vec::new();
-    let mut consumed_task_marker = false;
-
-    for line in content.lines() {
-        if target.is_none()
-            && let Some(value) = yamlish_field_value(line, "target")
-        {
-            target = Some(value);
-            continue;
-        }
-
-        if !consumed_task_marker && let Some(value) = yamlish_field_value(line, "task") {
-            consumed_task_marker = true;
-            if !value.trim().is_empty() {
-                task_lines.push(value);
-            }
-            continue;
-        }
-
-        if task_lines.is_empty() && line.trim().is_empty() {
-            continue;
-        }
-        task_lines.push(line.to_string());
-    }
-
-    let target = target?.trim().to_string();
-    let task = task_lines.join("\n").trim().to_string();
-    (!target.is_empty() && !task.is_empty()).then_some(SpawnTaskDispatch {
-        target,
-        task,
-        seq: None,
-    })
-}
-
-fn yamlish_field_value(line: &str, field: &str) -> Option<String> {
-    let (key, value) = line.split_once(':')?;
-    key.trim()
-        .eq_ignore_ascii_case(field)
-        .then(|| value.trim().to_string())
-}
-
-fn xmlish_attr_value(tag: &str, attr: &str) -> Option<String> {
-    let needle = format!("{attr}=");
-    let start = tag.find(&needle)? + needle.len();
-    let mut chars = tag[start..].chars();
-    let quote = chars.next()?;
-    if quote != '"' && quote != '\'' {
-        return None;
-    }
-    let value_start = start + quote.len_utf8();
-    let value_end = tag[value_start..].find(quote)? + value_start;
-    Some(tag[value_start..value_end].to_string())
 }
 
 fn section_item(name: &str) -> SelectionItem {
@@ -6436,6 +5377,7 @@ fn spawn_status_label(status: &codex_app_server_protocol::CollabAgentState) -> &
 fn collab_status_label(status: &codex_app_server_protocol::CollabAgentStatus) -> &'static str {
     match *status {
         codex_app_server_protocol::CollabAgentStatus::PendingInit => "pending",
+        codex_app_server_protocol::CollabAgentStatus::Unloaded => "unloaded",
         codex_app_server_protocol::CollabAgentStatus::Running => "running",
         codex_app_server_protocol::CollabAgentStatus::Interrupted => "interrupted",
         codex_app_server_protocol::CollabAgentStatus::Completed => "completed",
@@ -6504,45 +5446,6 @@ fn child_report_processing_prompt(report: &str) -> String {
     format!("{CHILD_REPORT_PROCESSING_PROMPT_PREFIX}{report}")
 }
 
-pub(crate) fn child_report_from_processing_prompt(task: &str) -> Option<&str> {
-    let report = task.strip_prefix(CHILD_REPORT_PROCESSING_PROMPT_PREFIX)?;
-    if report.trim().is_empty() {
-        None
-    } else {
-        Some(report)
-    }
-}
-
-#[cfg(test)]
-fn evict_spawn_processed_dispatch_turns(
-    processed_turns: &mut HashSet<(ThreadId, String)>,
-    live_threads: &HashSet<ThreadId>,
-    protected_turn: &(ThreadId, String),
-) -> Option<(usize, usize)> {
-    if processed_turns.len() <= SPAWN_PROCESSED_DISPATCH_TURN_LIMIT {
-        return None;
-    }
-
-    let before_len = processed_turns.len();
-    let protected_budget = usize::from(processed_turns.contains(protected_turn));
-    let retain_budget = SPAWN_PROCESSED_DISPATCH_TURN_RETAIN.saturating_sub(protected_budget);
-    let mut retained = 0usize;
-    processed_turns.retain(|turn| {
-        if turn == protected_turn {
-            return true;
-        }
-        if retained >= retain_budget {
-            return false;
-        }
-        if live_threads.contains(&turn.0) {
-            retained += 1;
-            return true;
-        }
-        false
-    });
-    Some((before_len, processed_turns.len()))
-}
-
 fn next_spawn_agent_nickname_from_used<'candidate, 'used>(
     candidates: impl IntoIterator<Item = &'candidate str>,
     used_nicknames: impl IntoIterator<Item = &'used str>,
@@ -6585,6 +5488,7 @@ mod tests {
     use codex_model_provider_info::AMBIENT_PROVIDER_ID;
     use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
     use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+    use codex_model_provider_info::OPENAI_PROVIDER_ID;
     use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
     use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
     use codex_model_provider_info::ZAI_DEFAULT_MODEL;
@@ -6863,9 +5767,9 @@ Done."#;
     }
 
     #[test]
-    fn dispatch_contract_tells_claude_not_to_claim_without_block() {
+    fn external_dispatch_contract_tells_claude_not_to_claim_without_block() {
         let mut context = String::new();
-        write_spawn_dispatch_contract(&mut context);
+        crate::external_plan_agent_adapter::write_dispatch_contract(&mut context);
 
         assert!(context.contains("<pfterminal_send_task target=\"EXACT_LISTED_TARGET\">"));
         assert!(context.contains("Never target your own pane"));
@@ -6873,7 +5777,6 @@ Done."#;
         assert!(context.contains("Dispatch blocks are plain assistant text"));
         assert!(context.contains("never put the block inside exec_command"));
         assert!(context.contains("Listed Troll/Orc panes are routable"));
-        assert!(context.contains("dispatching a task to them materializes the pane"));
         assert!(context.contains("Do not spawn fresh panes"));
         assert!(context.contains("tool-call syntax"));
         assert!(context.contains("<invoke>"));
@@ -6882,57 +5785,15 @@ Done."#;
     }
 
     #[test]
-    fn extracts_multiple_parent_checkpoint_reports_without_literal_routing_rules() {
-        let text = r#"Working through the review.
-<pfterminal_report_parent>
-Phase alpha passed; evidence is artifacts/alpha.json. Phase beta remains.
-</pfterminal_report_parent>
-<pfterminal_report_parent>
-The adjacent verification lane found a retry race; no release claim yet.
-</pfterminal_report_parent>"#;
+    fn native_dispatch_contract_uses_collaboration_tools_not_text_tags() {
+        let mut context = String::new();
+        write_native_spawn_dispatch_contract(&mut context);
 
-        assert_eq!(
-            extract_spawn_parent_reports(text),
-            vec![
-                "Phase alpha passed; evidence is artifacts/alpha.json. Phase beta remains."
-                    .to_string(),
-                "The adjacent verification lane found a retry race; no release claim yet."
-                    .to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn processed_native_dispatch_turn_eviction_stays_bounded_and_allows_evicted_turn_as_new() {
-        let live_thread_id =
-            ThreadId::from_string("00000000-0000-0000-0000-000000000601").expect("valid id");
-        let stale_thread_id =
-            ThreadId::from_string("00000000-0000-0000-0000-000000000602").expect("valid id");
-        let protected_turn = (live_thread_id, "turn-live".to_string());
-        let evicted_turn = (stale_thread_id, "turn-0".to_string());
-        let mut processed_turns = HashSet::new();
-        let mut live_threads = HashSet::new();
-        live_threads.insert(live_thread_id);
-
-        processed_turns.insert(evicted_turn.clone());
-        for index in 1..=SPAWN_PROCESSED_DISPATCH_TURN_LIMIT {
-            processed_turns.insert((stale_thread_id, format!("turn-{index}")));
-        }
-        processed_turns.insert(protected_turn.clone());
-        assert!(processed_turns.len() > SPAWN_PROCESSED_DISPATCH_TURN_LIMIT);
-
-        let eviction = evict_spawn_processed_dispatch_turns(
-            &mut processed_turns,
-            &live_threads,
-            &protected_turn,
-        );
-
-        assert_eq!(eviction, Some((SPAWN_PROCESSED_DISPATCH_TURN_LIMIT + 2, 1)));
-        assert!(processed_turns.len() <= SPAWN_PROCESSED_DISPATCH_TURN_LIMIT);
-        assert!(processed_turns.contains(&protected_turn));
-        assert!(!processed_turns.contains(&evicted_turn));
-        assert!(processed_turns.insert(evicted_turn));
-        assert!(processed_turns.len() <= SPAWN_PROCESSED_DISPATCH_TURN_LIMIT);
+        assert!(context.contains("send_message"));
+        assert!(context.contains("followup_task"));
+        assert!(context.contains("canonical task path"));
+        assert!(context.contains("do not emit legacy pfterminal_send_task tags"));
+        assert!(!context.contains("<pfterminal_send_task"));
     }
 
     #[test]
@@ -7235,6 +6096,7 @@ The adjacent verification lane found a retry race; no release claim yet.
             id: "test-model".to_string(),
             model: "test-model".to_string(),
             provider_id: None,
+            orchestration: None,
             display_name: "Test Model".to_string(),
             description: "test".to_string(),
             default_reasoning_effort,
@@ -7268,7 +6130,6 @@ The adjacent verification lane found a retry race; no release claim yet.
         let (visible, dispatches) = extract_spawn_task_dispatches(text);
         assert!(dispatches.is_empty());
         assert!(visible.contains(SEND_TASK_OPEN));
-        assert!(turn_mentions_spawn_task_dispatch(text, &visible));
     }
 
     #[test]
@@ -7277,7 +6138,6 @@ The adjacent verification lane found a retry race; no release claim yet.
         let (visible, dispatches) = extract_spawn_task_dispatches(text);
         assert!(dispatches.is_empty());
         assert!(visible.contains(SEND_TASK_FENCE_OPEN));
-        assert!(turn_mentions_spawn_task_dispatch(text, &visible));
     }
 
     #[test]
@@ -7288,7 +6148,6 @@ The adjacent verification lane found a retry race; no release claim yet.
         assert_eq!(dispatches[0].target, "Burzum");
         assert_eq!(dispatches[0].task, "Do the thing.");
         assert!(!visible.contains(SEND_TASK_OPEN));
-        assert!(!turn_mentions_spawn_task_dispatch(text, &visible));
     }
 
     #[test]

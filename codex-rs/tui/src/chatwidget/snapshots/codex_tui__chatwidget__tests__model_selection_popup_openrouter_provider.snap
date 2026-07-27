@@ -7,8 +7,8 @@ expression: popup
 
   OpenAI  Ambient  Kimi Code  Z.AI  Claude Plan  Anthropic  Meta  Vercel  Baseten  [OpenRouter]
 
-  1. OpenRouter MiniMax M3         Model: minimax/minimax-m3. OpenRouter: MiniMax M3 - $0.30/M
-                                   input, $1.20/M output.
+  1. OpenRouter MiniMax M3         Model: minimax/minimax-m3. OpenRouter: MiniMax M3 - $0.60/M
+                                   input, $2.40/M output.
   2. OpenRouter Owl Alpha          Model: openrouter/owl-alpha. OpenRouter: Owl Alpha - $0/M
                                    input, $0/M output.
   3. OpenRouter Gemini 3.5 Flash   Model: google/gemini-3.5-flash. OpenRouter: Gemini 3.5 Flash -

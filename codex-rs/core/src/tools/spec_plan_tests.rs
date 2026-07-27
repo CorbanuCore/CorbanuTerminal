@@ -742,7 +742,7 @@ async fn glm_model_slug_uses_structured_edit_tools_instead_of_apply_patch() {
 }
 
 #[tokio::test]
-async fn repeated_strict_patch_failures_switch_turn_to_structured_edit_tools() {
+async fn strict_patch_fallback_keeps_model_visible_edit_tools_stable() {
     let initial = probe(|turn| {
         turn.permission_profile = PermissionProfile::workspace_write();
         use_openai_provider(turn);
@@ -751,23 +751,31 @@ async fn repeated_strict_patch_failures_switch_turn_to_structured_edit_tools() {
     })
     .await;
 
-    initial.assert_visible_contains(&["apply_patch"]);
-    initial.assert_visible_lacks(&["structured_edit", "structured_write"]);
+    initial.assert_visible_contains(&["apply_patch", "structured_edit", "structured_write"]);
+    initial.assert_registered_contains(&["apply_patch", "structured_edit", "structured_write"]);
 
     let fallback = probe(|turn| {
         turn.permission_profile = PermissionProfile::workspace_write();
         use_openai_provider(turn);
         turn.model_info.slug = "gpt-5.2".to_string();
         turn.model_info.apply_patch_tool_type = Some(ApplyPatchToolType::Freeform);
-        assert_eq!(turn.record_strict_apply_patch_failure(), 1);
-        assert_eq!(turn.record_strict_apply_patch_failure(), 2);
+        assert_eq!(
+            turn.record_strict_apply_patch_grammar_failure()
+                .consecutive_failures(),
+            1
+        );
+        assert_eq!(
+            turn.record_strict_apply_patch_grammar_failure()
+                .consecutive_failures(),
+            2
+        );
     })
     .await;
 
-    fallback.assert_visible_contains(&["structured_edit", "structured_write"]);
-    fallback.assert_registered_contains(&["structured_edit", "structured_write"]);
-    fallback.assert_visible_lacks(&["apply_patch"]);
-    fallback.assert_registered_lacks(&["apply_patch"]);
+    fallback.assert_visible_contains(&["apply_patch", "structured_edit", "structured_write"]);
+    fallback.assert_registered_contains(&["apply_patch", "structured_edit", "structured_write"]);
+    assert_eq!(initial.visible_specs, fallback.visible_specs);
+    assert_eq!(initial.registered_names, fallback.registered_names);
 }
 
 #[tokio::test]
@@ -1371,7 +1379,51 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
 }
 
 #[tokio::test]
-async fn multi_agent_v2_message_schemas_are_encrypted() {
+async fn multi_agent_v2_advertises_cross_provider_catalog_from_third_party_parent() {
+    let v2 = probe(|turn| {
+        use_openrouter_provider(turn);
+        turn.available_models = crate::test_support::all_model_presets().clone();
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+        update_config(turn, |config| {
+            config.agent_provider_allowlist = Some(vec![
+                OPENROUTER_PROVIDER_ID.to_string(),
+                OPENAI_PROVIDER_ID.to_string(),
+            ]);
+        });
+    })
+    .await;
+    let v2_description = match v2.visible_spec("spawn_agent") {
+        ToolSpec::Function(tool) => tool.description.as_str(),
+        other => panic!("expected v2 spawn_agent function spec, got {other:?}"),
+    };
+    assert!(
+        v2_description.contains("`openai` / `gpt-5.6-sol`"),
+        "v2 managers on third-party providers need the authorized cross-provider catalog"
+    );
+    assert!(
+        !v2_description.contains("`openai` / `gpt-5.5`"),
+        "catalogue-disabled models must not be advertised for spawned work"
+    );
+
+    let v1 = probe(|turn| {
+        use_openrouter_provider(turn);
+        turn.available_models = crate::test_support::all_model_presets().clone();
+        set_feature(turn, Feature::Collab, /*enabled*/ true);
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
+    })
+    .await;
+    let v1_description = match v1.visible_spec("spawn_agent_v1") {
+        ToolSpec::Function(tool) => tool.description.as_str(),
+        other => panic!("expected flattened v1 spawn_agent function spec, got {other:?}"),
+    };
+    assert!(
+        !v1_description.contains("`openai` / `gpt-5.6-sol`"),
+        "v1 must not advertise provider/model pairs its model-only schema cannot select"
+    );
+}
+
+#[tokio::test]
+async fn multi_agent_v2_message_schemas_are_provider_neutral_plaintext() {
     let plan = probe(|turn| {
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
     })
@@ -1389,7 +1441,7 @@ async fn multi_agent_v2_message_schemas_are_encrypted() {
             properties
                 .get("message")
                 .and_then(|schema| schema.encrypted),
-            Some(true)
+            None
         );
     }
 }
@@ -1406,6 +1458,7 @@ async fn orc_tool_surface_excludes_manager_controls() {
             ),
             agent_nickname: Some("Snaga".to_string()),
             agent_role: Some("orc".to_string()),
+            agent_class: None,
         });
     })
     .await;

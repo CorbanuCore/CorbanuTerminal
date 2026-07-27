@@ -7836,6 +7836,7 @@ async fn load_config_rejects_missing_agent_role_config_file() -> std::io::Result
             max_depth: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
+            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {
@@ -8758,6 +8759,7 @@ async fn load_config_resolves_agent_interrupt_message() -> std::io::Result<()> {
     let cfg = ConfigToml {
         agents: Some(AgentsToml {
             interrupt_message: Some(false),
+            provider_allowlist: None,
             ..Default::default()
         }),
         ..Default::default()
@@ -8784,6 +8786,7 @@ async fn load_config_normalizes_agent_role_nickname_candidates() -> std::io::Res
             max_depth: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
+            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {
@@ -8827,6 +8830,7 @@ async fn load_config_rejects_empty_agent_role_nickname_candidates() -> std::io::
             max_depth: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
+            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {
@@ -8864,6 +8868,7 @@ async fn load_config_rejects_duplicate_agent_role_nickname_candidates() -> std::
             max_depth: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
+            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {
@@ -8901,6 +8906,7 @@ async fn load_config_rejects_unsafe_agent_role_nickname_candidates() -> std::io:
             max_depth: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
+            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {
@@ -10858,6 +10864,7 @@ async fn multi_agent_v2_config_from_feature_table() -> std::io::Result<()> {
         r#"[features.multi_agent_v2]
 enabled = true
 max_concurrent_threads_per_session = 5
+max_subagent_model_requests_per_turn = 18
 min_wait_timeout_ms = 2500
 max_wait_timeout_ms = 120000
 default_wait_timeout_ms = 30000
@@ -10879,6 +10886,10 @@ non_code_mode_only = true
 
     assert!(config.features.enabled(Feature::MultiAgentV2));
     assert_eq!(config.multi_agent_v2.max_concurrent_threads_per_session, 5);
+    assert_eq!(
+        config.multi_agent_v2.max_subagent_model_requests_per_turn,
+        18
+    );
     assert_eq!(config.multi_agent_v2.min_wait_timeout_ms, 2500);
     assert_eq!(config.multi_agent_v2.max_wait_timeout_ms, 120000);
     assert_eq!(config.multi_agent_v2.default_wait_timeout_ms, 30000);
@@ -10929,6 +10940,10 @@ enabled = true
         .await?;
 
     assert_eq!(config.multi_agent_v2, MultiAgentV2Config::default());
+    assert!(
+        !config.multi_agent_v2.hide_spawn_agent_metadata,
+        "multi-model native orchestration requires spawn_agent to expose provider/model overrides"
+    );
     assert_eq!(
         (
             config.agent_max_threads,
@@ -10962,6 +10977,32 @@ max_concurrent_threads_per_session = 17
         .into_iter()
         .all(|hint| hint.is_some_and(|hint| hint.ends_with(expected_suffix.as_str())))
     );
+}
+
+#[tokio::test]
+async fn multi_agent_v2_rejects_subagent_model_request_limit_below_two() -> std::io::Result<()> {
+    let codex_home = TempDir::new()?;
+    std::fs::write(
+        codex_home.path().join(CONFIG_TOML_FILE),
+        r#"[features.multi_agent_v2]
+enabled = true
+max_subagent_model_requests_per_turn = 1
+"#,
+    )?;
+
+    let config = ConfigBuilder::without_managed_config_for_tests()
+        .codex_home(codex_home.path().to_path_buf())
+        .fallback_cwd(Some(codex_home.path().to_path_buf()))
+        .build()
+        .await?;
+    let error = config
+        .validate_multi_agent_v2_config()
+        .expect_err("a one-request cap cannot provide a finalization request");
+    assert_eq!(
+        error.to_string(),
+        "features.multi_agent_v2.max_subagent_model_requests_per_turn must be at least 2"
+    );
+    Ok(())
 }
 
 #[tokio::test]
@@ -11017,7 +11058,7 @@ max_threads = 3
     );
     assert_eq!(
         config.effective_agent_max_threads(MultiAgentVersion::V2),
-        Some(3)
+        Some(5)
     );
 
     Ok(())

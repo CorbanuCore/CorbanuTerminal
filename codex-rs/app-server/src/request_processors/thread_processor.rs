@@ -4,6 +4,8 @@ use codex_app_server_protocol::SelectedCapabilityRoot;
 use codex_extension_api::ExtensionDataInit;
 use codex_protocol::AgentPath;
 use codex_protocol::config_types::MultiAgentMode;
+use codex_protocol::crew::AgentClass;
+use codex_protocol::crew::RetentionPolicy;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
 use codex_protocol::protocol::SessionSource as CoreSessionSource;
@@ -26,7 +28,10 @@ fn trace_thread_processor_timing(label: &str, start: std::time::Instant) {
 #[derive(Debug, Clone)]
 enum ThreadStartResponseKind {
     ThreadStart,
-    ThreadSpawnAgent { agent_nickname: Option<String> },
+    ThreadSpawnAgent {
+        agent_nickname: Option<String>,
+        agent_class: Option<AgentClass>,
+    },
 }
 
 struct ThreadListFilters {
@@ -467,6 +472,7 @@ impl ThreadRequestProcessor {
             parent_thread_id,
             agent_role,
             agent_nickname,
+            agent_class,
             mut thread,
         } = params;
         thread.spawn_agent_parent_thread_id = Some(parent_thread_id);
@@ -479,10 +485,52 @@ impl ThreadRequestProcessor {
             app_server_client_version,
             supports_openai_form_elicitation,
             request_context,
-            ThreadStartResponseKind::ThreadSpawnAgent { agent_nickname },
+            ThreadStartResponseKind::ThreadSpawnAgent {
+                agent_nickname,
+                agent_class,
+            },
         )
         .await
         .map(|()| None)
+    }
+
+    pub(crate) async fn thread_agent_message(
+        &self,
+        params: ThreadAgentMessageParams,
+    ) -> Result<ThreadAgentMessageResponse, JSONRPCErrorError> {
+        let ThreadAgentMessageParams {
+            source_thread_id,
+            target_thread_id,
+            message_id,
+            assignment_id,
+            kind,
+            content,
+            trigger_turn,
+        } = params;
+        let (source_thread_id, source_thread) = self.load_thread(&source_thread_id).await?;
+        let target_thread_id = ThreadId::from_string(&target_thread_id)
+            .map_err(|err| invalid_request(format!("invalid target thread id: {err}")))?;
+        let message_id = source_thread
+            .send_agent_message(
+                target_thread_id,
+                content,
+                trigger_turn,
+                message_id,
+                assignment_id,
+                kind,
+            )
+            .await
+            .map_err(|err| {
+                core_thread_write_error(
+                    &format!("send agent message from {source_thread_id} to {target_thread_id}"),
+                    err,
+                )
+            })?;
+        Ok(ThreadAgentMessageResponse {
+            message_id,
+            target_thread_id: target_thread_id.to_string(),
+            trigger_turn,
+        })
     }
 
     pub(crate) async fn thread_unsubscribe(
@@ -1187,12 +1235,18 @@ impl ThreadRequestProcessor {
                 let agent_role = spawn_agent_role
                     .map(|role| role.trim().to_string())
                     .filter(|role| !role.is_empty());
-                let agent_nickname = match &response_kind {
-                    ThreadStartResponseKind::ThreadSpawnAgent { agent_nickname } => agent_nickname
-                        .as_ref()
-                        .map(|nickname| nickname.trim().to_string())
-                        .filter(|nickname| !nickname.is_empty()),
-                    ThreadStartResponseKind::ThreadStart => None,
+                let (agent_nickname, requested_agent_class) = match &response_kind {
+                    ThreadStartResponseKind::ThreadSpawnAgent {
+                        agent_nickname,
+                        agent_class,
+                    } => (
+                        agent_nickname
+                            .as_ref()
+                            .map(|nickname| nickname.trim().to_string())
+                            .filter(|nickname| !nickname.is_empty()),
+                        agent_class.clone(),
+                    ),
+                    ThreadStartResponseKind::ThreadStart => (None, None),
                 };
                 let parent_thread = listener_task_context
                     .thread_manager
@@ -1222,13 +1276,13 @@ impl ThreadRequestProcessor {
                         config.agent_max_depth
                     )));
                 }
-                let parent_role = parent_snapshot.session_source.get_agent_role();
-                codex_core::config::validate_thread_spawn_role_graph(
-                    parent_role.as_deref(),
-                    agent_role.as_deref(),
-                    depth,
-                )
-                .map_err(invalid_request)?;
+                let agent_class =
+                    Some(
+                        requested_agent_class.unwrap_or_else(|| AgentClass::EphemeralTask {
+                            assignment_id: format!("thread-spawn:{}", ThreadId::new()),
+                            retention: RetentionPolicy::Retain,
+                        }),
+                    );
                 Some(CoreSessionSource::SubAgent(
                     CoreSubAgentSource::ThreadSpawn {
                         parent_thread_id,
@@ -1236,6 +1290,7 @@ impl ThreadRequestProcessor {
                         agent_path,
                         agent_nickname,
                         agent_role,
+                        agent_class,
                     },
                 ))
             }

@@ -7,6 +7,7 @@ use crate::session::turn_context::TurnContext;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
 use crate::tools::context::boxed_tool_output;
+use crate::tools::handlers::apply_patch::InterceptedPatchSource;
 use crate::tools::handlers::apply_patch::intercept_apply_patch;
 use crate::tools::handlers::parse_arguments_for_tool;
 use crate::tools::handlers::resolve_tool_environment;
@@ -54,6 +55,35 @@ pub(crate) fn emit_model_edit_compat_metric(
     );
 }
 
+pub(crate) fn emit_model_edit_fallback_activated_metric(
+    turn_context: &TurnContext,
+    protocol: &'static str,
+) {
+    let profile = model_edit_profile_tag(turn_context);
+    turn_context.session_telemetry.counter(
+        MODEL_EDIT_COMPATIBILITY_METRIC,
+        /*inc*/ 1,
+        &[
+            ("profile", profile),
+            ("protocol", protocol),
+            ("outcome", "fallback_activated"),
+            ("reason", "consecutive_grammar_failures"),
+            ("consecutive_failures", "2"),
+            ("tool_schema_changed", "false"),
+        ],
+    );
+    tracing::info!(
+        target: "codex::model_edit_compatibility",
+        profile,
+        protocol,
+        outcome = "fallback_activated",
+        reason = "consecutive_grammar_failures",
+        consecutive_failures = 2,
+        tool_schema_changed = false,
+        "model edit compatibility fallback activated"
+    );
+}
+
 fn model_edit_profile_tag(turn_context: &TurnContext) -> &'static str {
     let provider = turn_context.provider.info();
     if provider.is_zai() {
@@ -84,6 +114,10 @@ pub(crate) fn structured_edit_protocol_enabled(turn_context: &TurnContext) -> bo
         return true;
     }
 
+    native_structured_edit_protocol_enabled(turn_context)
+}
+
+pub(crate) fn native_structured_edit_protocol_enabled(turn_context: &TurnContext) -> bool {
     let provider = turn_context.provider.info();
     if provider.is_zai() || provider.is_ambient() || provider.is_meta() {
         return true;
@@ -603,6 +637,7 @@ async fn run_generated_patch(
         Some(&invocation.tracker),
         &invocation.call_id,
         invocation.tool_name,
+        InterceptedPatchSource::StructuredTool,
     ))
     .await?;
     match output {
@@ -872,9 +907,24 @@ mod tests {
         turn.model_info.slug = "gpt-5.2".to_string();
 
         assert!(!structured_edit_protocol_enabled(&turn));
-        assert_eq!(turn.record_strict_apply_patch_failure(), 1);
+        assert_eq!(
+            turn.record_strict_apply_patch_grammar_failure()
+                .consecutive_failures(),
+            1
+        );
         assert!(!structured_edit_protocol_enabled(&turn));
-        assert_eq!(turn.record_strict_apply_patch_failure(), 2);
+        turn.record_strict_apply_patch_parse_success();
+        assert_eq!(
+            turn.record_strict_apply_patch_grammar_failure()
+                .consecutive_failures(),
+            1
+        );
+        assert!(!structured_edit_protocol_enabled(&turn));
+        assert_eq!(
+            turn.record_strict_apply_patch_grammar_failure()
+                .consecutive_failures(),
+            2
+        );
         assert!(structured_edit_protocol_enabled(&turn));
     }
 

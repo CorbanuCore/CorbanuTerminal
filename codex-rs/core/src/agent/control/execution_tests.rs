@@ -1,8 +1,10 @@
 use crate::agent::AgentControl;
 use codex_protocol::error::CodexErr;
 use codex_protocol::protocol::MultiAgentVersion;
+use codex_protocol::protocol::Op;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
+use codex_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 
 fn control_with_limit(max_threads: usize) -> AgentControl {
@@ -60,7 +62,7 @@ fn execution_guards_ignore_root_and_v1_turns() {
 }
 
 #[test]
-fn execution_guards_reserve_nazgul_control_path_under_worker_saturation() {
+fn execution_guards_do_not_derive_capacity_policy_from_role_names() {
     let control = control_with_limit(/*max_threads*/ 1);
     let worker_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
         parent_thread_id: codex_protocol::ThreadId::new(),
@@ -68,6 +70,7 @@ fn execution_guards_reserve_nazgul_control_path_under_worker_saturation() {
         agent_path: None,
         agent_nickname: Some("Snaga".to_string()),
         agent_role: Some("orc".to_string()),
+        agent_class: None,
     });
     let nazgul_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
         parent_thread_id: codex_protocol::ThreadId::new(),
@@ -75,6 +78,7 @@ fn execution_guards_reserve_nazgul_control_path_under_worker_saturation() {
         agent_path: None,
         agent_nickname: Some("Angmar".to_string()),
         agent_role: Some("nazgul".to_string()),
+        agent_class: None,
     });
 
     let _worker = control
@@ -87,13 +91,69 @@ fn execution_guards_reserve_nazgul_control_path_under_worker_saturation() {
     };
     assert_eq!(max_threads, 1);
 
-    control
-        .ensure_execution_capacity(MultiAgentVersion::V2, &nazgul_source)
-        .expect("Nazgul control turns must bypass saturated worker capacity");
+    let Err(CodexErr::AgentLimitReached { max_threads }) =
+        control.ensure_execution_capacity(MultiAgentVersion::V2, &nazgul_source)
+    else {
+        panic!("display roles must not bypass native execution capacity");
+    };
+    assert_eq!(max_threads, 1);
+    assert!(matches!(
+        control.try_execution_guard(MultiAgentVersion::V2, &nazgul_source),
+        Err(CodexErr::AgentLimitReached { max_threads: 1 })
+    ));
+}
+
+#[test]
+fn human_input_is_control_plane_work_not_worker_execution() {
+    let user_input = Op::UserInput {
+        items: vec![UserInput::Text {
+            text: "Reprioritize the crew while every worker slot is occupied.".to_string(),
+            text_elements: Vec::new(),
+        }],
+        final_output_json_schema: None,
+        responsesapi_client_metadata: None,
+        additional_context: Default::default(),
+        thread_settings: Default::default(),
+    };
+
+    assert!(!super::op_starts_worker_turn(&user_input));
+    assert!(super::op_starts_worker_turn(&Op::WakePendingWork));
+}
+
+#[tokio::test]
+async fn capacity_waiter_unblocks_after_atomic_worker_reservation_is_released() {
+    let control = control_with_limit(/*max_threads*/ 1);
+    let source = SessionSource::SubAgent(SubAgentSource::Other("worker".to_string()));
+    let reservation = control
+        .try_execution_guard(MultiAgentVersion::V2, &source)
+        .expect("first reservation")
+        .expect("worker reservation");
+    assert!(matches!(
+        control.try_execution_guard(MultiAgentVersion::V2, &source),
+        Err(CodexErr::AgentLimitReached { max_threads: 1 })
+    ));
+
+    let waiting_control = control.clone();
+    let waiter = tokio::spawn(async move {
+        waiting_control.wait_for_execution_capacity().await;
+        waiting_control
+            .try_execution_guard(MultiAgentVersion::V2, &source)
+            .expect("reservation after wake")
+            .expect("worker reservation after wake")
+    });
     assert!(
-        control
-            .execution_guard(MultiAgentVersion::V2, &nazgul_source)
-            .is_none(),
-        "Nazgul control turns must not consume worker capacity"
+        tokio::time::timeout(std::time::Duration::from_millis(25), async {
+            while !waiter.is_finished() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .is_err()
     );
+    drop(reservation);
+    let resumed_reservation = tokio::time::timeout(std::time::Duration::from_secs(1), waiter)
+        .await
+        .expect("capacity waiter should wake")
+        .expect("capacity waiter task");
+    drop(resumed_reservation);
 }

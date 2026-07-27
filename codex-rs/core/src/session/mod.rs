@@ -109,7 +109,10 @@ use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::SandboxEnforcement;
 use codex_protocol::models::format_allow_prefixes;
+use codex_protocol::openai_models::ModelBilling;
+use codex_protocol::openai_models::ModelCapabilityTier;
 use codex_protocol::openai_models::ModelInfo;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::NetworkSandboxPolicy;
@@ -2023,13 +2026,24 @@ impl Session {
             .rollout_thread_trace
             .is_enabled()
             .then(|| message.clone());
+        let trigger_turn = self
+            .services
+            .agent_control
+            .auto_processes_terminal_results(parent_thread_id)
+            .await;
         let communication = InterAgentCommunication::new(
             child_agent_path.clone(),
             parent_agent_path,
             Vec::new(),
             message,
-            /*trigger_turn*/ false,
-        );
+            trigger_turn,
+        )
+        .with_kind(codex_protocol::protocol::AgentMessageKind::TerminalResult)
+        .with_assignment_id(turn_context.sub_id.clone())
+        .with_message_id(format!(
+            "completion:{}:{}",
+            self.thread_id, turn_context.sub_id
+        ));
         if let Err(err) = self
             .services
             .agent_control
@@ -2952,6 +2966,16 @@ impl Session {
         turn_context: &TurnContext,
         communication: InterAgentCommunication,
     ) {
+        let message_id = communication.message_id.clone();
+        if let Some(message_id) = message_id.as_ref()
+            && !self
+                .applied_agent_message_ids
+                .lock()
+                .await
+                .insert(message_id.clone())
+        {
+            return;
+        }
         let response_item = communication.to_model_input_item();
         let items = self.prepare_conversation_items_for_history(
             turn_context,
@@ -2967,6 +2991,55 @@ impl Session {
         }
         self.persist_rollout_items(&[RolloutItem::InterAgentCommunication(communication)])
             .await;
+        if let Some(message_id) = message_id
+            && let Some(state_db) = self.state_db()
+        {
+            match self.flush_rollout().await {
+                Ok(()) => {
+                    if self
+                        .track_agent_message_for_turn(&turn_context.sub_id, message_id.clone())
+                        .await
+                    {
+                        match state_db
+                            .transition_agent_message(
+                                &message_id,
+                                codex_state::AgentMailboxPhase::Submitted,
+                                codex_state::AgentMailboxPhase::ProviderRunning,
+                                crate::turn_timing::now_unix_timestamp_ms(),
+                            )
+                            .await
+                        {
+                            Ok(true) => {}
+                            Ok(false) => warn!(
+                                %message_id,
+                                "agent mailbox message could not enter provider_running from its \
+                                 current state"
+                            ),
+                            Err(err) => warn!(
+                                %err,
+                                %message_id,
+                                "failed to mark agent mailbox message provider_running"
+                            ),
+                        }
+                    } else if let Err(err) = state_db
+                        .mark_agent_message_completed(
+                            &message_id,
+                            crate::turn_timing::now_unix_timestamp_ms(),
+                        )
+                        .await
+                    {
+                        warn!(%err, %message_id, "failed to complete locally applied mailbox message");
+                    }
+                }
+                Err(err) => {
+                    warn!(
+                        %err,
+                        %message_id,
+                        "leaving agent mailbox message recoverable because its rollout did not flush"
+                    );
+                }
+            }
+        }
         self.send_raw_response_items(turn_context, items).await;
         // Plaintext inter-agent controls are operator-visible transcript content. Raw response
         // notifications preserve provider compatibility, but app-server clients render the
@@ -2975,6 +3048,25 @@ impl Session {
             self.emit_turn_item_started(turn_context, &item).await;
             self.emit_turn_item_completed(turn_context, item).await;
         }
+    }
+
+    pub(crate) async fn has_applied_agent_message_id(&self, message_id: &str) -> bool {
+        self.applied_agent_message_ids
+            .lock()
+            .await
+            .contains(message_id)
+    }
+
+    async fn track_agent_message_for_turn(&self, sub_id: &str, message_id: String) -> bool {
+        let Some(turn_state) = self
+            .input_queue
+            .turn_state_for_sub_id(&self.active_turn, sub_id)
+            .await
+        else {
+            return false;
+        };
+        turn_state.lock().await.track_mailbox_message(message_id);
+        true
     }
 
     async fn maybe_warn_on_server_model_mismatch(

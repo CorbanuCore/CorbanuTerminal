@@ -9,6 +9,7 @@ use crate::tools::handlers::multi_agents_spec::create_spawn_agent_tool_v2;
 use crate::turn_timing::now_unix_timestamp_ms;
 use codex_protocol::AgentPath;
 use codex_protocol::models::ResponseItemMetadata;
+use codex_protocol::protocol::AgentMessageKind;
 use codex_protocol::protocol::Op;
 use codex_tools::ToolSpec;
 
@@ -70,7 +71,6 @@ async fn handle_spawn_agent(
     let initial_operation = parse_collab_input(Some(args.message), /*items*/ None)?;
     let session_source = turn.session_source.clone();
     let child_depth = next_thread_spawn_depth(&session_source);
-    validate_model_spawn_role_graph(&session_source, role_name, child_depth)?;
     let mut config =
         build_agent_spawn_config(&session.get_base_instructions().await, turn.as_ref())?;
     if let Some(service_tier) = args.service_tier.as_ref() {
@@ -79,21 +79,23 @@ async fn handle_spawn_agent(
     if matches!(fork_mode, Some(SpawnAgentForkMode::FullHistory)) {
         reject_full_fork_spawn_overrides(
             role_name,
+            args.model_provider.as_deref(),
             args.model.as_deref(),
             args.reasoning_effort.clone(),
         )?;
     } else {
-        apply_requested_spawn_agent_model_overrides(
+        apply_role_to_config(&mut config, role_name)
+            .await
+            .map_err(FunctionCallError::RespondToModel)?;
+        apply_requested_spawn_agent_runtime_overrides(
             &session,
             turn.as_ref(),
             &mut config,
+            args.model_provider.as_deref(),
             args.model.as_deref(),
             args.reasoning_effort.clone(),
         )
         .await?;
-        apply_role_to_config(&mut config, role_name)
-            .await
-            .map_err(FunctionCallError::RespondToModel)?;
     }
     apply_spawn_agent_service_tier(
         &session,
@@ -103,6 +105,15 @@ async fn handle_spawn_agent(
     )
     .await?;
     apply_spawn_agent_runtime_overrides(&mut config, turn.as_ref())?;
+    ensure_spawn_provider_authorized(&config, &config.model_provider_id)?;
+    ensure_spawn_runtime_eligible(&session, &config).await?;
+    let resolved_model_provider = config.model_provider_id.clone();
+    let resolved_model = config
+        .model
+        .clone()
+        .unwrap_or_else(|| turn.model_info.slug.clone());
+    let resolved_reasoning_effort = config.model_reasoning_effort.clone();
+    let resolved_service_tier = config.service_tier.clone();
 
     let spawn_source = thread_spawn_source(
         session.thread_id,
@@ -110,6 +121,7 @@ async fn handle_spawn_agent(
         child_depth,
         role_name,
         Some(args.task_name.clone()),
+        Some(call_id.clone()),
     )?;
     let new_agent_path = spawn_source.get_agent_path().ok_or_else(|| {
         FunctionCallError::RespondToModel(
@@ -134,7 +146,12 @@ async fn handle_spawn_agent(
                         new_agent_path.clone(),
                         message,
                         &turn.config.model_provider_id,
-                    );
+                    )
+                    .with_kind(AgentMessageKind::Assignment)
+                    .with_assignment_id(call_id.clone());
+                    communication
+                        .validate_mailbox_body()
+                        .map_err(FunctionCallError::RespondToModel)?;
                     communication
                         .metadata
                         .get_or_insert_with(ResponseItemMetadata::default)
@@ -199,6 +216,10 @@ async fn handle_spawn_agent(
         Ok(SpawnAgentResult::WithNickname {
             task_name,
             nickname,
+            model_provider: resolved_model_provider,
+            model: resolved_model,
+            reasoning_effort: resolved_reasoning_effort,
+            service_tier: resolved_service_tier,
         })
     }
 }
@@ -215,6 +236,7 @@ struct SpawnAgentArgs {
     message: String,
     task_name: String,
     agent_type: Option<String>,
+    model_provider: Option<String>,
     model: Option<String>,
     reasoning_effort: Option<ReasoningEffort>,
     service_tier: Option<String>,
@@ -265,6 +287,10 @@ pub(crate) enum SpawnAgentResult {
     WithNickname {
         task_name: String,
         nickname: Option<String>,
+        model_provider: String,
+        model: String,
+        reasoning_effort: Option<ReasoningEffort>,
+        service_tier: Option<String>,
     },
     HiddenMetadata {
         task_name: String,

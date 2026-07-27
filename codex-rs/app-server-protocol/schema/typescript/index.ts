@@ -2,6 +2,7 @@
 
 export type { AbsolutePathBuf } from "./AbsolutePathBuf";
 export type { AgentMessageInputContent } from "./AgentMessageInputContent";
+export type { AgentMessageKind } from "./AgentMessageKind";
 export type { AgentPath } from "./AgentPath";
 export type { AmazonBedrockCredentialSource } from "./AmazonBedrockCredentialSource";
 export type { ApplyPatchApprovalParams } from "./ApplyPatchApprovalParams";
@@ -49,6 +50,9 @@ export type { LocalShellStatus } from "./LocalShellStatus";
 export type { McpServerInfo } from "./McpServerInfo";
 export type { MessagePhase } from "./MessagePhase";
 export type { ModeKind } from "./ModeKind";
+export type { ModelBilling } from "./ModelBilling";
+export type { ModelCapabilityTier } from "./ModelCapabilityTier";
+export type { ModelOrchestrationMetadata } from "./ModelOrchestrationMetadata";
 export type { MultiAgentMode } from "./MultiAgentMode";
 export type { NetworkPolicyAmendment } from "./NetworkPolicyAmendment";
 export type { NetworkPolicyRuleAction } from "./NetworkPolicyRuleAction";

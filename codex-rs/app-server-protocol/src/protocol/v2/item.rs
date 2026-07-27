@@ -1079,6 +1079,7 @@ impl From<CoreSubAgentActivityKind> for SubAgentActivityKind {
 #[ts(export_to = "v2/")]
 pub enum CollabAgentStatus {
     PendingInit,
+    Unloaded,
     Running,
     Interrupted,
     Completed,
@@ -1100,6 +1101,10 @@ impl From<CoreAgentStatus> for CollabAgentState {
         match value {
             CoreAgentStatus::PendingInit => Self {
                 status: CollabAgentStatus::PendingInit,
+                message: None,
+            },
+            CoreAgentStatus::Unloaded => Self {
+                status: CollabAgentStatus::Unloaded,
                 message: None,
             },
             CoreAgentStatus::Running => Self {

@@ -34,6 +34,58 @@
       ],
       "type": "string"
     },
+    "AgentClass": {
+      "oneOf": [
+        {
+          "properties": {
+            "class": {
+              "enum": [
+                "crew_member"
+              ],
+              "type": "string"
+            },
+            "crew_id": {
+              "type": "string"
+            },
+            "human_addressable": {
+              "type": "boolean"
+            },
+            "logical_member_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "class",
+            "crew_id",
+            "human_addressable",
+            "logical_member_id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "assignment_id": {
+              "type": "string"
+            },
+            "class": {
+              "enum": [
+                "ephemeral_task"
+              ],
+              "type": "string"
+            },
+            "retention": {
+              "$ref": "#/definitions/RetentionPolicy"
+            }
+          },
+          "required": [
+            "assignment_id",
+            "class",
+            "retention"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "AgentMessageInputContent": {
       "oneOf": [
         {
@@ -77,6 +129,17 @@
           "type": "object"
         }
       ]
+    },
+    "AgentMessageKind": {
+      "enum": [
+        "assignment",
+        "follow_up",
+        "informational",
+        "checkpoint",
+        "terminal_result",
+        "control_request"
+      ],
+      "type": "string"
     },
     "ApprovalsReviewer": {
       "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
@@ -3150,6 +3213,14 @@
           "type": "object"
         }
       ]
+    },
+    "RetentionPolicy": {
+      "enum": [
+        "close_on_completion",
+        "unload_on_completion",
+        "retain"
+      ],
+      "type": "string"
     },
     "ReviewDelivery": {
       "enum": [

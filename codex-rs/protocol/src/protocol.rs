@@ -694,7 +694,38 @@ impl From<Vec<UserInput>> for Op {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+#[derive(Default)]
+pub enum AgentMessageKind {
+    Assignment,
+    FollowUp,
+    #[default]
+    Informational,
+    Checkpoint,
+    TerminalResult,
+    ControlRequest,
+}
+
+/// Maximum provider-neutral message body admitted to the native agent mailbox.
+///
+/// Agent messages become model-visible context when the recipient runs. Keeping one bound at
+/// the protocol boundary prevents every producer and adapter from inventing a different limit.
+pub const MAX_AGENT_MESSAGE_BYTES: usize = 32 * 1024;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema, TS)]
 pub struct InterAgentCommunication {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub message_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub assignment_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub kind: Option<AgentMessageKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub created_at_ms: Option<i64>,
     pub author: AgentPath,
     pub recipient: AgentPath,
     #[serde(default)]
@@ -718,6 +749,14 @@ impl InterAgentCommunication {
         trigger_turn: bool,
     ) -> Self {
         Self {
+            message_id: Some(uuid::Uuid::now_v7().to_string()),
+            assignment_id: None,
+            kind: Some(if trigger_turn {
+                AgentMessageKind::FollowUp
+            } else {
+                AgentMessageKind::Informational
+            }),
+            created_at_ms: Some(chrono::Utc::now().timestamp_millis()),
             author,
             recipient,
             other_recipients,
@@ -736,6 +775,14 @@ impl InterAgentCommunication {
         trigger_turn: bool,
     ) -> Self {
         Self {
+            message_id: Some(uuid::Uuid::now_v7().to_string()),
+            assignment_id: None,
+            kind: Some(if trigger_turn {
+                AgentMessageKind::FollowUp
+            } else {
+                AgentMessageKind::Informational
+            }),
+            created_at_ms: Some(chrono::Utc::now().timestamp_millis()),
             author,
             recipient,
             other_recipients,
@@ -744,6 +791,43 @@ impl InterAgentCommunication {
             metadata: None,
             trigger_turn,
         }
+    }
+
+    pub fn ensure_message_identity(&mut self) -> &str {
+        let message_id = self
+            .message_id
+            .get_or_insert_with(|| uuid::Uuid::now_v7().to_string());
+        self.created_at_ms
+            .get_or_insert_with(|| chrono::Utc::now().timestamp_millis());
+        message_id.as_str()
+    }
+
+    pub fn with_kind(mut self, kind: AgentMessageKind) -> Self {
+        self.kind = Some(kind);
+        self
+    }
+
+    pub fn with_assignment_id(mut self, assignment_id: impl Into<String>) -> Self {
+        self.assignment_id = Some(assignment_id.into());
+        self
+    }
+
+    pub fn with_message_id(mut self, message_id: impl Into<String>) -> Self {
+        self.message_id = Some(message_id.into());
+        self
+    }
+
+    pub fn validate_mailbox_body(&self) -> Result<(), String> {
+        let body_len = self
+            .encrypted_content
+            .as_ref()
+            .map_or_else(|| self.content.len(), String::len);
+        if body_len > MAX_AGENT_MESSAGE_BYTES {
+            return Err(format!(
+                "agent message is {body_len} bytes; maximum is {MAX_AGENT_MESSAGE_BYTES} bytes"
+            ));
+        }
+        Ok(())
     }
 
     pub fn to_response_input_item(&self) -> ResponseInputItem {
@@ -1662,6 +1746,8 @@ pub enum AgentStatus {
     /// Agent is waiting for initialization.
     #[default]
     PendingInit,
+    /// Agent is persisted and addressable, but is not currently resident in this process.
+    Unloaded,
     /// Agent is currently running.
     Running,
     /// Agent's current turn was interrupted and it may receive more input.
@@ -2732,6 +2818,11 @@ pub enum SubAgentSource {
         agent_nickname: Option<String>,
         #[serde(default, alias = "agent_type")]
         agent_role: Option<String>,
+        /// Product-level retention and addressing classification for this native thread.
+        ///
+        /// Older rollouts omit this field and remain resumable as unclassified agents.
+        #[serde(default)]
+        agent_class: Option<crate::crew::AgentClass>,
     },
     MemoryConsolidation,
     Other(String),
@@ -2803,6 +2894,15 @@ impl SessionSource {
         match self {
             SessionSource::SubAgent(SubAgentSource::ThreadSpawn { agent_path, .. }) => {
                 agent_path.clone()
+            }
+            _ => None,
+        }
+    }
+
+    pub fn get_agent_class(&self) -> Option<crate::crew::AgentClass> {
+        match self {
+            SessionSource::SubAgent(SubAgentSource::ThreadSpawn { agent_class, .. }) => {
+                agent_class.clone()
             }
             _ => None,
         }
@@ -4351,6 +4451,10 @@ mod tests {
     #[test]
     fn inter_agent_communication_response_input_item_preserves_commentary_phase() {
         let communication = InterAgentCommunication {
+            message_id: Some("message-1".to_string()),
+            assignment_id: Some("assignment-1".to_string()),
+            kind: Some(AgentMessageKind::Assignment),
+            created_at_ms: Some(1_000),
             author: AgentPath::root(),
             recipient: AgentPath::root().join("reviewer").expect("recipient path"),
             other_recipients: vec![AgentPath::root().join("worker").expect("recipient path")],
@@ -4369,6 +4473,34 @@ mod tests {
                 }],
                 phase: Some(MessagePhase::Commentary),
             }
+        );
+    }
+
+    #[test]
+    fn inter_agent_communication_enforces_one_canonical_body_limit() {
+        let recipient = AgentPath::root().join("worker").expect("recipient path");
+        let at_limit = InterAgentCommunication::new(
+            AgentPath::root(),
+            recipient.clone(),
+            Vec::new(),
+            "x".repeat(MAX_AGENT_MESSAGE_BYTES),
+            /*trigger_turn*/ true,
+        );
+        assert_eq!(at_limit.validate_mailbox_body(), Ok(()));
+
+        let over_limit = InterAgentCommunication::new(
+            AgentPath::root(),
+            recipient,
+            Vec::new(),
+            "x".repeat(MAX_AGENT_MESSAGE_BYTES + 1),
+            /*trigger_turn*/ true,
+        );
+        assert_eq!(
+            over_limit.validate_mailbox_body(),
+            Err(format!(
+                "agent message is {} bytes; maximum is {MAX_AGENT_MESSAGE_BYTES} bytes",
+                MAX_AGENT_MESSAGE_BYTES + 1
+            ))
         );
     }
 

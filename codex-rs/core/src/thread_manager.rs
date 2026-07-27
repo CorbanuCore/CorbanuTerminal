@@ -728,7 +728,6 @@ impl ThreadManager {
         parent_trace: Option<W3cTraceContext>,
         supports_openai_form_elicitation: bool,
     ) -> CodexResult<NewThread> {
-        let agent_control = self.agent_control_for_config(&config);
         let environments = default_thread_environment_selections(
             self.state.environment_manager.as_ref(),
             &config.cwd,
@@ -736,12 +735,19 @@ impl ThreadManager {
         let (session_source, thread_source) = initial_history
             .get_resumed_session_sources()
             .unwrap_or_else(|| (self.state.session_source.clone(), None));
+        // A restored thread-spawn child must rejoin its loaded parent's control plane. Giving
+        // every resumed child a fresh AgentControl leaves persisted siblings invisible to
+        // list/send/follow-up operations and permits a duplicate path to be spawned over them.
+        // Root threads still receive a fresh tree-scoped control.
+        let agent_control = self
+            .agent_control_for_session_source(&config, &session_source)
+            .await;
         let initial_multi_agent_mode = initial_history.get_latest_effective_multi_agent_mode();
-        Box::pin(self.state.spawn_thread_with_source(
+        let resumed_thread = Box::pin(self.state.spawn_thread_with_source(
             config,
             initial_history,
             auth_manager,
-            agent_control,
+            agent_control.clone(),
             session_source,
             /*parent_thread_id*/ None,
             /*forked_from_thread_id*/ None,
@@ -757,7 +763,18 @@ impl ThreadManager {
             supports_openai_form_elicitation,
             /*user_shell_override*/ None,
         ))
-        .await
+        .await?;
+        agent_control
+            .restore_persisted_agent_subtree(resumed_thread.thread_id)
+            .await?;
+        // Root-thread resume is also a provider/process recovery boundary. Child reloads
+        // reconcile their own mailbox in `ensure_v2_agent_loaded`, but the human root does not
+        // pass through that path. Reconcile it explicitly so ambiguous in-flight work is
+        // quarantined and safe local work is resumed exactly once.
+        agent_control
+            .recover_inter_agent_communications(resumed_thread.thread_id)
+            .await?;
+        Ok(resumed_thread)
     }
 
     pub(crate) async fn start_thread_with_user_shell_override_for_tests(
@@ -1536,10 +1553,17 @@ impl ThreadManagerState {
         let new_thread = self
             .finalize_thread_spawn(codex, thread_id, tracked_session_source)
             .await?;
-        agent_control.register_thread_spawn_metadata(
-            new_thread.thread_id,
-            &new_thread.thread.session_source,
-        );
+        if is_resumed_thread {
+            agent_control.restore_thread_spawn_metadata(
+                new_thread.thread_id,
+                &new_thread.thread.session_source,
+            );
+        } else {
+            agent_control.register_thread_spawn_metadata(
+                new_thread.thread_id,
+                &new_thread.thread.session_source,
+            );
+        }
         if is_resumed_thread {
             new_thread.thread.emit_thread_resume_lifecycle().await;
         }

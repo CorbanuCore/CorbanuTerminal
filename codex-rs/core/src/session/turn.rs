@@ -19,6 +19,7 @@ use crate::compact_remote::run_inline_remote_auto_compact_task;
 use crate::compact_remote_v2::run_inline_remote_auto_compact_task as run_inline_remote_auto_compact_task_v2;
 use crate::connectors;
 use crate::context::ContextualUserFragment;
+use crate::context::SubagentTurnBudgetFinalization;
 use crate::context::TurnCompletionContinuation;
 use crate::feedback_tags;
 use crate::hook_runtime::inspect_pending_input;
@@ -112,6 +113,7 @@ use codex_protocol::protocol::ModelResponseCompletedEvent;
 use codex_protocol::protocol::PlanDeltaEvent;
 use codex_protocol::protocol::ReasoningContentDeltaEvent;
 use codex_protocol::protocol::ReasoningRawContentDeltaEvent;
+use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TurnDiffEvent;
 use codex_protocol::protocol::WarningEvent;
@@ -250,6 +252,13 @@ pub(crate) async fn run_turn(
     let completion_objective = objective_from_turn_input(&input);
     let mut completion_progress = CompletionProgressState::default();
     let mut pending_completion_continuation = false;
+    let subagent_model_request_limit = turn_context.session_source.is_non_root_agent().then_some(
+        turn_context
+            .config
+            .multi_agent_v2
+            .max_subagent_model_requests_per_turn,
+    );
+    let mut model_request_count = 0_usize;
     // Although from the perspective of codex.rs, TurnDiffTracker has the lifecycle of a Task which contains
     // many turns, from the perspective of the user, it is a single turn.
     let display_roots = turn_diff_display_roots(turn_context.as_ref()).await;
@@ -266,6 +275,23 @@ pub(crate) async fn run_turn(
     // 2. After auto-compact, when model/tool continuation needs to resume before any steer.
 
     loop {
+        if subagent_model_request_limit.is_some_and(|limit| model_request_count >= limit) {
+            let limit = subagent_model_request_limit.unwrap_or_default();
+            let message = format!(
+                "Sub-agent turn stopped after the configured limit of {limit} model requests. \
+                 Review the last reported progress and send a focused follow-up task if more work \
+                 is required."
+            );
+            sess.send_event(
+                &turn_context,
+                EventMsg::Warning(WarningEvent {
+                    message: message.clone(),
+                }),
+            )
+            .await;
+            last_agent_message.get_or_insert(message);
+            break;
+        }
         // Note that pending_input would be something like a message the user
         // submitted through the UI while the model was running. Though the UI
         // may support this, the model might not.
@@ -307,6 +333,15 @@ pub(crate) async fn run_turn(
                 sampling_request_input
                     .push(ContextualUserFragment::into(TurnCompletionContinuation));
             }
+            if subagent_model_request_limit
+                .is_some_and(|limit| model_request_count.saturating_add(1) == limit)
+            {
+                sampling_request_input.push(ContextualUserFragment::into(
+                    SubagentTurnBudgetFinalization {
+                        max_model_requests: subagent_model_request_limit.unwrap_or_default(),
+                    },
+                ));
+            }
             trace_turn_timing("after_prepare_sampling_request_input", turn_started_at);
 
             let responses_metadata = turn_context.turn_metadata_state.to_responses_metadata(
@@ -316,6 +351,7 @@ pub(crate) async fn run_turn(
             );
             let tokens_before_sampling = sess.get_total_token_usage().await;
             trace_turn_timing("before_run_sampling_request", turn_started_at);
+            model_request_count = model_request_count.saturating_add(1);
             let (sampling_request_output, sampling_request_input) = run_sampling_request(
                 Arc::clone(&sess),
                 Arc::clone(&turn_context),
@@ -345,6 +381,9 @@ pub(crate) async fn run_turn(
                     made_tool_progress,
                     provider_stopped,
                 } = sampling_request_output;
+                if let Some(message) = sampling_request_last_agent_message.as_ref() {
+                    last_agent_message = Some(message.clone());
+                }
                 if made_tool_progress {
                     completion_progress.note_tool_progress();
                 }
@@ -539,7 +578,9 @@ pub(crate) async fn run_turn(
                 }
 
                 if !needs_follow_up {
-                    last_agent_message = sampling_request_last_agent_message;
+                    if sampling_request_last_agent_message.is_some() {
+                        last_agent_message = sampling_request_last_agent_message;
+                    }
                     let stop_outcome = run_turn_stop_hooks(
                         &sess,
                         &turn_context,
@@ -2416,6 +2457,9 @@ fn provider_request_active_lease_needed(
     preflight: &ProviderRequestPreflight,
     last_token_usage: Option<&TokenUsage>,
 ) -> bool {
+    if !provider_request_lease_applies_to_session(&turn_context.session_source) {
+        return false;
+    }
     if !provider_uses_request_lease(
         turn_context.config.model_provider_id.as_str(),
         turn_context.provider.info().is_openai(),
@@ -2425,6 +2469,17 @@ fn provider_request_active_lease_needed(
     let large_request = preflight.input_tokens >= THIRD_PARTY_PREFLIGHT_WARNING_INPUT_TOKENS
         || preflight.request_bytes >= THIRD_PARTY_PREFLIGHT_WARNING_REQUEST_BYTES;
     large_request && !third_party_cache_looks_healthy(last_token_usage)
+}
+
+/// The cross-process lease exists to stop many autonomous sub-agents from
+/// hammering one metered third-party key. A human-driven session is
+/// control-plane work, not worker execution: it must stay able to reach its
+/// manager while sub-agents saturate that key, so it never waits on the
+/// shared lease. This mirrors the worker/control-plane split that
+/// `AgentControl` already applies to execution capacity, and is neutral to
+/// provider, model, and role name.
+fn provider_request_lease_applies_to_session(session_source: &SessionSource) -> bool {
+    matches!(session_source, SessionSource::SubAgent(_))
 }
 
 fn provider_uses_request_lease(provider_id: &str, is_openai: bool) -> bool {

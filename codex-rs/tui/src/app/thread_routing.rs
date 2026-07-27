@@ -340,17 +340,12 @@ impl App {
     /// not spend footer space restating that the user is already on the main conversation.
     pub(crate) fn sync_active_agent_label(&mut self) {
         let active_claude_title = self.claude_panes.active_claude_pane_title();
-        let mut label = active_claude_title
+        let label = active_claude_title
             .map(|title| format!("{title} pane"))
             .or_else(|| {
                 self.agent_navigation
                     .active_agent_label(self.current_displayed_thread_id(), self.primary_thread_id)
             });
-        if let (Some(label), Some((items, bytes))) =
-            (label.as_mut(), self.active_spawn_dispatch_queue_usage())
-        {
-            let _ = write!(label, " · dispatch queue: {items} items, {bytes} bytes");
-        }
         self.chat_widget
             .set_active_external_model_display(self.claude_panes.active_claude_pane_model_label());
         self.chat_widget.set_active_agent_label(label);
@@ -1195,16 +1190,6 @@ impl App {
                 self.agent_navigation.set_running(thread_id, is_running);
                 self.agent_navigation
                     .set_last_result_message(thread_id, status.message.clone());
-                if !is_running && self.is_spawn_orchestration_thread(thread_id) {
-                    let flushed_dispatch = self
-                        .spawn_pending_dispatches
-                        .get(&crate::spawn_orchestration::thread_node_id(thread_id))
-                        .is_some_and(|queue| !queue.is_empty());
-                    self.request_spawn_dispatch_pump();
-                    if !flushed_dispatch {
-                        self.flush_pending_reports_for_thread(thread_id);
-                    }
-                }
             }
 
             if self.agent_navigation.get(&thread_id).is_some() {
@@ -1733,7 +1718,6 @@ impl App {
                 {
                     self.spawn_waiting_for_agents_by_thread
                         .insert(thread_id, (notification.turn_id.clone(), id.clone()));
-                    self.request_spawn_dispatch_pump();
                 }
             }
             ServerNotification::ItemCompleted(notification) => {
@@ -1786,13 +1770,6 @@ impl App {
                 },
             );
             self.agent_navigation.mark_closed(thread_id);
-            self.record_spawn_child_report_for_thread(
-                thread_id,
-                codex_app_server_protocol::CollabAgentStatus::Shutdown,
-                Some("thread closed".to_string()),
-            );
-            self.fail_pending_dispatches_for_thread(thread_id, "target closed before delivery");
-            self.flush_pending_reports_for_thread(thread_id);
             self.persist_pane_state();
             return;
         }
@@ -1819,7 +1796,7 @@ impl App {
                 let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
                     return;
                 };
-                self.dispatch_native_spawn_task_blocks_from_turn(thread_id, &notification.turn);
+                self.process_native_completed_turn_for_orchestration(thread_id, &notification.turn);
                 // Loop breaker: finalize AFTER the dispatch call above so a dispatch emitted by
                 // this turn is attributed to it before the auto-turn flags clear.
                 if notification.turn.status != TurnStatus::InProgress {
@@ -1860,14 +1837,20 @@ impl App {
                 // dispatch immediately so dispatch-then-wait works; interrupted/truncated turns
                 // never emit ItemCompleted for that message, and TurnCompleted remains a deduped
                 // catch-all for completed turns.
-                if let codex_app_server_protocol::ThreadItem::AgentMessage { text, .. } =
-                    &notification.item
+                if let codex_app_server_protocol::ThreadItem::AgentMessage {
+                    id, text, phase, ..
+                } = &notification.item
+                    && !matches!(
+                        phase,
+                        Some(codex_protocol::models::MessagePhase::Commentary)
+                    )
                 {
                     let source_node_id = self.spawn_auto_loop_node_for_thread(thread_id);
                     self.dispatch_orchestrate_blocks_from_text(&source_node_id, text);
                     self.dispatch_native_spawn_task_blocks_from_item(
                         thread_id,
                         &notification.turn_id,
+                        id,
                         text,
                     );
                 }
@@ -1918,7 +1901,6 @@ impl App {
         } else {
             message
         };
-        let report_message = message.clone();
         self.spawn_status_by_thread.insert(
             thread_id,
             codex_app_server_protocol::CollabAgentState {
@@ -1945,26 +1927,12 @@ impl App {
                 status,
                 codex_app_server_protocol::CollabAgentStatus::Completed
             );
-            self.record_spawn_child_report_for_thread(thread_id, status, report_message);
-            // Commands queued for this target take priority over informational child reports.
-            let flushed_dispatch = self
-                .spawn_pending_dispatches
-                .get(&crate::spawn_orchestration::thread_node_id(thread_id))
-                .is_some_and(|queue| !queue.is_empty());
-            self.request_spawn_dispatch_pump();
-            // This thread just went idle. If child reports arrived while it was mid-turn, flush them
-            // now into a real processing turn so no report is silently dropped (the multi-turn race).
-            let flushed_reports = if flushed_dispatch {
-                false
-            } else {
-                self.flush_pending_reports_for_thread(thread_id)
-            };
             let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
             if should_process_terminal_side_effects {
                 self.note_whip_target_idle_with_fire_control(
                     &node_key,
                     current_turn_message.as_deref(),
-                    !flushed_dispatch && !flushed_reports,
+                    true,
                     turn_succeeded,
                 );
             }
@@ -2074,7 +2042,12 @@ impl App {
 
 fn spawn_turn_result_message(turn: &codex_app_server_protocol::Turn) -> Option<String> {
     let agent_text = turn.items.iter().rev().find_map(|item| match item {
-        codex_app_server_protocol::ThreadItem::AgentMessage { text, .. } => {
+        codex_app_server_protocol::ThreadItem::AgentMessage { text, phase, .. }
+            if !matches!(
+                phase,
+                Some(codex_protocol::models::MessagePhase::Commentary)
+            ) =>
+        {
             let trimmed = text.trim();
             (!trimmed.is_empty()).then_some(trimmed)
         }

@@ -2012,6 +2012,13 @@ impl App {
         })
     }
 
+    pub(crate) fn is_orchestration_participant(&self, node_id: &str) -> bool {
+        let node_id = normalize_orchestrate_node_id(node_id);
+        self.orchestrate_whips
+            .values()
+            .any(|whip| whip.target == node_id || whip.holder.as_deref() == Some(node_id.as_str()))
+    }
+
     pub(crate) fn assignment_dispatch_target_for_holder(
         &self,
         holder_node_id: &str,
@@ -2690,18 +2697,12 @@ impl App {
         );
         match destination {
             FireDestination::Native(thread_id) => {
-                self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
-                    thread_id,
-                    task,
-                    delivery_id: None,
-                });
+                self.app_event_tx
+                    .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
             }
             FireDestination::ClaudePane(pane_id) => {
-                self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
-                    pane_id,
-                    task,
-                    delivery_id: None,
-                });
+                self.app_event_tx
+                    .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task });
             }
         }
         self.chat_widget.add_info_message(
@@ -2900,14 +2901,12 @@ impl App {
                 self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
                     thread_id,
                     task: plan.task,
-                    delivery_id: None,
                 });
             }
             FireDestination::ClaudePane(pane_id) => {
                 self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
                     pane_id,
                     task: plan.task,
-                    delivery_id: None,
                 });
             }
         }
@@ -3084,20 +3083,12 @@ impl App {
                 "Assignment {id} recovery: your previous turn completed successfully but emitted no visible assistant response. Process the latest user message already present in this conversation. Continue drafting the assignment from the available context and dispatch the Worker when the specification is sufficiently concrete. Do not ask the user to repeat information they already supplied."
             );
             match self.fire_destination_for_node(manager) {
-                Ok(FireDestination::Native(thread_id)) => {
-                    self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
-                        thread_id,
-                        task,
-                        delivery_id: None,
-                    })
-                }
-                Ok(FireDestination::ClaudePane(pane_id)) => {
-                    self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
-                        pane_id,
-                        task,
-                        delivery_id: None,
-                    })
-                }
+                Ok(FireDestination::Native(thread_id)) => self
+                    .app_event_tx
+                    .send(AppEvent::SubmitSpawnAgentTask { thread_id, task }),
+                Ok(FireDestination::ClaudePane(pane_id)) => self
+                    .app_event_tx
+                    .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task }),
                 Err(err) => {
                     pause_ids.push(id.clone());
                     self.chat_widget.add_error_message(format!(

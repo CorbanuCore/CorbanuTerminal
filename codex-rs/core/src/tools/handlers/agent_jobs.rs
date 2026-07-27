@@ -5,6 +5,8 @@ use crate::function_tool::FunctionCallError;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::tools::handlers::multi_agents::build_agent_spawn_config;
+use crate::tools::handlers::multi_agents::ensure_spawn_provider_authorized;
+use crate::tools::handlers::multi_agents::ensure_spawn_runtime_eligible;
 use crate::tools::handlers::parse_arguments;
 use codex_protocol::ThreadId;
 use codex_protocol::error::CodexErr;
@@ -125,6 +127,8 @@ async fn build_runner_options(
     let max_concurrency = normalize_concurrency(requested_concurrency, agent_max_threads);
     let base_instructions = session.get_base_instructions().await;
     let spawn_config = build_agent_spawn_config(&base_instructions, turn.as_ref())?;
+    ensure_spawn_provider_authorized(&spawn_config, &spawn_config.model_provider_id)?;
+    ensure_spawn_runtime_eligible(session, &spawn_config).await?;
     Ok(JobRunnerOptions {
         max_concurrency,
         spawn_config,

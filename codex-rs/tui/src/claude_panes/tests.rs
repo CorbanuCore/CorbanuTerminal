@@ -482,6 +482,20 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
             Vec::new(),
         )],
     );
+    let mut crew =
+        crate::crew_state::CrewInstanceState::begin(crate::crew_presets::standard_crew_spec())
+            .expect("standard crew");
+    for (index, member_id) in ["nazgul", "troll", "orc-1", "orc-2", "orc-3"]
+        .into_iter()
+        .enumerate()
+    {
+        crew.record_member(
+            member_id,
+            &format!("thread:00000000-0000-7000-8000-{index:012}"),
+        )
+        .expect("crew member");
+    }
+    crew.mark_ready().expect("ready crew");
     let layout = PaneLayoutState {
         version: 0,
         codex_thread_id: Some("019f0657-1d67-7103-9d65-89e71587347d".to_string()),
@@ -495,6 +509,7 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
             "thread:019f0657-1d67-7103-9d65-89e71587347d".to_string(),
             "019f0e22-e6e9-7e02-9cca-9dc18667b3e5".to_string(),
         )]),
+        spawn_crew: Some(crew.clone()),
         orchestrate_whips: whips.clone(),
         orchestrate_next_whip_seq: 3,
         spawn_pending_dispatches: BTreeMap::new(),
@@ -525,6 +540,7 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
     assert!(restored.spawn_nazgul_rebind_required);
     assert_eq!(restored.claude_pane_ids, layout.claude_pane_ids);
     assert_eq!(restored.spawn_parent_by_node, parents);
+    assert_eq!(restored.spawn_crew, Some(crew));
     assert_eq!(
         restored.spawn_native_endpoint_by_node["thread:019f0657-1d67-7103-9d65-89e71587347d"],
         "019f0e22-e6e9-7e02-9cca-9dc18667b3e5"

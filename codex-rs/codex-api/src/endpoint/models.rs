@@ -111,6 +111,7 @@ fn openai_model_item_to_info(item: OpenAiModelListItem) -> ModelInfo {
     let context_window = item.context_length;
     ModelInfo {
         slug: item.id.clone(),
+        orchestration: None,
         display_name: item.name.unwrap_or(item.id),
         description: item.description,
         default_reasoning_level: None,

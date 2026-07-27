@@ -390,7 +390,6 @@ impl App {
         self.abort_thread_event_listener(thread_id);
         self.thread_event_channels.remove(&thread_id);
         self.side_threads.remove(&thread_id);
-        self.fail_pending_dispatches_for_thread(thread_id, "target closed before delivery");
         if self.is_spawn_orchestration_thread(thread_id) {
             self.agent_navigation.mark_closed(thread_id);
             self.spawn_status_by_thread

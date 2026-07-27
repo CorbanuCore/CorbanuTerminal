@@ -1111,6 +1111,11 @@ impl MessageProcessor {
                     )
                     .await
             }
+            ClientRequest::ThreadAgentMessage { params, .. } => self
+                .thread_processor
+                .thread_agent_message(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::ThreadUnsubscribe { params, .. } => {
                 self.thread_processor
                     .thread_unsubscribe(&request_id, params)

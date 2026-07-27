@@ -680,6 +680,7 @@ fn status_summary_line(status: Option<&CollabAgentState>, fallback_error: &str) 
 fn status_summary_spans(status: &CollabAgentState) -> Vec<Span<'static>> {
     match status.status {
         CollabAgentStatus::PendingInit => vec![Span::from("Pending init").cyan()],
+        CollabAgentStatus::Unloaded => vec![Span::from("Unloaded").dim()],
         CollabAgentStatus::Running => vec![Span::from("Running").cyan().bold()],
         // Allow `.yellow()`
         #[allow(clippy::disallowed_methods)]

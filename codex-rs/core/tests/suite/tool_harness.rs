@@ -832,14 +832,15 @@ A {file_name}
 }
 
 #[test]
-fn apply_patch_reports_parse_diagnostics() -> anyhow::Result<()> {
+fn apply_patch_fallback_preserves_tools_and_uses_structured_edit() -> anyhow::Result<()> {
     run_tool_harness_test(
-        "apply-patch-parse-diagnostics",
-        apply_patch_reports_parse_diagnostics_inner,
+        "apply-patch-cache-stable-fallback",
+        apply_patch_fallback_preserves_tools_and_uses_structured_edit_inner,
     )
 }
 
-async fn apply_patch_reports_parse_diagnostics_inner() -> anyhow::Result<()> {
+async fn apply_patch_fallback_preserves_tools_and_uses_structured_edit_inner() -> anyhow::Result<()>
+{
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
@@ -852,32 +853,70 @@ async fn apply_patch_reports_parse_diagnostics_inner() -> anyhow::Result<()> {
         ..
     } = builder.build(&server).await?;
 
-    let call_id = "apply-patch-parse-error";
-    let second_call_id = "apply-patch-parse-error-2";
-    let patch_content = r"*** Begin Patch
+    let file_name = "fallback-notes.txt";
+    let file_path = cwd.path().join(file_name);
+    fs::write(&file_path, "alpha\nbeta\ngamma\n")?;
+
+    let malformed_patch = r"*** Begin Patch
 *** Update File: broken.txt
 *** End Patch";
+    let valid_patch =
+        format!("*** Begin Patch\n*** Update File: {file_name}\n@@\n-beta\n+BETA\n*** End Patch");
+    let rejected_patch =
+        format!("*** Begin Patch\n*** Update File: {file_name}\n@@\n-BETA\n+BROKEN\n*** End Patch");
+    let structured_edit_args = json!({
+        "path": file_name,
+        "old_string": "BETA\n",
+        "new_string": "OMEGA\n",
+        "replace_all": false,
+    })
+    .to_string();
 
-    let first_response = sse(vec![
-        ev_response_created("resp-1"),
-        ev_apply_patch_custom_tool_call(call_id, patch_content),
-        ev_completed("resp-1"),
-    ]);
-    responses::mount_sse_once(&server, first_response).await;
-
-    let second_response = sse(vec![
-        ev_response_created("resp-2"),
-        ev_apply_patch_custom_tool_call(second_call_id, patch_content),
-        ev_completed("resp-2"),
-    ]);
-    let second_mock = responses::mount_sse_once(&server, second_response).await;
-
-    let third_response = sse(vec![
-        ev_response_created("resp-3"),
-        ev_assistant_message("msg-1", "failed"),
-        ev_completed("resp-3"),
-    ]);
-    let third_mock = responses::mount_sse_once(&server, third_response).await;
+    let responses = [
+        sse(vec![
+            ev_response_created("resp-1"),
+            ev_apply_patch_custom_tool_call("malformed-1", malformed_patch),
+            ev_completed("resp-1"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-2"),
+            ev_apply_patch_custom_tool_call("valid-reset", &valid_patch),
+            ev_completed("resp-2"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-3"),
+            ev_apply_patch_custom_tool_call("malformed-2", malformed_patch),
+            ev_completed("resp-3"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-4"),
+            ev_apply_patch_custom_tool_call("malformed-3", malformed_patch),
+            ev_completed("resp-4"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-5"),
+            ev_apply_patch_custom_tool_call("rejected-after-fallback", &rejected_patch),
+            ev_completed("resp-5"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-6"),
+            ev_function_call(
+                "structured-fallback",
+                "structured_edit",
+                &structured_edit_args,
+            ),
+            ev_completed("resp-6"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-7"),
+            ev_assistant_message("msg-1", "fallback complete"),
+            ev_completed("resp-7"),
+        ]),
+    ];
+    let mut mocks = Vec::new();
+    for response in responses {
+        mocks.push(responses::mount_sse_once(&server, response).await);
+    }
 
     let session_model = session_configured.model.clone();
     let cwd_path = cwd.abs();
@@ -913,60 +952,79 @@ async fn apply_patch_reports_parse_diagnostics_inner() -> anyhow::Result<()> {
 
     wait_for_event(&codex, |event| matches!(event, EventMsg::TurnComplete(_))).await;
 
-    let req = second_mock.single_request();
-    let (output_text, success_flag) = custom_call_output(&req, call_id);
-    let second_request_tools = tool_names(&req);
-
-    assert!(
-        output_text.contains("apply_patch verification failed"),
-        "expected apply_patch verification failure message, got {output_text:?}"
-    );
-    assert!(
-        output_text.contains("invalid hunk"),
-        "expected parse diagnostics in output text, got {output_text:?}"
-    );
-
-    if let Some(success_flag) = success_flag {
-        assert!(
-            !success_flag,
-            "expected tool output to mark success=false for parse failures"
+    let requests = mocks
+        .iter()
+        .map(core_test_support::responses::ResponseMock::single_request)
+        .collect::<Vec<_>>();
+    let first_tools = requests[0].body_json()["tools"].clone();
+    let first_tools_bytes = serde_json::to_vec(&first_tools)?;
+    for (index, request) in requests.iter().enumerate() {
+        let tools = request.body_json()["tools"].clone();
+        assert_eq!(
+            tools,
+            first_tools,
+            "request {} changed the parsed model-visible tools",
+            index + 1
         );
+        assert_eq!(
+            serde_json::to_vec(&tools)?,
+            first_tools_bytes,
+            "request {} changed serialized model-visible tool bytes",
+            index + 1
+        );
+        let names = tool_names(request);
+        for edit_tool in ["apply_patch", "structured_edit", "structured_write"] {
+            assert!(
+                names.iter().any(|name| name == edit_tool),
+                "request {} omitted stable edit tool {edit_tool}; tools were {names:?}",
+                index + 1
+            );
+        }
     }
 
-    assert!(
-        second_request_tools.contains(&"apply_patch".to_string()),
-        "first parse failure should keep strict apply_patch available for one repair attempt; tools were {second_request_tools:?}"
+    let (first_failure, _) = custom_call_output(&requests[1], "malformed-1");
+    assert!(first_failure.contains("invalid hunk"));
+    let (reset_success, reset_success_flag) = custom_call_output(&requests[2], "valid-reset");
+    assert_ne!(
+        reset_success_flag,
+        Some(false),
+        "valid patch should not report failure"
     );
-    assert!(
-        !second_request_tools.contains(&"structured_edit".to_string()),
-        "structured_edit should not be visible until the repeated-failure threshold; tools were {second_request_tools:?}"
-    );
+    assert!(reset_success.contains("Success. Updated"));
 
-    let req = third_mock.single_request();
-    let (output_text, success_flag) = custom_call_output(&req, second_call_id);
-    let third_request_tools = tool_names(&req);
-
+    let (failure_after_reset, _) = custom_call_output(&requests[3], "malformed-2");
     assert!(
-        output_text.contains("Repeated apply_patch grammar failures detected (2)"),
-        "expected structured-edit fallback guidance after repeated parse failures, got {output_text:?}"
+        !failure_after_reset.contains("fallback is active"),
+        "a valid parsed patch must reset the grammar-failure streak"
     );
-    if let Some(success_flag) = success_flag {
+    let (activation, _) = custom_call_output(&requests[4], "malformed-3");
+    assert!(
+        activation.contains("Repeated apply_patch grammar failures detected (2)"),
+        "second consecutive grammar failure should activate fallback: {activation:?}"
+    );
+    let (rejection, rejection_success) =
+        custom_call_output(&requests[5], "rejected-after-fallback");
+    if let Some(rejection_success) = rejection_success {
         assert!(
-            !success_flag,
-            "expected second parse failure output to mark success=false"
+            !rejection_success,
+            "fallback rejection must not report success"
         );
     }
     assert!(
-        third_request_tools.contains(&"structured_edit".to_string()),
-        "repeated parse failures should expose structured_edit; tools were {third_request_tools:?}"
+        rejection.contains("Structured edit fallback is active for this turn"),
+        "strict patch should be rejected locally after activation: {rejection:?}"
     );
-    assert!(
-        third_request_tools.contains(&"structured_write".to_string()),
-        "repeated parse failures should expose structured_write; tools were {third_request_tools:?}"
+    let (structured_output, structured_success) = call_output(&requests[6], "structured-fallback");
+    assert_ne!(
+        structured_success,
+        Some(false),
+        "structured fallback should not report failure: {structured_output:?}"
     );
-    assert!(
-        !third_request_tools.contains(&"apply_patch".to_string()),
-        "repeated parse failures should hide apply_patch; tools were {third_request_tools:?}"
+
+    assert_eq!(
+        fs::read_to_string(file_path)?,
+        "alpha\nOMEGA\ngamma\n",
+        "rejected strict patch must not mutate the file and structured fallback must complete; structured output was {structured_output:?}"
     );
 
     Ok(())

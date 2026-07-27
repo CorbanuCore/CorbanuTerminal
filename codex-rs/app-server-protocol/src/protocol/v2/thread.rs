@@ -17,12 +17,14 @@ use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::MultiAgentMode;
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary;
+use codex_protocol::crew::AgentClass;
 pub use codex_protocol::dynamic_tools::DynamicToolFunctionSpec;
 pub use codex_protocol::dynamic_tools::DynamicToolNamespaceSpec;
 pub use codex_protocol::dynamic_tools::DynamicToolNamespaceTool;
 pub use codex_protocol::dynamic_tools::DynamicToolSpec;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort;
+pub use codex_protocol::protocol::AgentMessageKind;
 use codex_protocol::protocol::ThreadGoalStatus as CoreThreadGoalStatus;
 use codex_protocol::protocol::TokenUsage as CoreTokenUsage;
 use codex_protocol::protocol::TokenUsageInfo as CoreTokenUsageInfo;
@@ -160,6 +162,9 @@ pub struct ThreadSpawnAgentParams {
     /// Optional display name to store on the native spawned-agent thread.
     #[ts(optional = nullable)]
     pub agent_nickname: Option<String>,
+    /// Retention and addressing class to persist on the spawned native thread.
+    #[ts(optional = nullable)]
+    pub agent_class: Option<AgentClass>,
     /// Thread creation settings for the agent pane.
     #[experimental(nested)]
     pub thread: ThreadStartParams,
@@ -184,6 +189,36 @@ pub struct ThreadSpawnAgentResponse {
     pub reasoning_effort: Option<ReasoningEffort>,
     #[ts(optional = nullable)]
     pub multi_agent_mode: Option<MultiAgentMode>,
+}
+
+/// Durably delivers one provider-neutral message between native agent threads.
+///
+/// The source and target must belong to the same native agent tree. Durable producers should
+/// provide one stable `message_id` and reuse it when reconciling an uncertain client outcome.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS, ExperimentalApi)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadAgentMessageParams {
+    pub source_thread_id: String,
+    pub target_thread_id: String,
+    #[ts(optional = nullable)]
+    pub message_id: Option<String>,
+    #[ts(optional = nullable)]
+    pub assignment_id: Option<String>,
+    pub kind: AgentMessageKind,
+    pub content: String,
+    /// Queue-only messages are delivered at the next valid model boundary. Triggering messages
+    /// request a turn when the target becomes idle.
+    pub trigger_turn: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS, ExperimentalApi)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadAgentMessageResponse {
+    pub message_id: String,
+    pub target_thread_id: String,
+    pub trigger_turn: bool,
 }
 
 impl From<ThreadStartResponse> for ThreadSpawnAgentResponse {

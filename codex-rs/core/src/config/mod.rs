@@ -880,6 +880,11 @@ pub struct Config {
 
     /// User-configured maximum number of agent threads that can be open concurrently.
     pub agent_max_threads: Option<usize>,
+    /// Operator-authorized provider IDs for spawned agents.
+    ///
+    /// `None` means unrestricted. When set, this is the ceiling for every
+    /// agent-creation path and a model cannot broaden it.
+    pub agent_provider_allowlist: Option<Vec<String>>,
     /// Maximum runtime in seconds for agent job workers before they are failed.
     pub agent_job_max_runtime_seconds: Option<u64>,
 
@@ -1133,6 +1138,7 @@ impl Default for CurrentTimeReminderConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct MultiAgentV2Config {
     pub max_concurrent_threads_per_session: usize,
+    pub max_subagent_model_requests_per_turn: usize,
     pub min_wait_timeout_ms: i64,
     pub max_wait_timeout_ms: i64,
     pub default_wait_timeout_ms: i64,
@@ -1149,6 +1155,7 @@ impl MultiAgentV2Config {
     fn defaults_for_max_concurrency(max_concurrent_threads_per_session: usize) -> Self {
         Self {
             max_concurrent_threads_per_session,
+            max_subagent_model_requests_per_turn: 24,
             min_wait_timeout_ms: DEFAULT_MULTI_AGENT_V2_MIN_WAIT_TIMEOUT_MS,
             max_wait_timeout_ms: DEFAULT_MULTI_AGENT_V2_MAX_WAIT_TIMEOUT_MS,
             default_wait_timeout_ms: DEFAULT_MULTI_AGENT_V2_DEFAULT_WAIT_TIMEOUT_MS,
@@ -1163,7 +1170,7 @@ impl MultiAgentV2Config {
                 max_concurrent_threads_per_session,
             )),
             tool_namespace: None,
-            hide_spawn_agent_metadata: true,
+            hide_spawn_agent_metadata: false,
             non_code_mode_only: true,
         }
     }
@@ -1509,6 +1516,11 @@ impl Config {
             Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "agents.max_threads cannot be set when features.multi_agent_v2 is enabled",
+            ))
+        } else if self.multi_agent_v2.max_subagent_model_requests_per_turn < 2 {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "features.multi_agent_v2.max_subagent_model_requests_per_turn must be at least 2",
             ))
         } else {
             Ok(())
@@ -2287,18 +2299,6 @@ pub async fn apply_agent_role_to_config(
     crate::agent::role::apply_role_to_config(config, role_name).await
 }
 
-/// Validates a thread-spawn role against the Nazgul -> Troll -> Orc hierarchy graph.
-///
-/// App-server thread spawning runs this when a client starts a sub-agent directly instead of
-/// going through the model-facing `spawn_agent` tool handler.
-pub fn validate_thread_spawn_role_graph(
-    parent_role: Option<&str>,
-    requested_role: Option<&str>,
-    child_depth: i32,
-) -> Result<(), String> {
-    crate::agent::role::validate_thread_spawn_role_graph(parent_role, requested_role, child_depth)
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CustomPermissionProfileSummary {
     pub id: String,
@@ -2669,6 +2669,9 @@ fn resolve_multi_agent_v2_config(config_toml: &ConfigToml) -> MultiAgentV2Config
         .unwrap_or(DEFAULT_MULTI_AGENT_V2_MAX_CONCURRENT_THREADS_PER_SESSION);
     let default =
         MultiAgentV2Config::defaults_for_max_concurrency(max_concurrent_threads_per_session);
+    let max_subagent_model_requests_per_turn = base
+        .and_then(|config| config.max_subagent_model_requests_per_turn)
+        .unwrap_or(default.max_subagent_model_requests_per_turn);
     let min_wait_timeout_ms = base
         .and_then(|config| config.min_wait_timeout_ms)
         .unwrap_or(default.min_wait_timeout_ms);
@@ -2706,6 +2709,7 @@ fn resolve_multi_agent_v2_config(config_toml: &ConfigToml) -> MultiAgentV2Config
 
     MultiAgentV2Config {
         max_concurrent_threads_per_session,
+        max_subagent_model_requests_per_turn,
         min_wait_timeout_ms,
         max_wait_timeout_ms,
         default_wait_timeout_ms,
@@ -3643,6 +3647,26 @@ impl Config {
                 "agents.max_threads must be at least 1",
             ));
         }
+        let agent_provider_allowlist = cfg
+            .agents
+            .as_ref()
+            .and_then(|agents| agents.provider_allowlist.clone())
+            .map(|providers| {
+                providers
+                    .into_iter()
+                    .map(|provider| provider.trim().to_string())
+                    .filter(|provider| !provider.is_empty())
+                    .collect::<Vec<_>>()
+            });
+        if agent_provider_allowlist
+            .as_ref()
+            .is_some_and(Vec::is_empty)
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "agents.provider_allowlist must name at least one provider when set",
+            ));
+        }
         let agent_max_depth = cfg
             .agents
             .as_ref()
@@ -4048,6 +4072,7 @@ impl Config {
                 .collect(),
             tool_output_token_limit: cfg.tool_output_token_limit,
             agent_max_threads,
+            agent_provider_allowlist,
             agent_max_depth,
             agent_roles,
             memories: memories_config,

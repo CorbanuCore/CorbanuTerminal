@@ -11,6 +11,8 @@ use crate::tools::context::ToolPayload;
 use codex_models_manager::manager::RefreshStrategy;
 use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
+use codex_protocol::crew::AgentClass;
+use codex_protocol::crew::RetentionPolicy;
 use codex_protocol::error::CodexErr;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ResponseInputItem;
@@ -30,36 +32,6 @@ use std::collections::HashMap;
 pub(crate) const MIN_WAIT_TIMEOUT_MS: i64 = DEFAULT_MULTI_AGENT_V2_MIN_WAIT_TIMEOUT_MS;
 pub(crate) const DEFAULT_WAIT_TIMEOUT_MS: i64 = 30_000;
 pub(crate) const MAX_WAIT_TIMEOUT_MS: i64 = HARD_MAX_MULTI_AGENT_V2_TIMEOUT_MS;
-
-/// Applies the model-facing hierarchy policy before the central spawn boundary validates the
-/// resulting `SessionSource`. Models cannot create the host-owned Nazgul pane or use the
-/// root-parented Orc shape reserved for non-native supervisor panes.
-pub(crate) fn validate_model_spawn_role_graph(
-    parent_session_source: &SessionSource,
-    requested_role: Option<&str>,
-    child_depth: i32,
-) -> Result<(), FunctionCallError> {
-    let parent_role = parent_session_source.get_agent_role();
-    let target_role = requested_role
-        .map(|role| role.trim().to_ascii_lowercase())
-        .filter(|role| !role.is_empty());
-    if target_role.as_deref() == Some(crate::agent::role::NAZGUL_ROLE_NAME) {
-        return Err(FunctionCallError::RespondToModel(
-            "Nazgul is a host-owned root pane. Use /spawn to create or bind it.".to_string(),
-        ));
-    }
-    if parent_role.is_none() && target_role.as_deref() == Some(crate::agent::role::ORC_ROLE_NAME) {
-        return Err(FunctionCallError::RespondToModel(
-            "Orcs must be spawned by a Troll supervisor.".to_string(),
-        ));
-    }
-    crate::agent::role::validate_thread_spawn_role_graph(
-        parent_role.as_deref(),
-        requested_role,
-        child_depth,
-    )
-    .map_err(FunctionCallError::RespondToModel)
-}
 
 pub(crate) fn function_arguments(payload: ToolPayload) -> Result<String, FunctionCallError> {
     match payload {
@@ -170,6 +142,7 @@ pub(crate) fn thread_spawn_source(
     depth: i32,
     agent_role: Option<&str>,
     task_name: Option<String>,
+    assignment_id: Option<String>,
 ) -> Result<SessionSource, FunctionCallError> {
     let agent_path = task_name
         .as_deref()
@@ -187,6 +160,11 @@ pub(crate) fn thread_spawn_source(
         agent_path,
         agent_nickname: None,
         agent_role: agent_role.map(str::to_string),
+        agent_class: Some(AgentClass::EphemeralTask {
+            assignment_id: assignment_id
+                .unwrap_or_else(|| format!("thread-spawn:{}", ThreadId::new())),
+            retention: RetentionPolicy::Retain,
+        }),
     }))
 }
 
@@ -265,12 +243,17 @@ fn build_agent_shared_config(turn: &TurnContext) -> Result<Config, FunctionCallE
 
 pub(crate) fn reject_full_fork_spawn_overrides(
     agent_type: Option<&str>,
+    model_provider: Option<&str>,
     model: Option<&str>,
     reasoning_effort: Option<ReasoningEffort>,
 ) -> Result<(), FunctionCallError> {
-    if agent_type.is_some() || model.is_some() || reasoning_effort.is_some() {
+    if agent_type.is_some()
+        || model_provider.is_some()
+        || model.is_some()
+        || reasoning_effort.is_some()
+    {
         return Err(FunctionCallError::RespondToModel(
-            "Full-history forked agents inherit the parent agent type, model, and reasoning effort; omit agent_type, model, and reasoning_effort, or spawn without a full-history fork.".to_string(),
+            "Full-history forked agents inherit the parent agent type, provider, model, and reasoning effort; omit agent_type, model_provider, model, and reasoning_effort, or spawn without a full-history fork.".to_string(),
         ));
     }
     Ok(())
@@ -301,6 +284,83 @@ pub(crate) fn apply_spawn_agent_runtime_overrides(
         .map_err(|err| {
             FunctionCallError::RespondToModel(format!("permission_profile is invalid: {err}"))
         })?;
+    Ok(())
+}
+
+/// Operator spend policy for model-driven agent creation.
+///
+/// `agents.provider_allowlist` is authorization, not preference. A model selects a
+/// runtime; only the operator authorizes one. This is enforced in core because the
+/// model-facing spawn path never crosses the TUI, and it is neutral to provider,
+/// model, and role name.
+pub(crate) fn ensure_spawn_provider_authorized(
+    config: &Config,
+    provider_id: &str,
+) -> Result<(), FunctionCallError> {
+    let Some(allowlist) = config.agent_provider_allowlist.as_ref() else {
+        return Ok(());
+    };
+    if allowlist.iter().any(|allowed| allowed == provider_id) {
+        return Ok(());
+    }
+    Err(FunctionCallError::RespondToModel(format!(
+        "Provider `{provider_id}` is not authorized for spawned agents. \
+Authorized providers: {}. This is operator policy set in `agents.provider_allowlist`; \
+it cannot be changed from a task and must not be worked around by selecting a different \
+model that routes to an unauthorized provider. Do not spawn a substitute runtime in this \
+turn; report the refusal and obtain the user's explicit consent before trying a fallback.",
+        allowlist.join(", ")
+    )))
+}
+
+/// Catalogue lifecycle policy for newly spawned work.
+///
+/// This runs on the fully resolved child config so inherited runtimes, role overrides,
+/// model-only switches, and explicit provider/model pairs all cross the same boundary.
+pub(crate) async fn ensure_spawn_runtime_eligible(
+    session: &Session,
+    config: &Config,
+) -> Result<(), FunctionCallError> {
+    let model = config.model.as_deref().ok_or_else(|| {
+        FunctionCallError::RespondToModel(
+            "spawn_agent could not resolve the child model for catalogue policy".to_string(),
+        )
+    })?;
+    let model_info = session
+        .services
+        .models_manager
+        .get_model_info(model, &config.to_models_manager_config())
+        .await;
+    // GPU rental routes are dynamic runtime records, not static vendor catalogue rows. Their
+    // reserved provider id is created only from a ready state-db rental record, and local billing
+    // means no additional per-token spend. Keep this dynamic trust source separate from the
+    // bundled provider/model catalogue instead of inventing one row per rental.
+    if config.model_provider_id.starts_with("gpu-")
+        && config
+            .model_providers
+            .contains_key(&config.model_provider_id)
+    {
+        return Ok(());
+    }
+    let metadata = model_info.orchestration.as_ref().ok_or_else(|| {
+        FunctionCallError::RespondToModel(format!(
+            "Runtime `{}` / `{model}` has no orchestration metadata in the active model catalogue and cannot receive spawned work.",
+            config.model_provider_id
+        ))
+    })?;
+    if metadata.provider_id() != config.model_provider_id {
+        return Err(FunctionCallError::RespondToModel(format!(
+            "Runtime `{}` / `{model}` does not match its model catalogue provider `{}` and cannot receive spawned work. In MultiAgentV2, pass the exact catalogue `model_provider` together with `model`; legacy V1 cannot express a cross-provider override.",
+            config.model_provider_id,
+            metadata.provider_id()
+        )));
+    }
+    if let Some(reason) = metadata.disabled_reason() {
+        return Err(FunctionCallError::RespondToModel(format!(
+            "Runtime `{}` / `{model}` is disabled for spawned agents by model catalogue policy: {reason}.",
+            config.model_provider_id
+        )));
+    }
     Ok(())
 }
 
@@ -348,6 +408,11 @@ pub(crate) async fn apply_requested_spawn_agent_model_overrides(
             &config.model_provider_id,
         ) && let Some(info) = config.model_providers.get(corrected)
         {
+            // A model switch can re-route the child onto another provider. That is still
+            // a provider selection and must clear the same operator policy as an explicit
+            // one. Authorize before mutating, so a refused switch cannot leave the child
+            // pointed at an unauthorized provider.
+            ensure_spawn_provider_authorized(config, corrected)?;
             tracing::warn!(
                 model = %selected_model_name,
                 parent_provider = %config.model_provider_id,
@@ -378,6 +443,82 @@ pub(crate) async fn apply_requested_spawn_agent_model_overrides(
             &reasoning_effort,
         )?;
         config.model_reasoning_effort = Some(reasoning_effort);
+    }
+
+    Ok(())
+}
+
+pub(crate) async fn apply_requested_spawn_agent_runtime_overrides(
+    session: &Session,
+    turn: &TurnContext,
+    config: &mut Config,
+    requested_provider: Option<&str>,
+    requested_model: Option<&str>,
+    requested_reasoning_effort: Option<ReasoningEffort>,
+) -> Result<(), FunctionCallError> {
+    let requested_provider = requested_provider
+        .map(str::trim)
+        .filter(|provider| !provider.is_empty());
+    if requested_provider.is_none() {
+        return apply_requested_spawn_agent_model_overrides(
+            session,
+            turn,
+            config,
+            requested_model,
+            requested_reasoning_effort,
+        )
+        .await;
+    }
+
+    let Some(requested_provider) = requested_provider else {
+        return Ok(());
+    };
+    let requested_model = requested_model
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .ok_or_else(|| {
+            FunctionCallError::RespondToModel(
+                "spawn_agent requires `model` when `model_provider` is set; set both fields or omit both to inherit the parent runtime.".to_string(),
+            )
+        })?;
+    let provider = config
+        .model_providers
+        .get(requested_provider)
+        .cloned()
+        .ok_or_else(|| {
+            FunctionCallError::RespondToModel(format!(
+                "Unknown model provider `{requested_provider}` for spawn_agent."
+            ))
+        })?;
+    ensure_spawn_provider_authorized(config, requested_provider)?;
+    let resolved_model = codex_model_provider_info::resolve_model_for_provider(
+        Some(requested_model.to_string()),
+        requested_provider,
+    );
+    if resolved_model.as_deref() != Some(requested_model) {
+        return Err(FunctionCallError::RespondToModel(format!(
+            "Model `{requested_model}` is not valid for provider `{requested_provider}`."
+        )));
+    }
+
+    config.model_provider_id = requested_provider.to_string();
+    config.model_provider = provider;
+    config.model = Some(requested_model.to_string());
+
+    let selected_model_info = session
+        .services
+        .models_manager
+        .get_model_info(requested_model, &config.to_models_manager_config())
+        .await;
+    if let Some(reasoning_effort) = requested_reasoning_effort {
+        validate_spawn_agent_reasoning_effort(
+            requested_model,
+            &selected_model_info.supported_reasoning_levels,
+            &reasoning_effort,
+        )?;
+        config.model_reasoning_effort = Some(reasoning_effort);
+    } else {
+        config.model_reasoning_effort = selected_model_info.default_reasoning_level;
     }
 
     Ok(())

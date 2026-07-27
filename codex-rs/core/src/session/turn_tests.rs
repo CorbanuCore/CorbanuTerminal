@@ -169,6 +169,51 @@ fn runtime_gpu_providers_do_not_use_third_party_request_leases() {
 }
 
 #[test]
+fn human_sessions_never_wait_on_the_shared_worker_request_lease() {
+    use codex_protocol::ThreadId;
+    use codex_protocol::protocol::InternalSessionSource;
+    use codex_protocol::protocol::SubAgentSource;
+
+    // Autonomous sub-agents share one metered key and are the hammering risk
+    // the lease bounds. Native `/spawn` workers and task agents both arrive as
+    // `ThreadSpawn`, so cover that variant alongside the simpler ones.
+    for source in [
+        SessionSource::SubAgent(SubAgentSource::Review),
+        SessionSource::SubAgent(SubAgentSource::Compact),
+        SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            parent_thread_id: ThreadId::new(),
+            depth: 1,
+            agent_path: None,
+            agent_nickname: None,
+            agent_role: None,
+            agent_class: None,
+        }),
+    ] {
+        assert!(
+            provider_request_lease_applies_to_session(&source),
+            "autonomous worker {source:?} must still share the request lease"
+        );
+    }
+
+    // Every human-driven entry point stays addressable while workers saturate
+    // that key. This is the control-plane class, not one reported surface.
+    for source in [
+        SessionSource::Cli,
+        SessionSource::VSCode,
+        SessionSource::Exec,
+        SessionSource::Mcp,
+        SessionSource::Custom("pfterminal".to_string()),
+        SessionSource::Internal(InternalSessionSource::MemoryConsolidation),
+        SessionSource::Unknown,
+    ] {
+        assert!(
+            !provider_request_lease_applies_to_session(&source),
+            "human-driven session {source:?} must not wait on the worker lease"
+        );
+    }
+}
+
+#[test]
 fn provider_cache_pressure_warning_labels_partial_hits() {
     let key = ProviderRequestKey {
         provider_id: "vercel".to_string(),

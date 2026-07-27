@@ -57,6 +57,13 @@
           "format": "uint",
           "minimum": 1.0,
           "type": "integer"
+        },
+        "provider_allowlist": {
+          "description": "Provider IDs that spawned agents are permitted to run on.\n\nThis is operator policy and is the ceiling for every agent-creation path: `/spawn` crews, custom crews, and native `spawn_agent` task agents. A model cannot broaden it. When unset, any configured provider may be used.\n\nExample: ```toml [agents] provider_allowlist = [\"claude-plan\", \"openai\"] ```",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "type": "object"
@@ -1703,6 +1710,12 @@
         "max_concurrent_threads_per_session": {
           "format": "uint",
           "minimum": 1.0,
+          "type": "integer"
+        },
+        "max_subagent_model_requests_per_turn": {
+          "description": "Hard per-turn sampling-request ceiling for non-root agents.",
+          "format": "uint",
+          "minimum": 2.0,
           "type": "integer"
         },
         "max_wait_timeout_ms": {

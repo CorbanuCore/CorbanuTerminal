@@ -161,6 +161,8 @@ pub(crate) struct PaneLayoutState {
     #[serde(default)]
     pub(crate) spawn_native_endpoint_by_node: BTreeMap<String, String>,
     #[serde(default)]
+    pub(crate) spawn_crew: Option<crate::crew_state::CrewInstanceState>,
+    #[serde(default)]
     pub(crate) orchestrate_whips: BTreeMap<String, crate::orchestrate::Whip>,
     #[serde(default)]
     pub(crate) orchestrate_next_whip_seq: u64,

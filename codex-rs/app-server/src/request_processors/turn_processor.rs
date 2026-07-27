@@ -1467,6 +1467,7 @@ mod tests {
             agent_path: None,
             agent_nickname: Some("Burzum".to_string()),
             agent_role: Some("troll".to_string()),
+            agent_class: None,
         });
 
         assert!(!direct_input_to_v2_thread_spawn_is_blocked(

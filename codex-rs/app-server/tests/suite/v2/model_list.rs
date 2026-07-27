@@ -19,7 +19,6 @@ use codex_app_server_protocol::RequestId;
 use codex_config::types::AuthCredentialsStoreMode;
 use codex_login::OPENAI_API_KEY_ENV_VAR;
 use codex_model_provider_info::AMBIENT_API_KEY_ENV_VAR;
-use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::ZAI_API_KEY_ENV_VAR;
 use codex_protocol::openai_models::ModelInfo;
@@ -34,6 +33,20 @@ use wiremock::MockServer;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const INVALID_REQUEST_ERROR_CODE: i64 = -32600;
+const SOL_DEFAULT_MODEL: &str = "gpt-5.6-sol";
+
+fn mark_expected_default(presets: &mut [ModelPreset]) {
+    ModelPreset::mark_default_by_picker_visibility(presets);
+    if let Some(sol_index) = presets
+        .iter()
+        .position(|preset| preset.model == SOL_DEFAULT_MODEL && preset.show_in_picker)
+    {
+        for preset in presets.iter_mut() {
+            preset.is_default = false;
+        }
+        presets[sol_index].is_default = true;
+    }
+}
 
 fn model_from_preset(preset: &ModelPreset) -> Model {
     Model {
@@ -49,6 +62,7 @@ fn model_from_preset(preset: &ModelPreset) -> Model {
         availability_nux: preset.availability_nux.clone().map(Into::into),
         display_name: preset.display_name.clone(),
         description: preset.description.clone(),
+        orchestration: preset.orchestration.clone(),
         hidden: !preset.show_in_picker,
         supported_reasoning_efforts: preset
             .supported_reasoning_efforts
@@ -94,7 +108,7 @@ fn expected_visible_models() -> Vec<Model> {
     );
 
     // Mirror `ModelsManager::build_available_models()` default selection after auth filtering.
-    ModelPreset::mark_default_by_picker_visibility(&mut presets);
+    mark_expected_default(&mut presets);
 
     presets
         .iter()
@@ -111,7 +125,7 @@ fn expected_cached_visible_models() -> Vec<Model> {
     );
 
     // Mirror `ModelsManager::build_available_models()` default selection after auth filtering.
-    ModelPreset::mark_default_by_picker_visibility(&mut presets);
+    mark_expected_default(&mut presets);
 
     presets
         .iter()
@@ -193,7 +207,7 @@ async fn list_models_returns_ambient_default_catalog() -> Result<()> {
         .filter(|model| model.is_default)
         .map(|model| model.id.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(default_model_ids, vec![AMBIENT_DEFAULT_MODEL]);
+    assert_eq!(default_model_ids, vec![SOL_DEFAULT_MODEL]);
 
     let expected_models = expected_visible_models();
     assert_eq!(items, expected_models);

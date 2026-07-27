@@ -1218,3 +1218,32 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
     assert_eq!(corrected_catalog_provider("", AMBIENT_PROVIDER_ID), None);
     assert_eq!(corrected_catalog_provider("gpt-5.5", ""), None);
 }
+
+#[test]
+fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
+    for (model, expected_provider) in [
+        (AMBIENT_DEFAULT_MODEL, AMBIENT_PROVIDER_ID),
+        (AMBIENT_KIMI_K2_7_CODE_MODEL, AMBIENT_PROVIDER_ID),
+        (KIMI_CODE_K3_MODEL, KIMI_CODE_PROVIDER_ID),
+        (ZAI_DEFAULT_MODEL, ZAI_PROVIDER_ID),
+        (CLAUDE_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+        (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+        (ANTHROPIC_DEFAULT_MODEL, ANTHROPIC_PROVIDER_ID),
+        (CLAUDE_FABLE_5_MODEL, ANTHROPIC_PROVIDER_ID),
+        ("x-ai/grok-4.5", OPENROUTER_PROVIDER_ID),
+        ("moonshotai/kimi-k3", OPENROUTER_PROVIDER_ID),
+        (META_DEFAULT_MODEL, META_PROVIDER_ID),
+        (VERCEL_DEFAULT_MODEL, VERCEL_PROVIDER_ID),
+        (VERCEL_GLM_5_2_FAST_MODEL, VERCEL_ANTHROPIC_FAST_PROVIDER_ID),
+        (BASETEN_DEFAULT_MODEL, BASETEN_PROVIDER_ID),
+        ("gpt-5.6-sol", OPENAI_PROVIDER_ID),
+    ] {
+        assert_eq!(
+            canonical_catalog_provider(model),
+            Some(expected_provider),
+            "unexpected canonical provider for {model}"
+        );
+    }
+    assert_eq!(canonical_catalog_provider(""), None);
+    assert_eq!(canonical_catalog_provider("private/custom-model"), None);
+}

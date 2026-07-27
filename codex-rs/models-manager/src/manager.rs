@@ -8,7 +8,6 @@ use codex_protocol::error::Result as CoreResult;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ModelsResponse;
-use codex_protocol::openai_models::ReasoningEffort;
 use std::fmt;
 use std::future::Future;
 use std::path::PathBuf;
@@ -359,18 +358,21 @@ impl OpenAiModelsManager {
     /// Replace the cached remote models and rebuild the derived presets list.
     async fn apply_remote_models(&self, models: Vec<ModelInfo>) {
         let mut existing_models = load_remote_models_from_file().unwrap_or_default();
-        for mut model in models.into_iter().map(sanitize_model_for_runtime) {
+        for mut model in models {
             if let Some(existing_index) = existing_models
                 .iter()
                 .position(|existing| existing.slug == model.slug)
             {
                 let bundled = &existing_models[existing_index];
-                if model.supported_reasoning_levels.is_empty()
-                    && !bundled.supported_reasoning_levels.is_empty()
-                {
+                // Provider discovery owns availability and presentation. The bundled catalogue
+                // owns spend authorization, capability classification, and allowed effort. A
+                // remote payload must never authorize a route, change its billing, or broaden
+                // expensive reasoning modes.
+                if !bundled.supported_reasoning_levels.is_empty() {
                     model.default_reasoning_level = bundled.default_reasoning_level.clone();
                     model.supported_reasoning_levels = bundled.supported_reasoning_levels.clone();
                 }
+                model.orchestration = bundled.orchestration.clone();
                 existing_models[existing_index] = model;
             } else {
                 existing_models.push(model);
@@ -440,20 +442,7 @@ impl ModelsManager for StaticModelsManager {
 }
 
 fn load_remote_models_from_file() -> Result<Vec<ModelInfo>, std::io::Error> {
-    Ok(crate::bundled_models_response()?
-        .models
-        .into_iter()
-        .map(sanitize_model_for_runtime)
-        .collect())
-}
-
-fn sanitize_model_for_runtime(mut model: ModelInfo) -> ModelInfo {
-    if model.slug.starts_with("gpt-5.6-") {
-        model.supported_reasoning_levels.retain(
-            |level| !matches!(&level.effort, ReasoningEffort::Custom(value) if value == "ultra"),
-        );
-    }
-    model
+    Ok(crate::bundled_models_response()?.models)
 }
 
 fn default_model_from_available(available: Vec<ModelPreset>) -> String {

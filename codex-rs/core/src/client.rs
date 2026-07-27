@@ -84,12 +84,15 @@ use codex_login::default_client::build_reqwest_client;
 use codex_otel::SessionTelemetry;
 use codex_otel::current_span_w3c_trace_context;
 
+use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
 use codex_protocol::config_types::Verbosity as VerbosityConfig;
 use codex_protocol::config_types::WebSearchContextSize;
+use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::models::plaintext_agent_message_content;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::InternalSessionSource;
@@ -3119,7 +3122,25 @@ fn append_chat_message_for_response_item(
                 });
             }
         }
-        ResponseItem::AgentMessage { .. } => {}
+        ResponseItem::AgentMessage {
+            author,
+            recipient,
+            content,
+            ..
+        } => {
+            // Native collaboration mail is a first-class Responses item, but Chat Completions
+            // has no equivalent role. Preserve its external-input semantics as a user message.
+            // The canonical path check distinguishes typed mailbox traffic from legacy
+            // display/transcript AgentMessage items, which must not be replayed to providers.
+            if let Some(message) = plaintext_collaboration_message(&author, &recipient, &content) {
+                messages.push(ChatMessage {
+                    role: "user".to_string(),
+                    content: Some(ChatMessageContent::text(message)),
+                    tool_call_id: None,
+                    tool_calls: Vec::new(),
+                });
+            }
+        }
         ResponseItem::FunctionCall {
             name,
             arguments,
@@ -3365,6 +3386,21 @@ fn normalize_chat_role(role: &str) -> String {
     }
 }
 
+fn plaintext_collaboration_message(
+    author: &str,
+    recipient: &str,
+    content: &[AgentMessageInputContent],
+) -> Option<String> {
+    AgentPath::try_from(author).ok()?;
+    AgentPath::try_from(recipient).ok()?;
+    let payload = plaintext_agent_message_content(content)?;
+    Some(format!(
+        "<inter_agent_message sender={author:?} recipient={recipient:?}>\n\
+         {payload}\n\
+         </inter_agent_message>"
+    ))
+}
+
 fn append_anthropic_message_for_response_item(
     item: ResponseItem,
     messages: &mut Vec<Value>,
@@ -3393,7 +3429,23 @@ fn append_anthropic_message_for_response_item(
                 push_anthropic_message(messages, role, block);
             }
         }
-        ResponseItem::AgentMessage { .. } => {}
+        ResponseItem::AgentMessage {
+            author,
+            recipient,
+            content,
+            ..
+        } => {
+            if let Some(message) = plaintext_collaboration_message(&author, &recipient, &content) {
+                push_anthropic_message(
+                    messages,
+                    "user",
+                    json!({
+                        "type": "text",
+                        "text": message,
+                    }),
+                );
+            }
+        }
         ResponseItem::FunctionCall {
             name,
             arguments,
@@ -3601,19 +3653,28 @@ fn is_anthropic_signed_thinking_history_rejection(error: &ApiError) -> bool {
         && (message.contains("thinking") || message.contains("redacted_thinking"))
 }
 
-/// Anthropic rejects assistant-prefill requests for Claude Plan models.
+/// Anthropic rejects assistant-prefill requests.
 ///
 /// Some durable items, including incoming collaboration mail, are intentionally omitted by the
 /// Anthropic adapter. When such an item arrives immediately after a completed model turn, the
 /// omission can expose that completed assistant message as the terminal request message. Keep the
 /// repair request-local so durable history and the operator-visible transcript remain unchanged.
+///
+/// Anthropic transports also reject a tool-result-only user turn when the preceding assistant
+/// message has text after its final tool call. This is not specific to Claude Plan: Anthropic
+/// API-key models enforce the same message-shape constraint. Although the request ends in a user
+/// message, the service treats that shape as an attempt to continue the assistant prefill. Add an
+/// explicit user continuation only for that exact protocol shape. A normal assistant message whose
+/// final block is `tool_use` remains untouched.
 fn ensure_anthropic_messages_end_with_user_turn(messages: &mut Vec<Value>) {
-    if messages
+    let ends_with_assistant = messages
         .last()
         .and_then(|message| message.get("role"))
         .and_then(Value::as_str)
-        != Some("assistant")
-    {
+        == Some("assistant");
+    let needs_tool_result_repair =
+        terminal_anthropic_tool_result_follows_trailing_assistant_text(messages);
+    if !(ends_with_assistant || needs_tool_result_repair) {
         return;
     }
 
@@ -3625,6 +3686,48 @@ fn ensure_anthropic_messages_end_with_user_turn(messages: &mut Vec<Value>) {
             "text": "Continue.",
         }),
     );
+}
+
+fn terminal_anthropic_tool_result_follows_trailing_assistant_text(messages: &[Value]) -> bool {
+    let [.., assistant, user] = messages else {
+        return false;
+    };
+    if assistant.get("role").and_then(Value::as_str) != Some("assistant")
+        || user.get("role").and_then(Value::as_str) != Some("user")
+    {
+        return false;
+    }
+
+    let Some(user_content) = user.get("content").and_then(Value::as_array) else {
+        return false;
+    };
+    if user_content.is_empty()
+        || !user_content
+            .iter()
+            .all(|block| block.get("type").and_then(Value::as_str) == Some("tool_result"))
+    {
+        return false;
+    }
+
+    let Some(assistant_content) = assistant.get("content").and_then(Value::as_array) else {
+        return false;
+    };
+    let Some(last_tool_use_index) = assistant_content
+        .iter()
+        .rposition(|block| block.get("type").and_then(Value::as_str) == Some("tool_use"))
+    else {
+        return false;
+    };
+
+    assistant_content[last_tool_use_index + 1..]
+        .iter()
+        .any(|block| {
+            block.get("type").and_then(Value::as_str) == Some("text")
+                && block
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .is_some_and(|text| !text.trim().is_empty())
+        })
 }
 
 fn anthropic_cache_control(use_one_hour_ttl: bool) -> Value {

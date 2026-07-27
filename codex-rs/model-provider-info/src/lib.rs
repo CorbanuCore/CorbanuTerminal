@@ -167,6 +167,76 @@ const VERCEL_FAMILY_PROVIDERS: [&str; 3] = [
     VERCEL_ANTHROPIC_FAST_PROVIDER_ID,
 ];
 
+/// Return the canonical built-in provider for a picker-visible model.
+///
+/// This is a catalog ownership mapping, not an exclusivity claim: gateways and
+/// user-defined providers may also serve the same model. Callers use it when
+/// they must present an exact, known-good provider/model pair instead of
+/// forcing a model to guess a provider identifier from a display name.
+pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
+    let model = model.trim();
+    if model.is_empty() {
+        return None;
+    }
+    if model == BASETEN_DEFAULT_MODEL {
+        return Some(BASETEN_PROVIDER_ID);
+    }
+    if model == AMBIENT_DEFAULT_MODEL
+        || model == AMBIENT_KIMI_K2_7_CODE_MODEL
+        || model.starts_with("ambient/")
+        || model.starts_with("zai-org/")
+    {
+        return Some(AMBIENT_PROVIDER_ID);
+    }
+    if model == KIMI_CODE_K3_MODEL {
+        return Some(KIMI_CODE_PROVIDER_ID);
+    }
+    if model == ZAI_DEFAULT_MODEL || model.starts_with("glm-") {
+        return Some(ZAI_PROVIDER_ID);
+    }
+    if matches!(
+        model,
+        CLAUDE_PLAN_MODEL | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL | CLAUDE_FABLE_5_PLAN_MODEL
+    ) {
+        return Some(CLAUDE_PLAN_PROVIDER_ID);
+    }
+    if model == ANTHROPIC_DEFAULT_MODEL || model.starts_with("claude-") {
+        return Some(ANTHROPIC_PROVIDER_ID);
+    }
+    if model == META_DEFAULT_MODEL {
+        return Some(META_PROVIDER_ID);
+    }
+    if matches!(
+        model,
+        OPENROUTER_DEFAULT_MODEL
+            | "minimax/minimax-m3"
+            | "openrouter/owl-alpha"
+            | "google/gemini-3.5-flash"
+            | "x-ai/grok-4.5"
+            | "deepseek/deepseek-v4-pro"
+            | "tencent/hy3:free"
+            | "moonshotai/kimi-k3"
+    ) {
+        return Some(OPENROUTER_PROVIDER_ID);
+    }
+    if model == VERCEL_GLM_5_2_FAST_MODEL {
+        return Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID);
+    }
+    if model == VERCEL_DEFAULT_MODEL {
+        return Some(VERCEL_PROVIDER_ID);
+    }
+    if matches!(
+        model,
+        AMAZON_BEDROCK_GPT_5_5_MODEL_ID | AMAZON_BEDROCK_GPT_5_4_MODEL_ID
+    ) {
+        return Some(AMAZON_BEDROCK_PROVIDER_ID);
+    }
+    if model.starts_with("gpt-") || model.starts_with("codex-auto-") {
+        return Some(OPENAI_PROVIDER_ID);
+    }
+    None
+}
+
 /// Returns the provider a session must use when its (model, provider) pair is impossible — the
 /// model belongs to a specific catalog provider family and the given provider is a different
 /// catalog provider that cannot serve it. Pairs go stale when thread metadata loses the provider

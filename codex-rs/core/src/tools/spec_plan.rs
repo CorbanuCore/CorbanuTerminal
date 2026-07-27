@@ -42,6 +42,7 @@ use crate::tools::handlers::multi_agents::WaitAgentHandler;
 use crate::tools::handlers::multi_agents_common::DEFAULT_WAIT_TIMEOUT_MS;
 use crate::tools::handlers::multi_agents_common::MAX_WAIT_TIMEOUT_MS;
 use crate::tools::handlers::multi_agents_common::MIN_WAIT_TIMEOUT_MS;
+use crate::tools::handlers::multi_agents_spec::SpawnAgentRuntime;
 use crate::tools::handlers::multi_agents_spec::SpawnAgentToolOptions;
 use crate::tools::handlers::multi_agents_spec::WaitAgentTimeoutOptions;
 use crate::tools::handlers::multi_agents_v2::FollowupTaskHandler as FollowupTaskHandlerV2;
@@ -50,7 +51,7 @@ use crate::tools::handlers::multi_agents_v2::ListAgentsHandler as ListAgentsHand
 use crate::tools::handlers::multi_agents_v2::SendMessageHandler as SendMessageHandlerV2;
 use crate::tools::handlers::multi_agents_v2::SpawnAgentHandler as SpawnAgentHandlerV2;
 use crate::tools::handlers::multi_agents_v2::WaitAgentHandler as WaitAgentHandlerV2;
-use crate::tools::handlers::structured_edit_protocol_enabled;
+use crate::tools::handlers::native_structured_edit_protocol_enabled;
 use crate::tools::handlers::view_image_spec::ViewImageToolOptions;
 use crate::tools::hosted_spec::WebSearchToolOptions;
 use crate::tools::hosted_spec::create_image_generation_tool;
@@ -751,19 +752,19 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mut
         ));
     }
 
-    if environment_mode.has_environment()
-        && edit_tools_allowed_by_permission_profile(turn_context)
-        && structured_edit_protocol_enabled(turn_context)
+    if environment_mode.has_environment() && edit_tools_allowed_by_permission_profile(turn_context)
     {
         let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
-        planned_tools.add(StructuredEditHandler::new(include_environment_id));
-        planned_tools.add(StructuredWriteHandler::new(include_environment_id));
-    } else if environment_mode.has_environment()
-        && edit_tools_allowed_by_permission_profile(turn_context)
-        && turn_context.model_info.apply_patch_tool_type.is_some()
-    {
-        let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
-        planned_tools.add(ApplyPatchHandler::new(include_environment_id));
+        if native_structured_edit_protocol_enabled(turn_context) {
+            planned_tools.add(StructuredEditHandler::new(include_environment_id));
+            planned_tools.add(StructuredWriteHandler::new(include_environment_id));
+        } else if turn_context.model_info.apply_patch_tool_type.is_some() {
+            // Runtime fallback policy may reject strict patches, but it must never rebuild
+            // the model-visible edit inventory and invalidate the provider's cached prefix.
+            planned_tools.add(ApplyPatchHandler::new(include_environment_id));
+            planned_tools.add(StructuredEditHandler::new(include_environment_id));
+            planned_tools.add(StructuredWriteHandler::new(include_environment_id));
+        }
     }
 
     if turn_context
@@ -829,7 +830,11 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mu
                 planned_tools.add_arc(override_tool_exposure(
                     multi_agent_v2_handler(
                         SpawnAgentHandlerV2::new(SpawnAgentToolOptions {
-                            available_models: spawn_agent_available_models(turn_context),
+                            available_models: spawn_agent_available_models(
+                                turn_context,
+                                /* supports_cross_provider_overrides */ true,
+                            ),
+                            inherited_runtime: spawn_agent_inherited_runtime(turn_context),
                             agent_type_description,
                             hide_agent_type_model_reasoning: turn_context
                                 .config
@@ -875,7 +880,11 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mu
                 planned_tools.add_arc(override_tool_exposure(
                     multi_agent_v2_handler(
                         SpawnAgentHandlerV2::new(SpawnAgentToolOptions {
-                            available_models: spawn_agent_available_models(turn_context),
+                            available_models: spawn_agent_available_models(
+                                turn_context,
+                                /* supports_cross_provider_overrides */ true,
+                            ),
+                            inherited_runtime: spawn_agent_inherited_runtime(turn_context),
                             agent_type_description,
                             hide_agent_type_model_reasoning: turn_context
                                 .config
@@ -918,7 +927,11 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mu
                 ToolExposure::Direct
             };
             let spawn_options = SpawnAgentToolOptions {
-                available_models: spawn_agent_available_models(turn_context),
+                available_models: spawn_agent_available_models(
+                    turn_context,
+                    /* supports_cross_provider_overrides */ false,
+                ),
+                inherited_runtime: spawn_agent_inherited_runtime(turn_context),
                 agent_type_description,
                 hide_agent_type_model_reasoning: false,
                 include_usage_hint: turn_context.config.multi_agent_v2.usage_hint_enabled,
@@ -1155,11 +1168,66 @@ fn v1_plain_function_subagents_enabled(turn_context: &TurnContext) -> bool {
             || provider_info.is_vercel())
 }
 
-fn spawn_agent_available_models(turn_context: &TurnContext) -> Vec<ModelPreset> {
-    if third_party_provider_without_spawn_model_switching(turn_context) {
+fn spawn_agent_available_models(
+    turn_context: &TurnContext,
+    supports_cross_provider_overrides: bool,
+) -> Vec<ModelPreset> {
+    if !supports_cross_provider_overrides
+        && third_party_provider_without_spawn_model_switching(turn_context)
+    {
         return Vec::new();
     }
-    turn_context.available_models.clone()
+    let mut models = turn_context.available_models.clone();
+    if let Some(api_key) = turn_context.auth_manager.as_ref().and_then(|auth| {
+        auth.auth_mode()
+            .map(|mode| mode == codex_app_server_protocol::AuthMode::ApiKey)
+    }) {
+        for model in &mut models {
+            if let Some(metadata) = model.orchestration.as_mut() {
+                metadata.resolve_billing_auth_mode(api_key);
+            }
+        }
+    }
+    // V1 has no provider argument. Advertising a model on another provider makes the generated
+    // tool promise a route the handler cannot represent, so legacy sessions are restricted to
+    // their current provider. V2 carries an explicit provider/model pair and may cross providers.
+    if !supports_cross_provider_overrides {
+        models.retain(|model| {
+            model.provider_id.as_deref() == Some(turn_context.config.model_provider_id.as_str())
+        });
+    }
+    if let Some(allowlist) = turn_context.config.agent_provider_allowlist.as_ref() {
+        models.retain(|model| {
+            model
+                .provider_id
+                .as_ref()
+                .is_some_and(|provider| allowlist.contains(provider))
+        });
+    }
+    models.retain(|model| {
+        model.orchestration.as_ref().is_some_and(
+            codex_protocol::openai_models::ModelOrchestrationMetadata::is_spawn_eligible,
+        )
+    });
+    models
+}
+
+fn spawn_agent_inherited_runtime(turn_context: &TurnContext) -> Option<SpawnAgentRuntime> {
+    let model_provider = turn_context.config.model_provider_id.clone();
+    turn_context
+        .config
+        .agent_provider_allowlist
+        .as_ref()
+        .is_none_or(|allowlist| allowlist.contains(&model_provider))
+        .then(|| SpawnAgentRuntime {
+            model_provider,
+            model: turn_context.model_info.slug.clone(),
+            reasoning_effort: turn_context
+                .reasoning_effort
+                .clone()
+                .or_else(|| turn_context.model_info.default_reasoning_level.clone()),
+            service_tier: turn_context.config.service_tier.clone(),
+        })
 }
 
 fn third_party_provider_without_spawn_model_switching(turn_context: &TurnContext) -> bool {

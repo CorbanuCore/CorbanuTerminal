@@ -158,6 +158,9 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::InputModality;
 #[cfg(test)]
 use codex_protocol::openai_models::ModelAvailabilityNux;
+use codex_protocol::openai_models::ModelBilling;
+use codex_protocol::openai_models::ModelCapabilityTier;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ModelUpgrade;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
@@ -762,34 +765,21 @@ pub(crate) struct App {
     pub(crate) spawn_native_runtime_by_node:
         HashMap<String, crate::dispatch_queue::SavedNativeSpawnRuntime>,
     pub(crate) spawn_native_endpoint_by_node: HashMap<String, ThreadId>,
+    pub(crate) spawn_crew: Option<crate::crew_state::CrewInstanceState>,
+    /// A restored pre-CrewSpec hierarchy remains inspectable but cannot be mutated by the native
+    /// control plane because its identity and parentage cannot be proven.
+    pub(crate) spawn_legacy_read_only: bool,
     pub(crate) spawn_status_by_thread:
         HashMap<ThreadId, codex_app_server_protocol::CollabAgentState>,
     /// Active `wait_agent` call by native spawn thread, keyed to the exact turn and item so a
     /// delayed completion from an older wait cannot clear a newer wait state.
     pub(crate) spawn_waiting_for_agents_by_thread: HashMap<ThreadId, (String, String)>,
     pub(crate) spawn_parent_reports_by_node: HashMap<String, VecDeque<String>>,
-    /// Child reports delivered to a native Codex parent thread that could not be turned into a
-    /// parent turn immediately because the parent was mid-turn. These are flushed (each turned
-    /// into a parent processing turn) when the parent goes idle. Keyed by parent thread id so a
-    /// flush only fires for the pane that actually became idle.
-    pub(crate) spawn_pending_reports_by_thread: HashMap<ThreadId, VecDeque<String>>,
-    /// The single durable dispatch inbox, keyed by logical target node id (`thread:`/`pane:`).
-    pub(crate) spawn_pending_dispatches:
-        HashMap<String, VecDeque<crate::spawn_orchestration::PendingSpawnDispatch>>,
-    /// Coalesces pump wakes and prevents more than one in-flight delivery per destination.
-    pub(crate) spawn_dispatch_pump_scheduled: bool,
-    pub(crate) spawn_dispatch_inflight_targets: HashSet<String>,
-    pub(crate) spawn_dispatch_round_robin_after: Option<String>,
     pub(crate) spawn_dispatch_acks_by_target_task:
         HashMap<(String, String), VecDeque<crate::spawn_orchestration::SpawnDispatchAck>>,
     pub(crate) spawn_next_dispatch_seq: u64,
     pub(crate) spawn_processed_dispatch_seq_ids: HashSet<u64>,
     pub(crate) spawn_processed_dispatch_origins: HashSet<String>,
-    /// Number of host dispatch-correction prompts submitted per source thread. Bounded so a
-    /// model that keeps emitting dispatch blocks inside shell text cannot ping-pong corrections
-    /// forever; each correction starts a fresh turn id, so turn-keyed dedup alone cannot stop it.
-    pub(crate) spawn_dispatch_corrections_by_thread: HashMap<ThreadId, usize>,
-    pub(crate) spawn_accepted_delivery_ids: HashSet<String>,
     /// Terminal turn notifications are observed both on receipt and during buffered replay. Keep
     /// orchestration side effects idempotent across those two delivery paths.
     pub(crate) spawn_processed_terminal_turns: HashSet<(ThreadId, String)>,
@@ -879,6 +869,11 @@ fn gpu_runtime_model_preset(provider: &codex_state::GpuRuntimeProvider) -> Optio
         id: format!("{}:{}", provider.provider_id, provider.model_id),
         model: provider.model_id.clone(),
         provider_id: Some(provider.provider_id.clone()),
+        orchestration: Some(ModelOrchestrationMetadata::Eligible {
+            provider_id: provider.provider_id.clone(),
+            capability: ModelCapabilityTier::Balanced,
+            billing: ModelBilling::Local,
+        }),
         display_name: provider.model_id.clone(),
         description: format!(
             "{} · active GPU rental {} · ${:.4}/hour",
@@ -1091,6 +1086,34 @@ impl App {
             config.tui_notifications.method,
             config.tui_notifications.condition,
         );
+
+        let startup_resume_model_override = match (
+            startup_resume_model_override,
+            &session_selection,
+            state_db.as_ref(),
+        ) {
+            (Some(explicit), _, _) => Some(explicit),
+            (None, SessionSelection::Resume(target), Some(state_db)) => {
+                match state_db.get_thread(target.thread_id).await {
+                    Ok(Some(metadata)) => apply_persisted_resume_runtime(
+                        &mut config,
+                        metadata.model.as_deref(),
+                        metadata.model_provider.as_str(),
+                        metadata.reasoning_effort.clone(),
+                    ),
+                    Ok(None) => None,
+                    Err(error) => {
+                        tracing::warn!(
+                            thread_id = %target.thread_id,
+                            %error,
+                            "failed to load persisted runtime for startup resume"
+                        );
+                        None
+                    }
+                }
+            }
+            (None, _, _) => None,
+        };
 
         let harness_overrides =
             normalize_harness_overrides_for_cwd(harness_overrides, &config.cwd)?;
@@ -1373,6 +1396,13 @@ See the PFTerminal keymap documentation for supported actions and examples."
         let restored_spawn_nazgul_rebind_required = restored_pane_layout
             .as_ref()
             .is_some_and(|layout| layout.spawn_nazgul_rebind_required);
+        let restored_spawn_legacy_read_only = restored_pane_layout.as_ref().is_some_and(|layout| {
+            !layout.spawn_pending_dispatches.is_empty()
+                || layout.spawn_crew.is_none()
+                    && (layout.spawn_nazgul_pane_id.is_some()
+                        || !layout.spawn_parent_by_node.is_empty()
+                        || !layout.claude_pane_ids.is_empty())
+        });
         let mut restored_orchestrate_whips: HashMap<_, _> = restored_pane_layout
             .as_ref()
             .map(|layout| {
@@ -1510,37 +1540,17 @@ See the PFTerminal keymap documentation for supported actions and examples."
                         .collect()
                 })
                 .unwrap_or_default(),
+            spawn_crew: restored_pane_layout
+                .as_ref()
+                .and_then(|layout| layout.spawn_crew.clone()),
+            spawn_legacy_read_only: restored_spawn_legacy_read_only,
             spawn_status_by_thread: HashMap::new(),
             spawn_waiting_for_agents_by_thread: HashMap::new(),
             spawn_parent_reports_by_node: HashMap::new(),
-            spawn_pending_reports_by_thread: HashMap::new(),
-            spawn_pending_dispatches: restored_pane_layout
-                .as_ref()
-                .map(|layout| {
-                    layout
-                        .spawn_pending_dispatches
-                        .iter()
-                        .map(|(target, queue)| {
-                            (
-                                target.clone(),
-                                crate::spawn_orchestration::reconcile_restored_dispatches(queue),
-                            )
-                        })
-                        .collect()
-                })
-                .unwrap_or_default(),
-            spawn_dispatch_pump_scheduled: false,
-            spawn_dispatch_inflight_targets: HashSet::new(),
-            spawn_dispatch_round_robin_after: None,
             spawn_dispatch_acks_by_target_task: HashMap::new(),
             spawn_next_dispatch_seq: restored_spawn_next_dispatch_seq,
             spawn_processed_dispatch_seq_ids: restored_spawn_processed_dispatch_seq_ids,
             spawn_processed_dispatch_origins: restored_spawn_processed_dispatch_origins,
-            spawn_dispatch_corrections_by_thread: HashMap::new(),
-            spawn_accepted_delivery_ids: restored_pane_layout
-                .as_ref()
-                .map(|layout| layout.spawn_accepted_delivery_ids.iter().cloned().collect())
-                .unwrap_or_default(),
             spawn_processed_terminal_turns: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
             spawn_operator_input_seen: false,
@@ -1835,7 +1845,6 @@ See the PFTerminal keymap documentation for supported actions and examples."
                                     }
                                 });
                                 app.restore_native_spawn_panes_from_saved_state(&mut app_server).await;
-                                app.request_spawn_dispatch_pump();
                                 listen_for_app_server_events = true;
                                 app_server_reconnect_failure_notified = false;
                                 app.chat_widget.add_info_message(
@@ -2071,6 +2080,33 @@ See the PFTerminal keymap documentation for supported actions and examples."
         })?;
         Ok(rendered_area)
     }
+}
+
+fn apply_persisted_resume_runtime(
+    config: &mut Config,
+    model: Option<&str>,
+    model_provider: &str,
+    reasoning_effort: Option<codex_protocol::openai_models::ReasoningEffort>,
+) -> Option<ResumeModelOverride> {
+    let model = model?.to_string();
+    config.model = Some(model.clone());
+    if let Some(reasoning_effort) = reasoning_effort {
+        config.model_reasoning_effort = Some(reasoning_effort);
+    }
+    if let Some(provider) = config.model_providers.get(model_provider).cloned() {
+        config.model_provider_id = model_provider.to_string();
+        config.model_provider = provider;
+    } else {
+        tracing::warn!(
+            model,
+            model_provider,
+            "persisted resume provider is not configured in this client"
+        );
+    }
+    Some(ResumeModelOverride {
+        model: Some(model),
+        model_provider: Some(model_provider.to_string()),
+    })
 }
 
 impl Drop for App {

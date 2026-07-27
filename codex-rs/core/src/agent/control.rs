@@ -56,6 +56,7 @@ const LAST_RESULT_MESSAGE_MAX_CHARS: usize = 500;
 
 mod execution;
 mod legacy;
+mod mailbox;
 mod residency;
 mod spawn;
 
@@ -186,29 +187,6 @@ impl AgentControl {
         result
     }
 
-    pub(crate) async fn send_inter_agent_communication(
-        &self,
-        agent_id: ThreadId,
-        communication: InterAgentCommunication,
-    ) -> CodexResult<String> {
-        let last_task_message = last_task_message_from_communication(&communication);
-        let state = self.upgrade()?;
-        let op = Op::InterAgentCommunication { communication };
-        self.ensure_execution_capacity_for_op(agent_id, &op).await?;
-        let result = self
-            .handle_thread_request_result(agent_id, &state, state.send_op(agent_id, op).await)
-            .await;
-        if result.is_ok() {
-            match last_task_message {
-                Some(last_task_message) => self
-                    .state
-                    .update_last_task_message(agent_id, last_task_message),
-                None => self.state.clear_last_task_message(agent_id),
-            }
-        }
-        result
-    }
-
     /// Interrupt the current task for an existing agent thread.
     pub(crate) async fn interrupt_agent(&self, agent_id: ThreadId) -> CodexResult<String> {
         let state = self.upgrade()?;
@@ -241,7 +219,11 @@ impl AgentControl {
             return AgentStatus::NotFound;
         };
         let Ok(thread) = state.get_thread(agent_id).await else {
-            return AgentStatus::NotFound;
+            return if self.state.agent_metadata_for_thread(agent_id).is_some() {
+                AgentStatus::Unloaded
+            } else {
+                AgentStatus::NotFound
+            };
         };
         thread.agent_status().await
     }
@@ -275,6 +257,23 @@ impl AgentControl {
         self.state
             .agent_metadata_for_thread(agent_id)
             .ok_or(CodexErr::ThreadNotFound(agent_id))
+    }
+
+    /// Whether native terminal mailbox items should wake this thread automatically.
+    ///
+    /// Persistent crew managers process child results without a TUI-side report queue.
+    /// Human-facing roots and ephemeral task agents retain ordinary Codex behavior.
+    pub(crate) async fn auto_processes_terminal_results(&self, agent_id: ThreadId) -> bool {
+        let Ok(state) = self.upgrade() else {
+            return false;
+        };
+        let Ok(thread) = state.get_thread(agent_id).await else {
+            return false;
+        };
+        matches!(
+            thread.session_source.get_agent_class(),
+            Some(codex_protocol::crew::AgentClass::CrewMember { .. })
+        )
     }
 
     pub(crate) fn record_agent_result_status(
@@ -314,6 +313,80 @@ impl AgentControl {
             last_task_message: None,
             last_result_message: None,
         });
+    }
+
+    pub(crate) fn restore_thread_spawn_metadata(
+        &self,
+        thread_id: ThreadId,
+        session_source: &SessionSource,
+    ) {
+        let SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            agent_path,
+            agent_nickname,
+            agent_role,
+            ..
+        }) = session_source
+        else {
+            return;
+        };
+        self.state.restore_spawned_thread(AgentMetadata {
+            agent_id: Some(thread_id),
+            agent_path: agent_path.clone(),
+            agent_nickname: agent_nickname.clone(),
+            agent_role: agent_role.clone(),
+            last_task_message: None,
+            last_result_message: None,
+        });
+    }
+
+    pub(crate) async fn restore_persisted_agent_subtree(
+        &self,
+        root_thread_id: ThreadId,
+    ) -> CodexResult<()> {
+        let state = self.upgrade()?;
+        let Some(state_db) = state.state_db() else {
+            return Ok(());
+        };
+        let descendant_ids = match state_db
+            .list_thread_spawn_descendants_with_status(
+                root_thread_id,
+                DirectionalThreadSpawnEdgeStatus::Open,
+            )
+            .await
+        {
+            Ok(descendant_ids) => descendant_ids,
+            Err(err) => {
+                warn!(
+                    %root_thread_id,
+                    %err,
+                    "failed to enumerate persisted agent subtree during resume"
+                );
+                return Ok(());
+            }
+        };
+        for thread_id in descendant_ids {
+            let stored_thread = match state
+                .read_stored_thread(ReadThreadParams {
+                    thread_id,
+                    include_archived: true,
+                    include_history: false,
+                })
+                .await
+            {
+                Ok(stored_thread) => stored_thread,
+                Err(err) => {
+                    warn!(
+                        %root_thread_id,
+                        %thread_id,
+                        %err,
+                        "failed to restore one persisted agent during resume"
+                    );
+                    continue;
+                }
+            };
+            self.restore_thread_spawn_metadata(thread_id, &stored_thread.source);
+        }
+        Ok(())
     }
 
     pub(crate) async fn list_live_agent_subtree_thread_ids(
@@ -486,16 +559,16 @@ impl AgentControl {
                 continue;
             }
 
-            let Ok(thread) = state.get_thread(thread_id).await else {
-                continue;
-            };
             let agent_name = metadata
                 .agent_path
                 .as_ref()
                 .map(ToString::to_string)
                 .unwrap_or_else(|| thread_id.to_string());
             let last_task_message = metadata.last_task_message.clone();
-            let agent_status = thread.agent_status().await;
+            let agent_status = match state.get_thread(thread_id).await {
+                Ok(thread) => thread.agent_status().await,
+                Err(_) => AgentStatus::Unloaded,
+            };
             let last_result_message = metadata
                 .last_result_message
                 .clone()
@@ -585,7 +658,8 @@ impl AgentControl {
                     Vec::new(),
                     message,
                     /*trigger_turn*/ false,
-                );
+                )
+                .with_kind(codex_protocol::protocol::AgentMessageKind::TerminalResult);
                 let _ = control
                     .send_inter_agent_communication(parent_thread_id, communication)
                     .await;
@@ -611,6 +685,7 @@ impl AgentControl {
         agent_path: Option<AgentPath>,
         agent_role: Option<String>,
         preferred_agent_nickname: Option<String>,
+        agent_class: Option<codex_protocol::crew::AgentClass>,
     ) -> CodexResult<(SessionSource, AgentMetadata)> {
         if depth == 1 {
             self.state.register_root_thread(parent_thread_id);
@@ -630,6 +705,7 @@ impl AgentControl {
             agent_path: agent_path.clone(),
             agent_nickname: agent_nickname.clone(),
             agent_role: agent_role.clone(),
+            agent_class,
         });
         let agent_metadata = AgentMetadata {
             agent_id: None,
@@ -862,7 +938,10 @@ fn result_message_from_status(status: &AgentStatus) -> Option<String> {
         ),
         AgentStatus::Shutdown => Some("Agent shut down.".to_string()),
         AgentStatus::NotFound => Some("Agent was not found.".to_string()),
-        AgentStatus::PendingInit | AgentStatus::Running | AgentStatus::Interrupted => None,
+        AgentStatus::PendingInit
+        | AgentStatus::Unloaded
+        | AgentStatus::Running
+        | AgentStatus::Interrupted => None,
     }
 }
 
