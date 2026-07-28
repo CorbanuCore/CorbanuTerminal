@@ -91,8 +91,10 @@ use codex_protocol::config_types::Verbosity as VerbosityConfig;
 use codex_protocol::config_types::WebSearchContextSize;
 use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::ContentItem;
+use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::models::plaintext_agent_message_content;
+use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::InternalSessionSource;
@@ -343,6 +345,7 @@ fn responses_request_properties_match(
         emit_usage: previous_emit_usage,
         enable_thinking: previous_enable_thinking,
         reasoning_effort: previous_zai_reasoning_effort,
+        provider_options: previous_provider_options,
     } = previous;
     let ResponsesApiRequest {
         model: current_model,
@@ -364,6 +367,7 @@ fn responses_request_properties_match(
         emit_usage: current_emit_usage,
         enable_thinking: current_enable_thinking,
         reasoning_effort: current_zai_reasoning_effort,
+        provider_options: current_provider_options,
     } = current;
 
     previous_model == current_model
@@ -382,6 +386,7 @@ fn responses_request_properties_match(
         && previous_emit_usage == current_emit_usage
         && previous_enable_thinking == current_enable_thinking
         && previous_zai_reasoning_effort == current_zai_reasoning_effort
+        && previous_provider_options == current_provider_options
 }
 
 fn incremental_items_for_request(
@@ -1098,17 +1103,7 @@ impl ModelClient {
     fn ambient_zai_reasoning_effort(
         effort: Option<&ReasoningEffortConfig>,
     ) -> Option<&'static str> {
-        match effort {
-            Some(ReasoningEffortConfig::Custom(value))
-                if matches!(
-                    value.as_str(),
-                    "deep" | "max" | "xhigh" | "extra_high" | "extra-high"
-                ) =>
-            {
-                Some("max")
-            }
-            _ => None,
-        }
+        wants_deep_reasoning(effort).then_some("max")
     }
 
     fn baseten_reasoning_effort(
@@ -1144,9 +1139,14 @@ impl ModelClient {
     /// normalized locally instead of producing a remote HTTP 400.
     fn kimi_code_reasoning_effort(effort: Option<&ReasoningEffortConfig>) -> Result<String> {
         let mapped = match effort {
-            Some(ReasoningEffortConfig::None)
-            | Some(ReasoningEffortConfig::Minimal)
-            | Some(ReasoningEffortConfig::Low) => "low",
+            Some(ReasoningEffortConfig::None) => {
+                return Err(CodexErr::InvalidRequest(
+                    "Kimi Code K3 requires preserved reasoning; reasoning effort `none` would \
+                     select K2.6 instead"
+                        .to_string(),
+                ));
+            }
+            Some(ReasoningEffortConfig::Minimal) | Some(ReasoningEffortConfig::Low) => "low",
             Some(ReasoningEffortConfig::Medium) | Some(ReasoningEffortConfig::High) => "high",
             Some(ReasoningEffortConfig::XHigh) => "max",
             Some(ReasoningEffortConfig::Custom(value)) => match value.as_str() {
@@ -1180,22 +1180,95 @@ impl ModelClient {
         Some(mapped.to_string())
     }
 
+    /// OpenRouter's unified `reasoning` object is the only thinking control it
+    /// honours. `enable_thinking` and `thinking.type` are silently dropped, so
+    /// a model with reasoning on by default kept thinking on every turn while
+    /// we believed we had disabled it (measured 2026-07-27: GLM 5.2 143 tok
+    /// with our old field vs 3 tok with `reasoning.enabled=false`; Kimi K3 73
+    /// vs 8). Absent or `none` effort therefore has to serialize as an
+    /// explicit `{"enabled": false}` rather than as an omitted field.
     fn openrouter_reasoning(
         model_info: &ModelInfo,
         effort: Option<&ReasoningEffortConfig>,
-    ) -> Option<Value> {
+    ) -> Result<Option<Value>> {
         let supports_reasoning = model_info.default_reasoning_level.is_some()
             || !model_info.supported_reasoning_levels.is_empty();
         if !supports_reasoning {
-            return None;
+            // OpenRouter omits the reasoning capability for models that do not
+            // reason, and `provider.require_parameters` restricts routing to
+            // upstreams that support every parameter supplied. Sending a
+            // reasoning object to such a model can make otherwise valid routes
+            // ineligible, so stay silent rather than assert a default.
+            return Ok(None);
         }
-
         let effort = effort
             .or(model_info.default_reasoning_level.as_ref())
-            .map(ReasoningEffortConfig::as_str)?;
-        Some(json!({
-            "effort": effort,
-        }))
+            .map(ReasoningEffortConfig::as_str);
+        if model_info.chat_completions.reasoning_protocol
+            == ChatReasoningProtocol::PreservedRequired
+        {
+            let Some(effort) = effort.filter(|effort| *effort != "none") else {
+                return Err(CodexErr::InvalidRequest(format!(
+                    "{} requires preserved reasoning; reasoning effort `none` would select a \
+                     different effective model",
+                    model_info.slug
+                )));
+            };
+            let effort = match effort {
+                "xhigh"
+                    if model_info
+                        .supported_reasoning_levels
+                        .iter()
+                        .any(|preset| preset.effort.as_str() == "max") =>
+                {
+                    "max"
+                }
+                effort => effort,
+            };
+            if !model_info
+                .supported_reasoning_levels
+                .iter()
+                .any(|preset| preset.effort.as_str() == effort)
+            {
+                let supported = model_info
+                    .supported_reasoning_levels
+                    .iter()
+                    .map(|preset| preset.effort.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(CodexErr::InvalidRequest(format!(
+                    "{} does not support reasoning effort `{effort}`; use {supported}",
+                    model_info.slug
+                )));
+            }
+            return Ok(Some(json!({ "effort": effort })));
+        }
+        match effort {
+            // Do not use `{"exclude": true}` here: it suppresses the reasoning
+            // text while still billing the tokens.
+            None | Some("none") => Ok(Some(json!({ "enabled": false }))),
+            Some(effort) => Ok(Some(json!({ "effort": effort }))),
+        }
+    }
+
+    /// The Chat wire needs the same disable the Responses and Anthropic wires
+    /// send. Pinning the upstream only guarantees the instruction reaches a
+    /// host that obeys it; it is not itself an instruction.
+    fn vercel_reasoning(model_info: &ModelInfo, effort: Option<&ReasoningEffortConfig>) -> Value {
+        let deep = wants_deep_reasoning(effort.or(model_info.default_reasoning_level.as_ref()));
+        // The gateway publishes `high` and `xhigh` for these slugs, so do not
+        // forward an effort level it does not accept.
+        json!({ "effort": if deep { "xhigh" } else { "none" } })
+    }
+
+    /// Ambient publishes OpenRouter's `ReasoningConfiguration` shape and does
+    /// not implement `enable_thinking` at all — the field appears zero times in
+    /// their OpenAPI spec, so every request we sent kept thinking on.
+    fn ambient_reasoning(effort: Option<&str>) -> Value {
+        match effort {
+            Some(effort) => json!({ "enabled": true, "effort": effort }),
+            None => json!({ "enabled": false }),
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1233,11 +1306,49 @@ impl ModelClient {
             .flatten();
         let ambient_enable_thinking =
             uses_zai_reasoning.then_some(ambient_reasoning_effort.is_some());
-        let reasoning = if uses_zai_reasoning {
+        let vercel_provider_options = self
+            .state
+            .provider
+            .info()
+            .is_vercel_gateway()
+            .then(|| vercel_gateway_provider_options(&model_info.slug))
+            .flatten();
+        // Same rule the Ambient, Z.AI and Anthropic paths already use: these
+        // models think only when deep reasoning was asked for explicitly.
+        let vercel_wants_thinking = wants_deep_reasoning(
+            effort
+                .as_ref()
+                .or(model_info.default_reasoning_level.as_ref()),
+        );
+        let mut reasoning = if uses_zai_reasoning {
             None
         } else {
             Self::build_reasoning(model_info, effort, summary)
         };
+        // A pinned third-party slug still has to be told not to think; the pin
+        // only makes the instruction reach a host that obeys it. The gateway
+        // advertises `high` and `xhigh` for these slugs, so do not forward an
+        // effort level it does not publish.
+        if vercel_provider_options.is_some() {
+            let vercel_effort = if vercel_wants_thinking {
+                ReasoningEffortConfig::XHigh
+            } else {
+                ReasoningEffortConfig::None
+            };
+            match reasoning.as_mut() {
+                Some(reasoning) => reasoning.effort = Some(vercel_effort),
+                None => {
+                    reasoning = Some(Reasoning {
+                        enabled: None,
+                        effort: Some(vercel_effort),
+                        max_tokens: None,
+                        summary: None,
+                        exclude: None,
+                        context: None,
+                    });
+                }
+            }
+        }
         let include = if !uses_zai_reasoning && reasoning.is_some() {
             vec!["reasoning.encrypted_content".to_string()]
         } else {
@@ -1286,6 +1397,7 @@ impl ModelClient {
             emit_usage: uses_zai_reasoning.then_some(true),
             enable_thinking: ambient_enable_thinking,
             reasoning_effort: ambient_reasoning_effort,
+            provider_options: vercel_provider_options,
         };
         Ok(request)
     }
@@ -1302,6 +1414,7 @@ impl ModelClient {
             messages.push(ChatMessage {
                 role: "system".to_string(),
                 content: Some(ChatMessageContent::text(instructions.to_string())),
+                reasoning_content: None,
                 tool_call_id: None,
                 tool_calls: Vec::new(),
             });
@@ -1309,7 +1422,12 @@ impl ModelClient {
 
         let input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
         let mut skipped_tool_call_ids = HashSet::new();
-        append_chat_messages_for_response_items(input, &mut messages, &mut skipped_tool_call_ids);
+        append_chat_messages_for_response_items(
+            input,
+            &mut messages,
+            &mut skipped_tool_call_ids,
+            model_info.chat_completions.reasoning_protocol,
+        );
 
         // GLM chat streams proper tool calls when OpenAI's `strict` function
         // flag is omitted. Keep the JSON schema, but drop that
@@ -1367,15 +1485,15 @@ impl ModelClient {
                 .map(str::to_string)
             })
             .flatten();
-        let ambient_enable_thinking =
-            uses_zai_reasoning.then_some(ambient_reasoning_effort.is_some());
-        let openrouter_reasoning = self
+        // `enable_thinking` is honoured by Z.AI direct only. Ambient takes the
+        // `reasoning` object instead; sending both would leave the ignored
+        // field on the wire for no reason.
+        let ambient_enable_thinking = self
             .state
             .provider
             .info()
-            .is_openrouter()
-            .then(|| Self::openrouter_reasoning(model_info, effort.as_ref()))
-            .flatten();
+            .is_zai()
+            .then_some(ambient_reasoning_effort.is_some());
         let response_format = prompt.output_schema.as_ref().map(|schema| {
             json!({
                 "type": "json_schema",
@@ -1393,6 +1511,22 @@ impl ModelClient {
 
         let upstream_model =
             chat_completions_upstream_model(&model_info.slug, self.state.provider.info());
+        let vercel_provider_options = self
+            .state
+            .provider
+            .info()
+            .is_vercel_gateway()
+            .then(|| vercel_gateway_provider_options(upstream_model))
+            .flatten();
+        let provider_reasoning = if self.state.provider.info().is_openrouter() {
+            Self::openrouter_reasoning(model_info, effort.as_ref())?
+        } else if self.state.provider.info().is_ambient() {
+            Some(Self::ambient_reasoning(ambient_reasoning_effort.as_deref()))
+        } else if vercel_provider_options.is_some() {
+            Some(Self::vercel_reasoning(model_info, effort.as_ref()))
+        } else {
+            None
+        };
         let baseten_reasoning_effort = self
             .state
             .provider
@@ -1454,9 +1588,10 @@ impl ModelClient {
                 .or(baseten_reasoning_effort)
                 .or(kimi_code_reasoning_effort)
                 .or(native_deepseek_reasoning_effort),
-            reasoning: openrouter_reasoning,
+            reasoning: provider_reasoning,
             provider: self.state.provider.info().chat_completions_provider.clone(),
             plugins: openrouter_web_plugins,
+            provider_options: vercel_provider_options,
         })
     }
 
@@ -1516,12 +1651,25 @@ impl ModelClient {
         let tools = create_tools_json_for_anthropic_messages(&prompt.tools, &cache_control)?;
         let tool_choice = (!tools.is_empty()).then(|| json!({ "type": "auto" }));
         let upstream_model = anthropic_upstream_model(&model_info.slug);
-        let (thinking, output_config) = anthropic_reasoning_for_model_and_effort(
+        let (mut thinking, output_config) = anthropic_reasoning_for_model_and_effort(
             upstream_model,
             effort
                 .as_ref()
                 .or(model_info.default_reasoning_level.as_ref()),
         );
+        let provider_options = self
+            .state
+            .provider
+            .info()
+            .is_vercel_gateway()
+            .then(|| vercel_gateway_provider_options(upstream_model))
+            .flatten();
+        // Third-party slugs on this wire think by default, so an omitted
+        // `thinking` block is not the same as thinking off. Only Anthropic's
+        // own models treat the omission that way.
+        if provider_options.is_some() && thinking.is_none() {
+            thinking = Some(json!({ "type": "disabled" }));
+        }
 
         Ok(AnthropicMessagesRequest {
             model: upstream_model.to_string(),
@@ -1533,6 +1681,7 @@ impl ModelClient {
             max_tokens: ANTHROPIC_MESSAGES_DEFAULT_MAX_TOKENS,
             thinking,
             output_config,
+            provider_options,
         })
     }
 
@@ -1543,7 +1692,7 @@ impl ModelClient {
         if provider.is_openrouter() {
             return ChatCachePolicy {
                 explicit_cache_control: chat_model_supports_openai_compatible_cache_control(slug),
-                prompt_cache_key: true,
+                prompt_cache_key: false,
             };
         }
 
@@ -1848,6 +1997,15 @@ impl ModelClientSession {
                 if let Ok(header_value) = HeaderValue::from_str(&responses_metadata.installation_id)
                 {
                     headers.insert(X_CODEX_INSTALLATION_ID_HEADER, header_value);
+                }
+                if self.client.state.provider.info().is_openrouter()
+                    && let Ok(header_value) =
+                        HeaderValue::from_str(&responses_metadata.session_id.to_string())
+                {
+                    // OpenRouter uses this header as the provider-sticky
+                    // conversation key. Its `session-id` header is unrelated,
+                    // and `prompt_cache_key` is an OpenAI/Vercel body field.
+                    headers.insert("x-session-id", header_value);
                 }
                 if let Some(header_value) = self.client.generate_attestation_header_for().await {
                     headers.insert(X_OAI_ATTESTATION_HEADER, header_value);
@@ -3076,13 +3234,19 @@ fn append_chat_messages_for_response_item(
     messages: &mut Vec<ChatMessage>,
     skipped_tool_call_ids: &mut HashSet<String>,
 ) {
-    append_chat_messages_for_response_items(std::iter::once(item), messages, skipped_tool_call_ids);
+    append_chat_messages_for_response_items(
+        std::iter::once(item),
+        messages,
+        skipped_tool_call_ids,
+        ChatReasoningProtocol::Independent,
+    );
 }
 
 fn append_chat_messages_for_response_items(
     items: impl IntoIterator<Item = ResponseItem>,
     messages: &mut Vec<ChatMessage>,
     skipped_tool_call_ids: &mut HashSet<String>,
+    reasoning_protocol: ChatReasoningProtocol,
 ) {
     let mut pending_tool_result_images = Vec::new();
 
@@ -3099,6 +3263,7 @@ fn append_chat_messages_for_response_items(
             messages,
             skipped_tool_call_ids,
             &mut pending_tool_result_images,
+            reasoning_protocol,
         );
     }
 
@@ -3110,16 +3275,31 @@ fn append_chat_message_for_response_item(
     messages: &mut Vec<ChatMessage>,
     skipped_tool_call_ids: &mut HashSet<String>,
     pending_tool_result_images: &mut Vec<ChatContentPart>,
+    reasoning_protocol: ChatReasoningProtocol,
 ) {
     match item {
         ResponseItem::Message { role, content, .. } => {
             if let Some(content) = content_items_to_chat_content(&content) {
-                messages.push(ChatMessage {
-                    role: normalize_chat_role(&role),
-                    content: Some(content),
-                    tool_call_id: None,
-                    tool_calls: Vec::new(),
-                });
+                let role = normalize_chat_role(&role);
+                if role == "assistant"
+                    && let Some(message) = messages.last_mut().filter(|message| {
+                        message.role == "assistant"
+                            && message.content.is_none()
+                            && message.tool_call_id.is_none()
+                            && (message.reasoning_content.is_some()
+                                || !message.tool_calls.is_empty())
+                    })
+                {
+                    message.content = Some(content);
+                } else {
+                    messages.push(ChatMessage {
+                        role,
+                        content: Some(content),
+                        reasoning_content: None,
+                        tool_call_id: None,
+                        tool_calls: Vec::new(),
+                    });
+                }
             }
         }
         ResponseItem::AgentMessage {
@@ -3136,6 +3316,39 @@ fn append_chat_message_for_response_item(
                 messages.push(ChatMessage {
                     role: "user".to_string(),
                     content: Some(ChatMessageContent::text(message)),
+                    reasoning_content: None,
+                    tool_call_id: None,
+                    tool_calls: Vec::new(),
+                });
+            }
+        }
+        ResponseItem::Reasoning { content, .. }
+            if reasoning_protocol == ChatReasoningProtocol::PreservedRequired =>
+        {
+            let reasoning_content = content
+                .unwrap_or_default()
+                .into_iter()
+                .map(|content| match content {
+                    ReasoningItemContent::ReasoningText { text }
+                    | ReasoningItemContent::Text { text } => text,
+                })
+                .filter(|text| !text.is_empty())
+                .collect::<Vec<_>>()
+                .join("");
+            if reasoning_content.is_empty() {
+                return;
+            }
+            if let Some(message) = messages.last_mut().filter(|message| {
+                message.role == "assistant"
+                    && message.tool_call_id.is_none()
+                    && message.reasoning_content.is_none()
+            }) {
+                message.reasoning_content = Some(reasoning_content);
+            } else {
+                messages.push(ChatMessage {
+                    role: "assistant".to_string(),
+                    content: None,
+                    reasoning_content: Some(reasoning_content),
                     tool_call_id: None,
                     tool_calls: Vec::new(),
                 });
@@ -3167,17 +3380,16 @@ fn append_chat_message_for_response_item(
                 kind: "function".to_string(),
                 function: ChatToolFunction { name, arguments },
             };
-            if let Some(message) = messages.last_mut().filter(|message| {
-                message.role == "assistant"
-                    && message.content.is_none()
-                    && message.tool_call_id.is_none()
-                    && !message.tool_calls.is_empty()
-            }) {
+            if let Some(message) = messages
+                .last_mut()
+                .filter(|message| message.role == "assistant" && message.tool_call_id.is_none())
+            {
                 message.tool_calls.push(tool_call);
             } else {
                 messages.push(ChatMessage {
                     role: "assistant".to_string(),
                     content: None,
+                    reasoning_content: None,
                     tool_call_id: None,
                     tool_calls: vec![tool_call],
                 });
@@ -3208,6 +3420,7 @@ fn append_chat_message_for_response_item(
             messages.push(ChatMessage {
                 role: "tool".to_string(),
                 content: Some(ChatMessageContent::text(output_text)),
+                reasoning_content: None,
                 tool_call_id: Some(call_id),
                 tool_calls: Vec::new(),
             });
@@ -3239,6 +3452,7 @@ fn flush_chat_tool_result_images(
         content: Some(ChatMessageContent::Parts(std::mem::take(
             pending_tool_result_images,
         ))),
+        reasoning_content: None,
         tool_call_id: None,
         tool_calls: Vec::new(),
     });
@@ -3842,21 +4056,59 @@ fn anthropic_adaptive_effort_value(effort: &ReasoningEffortConfig) -> Option<Str
     }
 }
 
-fn anthropic_thinking_for_effort(effort: Option<&ReasoningEffortConfig>) -> Option<Value> {
-    match effort {
-        Some(ReasoningEffortConfig::Custom(value))
-            if matches!(
-                value.as_str(),
-                "deep" | "max" | "xhigh" | "extra_high" | "extra-high"
-            ) =>
-        {
-            Some(json!({
-                "type": "enabled",
-                "budget_tokens": 16_000,
-            }))
-        }
+/// The Vercel AI Gateway serves third-party model slugs from whichever upstream
+/// host it prefers — `zai/*` defaults to Fireworks — and those hosts silently
+/// drop every thinking toggle the gateway forwards. The vendor's own API is
+/// itself a pinnable upstream, and pinning to it restores the toggle.
+///
+/// Measured 2026-07-27 on `zai/glm-5.2` and `zai/glm-5.2-fast`, all three wire
+/// formats, n=3 each: unpinned 88-194 completion tokens with 54-130 of
+/// reasoning regardless of parameter shape; pinned to `zai` with thinking off,
+/// 3 completion tokens and 0 reasoning.
+///
+/// Pins are validated server-side, so an unknown upstream fails with HTTP 400
+/// rather than degrading silently. Only pin slugs whose vendor is known to be
+/// an available upstream.
+fn vercel_gateway_vendor_pin(model: &str) -> Option<&'static str> {
+    match model.split('/').next()?.trim() {
+        "zai" => Some("zai"),
+        "moonshotai" => Some("moonshotai"),
         _ => None,
     }
+}
+
+fn vercel_gateway_provider_options(model: &str) -> Option<Value> {
+    vercel_gateway_vendor_pin(model).map(|upstream| {
+        json!({
+            "gateway": { "only": [upstream] },
+        })
+    })
+}
+
+/// True when the caller explicitly asked for deep reasoning.
+///
+/// The catalog exposes this level as `"xhigh"`, which deserializes to the
+/// first-class `XHigh` variant rather than `Custom("xhigh")`. Matching only on
+/// `Custom` therefore ignored every user who picked Deep in the model picker,
+/// on every provider that routes through here.
+fn wants_deep_reasoning(effort: Option<&ReasoningEffortConfig>) -> bool {
+    match effort {
+        Some(ReasoningEffortConfig::XHigh) => true,
+        Some(ReasoningEffortConfig::Custom(value)) => matches!(
+            value.as_str(),
+            "deep" | "max" | "xhigh" | "extra_high" | "extra-high"
+        ),
+        _ => false,
+    }
+}
+
+fn anthropic_thinking_for_effort(effort: Option<&ReasoningEffortConfig>) -> Option<Value> {
+    wants_deep_reasoning(effort).then(|| {
+        json!({
+            "type": "enabled",
+            "budget_tokens": 16_000,
+        })
+    })
 }
 
 fn create_tools_json_for_anthropic_messages(

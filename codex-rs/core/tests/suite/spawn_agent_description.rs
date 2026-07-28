@@ -51,6 +51,7 @@ fn test_model_info(
     ModelInfo {
         slug: slug.to_string(),
         orchestration: None,
+        chat_completions: Default::default(),
         display_name: display_name.to_string(),
         description: Some(description.to_string()),
         default_reasoning_level: Some(default_reasoning_level),

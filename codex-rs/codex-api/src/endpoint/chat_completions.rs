@@ -767,6 +767,19 @@ impl ChatStreamState {
                 .await;
             return;
         }
+        let finish_reason = self
+            .finish_reason
+            .take()
+            .map(CompletionFinishReason::from_provider);
+        if let Some(CompletionFinishReason::ProviderError(reason)) = finish_reason.as_ref() {
+            let _ = tx_event
+                .send(Err(ApiError::Stream(format!(
+                    "chat completions provider ended the stream with retryable finish reason \
+                     `{reason}`"
+                ))))
+                .await;
+            return;
+        }
         let response_id = self.response_id();
         let message_id = format!("msg_{response_id}");
         let token_usage = self.token_usage.take();
@@ -850,10 +863,6 @@ impl ChatStreamState {
             }
         }
 
-        let finish_reason = self
-            .finish_reason
-            .take()
-            .map(CompletionFinishReason::from_provider);
         // A length-limited response is incomplete but recoverable: the turn runner records
         // the partial assistant output, requests a continuation, and caps consecutive
         // provider-driven continuations. Filtered and unknown terminal states are left
@@ -864,6 +873,7 @@ impl ChatStreamState {
             | Some(CompletionFinishReason::FunctionCall)
             | Some(CompletionFinishReason::Length) => Some(false),
             Some(CompletionFinishReason::ContentFilter)
+            | Some(CompletionFinishReason::ProviderError(_))
             | Some(CompletionFinishReason::Unknown(_))
             | None => None,
         };
@@ -1565,6 +1575,32 @@ mod tests {
                     ..
                 })) if reason == &expected_reason && end_turn == &expected_end_turn,
                 "finish reason {raw} was not preserved"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn provider_error_finish_reasons_fail_before_committing_partial_output() {
+        for raw in ["error", "failed", "server_error"] {
+            let content = content_event("chatcmpl-provider-error", "partial output");
+            let terminal = format!(
+                "data: {{\"id\":\"chatcmpl-provider-error\",\"choices\":[{{\"delta\":{{}},\"finish_reason\":\"{raw}\"}}]}}\n\n"
+            );
+            let events =
+                collect_events(&[content.as_slice(), terminal.as_bytes(), b"data: [DONE]\n\n"])
+                    .await;
+
+            assert!(
+                events
+                    .iter()
+                    .all(|event| !matches!(event, Ok(ResponseEvent::OutputItemDone(_)))),
+                "provider error `{raw}` must not commit partial output"
+            );
+            assert_matches!(
+                events.last(),
+                Some(Err(ApiError::Stream(message)))
+                    if message.contains(raw) && message.contains("retryable"),
+                "provider error `{raw}` must become a retryable stream error"
             );
         }
     }

@@ -330,6 +330,7 @@ fn test_remote_model(slug: &str, priority: i32) -> ModelInfo {
     ModelInfo {
         slug: slug.to_string(),
         orchestration: None,
+        chat_completions: Default::default(),
         display_name: "Remote Test".to_string(),
         description: Some("remote model".to_string()),
         default_reasoning_level: Some(ReasoningEffort::Medium),

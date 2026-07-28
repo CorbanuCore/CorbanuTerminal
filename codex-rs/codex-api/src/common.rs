@@ -158,6 +158,7 @@ pub enum CompletionFinishReason {
     ContentFilter,
     ToolCalls,
     FunctionCall,
+    ProviderError(String),
     Unknown(String),
 }
 
@@ -170,6 +171,7 @@ impl CompletionFinishReason {
             "content_filter" | "content_filtered" => Self::ContentFilter,
             "tool_calls" => Self::ToolCalls,
             "function_call" => Self::FunctionCall,
+            "error" | "failed" | "server_error" => Self::ProviderError(value),
             _ => Self::Unknown(value),
         }
     }
@@ -181,6 +183,7 @@ impl CompletionFinishReason {
             Self::ContentFilter => "content_filter",
             Self::ToolCalls => "tool_calls",
             Self::FunctionCall => "function_call",
+            Self::ProviderError(value) => value,
             Self::Unknown(value) => value,
         }
     }
@@ -279,6 +282,9 @@ pub struct ResponsesApiRequest {
     pub emit_usage: Option<bool>,
     pub enable_thinking: Option<bool>,
     pub reasoning_effort: Option<String>,
+    /// Gateway-level routing/provider controls, serialized as `providerOptions`.
+    /// Used by the Vercel AI Gateway to pin an upstream host.
+    pub provider_options: Option<serde_json::Value>,
 }
 
 impl ResponsesApiRequest {
@@ -307,6 +313,7 @@ impl Serialize for ResponsesApiRequest {
         field_count += usize::from(self.emit_usage.is_some());
         field_count += usize::from(self.enable_thinking.is_some());
         field_count += usize::from(self.reasoning_effort.is_some());
+        field_count += usize::from(self.provider_options.is_some());
 
         let mut state = serializer.serialize_struct("ResponsesApiRequest", field_count)?;
         state.serialize_field("model", &self.model)?;
@@ -353,6 +360,9 @@ impl Serialize for ResponsesApiRequest {
         }
         if let Some(reasoning_effort) = &self.reasoning_effort {
             state.serialize_field("reasoning_effort", reasoning_effort)?;
+        }
+        if let Some(provider_options) = &self.provider_options {
+            state.serialize_field("providerOptions", provider_options)?;
         }
         state.end()
     }
@@ -528,6 +538,9 @@ pub struct ChatCompletionsRequest {
     pub provider: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plugins: Option<Vec<Value>>,
+    /// Gateway-level routing/provider controls (Vercel AI Gateway).
+    #[serde(rename = "providerOptions", skip_serializing_if = "Option::is_none")]
+    pub provider_options: Option<Value>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
@@ -551,6 +564,9 @@ pub struct AnthropicMessagesRequest {
     pub thinking: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_config: Option<Value>,
+    /// Gateway-level routing/provider controls (Vercel AI Gateway).
+    #[serde(rename = "providerOptions", skip_serializing_if = "Option::is_none")]
+    pub provider_options: Option<Value>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
@@ -558,6 +574,10 @@ pub struct ChatMessage {
     pub role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<ChatMessageContent>,
+    /// Preserved reasoning state used by models whose Chat protocol requires the complete
+    /// assistant message to be replayed on subsequent tool-loop requests.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -860,6 +880,7 @@ mod tests {
             messages: vec![ChatMessage {
                 role: "user".to_string(),
                 content: Some(ChatMessageContent::text("hello")),
+                reasoning_content: None,
                 tool_call_id: None,
                 tool_calls: Vec::new(),
             }],
@@ -883,6 +904,7 @@ mod tests {
             reasoning: Some(json!({ "effort": "medium" })),
             provider: None,
             plugins: None,
+            provider_options: None,
         };
 
         let serialized = serde_json::to_value(&request).expect("serialize request");
@@ -923,6 +945,7 @@ mod tests {
                 "require_parameters": true,
             })),
             plugins: None,
+            provider_options: None,
         };
 
         let body = serde_json::to_value(&request).expect("serialize request");
@@ -1028,6 +1051,7 @@ mod tests {
             emit_usage: ambient.then_some(true),
             enable_thinking: None,
             reasoning_effort: None,
+            provider_options: None,
         }
     }
 

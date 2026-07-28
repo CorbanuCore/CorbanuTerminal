@@ -3494,8 +3494,7 @@ impl Config {
             );
             approvals_reviewer = constrained_approvals_reviewer.value();
         }
-        let web_search_mode =
-            resolve_web_search_mode(&cfg, &features).unwrap_or(WebSearchMode::Cached);
+        let configured_web_search_mode = resolve_web_search_mode(&cfg, &features);
         let web_search_config = resolve_web_search_config(&cfg);
         let experimental_request_user_input_enabled =
             resolve_experimental_request_user_input_enabled(&cfg);
@@ -3760,6 +3759,15 @@ impl Config {
             model_provider_id.as_str(),
             OPENROUTER_PROVIDER_ID | OPENROUTER_ANTHROPIC_PROVIDER_ID
         );
+        // OpenRouter's hosted web plugin rewrites the upstream prompt and
+        // prevents provider-side prefix caching even when no search occurs.
+        // Keep it available through an explicit `web_search` setting, but do
+        // not attach it to every default coding turn.
+        let web_search_mode = configured_web_search_mode.unwrap_or(if openrouter_provider_selected {
+            WebSearchMode::Disabled
+        } else {
+            WebSearchMode::Cached
+        });
         let vercel_provider_selected = matches!(
             model_provider_id.as_str(),
             VERCEL_PROVIDER_ID | VERCEL_ANTHROPIC_PROVIDER_ID | VERCEL_ANTHROPIC_FAST_PROVIDER_ID

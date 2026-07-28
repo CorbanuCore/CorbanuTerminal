@@ -129,6 +129,7 @@ fn serializes_text_verbosity_when_set() {
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
+        provider_options: None,
     };
 
     let v = serde_json::to_value(&req).expect("json");
@@ -178,6 +179,7 @@ fn serializes_text_schema_with_strict_format() {
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
+        provider_options: None,
     };
 
     let v = serde_json::to_value(&req).expect("json");
@@ -244,6 +246,7 @@ fn omits_text_when_not_set() {
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
+        provider_options: None,
     };
 
     let v = serde_json::to_value(&req).expect("json");
@@ -280,6 +283,7 @@ fn ambient_fast_request_serializes_plain_string_input() {
         emit_usage: Some(true),
         enable_thinking: Some(true),
         reasoning_effort: Some("high".to_string()),
+        provider_options: None,
     };
 
     let v = serde_json::to_value(&req).expect("json");
@@ -319,6 +323,7 @@ fn serializes_flex_service_tier_when_set() {
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
+        provider_options: None,
     };
 
     let v = serde_json::to_value(&req).expect("json");

@@ -331,6 +331,7 @@ async fn responses_client_stream_request_preserves_item_ids() -> Result<()> {
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
+        provider_options: None,
     };
     let expected = serde_json::to_value(&request)?;
 
@@ -422,6 +423,7 @@ async fn streaming_client_retries_on_transport_error() -> Result<()> {
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
+        provider_options: None,
     };
     let client = ResponsesClient::new(transport.clone(), provider, Arc::new(NoAuth));
 
@@ -546,6 +548,7 @@ async fn azure_store_sends_ids_and_headers() -> Result<()> {
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
+        provider_options: None,
     };
 
     let mut extra_headers = HeaderMap::new();

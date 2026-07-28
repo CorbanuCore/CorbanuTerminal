@@ -46,6 +46,7 @@ use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ReasoningItemReasoningSummary;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::models::WebSearchAction;
+use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::InternalSessionSource;
@@ -1411,7 +1412,12 @@ fn chat_replay_keeps_parallel_tool_results_contiguous_before_images() {
     let mut messages = Vec::<codex_api::ChatMessage>::new();
     let mut skipped = std::collections::HashSet::new();
 
-    super::append_chat_messages_for_response_items(items, &mut messages, &mut skipped);
+    super::append_chat_messages_for_response_items(
+        items,
+        &mut messages,
+        &mut skipped,
+        ChatReasoningProtocol::Independent,
+    );
 
     let body = serde_json::to_value(messages).expect("serialize chat messages");
     assert_eq!(
@@ -1860,8 +1866,11 @@ fn ambient_responses_request_disables_thinking_unless_deep_reasoning_is_explicit
     assert_eq!(deep.reasoning, None);
     assert_eq!(deep.thinking_budget, None);
     assert_eq!(deep.emit_usage, Some(true));
-    assert_eq!(deep.enable_thinking, Some(false));
-    assert_eq!(deep.reasoning_effort, None);
+    // `xhigh` is the catalog spelling of Deep and deserializes to the XHigh
+    // variant, so picking Deep has to turn reasoning on. It previously matched
+    // only `Custom("xhigh")` and silently did nothing.
+    assert_eq!(deep.enable_thinking, Some(true));
+    assert_eq!(deep.reasoning_effort.as_deref(), Some("max"));
 
     let max = client
         .build_responses_request(
@@ -1913,15 +1922,23 @@ fn ambient_chat_completions_request_disables_thinking_unless_deep_reasoning_is_e
         .expect("standard Ambient chat request");
     assert_eq!(standard.model, AMBIENT_DEFAULT_MODEL);
     assert_eq!(standard.emit_usage, Some(true));
-    assert_eq!(standard.enable_thinking, Some(false));
+    // Ambient does not implement `enable_thinking`; the field is absent from
+    // their OpenAPI spec, so sending it left thinking on. They implement the
+    // `reasoning` object instead.
+    assert_eq!(standard.enable_thinking, None);
+    assert_eq!(standard.reasoning, Some(json!({ "enabled": false })));
     assert_eq!(standard.reasoning_effort, None);
 
     let deep = client
         .build_chat_completions_request(&prompt, &model_info, Some(ReasoningEffortConfig::XHigh))
         .expect("deep Ambient chat request");
     assert_eq!(deep.emit_usage, Some(true));
-    assert_eq!(deep.enable_thinking, Some(false));
-    assert_eq!(deep.reasoning_effort, None);
+    assert_eq!(deep.enable_thinking, None);
+    assert_eq!(
+        deep.reasoning,
+        Some(json!({ "enabled": true, "effort": "max" }))
+    );
+    assert_eq!(deep.reasoning_effort.as_deref(), Some("max"));
     assert_eq!(deep.prompt_cache_key, None);
 
     let max = client
@@ -1932,7 +1949,11 @@ fn ambient_chat_completions_request_disables_thinking_unless_deep_reasoning_is_e
         )
         .expect("max Ambient chat request");
     assert_eq!(max.emit_usage, Some(true));
-    assert_eq!(max.enable_thinking, Some(true));
+    assert_eq!(max.enable_thinking, None);
+    assert_eq!(
+        max.reasoning,
+        Some(json!({ "enabled": true, "effort": "max" }))
+    );
     assert_eq!(max.reasoning_effort.as_deref(), Some("max"));
 
     let mut legacy_model_info = model_info;
@@ -1941,6 +1962,253 @@ fn ambient_chat_completions_request_disables_thinking_unless_deep_reasoning_is_e
         .build_chat_completions_request(&prompt, &legacy_model_info, None)
         .expect("legacy Ambient chat request");
     assert_eq!(legacy.model, AMBIENT_DEFAULT_MODEL);
+}
+
+fn test_vercel_glm_model_info(slug: &str) -> ModelInfo {
+    serde_json::from_value(json!({
+        "slug": slug,
+        "display_name": "Vercel GLM 5.2",
+        "description": "Vercel GLM 5.2",
+        "default_reasoning_level": null,
+        "supported_reasoning_levels": [],
+        "shell_type": "shell_command",
+        "visibility": "list",
+        "supported_in_api": true,
+        "priority": 1,
+        "upgrade": null,
+        "base_instructions": "base instructions",
+        "model_messages": null,
+        "supports_reasoning_summaries": false,
+        "support_verbosity": false,
+        "default_verbosity": null,
+        "apply_patch_tool_type": null,
+        "truncation_policy": {"mode": "tokens", "limit": 10000},
+        "supports_parallel_tool_calls": true,
+        "supports_image_detail_original": false,
+        "context_window": 202752,
+        "auto_compact_token_limit": null,
+        "experimental_supported_tools": []
+    }))
+    .expect("deserialize Vercel test model info")
+}
+
+fn test_prompt() -> super::Prompt {
+    super::Prompt {
+        input: vec![ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText {
+                text: "hello".to_string(),
+            }],
+            phase: None,
+            metadata: None,
+        }],
+        ..Default::default()
+    }
+}
+
+fn test_client(provider_info: ModelProviderInfo) -> ModelClient {
+    ModelClient::new(
+        /*auth_manager*/ None,
+        ThreadId::new(),
+        provider_info,
+        SessionSource::Cli,
+        /*model_verbosity*/ None,
+        /*enable_request_compression*/ false,
+        /*include_timing_metrics*/ false,
+        /*beta_features_header*/ None,
+        /*item_ids_enabled*/ false,
+        /*attestation_provider*/ None,
+    )
+}
+
+/// Unpinned, the gateway serves `zai/*` from Fireworks, which drops every
+/// thinking toggle. The pin is what makes the toggle reach a host that obeys it.
+#[test]
+fn vercel_anthropic_wire_pins_vendor_upstream_and_disables_thinking() {
+    let client = test_client(ModelProviderInfo::create_vercel_anthropic_fast_provider());
+    let model_info = test_vercel_glm_model_info("zai/glm-5.2-fast");
+    let request = client
+        .build_anthropic_messages_request(&test_prompt(), &model_info, None)
+        .expect("vercel anthropic request");
+
+    assert_eq!(
+        request.provider_options,
+        Some(json!({ "gateway": { "only": ["zai"] } }))
+    );
+    assert_eq!(request.thinking, Some(json!({ "type": "disabled" })));
+}
+
+#[test]
+fn vercel_responses_wire_pins_vendor_upstream_and_disables_reasoning() {
+    let provider_info = ModelProviderInfo::create_vercel_provider();
+    let api_provider = provider_info
+        .to_api_provider(Some(AuthMode::ApiKey))
+        .expect("Vercel API provider");
+    let client = test_client(provider_info);
+    let model_info = test_vercel_glm_model_info("zai/glm-5.2");
+    let responses_metadata = test_responses_metadata_for_client(
+        &client,
+        Some("turn-1"),
+        "window-1".to_string(),
+        None,
+        TestCodexResponsesRequestKind::Turn,
+    );
+    let request = client
+        .build_responses_request(
+            &api_provider,
+            &test_prompt(),
+            &model_info,
+            None,
+            ReasoningSummaryConfig::None,
+            None,
+            &responses_metadata,
+        )
+        .expect("vercel responses request");
+
+    assert_eq!(
+        request.provider_options,
+        Some(json!({ "gateway": { "only": ["zai"] } }))
+    );
+    assert_eq!(
+        request
+            .reasoning
+            .as_ref()
+            .and_then(|reasoning| reasoning.effort.clone()),
+        Some(ReasoningEffortConfig::None)
+    );
+}
+
+/// First-party slugs already honour reasoning control on this gateway, and
+/// their upstream is not a vendor slug we can pin, so leave them alone.
+#[test]
+fn vercel_gateway_leaves_first_party_slugs_unpinned() {
+    let client = test_client(ModelProviderInfo::create_vercel_anthropic_provider());
+    let model_info = test_vercel_glm_model_info("anthropic/claude-opus-5");
+    let request = client
+        .build_anthropic_messages_request(&test_prompt(), &model_info, None)
+        .expect("vercel anthropic first-party request");
+
+    assert_eq!(request.provider_options, None);
+    assert_eq!(request.thinking, None);
+}
+
+/// Deep reasoning must survive every wire. The catalog spells this level
+/// `xhigh`, which is the `XHigh` variant and not `Custom("xhigh")`.
+#[test]
+fn vercel_gateway_honours_explicit_deep_reasoning_on_every_wire() {
+    let anthropic_request = test_client(ModelProviderInfo::create_vercel_anthropic_fast_provider())
+        .build_anthropic_messages_request(
+            &test_prompt(),
+            &test_vercel_glm_model_info("zai/glm-5.2-fast"),
+            Some(ReasoningEffortConfig::XHigh),
+        )
+        .expect("deep vercel anthropic request");
+    assert_eq!(
+        anthropic_request.provider_options,
+        Some(json!({ "gateway": { "only": ["zai"] } }))
+    );
+    assert_eq!(
+        anthropic_request.thinking,
+        Some(json!({ "type": "enabled", "budget_tokens": 16_000 }))
+    );
+
+    let provider_info = ModelProviderInfo::create_vercel_provider();
+    let api_provider = provider_info
+        .to_api_provider(Some(AuthMode::ApiKey))
+        .expect("Vercel API provider");
+    let client = test_client(provider_info);
+    let responses_metadata = test_responses_metadata_for_client(
+        &client,
+        Some("turn-1"),
+        "window-1".to_string(),
+        None,
+        TestCodexResponsesRequestKind::Turn,
+    );
+    let responses_request = client
+        .build_responses_request(
+            &api_provider,
+            &test_prompt(),
+            &test_vercel_glm_model_info("zai/glm-5.2"),
+            Some(ReasoningEffortConfig::XHigh),
+            ReasoningSummaryConfig::None,
+            None,
+            &responses_metadata,
+        )
+        .expect("deep vercel responses request");
+    assert_eq!(
+        responses_request
+            .reasoning
+            .as_ref()
+            .and_then(|reasoning| reasoning.effort.clone()),
+        Some(ReasoningEffortConfig::XHigh)
+    );
+
+    let chat_request = test_client(vercel_chat_provider())
+        .build_chat_completions_request(
+            &test_prompt(),
+            &test_vercel_glm_model_info("zai/glm-5.2"),
+            Some(ReasoningEffortConfig::XHigh),
+        )
+        .expect("deep vercel chat request");
+    assert_eq!(chat_request.reasoning, Some(json!({ "effort": "xhigh" })));
+}
+
+/// A user-defined provider aimed at the gateway is still the gateway. Detection
+/// is on the endpoint, not the display name.
+fn vercel_chat_provider() -> ModelProviderInfo {
+    let mut provider = ModelProviderInfo::create_vercel_provider();
+    provider.name = "my-own-gateway".to_string();
+    provider.wire_api = WireApi::Chat;
+    provider
+}
+
+/// The pin alone is not an instruction. Without a native toggle the Chat wire
+/// keeps paying for reasoning on a correctly pinned request.
+#[test]
+fn vercel_chat_wire_pins_vendor_upstream_and_disables_reasoning() {
+    let request = test_client(vercel_chat_provider())
+        .build_chat_completions_request(
+            &test_prompt(),
+            &test_vercel_glm_model_info("zai/glm-5.2"),
+            None,
+        )
+        .expect("vercel chat request");
+
+    assert_eq!(
+        request.provider_options,
+        Some(json!({ "gateway": { "only": ["zai"] } }))
+    );
+    assert_eq!(request.reasoning, Some(json!({ "effort": "none" })));
+    assert_eq!(request.enable_thinking, None);
+}
+
+#[test]
+fn vercel_gateway_detection_ignores_provider_display_name() {
+    let mut renamed = ModelProviderInfo::create_vercel_anthropic_fast_provider();
+    renamed.name = "house-gateway".to_string();
+    assert!(renamed.is_vercel_gateway());
+
+    let mut impostor = ModelProviderInfo::create_openrouter_provider();
+    impostor.name = "Vercel".to_string();
+    assert!(!impostor.is_vercel_gateway());
+}
+
+/// OpenRouter omits the reasoning capability for models that do not reason, and
+/// `provider.require_parameters` drops upstreams that cannot honour every
+/// parameter sent. Asserting a default on such a model can make otherwise valid
+/// routes ineligible.
+#[test]
+fn openrouter_omits_reasoning_for_models_without_the_capability() {
+    let mut model_info = test_openrouter_gemini_model_info();
+    model_info.default_reasoning_level = None;
+    model_info.supported_reasoning_levels = Vec::new();
+
+    let request = test_client(ModelProviderInfo::create_openrouter_provider())
+        .build_chat_completions_request(&test_prompt(), &model_info, None)
+        .expect("non-reasoning OpenRouter chat request");
+
+    assert_eq!(request.reasoning, None);
 }
 
 #[test]
@@ -1978,10 +2246,12 @@ fn openrouter_chat_completions_request_uses_reasoning_object() {
     assert_eq!(default_request.enable_thinking, None);
     assert_eq!(default_request.emit_usage, None);
     assert_eq!(default_request.reasoning_effort, None);
-    assert_eq!(default_request.reasoning, None);
-    assert!(
-        default_request.prompt_cache_key.is_some(),
-        "OpenRouter Chat requests should carry a stable prompt_cache_key"
+    // An omitted `reasoning` object leaves the model's own default on, which
+    // for a reasoning model means we pay for thinking we never asked for.
+    assert_eq!(default_request.reasoning, Some(json!({ "enabled": false })));
+    assert_eq!(
+        default_request.prompt_cache_key, None,
+        "OpenRouter uses x-session-id for provider stickiness, not prompt_cache_key"
     );
     assert!(
         !serde_json::to_value(&default_request)
@@ -2013,6 +2283,38 @@ fn openrouter_chat_completions_request_uses_reasoning_object() {
             .and_then(|reasoning| reasoning.get("effort"))
             .and_then(|effort| effort.as_str()),
         Some("high")
+    );
+}
+
+#[test]
+fn openrouter_preserved_required_reasoning_rejects_none_and_uses_catalog_default() {
+    let mut model_info = test_model_info();
+    model_info.slug = "catalog-required-reasoning-model".to_string();
+    model_info.chat_completions.reasoning_protocol = ChatReasoningProtocol::PreservedRequired;
+    model_info.default_reasoning_level = Some(ReasoningEffortConfig::Custom("max".to_string()));
+    model_info.supported_reasoning_levels =
+        vec![codex_protocol::openai_models::ReasoningEffortPreset {
+            effort: ReasoningEffortConfig::Custom("max".to_string()),
+            description: "Required preserved reasoning".to_string(),
+        }];
+    let client = test_client(ModelProviderInfo::create_openrouter_provider());
+
+    let request = client
+        .build_chat_completions_request(&test_prompt(), &model_info, None)
+        .expect("catalog default reasoning request");
+    assert_eq!(request.reasoning, Some(json!({ "effort": "max" })));
+
+    let error = client
+        .build_chat_completions_request(
+            &test_prompt(),
+            &model_info,
+            Some(ReasoningEffortConfig::None),
+        )
+        .expect_err("required reasoning must reject none");
+    assert!(
+        error
+            .to_string()
+            .contains("reasoning effort `none` would select a different effective model")
     );
 }
 
@@ -2114,9 +2416,9 @@ fn openrouter_anthropic_chat_request_adds_cache_control_markers() {
     let request = client
         .build_chat_completions_request(&prompt, &model_info, None)
         .expect("OpenRouter Anthropic chat request");
-    assert!(
-        request.prompt_cache_key.is_some(),
-        "OpenRouter Chat requests should carry a stable prompt_cache_key"
+    assert_eq!(
+        request.prompt_cache_key, None,
+        "OpenRouter uses x-session-id for provider stickiness, not prompt_cache_key"
     );
 
     let body = serde_json::to_value(&request).expect("serialize request");
@@ -2240,7 +2542,10 @@ fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
     let request = client
         .build_anthropic_messages_request(&prompt, &model_info, Some(ReasoningEffortConfig::XHigh))
         .expect("Anthropic messages request");
-    assert_eq!(request.thinking, None);
+    assert_eq!(
+        request.thinking,
+        Some(json!({ "type": "enabled", "budget_tokens": 16_000 }))
+    );
 
     let body = serde_json::to_value(&request).expect("serialize request");
     assert_eq!(
@@ -2664,7 +2969,7 @@ fn openrouter_chat_completions_request_preserves_function_tools_with_web_search(
     let request = client
         .build_chat_completions_request(&prompt, &model_info, None)
         .expect("OpenRouter chat request");
-    assert!(request.prompt_cache_key.is_some());
+    assert_eq!(request.prompt_cache_key, None);
 
     assert_eq!(
         request
@@ -2833,6 +3138,14 @@ fn kimi_code_k3_chat_maps_supported_reasoning_and_rejects_unknown_values() {
     }
 
     let err = client
+        .build_chat_completions_request(&prompt, &model_info, Some(ReasoningEffortConfig::None))
+        .expect_err("Kimi K3 must not silently downgrade to K2.6");
+    assert!(
+        err.to_string().contains("would select K2.6 instead"),
+        "unexpected error: {err}"
+    );
+
+    let err = client
         .build_chat_completions_request(
             &prompt,
             &model_info,
@@ -2915,11 +3228,18 @@ fn vercel_responses_request_uses_standard_responses_fields() {
         .reasoning
         .as_ref()
         .expect("Vercel GLM should use standard Responses reasoning");
+    // Standard effort means "do not think" for this family, and the gateway
+    // only publishes `high`/`xhigh`, so `medium` was both a no-op level and a
+    // request for reasoning we never wanted.
     assert_eq!(
         reasoning.effort.as_ref(),
-        Some(&ReasoningEffortConfig::Medium)
+        Some(&ReasoningEffortConfig::None)
     );
     assert_eq!(reasoning.summary, None);
+    assert_eq!(
+        request.provider_options,
+        Some(json!({ "gateway": { "only": ["zai"] } }))
+    );
     assert_eq!(request.enable_thinking, None);
     assert_eq!(request.emit_usage, None);
     assert_eq!(request.reasoning_effort, None);

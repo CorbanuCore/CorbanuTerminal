@@ -298,6 +298,17 @@ async fn assess_turn_completion_inner(
             } => {
                 sess.update_token_usage_info(turn_context, token_usage.as_ref())
                     .await?;
+                if let Some(codex_api::CompletionFinishReason::ProviderError(reason)) =
+                    finish_reason.as_ref()
+                {
+                    return Err(CodexErr::Stream(
+                        format!(
+                            "the model provider ended completion assessment with retryable finish \
+                             reason `{reason}`"
+                        ),
+                        None,
+                    ));
+                }
                 if !matches!(
                     finish_reason,
                     None | Some(codex_api::CompletionFinishReason::Stop)

@@ -373,6 +373,7 @@ impl OpenAiModelsManager {
                     model.supported_reasoning_levels = bundled.supported_reasoning_levels.clone();
                 }
                 model.orchestration = bundled.orchestration.clone();
+                model.chat_completions = bundled.chat_completions.clone();
                 existing_models[existing_index] = model;
             } else {
                 existing_models.push(model);

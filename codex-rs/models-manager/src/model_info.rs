@@ -90,6 +90,7 @@ pub fn model_info_from_slug(slug: &str) -> ModelInfo {
     ModelInfo {
         slug: slug.to_string(),
         orchestration: None,
+        chat_completions: Default::default(),
         display_name,
         description: None,
         default_reasoning_level: is_deepseek_v4_flash.then_some(ReasoningEffort::High),

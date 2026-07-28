@@ -3113,6 +3113,15 @@ async fn try_run_sampling_request(
                                 .to_string(),
                         ));
                     }
+                    Some(codex_api::CompletionFinishReason::ProviderError(reason)) => {
+                        break Err(CodexErr::Stream(
+                            format!(
+                                "the model provider ended the completion with retryable finish \
+                                 reason `{reason}`"
+                            ),
+                            None,
+                        ));
+                    }
                     Some(codex_api::CompletionFinishReason::Unknown(reason)) => {
                         break Err(CodexErr::InvalidRequest(format!(
                             "the model provider returned an unknown completion finish reason \

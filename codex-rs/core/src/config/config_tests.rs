@@ -891,6 +891,34 @@ model = "z-ai/glm-5.2"
     assert_eq!(config.model_context_window, None);
     assert_eq!(config.to_models_manager_config().model_context_window, None);
     assert_eq!(config.forced_login_method, Some(ForcedLoginMethod::Api));
+    assert_eq!(
+        config.web_search_mode.value(),
+        WebSearchMode::Disabled,
+        "OpenRouter hosted web search must be opt-in because its prompt transform defeats prefix caching"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn load_config_openrouter_preserves_explicit_web_search() -> std::io::Result<()> {
+    let cfg = toml::from_str::<ConfigToml>(
+        r#"
+model_provider = "openrouter"
+model = "z-ai/glm-5.2"
+web_search = "live"
+"#,
+    )
+    .expect("config should deserialize");
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.web_search_mode.value(), WebSearchMode::Live);
 
     Ok(())
 }
