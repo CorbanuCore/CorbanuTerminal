@@ -72,6 +72,9 @@
       "auto_compact_token_limit": null,
       "default_reasoning_summary": "none",
       "slug": "k3",
+      "chat_completions": {
+        "reasoning_protocol": "preserved_required"
+      },
       "orchestration": {
         "status": "eligible",
         "provider_id": "kimi-code",
@@ -745,6 +748,9 @@
       "auto_compact_token_limit": null,
       "default_reasoning_summary": "none",
       "slug": "moonshotai/kimi-k3",
+      "chat_completions": {
+        "reasoning_protocol": "preserved_required"
+      },
       "orchestration": {
         "status": "eligible",
         "provider_id": "openrouter",
@@ -756,8 +762,16 @@
       "default_reasoning_level": "max",
       "supported_reasoning_levels": [
         {
+          "effort": "low",
+          "description": "Low. Faster, lighter reasoning."
+        },
+        {
+          "effort": "high",
+          "description": "High. Stronger reasoning with more latency."
+        },
+        {
           "effort": "max",
-          "description": "Max. Kimi K3's required reasoning mode for complex coding and long-horizon work."
+          "description": "Max. Kimi K3's deepest reasoning mode (default)."
         }
       ],
       "shell_type": "shell_command",

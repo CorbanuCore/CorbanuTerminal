@@ -112,6 +112,7 @@ fn openai_model_item_to_info(item: OpenAiModelListItem) -> ModelInfo {
     ModelInfo {
         slug: item.id.clone(),
         orchestration: None,
+        chat_completions: Default::default(),
         display_name: item.name.unwrap_or(item.id),
         description: item.description,
         default_reasoning_level: None,

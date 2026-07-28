@@ -1,3 +1,48 @@
+# PFTerminal 0.1.24
+
+## Added
+
+- The canonical model catalogue now declares model-specific Chat Completions
+  reasoning protocols. Kimi K3 routes expose their supported low, high, and
+  max effort levels and require preserved reasoning across tool turns.
+
+## Fixed
+
+- Kimi K3 now replays returned `reasoning_content` on the same assistant
+  message as its tool calls, as required by Moonshot's multi-turn protocol.
+  Selecting no reasoning is rejected instead of silently running a different
+  effective model.
+- OpenRouter requests now use the gateway's sticky `x-session-id` header rather
+  than an unsupported `prompt_cache_key`. Hosted web search is opt-in on
+  OpenRouter so its prompt transform does not defeat provider prefix caching.
+- OpenRouter and Ambient reasoning controls now reach the provider using the
+  supported wire fields. Vercel routes pin the intended upstream when needed
+  and apply native reasoning control on Anthropic, Responses, and Chat wires.
+- Deep reasoning accepts the catalogue's first-class `xhigh` value on Ambient,
+  Z.AI, and Vercel instead of silently disabling reasoning.
+- Chat streams ending with provider error finish reasons enter the bounded
+  retry path without committing partial output as a successful turn.
+- Provider capability detection uses normalized gateway endpoints instead of
+  mutable display names, and non-reasoning OpenRouter models no longer receive
+  parameters that can make valid upstream routes ineligible.
+
+## Qualification status
+
+- Kimi's preserved-thinking request contract is covered by model-catalogue,
+  request-builder, stream parser, retry, and multi-turn integration tests.
+- A two-wave live Queuecraft comparison through OpenRouter passed 35/35 tests
+  and 7/7 hidden probes on every run. PFTerminal solved 2/2 in 225.626 seconds
+  for $0.525786 of directly billed spend; current Hermes solved 2/2 in 547.410
+  seconds for $2.217944.
+- Provider, protocol, model-catalogue, and exact debug-package builds pass on
+  the release candidate.
+
+Previous release: 0.1.23.
+
+The changelog can be found on the [releases page](https://github.com/agtico/PfTerminal/releases).
+
+---
+
 # PFTerminal 0.1.23
 
 ## Added

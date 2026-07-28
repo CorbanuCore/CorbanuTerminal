@@ -56,6 +56,7 @@ async fn models_client_hits_models_endpoint() {
             display_name: "gpt-test".to_string(),
             description: Some("desc".to_string()),
             orchestration: None,
+            chat_completions: Default::default(),
             default_reasoning_level: Some(ReasoningEffort::Medium),
             supported_reasoning_levels: vec![
                 ReasoningEffortPreset {

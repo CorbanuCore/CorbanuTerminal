@@ -203,6 +203,28 @@ pub enum ModelCapabilityTier {
     Unclassified,
 }
 
+/// Reasoning-state contract for an OpenAI-compatible Chat Completions model.
+#[derive(
+    Debug, Default, Clone, Copy, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq, Display,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum ChatReasoningProtocol {
+    /// Reasoning is optional or does not need to be replayed in assistant messages.
+    #[default]
+    Independent,
+    /// Every turn reasons, and returned reasoning content must be replayed with the assistant
+    /// message on the next request.
+    PreservedRequired,
+}
+
+/// Chat Completions protocol capabilities that cannot be inferred from the provider alone.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq)]
+pub struct ChatCompletionsCapabilities {
+    #[serde(default)]
+    pub reasoning_protocol: ChatReasoningProtocol,
+}
+
 /// Billing data for an exact provider/model route.
 ///
 /// Monetary values use milli-USD per million tokens so catalogue metadata remains exact,
@@ -501,6 +523,9 @@ pub struct ModelInfo {
     /// Canonical cost, capability, and spawn-policy metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orchestration: Option<ModelOrchestrationMetadata>,
+    /// Model-specific Chat Completions wire behavior.
+    #[serde(default)]
+    pub chat_completions: ChatCompletionsCapabilities,
     pub display_name: String,
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -810,6 +835,7 @@ mod tests {
             display_name: "Test Model".to_string(),
             description: None,
             orchestration: None,
+            chat_completions: Default::default(),
             default_reasoning_level: None,
             supported_reasoning_levels: vec![],
             shell_type: ConfigShellToolType::ShellCommand,

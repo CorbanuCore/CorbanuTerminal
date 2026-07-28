@@ -218,6 +218,7 @@ fn remote_model_with_auto_review_override(slug: &str, review_model: &str) -> Mod
     ModelInfo {
         slug: slug.to_string(),
         orchestration: None,
+        chat_completions: Default::default(),
         display_name: format!("{slug} display"),
         description: Some(format!("{slug} description")),
         default_reasoning_level: Some(ReasoningEffort::Medium),

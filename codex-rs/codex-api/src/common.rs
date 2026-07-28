@@ -158,6 +158,7 @@ pub enum CompletionFinishReason {
     ContentFilter,
     ToolCalls,
     FunctionCall,
+    ProviderError(String),
     Unknown(String),
 }
 
@@ -170,6 +171,7 @@ impl CompletionFinishReason {
             "content_filter" | "content_filtered" => Self::ContentFilter,
             "tool_calls" => Self::ToolCalls,
             "function_call" => Self::FunctionCall,
+            "error" | "failed" | "server_error" => Self::ProviderError(value),
             _ => Self::Unknown(value),
         }
     }
@@ -181,6 +183,7 @@ impl CompletionFinishReason {
             Self::ContentFilter => "content_filter",
             Self::ToolCalls => "tool_calls",
             Self::FunctionCall => "function_call",
+            Self::ProviderError(value) => value,
             Self::Unknown(value) => value,
         }
     }
@@ -571,6 +574,10 @@ pub struct ChatMessage {
     pub role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<ChatMessageContent>,
+    /// Preserved reasoning state used by models whose Chat protocol requires the complete
+    /// assistant message to be replayed on subsequent tool-loop requests.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -873,6 +880,7 @@ mod tests {
             messages: vec![ChatMessage {
                 role: "user".to_string(),
                 content: Some(ChatMessageContent::text("hello")),
+                reasoning_content: None,
                 tool_call_id: None,
                 tool_calls: Vec::new(),
             }],

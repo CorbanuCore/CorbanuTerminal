@@ -1,5 +1,6 @@
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::built_in_model_providers;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
@@ -52,7 +53,7 @@ struct ToolThenFinalResponder {
 impl Respond for ToolThenFinalResponder {
     fn respond(&self, _request: &Request) -> ResponseTemplate {
         match self.calls.fetch_add(1, Ordering::SeqCst) {
-            0 => sse_response(tool_call_sse("call-tool-final")),
+            0 => sse_response(reasoning_tool_call_sse("call-tool-final")),
             1 => text_response(FINAL_RESPONSE),
             2 => assessment_response("complete", "requested repair was delivered"),
             call => panic!("unexpected Kimi request {call}"),
@@ -63,6 +64,21 @@ impl Respond for ToolThenFinalResponder {
 #[derive(Default)]
 struct RepeatedCheckpointResponder {
     calls: AtomicUsize,
+}
+
+#[derive(Default)]
+struct ProviderErrorThenFinalResponder {
+    calls: AtomicUsize,
+}
+
+impl Respond for ProviderErrorThenFinalResponder {
+    fn respond(&self, _request: &Request) -> ResponseTemplate {
+        match self.calls.fetch_add(1, Ordering::SeqCst) {
+            0 => provider_error_response("error", "partial-before-provider-error"),
+            1 => text_response(FINAL_RESPONSE),
+            call => panic!("unexpected OpenRouter request {call}"),
+        }
+    }
 }
 
 impl Respond for RepeatedCheckpointResponder {
@@ -161,6 +177,42 @@ fn tool_call_sse(id: &str) -> String {
     format!("data: {tool_call}\n\ndata: [DONE]\n\n")
 }
 
+fn reasoning_tool_call_sse(id: &str) -> String {
+    let reasoning = serde_json::json!({
+        "id": "chatcmpl-reasoning-tool",
+        "model": "k3",
+        "choices": [{
+            "delta": {
+                "role": "assistant",
+                "reasoning_content": "I need to inspect the repository before editing."
+            }
+        }]
+    });
+    let tool_call = serde_json::json!({
+        "id": "chatcmpl-reasoning-tool",
+        "model": "k3",
+        "choices": [{
+            "delta": {
+                "tool_calls": [{
+                    "index": 0,
+                    "id": id,
+                    "type": "function",
+                    "function": {
+                        "name": "exec_command",
+                        "arguments": "{\"cmd\":\"true\"}"
+                    }
+                }]
+            }
+        }]
+    });
+    let terminal = serde_json::json!({
+        "id": "chatcmpl-reasoning-tool",
+        "model": "k3",
+        "choices": [{"delta": {}, "finish_reason": "tool_calls"}]
+    });
+    format!("data: {reasoning}\n\ndata: {tool_call}\n\ndata: {terminal}\n\ndata: [DONE]\n\n")
+}
+
 fn text_response(text: &str) -> ResponseTemplate {
     let id = "chatcmpl-test";
     let delta = serde_json::json!({
@@ -184,6 +236,23 @@ fn text_response(text: &str) -> ResponseTemplate {
     });
     sse_response(format!(
         "data: {delta}\n\ndata: {stop}\n\ndata: {usage}\n\ndata: [DONE]\n\n"
+    ))
+}
+
+fn provider_error_response(reason: &str, partial_text: &str) -> ResponseTemplate {
+    let id = "chatcmpl-provider-error";
+    let delta = serde_json::json!({
+        "id": id,
+        "model": "z-ai/glm-5.2",
+        "choices": [{"delta": {"role": "assistant", "content": partial_text}}],
+    });
+    let terminal = serde_json::json!({
+        "id": id,
+        "model": "z-ai/glm-5.2",
+        "choices": [{"delta": {}, "finish_reason": reason}],
+    });
+    sse_response(format!(
+        "data: {delta}\n\ndata: {terminal}\n\ndata: [DONE]\n\n"
     ))
 }
 
@@ -220,6 +289,17 @@ fn reliable_provider(server: &wiremock::MockServer) -> ModelProviderInfo {
     }
 }
 
+fn openrouter_provider(server: &wiremock::MockServer) -> ModelProviderInfo {
+    ModelProviderInfo {
+        base_url: Some(format!("{}/api/v1", server.uri())),
+        env_key: Some("PATH".to_string()),
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        stream_idle_timeout_ms: Some(2_000),
+        ..built_in_model_providers(/*openai_base_url*/ None)[OPENROUTER_PROVIDER_ID].clone()
+    }
+}
+
 async fn submit_turn(test: &core_test_support::test_codex::TestCodex) -> Vec<EventMsg> {
     test.codex
         .submit(Op::UserInput {
@@ -252,6 +332,97 @@ fn request_bodies(requests: &[wiremock::Request]) -> Vec<Value> {
         .iter()
         .map(|request| serde_json::from_slice(&request.body).expect("request body"))
         .collect()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn openrouter_chat_uses_gateway_sticky_session_header() {
+    skip_if_no_network!();
+
+    let server = wiremock::MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path_regex(".*/chat/completions$"))
+        .respond_with(text_response(FINAL_RESPONSE))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let provider = openrouter_provider(&server);
+    let test = test_codex()
+        .with_config(move |config| {
+            config.model = Some("z-ai/glm-5.2".to_string());
+            config.model_provider_id = OPENROUTER_PROVIDER_ID.to_string();
+            config.model_provider = provider;
+        })
+        .build(&server)
+        .await
+        .expect("build OpenRouter test session");
+    let expected_session_id = test.session_configured.session_id.to_string();
+
+    let events = submit_turn(&test).await;
+    assert!(
+        events
+            .iter()
+            .all(|event| !matches!(event, EventMsg::Warning(_) | EventMsg::Error(_)))
+    );
+
+    let requests = server.received_requests().await.expect("recorded requests");
+    let request = requests.first().expect("OpenRouter chat request");
+    let body: Value = serde_json::from_slice(&request.body).expect("request body");
+    assert_eq!(
+        request
+            .headers
+            .get("x-session-id")
+            .and_then(|value| value.to_str().ok()),
+        Some(expected_session_id.as_str())
+    );
+    assert_eq!(body.get("prompt_cache_key"), None);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn openrouter_chat_retries_provider_error_finish_reason_without_leaking_partial_output() {
+    skip_if_no_network!();
+
+    let server = wiremock::MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path_regex(".*/chat/completions$"))
+        .respond_with(ProviderErrorThenFinalResponder::default())
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    let mut provider = openrouter_provider(&server);
+    provider.stream_max_retries = Some(1);
+    let test = test_codex()
+        .with_config(move |config| {
+            config.model = Some("z-ai/glm-5.2".to_string());
+            config.model_provider_id = OPENROUTER_PROVIDER_ID.to_string();
+            config.model_provider = provider;
+        })
+        .build(&server)
+        .await
+        .expect("build OpenRouter test session");
+
+    let events = submit_turn(&test).await;
+    assert!(
+        events
+            .iter()
+            .all(|event| !matches!(event, EventMsg::Error(_)))
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, EventMsg::TurnComplete(_)))
+    );
+
+    let requests = server.received_requests().await.expect("recorded requests");
+    assert_eq!(requests.len(), 2);
+    let bodies = request_bodies(&requests);
+    assert!(
+        !bodies[1]
+            .to_string()
+            .contains("partial-before-provider-error"),
+        "retry request must reuse the original prompt without committing partial failed output"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -345,6 +516,31 @@ async fn kimi_tool_call_then_final_does_not_start_work_again() {
     assert!(requests.iter().all(|request| {
         !String::from_utf8_lossy(&request.body).contains(CONTINUE_INSTRUCTION_FRAGMENT)
     }));
+    let bodies = request_bodies(&requests);
+    let replayed_assistant = bodies[1]
+        .pointer("/messages")
+        .and_then(Value::as_array)
+        .and_then(|messages| {
+            messages.iter().find(|message| {
+                message.get("role") == Some(&Value::String("assistant".to_string()))
+                    && message.get("reasoning_content").is_some()
+            })
+        })
+        .expect("assistant reasoning replay");
+    assert_eq!(
+        replayed_assistant.get("reasoning_content"),
+        Some(&Value::String(
+            "I need to inspect the repository before editing.".to_string()
+        ))
+    );
+    assert_eq!(
+        replayed_assistant
+            .get("tool_calls")
+            .and_then(Value::as_array)
+            .map(Vec::len),
+        Some(1),
+        "reasoning and tool calls must be replayed in the same assistant message"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

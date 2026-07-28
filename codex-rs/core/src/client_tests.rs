@@ -46,6 +46,7 @@ use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ReasoningItemReasoningSummary;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::models::WebSearchAction;
+use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::InternalSessionSource;
@@ -1411,7 +1412,12 @@ fn chat_replay_keeps_parallel_tool_results_contiguous_before_images() {
     let mut messages = Vec::<codex_api::ChatMessage>::new();
     let mut skipped = std::collections::HashSet::new();
 
-    super::append_chat_messages_for_response_items(items, &mut messages, &mut skipped);
+    super::append_chat_messages_for_response_items(
+        items,
+        &mut messages,
+        &mut skipped,
+        ChatReasoningProtocol::Independent,
+    );
 
     let body = serde_json::to_value(messages).expect("serialize chat messages");
     assert_eq!(
@@ -2243,9 +2249,9 @@ fn openrouter_chat_completions_request_uses_reasoning_object() {
     // An omitted `reasoning` object leaves the model's own default on, which
     // for a reasoning model means we pay for thinking we never asked for.
     assert_eq!(default_request.reasoning, Some(json!({ "enabled": false })));
-    assert!(
-        default_request.prompt_cache_key.is_some(),
-        "OpenRouter Chat requests should carry a stable prompt_cache_key"
+    assert_eq!(
+        default_request.prompt_cache_key, None,
+        "OpenRouter uses x-session-id for provider stickiness, not prompt_cache_key"
     );
     assert!(
         !serde_json::to_value(&default_request)
@@ -2277,6 +2283,38 @@ fn openrouter_chat_completions_request_uses_reasoning_object() {
             .and_then(|reasoning| reasoning.get("effort"))
             .and_then(|effort| effort.as_str()),
         Some("high")
+    );
+}
+
+#[test]
+fn openrouter_preserved_required_reasoning_rejects_none_and_uses_catalog_default() {
+    let mut model_info = test_model_info();
+    model_info.slug = "catalog-required-reasoning-model".to_string();
+    model_info.chat_completions.reasoning_protocol = ChatReasoningProtocol::PreservedRequired;
+    model_info.default_reasoning_level = Some(ReasoningEffortConfig::Custom("max".to_string()));
+    model_info.supported_reasoning_levels =
+        vec![codex_protocol::openai_models::ReasoningEffortPreset {
+            effort: ReasoningEffortConfig::Custom("max".to_string()),
+            description: "Required preserved reasoning".to_string(),
+        }];
+    let client = test_client(ModelProviderInfo::create_openrouter_provider());
+
+    let request = client
+        .build_chat_completions_request(&test_prompt(), &model_info, None)
+        .expect("catalog default reasoning request");
+    assert_eq!(request.reasoning, Some(json!({ "effort": "max" })));
+
+    let error = client
+        .build_chat_completions_request(
+            &test_prompt(),
+            &model_info,
+            Some(ReasoningEffortConfig::None),
+        )
+        .expect_err("required reasoning must reject none");
+    assert!(
+        error
+            .to_string()
+            .contains("reasoning effort `none` would select a different effective model")
     );
 }
 
@@ -2378,9 +2416,9 @@ fn openrouter_anthropic_chat_request_adds_cache_control_markers() {
     let request = client
         .build_chat_completions_request(&prompt, &model_info, None)
         .expect("OpenRouter Anthropic chat request");
-    assert!(
-        request.prompt_cache_key.is_some(),
-        "OpenRouter Chat requests should carry a stable prompt_cache_key"
+    assert_eq!(
+        request.prompt_cache_key, None,
+        "OpenRouter uses x-session-id for provider stickiness, not prompt_cache_key"
     );
 
     let body = serde_json::to_value(&request).expect("serialize request");
@@ -2931,7 +2969,7 @@ fn openrouter_chat_completions_request_preserves_function_tools_with_web_search(
     let request = client
         .build_chat_completions_request(&prompt, &model_info, None)
         .expect("OpenRouter chat request");
-    assert!(request.prompt_cache_key.is_some());
+    assert_eq!(request.prompt_cache_key, None);
 
     assert_eq!(
         request
@@ -3098,6 +3136,14 @@ fn kimi_code_k3_chat_maps_supported_reasoning_and_rejects_unknown_values() {
             .expect("supported Kimi reasoning effort");
         assert_eq!(request.reasoning_effort.as_deref(), Some(expected));
     }
+
+    let err = client
+        .build_chat_completions_request(&prompt, &model_info, Some(ReasoningEffortConfig::None))
+        .expect_err("Kimi K3 must not silently downgrade to K2.6");
+    assert!(
+        err.to_string().contains("would select K2.6 instead"),
+        "unexpected error: {err}"
+    );
 
     let err = client
         .build_chat_completions_request(

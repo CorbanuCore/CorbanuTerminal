@@ -10,6 +10,7 @@ use codex_login::ExternalAuth;
 use codex_login::ExternalAuthRefreshContext;
 use codex_login::ExternalAuthTokens;
 use codex_login::TokenData;
+use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelBilling;
 use codex_protocol::openai_models::ModelCapabilityTier;
@@ -1606,6 +1607,10 @@ fn bundled_models_json_contains_kimi_code_k3() {
         ]
     );
     assert!(kimi.supports_parallel_tool_calls);
+    assert_eq!(
+        kimi.chat_completions.reasoning_protocol,
+        ChatReasoningProtocol::PreservedRequired
+    );
     assert_standard_base(&kimi.base_instructions);
 
     let conservative =
@@ -1724,11 +1729,19 @@ fn bundled_models_json_contains_openrouter_models() {
             .iter()
             .map(|level| level.effort.clone())
             .collect::<Vec<_>>(),
-        vec![ReasoningEffort::Custom("max".to_string())]
+        vec![
+            ReasoningEffort::Low,
+            ReasoningEffort::High,
+            ReasoningEffort::Custom("max".to_string()),
+        ]
     );
     assert_eq!(
         kimi.input_modalities,
         vec![InputModality::Text, InputModality::Image]
+    );
+    assert_eq!(
+        kimi.chat_completions.reasoning_protocol,
+        ChatReasoningProtocol::PreservedRequired
     );
     assert!(
         kimi.description
