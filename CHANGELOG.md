@@ -1,3 +1,39 @@
+# PFTerminal 0.1.25
+
+## Fixed
+
+- OpenAI Responses turns now preserve server-side continuation after model
+  commentary followed by tool calls. PF Terminal compares durable canonical
+  history when deciding whether to reuse `previous_response_id`, preventing an
+  outbound compatibility item from forcing a full-history replay.
+- The synthetic `Continue.` message required by some external
+  Responses-compatible providers is now applied only to their outbound wire
+  request. OpenAI receives no synthetic continuation turn, while external
+  WebSocket and Vercel routes retain their provider-specific behavior.
+- Continuation prefix comparison ignores non-semantic metadata on both sides,
+  matching current Codex behavior without rewriting stored conversation
+  history.
+
+## Qualification status
+
+- A balanced direct-OpenAI regression suite ran QueueCraft, TextWright, and
+  QueryForge five times each through both PF Terminal and Codex with
+  `gpt-5.6-sol` at high reasoning effort. Both harnesses passed 15/15 runs.
+- The 15 PF Terminal qualification runs captured 169 Responses requests with
+  zero continuation drops after server-side continuation began and zero
+  synthetic `Continue.` turns on OpenAI. Three additional QueueCraft robustness
+  runs also passed, bringing fixed-build coverage to 18/18 runs and 198
+  captured requests.
+- OpenAI WebSocket, external Responses WebSocket, Vercel server-state, and
+  adjacent prompt-cache/client regression tests cover consecutive
+  commentary-plus-tool continuations and wire-only provider transforms.
+
+Previous release: 0.1.24.
+
+The changelog can be found on the [releases page](https://github.com/agtico/PfTerminal/releases).
+
+---
+
 # PFTerminal 0.1.24
 
 ## Added

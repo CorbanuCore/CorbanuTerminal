@@ -23,6 +23,7 @@ use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::ServiceTier;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
+use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
@@ -42,6 +43,7 @@ use core_test_support::responses::WebSocketConnectionConfig;
 use core_test_support::responses::WebSocketTestServer;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
+use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::start_websocket_server;
 use core_test_support::responses::start_websocket_server_with_headers;
@@ -1000,6 +1002,161 @@ async fn responses_websocket_v2_incremental_requests_are_reused_across_turns() {
     assert_eq!(
         second["input"],
         serde_json::to_value(&prompt_two.input[2..]).unwrap()
+    );
+
+    server.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn responses_websocket_openai_commentary_tool_turn_preserves_incremental_reuse() {
+    skip_if_no_network!();
+
+    let server = start_websocket_server(vec![vec![
+        vec![
+            ev_response_created("resp-1"),
+            ev_assistant_message("msg-1", "I will inspect the repository."),
+            ev_function_call("call-1", "shell", "{}"),
+            ev_completed("resp-1"),
+        ],
+        vec![
+            ev_response_created("resp-2"),
+            ev_function_call("call-2", "shell", "{}"),
+            ev_completed("resp-2"),
+        ],
+        vec![ev_response_created("resp-3"), ev_completed("resp-3")],
+    ]])
+    .await;
+
+    let mut provider = websocket_provider(&server);
+    provider.name = ModelProviderInfo::create_openai_provider(/*base_url*/ None).name;
+    let harness =
+        websocket_harness_with_provider_options(provider, /*runtime_metrics_enabled*/ false).await;
+    let mut client_session = harness.client.new_session();
+
+    let prompt_one = prompt_with_input(vec![message_item("Fix the defect.")]);
+    let mut commentary = assistant_message_item("msg-1", "I will inspect the repository.");
+    commentary.stamp_turn_id_if_missing("turn-1");
+    let first_call = function_call_item("call-1");
+    let first_output = function_call_output_item("call-1");
+    let prompt_two = prompt_with_input(vec![
+        message_item("Fix the defect."),
+        commentary.clone(),
+        first_call.clone(),
+        first_output.clone(),
+    ]);
+    let second_call = function_call_item("call-2");
+    let second_output = function_call_output_item("call-2");
+    let prompt_three = prompt_with_input(vec![
+        message_item("Fix the defect."),
+        commentary,
+        first_call,
+        first_output,
+        second_call,
+        second_output.clone(),
+    ]);
+
+    stream_until_complete(&mut client_session, &harness, &prompt_one).await;
+    stream_until_complete(&mut client_session, &harness, &prompt_two).await;
+    stream_until_complete(&mut client_session, &harness, &prompt_three).await;
+
+    let connection = server.single_connection();
+    assert_eq!(connection.len(), 3);
+    let second = connection
+        .get(1)
+        .expect("missing second request")
+        .body_json();
+    assert_eq!(second["previous_response_id"].as_str(), Some("resp-1"));
+    assert_eq!(
+        second["input"],
+        serde_json::to_value([function_call_output_item("call-1")]).unwrap()
+    );
+    let third = connection
+        .get(2)
+        .expect("missing third request")
+        .body_json();
+    assert_eq!(third["previous_response_id"].as_str(), Some("resp-2"));
+    assert_eq!(
+        third["input"],
+        serde_json::to_value([second_output]).unwrap()
+    );
+
+    server.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn responses_websocket_external_provider_synthetic_turn_does_not_poison_reuse() {
+    skip_if_no_network!();
+
+    let server = start_websocket_server(vec![vec![
+        vec![
+            ev_response_created("resp-1"),
+            ev_assistant_message("msg-1", "I will inspect the repository."),
+            ev_function_call("call-1", "shell", "{}"),
+            ev_completed("resp-1"),
+        ],
+        vec![
+            ev_response_created("resp-2"),
+            ev_function_call("call-2", "shell", "{}"),
+            ev_completed("resp-2"),
+        ],
+        vec![ev_response_created("resp-3"), ev_completed("resp-3")],
+    ]])
+    .await;
+
+    let harness = websocket_harness_with_options(&server, /*runtime_metrics_enabled*/ false).await;
+    let mut client_session = harness.client.new_session();
+
+    let prompt_one = prompt_with_input(vec![message_item("Fix the defect.")]);
+    let commentary = assistant_message_item("msg-1", "I will inspect the repository.");
+    let first_call = function_call_item("call-1");
+    let first_output = function_call_output_item("call-1");
+    let prompt_two = prompt_with_input(vec![
+        message_item("Fix the defect."),
+        commentary.clone(),
+        first_call.clone(),
+        first_output,
+    ]);
+    let second_call = function_call_item("call-2");
+    let prompt_three = prompt_with_input(vec![
+        message_item("Fix the defect."),
+        commentary,
+        first_call,
+        function_call_output_item("call-1"),
+        second_call,
+        function_call_output_item("call-2"),
+    ]);
+
+    stream_until_complete(&mut client_session, &harness, &prompt_one).await;
+    stream_until_complete(&mut client_session, &harness, &prompt_two).await;
+    stream_until_complete(&mut client_session, &harness, &prompt_three).await;
+
+    let expected_second_input = vec![
+        function_call_output_item("call-1"),
+        message_item("Continue."),
+    ];
+    let expected_third_input = vec![
+        function_call_output_item("call-2"),
+        message_item("Continue."),
+    ];
+    let connection = server.single_connection();
+    assert_eq!(connection.len(), 3);
+    let second = connection
+        .get(1)
+        .expect("missing second request")
+        .body_json();
+    assert_eq!(second["previous_response_id"].as_str(), Some("resp-1"));
+    assert_eq!(
+        second["input"],
+        serde_json::to_value(expected_second_input).unwrap()
+    );
+    let third = connection
+        .get(2)
+        .expect("missing third request")
+        .body_json();
+    assert_eq!(third["previous_response_id"].as_str(), Some("resp-2"));
+    assert_eq!(
+        third["input"],
+        serde_json::to_value(expected_third_input).unwrap()
     );
 
     server.shutdown().await;
@@ -2069,6 +2226,26 @@ fn assistant_message_item(id: &str, text: &str) -> ResponseItem {
         role: "assistant".into(),
         content: vec![ContentItem::OutputText { text: text.into() }],
         phase: None,
+        metadata: None,
+    }
+}
+
+fn function_call_item(call_id: &str) -> ResponseItem {
+    ResponseItem::FunctionCall {
+        id: None,
+        name: "shell".to_string(),
+        namespace: None,
+        arguments: "{}".to_string(),
+        call_id: call_id.to_string(),
+        metadata: None,
+    }
+}
+
+fn function_call_output_item(call_id: &str) -> ResponseItem {
+    ResponseItem::FunctionCallOutput {
+        id: None,
+        call_id: call_id.to_string(),
+        output: FunctionCallOutputPayload::from_text("ok".to_string()),
         metadata: None,
     }
 }

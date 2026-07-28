@@ -393,7 +393,6 @@ fn incremental_items_for_request(
     request: &ResponsesApiRequest,
     previous_request: &ResponsesApiRequest,
     last_response: Option<&LastResponse>,
-    provider_is_openai: bool,
     allow_empty_delta: bool,
 ) -> Option<Vec<ResponseItem>> {
     if !responses_request_properties_match(previous_request, request) {
@@ -401,30 +400,42 @@ fn incremental_items_for_request(
         return None;
     }
 
-    let Some(after_previous_input) = request
+    let response_items = last_response.map_or(&[][..], |response| response.items_added.as_slice());
+    let previous_items_len = previous_request
         .input
-        .strip_prefix(previous_request.input.as_slice())
+        .len()
+        .checked_add(response_items.len())?;
+    let Some((request_items_to_compare, incremental_items)) =
+        request.input.split_at_checked(previous_items_len)
     else {
-        trace!("incremental request failed, previous input prefix didn't match");
+        trace!("incremental request failed, incompatible request length");
         return None;
     };
-
-    let mut response_items =
-        last_response.map_or_else(Vec::new, |response| response.items_added.clone());
-    if !provider_is_openai {
-        response_items
-            .iter_mut()
-            .for_each(ResponseItem::clear_metadata);
+    let previous_items = previous_request.input.iter().chain(response_items);
+    if !previous_items
+        .zip(request_items_to_compare)
+        .all(response_items_equal_ignoring_metadata)
+    {
+        trace!("incremental request failed, items didn't match");
+        return None;
     }
-    let Some(incremental_items) = after_previous_input.strip_prefix(response_items.as_slice())
-    else {
-        trace!("incremental request failed, previous response prefix didn't match");
-        return None;
-    };
     if !allow_empty_delta && incremental_items.is_empty() {
         return None;
     }
     Some(incremental_items.to_vec())
+}
+
+fn response_items_equal_ignoring_metadata(previous: (&ResponseItem, &ResponseItem)) -> bool {
+    let (previous, current) = previous;
+    if previous == current {
+        return true;
+    }
+
+    let mut previous = previous.clone();
+    previous.clear_metadata();
+    let mut current = current.clone();
+    current.clear_metadata();
+    previous == current
 }
 
 fn items_after_last_model_output(input: &[ResponseItem]) -> Option<Vec<ResponseItem>> {
@@ -440,14 +451,14 @@ fn items_after_last_model_output(input: &[ResponseItem]) -> Option<Vec<ResponseI
 /// models ignore those non-message items when validating conversation shape and reject the request
 /// because its latest message is still `assistant`. The continuation is request-only: it does not
 /// rewrite the durable conversation history.
-fn ensure_responses_input_ends_with_user_turn(input: &mut Vec<ResponseItem>) {
+fn responses_input_needs_synthetic_user_turn(input: &[ResponseItem]) -> bool {
     // A compaction trigger is itself the terminal request control. Appending anything after it is
     // invalid, and it does not need the user-message continuation used for ordinary sampling.
     if input
         .iter()
         .any(|item| matches!(item, ResponseItem::CompactionTrigger { .. }))
     {
-        return;
+        return false;
     }
 
     let latest_message_is_assistant = input.iter().rev().find_map(|item| match item {
@@ -459,10 +470,10 @@ fn ensure_responses_input_ends_with_user_turn(input: &mut Vec<ResponseItem>) {
         ResponseItem::AgentMessage { .. } => Some(true),
         _ => None,
     });
-    if latest_message_is_assistant != Some(true) {
-        return;
-    }
+    latest_message_is_assistant == Some(true)
+}
 
+fn append_synthetic_responses_user_turn(input: &mut Vec<ResponseItem>) {
     input.push(ResponseItem::Message {
         id: None,
         role: "user".to_string(),
@@ -472,6 +483,13 @@ fn ensure_responses_input_ends_with_user_turn(input: &mut Vec<ResponseItem>) {
         phase: None,
         metadata: None,
     });
+}
+
+#[cfg(test)]
+fn ensure_responses_input_ends_with_user_turn(input: &mut Vec<ResponseItem>) {
+    if responses_input_needs_synthetic_user_turn(input) {
+        append_synthetic_responses_user_turn(input);
+    }
 }
 
 /// Whether an outbound Responses `input` contains at least one user-role message.
@@ -493,8 +511,12 @@ fn responses_input_includes_user_message(items: &[ResponseItem]) -> bool {
 fn apply_http_server_state_continuation(
     request: &mut ResponsesApiRequest,
     response_id: String,
-    incremental_items: Vec<ResponseItem>,
+    mut incremental_items: Vec<ResponseItem>,
+    append_user_turn: bool,
 ) {
+    if append_user_turn {
+        append_synthetic_responses_user_turn(&mut incremental_items);
+    }
     if !responses_input_includes_user_message(&incremental_items) {
         debug!(
             "skipping server-state incremental continuation without a user message; \
@@ -854,6 +876,9 @@ impl ModelClient {
             text,
             ..
         } = request;
+        if self.responses_input_needs_synthetic_user_turn(&input) {
+            append_synthetic_responses_user_turn(&mut input);
+        }
         self.prepare_response_items_for_request(&mut input, /*store*/ false);
         let payload = ApiCompactionInput {
             model: &model,
@@ -1287,7 +1312,6 @@ impl ModelClient {
         if !self.state.provider.info().is_openai() {
             input.iter_mut().for_each(ResponseItem::clear_metadata);
         }
-        ensure_responses_input_ends_with_user_turn(&mut input);
         let uses_zai_reasoning =
             self.state.provider.info().is_ambient() || self.state.provider.info().is_zai();
         let mut tools = create_tools_json_for_responses_api(&prompt.tools)?;
@@ -1722,6 +1746,10 @@ impl ModelClient {
         }
     }
 
+    fn responses_input_needs_synthetic_user_turn(&self, input: &[ResponseItem]) -> bool {
+        !self.state.provider.info().is_openai() && responses_input_needs_synthetic_user_turn(input)
+    }
+
     /// Returns whether the Responses-over-WebSocket transport is active for this session.
     ///
     /// WebSocket use is controlled by provider capability and session-scoped fallback state.
@@ -1913,7 +1941,7 @@ impl ModelClientSession {
                     .provider
                     .info()
                     .to_api_provider(auth_mode)?;
-                let request = self.client.build_responses_request(
+                let mut request = self.client.build_responses_request(
                     &api_provider,
                     prompt,
                     model_info,
@@ -1922,6 +1950,12 @@ impl ModelClientSession {
                     service_tier,
                     responses_metadata,
                 )?;
+                if self
+                    .client
+                    .responses_input_needs_synthetic_user_turn(&request.input)
+                {
+                    append_synthetic_responses_user_turn(&mut request.input);
+                }
                 serde_json::to_vec(&request)?
             }
             WireApi::Chat => {
@@ -2213,13 +2247,7 @@ impl ModelClientSession {
         // extension of the previous known input. Server-returned output items are treated as part
         // of the baseline so we do not resend them.
         let previous_request = self.websocket_session.last_request.as_ref()?;
-        incremental_items_for_request(
-            request,
-            previous_request,
-            last_response,
-            self.client.state.provider.info().is_openai(),
-            allow_empty_delta,
-        )
+        incremental_items_for_request(request, previous_request, last_response, allow_empty_delta)
     }
 
     fn get_last_response(&mut self) -> Option<LastResponse> {
@@ -2236,6 +2264,7 @@ impl ModelClientSession {
         &mut self,
         request: &mut ResponsesApiRequest,
         logical_request: &ResponsesApiRequest,
+        append_user_turn: bool,
     ) {
         if let Some(state) = self.client.server_conversation_state() {
             if state.last_response.response_id.is_empty() {
@@ -2246,13 +2275,13 @@ impl ModelClientSession {
                     logical_request,
                     previous_request,
                     Some(&state.last_response),
-                    self.client.state.provider.info().is_openai(),
                     /*allow_empty_delta*/ false,
                 ) {
                     apply_http_server_state_continuation(
                         request,
                         state.last_response.response_id,
                         incremental_items,
+                        append_user_turn,
                     );
                     return;
                 }
@@ -2263,6 +2292,7 @@ impl ModelClientSession {
                     request,
                     state.last_response.response_id,
                     incremental_items,
+                    append_user_turn,
                 );
                 return;
             }
@@ -2280,6 +2310,7 @@ impl ModelClientSession {
                 request,
                 last_response.response_id,
                 incremental_items,
+                append_user_turn,
             );
         }
     }
@@ -2668,8 +2699,18 @@ impl ModelClientSession {
             )?;
             let logical_request = request.clone();
             let uses_http_server_state = self.client.state.provider.info().is_vercel();
+            let append_user_turn = self
+                .client
+                .responses_input_needs_synthetic_user_turn(&logical_request.input);
             if uses_http_server_state {
-                self.prepare_http_server_state_request(&mut request, &logical_request);
+                self.prepare_http_server_state_request(
+                    &mut request,
+                    &logical_request,
+                    append_user_turn,
+                );
+            }
+            if append_user_turn && request.previous_response_id.is_none() {
+                append_synthetic_responses_user_turn(&mut request.input);
             }
             let request_used_server_state = request.previous_response_id.is_some();
             let store = request.store;
@@ -2829,6 +2870,9 @@ impl ModelClientSession {
                 service_tier.clone(),
                 responses_metadata,
             )?;
+            let append_user_turn = self
+                .client
+                .responses_input_needs_synthetic_user_turn(&request.input);
             let mut client_metadata = self
                 .client
                 .build_ws_client_metadata(responses_metadata, model_info.use_responses_lite);
@@ -2892,6 +2936,9 @@ impl ModelClientSession {
             };
             stamp_ws_stream_request_start_ms(&mut ws_request);
             let ResponsesWsRequest::ResponseCreate(ws_payload) = &mut ws_request;
+            if append_user_turn {
+                append_synthetic_responses_user_turn(&mut ws_payload.input);
+            }
             let store = ws_payload.store;
             self.client
                 .prepare_response_items_for_request(&mut ws_payload.input, store);

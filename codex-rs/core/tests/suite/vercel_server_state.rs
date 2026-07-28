@@ -139,6 +139,57 @@ async fn vercel_tool_followup_falls_back_to_full_context_and_keeps_state() -> Re
     Ok(())
 }
 
+/// A visible assistant commentary message before a tool call requires a
+/// synthetic user turn on Vercel's wire. That wire-only item must not enter
+/// the canonical continuation baseline or force later full-context replays.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn vercel_commentary_tool_followups_keep_incremental_server_state() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let server = responses::start_mock_server().await;
+    let first_call_id = "call-vercel-first";
+    let second_call_id = "call-vercel-second";
+    let response_mock = mount_sse_sequence(
+        &server,
+        vec![
+            sse(vec![
+                ev_response_created("resp1"),
+                ev_assistant_message("msg-1", "I will inspect this first."),
+                ev_function_call(first_call_id, "nonexistent_tool", "{}"),
+                ev_completed("resp1"),
+            ]),
+            sse(vec![
+                ev_response_created("resp2"),
+                ev_function_call(second_call_id, "nonexistent_tool", "{}"),
+                ev_completed("resp2"),
+            ]),
+            sse(vec![
+                ev_response_created("resp3"),
+                ev_assistant_message("msg-2", "done"),
+                ev_completed("resp3"),
+            ]),
+        ],
+    )
+    .await;
+
+    let mut builder = vercel_test_codex();
+    let test = builder.build(&server).await?;
+    test.submit_turn("please inspect the repository").await?;
+
+    let requests = response_mock.requests();
+    assert_eq!(requests.len(), 3);
+    assert_eq!(previous_response_id(&requests[0]), None);
+
+    assert_eq!(previous_response_id(&requests[1]).as_deref(), Some("resp1"));
+    assert!(input_has_function_call_output(&requests[1], first_call_id));
+    assert!(input_has_user_message(&requests[1]));
+
+    assert_eq!(previous_response_id(&requests[2]).as_deref(), Some("resp2"));
+    assert!(input_has_function_call_output(&requests[2], second_call_id));
+    assert!(input_has_user_message(&requests[2]));
+    Ok(())
+}
+
 /// If the provider still rejects a server-state continuation with HTTP 400,
 /// the client clears the stored state and retries once with full context
 /// instead of failing the turn.
