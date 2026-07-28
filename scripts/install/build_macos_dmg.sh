@@ -147,12 +147,36 @@ EOF
 volume_name="PFTerminal-${version}-${target}"
 archive_size_bytes="$(stat -f '%z' "$archive_path")"
 image_size_mib="$(( (archive_size_bytes + 1048575) / 1048576 + 256 ))"
-hdiutil create \
-  -volname "$volume_name" \
-  -srcfolder "$staging_dir" \
-  -size "${image_size_mib}m" \
-  -ov \
-  -format UDZO \
-  "$output_path"
+
+# GitHub-hosted macOS runners occasionally leave diskimages-helper busy for a
+# few seconds after large SDK/cache cleanup. hdiutil reports that transient as
+# "create failed - Resource busy" even though the source tree and destination
+# are valid. Retrying the hdiutil boundary is safe because every attempt uses
+# -ov and removes any partial destination first.
+max_create_attempts=5
+create_attempt=1
+retry_delay_seconds=5
+while true; do
+  rm -f "$output_path"
+  if hdiutil create \
+    -volname "$volume_name" \
+    -srcfolder "$staging_dir" \
+    -size "${image_size_mib}m" \
+    -ov \
+    -format UDZO \
+    "$output_path"; then
+    break
+  fi
+  if (( create_attempt >= max_create_attempts )); then
+    echo "hdiutil create failed after ${max_create_attempts} attempts." >&2
+    exit 1
+  fi
+  echo \
+    "hdiutil create attempt ${create_attempt} failed; retrying in " \
+    "${retry_delay_seconds}s." >&2
+  sleep "$retry_delay_seconds"
+  create_attempt="$((create_attempt + 1))"
+  retry_delay_seconds="$((retry_delay_seconds * 2))"
+done
 
 echo "Built $output_path"
