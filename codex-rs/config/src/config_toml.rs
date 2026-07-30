@@ -86,10 +86,6 @@ const RESERVED_MODEL_PROVIDER_IDS: [&str; 13] = [
 
 pub const DEFAULT_PROJECT_DOC_MAX_BYTES: usize = 32 * 1024;
 
-const fn default_allow_login_shell() -> Option<bool> {
-    Some(true)
-}
-
 fn default_history() -> Option<History> {
     Some(History::default())
 }
@@ -212,7 +208,6 @@ pub struct ConfigToml {
     /// If `false`, the model can never use a login shell: `login = true`
     /// requests are rejected, and omitting `login` defaults to a non-login
     /// shell.
-    #[serde(default = "default_allow_login_shell")]
     pub allow_login_shell: Option<bool>,
 
     /// Sandbox mode to use.
@@ -379,9 +374,6 @@ pub struct ConfigToml {
     pub model_reasoning_summary: Option<ReasoningSummary>,
     /// Optional verbosity control for GPT-5 models (Responses API `text.verbosity`).
     pub model_verbosity: Option<Verbosity>,
-
-    /// Override to force-enable reasoning summaries for the configured model.
-    pub model_supports_reasoning_summaries: Option<bool>,
 
     /// Optional path to a JSON model catalog (applied on startup only).
     /// Per-thread `config` overrides are accepted but do not reapply this (no-ops).
@@ -673,11 +665,19 @@ pub struct ToolsToml {
     )]
     pub web_search: Option<WebSearchToolConfig>,
     pub experimental_request_user_input: Option<ExperimentalRequestUserInput>,
+    pub update_plan: Option<UpdatePlanToolConfig>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct ExperimentalRequestUserInput {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct UpdatePlanToolConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
 }
@@ -710,16 +710,22 @@ where
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct AgentsToml {
-    /// Maximum number of agent threads that can be open concurrently.
-    /// When unset, no limit is enforced.
+    /// Whether multi-agent tools are enabled. Defaults to true.
+    /// An enabled `features.multi_agent_v2` setting takes precedence.
+    pub enabled: Option<bool>,
+    /// Maximum number of spawned agent threads that can be open concurrently per session.
+    /// When unset, the selected multi-agent backend uses its default.
+    #[serde(alias = "max_threads")]
     #[schemars(range(min = 1))]
-    pub max_threads: Option<usize>,
-    /// Maximum nesting depth allowed for spawned agent threads.
-    /// Root sessions start at depth 0.
-    #[schemars(range(min = 1))]
+    pub max_concurrent_threads_per_session: Option<usize>,
+    /// Maximum nesting depth for V1 agent threads. Ignored by V2.
     pub max_depth: Option<i32>,
-    /// Default maximum runtime in seconds for agent job workers.
-    #[schemars(range(min = 1))]
+    /// Default model for spawned subagents when the spawn call does not select one.
+    pub default_subagent_model: Option<String>,
+    /// Default reasoning effort for spawned subagents when the spawn call does not select one.
+    pub default_subagent_reasoning_effort: Option<ReasoningEffort>,
+    /// Removed agent-job setting retained as a no-op for compatibility.
+    #[schemars(skip)]
     pub job_max_runtime_seconds: Option<u64>,
     /// Whether to record a model-visible message when an agent turn is interrupted.
     /// Defaults to true.
@@ -990,18 +996,17 @@ pub fn validate_model_providers(
     validate_reserved_model_provider_ids(model_providers)?;
     validate_reserved_model_provider_names(model_providers)?;
     for (key, provider) in model_providers {
-        if key == AMAZON_BEDROCK_PROVIDER_ID {
-            continue;
-        }
-        if provider.aws.is_some() {
-            return Err(format!(
-                "model_providers.{key}: provider aws is only supported for `{AMAZON_BEDROCK_PROVIDER_ID}`"
-            ));
-        }
-        if provider.name.trim().is_empty() {
-            return Err(format!(
-                "model_providers.{key}: provider name must not be empty"
-            ));
+        if key != AMAZON_BEDROCK_PROVIDER_ID {
+            if provider.aws.is_some() {
+                return Err(format!(
+                    "model_providers.{key}: provider aws is only supported for `{AMAZON_BEDROCK_PROVIDER_ID}`"
+                ));
+            }
+            if provider.name.trim().is_empty() {
+                return Err(format!(
+                    "model_providers.{key}: provider name must not be empty"
+                ));
+            }
         }
         provider
             .validate()
@@ -1090,117 +1095,19 @@ mod tests {
     }
 
     #[test]
-    fn config_toml_deserializes_openrouter_provider_object() {
-        let config: ConfigToml = toml::from_str(
+    fn amazon_bedrock_auth_command_must_not_be_empty() {
+        let err = toml::from_str::<ConfigToml>(
             r#"
-openrouter_provider = { sort = "throughput", require_parameters = true, allow_fallbacks = false, order = ["StreamLake"] }
+[model_providers.amazon-bedrock.auth]
+command = "   "
 "#,
         )
-        .expect("OpenRouter provider object should deserialize");
+        .expect_err("empty Amazon Bedrock auth command should be rejected");
 
-        let provider = config
-            .openrouter_provider
-            .expect("provider object should be set");
-        assert_eq!(provider["sort"], "throughput");
-        assert_eq!(provider["require_parameters"], true);
-        assert_eq!(provider["allow_fallbacks"], false);
-        assert_eq!(provider["order"][0], "StreamLake");
-    }
-
-    #[test]
-    fn model_provider_validation_rejects_pfterminal_reserved_ids() {
-        let mut providers = HashMap::new();
-        providers.insert(
-            VERCEL_PROVIDER_ID.to_string(),
-            ModelProviderInfo {
-                name: "Custom Vercel".to_string(),
-                ..Default::default()
-            },
+        assert!(
+            err.to_string().contains(
+                "model_providers.amazon-bedrock: provider auth.command must not be empty"
+            )
         );
-
-        let err = validate_model_providers(&providers).expect_err("reserved id rejected");
-
-        assert!(err.contains("reserved built-in provider IDs"));
-        assert!(err.contains(VERCEL_PROVIDER_ID));
-    }
-
-    #[test]
-    fn model_provider_validation_rejects_reserved_builtin_names() {
-        let mut providers = HashMap::new();
-        providers.insert(
-            "myvercel".to_string(),
-            ModelProviderInfo {
-                name: " Vercel ".to_string(),
-                base_url: Some("https://attacker.example/v1".to_string()),
-                ..Default::default()
-            },
-        );
-
-        let err = validate_model_providers(&providers).expect_err("reserved name rejected");
-
-        assert!(err.contains("reserved built-in provider names"));
-        assert!(err.contains("myvercel"));
-        assert!(err.contains("Vercel"));
-    }
-
-    #[test]
-    fn reserved_model_provider_names_rejects_openai_builtin_name() {
-        let mut provider =
-            ModelProviderInfo::create_openai_provider(Some("https://mock.example/v1".to_string()));
-        provider.name = BUILT_IN_MODEL_PROVIDER_NAMES[0].to_string();
-        let mut providers = HashMap::new();
-        providers.insert("openai-custom".to_string(), provider);
-
-        let err = validate_reserved_model_provider_names(&providers)
-            .expect_err("reserved OpenAI display name rejected");
-
-        assert!(err.contains("reserved built-in provider names"));
-        assert!(err.contains("openai-custom"));
-        assert!(err.contains(BUILT_IN_MODEL_PROVIDER_NAMES[0]));
-    }
-
-    #[test]
-    fn reserved_model_provider_ids_rejects_openai_builtin_id() {
-        let mut provider =
-            ModelProviderInfo::create_openai_provider(Some("https://mock.example/v1".to_string()));
-        provider.name = "OpenAI Test Mock".to_string();
-        let mut providers = HashMap::new();
-        providers.insert(OPENAI_PROVIDER_ID.to_string(), provider);
-
-        let err = validate_reserved_model_provider_ids(&providers)
-            .expect_err("reserved OpenAI provider id rejected");
-
-        assert!(err.contains("reserved built-in provider IDs"));
-        assert!(err.contains(OPENAI_PROVIDER_ID));
-    }
-
-    #[test]
-    fn model_provider_validation_accepts_unique_openai_auth_mock_provider() {
-        let mut provider =
-            ModelProviderInfo::create_openai_provider(Some("https://mock.example/v1".to_string()));
-        provider.name = "OpenAI Test Mock".to_string();
-        let mut providers = HashMap::new();
-        providers.insert("openai-custom".to_string(), provider);
-
-        validate_model_providers(&providers)
-            .expect("unique OpenAI-auth responses mock provider should validate");
-    }
-
-    #[test]
-    fn model_provider_validation_rejects_non_object_chat_completions_provider() {
-        let mut providers = HashMap::new();
-        providers.insert(
-            "custom-chat".to_string(),
-            ModelProviderInfo {
-                name: "Custom Chat".to_string(),
-                chat_completions_provider: Some(JsonValue::String("Novita".to_string())),
-                ..Default::default()
-            },
-        );
-
-        let err = validate_model_providers(&providers)
-            .expect_err("non-object chat_completions_provider rejected");
-
-        assert!(err.contains("chat_completions_provider must be a JSON object"));
     }
 }

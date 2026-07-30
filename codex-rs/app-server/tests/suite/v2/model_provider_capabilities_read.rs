@@ -2,31 +2,28 @@ use std::time::Duration;
 
 use anyhow::Result;
 use app_test_support::TestAppServer;
-use app_test_support::to_response;
-use codex_app_server_protocol::JSONRPCResponse;
 use codex_app_server_protocol::ModelProviderCapabilitiesReadParams;
 use codex_app_server_protocol::ModelProviderCapabilitiesReadResponse;
-use codex_app_server_protocol::RequestId;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use tokio::time::timeout;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
-async fn read_capabilities(
-    codex_home: &std::path::Path,
-) -> Result<ModelProviderCapabilitiesReadResponse> {
-    let mut mcp = TestAppServer::new(codex_home).await?;
-    timeout(DEFAULT_TIMEOUT, mcp.initialize()).await??;
+#[tokio::test]
+async fn read_default_provider_capabilities() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .build_initialized_with_timeout(DEFAULT_TIMEOUT)
+        .await?;
 
     let request_id = mcp
         .send_model_provider_capabilities_read_request(ModelProviderCapabilitiesReadParams {})
         .await?;
-    let response: JSONRPCResponse = timeout(
-        DEFAULT_TIMEOUT,
-        mcp.read_stream_until_response_message(RequestId::Integer(request_id)),
-    )
-    .await??;
+    let received: ModelProviderCapabilitiesReadResponse =
+        timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
 
     to_response(response)
 }
@@ -113,7 +110,18 @@ async fn read_amazon_bedrock_provider_capabilities() -> Result<()> {
         r#"model_provider = "amazon-bedrock"
 "#,
     )?;
-    let received = read_capabilities(codex_home.path()).await?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .build_initialized_with_timeout(DEFAULT_TIMEOUT)
+        .await?;
+
+    let request_id = mcp
+        .send_model_provider_capabilities_read_request(ModelProviderCapabilitiesReadParams {})
+        .await?;
+    let received: ModelProviderCapabilitiesReadResponse =
+        timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
+
     let expected = ModelProviderCapabilitiesReadResponse {
         namespace_tools: true,
         image_generation: false,

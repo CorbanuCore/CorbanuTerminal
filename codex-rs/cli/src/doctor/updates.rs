@@ -132,8 +132,9 @@ fn push_cached_version_details(details: &mut Vec<String>, version_file: &Path) {
 
 fn update_action_label(context: &InstallContext) -> &'static str {
     match &context.method {
-        InstallMethod::Npm => "npm install -g @agticorp/pfterminal",
-        InstallMethod::Bun => "bun install -g @agticorp/pfterminal",
+        InstallMethod::Npm => "npm install -g @openai/codex",
+        InstallMethod::Bun => "bun install -g @openai/codex",
+        InstallMethod::Pnpm => "pnpm add -g @openai/codex",
         InstallMethod::Brew => "brew upgrade --cask codex",
         InstallMethod::Standalone { .. } => "standalone installer",
         InstallMethod::Other => "manual or unknown",
@@ -145,6 +146,7 @@ fn fetch_latest_version(context: &InstallContext) -> Result<String, String> {
         InstallMethod::Brew => fetch_homebrew_cask_version(),
         InstallMethod::Npm
         | InstallMethod::Bun
+        | InstallMethod::Pnpm
         | InstallMethod::Standalone { .. }
         | InstallMethod::Other => {
             fetch_latest_github_release_version(PFTERMINAL_LATEST_RELEASE_URL)
@@ -225,6 +227,13 @@ mod tests {
                 package_layout: None,
             }),
             "npm install -g @agticorp/pfterminal"
+        );
+        assert_eq!(
+            update_action_label(&InstallContext {
+                method: InstallMethod::Pnpm,
+                package_layout: None,
+            }),
+            "pnpm add -g @openai/codex"
         );
         assert_eq!(
             update_action_label(&InstallContext {

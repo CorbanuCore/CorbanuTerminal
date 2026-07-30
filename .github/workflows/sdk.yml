@@ -1,7 +1,7 @@
 name: sdk
 
 on:
-  workflow_dispatch:
+  workflow_call:
 
 jobs:
   python-sdk:
@@ -36,6 +36,10 @@ jobs:
               /tmp/uv/bin/uv run --frozen --no-sync ruff format --check .
               /tmp/uv/bin/uv run --frozen --no-sync pytest
             '
+
+      - name: Check for a clean worktree
+        if: always() && !cancelled()
+        uses: ./.github/actions/check-clean-worktree
 
   sdks:
     runs-on: ubuntu-24.04
@@ -153,5 +157,9 @@ jobs:
         continue-on-error: true
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          path: ${{ steps.prepare_bazel.outputs.repository-cache-path }}
-          key: ${{ steps.prepare_bazel.outputs.repository-cache-key }}
+          path: ${{ steps.setup_bazel.outputs.repository-cache-path }}
+          key: bazel-cache-x86_64-unknown-linux-gnu-${{ hashFiles('MODULE.bazel', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}
+
+      - name: Check for a clean worktree
+        if: always() && !cancelled()
+        uses: ./.github/actions/check-clean-worktree

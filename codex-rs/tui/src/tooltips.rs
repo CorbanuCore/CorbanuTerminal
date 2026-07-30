@@ -11,11 +11,13 @@ const IS_MACOS: bool = cfg!(target_os = "macos");
 #[cfg(test)]
 const IS_WINDOWS: bool = cfg!(target_os = "windows");
 
-#[cfg(test)]
-const APP_TOOLTIP: &str = "Try the **PFTerminal App**. Run 'pfterminal app'.";
-#[cfg(test)]
+const APP_TOOLTIP: &str = "Try the **Desktop app**. Run 'codex app' or visit https://chatgpt.com/codex?app-landing-page=true";
 const FAST_TOOLTIP: &str =
     "*New* Use **/fast** to enable our fastest inference with increased plan usage.";
+const OTHER_TOOLTIP: &str = "*New* Build faster with the **Desktop app**. Run 'codex app' or visit https://chatgpt.com/codex?app-landing-page=true";
+const OTHER_TOOLTIP_NON_MAC: &str = "*New* Build faster with Codex.";
+const FREE_GO_TOOLTIP: &str =
+    "*New* For a limited time, Codex is included in your plan for free – let’s build together.";
 
 #[cfg(test)]
 const RAW_TOOLTIPS: &str = include_str!("../tooltips.txt");
@@ -99,18 +101,39 @@ pub(crate) mod announcement {
     use chrono::NaiveDate;
     #[cfg(test)]
     use chrono::Utc;
-    #[cfg(test)]
+    use codex_http_client::ClientRouteClass;
+    use codex_http_client::HttpClientFactory;
+    use codex_http_client::RouteAwareClientPool;
     use codex_protocol::account::PlanType;
     #[cfg(test)]
     use regex_lite::Regex;
     #[cfg(test)]
     use serde::Deserialize;
+    use std::sync::OnceLock;
+    use std::time::Duration;
 
     #[cfg(test)]
     const CURRENT_OS: TargetOs = TargetOs::current();
 
     /// Prewarm the cache of the announcement tip.
-    pub(crate) fn prewarm() {}
+    pub(crate) fn prewarm(http_client_factory: HttpClientFactory) {
+        if ANNOUNCEMENT_TIP.get().is_some() {
+            return;
+        }
+        tokio::spawn(async move {
+            let announcement_tip = fetch_announcement_tip_text(http_client_factory).await;
+            let _ = ANNOUNCEMENT_TIP.set(announcement_tip);
+        });
+    }
+
+    /// Fetch the announcement tip, return None if the prewarm is not done yet.
+    pub(crate) fn fetch_announcement_tip(plan: Option<PlanType>) -> Option<String> {
+        ANNOUNCEMENT_TIP
+            .get()
+            .cloned()
+            .flatten()
+            .and_then(|raw| parse_announcement_tip_toml(&raw, plan))
+    }
 
     #[cfg(test)]
     #[derive(Debug, Deserialize)]
@@ -167,7 +190,17 @@ pub(crate) mod announcement {
         }
     }
 
-    #[cfg(test)]
+    async fn fetch_announcement_tip_text(http_client_factory: HttpClientFactory) -> Option<String> {
+        let client = RouteAwareClientPool::new(http_client_factory, ClientRouteClass::Other);
+        let response = client
+            .get(ANNOUNCEMENT_TIP_URL)
+            .timeout(Duration::from_millis(2000))
+            .send()
+            .await
+            .ok()?;
+        response.error_for_status().ok()?.text().await.ok()
+    }
+
     pub(crate) fn parse_announcement_tip_toml(
         text: &str,
         plan: Option<PlanType>,

@@ -35,6 +35,7 @@ fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
         is_default: false,
         upgrade: None,
         show_in_picker,
+        multi_agent_version: Some(MultiAgentVersion::V2),
         availability_nux: None,
         supported_in_api: true,
         input_modalities: Vec::new(),
@@ -43,14 +44,19 @@ fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
 
 #[test]
 fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
-    let mut visible = model_preset("visible", /*show_in_picker*/ true);
-    visible.provider_id = Some("example-provider".to_string());
+    let mut incompatible = model_preset("incompatible", /*show_in_picker*/ true);
+    incompatible.multi_agent_version = Some(MultiAgentVersion::V1);
     let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
-        available_models: vec![visible, model_preset("hidden", /*show_in_picker*/ false)],
-        inherited_runtime: None,
+        available_models: vec![
+            model_preset("visible", /*show_in_picker*/ true),
+            model_preset("hidden", /*show_in_picker*/ false),
+            incompatible,
+        ],
         agent_type_description: "role help".to_string(),
+        expose_agent_type: true,
         hide_agent_type_model_reasoning: false,
-        include_usage_hint: true,
+        expose_spawn_agent_model_overrides: true,
+        multi_agent_version: MultiAgentVersion::V2,
         usage_hint_text: None,
     });
 
@@ -84,6 +90,7 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
         "- `example-provider` / `visible-model`; text-only; efforts: xhigh (default); tiers: priority"
     ));
     assert!(!description.contains("hidden-model"));
+    assert!(!description.contains("incompatible-model"));
     assert!(properties.contains_key("task_name"));
     assert!(properties.contains_key("message"));
     assert_eq!(
@@ -96,10 +103,6 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
     assert!(!properties.contains_key("items"));
     assert!(!properties.contains_key("fork_context"));
     assert_eq!(
-        properties.get("agent_type"),
-        Some(&JsonSchema::string(Some("role help".to_string())))
-    );
-    assert_eq!(
         properties
             .get("model")
             .and_then(|schema| schema.description.as_deref()),
@@ -107,9 +110,9 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
     );
     assert_eq!(
         properties
-            .get("model_provider")
+            .get("reasoning_effort")
             .and_then(|schema| schema.description.as_deref()),
-        Some(SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION)
+        Some("Reasoning effort override for the new agent. Omit to inherit the parent effort.")
     );
     assert_eq!(
         properties
@@ -191,8 +194,10 @@ fn spawn_agent_tool_v1_keeps_legacy_fork_context_field() {
         available_models: Vec::new(),
         inherited_runtime: None,
         agent_type_description: "role help".to_string(),
+        expose_agent_type: true,
         hide_agent_type_model_reasoning: false,
-        include_usage_hint: true,
+        expose_spawn_agent_model_overrides: true,
+        multi_agent_version: MultiAgentVersion::V1,
         usage_hint_text: None,
     });
 
@@ -220,6 +225,12 @@ fn spawn_agent_tool_v1_keeps_legacy_fork_context_field() {
     assert!(description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V1));
     assert!(properties.contains_key("fork_context"));
     assert!(!properties.contains_key("fork_turns"));
+    assert_eq!(
+        properties.get("agent_type"),
+        Some(&JsonSchema::string(Some(format!(
+            "{SPAWN_AGENT_TYPE_OVERRIDE_DESCRIPTION_V1}\nrole help"
+        ))))
+    );
     assert_eq!(
         properties
             .get("message")
@@ -249,8 +260,10 @@ fn spawn_agent_tool_caps_visible_model_summaries() {
         available_models,
         inherited_runtime: None,
         agent_type_description: "role help".to_string(),
+        expose_agent_type: true,
         hide_agent_type_model_reasoning: false,
-        include_usage_hint: true,
+        expose_spawn_agent_model_overrides: true,
+        multi_agent_version: MultiAgentVersion::V2,
         usage_hint_text: None,
     });
 
@@ -277,22 +290,25 @@ fn spawn_agent_tool_caps_reasoning_effort_value_length() {
         description: "Model-defined".to_string(),
     }];
 
-    // The point of this test is the effort-string truncation, so assert the model
-    // line rather than pinning the whole guidance header.
-    assert!(spawn_agent_models_description(&[model], None).ends_with(&format!(
-        "- model `visible-model` (provider unspecified; not a cross-provider route); text-only; efforts: {} (default); tiers: priority",
-        "é".repeat(MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION)
-    )));
+    assert_eq!(
+        spawn_agent_models_description(&[model], MultiAgentVersion::V2),
+        format!(
+            "Available model overrides (optional; inherited parent model is preferred):\n- `visible-model`: visible description Reasoning efforts: {} (default). Service tiers: priority.",
+            "é".repeat(MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION)
+        )
+    );
 }
 
 #[test]
-fn spawn_agent_tool_hides_service_tier_with_spawn_metadata() {
+fn spawn_agent_tool_keeps_model_controls_when_spawn_metadata_is_hidden() {
     let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
         available_models: vec![model_preset("visible", /*show_in_picker*/ true)],
         inherited_runtime: None,
         agent_type_description: "role help".to_string(),
+        expose_agent_type: false,
         hide_agent_type_model_reasoning: true,
-        include_usage_hint: true,
+        expose_spawn_agent_model_overrides: true,
+        multi_agent_version: MultiAgentVersion::V2,
         usage_hint_text: None,
     });
 
@@ -310,11 +326,42 @@ fn spawn_agent_tool_hides_service_tier_with_spawn_metadata() {
         .expect("spawn_agent should use object params");
 
     assert!(!properties.contains_key("agent_type"));
-    assert!(!properties.contains_key("model"));
-    assert!(!properties.contains_key("model_provider"));
-    assert!(!properties.contains_key("reasoning_effort"));
+    assert!(properties.contains_key("model"));
+    assert!(properties.contains_key("reasoning_effort"));
     assert!(!properties.contains_key("service_tier"));
-    assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2));
+    assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE));
+    assert!(description.contains("Available model overrides"));
+}
+
+#[test]
+fn spawn_agent_tool_hides_model_controls_without_override_exposure() {
+    let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
+        available_models: vec![model_preset("visible", /*show_in_picker*/ true)],
+        agent_type_description: "role help".to_string(),
+        expose_agent_type: false,
+        hide_agent_type_model_reasoning: true,
+        expose_spawn_agent_model_overrides: false,
+        multi_agent_version: MultiAgentVersion::V2,
+        usage_hint_text: None,
+    });
+
+    let ToolSpec::Function(ResponsesApiTool {
+        description,
+        parameters,
+        ..
+    }) = tool
+    else {
+        panic!("spawn_agent should be a function tool");
+    };
+    let properties = parameters
+        .properties
+        .as_ref()
+        .expect("spawn_agent should use object params");
+
+    for property in ["agent_type", "model", "reasoning_effort", "service_tier"] {
+        assert!(!properties.contains_key(property));
+    }
+    assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE));
     assert!(!description.contains("Available model overrides"));
 }
 
@@ -432,7 +479,9 @@ fn wait_agent_tool_v2_uses_timeout_only_summary_output() {
         properties
             .get("timeout_ms")
             .and_then(|schema| schema.description.as_deref()),
-        Some("Timeout in milliseconds. Defaults to 30000, min 10000, max 3600000.")
+        Some(
+            "Timeout in milliseconds. Defaults to 30000, min 10000, max 3600000. Prefer longer waits (minutes) to avoid busy polling."
+        )
     );
     assert_eq!(parameters.required.as_ref(), None);
     let output_schema = output_schema.expect("wait output schema");
@@ -492,14 +541,7 @@ fn list_agents_tool_includes_path_prefix_and_agent_fields() {
     );
     assert_eq!(
         output_schema.expect("list_agents output schema")["properties"]["agents"]["items"]["required"],
-        json!([
-            "agent_name",
-            "agent_nickname",
-            "agent_role",
-            "agent_status",
-            "last_task_message",
-            "last_result_message"
-        ])
+        json!(["agent_name", "agent_status"])
     );
 }
 

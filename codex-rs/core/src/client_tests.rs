@@ -1,6 +1,8 @@
 use super::AuthRequestTelemetryContext;
+use super::CompactConversationRequestSettings;
 use super::ModelClient;
 use super::PendingUnauthorizedRetry;
+use super::Prompt;
 use super::UnauthorizedRecoveryExecution;
 use super::X_CODEX_INSTALLATION_ID_HEADER;
 use super::X_CODEX_PARENT_THREAD_ID_HEADER;
@@ -13,16 +15,20 @@ use crate::GenerateAttestationFuture;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::test_support::TestCodexResponsesRequestKind;
 use crate::test_support::responses_metadata as test_responses_metadata;
+use codex_api::AgentIdentityTelemetry;
 use codex_api::ApiError;
 use codex_api::ResponseEvent;
-use codex_app_server_protocol::AuthMode;
+use codex_api::TransportError;
+use codex_http_client::HttpClientFactory;
+use codex_http_client::OutboundProxyPolicy;
+use codex_login::AuthCredentialsStoreMode;
+use codex_login::AuthKeyringBackendKind;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
+use codex_login::auth::AgentIdentityAuthPolicy;
 use codex_model_provider::BearerAuthProvider;
-use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
-use codex_model_provider_info::AMBIENT_LEGACY_GLM_5_2_FP8_MODEL;
-use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
-use codex_model_provider_info::ANTHROPIC_LEGACY_OPUS_4_8_MODEL;
+use codex_model_provider::SharedModelProvider;
+use codex_model_provider::create_model_provider;
 use codex_model_provider_info::CHATGPT_CODEX_BASE_URL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
@@ -36,9 +42,7 @@ use codex_model_provider_info::WireApi;
 use codex_model_provider_info::create_oss_provider_with_base_url;
 use codex_otel::SessionTelemetry;
 use codex_protocol::ThreadId;
-use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
-use codex_protocol::config_types::WebSearchContextSize;
-use codex_protocol::models::AgentMessageInputContent;
+use codex_protocol::auth::AuthMode;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
@@ -48,10 +52,11 @@ use codex_protocol::models::ResponseItem;
 use codex_protocol::models::WebSearchAction;
 use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
+use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::InternalSessionSource;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
+use codex_rollout_trace::CompactionTraceContext;
 use codex_rollout_trace::ExecutionStatus;
 use codex_rollout_trace::InferenceTraceAttempt;
 use codex_rollout_trace::InferenceTraceContext;
@@ -87,7 +92,13 @@ use tracing_subscriber::layer::Context as LayerContext;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
+use wiremock::Mock;
+use wiremock::MockServer;
+use wiremock::ResponseTemplate;
+use wiremock::matchers::method;
+use wiremock::matchers::path;
 
+const TEST_CHATGPT_ID_TOKEN: &str = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJlbWFpbCI6InVzZXJAZXhhbXBsZS5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9hdXRoIjp7ImNoYXRncHRfdXNlcl9pZCI6InVzZXItMTIzNDUiLCJ1c2VyX2lkIjoidXNlci0xMjM0NSIsImNoYXRncHRfcGxhbl90eXBlIjoicHJvIiwiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjb3VudC0xMjMifX0.c2ln";
 const TEST_INSTALLATION_ID: &str = "11111111-1111-4111-8111-111111111111";
 
 #[test]
@@ -591,100 +602,143 @@ fn anthropic_history_rejection_classifier_is_narrow_and_structured() {
 }
 
 fn test_model_client(session_source: SessionSource) -> ModelClient {
+    test_model_client_with_thread_id(ThreadId::new(), session_source)
+}
+
+fn test_model_client_with_thread_id(
+    thread_id: ThreadId,
+    session_source: SessionSource,
+) -> ModelClient {
     let provider = create_oss_provider_with_base_url("https://example.com/v1", WireApi::Responses);
-    let thread_id = ThreadId::new();
     ModelClient::new(
         /*auth_manager*/ None,
+        AgentIdentityAuthPolicy::JwtOnly,
         thread_id,
         provider,
         session_source,
+        "test_originator".to_string(),
         /*model_verbosity*/ None,
         /*enable_request_compression*/ false,
         /*include_timing_metrics*/ false,
         /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
+        /*concurrent_reasoning_summaries_enabled*/ false,
         /*attestation_provider*/ None,
+        HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
     )
 }
 
-#[test]
-fn meta_repairs_missing_response_item_ids_before_request() {
+#[tokio::test]
+async fn compact_uses_bearer_after_agent_identity_session_fallback() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let registration_count = Arc::new(AtomicUsize::new(0));
+    let response_count = Arc::clone(&registration_count);
+    Mock::given(method("POST"))
+        .and(path("/v1/agent/register"))
+        .respond_with(move |_request: &wiremock::Request| {
+            response_count.fetch_add(1, Ordering::SeqCst);
+            ResponseTemplate::new(/*status*/ 503)
+        })
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/responses/compact"))
+        .respond_with(ResponseTemplate::new(/*status*/ 200).set_body_json(json!({
+            "output": []
+        })))
+        .expect(/*requests*/ 1)
+        .mount(&server)
+        .await;
+
+    let codex_home = TempDir::new()?;
+    let auth_manager = chatgpt_auth_manager(&codex_home, server.uri()).await;
+    let mut provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+    provider.base_url = Some(format!("{}/v1", server.uri()));
+    provider.supports_websockets = false;
+    let thread_id = ThreadId::new();
     let client = ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        ModelProviderInfo::create_meta_provider(),
+        Some(auth_manager),
+        AgentIdentityAuthPolicy::ChatGptAuth,
+        thread_id,
+        provider,
         SessionSource::Cli,
+        "test_originator".to_string(),
         /*model_verbosity*/ None,
         /*enable_request_compression*/ false,
         /*include_timing_metrics*/ false,
         /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
+        /*concurrent_reasoning_summaries_enabled*/ false,
         /*attestation_provider*/ None,
+        HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
     );
-    let mut input = vec![
-        ResponseItem::Message {
+    let prompt = Prompt {
+        input: vec![ResponseItem::Message {
             id: None,
             role: "user".to_string(),
             content: vec![ContentItem::InputText {
-                text: "legacy history".to_string(),
+                text: "please compact".to_string(),
             }],
             phase: None,
-            metadata: None,
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        base_instructions: BaseInstructions {
+            text: "base instructions".to_string(),
         },
-        ResponseItem::FunctionCall {
-            id: Some("fc_server".to_string()),
-            name: "exec_command".to_string(),
-            namespace: None,
-            arguments: r#"{"cmd":"true"}"#.to_string(),
-            call_id: "call_1".to_string(),
-            metadata: None,
-        },
-        ResponseItem::FunctionCallOutput {
-            id: None,
-            call_id: "call_1".to_string(),
-            output: FunctionCallOutputPayload::from_text(String::new()),
-            metadata: None,
-        },
-    ];
+        ..Default::default()
+    };
+    let responses_metadata = test_responses_metadata_for_client(
+        &client,
+        /*turn_id*/ None,
+        format!("{}:0", client.state.thread_id),
+        /*parent_thread_id*/ None,
+        TestCodexResponsesRequestKind::Turn,
+    );
 
-    client.prepare_response_items_for_request(&mut input, /*store*/ false);
+    let output = client
+        .compact_conversation_history(
+            &prompt,
+            &test_model_info(),
+            /*turn_state*/ None,
+            CompactConversationRequestSettings {
+                effort: None,
+                summary: codex_protocol::config_types::ReasoningSummary::None,
+                service_tier: None,
+            },
+            &test_session_telemetry(),
+            &CompactionTraceContext::disabled(),
+            &responses_metadata,
+        )
+        .await?;
 
-    assert!(input[0].id().is_some_and(|id| id.starts_with("msg_")));
-    assert_eq!(input[1].id(), Some("fc_server"));
-    assert!(input[2].id().is_some_and(|id| id.starts_with("fco_")));
+    assert!(output.is_empty());
+    assert_eq!(registration_count.load(Ordering::SeqCst), 3);
+    let requests = server
+        .received_requests()
+        .await
+        .expect("server should record requests");
+    let compact_request = requests
+        .iter()
+        .find(|request| request.url.path() == "/v1/responses/compact")
+        .expect("compact request should be captured");
+    assert_eq!(
+        compact_request
+            .headers
+            .get(http::header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok()),
+        Some("Bearer test-access-token")
+    );
+    assert_eq!(
+        compact_request
+            .headers
+            .get("ChatGPT-Account-ID")
+            .and_then(|value| value.to_str().ok()),
+        Some("account-123")
+    );
+
+    Ok(())
 }
 
-#[test]
-fn provider_api_keys_do_not_fall_back_to_chatgpt_unauthorized_recovery() {
-    let auth_manager =
-        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
-    let openrouter = ModelClient::new(
-        Some(Arc::clone(&auth_manager)),
-        ThreadId::new(),
-        ModelProviderInfo::create_openrouter_provider(),
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    assert!(openrouter.unauthorized_recovery().is_none());
-
-    let openai = ModelClient::new(
-        Some(auth_manager),
-        ThreadId::new(),
-        ModelProviderInfo::create_openai_provider(/*base_url*/ None),
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    assert!(openai.unauthorized_recovery().is_some());
+fn test_model_provider() -> SharedModelProvider {
+    test_model_client(SessionSource::Cli).state.provider.clone()
 }
 
 fn test_responses_metadata_for_client(
@@ -723,7 +777,6 @@ fn test_model_info() -> ModelInfo {
         "upgrade": null,
         "base_instructions": "base instructions",
         "model_messages": null,
-        "supports_reasoning_summaries": false,
         "support_verbosity": false,
         "default_verbosity": null,
         "apply_patch_tool_type": null,
@@ -925,2536 +978,53 @@ fn test_session_telemetry() -> SessionTelemetry {
 }
 
 #[test]
-fn chat_completions_wraps_freeform_tools_as_functions() {
-    let tools = super::create_tools_json_for_chat_completions(
-        &[ToolSpec::Freeform(FreeformTool {
-            name: "apply_patch".to_string(),
-            description: "Apply a patch".to_string(),
-            format: FreeformToolFormat {
-                r#type: "grammar".to_string(),
-                syntax: "lark".to_string(),
-                definition: "start: /.+/".to_string(),
-            },
-        })],
-        false,
-        false,
-    )
-    .expect("chat tools");
-
+fn ultra_reasoning_uses_max_for_requests() {
     assert_eq!(
-        tools,
-        vec![json!({
-            "type": "function",
-            "function": {
-                "name": "apply_patch",
-                "description": "Use this tool to edit files by applying a patch. Pass the raw patch text in the `input` field. The `input` value must begin with `*** Begin Patch` and end with `*** End Patch`; do not put JSON, shell commands, or heredocs inside `input`.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "input": {
-                            "type": "string",
-                            "description": "Raw apply_patch input. Put the tool payload directly in this string; do not nest JSON, shell commands, or heredocs inside it.",
-                        },
-                    },
-                    "required": ["input"],
-                    "additionalProperties": false,
-                },
-                "strict": true,
-            },
-        })]
-    );
-}
-
-#[test]
-fn ambient_chat_completions_strips_strict_from_tools() {
-    let freeform = ToolSpec::Freeform(FreeformTool {
-        name: "apply_patch".to_string(),
-        description: "Apply a patch".to_string(),
-        format: FreeformToolFormat {
-            r#type: "grammar".to_string(),
-            syntax: "lark".to_string(),
-            definition: "start: /.+/".to_string(),
-        },
-    });
-    let function = ToolSpec::Function(ResponsesApiTool {
-        name: "ambient_probe".to_string(),
-        description: "Records a small probe result.".to_string(),
-        strict: true,
-        defer_loading: None,
-        parameters: JsonSchema::object(
-            BTreeMap::from([(
-                "ok".to_string(),
-                JsonSchema::boolean(Some("Whether the probe succeeded.".to_string())),
-            )]),
-            Some(vec!["ok".to_string()]),
-            Some(false.into()),
+        (
+            super::reasoning_effort_for_request(ReasoningEffort::Ultra),
+            super::reasoning_effort_for_request(ReasoningEffort::High),
         ),
-        output_schema: None,
-    });
+        (ReasoningEffort::Max, ReasoningEffort::High,)
+    );
+}
 
-    let tools = super::create_tools_json_for_chat_completions(
-        &[freeform, function],
-        /*strip_strict*/ true,
-        /*zai_native_web_search*/ false,
+fn write_chatgpt_auth_json(codex_home: &std::path::Path) {
+    let auth_json = json!({
+        "tokens": {
+            "id_token": TEST_CHATGPT_ID_TOKEN,
+            "access_token": "test-access-token",
+            "refresh_token": "test-refresh-token",
+            "account_id": "account-123"
+        },
+        "last_refresh": "2099-01-01T00:00:00Z"
+    });
+    std::fs::write(
+        codex_home.join("auth.json"),
+        serde_json::to_string_pretty(&auth_json).expect("serialize auth.json"),
     )
-    .expect("chat tools");
-
-    assert_eq!(tools.len(), 2);
-    assert!(
-        tools
-            .iter()
-            .all(|tool| tool.pointer("/function/strict").is_none()),
-        "Ambient chat tool payloads must omit strict: {tools:?}"
-    );
-    assert_eq!(
-        tools[1]
-            .pointer("/function/name")
-            .and_then(|value| value.as_str()),
-        Some("ambient_probe")
-    );
-    assert_eq!(
-        tools[1]
-            .pointer("/function/parameters/additionalProperties")
-            .and_then(serde_json::Value::as_bool),
-        Some(false)
-    );
+    .expect("write auth.json");
 }
 
-#[test]
-fn zai_chat_completions_serializes_native_web_search_tool() {
-    let tools = super::create_tools_json_for_chat_completions(
-        &[ToolSpec::WebSearch {
-            external_web_access: Some(true),
-            index_gated_web_access: None,
-            filters: None,
-            user_location: None,
-            search_context_size: None,
-            search_content_types: None,
-        }],
-        /*strip_strict*/ true,
-        /*zai_native_web_search*/ true,
+async fn chatgpt_auth_manager(
+    codex_home: &TempDir,
+    agent_identity_authapi_base_url: String,
+) -> Arc<AuthManager> {
+    write_chatgpt_auth_json(codex_home.path());
+    let auth_manager = AuthManager::shared(
+        codex_home.path().to_path_buf(),
+        /*enable_codex_api_key_env*/ false,
+        AuthCredentialsStoreMode::File,
+        /*forced_chatgpt_workspace_id*/ None,
+        /*chatgpt_base_url*/ None,
+        AuthKeyringBackendKind::default(),
+        codex_login::test_support::transport_default_auth_route_config(),
     )
-    .expect("chat tools");
-
-    assert_eq!(tools.len(), 1);
-    let tool = &tools[0];
-    assert_eq!(
-        tool.pointer("/type").and_then(|value| value.as_str()),
-        Some("web_search")
-    );
-    assert_eq!(
-        tool.pointer("/web_search/enable")
-            .and_then(|value| value.as_str()),
-        Some("True")
-    );
-    assert_eq!(
-        tool.pointer("/web_search/search_result")
-            .and_then(|value| value.as_str()),
-        Some("True")
-    );
-    let search_prompt = tool
-        .pointer("/web_search/search_prompt")
-        .and_then(|value| value.as_str())
-        .expect("search_prompt");
-    assert!(search_prompt.contains("{{search_result}}"));
-    assert!(search_prompt.contains("provider-native web_search"));
-    assert!(search_prompt.contains("Do not say you cannot browse"));
-}
-
-#[test]
-fn chat_completions_never_serializes_web_search_into_tools_without_zai() {
-    // A non-function `tools` entry makes every regular host ineligible on
-    // OpenRouter and diverts the request to a tool-middleware tier with a
-    // fixed ~10s header hold, so web search must never be expressed as a
-    // chat-completions tools entry (OpenRouter rides `plugins` instead).
-    let tools = super::create_tools_json_for_chat_completions(
-        &[ToolSpec::WebSearch {
-            external_web_access: Some(true),
-            index_gated_web_access: None,
-            filters: None,
-            user_location: None,
-            search_context_size: Some(WebSearchContextSize::High),
-            search_content_types: None,
-        }],
-        /*strip_strict*/ false,
-        /*zai_native_web_search*/ false,
+    .await;
+    let auth = auth_manager.auth().await.expect("auth should load");
+    AuthManager::from_auth_for_testing_with_agent_identity_authapi_base_url(
+        auth,
+        agent_identity_authapi_base_url,
     )
-    .expect("chat tools");
-
-    assert_eq!(tools, Vec::<serde_json::Value>::new());
-}
-
-#[test]
-fn anthropic_messages_serializes_native_web_search_tool() {
-    let tool = ToolSpec::WebSearch {
-        external_web_access: Some(true),
-        index_gated_web_access: None,
-        filters: None,
-        user_location: None,
-        search_context_size: Some(WebSearchContextSize::High),
-        search_content_types: None,
-    };
-    let latest =
-        super::anthropic_web_search_tool_with_type(&tool, super::ANTHROPIC_WEB_SEARCH_TOOL_TYPE);
-    assert_eq!(
-        latest.pointer("/type").and_then(serde_json::Value::as_str),
-        Some("web_search_20260209")
-    );
-    assert_eq!(
-        latest.pointer("/name").and_then(serde_json::Value::as_str),
-        Some("web_search")
-    );
-    assert_eq!(latest.pointer("/max_uses"), Some(&json!(8)));
-    assert_eq!(latest.pointer("/allowed_callers/0"), Some(&json!("direct")));
-
-    let legacy = super::anthropic_web_search_tool_with_type(
-        &tool,
-        super::ANTHROPIC_WEB_SEARCH_TOOL_TYPE_LEGACY,
-    );
-    assert_eq!(
-        legacy.pointer("/type").and_then(serde_json::Value::as_str),
-        Some("web_search_20250305")
-    );
-
-    let client = test_model_client(SessionSource::Cli);
-    let prompt = super::Prompt {
-        input: vec![ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: "search".to_string(),
-            }],
-            phase: None,
-            metadata: None,
-        }],
-        tools: vec![
-            ToolSpec::Function(ResponsesApiTool {
-                name: "exec_command".to_string(),
-                description: "Run a command.".to_string(),
-                strict: true,
-                defer_loading: None,
-                parameters: JsonSchema::object(BTreeMap::new(), None, Some(false.into())),
-                output_schema: None,
-            }),
-            tool,
-        ],
-        ..Default::default()
-    };
-    let request = client
-        .build_anthropic_messages_request(&prompt, &test_claude_plan_model_info(), None)
-        .expect("Anthropic request");
-    let body = serde_json::to_value(&request).expect("serialize request");
-    assert_eq!(
-        body.pointer("/tools/0/type")
-            .and_then(serde_json::Value::as_str),
-        Some("web_search_20260209")
-    );
-    assert_eq!(
-        body.pointer("/tools/0/cache_control/type"),
-        None,
-        "server-side Anthropic web_search tools should not receive cache_control"
-    );
-    assert_eq!(
-        body.pointer("/tools/0/allowed_callers/0"),
-        Some(&json!("direct"))
-    );
-    assert_eq!(
-        body.pointer("/tools/1/name")
-            .and_then(serde_json::Value::as_str),
-        Some("exec_command"),
-        "executable tools stay available after the native web_search tool"
-    );
-    assert_eq!(
-        body.pointer("/tools/1/cache_control/type"),
-        Some(&json!("ephemeral")),
-        "the final executable tool still receives the cache breakpoint"
-    );
-}
-
-#[test]
-fn anthropic_replays_server_side_web_search_blocks() {
-    let server_tool_use = json!({
-        "type": "server_tool_use",
-        "id": "srvtoolu_1",
-        "name": "web_search",
-        "input": { "query": "10 year treasury yield" }
-    });
-    let web_search_result = json!({
-        "type": "web_search_tool_result",
-        "tool_use_id": "srvtoolu_1",
-        "content": [
-            {
-                "type": "web_search_result",
-                "url": "https://example.com/yield",
-                "title": "Yield",
-                "encrypted_content": "abc"
-            }
-        ]
-    });
-    let mut messages = Vec::new();
-    let mut skipped = std::collections::HashSet::new();
-    super::append_anthropic_message_for_response_item(
-        ResponseItem::WebSearchCall {
-            id: Some("srvtoolu_1".to_string()),
-            status: Some("in_progress".to_string()),
-            action: Some(WebSearchAction::Search {
-                query: Some("10 year treasury yield".to_string()),
-                queries: None,
-            }),
-            anthropic_content_block: Some(server_tool_use.clone()),
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped,
-    );
-    super::append_anthropic_message_for_response_item(
-        ResponseItem::WebSearchCall {
-            id: Some("wsr_1".to_string()),
-            status: Some("completed".to_string()),
-            action: None,
-            anthropic_content_block: Some(web_search_result.clone()),
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped,
-    );
-
-    assert_eq!(messages.len(), 1);
-    assert_eq!(messages[0].pointer("/role"), Some(&json!("assistant")));
-    assert_eq!(messages[0].pointer("/content/0"), Some(&server_tool_use));
-    assert_eq!(messages[0].pointer("/content/1"), Some(&web_search_result));
-}
-
-#[test]
-fn anthropic_replays_signed_thinking_blocks() {
-    let thinking_block = json!({
-        "type": "thinking",
-        "thinking": "summarized thinking",
-        "signature": "sig-abc"
-    });
-    let mut messages = Vec::new();
-    let mut skipped = std::collections::HashSet::new();
-    super::append_anthropic_message_for_response_item(
-        ResponseItem::Reasoning {
-            id: Some("rs_msg".to_string()),
-            summary: Vec::<ReasoningItemReasoningSummary>::new(),
-            content: Some(vec![ReasoningItemContent::ReasoningText {
-                text: "summarized thinking".to_string(),
-            }]),
-            encrypted_content: None,
-            anthropic_content_block: Some(thinking_block.clone()),
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped,
-    );
-
-    assert_eq!(messages.len(), 1);
-    assert_eq!(messages[0].pointer("/role"), Some(&json!("assistant")));
-    assert_eq!(messages[0].pointer("/content/0"), Some(&thinking_block));
-}
-
-#[test]
-fn anthropic_replay_omits_signed_response_with_malformed_tool_call() {
-    let mut messages = Vec::new();
-    let mut skipped = std::collections::HashSet::new();
-    super::append_anthropic_message_for_response_item(
-        ResponseItem::Reasoning {
-            id: Some("rs_cutoff".to_string()),
-            summary: Vec::<ReasoningItemReasoningSummary>::new(),
-            content: Some(vec![ReasoningItemContent::ReasoningText {
-                text: "writing the engine".to_string(),
-            }]),
-            encrypted_content: None,
-            anthropic_content_block: Some(json!({
-                "type": "thinking",
-                "thinking": "writing the engine",
-                "signature": "sig-cutoff"
-            })),
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped,
-    );
-    super::append_anthropic_message_for_response_item(
-        ResponseItem::FunctionCall {
-            id: Some("fc_cutoff".to_string()),
-            name: "structured_write".to_string(),
-            namespace: None,
-            arguments: "{\"path\":\"runtime/engine.js\",\"mode\":\"overwrite\"".to_string(),
-            call_id: "toolu_cutoff".to_string(),
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped,
-    );
-    super::append_anthropic_message_for_response_item(
-        ResponseItem::FunctionCallOutput {
-            id: None,
-            call_id: "toolu_cutoff".to_string(),
-            output: FunctionCallOutputPayload::from_text("malformed arguments".to_string()),
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped,
-    );
-
-    assert!(
-        messages.is_empty(),
-        "the incomplete signed response and its coupled tool output must be omitted together"
-    );
-}
-
-#[test]
-fn anthropic_replay_omits_reasoning_only_signed_response() {
-    let mut messages = vec![
-        json!({"role": "user", "content": [{"type": "text", "text": "write the engine"}]}),
-        json!({
-            "role": "assistant",
-            "content": [{
-                "type": "thinking",
-                "thinking": "partial",
-                "signature": "sig-partial"
-            }],
-        }),
-    ];
-
-    assert!(super::remove_latest_signed_thinking_only_assistant_message(
-        &mut messages
-    ));
-    assert_eq!(
-        messages,
-        vec![json!({
-            "role": "user",
-            "content": [{"type": "text", "text": "write the engine"}]
-        })]
-    );
-}
-
-#[test]
-fn chat_replay_drops_anthropic_reasoning_blocks() {
-    let thinking_block = json!({
-        "type": "thinking",
-        "thinking": "summarized thinking",
-        "signature": "sig-abc"
-    });
-    let mut messages = Vec::<codex_api::ChatMessage>::new();
-    let mut skipped = std::collections::HashSet::new();
-    super::append_chat_messages_for_response_item(
-        ResponseItem::Reasoning {
-            id: Some("rs_msg".to_string()),
-            summary: Vec::<ReasoningItemReasoningSummary>::new(),
-            content: Some(vec![ReasoningItemContent::ReasoningText {
-                text: "summarized thinking".to_string(),
-            }]),
-            encrypted_content: None,
-            anthropic_content_block: Some(thinking_block),
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped,
-    );
-
-    assert_eq!(messages, Vec::<codex_api::ChatMessage>::new());
-    assert!(
-        !serde_json::to_string(&messages)
-            .expect("serialize chat messages")
-            .contains("anthropic_content_block")
-    );
-}
-
-#[test]
-fn chat_replay_preserves_user_and_tool_result_images() {
-    let mut messages = Vec::<codex_api::ChatMessage>::new();
-    let mut skipped = std::collections::HashSet::new();
-    super::append_chat_messages_for_response_item(
-        ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![
-                ContentItem::InputText {
-                    text: "describe image".to_string(),
-                },
-                ContentItem::InputImage {
-                    image_url: "data:image/png;base64,cG5n".to_string(),
-                    detail: Some(codex_protocol::models::ImageDetail::High),
-                },
-            ],
-            phase: None,
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped,
-    );
-    super::append_chat_messages_for_response_item(
-        ResponseItem::FunctionCall {
-            id: None,
-            name: "view_image".to_string(),
-            namespace: None,
-            arguments: r#"{"path":"image.png"}"#.to_string(),
-            call_id: "call_image".to_string(),
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped,
-    );
-    super::append_chat_messages_for_response_item(
-        ResponseItem::FunctionCallOutput {
-            id: None,
-            call_id: "call_image".to_string(),
-            output: FunctionCallOutputPayload::from_content_items(vec![
-                codex_protocol::models::FunctionCallOutputContentItem::InputImage {
-                    image_url: "https://example.com/tool.webp".to_string(),
-                    detail: Some(codex_protocol::models::ImageDetail::Low),
-                },
-            ]),
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped,
-    );
-
-    let body = serde_json::to_value(messages).expect("serialize chat messages");
-    assert_eq!(
-        body.pointer("/0/content/1"),
-        Some(&json!({
-            "type": "image_url",
-            "image_url": {
-                "url": "data:image/png;base64,cG5n",
-                "detail": "high"
-            }
-        }))
-    );
-    assert_eq!(body.pointer("/2/role"), Some(&json!("tool")));
-    assert_eq!(body.pointer("/2/content"), Some(&json!("(image attached)")));
-    assert_eq!(body.pointer("/3/role"), Some(&json!("user")));
-    assert_eq!(
-        body.pointer("/3/content/0"),
-        Some(&json!({
-            "type": "image_url",
-            "image_url": {
-                "url": "https://example.com/tool.webp",
-                "detail": "low"
-            }
-        }))
-    );
-    assert_eq!(
-        serde_json::to_string(&body)
-            .expect("serialize chat messages")
-            .matches("https://example.com/tool.webp")
-            .count(),
-        1,
-        "the image URL must not also be embedded in the tool text"
-    );
-}
-
-#[test]
-fn chat_replay_keeps_parallel_tool_results_contiguous_before_images() {
-    let image_url = "data:image/png;base64,cGFyYWxsZWw=";
-    let items = vec![
-        ResponseItem::FunctionCall {
-            id: None,
-            name: "view_image".to_string(),
-            namespace: None,
-            arguments: r#"{"path":"image.png"}"#.to_string(),
-            call_id: "call_image".to_string(),
-            metadata: None,
-        },
-        ResponseItem::FunctionCall {
-            id: None,
-            name: "exec_command".to_string(),
-            namespace: None,
-            arguments: r#"{"cmd":"pwd"}"#.to_string(),
-            call_id: "call_shell".to_string(),
-            metadata: None,
-        },
-        ResponseItem::FunctionCallOutput {
-            id: None,
-            call_id: "call_image".to_string(),
-            output: FunctionCallOutputPayload::from_content_items(vec![
-                codex_protocol::models::FunctionCallOutputContentItem::InputImage {
-                    image_url: image_url.to_string(),
-                    detail: Some(codex_protocol::models::ImageDetail::High),
-                },
-            ]),
-            metadata: None,
-        },
-        ResponseItem::FunctionCallOutput {
-            id: None,
-            call_id: "call_shell".to_string(),
-            output: FunctionCallOutputPayload::from_text("/workspace".to_string()),
-            metadata: None,
-        },
-    ];
-    let mut messages = Vec::<codex_api::ChatMessage>::new();
-    let mut skipped = std::collections::HashSet::new();
-
-    super::append_chat_messages_for_response_items(
-        items,
-        &mut messages,
-        &mut skipped,
-        ChatReasoningProtocol::Independent,
-    );
-
-    let body = serde_json::to_value(messages).expect("serialize chat messages");
-    assert_eq!(
-        body,
-        json!([
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    {
-                        "id": "call_image",
-                        "type": "function",
-                        "function": {
-                            "name": "view_image",
-                            "arguments": "{\"path\":\"image.png\"}"
-                        }
-                    },
-                    {
-                        "id": "call_shell",
-                        "type": "function",
-                        "function": {
-                            "name": "exec_command",
-                            "arguments": "{\"cmd\":\"pwd\"}"
-                        }
-                    }
-                ]
-            },
-            {
-                "role": "tool",
-                "content": "(image attached)",
-                "tool_call_id": "call_image"
-            },
-            {
-                "role": "tool",
-                "content": "/workspace",
-                "tool_call_id": "call_shell"
-            },
-            {
-                "role": "user",
-                "content": [{
-                    "type": "image_url",
-                    "image_url": {
-                        "url": image_url,
-                        "detail": "high"
-                    }
-                }]
-            }
-        ])
-    );
-    assert_eq!(
-        serde_json::to_string(&body)
-            .expect("serialize chat messages")
-            .matches(image_url)
-            .count(),
-        1,
-        "the image bytes must occur exactly once in a parallel tool result batch"
-    );
-}
-
-#[test]
-fn anthropic_replays_thinking_before_tool_use_in_same_assistant_turn() {
-    let thinking_block = json!({
-        "type": "thinking",
-        "thinking": "need a file",
-        "signature": "sig-tool"
-    });
-    let mut messages = Vec::new();
-    let mut skipped = std::collections::HashSet::new();
-    super::append_anthropic_message_for_response_item(
-        ResponseItem::Reasoning {
-            id: Some("rs_msg".to_string()),
-            summary: Vec::<ReasoningItemReasoningSummary>::new(),
-            content: Some(vec![ReasoningItemContent::ReasoningText {
-                text: "need a file".to_string(),
-            }]),
-            encrypted_content: None,
-            anthropic_content_block: Some(thinking_block.clone()),
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped,
-    );
-    super::append_anthropic_message_for_response_item(
-        ResponseItem::FunctionCall {
-            id: Some("fc_msg_1".to_string()),
-            name: "exec_command".to_string(),
-            namespace: None,
-            arguments: "{\"cmd\":\"pwd\"}".to_string(),
-            call_id: "toolu_read".to_string(),
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped,
-    );
-
-    assert_eq!(messages.len(), 1);
-    assert_eq!(messages[0].pointer("/role"), Some(&json!("assistant")));
-    assert_eq!(messages[0].pointer("/content/0"), Some(&thinking_block));
-    assert_eq!(
-        messages[0].pointer("/content/1/type"),
-        Some(&json!("tool_use"))
-    );
-    assert_eq!(
-        messages[0].pointer("/content/1/id"),
-        Some(&json!("toolu_read"))
-    );
-}
-
-#[test]
-fn baseten_reasoning_effort_maps_to_glm52_supported_set() {
-    let effort = |s: &str| ReasoningEffortConfig::Custom(s.to_string());
-    let map = |model: &str, e: &str| {
-        super::ModelClient::baseten_reasoning_effort(model, Some(&effort(e)))
-    };
-
-    // GLM-5.2 accepts exactly {none, high, max}; everything else must clamp.
-    assert_eq!(map("zai-org/GLM-5.2", "medium").as_deref(), Some("high"));
-    assert_eq!(map("zai-org/GLM-5.2", "low").as_deref(), Some("high"));
-    assert_eq!(map("zai-org/GLM-5.2", "xhigh").as_deref(), Some("max"));
-    assert_eq!(map("zai-org/GLM-5.2", "none").as_deref(), Some("none"));
-    // Other Baseten models pass the configured effort through unchanged.
-    assert_eq!(
-        map("deepseek-ai/DeepSeek-V4-Pro", "medium").as_deref(),
-        Some("medium")
-    );
-    // No configured effort: GLM-5.2 standardizes to "high" (its server
-    // default under-thinks); other models keep their server default.
-    assert_eq!(
-        super::ModelClient::baseten_reasoning_effort("zai-org/GLM-5.2", None).as_deref(),
-        Some("high")
-    );
-    assert_eq!(
-        super::ModelClient::baseten_reasoning_effort("deepseek-ai/DeepSeek-V4-Pro", None),
-        None
-    );
-}
-
-#[test]
-fn native_deepseek_v4_reasoning_effort_maps_supported_family_values() {
-    let effort = |s: &str| ReasoningEffortConfig::Custom(s.to_string());
-    let map = |model: &str, value: &str| {
-        super::ModelClient::native_deepseek_v4_reasoning_effort(model, Some(&effort(value)))
-    };
-
-    assert_eq!(
-        super::ModelClient::native_deepseek_v4_reasoning_effort(
-            "deepseek-ai/DeepSeek-V4-Flash",
-            None,
-        )
-        .as_deref(),
-        Some("high")
-    );
-    assert_eq!(
-        map("deepseek-ai/DeepSeek-V4-Flash", "medium").as_deref(),
-        Some("high")
-    );
-    assert_eq!(
-        map("DeepSeek-AI/DeepSeek-V4-Pro", "xhigh").as_deref(),
-        Some("max")
-    );
-    assert_eq!(map("deepseek-v4-custom", "none"), None);
-    assert_eq!(
-        super::ModelClient::native_deepseek_v4_reasoning_effort("zai-org/GLM-5.2", None),
-        None
-    );
-}
-
-#[test]
-fn openrouter_web_plugin_maps_context_size_to_max_results() {
-    assert_eq!(
-        super::openrouter_web_plugin(Some(WebSearchContextSize::Low)),
-        json!({"id": "web", "max_results": 3})
-    );
-    assert_eq!(
-        super::openrouter_web_plugin(None),
-        json!({"id": "web", "max_results": 5})
-    );
-    assert_eq!(
-        super::openrouter_web_plugin(Some(WebSearchContextSize::High)),
-        json!({"id": "web", "max_results": 10})
-    );
-}
-
-#[test]
-fn chat_completions_omits_untyped_agent_messages_from_history() {
-    let mut messages = Vec::new();
-    let mut skipped_tool_call_ids = std::collections::HashSet::new();
-    super::append_chat_messages_for_response_item(
-        ResponseItem::AgentMessage {
-            id: None,
-            author: "assistant".to_string(),
-            recipient: "user".to_string(),
-            content: vec![AgentMessageInputContent::InputText {
-                text: concat!(
-                    "assistant:\n",
-                    "{\"type\":\"function_call\",\"name\":\"exec_command\",",
-                    "\"arguments\":\"{\\\"cmd\\\": \\\"ls\\\"}\",",
-                    "\"call_id\":\"chatcmpl-tool-123\"}\n\n",
-                    "tool:\n",
-                    "{\"type\":\"function_call_output\",",
-                    "\"call_id\":\"chatcmpl-tool-123\",\"output\":\"ok\"}"
-                )
-                .to_string(),
-            }],
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped_tool_call_ids,
-    );
-
-    assert!(
-        messages.is_empty(),
-        "AgentMessage is display/transcript state and must not be replayed to Chat Completions"
-    );
-
-    super::append_chat_messages_for_response_item(
-        ResponseItem::Message {
-            id: None,
-            role: "assistant".to_string(),
-            content: vec![ContentItem::OutputText {
-                text: "real assistant text".to_string(),
-            }],
-            phase: None,
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped_tool_call_ids,
-    );
-
-    assert_eq!(messages.len(), 1);
-    assert_eq!(messages[0].role, "assistant");
-    assert_eq!(
-        messages[0].content,
-        Some(codex_api::ChatMessageContent::text("real assistant text"))
-    );
-}
-
-#[test]
-fn chat_completions_maps_typed_collaboration_mail_to_user_input() {
-    let mut messages = Vec::new();
-    let mut skipped_tool_call_ids = std::collections::HashSet::new();
-    super::append_chat_messages_for_response_item(
-        ResponseItem::AgentMessage {
-            id: None,
-            author: "/root/nazgul/troll".to_string(),
-            recipient: "/root/nazgul/troll/orc".to_string(),
-            content: vec![AgentMessageInputContent::InputText {
-                text: "Audit the movement boundary and report evidence.".to_string(),
-            }],
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped_tool_call_ids,
-    );
-
-    assert_eq!(messages.len(), 1);
-    assert_eq!(messages[0].role, "user");
-    assert_eq!(
-        messages[0].content,
-        Some(codex_api::ChatMessageContent::text(concat!(
-            "<inter_agent_message sender=\"/root/nazgul/troll\" ",
-            "recipient=\"/root/nazgul/troll/orc\">\n",
-            "Audit the movement boundary and report evidence.\n",
-            "</inter_agent_message>"
-        )))
-    );
-}
-
-#[test]
-fn openrouter_request_includes_typed_collaboration_mail() {
-    let client = ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        ModelProviderInfo::create_openrouter_provider(),
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    let prompt = super::Prompt {
-        input: vec![ResponseItem::AgentMessage {
-            id: None,
-            author: "/root/nazgul/troll".to_string(),
-            recipient: "/root/nazgul/troll/orc".to_string(),
-            content: vec![AgentMessageInputContent::InputText {
-                text: "Run the assigned regression lane.".to_string(),
-            }],
-            metadata: None,
-        }],
-        ..Default::default()
-    };
-
-    let request = client
-        .build_chat_completions_request(&prompt, &test_model_info(), None)
-        .expect("OpenRouter chat request");
-
-    let collaboration_message = request
-        .messages
-        .iter()
-        .find(|message| message.role == "user")
-        .expect("typed collaboration user message");
-    assert_eq!(
-        collaboration_message.content,
-        Some(codex_api::ChatMessageContent::text(concat!(
-            "<inter_agent_message sender=\"/root/nazgul/troll\" ",
-            "recipient=\"/root/nazgul/troll/orc\">\n",
-            "Run the assigned regression lane.\n",
-            "</inter_agent_message>"
-        )))
-    );
-}
-
-#[test]
-fn chat_completions_skips_malformed_historical_tool_calls() {
-    let mut messages = Vec::new();
-    let mut skipped_tool_call_ids = std::collections::HashSet::new();
-    let malformed_call_id = "chatcmpl-tool-bad-plan".to_string();
-
-    super::append_chat_messages_for_response_item(
-        ResponseItem::FunctionCall {
-            id: None,
-            name: "update_plan".to_string(),
-            arguments: concat!(
-                "{\"explanation\":\"bad historical call\",",
-                "\"plan\":[step\":\"Explore repo\",",
-                "\"status\":\"in_progress\"}]}"
-            )
-            .to_string(),
-            call_id: malformed_call_id.clone(),
-            namespace: None,
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped_tool_call_ids,
-    );
-
-    super::append_chat_messages_for_response_item(
-        ResponseItem::FunctionCallOutput {
-            id: None,
-            call_id: malformed_call_id,
-            output: FunctionCallOutputPayload::from_text(
-                "failed to parse function arguments".to_string(),
-            ),
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped_tool_call_ids,
-    );
-
-    assert!(
-        messages.is_empty(),
-        "malformed historical tool calls and their outputs must not poison resumed Chat requests"
-    );
-
-    super::append_chat_messages_for_response_item(
-        ResponseItem::FunctionCall {
-            id: None,
-            name: "exec_command".to_string(),
-            arguments: "{\"cmd\":\"pwd\"}".to_string(),
-            call_id: "chatcmpl-tool-good".to_string(),
-            namespace: None,
-            metadata: None,
-        },
-        &mut messages,
-        &mut skipped_tool_call_ids,
-    );
-
-    assert_eq!(messages.len(), 1);
-    assert_eq!(messages[0].role, "assistant");
-    assert_eq!(messages[0].tool_calls.len(), 1);
-    assert_eq!(
-        messages[0].tool_calls[0].function.arguments,
-        "{\"cmd\":\"pwd\"}"
-    );
-}
-
-#[test]
-fn ambient_responses_request_disables_thinking_unless_deep_reasoning_is_explicit() {
-    let provider_info = ModelProviderInfo::create_ambient_provider();
-    let api_provider = provider_info
-        .to_api_provider(Some(AuthMode::ApiKey))
-        .expect("Ambient API provider");
-    let client = ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        provider_info,
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    let prompt = super::Prompt {
-        input: vec![ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: "hello".to_string(),
-            }],
-            phase: None,
-            metadata: None,
-        }],
-        ..Default::default()
-    };
-    let model_info = test_ambient_model_info();
-    let responses_metadata = test_responses_metadata_for_client(
-        &client,
-        Some("turn-1"),
-        "window-1".to_string(),
-        None,
-        TestCodexResponsesRequestKind::Turn,
-    );
-
-    let standard = client
-        .build_responses_request(
-            &api_provider,
-            &prompt,
-            &model_info,
-            Some(ReasoningEffortConfig::Medium),
-            ReasoningSummaryConfig::None,
-            None,
-            &responses_metadata,
-        )
-        .expect("standard Ambient request");
-    assert_eq!(standard.reasoning, None);
-    assert_eq!(standard.thinking_budget, None);
-    assert_eq!(standard.emit_usage, Some(true));
-    assert_eq!(standard.enable_thinking, Some(false));
-    assert_eq!(standard.reasoning_effort, None);
-
-    let deep = client
-        .build_responses_request(
-            &api_provider,
-            &prompt,
-            &model_info,
-            Some(ReasoningEffortConfig::XHigh),
-            ReasoningSummaryConfig::None,
-            None,
-            &responses_metadata,
-        )
-        .expect("deep Ambient request");
-    assert_eq!(deep.reasoning, None);
-    assert_eq!(deep.thinking_budget, None);
-    assert_eq!(deep.emit_usage, Some(true));
-    // `xhigh` is the catalog spelling of Deep and deserializes to the XHigh
-    // variant, so picking Deep has to turn reasoning on. It previously matched
-    // only `Custom("xhigh")` and silently did nothing.
-    assert_eq!(deep.enable_thinking, Some(true));
-    assert_eq!(deep.reasoning_effort.as_deref(), Some("max"));
-
-    let max = client
-        .build_responses_request(
-            &api_provider,
-            &prompt,
-            &model_info,
-            Some(ReasoningEffortConfig::Custom("max".to_string())),
-            ReasoningSummaryConfig::None,
-            None,
-            &responses_metadata,
-        )
-        .expect("max Ambient request");
-    assert_eq!(max.emit_usage, Some(true));
-    assert_eq!(max.enable_thinking, Some(true));
-    assert_eq!(max.reasoning_effort.as_deref(), Some("max"));
-}
-
-#[test]
-fn ambient_chat_completions_request_disables_thinking_unless_deep_reasoning_is_explicit() {
-    let provider_info = ModelProviderInfo::create_ambient_provider();
-    let client = ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        provider_info,
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    let prompt = super::Prompt {
-        input: vec![ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: "hello".to_string(),
-            }],
-            phase: None,
-            metadata: None,
-        }],
-        ..Default::default()
-    };
-    let model_info = test_ambient_model_info();
-
-    let standard = client
-        .build_chat_completions_request(&prompt, &model_info, Some(ReasoningEffortConfig::Medium))
-        .expect("standard Ambient chat request");
-    assert_eq!(standard.model, AMBIENT_DEFAULT_MODEL);
-    assert_eq!(standard.emit_usage, Some(true));
-    // Ambient does not implement `enable_thinking`; the field is absent from
-    // their OpenAPI spec, so sending it left thinking on. They implement the
-    // `reasoning` object instead.
-    assert_eq!(standard.enable_thinking, None);
-    assert_eq!(standard.reasoning, Some(json!({ "enabled": false })));
-    assert_eq!(standard.reasoning_effort, None);
-
-    let deep = client
-        .build_chat_completions_request(&prompt, &model_info, Some(ReasoningEffortConfig::XHigh))
-        .expect("deep Ambient chat request");
-    assert_eq!(deep.emit_usage, Some(true));
-    assert_eq!(deep.enable_thinking, None);
-    assert_eq!(
-        deep.reasoning,
-        Some(json!({ "enabled": true, "effort": "max" }))
-    );
-    assert_eq!(deep.reasoning_effort.as_deref(), Some("max"));
-    assert_eq!(deep.prompt_cache_key, None);
-
-    let max = client
-        .build_chat_completions_request(
-            &prompt,
-            &model_info,
-            Some(ReasoningEffortConfig::Custom("max".to_string())),
-        )
-        .expect("max Ambient chat request");
-    assert_eq!(max.emit_usage, Some(true));
-    assert_eq!(max.enable_thinking, None);
-    assert_eq!(
-        max.reasoning,
-        Some(json!({ "enabled": true, "effort": "max" }))
-    );
-    assert_eq!(max.reasoning_effort.as_deref(), Some("max"));
-
-    let mut legacy_model_info = model_info;
-    legacy_model_info.slug = AMBIENT_LEGACY_GLM_5_2_FP8_MODEL.to_string();
-    let legacy = client
-        .build_chat_completions_request(&prompt, &legacy_model_info, None)
-        .expect("legacy Ambient chat request");
-    assert_eq!(legacy.model, AMBIENT_DEFAULT_MODEL);
-}
-
-fn test_vercel_glm_model_info(slug: &str) -> ModelInfo {
-    serde_json::from_value(json!({
-        "slug": slug,
-        "display_name": "Vercel GLM 5.2",
-        "description": "Vercel GLM 5.2",
-        "default_reasoning_level": null,
-        "supported_reasoning_levels": [],
-        "shell_type": "shell_command",
-        "visibility": "list",
-        "supported_in_api": true,
-        "priority": 1,
-        "upgrade": null,
-        "base_instructions": "base instructions",
-        "model_messages": null,
-        "supports_reasoning_summaries": false,
-        "support_verbosity": false,
-        "default_verbosity": null,
-        "apply_patch_tool_type": null,
-        "truncation_policy": {"mode": "tokens", "limit": 10000},
-        "supports_parallel_tool_calls": true,
-        "supports_image_detail_original": false,
-        "context_window": 202752,
-        "auto_compact_token_limit": null,
-        "experimental_supported_tools": []
-    }))
-    .expect("deserialize Vercel test model info")
-}
-
-fn test_prompt() -> super::Prompt {
-    super::Prompt {
-        input: vec![ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: "hello".to_string(),
-            }],
-            phase: None,
-            metadata: None,
-        }],
-        ..Default::default()
-    }
-}
-
-fn test_client(provider_info: ModelProviderInfo) -> ModelClient {
-    ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        provider_info,
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    )
-}
-
-/// Unpinned, the gateway serves `zai/*` from Fireworks, which drops every
-/// thinking toggle. The pin is what makes the toggle reach a host that obeys it.
-#[test]
-fn vercel_anthropic_wire_pins_vendor_upstream_and_disables_thinking() {
-    let client = test_client(ModelProviderInfo::create_vercel_anthropic_fast_provider());
-    let model_info = test_vercel_glm_model_info("zai/glm-5.2-fast");
-    let request = client
-        .build_anthropic_messages_request(&test_prompt(), &model_info, None)
-        .expect("vercel anthropic request");
-
-    assert_eq!(
-        request.provider_options,
-        Some(json!({ "gateway": { "only": ["zai"] } }))
-    );
-    assert_eq!(request.thinking, Some(json!({ "type": "disabled" })));
-}
-
-#[test]
-fn vercel_responses_wire_pins_vendor_upstream_and_disables_reasoning() {
-    let provider_info = ModelProviderInfo::create_vercel_provider();
-    let api_provider = provider_info
-        .to_api_provider(Some(AuthMode::ApiKey))
-        .expect("Vercel API provider");
-    let client = test_client(provider_info);
-    let model_info = test_vercel_glm_model_info("zai/glm-5.2");
-    let responses_metadata = test_responses_metadata_for_client(
-        &client,
-        Some("turn-1"),
-        "window-1".to_string(),
-        None,
-        TestCodexResponsesRequestKind::Turn,
-    );
-    let request = client
-        .build_responses_request(
-            &api_provider,
-            &test_prompt(),
-            &model_info,
-            None,
-            ReasoningSummaryConfig::None,
-            None,
-            &responses_metadata,
-        )
-        .expect("vercel responses request");
-
-    assert_eq!(
-        request.provider_options,
-        Some(json!({ "gateway": { "only": ["zai"] } }))
-    );
-    assert_eq!(
-        request
-            .reasoning
-            .as_ref()
-            .and_then(|reasoning| reasoning.effort.clone()),
-        Some(ReasoningEffortConfig::None)
-    );
-}
-
-/// First-party slugs already honour reasoning control on this gateway, and
-/// their upstream is not a vendor slug we can pin, so leave them alone.
-#[test]
-fn vercel_gateway_leaves_first_party_slugs_unpinned() {
-    let client = test_client(ModelProviderInfo::create_vercel_anthropic_provider());
-    let model_info = test_vercel_glm_model_info("anthropic/claude-opus-5");
-    let request = client
-        .build_anthropic_messages_request(&test_prompt(), &model_info, None)
-        .expect("vercel anthropic first-party request");
-
-    assert_eq!(request.provider_options, None);
-    assert_eq!(request.thinking, None);
-}
-
-/// Deep reasoning must survive every wire. The catalog spells this level
-/// `xhigh`, which is the `XHigh` variant and not `Custom("xhigh")`.
-#[test]
-fn vercel_gateway_honours_explicit_deep_reasoning_on_every_wire() {
-    let anthropic_request = test_client(ModelProviderInfo::create_vercel_anthropic_fast_provider())
-        .build_anthropic_messages_request(
-            &test_prompt(),
-            &test_vercel_glm_model_info("zai/glm-5.2-fast"),
-            Some(ReasoningEffortConfig::XHigh),
-        )
-        .expect("deep vercel anthropic request");
-    assert_eq!(
-        anthropic_request.provider_options,
-        Some(json!({ "gateway": { "only": ["zai"] } }))
-    );
-    assert_eq!(
-        anthropic_request.thinking,
-        Some(json!({ "type": "enabled", "budget_tokens": 16_000 }))
-    );
-
-    let provider_info = ModelProviderInfo::create_vercel_provider();
-    let api_provider = provider_info
-        .to_api_provider(Some(AuthMode::ApiKey))
-        .expect("Vercel API provider");
-    let client = test_client(provider_info);
-    let responses_metadata = test_responses_metadata_for_client(
-        &client,
-        Some("turn-1"),
-        "window-1".to_string(),
-        None,
-        TestCodexResponsesRequestKind::Turn,
-    );
-    let responses_request = client
-        .build_responses_request(
-            &api_provider,
-            &test_prompt(),
-            &test_vercel_glm_model_info("zai/glm-5.2"),
-            Some(ReasoningEffortConfig::XHigh),
-            ReasoningSummaryConfig::None,
-            None,
-            &responses_metadata,
-        )
-        .expect("deep vercel responses request");
-    assert_eq!(
-        responses_request
-            .reasoning
-            .as_ref()
-            .and_then(|reasoning| reasoning.effort.clone()),
-        Some(ReasoningEffortConfig::XHigh)
-    );
-
-    let chat_request = test_client(vercel_chat_provider())
-        .build_chat_completions_request(
-            &test_prompt(),
-            &test_vercel_glm_model_info("zai/glm-5.2"),
-            Some(ReasoningEffortConfig::XHigh),
-        )
-        .expect("deep vercel chat request");
-    assert_eq!(chat_request.reasoning, Some(json!({ "effort": "xhigh" })));
-}
-
-/// A user-defined provider aimed at the gateway is still the gateway. Detection
-/// is on the endpoint, not the display name.
-fn vercel_chat_provider() -> ModelProviderInfo {
-    let mut provider = ModelProviderInfo::create_vercel_provider();
-    provider.name = "my-own-gateway".to_string();
-    provider.wire_api = WireApi::Chat;
-    provider
-}
-
-/// The pin alone is not an instruction. Without a native toggle the Chat wire
-/// keeps paying for reasoning on a correctly pinned request.
-#[test]
-fn vercel_chat_wire_pins_vendor_upstream_and_disables_reasoning() {
-    let request = test_client(vercel_chat_provider())
-        .build_chat_completions_request(
-            &test_prompt(),
-            &test_vercel_glm_model_info("zai/glm-5.2"),
-            None,
-        )
-        .expect("vercel chat request");
-
-    assert_eq!(
-        request.provider_options,
-        Some(json!({ "gateway": { "only": ["zai"] } }))
-    );
-    assert_eq!(request.reasoning, Some(json!({ "effort": "none" })));
-    assert_eq!(request.enable_thinking, None);
-}
-
-#[test]
-fn vercel_gateway_detection_ignores_provider_display_name() {
-    let mut renamed = ModelProviderInfo::create_vercel_anthropic_fast_provider();
-    renamed.name = "house-gateway".to_string();
-    assert!(renamed.is_vercel_gateway());
-
-    let mut impostor = ModelProviderInfo::create_openrouter_provider();
-    impostor.name = "Vercel".to_string();
-    assert!(!impostor.is_vercel_gateway());
-}
-
-/// OpenRouter omits the reasoning capability for models that do not reason, and
-/// `provider.require_parameters` drops upstreams that cannot honour every
-/// parameter sent. Asserting a default on such a model can make otherwise valid
-/// routes ineligible.
-#[test]
-fn openrouter_omits_reasoning_for_models_without_the_capability() {
-    let mut model_info = test_openrouter_gemini_model_info();
-    model_info.default_reasoning_level = None;
-    model_info.supported_reasoning_levels = Vec::new();
-
-    let request = test_client(ModelProviderInfo::create_openrouter_provider())
-        .build_chat_completions_request(&test_prompt(), &model_info, None)
-        .expect("non-reasoning OpenRouter chat request");
-
-    assert_eq!(request.reasoning, None);
-}
-
-#[test]
-fn openrouter_chat_completions_request_uses_reasoning_object() {
-    let provider_info = ModelProviderInfo::create_openrouter_provider();
-    let client = ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        provider_info,
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    let prompt = super::Prompt {
-        input: vec![ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: "hello".to_string(),
-            }],
-            phase: None,
-            metadata: None,
-        }],
-        ..Default::default()
-    };
-    let model_info = test_openrouter_gemini_model_info();
-
-    let default_request = client
-        .build_chat_completions_request(&prompt, &model_info, None)
-        .expect("default OpenRouter chat request");
-    assert_eq!(default_request.enable_thinking, None);
-    assert_eq!(default_request.emit_usage, None);
-    assert_eq!(default_request.reasoning_effort, None);
-    // An omitted `reasoning` object leaves the model's own default on, which
-    // for a reasoning model means we pay for thinking we never asked for.
-    assert_eq!(default_request.reasoning, Some(json!({ "enabled": false })));
-    assert_eq!(
-        default_request.prompt_cache_key, None,
-        "OpenRouter uses x-session-id for provider stickiness, not prompt_cache_key"
-    );
-    assert!(
-        !serde_json::to_value(&default_request)
-            .expect("serialize request")
-            .to_string()
-            .contains("cache_control"),
-        "Gemini should not receive explicit cache_control blocks"
-    );
-
-    let minimal_request = client
-        .build_chat_completions_request(&prompt, &model_info, Some(ReasoningEffortConfig::Minimal))
-        .expect("minimal OpenRouter chat request");
-    assert_eq!(
-        minimal_request
-            .reasoning
-            .as_ref()
-            .and_then(|reasoning| reasoning.get("effort"))
-            .and_then(|effort| effort.as_str()),
-        Some("minimal")
-    );
-
-    let high_request = client
-        .build_chat_completions_request(&prompt, &model_info, Some(ReasoningEffortConfig::High))
-        .expect("high OpenRouter chat request");
-    assert_eq!(
-        high_request
-            .reasoning
-            .as_ref()
-            .and_then(|reasoning| reasoning.get("effort"))
-            .and_then(|effort| effort.as_str()),
-        Some("high")
-    );
-}
-
-#[test]
-fn openrouter_preserved_required_reasoning_rejects_none_and_uses_catalog_default() {
-    let mut model_info = test_model_info();
-    model_info.slug = "catalog-required-reasoning-model".to_string();
-    model_info.chat_completions.reasoning_protocol = ChatReasoningProtocol::PreservedRequired;
-    model_info.default_reasoning_level = Some(ReasoningEffortConfig::Custom("max".to_string()));
-    model_info.supported_reasoning_levels =
-        vec![codex_protocol::openai_models::ReasoningEffortPreset {
-            effort: ReasoningEffortConfig::Custom("max".to_string()),
-            description: "Required preserved reasoning".to_string(),
-        }];
-    let client = test_client(ModelProviderInfo::create_openrouter_provider());
-
-    let request = client
-        .build_chat_completions_request(&test_prompt(), &model_info, None)
-        .expect("catalog default reasoning request");
-    assert_eq!(request.reasoning, Some(json!({ "effort": "max" })));
-
-    let error = client
-        .build_chat_completions_request(
-            &test_prompt(),
-            &model_info,
-            Some(ReasoningEffortConfig::None),
-        )
-        .expect_err("required reasoning must reject none");
-    assert!(
-        error
-            .to_string()
-            .contains("reasoning effort `none` would select a different effective model")
-    );
-}
-
-#[test]
-fn openrouter_chat_completions_request_uses_configured_provider_object() {
-    let mut provider_info = ModelProviderInfo::create_openrouter_provider();
-    provider_info.chat_completions_provider = Some(json!({
-        "sort": "throughput",
-        "require_parameters": true,
-    }));
-    let client = ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        provider_info,
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    let prompt = super::Prompt {
-        input: vec![ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: "hello".to_string(),
-            }],
-            phase: None,
-            metadata: None,
-        }],
-        ..Default::default()
-    };
-    let model_info = test_openrouter_gemini_model_info();
-
-    let request = client
-        .build_chat_completions_request(&prompt, &model_info, None)
-        .expect("OpenRouter chat request");
-
-    assert_eq!(
-        request.provider,
-        Some(json!({
-            "sort": "throughput",
-            "require_parameters": true,
-        }))
-    );
-}
-
-#[test]
-fn openrouter_anthropic_chat_request_adds_cache_control_markers() {
-    let provider_info = ModelProviderInfo::create_openrouter_provider();
-    let client = ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        provider_info,
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    let prompt = super::Prompt {
-        input: vec![
-            ResponseItem::Message {
-                id: None,
-                role: "user".to_string(),
-                content: vec![ContentItem::InputText {
-                    text: "first user".to_string(),
-                }],
-                phase: None,
-                metadata: None,
-            },
-            ResponseItem::Message {
-                id: None,
-                role: "user".to_string(),
-                content: vec![ContentItem::InputText {
-                    text: "second user".to_string(),
-                }],
-                phase: None,
-                metadata: None,
-            },
-            ResponseItem::Message {
-                id: None,
-                role: "user".to_string(),
-                content: vec![ContentItem::InputText {
-                    text: "third user".to_string(),
-                }],
-                phase: None,
-                metadata: None,
-            },
-        ],
-        ..Default::default()
-    };
-    let model_info = test_openrouter_anthropic_model_info();
-
-    let request = client
-        .build_chat_completions_request(&prompt, &model_info, None)
-        .expect("OpenRouter Anthropic chat request");
-    assert_eq!(
-        request.prompt_cache_key, None,
-        "OpenRouter uses x-session-id for provider stickiness, not prompt_cache_key"
-    );
-
-    let body = serde_json::to_value(&request).expect("serialize request");
-    let messages = body
-        .get("messages")
-        .and_then(serde_json::Value::as_array)
-        .expect("messages array");
-    assert_eq!(
-        messages[0].pointer("/content/0/cache_control/type"),
-        Some(&json!("ephemeral")),
-        "system message should be cache marked"
-    );
-    assert!(
-        messages[1]
-            .get("content")
-            .is_some_and(serde_json::Value::is_string),
-        "oldest user message should keep the normal string shape"
-    );
-    assert_eq!(
-        messages[2].pointer("/content/0/cache_control/type"),
-        Some(&json!("ephemeral")),
-        "second-to-last user message should be cache marked"
-    );
-    assert_eq!(
-        messages[3].pointer("/content/0/cache_control/type"),
-        Some(&json!("ephemeral")),
-        "latest user message should be cache marked"
-    );
-}
-
-#[test]
-fn anthropic_messages_request_adds_cache_control_and_replays_tools() {
-    let mut provider_info = ModelProviderInfo::create_zai_provider();
-    provider_info.wire_api = WireApi::Anthropic;
-    let client = ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        provider_info,
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    let prompt = super::Prompt {
-        base_instructions: BaseInstructions {
-            text: "system instructions".to_string(),
-        },
-        input: vec![
-            ResponseItem::Message {
-                id: None,
-                role: "user".to_string(),
-                content: vec![ContentItem::InputText {
-                    text: "first user".to_string(),
-                }],
-                phase: None,
-                metadata: None,
-            },
-            ResponseItem::FunctionCall {
-                id: None,
-                name: "exec_command".to_string(),
-                namespace: None,
-                arguments: r#"{"cmd":"date"}"#.to_string(),
-                call_id: "toolu_1".to_string(),
-                metadata: None,
-            },
-            ResponseItem::FunctionCallOutput {
-                id: None,
-                call_id: "toolu_1".to_string(),
-                output: FunctionCallOutputPayload::from_text("Mon".to_string()),
-                metadata: None,
-            },
-            ResponseItem::Message {
-                id: None,
-                role: "user".to_string(),
-                content: vec![ContentItem::InputText {
-                    text: "second user".to_string(),
-                }],
-                phase: None,
-                metadata: None,
-            },
-        ],
-        tools: vec![
-            ToolSpec::Function(ResponsesApiTool {
-                name: "exec_command".to_string(),
-                description: "Run a command.".to_string(),
-                strict: true,
-                defer_loading: None,
-                parameters: JsonSchema::object(
-                    BTreeMap::from([(
-                        "cmd".to_string(),
-                        JsonSchema::string(Some("Command to run.".to_string())),
-                    )]),
-                    Some(vec!["cmd".to_string()]),
-                    Some(false.into()),
-                ),
-                output_schema: None,
-            }),
-            ToolSpec::Function(ResponsesApiTool {
-                name: "read_file".to_string(),
-                description: "Read a file.".to_string(),
-                strict: true,
-                defer_loading: None,
-                parameters: JsonSchema::object(
-                    BTreeMap::from([(
-                        "path".to_string(),
-                        JsonSchema::string(Some("Path to read.".to_string())),
-                    )]),
-                    Some(vec!["path".to_string()]),
-                    Some(false.into()),
-                ),
-                output_schema: None,
-            }),
-        ],
-        ..Default::default()
-    };
-    let model_info = test_ambient_model_info();
-
-    let request = client
-        .build_anthropic_messages_request(&prompt, &model_info, Some(ReasoningEffortConfig::XHigh))
-        .expect("Anthropic messages request");
-    assert_eq!(
-        request.thinking,
-        Some(json!({ "type": "enabled", "budget_tokens": 16_000 }))
-    );
-
-    let body = serde_json::to_value(&request).expect("serialize request");
-    assert_eq!(
-        body.pointer("/system/0/cache_control/type"),
-        Some(&json!("ephemeral"))
-    );
-    assert_eq!(body.pointer("/system/0/cache_control/ttl"), None);
-    assert_eq!(
-        body.pointer("/tools/0/cache_control/type"),
-        None,
-        "only the final tool should carry the Anthropic cache breakpoint"
-    );
-    assert_eq!(
-        body.pointer("/tools/1/cache_control/type"),
-        Some(&json!("ephemeral"))
-    );
-    assert_eq!(
-        body.pointer("/tools/0/input_schema/properties/cmd/type"),
-        Some(&json!("string"))
-    );
-    assert_eq!(
-        body.pointer("/messages/0/content/0/cache_control/type"),
-        Some(&json!("ephemeral"))
-    );
-    assert_eq!(
-        body.pointer("/messages/1/content/0/type"),
-        Some(&json!("tool_use"))
-    );
-    assert_eq!(
-        body.pointer("/messages/1/content/0/input/cmd"),
-        Some(&json!("date"))
-    );
-    assert_eq!(
-        body.pointer("/messages/2/content/0/type"),
-        Some(&json!("tool_result"))
-    );
-    assert_eq!(
-        body.pointer("/messages/2/content/1/cache_control/type"),
-        Some(&json!("ephemeral"))
-    );
-    assert_eq!(
-        count_cache_control_markers(&body),
-        4,
-        "Anthropic Messages rejects more than four cache_control blocks"
-    );
-
-    let mut extended_prompt = prompt.clone();
-    extended_prompt.input.push(ResponseItem::Message {
-        id: None,
-        role: "user".to_string(),
-        content: vec![ContentItem::InputText {
-            text: "third user after fallback policy changed".to_string(),
-        }],
-        phase: None,
-        metadata: None,
-    });
-    let extended_request = client
-        .build_anthropic_messages_request(
-            &extended_prompt,
-            &model_info,
-            Some(ReasoningEffortConfig::XHigh),
-        )
-        .expect("extended Anthropic messages request");
-    assert_eq!(
-        request.tools, extended_request.tools,
-        "append-only message growth must not change parsed Anthropic tools"
-    );
-    assert_eq!(
-        serde_json::to_vec(&request.tools).expect("serialize initial Anthropic tools"),
-        serde_json::to_vec(&extended_request.tools).expect("serialize extended Anthropic tools"),
-        "append-only message growth must not change production-serialized Anthropic tool bytes"
-    );
-
-    let max_request = client
-        .build_anthropic_messages_request(
-            &prompt,
-            &model_info,
-            Some(ReasoningEffortConfig::Custom("max".to_string())),
-        )
-        .expect("Anthropic max request");
-    assert_eq!(
-        max_request
-            .thinking
-            .as_ref()
-            .and_then(|thinking| thinking.get("type"))
-            .and_then(serde_json::Value::as_str),
-        Some("enabled")
-    );
-
-    let opus_model = test_anthropic_opus_model_info();
-    let opus_request = client
-        .build_anthropic_messages_request(&prompt, &opus_model, Some(ReasoningEffortConfig::XHigh))
-        .expect("Anthropic Opus request");
-    let body = serde_json::to_value(&opus_request).expect("serialize Opus request");
-    assert_eq!(
-        body.pointer("/thinking/type")
-            .and_then(serde_json::Value::as_str),
-        Some("adaptive")
-    );
-    assert_eq!(
-        body.pointer("/thinking/display")
-            .and_then(serde_json::Value::as_str),
-        Some("summarized"),
-        "adaptive Anthropic models should request readable thinking summaries"
-    );
-    assert_eq!(
-        body.pointer("/thinking/budget_tokens"),
-        None,
-        "Opus 5 rejects fixed thinking budgets"
-    );
-    assert_eq!(
-        body.pointer("/output_config/effort")
-            .and_then(serde_json::Value::as_str),
-        Some("xhigh")
-    );
-
-    let claude_plan_model = test_claude_plan_model_info();
-    let claude_plan_request = client
-        .build_anthropic_messages_request(
-            &prompt,
-            &claude_plan_model,
-            Some(ReasoningEffortConfig::XHigh),
-        )
-        .expect("Claude Plan request");
-    let body = serde_json::to_value(&claude_plan_request).expect("serialize Claude Plan request");
-    assert_eq!(
-        body.pointer("/model").and_then(serde_json::Value::as_str),
-        Some(CLAUDE_PLAN_UPSTREAM_MODEL),
-        "PFTerminal's visible Claude Plan slug must not be sent upstream"
-    );
-
-    let mut legacy_plan_model = test_claude_plan_model_info();
-    legacy_plan_model.slug = CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL.to_string();
-    let legacy_plan_request = client
-        .build_anthropic_messages_request(
-            &prompt,
-            &legacy_plan_model,
-            Some(ReasoningEffortConfig::XHigh),
-        )
-        .expect("legacy Claude Plan request");
-    assert_eq!(
-        legacy_plan_request.model, ANTHROPIC_LEGACY_OPUS_4_8_MODEL,
-        "a saved Opus 4.8 Plan session must remain resumable without sending its synthetic slug"
-    );
-    assert_eq!(
-        body.pointer("/system/0/text")
-            .and_then(serde_json::Value::as_str),
-        Some("You are Claude Code, Anthropic's official CLI for Claude."),
-        "Claude Plan OAuth requests need the Claude Code identity block"
-    );
-    assert_eq!(
-        body.pointer("/system/0/cache_control/type"),
-        None,
-        "Claude Plan identity must not add a fifth Anthropic cache breakpoint"
-    );
-    assert_eq!(
-        body.pointer("/system/1/cache_control/type"),
-        Some(&json!("ephemeral")),
-        "Claude Plan caches the final system block while preserving the four-block limit"
-    );
-    assert_eq!(
-        body.pointer("/system/1/cache_control/ttl"),
-        Some(&json!("1h")),
-        "Claude subscription sessions keep long-running agent prefixes warm"
-    );
-    assert_eq!(
-        body.pointer("/tools/1/cache_control/ttl"),
-        Some(&json!("1h"))
-    );
-    assert_eq!(
-        body.pointer("/messages/0/content/0/cache_control/ttl"),
-        Some(&json!("1h"))
-    );
-    assert!(
-        count_cache_control_markers(&body) <= 4,
-        "Anthropic Messages rejects more than four cache_control blocks"
-    );
-    assert_eq!(
-        body.pointer("/output_config/effort")
-            .and_then(serde_json::Value::as_str),
-        Some("xhigh")
-    );
-
-    let fable_model = test_claude_fable_model_info();
-    let fable_request = client
-        .build_anthropic_messages_request(&prompt, &fable_model, Some(ReasoningEffortConfig::XHigh))
-        .expect("Anthropic Fable request");
-    let body = serde_json::to_value(&fable_request).expect("serialize Fable request");
-    assert_eq!(
-        body.pointer("/model").and_then(serde_json::Value::as_str),
-        Some(CLAUDE_FABLE_5_MODEL)
-    );
-    assert_eq!(
-        body.pointer("/thinking/display")
-            .and_then(serde_json::Value::as_str),
-        Some("summarized"),
-        "Fable otherwise returns omitted thinking blocks with only signatures"
-    );
-    assert_ne!(
-        body.pointer("/system/0/text")
-            .and_then(serde_json::Value::as_str),
-        Some("You are Claude Code, Anthropic's official CLI for Claude."),
-        "Anthropic API-key Fable must not get the Claude Plan identity block"
-    );
-
-    let fable_plan_model = test_claude_fable_plan_model_info();
-    let fable_plan_request = client
-        .build_anthropic_messages_request(
-            &prompt,
-            &fable_plan_model,
-            Some(ReasoningEffortConfig::XHigh),
-        )
-        .expect("Claude Fable Plan request");
-    let body = serde_json::to_value(&fable_plan_request).expect("serialize Fable Plan request");
-    assert_eq!(
-        body.pointer("/model").and_then(serde_json::Value::as_str),
-        Some(CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL),
-        "PFTerminal's visible Claude Fable Plan slug must not be sent upstream"
-    );
-    assert_eq!(
-        body.pointer("/system/0/text")
-            .and_then(serde_json::Value::as_str),
-        Some("You are Claude Code, Anthropic's official CLI for Claude."),
-        "Claude Fable Plan OAuth requests need the Claude Code identity block"
-    );
-    assert_eq!(
-        body.pointer("/system/1/cache_control/type"),
-        Some(&json!("ephemeral")),
-        "Claude Fable Plan caches the final system block while preserving the four-block limit"
-    );
-    assert_eq!(
-        body.pointer("/system/1/cache_control/ttl"),
-        Some(&json!("1h"))
-    );
-    assert!(
-        count_cache_control_markers(&body) <= 4,
-        "Anthropic Messages rejects more than four cache_control blocks"
-    );
-
-    let mut identity_only_prompt = prompt;
-    identity_only_prompt.base_instructions = BaseInstructions {
-        text: String::new(),
-    };
-    let identity_only_request = client
-        .build_anthropic_messages_request(
-            &identity_only_prompt,
-            &claude_plan_model,
-            Some(ReasoningEffortConfig::XHigh),
-        )
-        .expect("Claude Plan identity-only request");
-    let body = serde_json::to_value(&identity_only_request)
-        .expect("serialize Claude Plan identity-only request");
-    assert_eq!(
-        body.pointer("/system/0/cache_control/type"),
-        Some(&json!("ephemeral")),
-        "Claude Plan identity-only requests cache the identity block"
-    );
-    assert_eq!(
-        body.pointer("/system/0/cache_control/ttl"),
-        Some(&json!("1h"))
-    );
-}
-
-#[test]
-fn anthropic_messages_request_preserves_user_and_tool_result_images() {
-    let client = ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        ModelProviderInfo::create_anthropic_provider(),
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    let prompt = super::Prompt {
-        base_instructions: BaseInstructions {
-            text: "system instructions".to_string(),
-        },
-        input: vec![
-            ResponseItem::Message {
-                id: None,
-                role: "user".to_string(),
-                content: vec![
-                    ContentItem::InputText {
-                        text: "describe these images".to_string(),
-                    },
-                    ContentItem::InputImage {
-                        image_url: "data:image/png;base64,cG5n".to_string(),
-                        detail: None,
-                    },
-                    ContentItem::InputImage {
-                        image_url: "https://example.com/image.webp".to_string(),
-                        detail: None,
-                    },
-                ],
-                phase: None,
-                metadata: None,
-            },
-            ResponseItem::FunctionCall {
-                id: None,
-                name: "view_image".to_string(),
-                namespace: None,
-                arguments: r#"{"path":"image.png"}"#.to_string(),
-                call_id: "toolu_image".to_string(),
-                metadata: None,
-            },
-            ResponseItem::FunctionCallOutput {
-                id: None,
-                call_id: "toolu_image".to_string(),
-                output: FunctionCallOutputPayload::from_content_items(vec![
-                    codex_protocol::models::FunctionCallOutputContentItem::InputText {
-                        text: "loaded image".to_string(),
-                    },
-                    codex_protocol::models::FunctionCallOutputContentItem::InputImage {
-                        image_url: "data:image/jpeg;base64,anBlZw==".to_string(),
-                        detail: None,
-                    },
-                ]),
-                metadata: None,
-            },
-        ],
-        ..Default::default()
-    };
-
-    let request = client
-        .build_anthropic_messages_request(&prompt, &test_anthropic_opus_model_info(), None)
-        .expect("Anthropic messages request");
-    let body = serde_json::to_value(request).expect("serialize request");
-
-    assert_eq!(
-        body.pointer("/messages/0/content/1"),
-        Some(&json!({
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": "image/png",
-                "data": "cG5n"
-            }
-        }))
-    );
-    assert_eq!(
-        body.pointer("/messages/0/content/2"),
-        Some(&json!({
-            "type": "image",
-            "source": {
-                "type": "url",
-                "url": "https://example.com/image.webp"
-            }
-        }))
-    );
-    assert_eq!(
-        body.pointer("/messages/2/content/0/content/1"),
-        Some(&json!({
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": "image/jpeg",
-                "data": "anBlZw=="
-            }
-        }))
-    );
-}
-
-#[test]
-fn openrouter_chat_completions_request_preserves_function_tools_with_web_search() {
-    let provider_info = ModelProviderInfo::create_openrouter_provider();
-    let client = ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        provider_info,
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    let prompt = super::Prompt {
-        input: vec![ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: "Find current Rust release notes and edit the summary.".to_string(),
-            }],
-            phase: None,
-            metadata: None,
-        }],
-        tools: vec![
-            ToolSpec::Function(ResponsesApiTool {
-                name: "exec_command".to_string(),
-                description: "Run a command.".to_string(),
-                strict: true,
-                defer_loading: None,
-                parameters: JsonSchema::object(
-                    BTreeMap::from([(
-                        "cmd".to_string(),
-                        JsonSchema::string(Some("Command to run.".to_string())),
-                    )]),
-                    Some(vec!["cmd".to_string()]),
-                    Some(false.into()),
-                ),
-                output_schema: None,
-            }),
-            ToolSpec::WebSearch {
-                external_web_access: Some(true),
-                index_gated_web_access: None,
-                filters: None,
-                user_location: None,
-                search_context_size: Some(WebSearchContextSize::Low),
-                search_content_types: None,
-            },
-        ],
-        ..Default::default()
-    };
-    let model_info = test_openrouter_gemini_model_info();
-
-    let request = client
-        .build_chat_completions_request(&prompt, &model_info, None)
-        .expect("OpenRouter chat request");
-    assert_eq!(request.prompt_cache_key, None);
-
-    assert_eq!(
-        request
-            .tools
-            .iter()
-            .map(|tool| {
-                (
-                    tool.get("type").and_then(serde_json::Value::as_str),
-                    tool.pointer("/function/name")
-                        .and_then(serde_json::Value::as_str),
-                )
-            })
-            .collect::<Vec<_>>(),
-        vec![(Some("function"), Some("exec_command"))],
-        "web search must not appear in tools; it rides `plugins`"
-    );
-    assert_eq!(
-        request.plugins,
-        Some(vec![json!({"id": "web", "max_results": 3})])
-    );
-    assert_eq!(request.tool_choice.as_deref(), Some("auto"));
-}
-
-#[test]
-fn baseten_chat_completions_strips_strict_without_zai_reasoning_fields() {
-    let provider_info = ModelProviderInfo::create_baseten_provider();
-    let client = ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        provider_info,
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    let prompt = super::Prompt {
-        input: vec![ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: "Run pwd.".to_string(),
-            }],
-            phase: None,
-            metadata: None,
-        }],
-        tools: vec![ToolSpec::Function(ResponsesApiTool {
-            name: "exec_command".to_string(),
-            description: "Run a command.".to_string(),
-            strict: true,
-            defer_loading: None,
-            parameters: JsonSchema::object(
-                BTreeMap::from([(
-                    "cmd".to_string(),
-                    JsonSchema::string(Some("Command to run.".to_string())),
-                )]),
-                Some(vec!["cmd".to_string()]),
-                Some(false.into()),
-            ),
-            output_schema: None,
-        })],
-        ..Default::default()
-    };
-
-    let request = client
-        .build_chat_completions_request(&prompt, &test_model_info(), None)
-        .expect("Baseten chat request");
-
-    assert_eq!(request.enable_thinking, None);
-    assert_eq!(request.emit_usage, None);
-    // Baseten DOES receive reasoning_effort (passed through for non-GLM-5.2
-    // models); only the Z.AI-specific fields must stay absent.
-    assert_eq!(request.reasoning_effort.as_deref(), Some("medium"));
-    assert_eq!(request.reasoning, None);
-    assert_eq!(request.prompt_cache_key, None);
-    assert!(
-        !serde_json::to_value(&request)
-            .expect("serialize request")
-            .to_string()
-            .contains("cache_control"),
-        "Baseten should not receive raw cache_control blocks without explicit support"
-    );
-    assert_eq!(
-        request.tools[0]
-            .pointer("/function/strict")
-            .and_then(serde_json::Value::as_bool),
-        None
-    );
-}
-
-#[test]
-fn kimi_code_k3_chat_maps_supported_reasoning_and_rejects_unknown_values() {
-    let provider_info = ModelProviderInfo::create_kimi_code_provider();
-    let client = ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        provider_info,
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    let prompt = super::Prompt {
-        input: vec![ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: "Run pwd.".to_string(),
-            }],
-            phase: None,
-            metadata: None,
-        }],
-        tools: vec![ToolSpec::Function(ResponsesApiTool {
-            name: "exec_command".to_string(),
-            description: "Run a command.".to_string(),
-            strict: true,
-            defer_loading: None,
-            parameters: JsonSchema::object(
-                BTreeMap::from([(
-                    "cmd".to_string(),
-                    JsonSchema::string(Some("Command to run.".to_string())),
-                )]),
-                Some(vec!["cmd".to_string()]),
-                Some(false.into()),
-            ),
-            output_schema: None,
-        })],
-        ..Default::default()
-    };
-    let mut model_info = test_model_info();
-    model_info.slug = "k3".to_string();
-    model_info.default_reasoning_level = None;
-
-    let request = client
-        .build_chat_completions_request(&prompt, &model_info, None)
-        .expect("Kimi Code chat request");
-
-    assert_eq!(request.model, "k3");
-    assert_eq!(request.reasoning_effort.as_deref(), Some("max"));
-    assert_eq!(request.enable_thinking, None);
-    assert_eq!(request.emit_usage, None);
-    assert_eq!(request.reasoning, None);
-    assert_eq!(
-        request.tools[0]
-            .pointer("/function/strict")
-            .and_then(serde_json::Value::as_bool),
-        Some(true)
-    );
-
-    for (effort, expected) in [
-        (ReasoningEffortConfig::Low, "low"),
-        (ReasoningEffortConfig::Medium, "high"),
-        (ReasoningEffortConfig::High, "high"),
-        (ReasoningEffortConfig::XHigh, "max"),
-        (ReasoningEffortConfig::Custom("ultra".to_string()), "max"),
-    ] {
-        let request = client
-            .build_chat_completions_request(&prompt, &model_info, Some(effort))
-            .expect("supported Kimi reasoning effort");
-        assert_eq!(request.reasoning_effort.as_deref(), Some(expected));
-    }
-
-    let err = client
-        .build_chat_completions_request(&prompt, &model_info, Some(ReasoningEffortConfig::None))
-        .expect_err("Kimi K3 must not silently downgrade to K2.6");
-    assert!(
-        err.to_string().contains("would select K2.6 instead"),
-        "unexpected error: {err}"
-    );
-
-    let err = client
-        .build_chat_completions_request(
-            &prompt,
-            &model_info,
-            Some(ReasoningEffortConfig::Custom("extreme".to_string())),
-        )
-        .expect_err("unsupported Kimi effort should fail locally");
-    assert!(
-        err.to_string().contains("use low, high, or max"),
-        "unexpected error: {err}"
-    );
-}
-
-#[test]
-fn vercel_responses_request_uses_standard_responses_fields() {
-    let provider_info = ModelProviderInfo::create_vercel_provider();
-    let api_provider = provider_info
-        .to_api_provider(Some(AuthMode::ApiKey))
-        .expect("Vercel API provider");
-    let client = ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        provider_info,
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    let prompt = super::Prompt {
-        input: vec![ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: "Run pwd.".to_string(),
-            }],
-            phase: None,
-            metadata: None,
-        }],
-        tools: vec![ToolSpec::Function(ResponsesApiTool {
-            name: "exec_command".to_string(),
-            description: "Run a command.".to_string(),
-            strict: true,
-            defer_loading: None,
-            parameters: JsonSchema::object(
-                BTreeMap::from([(
-                    "cmd".to_string(),
-                    JsonSchema::string(Some("Command to run.".to_string())),
-                )]),
-                Some(vec!["cmd".to_string()]),
-                Some(false.into()),
-            ),
-            output_schema: None,
-        })],
-        ..Default::default()
-    };
-    let responses_metadata = test_responses_metadata_for_client(
-        &client,
-        Some("turn-1"),
-        "window-1".to_string(),
-        None,
-        TestCodexResponsesRequestKind::Turn,
-    );
-
-    let request = client
-        .build_responses_request(
-            &api_provider,
-            &prompt,
-            &test_vercel_model_info(),
-            None,
-            ReasoningSummaryConfig::None,
-            None,
-            &responses_metadata,
-        )
-        .expect("Vercel responses request");
-
-    assert_eq!(request.model, VERCEL_DEFAULT_MODEL);
-    let reasoning = request
-        .reasoning
-        .as_ref()
-        .expect("Vercel GLM should use standard Responses reasoning");
-    // Standard effort means "do not think" for this family, and the gateway
-    // only publishes `high`/`xhigh`, so `medium` was both a no-op level and a
-    // request for reasoning we never wanted.
-    assert_eq!(
-        reasoning.effort.as_ref(),
-        Some(&ReasoningEffortConfig::None)
-    );
-    assert_eq!(reasoning.summary, None);
-    assert_eq!(
-        request.provider_options,
-        Some(json!({ "gateway": { "only": ["zai"] } }))
-    );
-    assert_eq!(request.enable_thinking, None);
-    assert_eq!(request.emit_usage, None);
-    assert_eq!(request.reasoning_effort, None);
-    assert!(request.prompt_cache_key.is_some());
-    assert!(request.client_metadata.is_some());
-    assert_eq!(request.tools.len(), 1);
-    assert_eq!(
-        request.tools[0]
-            .pointer("/name")
-            .and_then(serde_json::Value::as_str),
-        Some("exec_command")
-    );
-}
-
-#[test]
-fn zai_chat_completions_preserves_function_tools_when_web_search_is_available() {
-    let provider_info = ModelProviderInfo::create_zai_provider();
-    let client = ModelClient::new(
-        /*auth_manager*/ None,
-        ThreadId::new(),
-        provider_info,
-        SessionSource::Cli,
-        /*model_verbosity*/ None,
-        /*enable_request_compression*/ false,
-        /*include_timing_metrics*/ false,
-        /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
-        /*attestation_provider*/ None,
-    );
-    let tools = vec![
-        ToolSpec::Function(ResponsesApiTool {
-            name: "exec_command".to_string(),
-            description: "Run a command.".to_string(),
-            strict: true,
-            defer_loading: None,
-            parameters: JsonSchema::object(
-                BTreeMap::from([(
-                    "cmd".to_string(),
-                    JsonSchema::string(Some("Command to run.".to_string())),
-                )]),
-                Some(vec!["cmd".to_string()]),
-                Some(false.into()),
-            ),
-            output_schema: None,
-        }),
-        ToolSpec::WebSearch {
-            external_web_access: Some(true),
-            index_gated_web_access: None,
-            filters: None,
-            user_location: None,
-            search_context_size: None,
-            search_content_types: None,
-        },
-    ];
-    let model_info = test_ambient_model_info();
-
-    let mixed_prompt = super::Prompt {
-        input: vec![ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: "Run pwd.".to_string(),
-            }],
-            phase: None,
-            metadata: None,
-        }],
-        tools,
-        ..Default::default()
-    };
-    let mixed_request = client
-        .build_chat_completions_request(&mixed_prompt, &model_info, None)
-        .expect("mixed request");
-    assert_eq!(
-        mixed_request
-            .tools
-            .iter()
-            .map(|tool| {
-                (
-                    tool.get("type").and_then(serde_json::Value::as_str),
-                    tool.pointer("/function/name")
-                        .and_then(serde_json::Value::as_str),
-                )
-            })
-            .collect::<Vec<_>>(),
-        vec![(Some("function"), Some("exec_command"))]
-    );
-    assert_eq!(
-        mixed_request
-            .messages
-            .iter()
-            .filter(|message| message.role == "system")
-            .count(),
-        1,
-        "Z.AI mixed-tool request shaping must not inject prompt guidance: {:?}",
-        mixed_request.messages
-    );
-
-    let search_only_prompt = super::Prompt {
-        input: vec![ResponseItem::Message {
-            id: None,
-            role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: "Use web search for Z.AI docs".to_string(),
-            }],
-            phase: None,
-            metadata: None,
-        }],
-        tools: vec![ToolSpec::WebSearch {
-            external_web_access: Some(true),
-            index_gated_web_access: None,
-            filters: None,
-            user_location: None,
-            search_context_size: None,
-            search_content_types: None,
-        }],
-        ..Default::default()
-    };
-    let search_only_request = client
-        .build_chat_completions_request(&search_only_prompt, &model_info, None)
-        .expect("search-only request");
-    assert_eq!(
-        search_only_request
-            .tools
-            .iter()
-            .map(|tool| tool.get("type").and_then(serde_json::Value::as_str))
-            .collect::<Vec<_>>(),
-        vec![Some("web_search")]
-    );
-    assert_eq!(
-        search_only_request
-            .messages
-            .iter()
-            .filter(|message| message.role == "system")
-            .count(),
-        1,
-        "Z.AI web search request shaping must not inject prompt guidance: {:?}",
-        search_only_request.messages
-    );
 }
 
 #[derive(Default)]
@@ -3531,13 +1101,13 @@ fn started_inference_attempt(temp: &TempDir) -> anyhow::Result<InferenceTraceAtt
 
 fn output_message(id: &str, text: &str) -> ResponseItem {
     ResponseItem::Message {
-        id: Some(id.to_string()),
+        id: Some(codex_protocol::ResponseItemId::with_suffix("msg", id)),
         role: "assistant".to_string(),
         content: vec![ContentItem::OutputText {
             text: text.to_string(),
         }],
         phase: None,
-        metadata: None,
+        internal_chat_message_metadata_passthrough: None,
     }
 }
 
@@ -3602,6 +1172,10 @@ fn build_subagent_headers_sets_internal_memory_consolidation_label() {
         .get(X_OPENAI_SUBAGENT_HEADER)
         .and_then(|value| value.to_str().ok());
     assert_eq!(value, Some("memory_consolidation"));
+    assert_eq!(
+        headers.get("originator"),
+        Some(&http::HeaderValue::from_static("test_originator"))
+    );
 }
 
 #[test]
@@ -3695,7 +1269,7 @@ async fn dropped_response_stream_traces_cancelled_partial_output() -> anyhow::Re
     // response.completed event. The harness has enough information to keep this
     // item in history, so the trace should preserve it when the stream is
     // abandoned.
-    let item = output_message("msg-1", "partial answer");
+    let item = output_message("1", "partial answer");
     let api_stream = futures::stream::iter([Ok(ResponseEvent::OutputItemDone(item))])
         .chain(futures::stream::pending());
     let (mut stream, _) = super::map_response_events(
@@ -3703,7 +1277,7 @@ async fn dropped_response_stream_traces_cancelled_partial_output() -> anyhow::Re
         api_stream,
         test_session_telemetry(),
         attempt,
-        None,
+        test_model_provider(),
     );
 
     let observed = stream
@@ -3754,7 +1328,7 @@ async fn response_stream_records_last_model_feedback_ids() {
         api_stream,
         test_session_telemetry(),
         InferenceTraceAttempt::disabled(),
-        None,
+        test_model_provider(),
     );
 
     while stream.next().await.is_some() {}
@@ -3771,6 +1345,39 @@ async fn response_stream_records_last_model_feedback_ids() {
 }
 
 #[tokio::test]
+async fn bedrock_unauthorized_error_uses_provider_mapping() {
+    let provider = create_model_provider(
+        ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
+        /*auth_manager*/ None,
+    );
+    let mut auth_recovery = None;
+    let url = "https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses";
+    let error = super::handle_unauthorized(
+        TransportError::Http {
+            status: http::StatusCode::UNAUTHORIZED,
+            url: Some(url.to_string()),
+            headers: None,
+            body: Some(
+                "Signature expired: 20260609T133205Z is now earlier than 20260614T062525Z"
+                    .to_string(),
+            ),
+        },
+        &mut auth_recovery,
+        &test_session_telemetry(),
+        &provider,
+    )
+    .await
+    .expect_err("expired Bedrock signature should fail");
+
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "Amazon Bedrock rejected the request because its AWS signature has expired. Refresh your AWS credentials and retry. If `AWS_BEARER_TOKEN_BEDROCK` is set, update or unset it, then restart Codex, url: {url}"
+        )
+    );
+}
+
+#[tokio::test]
 async fn dropped_backpressured_response_stream_traces_cancelled_partial_output()
 -> anyhow::Result<()> {
     let temp = TempDir::new()?;
@@ -3781,7 +1388,7 @@ async fn dropped_backpressured_response_stream_traces_cancelled_partial_output()
         events.push_back(ResponseEvent::Created);
     }
     events.push_back(ResponseEvent::OutputItemDone(output_message(
-        "msg-1",
+        "1",
         "partial answer",
     )));
     let api_stream = NotifyAfterEventStream {
@@ -3796,7 +1403,7 @@ async fn dropped_backpressured_response_stream_traces_cancelled_partial_output()
         api_stream,
         test_session_telemetry(),
         attempt,
-        None,
+        test_model_provider(),
     );
 
     // Fill the mapper channel with non-terminal events, then yield one output
@@ -3825,6 +1432,7 @@ fn auth_request_telemetry_context_tracks_attached_auth_and_retry_phase() {
     let auth_context = AuthRequestTelemetryContext::new(
         Some(AuthMode::Chatgpt),
         &BearerAuthProvider::for_test(Some("access-token"), Some("workspace-123")),
+        /*agent_identity_telemetry*/ None,
         PendingUnauthorizedRetry::from_recovery(UnauthorizedRecoveryExecution {
             mode: "managed",
             phase: "refresh_token",
@@ -3837,6 +1445,27 @@ fn auth_request_telemetry_context_tracks_attached_auth_and_retry_phase() {
     assert!(auth_context.retry_after_unauthorized);
     assert_eq!(auth_context.recovery_mode, Some("managed"));
     assert_eq!(auth_context.recovery_phase, Some("refresh_token"));
+}
+
+#[test]
+fn auth_request_telemetry_context_tracks_agent_identity_ids() {
+    let auth_context = AuthRequestTelemetryContext::new(
+        Some(AuthMode::Chatgpt),
+        &BearerAuthProvider::for_test(/*token*/ None, /*account_id*/ None),
+        Some(AgentIdentityTelemetry {
+            agent_id: "agent-runtime-context".to_string(),
+            task_id: "task-run-context".to_string(),
+        }),
+        PendingUnauthorizedRetry::default(),
+    );
+
+    assert_eq!(
+        auth_context.agent_identity_telemetry(),
+        Some(&AgentIdentityTelemetry {
+            agent_id: "agent-runtime-context".to_string(),
+            task_id: "task-run-context".to_string(),
+        })
+    );
 }
 
 fn model_client_with_counting_attestation(
@@ -3876,17 +1505,20 @@ fn model_client_with_counting_attestation(
     };
     let model_client = ModelClient::new(
         auth_manager,
+        AgentIdentityAuthPolicy::JwtOnly,
         ThreadId::new(),
         provider,
         SessionSource::Exec,
+        "test_originator".to_string(),
         /*model_verbosity*/ None,
         /*enable_request_compression*/ false,
         /*include_timing_metrics*/ false,
         /*beta_features_header*/ None,
-        /*item_ids_enabled*/ false,
+        /*concurrent_reasoning_summaries_enabled*/ false,
         Some(Arc::new(CountingAttestationProvider {
             calls: attestation_calls.clone(),
         })),
+        HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
     );
     (model_client, attestation_calls)
 }

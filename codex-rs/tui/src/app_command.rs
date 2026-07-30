@@ -24,9 +24,7 @@ use serde_json::Value;
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) enum AppCommand {
-    Interrupt {
-        behavior: InterruptBehavior,
-    },
+    Interrupt,
     CleanBackgroundTerminals,
     RunUserShellCommand {
         command: String,
@@ -89,9 +87,8 @@ pub(crate) enum AppCommand {
         force_reload: bool,
     },
     Compact,
-    Shutdown,
-    ThreadRollback {
-        num_turns: u32,
+    SetThreadName {
+        name: String,
     },
     Review {
         target: ReviewTarget,
@@ -101,23 +98,9 @@ pub(crate) enum AppCommand {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub(crate) enum InterruptBehavior {
-    Default,
-    RestorePromptIfNoOutput,
-}
-
 impl AppCommand {
     pub(crate) fn interrupt() -> Self {
-        Self::Interrupt {
-            behavior: InterruptBehavior::Default,
-        }
-    }
-
-    pub(crate) fn interrupt_and_restore_prompt_if_no_output() -> Self {
-        Self::Interrupt {
-            behavior: InterruptBehavior::RestorePromptIfNoOutput,
-        }
+        Self::Interrupt
     }
 
     pub(crate) fn clean_background_terminals() -> Self {
@@ -244,13 +227,8 @@ impl AppCommand {
         Self::Compact
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn shutdown() -> Self {
-        Self::Shutdown
-    }
-
-    pub(crate) fn thread_rollback(num_turns: u32) -> Self {
-        Self::ThreadRollback { num_turns }
+    pub(crate) fn set_thread_name(name: String) -> Self {
+        Self::SetThreadName { name }
     }
 
     pub(crate) fn review(target: ReviewTarget) -> Self {

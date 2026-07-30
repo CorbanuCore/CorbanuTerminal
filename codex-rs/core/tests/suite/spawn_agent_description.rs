@@ -2,6 +2,7 @@
 #![allow(clippy::unwrap_used)]
 
 use anyhow::Result;
+use codex_core::config::AgentRoleConfig;
 use codex_features::Feature;
 use codex_login::CodexAuth;
 use codex_models_manager::manager::RefreshStrategy;
@@ -27,9 +28,11 @@ use core_test_support::test_codex::test_codex;
 use serde_json::Value;
 use std::time::Duration;
 use std::time::Instant;
+use test_case::test_case;
 use tokio::time::sleep;
 
 const MULTI_AGENT_V1_NAMESPACE: &str = "multi_agent_v1";
+const MULTI_AGENT_V2_NAMESPACE: &str = "collaboration";
 const SPAWN_AGENT_TOOL_NAME: &str = "spawn_agent";
 
 fn spawn_agent_description(body: &Value) -> Option<String> {
@@ -37,6 +40,12 @@ fn spawn_agent_description(body: &Value) -> Option<String> {
         .and_then(|tool| tool.get("description"))
         .and_then(Value::as_str)
         .map(str::to_string)
+}
+
+fn spawn_agent_exposes_agent_type(body: &Value, namespace: &str) -> bool {
+    namespace_child_tool(body, namespace, SPAWN_AGENT_TOOL_NAME)
+        .and_then(|tool| tool.pointer("/parameters/properties/agent_type"))
+        .is_some()
 }
 
 fn test_model_info(
@@ -73,7 +82,8 @@ fn test_model_info(
         upgrade: None,
         base_instructions: "base instructions".to_string(),
         model_messages: None,
-        supports_reasoning_summaries: false,
+        include_skills_usage_instructions: false,
+        supports_reasoning_summary_parameter: true,
         default_reasoning_summary: ReasoningSummary::Auto,
         support_verbosity: false,
         default_verbosity: None,
@@ -95,7 +105,12 @@ fn test_model_info(
 async fn wait_for_model_available(manager: &SharedModelsManager, slug: &str) {
     let deadline = Instant::now() + Duration::from_secs(2);
     loop {
-        let available_models = manager.list_models(RefreshStrategy::Online).await;
+        let available_models = manager
+            .list_models(
+                RefreshStrategy::Online,
+                codex_core::test_support::default_http_client_factory(),
+            )
+            .await;
         if available_models.iter().any(|model| model.model == slug) {
             return;
         }
@@ -225,13 +240,15 @@ async fn spawn_agent_description_lists_visible_models_and_reasoning_efforts() ->
     );
     assert!(
         description.contains(
-            "Do not spawn sub-agents unless the user explicitly asks for sub-agents, delegation, or parallel agent work."
+            "Do not spawn sub-agents unless the user or applicable AGENTS.md/skill instructions explicitly ask for sub-agents, delegation, or parallel agent work."
         ),
         "expected explicit authorization rule in spawn_agent description: {description:?}"
     );
     assert!(
-        !description.contains("### When to delegate vs. do the subtask yourself"),
-        "spawn_agent description should not include extra when-to-use delegation guidance: {description:?}"
+        description.contains(
+            "Requests for depth, thoroughness, research, investigation, or detailed codebase analysis do not count as permission to spawn."
+        ) && description.contains("### When to delegate vs. do the subtask yourself"),
+        "expected delegation decision guidance in spawn_agent description: {description:?}"
     );
     assert!(
         description.contains(
@@ -247,104 +264,111 @@ async fn spawn_agent_description_lists_visible_models_and_reasoning_efforts() ->
     Ok(())
 }
 
+#[test_case(false, false, MULTI_AGENT_V1_NAMESPACE; "v1 hides agent type without roles")]
+#[test_case(true, true, "collaboration"; "v2 exposes agent type with a role")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn spawn_agent_description_filters_policy_and_marks_sol_ultra_frontier() -> Result<()> {
+async fn configured_agent_roles_control_spawn_agent_type(
+    multi_agent_v2: bool,
+    has_agent_role: bool,
+    namespace: &str,
+) -> Result<()> {
     let server = start_mock_server().await;
-    let frontier_efforts = vec![
-        ReasoningEffortPreset {
-            effort: ReasoningEffort::High,
-            description: "Deep work".to_string(),
-        },
-        ReasoningEffortPreset {
-            effort: ReasoningEffort::Custom("max".to_string()),
-            description: "Maximum reasoning".to_string(),
-        },
-        ReasoningEffortPreset {
-            effort: ReasoningEffort::Custom("ultra".to_string()),
-            description: "Maximum reasoning with automatic delegation".to_string(),
-        },
-    ];
-    mount_models_once(
-        &server,
-        ModelsResponse {
-            models: vec![
-                test_model_info(
-                    "gpt-5.6-sol",
-                    "GPT-5.6-Sol",
-                    "Frontier coding model",
-                    ModelVisibility::List,
-                    ReasoningEffort::High,
-                    frontier_efforts.clone(),
-                    Vec::new(),
-                ),
-                test_model_info(
-                    "k3",
-                    "Kimi K3",
-                    "Frontier code model",
-                    ModelVisibility::List,
-                    ReasoningEffort::High,
-                    frontier_efforts,
-                    Vec::new(),
-                ),
-                test_model_info(
-                    "gpt-5.5",
-                    "GPT-5.5",
-                    "Superseded coding model",
-                    ModelVisibility::List,
-                    ReasoningEffort::High,
-                    vec![ReasoningEffortPreset {
-                        effort: ReasoningEffort::High,
-                        description: "Deep work".to_string(),
-                    }],
-                    Vec::new(),
-                ),
-            ],
-        },
-    )
-    .await;
-    let resp_mock = mount_sse_once(
+    let response = mount_sse_once(
         &server,
         sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
     )
     .await;
-
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
-        .with_model("gpt-5.6-sol")
-        .with_config(|config| {
-            config.model_provider_id = "openai".to_string();
+    let test = test_codex()
+        .with_config(move |config| {
             config
                 .features
                 .enable(Feature::Collab)
                 .expect("test config should allow feature update");
-            config.multi_agent_v2.hide_spawn_agent_metadata = false;
-            config.agent_provider_allowlist = Some(vec!["openai".to_string()]);
-        });
-    let test = builder.build(&server).await?;
-    wait_for_model_available(&test.thread_manager.get_models_manager(), "gpt-5.6-sol").await;
+            if multi_agent_v2 {
+                config
+                    .features
+                    .enable(Feature::MultiAgentV2)
+                    .expect("test config should allow feature update");
+            } else {
+                config
+                    .features
+                    .disable(Feature::MultiAgentV2)
+                    .expect("test config should allow feature update");
+            }
+            if has_agent_role {
+                config.agent_roles.insert(
+                    "researcher".to_string(),
+                    AgentRoleConfig {
+                        description: Some("Research role".to_string()),
+                        config_file: None,
+                        nickname_candidates: None,
+                    },
+                );
+            }
+        })
+        .build_with_auto_env(&server)
+        .await?;
 
     test.submit_turn("hello").await?;
 
-    let description = spawn_agent_description(&resp_mock.single_request().body_json())
-        .expect("spawn_agent description should be present");
-    assert!(
-        description.contains(
-            "`openai` / `gpt-5.6-sol`; plan, burn 1x, frontier; frontier efforts: max, ultra (ultra includes automatic delegation)"
-        ),
-        "expected authorized Sol frontier allocation metadata: {description:?}"
+    assert_eq!(
+        spawn_agent_exposes_agent_type(&response.single_request().body_json(), namespace),
+        has_agent_role
     );
-    assert!(
-        !description.contains("`kimi-code` / `k3`"),
-        "operator-disallowed providers must not be advertised as available: {description:?}"
+    Ok(())
+}
+
+#[test_case(true, false; "wait agent remains available without clock sleep")]
+#[test_case(true, true; "wait agent remains available with clock sleep")]
+#[test_case(false, false; "wait agent can be disabled without clock sleep")]
+#[test_case(false, true; "wait agent can be disabled with clock sleep")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn multi_agent_v2_wait_agent_tool_follows_configuration(
+    wait_agent_enabled: bool,
+    sleep_tool_enabled: bool,
+) -> Result<()> {
+    let current_time_reminder = if sleep_tool_enabled {
+        r#"
+[features.current_time_reminder]
+enabled = true
+sleep_tool = true
+"#
+    } else {
+        ""
+    };
+    let config_toml = format!(
+        r#"
+[features.multi_agent_v2]
+enabled = true
+wait_agent_enabled = {wait_agent_enabled}
+{current_time_reminder}"#
     );
-    assert!(
-        !description.contains("`openai` / `gpt-5.5`"),
-        "catalogue-disabled GPT-5.5 must not be advertised as spawnable: {description:?}"
+    let server = start_mock_server().await;
+    let response = mount_sse_once(
+        &server,
+        sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
+    )
+    .await;
+    let test = test_codex()
+        .with_pre_build_hook(move |home| {
+            std::fs::write(home.join("config.toml"), &config_toml)
+                .expect("write multi-agent configuration");
+        })
+        .build_with_auto_env(&server)
+        .await?;
+
+    test.submit_turn("hello").await?;
+
+    let request = response.single_request();
+    let body = request.body_json();
+    assert!(namespace_child_tool(&body, MULTI_AGENT_V2_NAMESPACE, SPAWN_AGENT_TOOL_NAME).is_some());
+    assert_eq!(
+        namespace_child_tool(&body, MULTI_AGENT_V2_NAMESPACE, "wait_agent").is_some(),
+        wait_agent_enabled
     );
-    assert!(
-        description
-            .contains("If the user names a provider or model, treat it as an exact constraint"),
-        "expected exact-model no-substitution policy: {description:?}"
+    assert_eq!(
+        namespace_child_tool(&body, "clock", "sleep").is_some(),
+        sleep_tool_enabled
     );
 
     Ok(())

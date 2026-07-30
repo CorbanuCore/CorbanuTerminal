@@ -113,20 +113,8 @@ pub(crate) async fn handle_retryable_response_stream_error(
     if *retries < effective_max_retries {
         *retries += 1;
         let retry_count = *retries;
-        let delay = match &err {
-            CodexErr::Stream(_, requested_delay) => {
-                requested_delay.unwrap_or_else(|| backoff(retry_count))
-            }
-            _ => backoff(retry_count),
-        };
-        log_retry(
-            request,
-            turn_context,
-            &err,
-            retry_count,
-            effective_max_retries,
-            delay,
-        );
+        let delay = err.retry_delay().unwrap_or_else(|| backoff(retry_count));
+        log_retry(request, turn_context, &err, retry_count, max_retries, delay);
 
         // In release builds, hide the first websocket retry notification to reduce noisy
         // transient reconnect messages. In debug builds, keep full visibility for diagnosis.
@@ -254,6 +242,10 @@ fn log_retry(
     match request {
         ResponsesStreamRequest::Sampling => {
             warn!(
+                turn_id = %turn_context.sub_id,
+                retries,
+                max_retries,
+                sampling_error = %err,
                 "stream disconnected - retrying sampling request ({retries}/{max_retries} in {delay:?})...",
             );
         }
@@ -270,92 +262,5 @@ fn log_retry(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn same_request_idle_guard_aborts_after_second_idle_failure() {
-        let mut failures = 0;
-        let idle = CodexErr::Stream(SSE_IDLE_TIMEOUT_MESSAGE.to_string(), None);
-
-        guard_same_request_idle_retry(&idle, &mut failures).expect("first idle failure can retry");
-        assert_eq!(failures, 1);
-
-        let err = guard_same_request_idle_retry(&idle, &mut failures)
-            .expect_err("second same-request idle failure should abort");
-        assert_eq!(failures, 2);
-        assert!(
-            err.to_string()
-                .contains("aborting instead of restarting it again")
-        );
-    }
-
-    #[test]
-    fn same_request_idle_guard_resets_on_non_idle_error() {
-        let mut failures = 1;
-        let other = CodexErr::Stream("stream closed before completion".to_string(), None);
-
-        guard_same_request_idle_retry(&other, &mut failures)
-            .expect("non-idle stream error should not abort");
-
-        assert_eq!(failures, 0);
-    }
-
-    #[test]
-    fn long_stream_failure_retries_are_capped_to_one() {
-        assert_eq!(
-            effective_max_stream_retries(
-                /*max_retries*/ 5, /*long_failure*/ true,
-                /*long_failure_max_retries*/ 1,
-            ),
-            1
-        );
-    }
-
-    #[test]
-    fn normal_stream_failures_keep_provider_retry_count() {
-        assert_eq!(
-            effective_max_stream_retries(
-                /*max_retries*/ 5, /*long_failure*/ false,
-                /*long_failure_max_retries*/ 1,
-            ),
-            5
-        );
-    }
-
-    #[test]
-    fn gpu_retry_liveness_distinguishes_recovery_from_termination() {
-        let record = codex_state::GpuRuntimeProvider {
-            rental_id: "gpu-rental".to_string(),
-            infrastructure_provider: "vast".to_string(),
-            provider_id: "gpu-gpu-rental".to_string(),
-            base_url: "http://127.0.0.1:1234/v1".to_string(),
-            model_id: "test-model".to_string(),
-            wire_api: "chat".to_string(),
-            health: "ready".to_string(),
-            display_hourly_microusd: 1_000_000,
-            maximum_context_tokens: Some(32_768),
-            catalog_sequence: 1,
-            updated_at_ms: 1,
-        };
-
-        assert_eq!(
-            gpu_runtime_provider_availability("gpu-gpu-rental", std::slice::from_ref(&record)),
-            GpuRuntimeProviderAvailability::Ready
-        );
-        assert_eq!(
-            gpu_runtime_provider_availability("gpu-another-rental", std::slice::from_ref(&record)),
-            GpuRuntimeProviderAvailability::Gone
-        );
-        assert_eq!(
-            gpu_runtime_provider_availability(
-                "gpu-gpu-rental",
-                &[codex_state::GpuRuntimeProvider {
-                    health: "degraded".to_string(),
-                    ..record
-                }]
-            ),
-            GpuRuntimeProviderAvailability::Recovering
-        );
-    }
-}
+#[path = "responses_retry_tests.rs"]
+mod tests;

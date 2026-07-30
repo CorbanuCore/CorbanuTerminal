@@ -165,6 +165,8 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 12] = [
     },
 ];
 
+const ULTRA_REASONING_CONCURRENCY_WARNING_THRESHOLD: usize = 8;
+
 impl ChatWidget {
     /// Open a popup to choose a quick auto model. Selecting "All models"
     /// opens the full picker with every available preset.
@@ -257,17 +259,31 @@ impl ChatWidget {
             .map(|preset| {
                 let description = Self::model_description_for_preset(&preset);
                 let model = preset.model.clone();
-                let display_name = Self::model_display_label_for_preset(&preset);
-                let should_prompt_plan_mode_scope = self.should_prompt_plan_mode_reasoning_scope(
-                    model.as_str(),
-                    Some(preset.default_reasoning_effort.clone()),
-                );
-                let actions = Self::model_selection_actions(
-                    model.clone(),
-                    preset.provider_id.clone(),
-                    Some(preset.default_reasoning_effort.clone()),
-                    should_prompt_plan_mode_scope,
-                );
+                let requires_advanced_selection =
+                    Self::is_advanced_reasoning_effort(&preset.default_reasoning_effort)
+                        || preset
+                            .supported_reasoning_efforts
+                            .iter()
+                            .any(|option| Self::is_advanced_reasoning_effort(&option.effort));
+                let actions: Vec<SelectionAction> = if requires_advanced_selection {
+                    let preset_for_action = preset.clone();
+                    vec![Box::new(move |tx| {
+                        tx.send(AppEvent::OpenReasoningPopup {
+                            model: preset_for_action.clone(),
+                        });
+                    })]
+                } else {
+                    let should_prompt_plan_mode_scope = self
+                        .should_prompt_plan_mode_reasoning_scope(
+                            model.as_str(),
+                            Some(preset.default_reasoning_effort.clone()),
+                        );
+                    self.model_selection_actions(
+                        model.clone(),
+                        Some(preset.default_reasoning_effort.clone()),
+                        should_prompt_plan_mode_scope,
+                    )
+                };
                 SelectionItem {
                     name: display_name.clone(),
                     description,
@@ -275,7 +291,8 @@ impl ChatWidget {
                     is_default: preset.is_default,
                     search_value: Some(format!("{display_name} {model}")),
                     actions,
-                    dismiss_on_select: true,
+                    dismiss_on_select: !requires_advanced_selection,
+                    dismiss_parent_on_child_accept: requires_advanced_selection,
                     ..Default::default()
                 }
             })
@@ -594,32 +611,39 @@ impl ChatWidget {
     }
 
     fn model_selection_actions(
+        &self,
         model_for_action: String,
         provider_for_action: Option<String>,
         effort_for_action: Option<ReasoningEffortConfig>,
         should_prompt_plan_mode_scope: bool,
     ) -> Vec<SelectionAction> {
+        let warning = effort_for_action
+            .as_ref()
+            .and_then(|effort| self.ultra_reasoning_concurrency_warning(effort));
         vec![Box::new(move |tx| {
-            if should_prompt_plan_mode_scope {
+            if effort_for_action == Some(ReasoningEffortConfig::Ultra) {
+                tx.send(AppEvent::ApplyAdvancedReasoning {
+                    model: model_for_action.clone(),
+                    effort: ReasoningEffortConfig::Ultra,
+                });
+            } else if should_prompt_plan_mode_scope {
                 tx.send(AppEvent::OpenPlanReasoningScopePrompt {
                     model: model_for_action.clone(),
                     provider: provider_for_action.clone(),
                     effort: effort_for_action.clone(),
                 });
-                return;
-            }
-
-            tx.send(AppEvent::UpdateModelSelection {
-                model: model_for_action.clone(),
-                provider: provider_for_action.clone(),
-            });
-            tx.send(AppEvent::UpdateReasoningEffort(effort_for_action.clone()));
-            if Self::should_persist_model_provider(provider_for_action.as_deref()) {
+            } else {
+                tx.send(AppEvent::UpdateModel(model_for_action.clone()));
+                tx.send(AppEvent::UpdateReasoningEffort(effort_for_action.clone()));
                 tx.send(AppEvent::PersistModelSelection {
                     model: model_for_action.clone(),
-                    provider: provider_for_action.clone(),
                     effort: effort_for_action.clone(),
                 });
+            }
+            if let Some(warning) = warning.clone() {
+                tx.send(AppEvent::InsertHistoryCell(Box::new(
+                    history_cell::new_warning_event(warning),
+                )));
             }
         })]
     }
@@ -692,11 +716,14 @@ impl ChatWidget {
             "Set the global default reasoning level and the Plan mode override. This replaces the current {plan_reasoning_source}."
         );
         let subtitle = format!("Choose where to apply {reasoning_phrase}.");
+        let warning = effort
+            .as_ref()
+            .and_then(|effort| self.ultra_reasoning_concurrency_warning(effort));
 
         let plan_only_actions: Vec<SelectionAction> = vec![Box::new({
             let model = model.clone();
             let effort = effort.clone();
-            let provider = provider.clone();
+            let warning = warning.clone();
             move |tx| {
                 tx.send(AppEvent::UpdateModelSelection {
                     model: model.clone(),
@@ -704,6 +731,11 @@ impl ChatWidget {
                 });
                 tx.send(AppEvent::UpdatePlanModeReasoningEffort(effort.clone()));
                 tx.send(AppEvent::PersistPlanModeReasoningEffort(effort.clone()));
+                if let Some(warning) = warning.clone() {
+                    tx.send(AppEvent::InsertHistoryCell(Box::new(
+                        history_cell::new_warning_event(warning),
+                    )));
+                }
             }
         })];
         let all_modes_actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
@@ -714,12 +746,14 @@ impl ChatWidget {
             tx.send(AppEvent::UpdateReasoningEffort(effort.clone()));
             tx.send(AppEvent::UpdatePlanModeReasoningEffort(effort.clone()));
             tx.send(AppEvent::PersistPlanModeReasoningEffort(effort.clone()));
-            if Self::should_persist_model_provider(provider.as_deref()) {
-                tx.send(AppEvent::PersistModelSelection {
-                    model: model.clone(),
-                    provider: provider.clone(),
-                    effort: effort.clone(),
-                });
+            tx.send(AppEvent::PersistModelSelection {
+                model: model.clone(),
+                effort: effort.clone(),
+            });
+            if let Some(warning) = warning.clone() {
+                tx.send(AppEvent::InsertHistoryCell(Box::new(
+                    history_cell::new_warning_event(warning),
+                )));
             }
         })];
 
@@ -750,31 +784,13 @@ impl ChatWidget {
         });
     }
 
-    /// Open a popup to choose the reasoning effort (stage 2) for the given model.
-    #[cfg(test)]
+    /// Open a popup to choose the standard reasoning effort for the given model.
+    ///
+    /// Max and Ultra require an explicit second step so expensive efforts cannot
+    /// be selected accidentally while moving through the normal effort scale.
     pub(crate) fn open_reasoning_popup(&mut self, preset: ModelPreset) {
-        self.open_reasoning_popup_for_purpose(preset, ModelSelectionPurpose::Session);
-    }
-
-    pub(crate) fn open_reasoning_popup_for_purpose(
-        &mut self,
-        preset: ModelPreset,
-        purpose: ModelSelectionPurpose,
-    ) {
-        let spawn_default_effort = match &purpose {
-            ModelSelectionPurpose::SpawnAgent { role, .. } => {
-                Some(spawn_reasoning_effort_for_role(*role, &preset))
-            }
-            ModelSelectionPurpose::Session => None,
-            ModelSelectionPurpose::CodexPane { .. } => None,
-        };
-        let model_label = Self::model_display_label_for_preset(&preset);
-        let provider = preset
-            .provider_id
-            .clone()
-            .or_else(|| Self::model_provider_for_selection(&preset.model));
-        let default_effort = preset.default_reasoning_effort;
-        let supported = preset.supported_reasoning_efforts;
+        let default_effort = preset.default_reasoning_effort.clone();
+        let supported = &preset.supported_reasoning_efforts;
         let in_plan_mode =
             self.collaboration_modes_enabled() && self.active_mode_kind() == ModeKind::Plan;
         let uses_ambient_reasoning_modes = Self::uses_glm_reasoning_modes(&preset.model);
@@ -800,15 +816,18 @@ impl ChatWidget {
             || preset.model.starts_with("gpt-5.1-codex-max")
             || preset.model.starts_with("gpt-5.2");
 
-        let mut choices: Vec<ReasoningEffortConfig> = supported
+        let mut all_choices: Vec<ReasoningEffortConfig> = supported
             .iter()
             .map(|option| option.effort.clone())
             .collect();
-        if choices.is_empty() {
-            choices.push(default_effort.clone());
+        if all_choices.is_empty() {
+            all_choices.push(default_effort.clone());
         }
+        let (choices, advanced_choices): (Vec<_>, Vec<_>) = all_choices
+            .into_iter()
+            .partition(|effort| !Self::is_advanced_reasoning_effort(effort));
 
-        if choices.len() == 1 {
+        if choices.len() == 1 && advanced_choices.is_empty() {
             let selected_effort = choices.first().cloned();
             let selected_model = preset.model;
             match purpose {
@@ -869,7 +888,8 @@ impl ChatWidget {
                     self.effective_reasoning_effort()
                 }
             }
-            ModelSelectionPurpose::Session => default_choice.clone(),
+        } else {
+            default_choice.clone().or_else(|| choices.first().cloned())
         };
         let selection_choice = highlight_choice.clone().or_else(|| default_choice.clone());
         let initial_selected_idx = choices
@@ -901,59 +921,16 @@ impl ChatWidget {
                 None
             };
 
-            let model_for_action = model_slug.clone();
             let choice_effort = Some(effort);
-            let should_prompt_plan_mode_scope = matches!(purpose, ModelSelectionPurpose::Session)
-                && self.should_prompt_plan_mode_reasoning_scope(
-                    model_slug.as_str(),
-                    choice_effort.clone(),
-                );
-            let purpose_for_action = purpose.clone();
-            let provider_for_action = provider.clone();
-            let actions: Vec<SelectionAction> =
-                vec![Box::new(move |tx| match &purpose_for_action {
-                    ModelSelectionPurpose::Session => {
-                        if should_prompt_plan_mode_scope {
-                            tx.send(AppEvent::OpenPlanReasoningScopePrompt {
-                                model: model_for_action.clone(),
-                                provider: provider_for_action.clone(),
-                                effort: choice_effort.clone(),
-                            });
-                            return;
-                        }
-                        tx.send(AppEvent::UpdateModelSelection {
-                            model: model_for_action.clone(),
-                            provider: provider_for_action.clone(),
-                        });
-                        tx.send(AppEvent::UpdateReasoningEffort(choice_effort.clone()));
-                        if Self::should_persist_model_provider(provider_for_action.as_deref()) {
-                            tx.send(AppEvent::PersistModelSelection {
-                                model: model_for_action.clone(),
-                                provider: provider_for_action.clone(),
-                                effort: choice_effort.clone(),
-                            });
-                        }
-                    }
-                    ModelSelectionPurpose::CodexPane { .. } => {
-                        tx.send(AppEvent::OpenCodexPaneNamePrompt {
-                            provider: provider_for_action.clone(),
-                            model: model_for_action.clone(),
-                            effort: choice_effort.clone(),
-                        });
-                    }
-                    ModelSelectionPurpose::SpawnAgent {
-                        role,
-                        parent_node_id,
-                        ..
-                    } => tx.send(AppEvent::CreateSpawnAgent {
-                        role: *role,
-                        parent_node_id: parent_node_id.clone(),
-                        agent_nickname: None,
-                        provider: provider_for_action.clone(),
-                        model: model_for_action.clone(),
-                        effort: choice_effort.clone(),
-                    }),
-                })];
+            let should_prompt_plan_mode_scope = self.should_prompt_plan_mode_reasoning_scope(
+                model_slug.as_str(),
+                choice_effort.clone(),
+            );
+            let actions = self.model_selection_actions(
+                model_slug.clone(),
+                choice_effort,
+                should_prompt_plan_mode_scope,
+            );
 
             items.push(SelectionItem {
                 name: effort_label,
@@ -962,6 +939,36 @@ impl ChatWidget {
                 is_current: is_current_model && Some(choice) == highlight_choice.as_ref(),
                 actions,
                 dismiss_on_select: true,
+                ..Default::default()
+            });
+        }
+
+        if !advanced_choices.is_empty() {
+            let advanced_label = advanced_choices
+                .iter()
+                .map(Self::reasoning_effort_label)
+                .collect::<Vec<_>>()
+                .join(" and ");
+            let verb = if advanced_choices.len() == 1 {
+                "consumes"
+            } else {
+                "consume"
+            };
+            let preset_for_action = preset;
+            let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
+                tx.send(AppEvent::OpenAdvancedReasoningPopup {
+                    model: preset_for_action.clone(),
+                });
+            })];
+            items.push(SelectionItem {
+                name: "More reasoning…".to_string(),
+                description: Some(format!("{advanced_label} {verb} usage limits faster")),
+                is_current: is_current_model
+                    && highlight_choice
+                        .as_ref()
+                        .is_some_and(Self::is_advanced_reasoning_effort),
+                actions,
+                dismiss_parent_on_child_accept: true,
                 ..Default::default()
             });
         }
@@ -985,33 +992,73 @@ impl ChatWidget {
         });
     }
 
-    fn reasoning_effort_label_for_model(model: &str, effort: &ReasoningEffortConfig) -> String {
-        if Self::uses_glm_reasoning_modes(model) {
-            return match effort {
-                ReasoningEffortConfig::High | ReasoningEffortConfig::XHigh => "Deep".to_string(),
-                ReasoningEffortConfig::Custom(value)
-                    if matches!(
-                        value.as_str(),
-                        "deep" | "max" | "xhigh" | "extra_high" | "extra-high"
-                    ) =>
-                {
-                    "Deep".to_string()
-                }
-                _ => "Standard".to_string(),
-            };
+    /// Open the explicit Max/Ultra effort picker for the given model.
+    pub(crate) fn open_advanced_reasoning_popup(&mut self, preset: ModelPreset) {
+        let mut choices = preset
+            .supported_reasoning_efforts
+            .iter()
+            .map(|option| option.effort.clone())
+            .filter(Self::is_advanced_reasoning_effort)
+            .collect::<Vec<_>>();
+        if choices.is_empty()
+            && Self::is_advanced_reasoning_effort(&preset.default_reasoning_effort)
+        {
+            choices.push(preset.default_reasoning_effort.clone());
+        }
+        choices.sort_by_key(|effort| matches!(effort, ReasoningEffortConfig::Ultra));
+        if choices.is_empty() {
+            return;
         }
 
-        Self::reasoning_effort_label(effort)
+        let model_slug = preset.model.to_string();
+        let is_current_model = self.current_model() == preset.model.as_str();
+        let highlight_choice = is_current_model
+            .then(|| self.effective_reasoning_effort())
+            .flatten();
+        let mut items = Vec::new();
+        for effort in choices {
+            let description = match &effort {
+                ReasoningEffortConfig::Max => {
+                    "For difficult problems when quality matters more than speed · higher usage"
+                }
+                ReasoningEffortConfig::Ultra => {
+                    "For demanding work using multiple agents · highest usage"
+                }
+                _ => unreachable!("advanced choices are limited to Max and Ultra"),
+            };
+            let should_prompt_plan_mode_scope = self
+                .should_prompt_plan_mode_reasoning_scope(model_slug.as_str(), Some(effort.clone()));
+            let actions = self.model_selection_actions(
+                model_slug.clone(),
+                Some(effort.clone()),
+                should_prompt_plan_mode_scope,
+            );
+
+            items.push(SelectionItem {
+                name: Self::reasoning_effort_label(&effort),
+                description: Some(description.to_string()),
+                is_current: is_current_model && Some(&effort) == highlight_choice.as_ref(),
+                actions,
+                dismiss_on_select: true,
+                ..Default::default()
+            });
+        }
+
+        let mut header = ColumnRenderable::new();
+        header.push(Line::from("Advanced Reasoning".bold()));
+        header.push(Line::from("⚠ Consumes usage limits faster".cyan()));
+        self.bottom_pane.show_selection_view(SelectionViewParams {
+            header: Box::new(header),
+            footer_hint: Some(standard_popup_hint_line()),
+            items,
+            ..Default::default()
+        });
     }
 
-    fn uses_glm_reasoning_modes(model: &str) -> bool {
+    pub(super) fn is_advanced_reasoning_effort(effort: &ReasoningEffortConfig) -> bool {
         matches!(
-            model,
-            AMBIENT_DEFAULT_MODEL
-                | AMBIENT_KIMI_K2_7_CODE_MODEL
-                | ZAI_DEFAULT_MODEL
-                | VERCEL_DEFAULT_MODEL
-                | VERCEL_GLM_5_2_FAST_MODEL
+            effort,
+            ReasoningEffortConfig::Max | ReasoningEffortConfig::Ultra
         )
     }
 
@@ -1023,6 +1070,8 @@ impl ChatWidget {
             ReasoningEffortConfig::Medium => "Medium".to_string(),
             ReasoningEffortConfig::High => "High".to_string(),
             ReasoningEffortConfig::XHigh => "Extra high".to_string(),
+            ReasoningEffortConfig::Max => "Max".to_string(),
+            ReasoningEffortConfig::Ultra => "Ultra".to_string(),
             ReasoningEffortConfig::Custom(value) => value.clone(),
         }
     }
@@ -1034,16 +1083,47 @@ impl ChatWidget {
         }
     }
 
+    pub(super) fn ultra_reasoning_concurrency_warning(
+        &self,
+        effort: &ReasoningEffortConfig,
+    ) -> Option<String> {
+        if effort != &ReasoningEffortConfig::Ultra {
+            return None;
+        }
+
+        let max_threads = self
+            .config
+            .multi_agent_v2
+            .max_concurrent_threads_per_session;
+        if max_threads < ULTRA_REASONING_CONCURRENCY_WARNING_THRESHOLD {
+            return None;
+        }
+
+        let max_subagents = max_threads.saturating_sub(1);
+        Some(format!(
+            "Ultra reasoning may proactively use multiple agents. This session is configured for \
+             {max_threads} concurrent threads with up to {max_subagents} subagents which can \
+             increase usage quickly. Consider setting \
+             features.multi_agent_v2.max_concurrent_threads_per_session below 8."
+        ))
+    }
+
     pub(super) fn apply_model_and_effort_without_persist(
         &self,
         model: String,
         effort: Option<ReasoningEffortConfig>,
     ) {
-        let provider = self.resolved_model_provider(&model);
-        self.app_event_tx
-            .send(AppEvent::UpdateModelSelection { model, provider });
+        let warning = effort
+            .as_ref()
+            .and_then(|effort| self.ultra_reasoning_concurrency_warning(effort));
+        self.app_event_tx.send(AppEvent::UpdateModel(model));
         self.app_event_tx
             .send(AppEvent::UpdateReasoningEffort(effort));
+        if let Some(warning) = warning {
+            self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+                history_cell::new_warning_event(warning),
+            )));
+        }
     }
 
     fn apply_model_and_effort(&self, model: String, effort: Option<ReasoningEffortConfig>) {

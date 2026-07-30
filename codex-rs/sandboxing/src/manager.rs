@@ -13,6 +13,7 @@ use crate::resolve_windows_elevated_filesystem_overrides;
 use crate::resolve_windows_restricted_token_filesystem_overrides;
 #[cfg(target_os = "windows")]
 use crate::windows_sandbox_uses_elevated_backend;
+use codex_network_proxy::ManagedNetworkSandboxContext;
 use codex_network_proxy::NetworkProxy;
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::AdditionalPermissionProfile;
@@ -99,6 +100,7 @@ pub struct SandboxCommand {
     pub args: Vec<String>,
     pub cwd: PathUri,
     pub env: HashMap<String, String>,
+    pub managed_network: Option<ManagedNetworkSandboxContext>,
     pub additional_permissions: Option<AdditionalPermissionProfile>,
 }
 
@@ -118,8 +120,6 @@ pub struct SandboxExecRequest {
     pub windows_sandbox_level: WindowsSandboxLevel,
     pub windows_sandbox_private_desktop: bool,
     pub permission_profile: PermissionProfile,
-    pub file_system_sandbox_policy: FileSystemSandboxPolicy,
-    pub network_sandbox_policy: NetworkSandboxPolicy,
     pub arg0: Option<String>,
 }
 
@@ -150,6 +150,7 @@ pub struct SandboxTransformRequest<'a> {
 pub struct SandboxDirectSpawnTransformRequest<'a> {
     pub transform: SandboxTransformRequest<'a>,
     pub workspace_roots: &'a [AbsolutePathBuf],
+    pub windows_sandbox_proxy_settings_mode: codex_windows_sandbox::WindowsSandboxProxySettingsMode,
 }
 
 // TODO(anp): Revisit this preparation type once this module's PathUri migration is complete.
@@ -157,8 +158,6 @@ struct PendingSandboxedExecRequest {
     native_command_cwd: AbsolutePathBuf,
     native_sandbox_policy_cwd: AbsolutePathBuf,
     effective_permission_profile: PermissionProfile,
-    effective_file_system_policy: FileSystemSandboxPolicy,
-    effective_network_policy: NetworkSandboxPolicy,
 }
 
 impl PendingSandboxedExecRequest {
@@ -186,14 +185,10 @@ impl PendingSandboxedExecRequest {
             managed_mitm_ca_trust_bundle_path,
             native_sandbox_policy_cwd.as_path(),
         );
-        let (effective_file_system_policy, effective_network_policy) =
-            effective_permission_profile.to_runtime_permissions();
         Ok(Self {
             native_command_cwd,
             native_sandbox_policy_cwd,
             effective_permission_profile,
-            effective_file_system_policy,
-            effective_network_policy,
         })
     }
 }
@@ -276,29 +271,38 @@ impl SandboxManager {
 
     pub fn select_initial(
         &self,
-        file_system_policy: &FileSystemSandboxPolicy,
-        network_policy: NetworkSandboxPolicy,
+        permission_profile: &PermissionProfile,
         pref: SandboxablePreference,
         windows_sandbox_level: WindowsSandboxLevel,
         has_managed_network_requirements: bool,
     ) -> SandboxType {
+        if self.should_sandbox(permission_profile, pref, has_managed_network_requirements) {
+            get_platform_sandbox(windows_sandbox_level != WindowsSandboxLevel::Disabled)
+                .unwrap_or(SandboxType::None)
+        } else {
+            SandboxType::None
+        }
+    }
+
+    /// Returns whether the request needs a sandbox, independently of whether
+    /// this host can provide a concrete sandbox implementation.
+    pub fn should_sandbox(
+        &self,
+        permission_profile: &PermissionProfile,
+        pref: SandboxablePreference,
+        has_managed_network_requirements: bool,
+    ) -> bool {
         match pref {
-            SandboxablePreference::Forbid => SandboxType::None,
-            SandboxablePreference::Require => {
-                get_platform_sandbox(windows_sandbox_level != WindowsSandboxLevel::Disabled)
-                    .unwrap_or(SandboxType::None)
-            }
+            SandboxablePreference::Forbid => false,
+            SandboxablePreference::Require => true,
             SandboxablePreference::Auto => {
-                if should_require_platform_sandbox(
-                    file_system_policy,
+                let (file_system_policy, network_policy) =
+                    permission_profile.to_runtime_permissions();
+                should_require_platform_sandbox(
+                    &file_system_policy,
                     network_policy,
                     has_managed_network_requirements,
-                ) {
-                    get_platform_sandbox(windows_sandbox_level != WindowsSandboxLevel::Disabled)
-                        .unwrap_or(SandboxType::None)
-                } else {
-                    SandboxType::None
-                }
+                )
             }
         }
     }
@@ -320,6 +324,8 @@ impl SandboxManager {
             windows_sandbox_level,
             windows_sandbox_private_desktop,
         } = request;
+        #[cfg(target_os = "macos")]
+        let managed_network = command.managed_network.as_ref();
         let additional_permissions = command.additional_permissions.take();
         let managed_mitm_ca_trust_bundle_path =
             network.and_then(NetworkProxy::managed_mitm_ca_trust_bundle_path);
@@ -331,8 +337,6 @@ impl SandboxManager {
             base_effective_permission_profile.clone(),
             managed_mitm_ca_trust_bundle_path.as_ref(),
         );
-        let (base_file_system_policy, base_network_policy) =
-            base_effective_permission_profile.to_runtime_permissions();
         let mut argv = Vec::with_capacity(1 + command.args.len());
         argv.push(command.program);
         argv.extend(command.args.into_iter().map(OsString::from));
@@ -346,12 +350,16 @@ impl SandboxManager {
                 use crate::seatbelt::create_seatbelt_command_args;
 
                 let pending = pending_sandboxed_request?;
+                let (file_system_sandbox_policy, network_sandbox_policy) = pending
+                    .effective_permission_profile
+                    .to_runtime_permissions();
                 let mut args = create_seatbelt_command_args(CreateSeatbeltCommandArgsParams {
                     command: os_argv_to_strings(argv),
-                    file_system_sandbox_policy: &pending.effective_file_system_policy,
-                    network_sandbox_policy: pending.effective_network_policy,
+                    file_system_sandbox_policy: &file_system_sandbox_policy,
+                    network_sandbox_policy,
                     sandbox_policy_cwd: pending.native_sandbox_policy_cwd.as_path(),
                     enforce_managed_network,
+                    managed_network,
                     environment_id,
                     network,
                     extra_allow_unix_sockets: &[],
@@ -371,7 +379,9 @@ impl SandboxManager {
                 let allow_proxy_network = allow_network_for_proxy(enforce_managed_network);
                 #[cfg(target_os = "linux")]
                 ensure_linux_bubblewrap_is_supported(
-                    &pending.effective_file_system_policy,
+                    &pending
+                        .effective_permission_profile
+                        .file_system_sandbox_policy(),
                     use_legacy_landlock,
                     allow_proxy_network,
                     is_wsl1(),
@@ -409,22 +419,11 @@ impl SandboxManager {
 
         // Unsandboxed exec-server requests may have foreign cwd values that cannot be prepared
         // locally, but their effective permissions must still be preserved. In that case, carry
-        // forward the base profile and its derived runtime policies.
-        let (permission_profile, file_system_sandbox_policy, network_sandbox_policy) =
-            pending_sandboxed_request.map_or(
-                (
-                    base_effective_permission_profile,
-                    base_file_system_policy,
-                    base_network_policy,
-                ),
-                |pending| {
-                    (
-                        pending.effective_permission_profile,
-                        pending.effective_file_system_policy,
-                        pending.effective_network_policy,
-                    )
-                },
-            );
+        // forward the base profile.
+        let permission_profile = pending_sandboxed_request
+            .map_or(base_effective_permission_profile, |pending| {
+                pending.effective_permission_profile
+            });
 
         Ok(SandboxExecRequest {
             command: argv,
@@ -437,8 +436,6 @@ impl SandboxManager {
             windows_sandbox_level,
             windows_sandbox_private_desktop,
             permission_profile,
-            file_system_sandbox_policy,
-            network_sandbox_policy,
             arg0: arg0_override,
         })
     }
@@ -467,12 +464,14 @@ impl SandboxManager {
         codex_home: &Path,
     ) -> Result<SandboxExecRequest, SandboxTransformError> {
         let workspace_roots = request.workspace_roots;
+        let proxy_settings_mode = request.windows_sandbox_proxy_settings_mode;
         let mut request = self.transform(request.transform)?;
         if request.sandbox == SandboxType::WindowsRestrictedToken {
             wrap_windows_sandbox_exec_request_for_direct_spawn(
                 &mut request,
                 workspace_roots,
                 codex_home,
+                proxy_settings_mode,
             )?;
         }
         Ok(request)
@@ -484,6 +483,7 @@ fn wrap_windows_sandbox_exec_request_for_direct_spawn(
     request: &mut SandboxExecRequest,
     workspace_roots: &[AbsolutePathBuf],
     codex_home: &Path,
+    proxy_settings_mode: codex_windows_sandbox::WindowsSandboxProxySettingsMode,
 ) -> Result<(), SandboxTransformError> {
     // TODO(anp): Keep PathUri through the Windows sandbox wrapper boundary.
     let native_cwd =
@@ -511,6 +511,19 @@ fn wrap_windows_sandbox_exec_request_for_direct_spawn(
 
     let inner_command = std::mem::take(&mut request.command);
     let proxy_enforced = request.network.is_some();
+    let network_proxy_restricting_sid = request
+        .network
+        .as_ref()
+        .map(|network| {
+            network
+                .network_proxy_restricting_sid(request.network_environment_id.as_deref())
+                .ok_or_else(|| {
+                    SandboxTransformError::WindowsSandboxPreparation(
+                        "managed Windows proxy route is missing its restricting SID".to_string(),
+                    )
+                })
+        })
+        .transpose()?;
     let use_elevated =
         windows_sandbox_uses_elevated_backend(request.windows_sandbox_level, proxy_enforced);
     let overrides = if use_elevated {
@@ -555,6 +568,8 @@ fn wrap_windows_sandbox_exec_request_for_direct_spawn(
             request.windows_sandbox_level,
             request.windows_sandbox_private_desktop,
             proxy_enforced,
+            network_proxy_restricting_sid.as_deref(),
+            proxy_settings_mode,
             read_roots_override,
             read_roots_include_platform_defaults,
             write_roots_override,

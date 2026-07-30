@@ -11,7 +11,7 @@ The builder creates a canonical package directory inherited from Codex:
 ├── codex-package.json
 ├── bin
 │   ├── <entrypoint>[.exe]
-│   └── <required companion binaries>[.exe]
+│   └── codex-code-mode-host[.exe]
 ├── codex-resources
 │   ├── bwrap                             # Linux only
 │   ├── zsh/bin/zsh                       # supported Unix targets only
@@ -49,8 +49,7 @@ grouped `cargo build` command per package when they are needed and no prebuilt
 override was provided:
 
 - all targets: the selected entrypoint, unless `--entrypoint-bin` is provided
-- variant-specific companion binaries, unless matching `--extra-bin` values
-  are provided (`pfterminal-walletd` is required by the `pfterminal` variant)
+- all targets: `codex-code-mode-host`, unless `--code-mode-host-bin` is provided
 - Linux targets: `bwrap`, unless `--bwrap-bin` is provided
 - Windows targets: `codex-command-runner` and `codex-windows-sandbox-setup`,
   unless the corresponding prebuilt helper flags are provided
@@ -60,6 +59,9 @@ fast, small builds. Release jobs should pass `--cargo-profile release` and an
 explicit target. Release jobs that already built and signed/notarized the
 entrypoint should pass `--entrypoint-bin` so the package contains that exact
 binary instead of rebuilding it.
+
+Release jobs should likewise pass `--code-mode-host-bin` so the package contains
+the signed host executable beside the signed entrypoint.
 
 Release jobs that already built package resource binaries should also pass the
 corresponding resource flags: `--bwrap-bin` for Linux packages, and
@@ -84,4 +86,6 @@ The patched zsh fork used by `shell_zsh_fork` is fetched from the DotSlash
 manifest at `scripts/codex_package/codex-zsh` when the selected target has a
 matching prebuilt artifact. Downloaded archives are cached under
 `$TMPDIR/codex-package/<target>-zsh` and installed at
-`codex-resources/zsh/bin/zsh`.
+`codex-resources/zsh/bin/zsh`. Pass `--zsh-bin` to package a prebuilt, signed
+executable, or `--zsh-manifest` to use a different DotSlash manifest, such as
+the manifest published with a standalone zsh artifact release.

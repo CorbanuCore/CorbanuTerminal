@@ -2,6 +2,9 @@
 
 use crate::agent::AgentStatus;
 use crate::agent::agent_resolver::resolve_agent_target;
+use crate::context::ContextualUserFragment;
+use crate::context::InterAgentMessage;
+use crate::context::InterAgentMessageType;
 use crate::function_tool::FunctionCallError;
 use crate::session::turn_context::TurnContext;
 use crate::tools::context::ToolInvocation;
@@ -15,14 +18,15 @@ use crate::tools::registry::ToolExecutor;
 #[cfg(test)]
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_protocol::AgentPath;
+use codex_protocol::items::CollabAgentTool;
+use codex_protocol::items::CollabAgentToolCallItem;
+use codex_protocol::items::CollabAgentToolCallStatus;
+use codex_protocol::items::SubAgentActivityItem;
+use codex_protocol::items::TurnItem;
 use codex_protocol::models::ResponseInputItem;
 use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::CollabWaitingBeginEvent;
-use codex_protocol::protocol::CollabWaitingEndEvent;
 use codex_protocol::protocol::InterAgentCommunication;
-use codex_protocol::protocol::SubAgentActivityEvent;
 use codex_protocol::protocol::SubAgentActivityKind;
-use codex_protocol::user_input::UserInput;
 use codex_tools::ToolName;
 use serde::Deserialize;
 use serde::Serialize;
@@ -43,23 +47,43 @@ mod send_message;
 mod spawn;
 pub(crate) mod wait;
 
-pub(super) fn communication_from_model_tool_message(
+pub(crate) async fn emit_sub_agent_activity(
+    session: &crate::session::session::Session,
+    turn: &crate::session::turn_context::TurnContext,
+    item: SubAgentActivityItem,
+) {
+    let item = TurnItem::SubAgentActivity(item);
+    session.emit_turn_item_started(turn, &item).await;
+    session.emit_turn_item_completed(turn, item).await;
+}
+
+fn communication_from_tool_message(
     author: AgentPath,
     recipient: AgentPath,
     message: String,
-    _provider_id: &str,
+    source: &crate::tools::context::ToolCallSource,
+    trigger_turn: bool,
 ) -> InterAgentCommunication {
-    // A durable heterogeneous mailbox must be able to deliver the same message to any provider.
-    // OpenAI's encrypted-string tool extension produces an opaque value that non-OpenAI
-    // recipients cannot consume, so the canonical V2 bus intentionally carries bounded
-    // plaintext and keeps it out of previews and logs.
-    InterAgentCommunication::new(
-        author,
-        recipient,
-        Vec::new(),
-        message,
-        /*trigger_turn*/ true,
-    )
+    if !matches!(
+        source,
+        crate::tools::context::ToolCallSource::DirectPlaintextMessage
+    ) {
+        return InterAgentCommunication::new_encrypted(
+            author,
+            recipient,
+            Vec::new(),
+            message,
+            trigger_turn,
+        );
+    }
+    let message_type = if trigger_turn {
+        InterAgentMessageType::NewTask
+    } else {
+        InterAgentMessageType::Message
+    };
+    let content =
+        InterAgentMessage::new(message_type, recipient.clone(), author.clone(), message).render();
+    InterAgentCommunication::new(author, recipient, Vec::new(), content, trigger_turn)
 }
 
 pub(super) fn ensure_manager_tool_allowed(

@@ -21,15 +21,21 @@ curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install
 
 ### Windows
 
-Run the native installer from PowerShell. Do not use the Linux `curl ... | sh`
-command in PowerShell; Windows PowerShell maps `curl` to `Invoke-WebRequest`,
-which does not support curl's `-fsSL` flags.
-
-```powershell
-Invoke-RestMethod https://github.com/agtico/PfTerminal/releases/latest/download/install.ps1 | Invoke-Expression
+```shell
+powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
 ```
 
-If you are working inside WSL2, use the Linux command instead.
+The standalone installers download from `https://releases.openai.com/codex` by default and fall back to GitHub Releases if a metadata or asset download is unavailable. To force GitHub Releases, set `CODEX_INSTALLER_USE_RELEASES_OPENAI_COM` to `false` (`0` and `no` are also accepted):
+
+```shell
+curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_INSTALLER_USE_RELEASES_OPENAI_COM=false sh
+```
+
+```powershell
+$env:CODEX_INSTALLER_USE_RELEASES_OPENAI_COM='false'; irm https://chatgpt.com/codex/install.ps1 | iex
+```
+
+Codex CLI can also be installed via the following package managers:
 
 ### macOS
 

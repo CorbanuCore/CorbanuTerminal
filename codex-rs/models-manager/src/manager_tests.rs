@@ -1,21 +1,16 @@
 use super::*;
 use crate::ModelsManagerConfig;
 use chrono::Utc;
-use codex_app_server_protocol::AuthMode;
+use codex_http_client::HttpClientFactory;
+use codex_http_client::OutboundProxyPolicy;
 use codex_login::AuthCredentialsStoreMode;
 use codex_login::AuthKeyringBackendKind;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_login::ExternalAuth;
 use codex_login::ExternalAuthRefreshContext;
-use codex_login::ExternalAuthTokens;
 use codex_login::TokenData;
-use codex_protocol::openai_models::ChatReasoningProtocol;
-use codex_protocol::openai_models::InputModality;
-use codex_protocol::openai_models::ModelBilling;
-use codex_protocol::openai_models::ModelCapabilityTier;
-use codex_protocol::openai_models::ModelOrchestrationMetadata;
-use codex_protocol::openai_models::ModelVisibility;
+use codex_protocol::auth::AuthMode;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
@@ -32,15 +27,8 @@ use tempfile::tempdir;
 #[path = "model_info_overrides_tests.rs"]
 mod model_info_overrides_tests;
 
-const STANDARD_BASE: &str = include_str!("../../core/src/agent/builtins/standard_base.md");
-const STANDARD_BASE_OUTCOME_MARKER: &str = "inspect code before changing it, keep edits scoped";
-const STANDARD_BASE_EVIDENCE_MARKER: &str = "only narrate when needed";
-const OLD_STANDARD_BASE_MARKER: &str = "Narrate as you work";
-const GPT55_GUIDE_MARKER: &str = "vivid inner life";
-
-fn assert_standard_base(actual: &str) {
-    assert_eq!(actual.trim_end(), STANDARD_BASE.trim_end());
-}
+const DEFAULT_HTTP_CLIENT_FACTORY: HttpClientFactory =
+    HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault);
 
 fn remote_model(slug: &str, display: &str, priority: i32) -> ModelInfo {
     remote_model_with_visibility(slug, display, priority, "list")
@@ -65,7 +53,6 @@ fn remote_model_with_visibility(
             "priority": priority,
             "upgrade": null,
             "base_instructions": "base instructions",
-            "supports_reasoning_summaries": false,
             "support_verbosity": false,
             "default_verbosity": null,
             "apply_patch_tool_type": null,
@@ -95,6 +82,7 @@ struct TestModelsEndpoint {
     uses_codex_backend: bool,
     responses: Mutex<VecDeque<Vec<ModelInfo>>>,
     fetch_count: AtomicUsize,
+    observed_proxy_policy: Mutex<Option<OutboundProxyPolicy>>,
 }
 
 impl TestModelsEndpoint {
@@ -104,6 +92,7 @@ impl TestModelsEndpoint {
             uses_codex_backend: true,
             responses: Mutex::new(responses.into()),
             fetch_count: AtomicUsize::new(0),
+            observed_proxy_policy: Mutex::new(None),
         })
     }
 
@@ -113,11 +102,19 @@ impl TestModelsEndpoint {
             uses_codex_backend: false,
             responses: Mutex::new(responses.into()),
             fetch_count: AtomicUsize::new(0),
+            observed_proxy_policy: Mutex::new(None),
         })
     }
 
     fn fetch_count(&self) -> usize {
         self.fetch_count.load(Ordering::SeqCst)
+    }
+
+    fn observed_proxy_policy(&self) -> Option<OutboundProxyPolicy> {
+        *self
+            .observed_proxy_policy
+            .lock()
+            .expect("observed proxy policy lock should not be poisoned")
     }
 
     async fn list_models(&self) -> CoreResult<(Vec<ModelInfo>, Option<String>)> {
@@ -136,27 +133,15 @@ impl TestModelsEndpoint {
 struct TestExternalApiKeyAuth;
 
 impl ExternalAuth for TestExternalApiKeyAuth {
-    fn auth_mode(&self) -> AuthMode {
-        AuthMode::ApiKey
-    }
-
-    fn resolve(&self) -> codex_login::ExternalAuthFuture<'_, Option<ExternalAuthTokens>> {
-        Box::pin(async {
-            Ok(Some(ExternalAuthTokens::access_token_only(
-                "test-external-api-key",
-            )))
-        })
+    fn resolve(&self) -> codex_login::ExternalAuthFuture<'_, CodexAuth> {
+        Box::pin(async { Ok(CodexAuth::from_api_key("test-external-api-key")) })
     }
 
     fn refresh(
         &self,
         _context: ExternalAuthRefreshContext,
-    ) -> codex_login::ExternalAuthFuture<'_, ExternalAuthTokens> {
-        Box::pin(async {
-            Ok(ExternalAuthTokens::access_token_only(
-                "test-external-api-key",
-            ))
-        })
+    ) -> codex_login::ExternalAuthFuture<'_, CodexAuth> {
+        Box::pin(async { Ok(CodexAuth::from_api_key("test-external-api-key")) })
     }
 }
 
@@ -164,14 +149,14 @@ impl ExternalAuth for TestExternalApiKeyAuth {
 struct TestUnresolvedExternalApiKeyAuth;
 
 impl ExternalAuth for TestUnresolvedExternalApiKeyAuth {
-    fn auth_mode(&self) -> AuthMode {
-        AuthMode::ApiKey
+    fn resolve(&self) -> codex_login::ExternalAuthFuture<'_, CodexAuth> {
+        Box::pin(async { Err(std::io::Error::other("unresolved test auth")) })
     }
 
     fn refresh(
         &self,
         _context: ExternalAuthRefreshContext,
-    ) -> codex_login::ExternalAuthFuture<'_, ExternalAuthTokens> {
+    ) -> codex_login::ExternalAuthFuture<'_, CodexAuth> {
         Box::pin(async { Err(std::io::Error::other("unresolved test auth")) })
     }
 }
@@ -188,8 +173,16 @@ impl ModelsEndpointClient for TestModelsEndpoint {
     fn list_models<'a>(
         &'a self,
         _client_version: &'a str,
+        http_client_factory: HttpClientFactory,
     ) -> ModelsEndpointFuture<'a, CoreResult<(Vec<ModelInfo>, Option<String>)>> {
-        Box::pin(TestModelsEndpoint::list_models(self))
+        Box::pin(async move {
+            *self
+                .observed_proxy_policy
+                .lock()
+                .expect("observed proxy policy lock should not be poisoned") =
+                Some(http_client_factory.outbound_proxy_policy());
+            TestModelsEndpoint::list_models(self).await
+        })
     }
 }
 
@@ -216,6 +209,36 @@ fn openai_manager_for_tests_with_auth(
 
 fn static_manager_for_tests(model_catalog: ModelsResponse) -> StaticModelsManager {
     StaticModelsManager::new(/*auth_manager*/ None, model_catalog)
+}
+
+#[tokio::test]
+async fn manager_without_cache_fetches_on_every_refresh() {
+    let remote_models = vec![remote_model("remote", "Remote", /*priority*/ 0)];
+    let endpoint = TestModelsEndpoint::new(vec![remote_models.clone(), remote_models.clone()]);
+    let manager = OpenAiModelsManager::new_without_cache(
+        endpoint.clone(),
+        Some(AuthManager::from_auth_for_testing(
+            CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+        )),
+    );
+
+    let catalog = manager
+        .raw_model_catalog(
+            RefreshStrategy::OnlineIfUncached,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
+        .await;
+    let second_catalog = manager
+        .raw_model_catalog(
+            RefreshStrategy::OnlineIfUncached,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
+        .await;
+
+    assert_eq!(catalog.models, remote_models);
+    assert_eq!(second_catalog, catalog);
+    assert_eq!(manager.get_remote_models().await, remote_models);
+    assert_eq!(endpoint.fetch_count(), 2);
 }
 
 async fn chatgpt_auth_tokens_for_tests(codex_home: &Path) -> CodexAuth {
@@ -250,10 +273,115 @@ c2ln",
         AuthCredentialsStoreMode::File,
         /*chatgpt_base_url*/ None,
         AuthKeyringBackendKind::default(),
+        &codex_login::test_support::transport_default_auth_route_config(),
     )
     .await
     .expect("auth should load")
     .expect("auth should be present")
+}
+
+#[tokio::test]
+async fn static_manager_preserves_supported_requested_model_when_fallback_is_allowed() {
+    let manager = static_manager_for_tests(ModelsResponse {
+        models: vec![
+            remote_model("provider-default", "Default", /*priority*/ 0),
+            remote_model("provider-supported", "Supported", /*priority*/ 1),
+        ],
+    });
+    let requested_model = Some("provider-supported".to_string());
+
+    let model = manager
+        .get_default_model(
+            &requested_model,
+            /*allow_provider_model_fallback*/ true,
+            RefreshStrategy::Offline,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
+        .await;
+
+    assert_eq!(model, "provider-supported");
+}
+
+#[tokio::test]
+async fn static_manager_falls_back_from_unsupported_requested_model_when_allowed() {
+    let manager = static_manager_for_tests(ModelsResponse {
+        models: vec![
+            remote_model("provider-default", "Default", /*priority*/ 0),
+            remote_model("provider-supported", "Supported", /*priority*/ 1),
+        ],
+    });
+    let requested_model = Some("unsupported".to_string());
+
+    let model = manager
+        .get_default_model(
+            &requested_model,
+            /*allow_provider_model_fallback*/ true,
+            RefreshStrategy::Offline,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
+        .await;
+
+    assert_eq!(model, "provider-default");
+}
+
+#[tokio::test]
+async fn static_manager_preserves_unsupported_requested_model_when_fallback_is_disabled() {
+    let manager = static_manager_for_tests(ModelsResponse {
+        models: vec![remote_model(
+            "provider-default",
+            "Default",
+            /*priority*/ 0,
+        )],
+    });
+    let requested_model = Some("unsupported".to_string());
+
+    let model = manager
+        .get_default_model(
+            &requested_model,
+            /*allow_provider_model_fallback*/ false,
+            RefreshStrategy::Offline,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
+        .await;
+
+    assert_eq!(model, "unsupported");
+}
+
+#[tokio::test]
+async fn static_manager_uses_empty_default_when_fallback_is_allowed_and_catalog_is_empty() {
+    let manager = static_manager_for_tests(ModelsResponse { models: Vec::new() });
+    let requested_model = Some("unsupported".to_string());
+
+    let model = manager
+        .get_default_model(
+            &requested_model,
+            /*allow_provider_model_fallback*/ true,
+            RefreshStrategy::Offline,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
+        .await;
+
+    assert_eq!(model, "");
+}
+
+#[tokio::test]
+async fn dynamic_manager_preserves_requested_model_when_fallback_is_allowed() {
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(Vec::new());
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
+    let requested_model = Some("unsupported".to_string());
+
+    let model = manager
+        .get_default_model(
+            &requested_model,
+            /*allow_provider_model_fallback*/ true,
+            RefreshStrategy::Online,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
+        .await;
+
+    assert_eq!(model, "unsupported");
+    assert_eq!(endpoint.fetch_count(), 0);
 }
 
 #[tokio::test]
@@ -370,14 +498,17 @@ async fn refresh_available_models_sorts_by_priority() {
     let endpoint = TestModelsEndpoint::new(vec![remote_models.clone()]);
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
 
-    manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
-        .await
-        .expect("refresh succeeds");
-    let cached_remote = manager.get_remote_models().await;
-    assert_models_contain(&cached_remote, &remote_models);
-
-    let available = manager.list_models(RefreshStrategy::OnlineIfUncached).await;
+    let available = manager
+        .list_models(
+            RefreshStrategy::Online,
+            HttpClientFactory::new(OutboundProxyPolicy::RespectSystemProxy),
+        )
+        .await;
+    assert_models_contain(&manager.get_remote_models().await, &remote_models);
+    assert_eq!(
+        endpoint.observed_proxy_policy(),
+        Some(OutboundProxyPolicy::RespectSystemProxy)
+    );
     let high_idx = available
         .iter()
         .position(|model| model.model == "priority-high")
@@ -407,7 +538,10 @@ async fn refresh_available_models_merges_chatgpt_remote_with_bundled_catalog() {
     expected.extend(remote_models);
 
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("refresh succeeds");
 
@@ -428,7 +562,10 @@ async fn refresh_available_models_merges_cached_chatgpt_remote_with_bundled_cata
         openai_manager_for_tests(codex_home.path().to_path_buf(), fetch_endpoint.clone());
 
     fetch_manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("initial refresh succeeds");
 
@@ -439,7 +576,10 @@ async fn refresh_available_models_merges_cached_chatgpt_remote_with_bundled_cata
     expected.extend(remote_models);
 
     cache_manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("cached refresh succeeds");
 
@@ -554,7 +694,10 @@ async fn get_model_info_keeps_bundled_models_when_chatgpt_remote_is_present() {
         .clone();
 
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("refresh succeeds");
 
@@ -574,7 +717,10 @@ async fn refresh_available_models_preserves_bundled_catalog_for_empty_chatgpt_re
     let expected = load_remote_models_from_file().expect("bundled models should parse");
 
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("refresh succeeds");
 
@@ -744,7 +890,10 @@ async fn refresh_available_models_merges_hidden_only_chatgpt_remote_with_bundled
     expected.push(hidden_remote);
 
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("refresh succeeds");
 
@@ -764,6 +913,7 @@ async fn refresh_available_models_keeps_merging_for_api_auth() {
         uses_codex_backend: false,
         responses: Mutex::new(vec![remote_models.clone()].into()),
         fetch_count: AtomicUsize::new(0),
+        observed_proxy_policy: Mutex::new(None),
     });
     let manager = openai_manager_for_tests_with_auth(
         codex_home.path().to_path_buf(),
@@ -776,7 +926,10 @@ async fn refresh_available_models_keeps_merging_for_api_auth() {
     expected.extend(remote_models);
 
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("refresh succeeds");
 
@@ -792,14 +945,20 @@ async fn refresh_available_models_uses_cache_when_fresh() {
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
 
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("first refresh succeeds");
     assert_models_contain(&manager.get_remote_models().await, &remote_models);
 
     // Second call should read from cache and avoid the network.
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("cached refresh succeeds");
     assert_models_contain(&manager.get_remote_models().await, &remote_models);
@@ -819,13 +978,18 @@ async fn refresh_available_models_refetches_when_cache_stale() {
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
 
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("initial refresh succeeds");
 
     // Rewrite cache with an old timestamp so it is treated as stale.
     manager
         .cache_manager
+        .as_ref()
+        .expect("cached model manager")
         .manipulate_cache_for_test(|fetched_at| {
             *fetched_at = Utc::now() - chrono::Duration::hours(1);
         })
@@ -833,7 +997,10 @@ async fn refresh_available_models_refetches_when_cache_stale() {
         .expect("cache manipulation succeeds");
 
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("second refresh succeeds");
     assert_models_contain(&manager.get_remote_models().await, &updated_models);
@@ -853,12 +1020,17 @@ async fn refresh_available_models_refetches_when_version_mismatch() {
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
 
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("initial refresh succeeds");
 
     manager
         .cache_manager
+        .as_ref()
+        .expect("cached model manager")
         .mutate_cache_for_test(|cache| {
             let client_version = crate::client_version_to_whole();
             cache.client_version = Some(format!("{client_version}-mismatch"));
@@ -867,7 +1039,10 @@ async fn refresh_available_models_refetches_when_version_mismatch() {
         .expect("cache mutation succeeds");
 
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("second refresh succeeds");
     assert_models_contain(&manager.get_remote_models().await, &updated_models);
@@ -893,15 +1068,25 @@ async fn refresh_available_models_drops_removed_remote_models() {
     )];
     let endpoint = TestModelsEndpoint::new(vec![initial_models, refreshed_models]);
     let mut manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
-    manager.cache_manager.set_ttl(Duration::ZERO);
+    manager
+        .cache_manager
+        .as_mut()
+        .expect("cached model manager")
+        .set_ttl(Duration::ZERO);
 
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("initial refresh succeeds");
 
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("second refresh succeeds");
 
@@ -939,7 +1124,7 @@ async fn refresh_available_models_skips_network_without_chatgpt_auth() {
     );
 
     manager
-        .refresh_available_models(RefreshStrategy::Online)
+        .refresh_available_models(RefreshStrategy::Online, &DEFAULT_HTTP_CLIENT_FACTORY)
         .await
         .expect("refresh should no-op without chatgpt auth");
     let cached_remote = manager.get_remote_models().await;
@@ -1011,6 +1196,7 @@ impl ModelsEndpointClient for TestAuthAwareModelsEndpoint {
     fn list_models<'a>(
         &'a self,
         _client_version: &'a str,
+        _http_client_factory: HttpClientFactory,
     ) -> ModelsEndpointFuture<'a, CoreResult<(Vec<ModelInfo>, Option<String>)>> {
         Box::pin(TestAuthAwareModelsEndpoint::list_models(self))
     }
@@ -1022,7 +1208,10 @@ async fn refresh_available_models_skips_network_when_external_api_key_overrides_
     let codex_home = tempdir().expect("temp dir");
     let auth_manager =
         AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
-    auth_manager.set_external_auth(Arc::new(TestExternalApiKeyAuth));
+    auth_manager
+        .set_external_auth(Arc::new(TestExternalApiKeyAuth))
+        .await
+        .expect("external API key auth should resolve");
     let endpoint = TestAuthAwareModelsEndpoint::new(
         Some(Arc::clone(&auth_manager)),
         vec![vec![remote_model(
@@ -1038,7 +1227,7 @@ async fn refresh_available_models_skips_network_when_external_api_key_overrides_
     );
 
     manager
-        .refresh_available_models(RefreshStrategy::Online)
+        .refresh_available_models(RefreshStrategy::Online, &DEFAULT_HTTP_CLIENT_FACTORY)
         .await
         .expect("refresh should no-op with API key auth");
     let cached_remote = manager.get_remote_models().await;
@@ -1062,7 +1251,10 @@ async fn refresh_available_models_uses_cached_chatgpt_when_external_api_key_is_u
     let codex_home = tempdir().expect("temp dir");
     let auth_manager =
         AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
-    auth_manager.set_external_auth(Arc::new(TestUnresolvedExternalApiKeyAuth));
+    auth_manager
+        .set_external_auth(Arc::new(TestUnresolvedExternalApiKeyAuth))
+        .await
+        .expect_err("unresolved external auth should be rejected");
     let endpoint = TestAuthAwareModelsEndpoint::new(
         Some(Arc::clone(&auth_manager)),
         vec![vec![remote_model(
@@ -1078,7 +1270,7 @@ async fn refresh_available_models_uses_cached_chatgpt_when_external_api_key_is_u
     );
 
     manager
-        .refresh_available_models(RefreshStrategy::Online)
+        .refresh_available_models(RefreshStrategy::Online, &DEFAULT_HTTP_CLIENT_FACTORY)
         .await
         .expect("refresh should fall back to cached ChatGPT auth");
 
@@ -1114,7 +1306,7 @@ async fn refresh_available_models_fetches_with_chatgpt_auth_tokens() {
     );
 
     manager
-        .refresh_available_models(RefreshStrategy::Online)
+        .refresh_available_models(RefreshStrategy::Online, &DEFAULT_HTTP_CLIENT_FACTORY)
         .await
         .expect("refresh should fetch with ChatGPT auth tokens");
 
@@ -1168,7 +1360,9 @@ async fn static_manager_reads_latest_auth_mode() {
         },
     );
 
-    let chatgpt_models = manager.list_models(RefreshStrategy::Online).await;
+    let chatgpt_models = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
     assert_eq!(
         chatgpt_models
             .iter()
@@ -1177,8 +1371,13 @@ async fn static_manager_reads_latest_auth_mode() {
         vec!["chatgpt-only", "api-model"]
     );
 
-    auth_manager.set_external_auth(Arc::new(TestExternalApiKeyAuth));
-    let api_models = manager.list_models(RefreshStrategy::Online).await;
+    auth_manager
+        .set_external_auth(Arc::new(TestExternalApiKeyAuth))
+        .await
+        .expect("external API key auth should resolve");
+    let api_models = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
 
     assert_eq!(
         api_models

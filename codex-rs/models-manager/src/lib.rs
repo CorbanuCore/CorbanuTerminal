@@ -6,7 +6,7 @@ pub mod model_info;
 pub mod model_presets;
 pub mod test_support;
 
-pub use codex_app_server_protocol::AuthMode;
+pub use codex_protocol::auth::AuthMode;
 pub use config::ModelsManagerConfig;
 
 /// OpenAI backend compatibility version for `/models` catalog requests.
