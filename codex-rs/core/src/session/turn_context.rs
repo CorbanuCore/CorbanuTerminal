@@ -132,6 +132,20 @@ pub(crate) struct ExplicitToolBudgetState {
     shell_commands_used: AtomicU64,
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct MalformedToolCallState {
+    counts: Mutex<HashMap<String, u8>>,
+}
+
+impl MalformedToolCallState {
+    async fn record(&self, signature: String) -> u8 {
+        let mut counts = self.counts.lock().await;
+        let count = counts.entry(signature).or_insert(0);
+        *count = count.saturating_add(1);
+        *count
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct TurnEnvironment {
     pub(crate) environment_id: String,
@@ -235,6 +249,7 @@ pub struct TurnContext {
     pub(crate) terminal_error: Arc<Mutex<Option<String>>>,
     pub(crate) model_edit_protocol_state: Arc<ModelEditProtocolState>,
     pub(crate) explicit_tool_budget_state: Arc<ExplicitToolBudgetState>,
+    pub(crate) malformed_tool_call_state: Arc<MalformedToolCallState>,
     pub(crate) server_model_warning_emitted: AtomicBool,
     pub(crate) provider_cache_pressure_warning_emitted: AtomicBool,
     pub(crate) model_verification_emitted: AtomicBool,
@@ -316,6 +331,10 @@ impl TurnContext {
 
     pub(crate) fn structured_edit_fallback_enabled(&self) -> bool {
         self.model_edit_protocol_state.fallback_enabled()
+    }
+
+    pub(crate) async fn record_malformed_tool_call(&self, signature: String) -> u8 {
+        self.malformed_tool_call_state.record(signature).await
     }
 
     pub(crate) fn set_explicit_shell_command_budget(&self, limit: u64) {
@@ -460,6 +479,7 @@ impl TurnContext {
             terminal_error: Arc::clone(&self.terminal_error),
             model_edit_protocol_state: Arc::clone(&self.model_edit_protocol_state),
             explicit_tool_budget_state: Arc::clone(&self.explicit_tool_budget_state),
+            malformed_tool_call_state: Arc::clone(&self.malformed_tool_call_state),
             server_model_warning_emitted: AtomicBool::new(
                 self.server_model_warning_emitted.load(Ordering::Relaxed),
             ),
@@ -783,6 +803,7 @@ impl Session {
             terminal_error: Arc::new(Mutex::new(None)),
             model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
             explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
+            malformed_tool_call_state: Arc::new(MalformedToolCallState::default()),
             server_model_warning_emitted: AtomicBool::new(false),
             provider_cache_pressure_warning_emitted: AtomicBool::new(false),
             model_verification_emitted: AtomicBool::new(false),

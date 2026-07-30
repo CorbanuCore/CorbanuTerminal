@@ -1255,6 +1255,83 @@ fn anthropic_replays_signed_thinking_blocks() {
 }
 
 #[test]
+fn anthropic_replay_omits_signed_response_with_malformed_tool_call() {
+    let mut messages = Vec::new();
+    let mut skipped = std::collections::HashSet::new();
+    super::append_anthropic_message_for_response_item(
+        ResponseItem::Reasoning {
+            id: Some("rs_cutoff".to_string()),
+            summary: Vec::<ReasoningItemReasoningSummary>::new(),
+            content: Some(vec![ReasoningItemContent::ReasoningText {
+                text: "writing the engine".to_string(),
+            }]),
+            encrypted_content: None,
+            anthropic_content_block: Some(json!({
+                "type": "thinking",
+                "thinking": "writing the engine",
+                "signature": "sig-cutoff"
+            })),
+            metadata: None,
+        },
+        &mut messages,
+        &mut skipped,
+    );
+    super::append_anthropic_message_for_response_item(
+        ResponseItem::FunctionCall {
+            id: Some("fc_cutoff".to_string()),
+            name: "structured_write".to_string(),
+            namespace: None,
+            arguments: "{\"path\":\"runtime/engine.js\",\"mode\":\"overwrite\"".to_string(),
+            call_id: "toolu_cutoff".to_string(),
+            metadata: None,
+        },
+        &mut messages,
+        &mut skipped,
+    );
+    super::append_anthropic_message_for_response_item(
+        ResponseItem::FunctionCallOutput {
+            id: None,
+            call_id: "toolu_cutoff".to_string(),
+            output: FunctionCallOutputPayload::from_text("malformed arguments".to_string()),
+            metadata: None,
+        },
+        &mut messages,
+        &mut skipped,
+    );
+
+    assert!(
+        messages.is_empty(),
+        "the incomplete signed response and its coupled tool output must be omitted together"
+    );
+}
+
+#[test]
+fn anthropic_replay_omits_reasoning_only_signed_response() {
+    let mut messages = vec![
+        json!({"role": "user", "content": [{"type": "text", "text": "write the engine"}]}),
+        json!({
+            "role": "assistant",
+            "content": [{
+                "type": "thinking",
+                "thinking": "partial",
+                "signature": "sig-partial"
+            }],
+        }),
+    ];
+
+    assert!(super::remove_latest_signed_thinking_only_assistant_message(
+        &mut messages
+    ));
+    assert_eq!(
+        messages,
+        vec![json!({
+            "role": "user",
+            "content": [{"type": "text", "text": "write the engine"}]
+        })]
+    );
+}
+
+#[test]
 fn chat_replay_drops_anthropic_reasoning_blocks() {
     let thinking_block = json!({
         "type": "thinking",

@@ -127,6 +127,10 @@ use tracing::instrument;
 use tracing::trace;
 use tracing::warn;
 
+use crate::anthropic_payload::ANTHROPIC_MESSAGES_REQUEST_BUDGET_BYTES;
+use crate::anthropic_payload::ANTHROPIC_MESSAGES_RETRY_BUDGET_BYTES;
+use crate::anthropic_payload::enforce_anthropic_payload_budget;
+use crate::anthropic_payload::is_anthropic_payload_too_large;
 use crate::attestation::AttestationContext;
 use crate::attestation::AttestationProvider;
 use crate::attestation::X_OAI_ATTESTATION_HEADER;
@@ -1666,7 +1670,9 @@ impl ModelClient {
                 &mut skipped_tool_call_ids,
             );
         }
-        if repair_incomplete_latest_assistant {
+        let removed_incomplete_signed_response =
+            remove_latest_signed_thinking_only_assistant_message(&mut messages);
+        if repair_incomplete_latest_assistant && !removed_incomplete_signed_response {
             remove_latest_signed_thinking_assistant_message(&mut messages);
         }
         ensure_anthropic_messages_end_with_user_turn(&mut messages);
@@ -1695,7 +1701,7 @@ impl ModelClient {
             thinking = Some(json!({ "type": "disabled" }));
         }
 
-        Ok(AnthropicMessagesRequest {
+        let mut request = AnthropicMessagesRequest {
             model: upstream_model.to_string(),
             system,
             messages,
@@ -1706,7 +1712,20 @@ impl ModelClient {
             thinking,
             output_config,
             provider_options,
-        })
+        };
+        let payload_report = enforce_anthropic_payload_budget(
+            &mut request,
+            ANTHROPIC_MESSAGES_REQUEST_BUDGET_BYTES,
+        )?;
+        if payload_report.omitted_images > 0 {
+            warn!(
+                original_bytes = payload_report.original_bytes,
+                final_bytes = payload_report.final_bytes,
+                omitted_images = payload_report.omitted_images,
+                "omitted older images from Anthropic request to enforce provider payload budget"
+            );
+        }
+        Ok(request)
     }
 
     fn chat_cache_policy(&self, model_info: &ModelInfo) -> ChatCachePolicy {
@@ -2105,6 +2124,7 @@ impl ModelClientSession {
         let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
         let mut signed_thinking_history_retry_used = false;
+        let mut payload_retry_used = false;
         loop {
             let provider_request_started_at = Instant::now();
             trace_stream_timing(
@@ -2135,7 +2155,7 @@ impl ModelClientSession {
                 "anthropic_http_before_build_request",
                 provider_request_started_at,
             );
-            let request = self
+            let mut request = self
                 .client
                 .build_anthropic_messages_request_with_history_repair(
                     prompt,
@@ -2143,6 +2163,18 @@ impl ModelClientSession {
                     effort.clone(),
                     signed_thinking_history_retry_used,
                 )?;
+            if payload_retry_used {
+                let payload_report = enforce_anthropic_payload_budget(
+                    &mut request,
+                    ANTHROPIC_MESSAGES_RETRY_BUDGET_BYTES,
+                )?;
+                warn!(
+                    original_bytes = payload_report.original_bytes,
+                    final_bytes = payload_report.final_bytes,
+                    omitted_images = payload_report.omitted_images,
+                    "retrying Anthropic request with stricter payload budget after HTTP 413"
+                );
+            }
             trace_stream_timing(
                 "anthropic_http_after_build_request",
                 provider_request_started_at,
@@ -2218,6 +2250,22 @@ impl ModelClientSession {
                          removing that response from this request and retrying once"
                     );
                     signed_thinking_history_retry_used = true;
+                    continue;
+                }
+                Err(err) if !payload_retry_used && is_anthropic_payload_too_large(&err) => {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let mapped_err = map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    warn!(
+                        "Anthropic rejected the request with HTTP 413; pruning additional older \
+                         images and retrying once"
+                    );
+                    payload_retry_used = true;
                     continue;
                 }
                 Err(err) => {
@@ -3727,6 +3775,14 @@ fn append_anthropic_message_for_response_item(
                         name = %name,
                         "skipping malformed historical Anthropic tool call arguments during replay"
                     );
+                    if remove_latest_signed_thinking_assistant_message(messages) {
+                        debug!(
+                            call_id = %call_id,
+                            name = %name,
+                            "omitting incomplete signed Anthropic assistant response that contained \
+                             a malformed tool call"
+                        );
+                    }
                     skipped_tool_call_ids.insert(call_id);
                     return;
                 }
@@ -3803,6 +3859,46 @@ fn push_anthropic_message(messages: &mut Vec<Value>, role: &str, block: Value) {
         "role": role,
         "content": [block],
     }));
+}
+
+/// Removes the request-local residue of a length-truncated Anthropic response.
+///
+/// The stream adapter intentionally withholds client tool calls and final text when Anthropic
+/// reports an output/context limit. A signed reasoning block may already have completed before the
+/// provider reports that terminal reason. Such a reasoning-only assistant message is not a complete
+/// response and cannot safely be replayed as one.
+fn remove_latest_signed_thinking_only_assistant_message(messages: &mut Vec<Value>) -> bool {
+    let Some(assistant_index) = messages
+        .iter()
+        .rposition(|message| message.get("role").and_then(Value::as_str) == Some("assistant"))
+    else {
+        return false;
+    };
+    let Some(content) = messages[assistant_index]
+        .get("content")
+        .and_then(Value::as_array)
+    else {
+        return false;
+    };
+    let has_signed_thinking = content.iter().any(|block| {
+        matches!(
+            block.get("type").and_then(Value::as_str),
+            Some("thinking" | "redacted_thinking")
+        )
+    });
+    let has_replayable_completion = content.iter().any(|block| {
+        !matches!(
+            block.get("type").and_then(Value::as_str),
+            Some("thinking" | "redacted_thinking")
+        )
+    });
+    if !has_signed_thinking || has_replayable_completion {
+        return false;
+    }
+
+    messages.remove(assistant_index);
+    merge_adjacent_anthropic_messages(messages);
+    true
 }
 
 /// Removes a partial Anthropic assistant response that cannot be replayed safely.

@@ -140,10 +140,10 @@ impl ToolCallRuntime {
                     Either::Right(lock.write().await)
                 };
 
-                router
+                let result = router
                     .dispatch_tool_call_with_terminal_outcome(
                         session,
-                        turn,
+                        Arc::clone(&turn),
                         invocation_cancellation_token,
                         tracker,
                         dispatch_call,
@@ -151,7 +151,30 @@ impl ToolCallRuntime {
                         dispatch_terminal_outcome_reached,
                     )
                     .instrument(dispatch_span.clone())
-                    .await
+                    .await;
+                match result {
+                    Err(FunctionCallError::MalformedToolCall {
+                        diagnostic,
+                        message,
+                    }) => {
+                        let signature = malformed_tool_call_signature(&diagnostic);
+                        let count = turn.record_malformed_tool_call(signature).await;
+                        if count > 1 {
+                            Err(FunctionCallError::Fatal(format!(
+                                "stopped the turn after {count} equivalent malformed tool calls \
+                                 for `{}` (category={}); the model did not correct the tool payload \
+                                 after one retry",
+                                diagnostic.tool, diagnostic.category
+                            )))
+                        } else {
+                            Err(FunctionCallError::MalformedToolCall {
+                                diagnostic,
+                                message,
+                            })
+                        }
+                    }
+                    other => other,
+                }
             }));
 
         async move {
@@ -212,6 +235,26 @@ fn tool_call_signature(call: &ToolCall) -> String {
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
     format!("{}:{payload_hash}", call.tool_name)
+}
+
+fn malformed_tool_call_signature(diagnostic: &codex_tools::MalformedToolCallDiagnostic) -> String {
+    let normalized_excerpt = diagnostic
+        .excerpt
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut hasher = Sha256::new();
+    hasher.update(diagnostic.tool.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(diagnostic.category.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(normalized_excerpt.as_bytes());
+    let digest = hasher.finalize();
+    digest
+        .iter()
+        .take(16)
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 impl ToolCallRuntime {
@@ -320,6 +363,45 @@ mod tests {
     }
 
     impl CoreToolRuntime for ImmediateHandler {}
+
+    struct MalformedHandler {
+        tool_name: codex_tools::ToolName,
+    }
+
+    impl ToolExecutor<ToolInvocation> for MalformedHandler {
+        fn tool_name(&self) -> codex_tools::ToolName {
+            self.tool_name.clone()
+        }
+
+        fn spec(&self) -> codex_tools::ToolSpec {
+            codex_tools::ToolSpec::Function(codex_tools::ResponsesApiTool {
+                name: self.tool_name.name.clone(),
+                description: "Malformed-call test tool.".to_string(),
+                strict: false,
+                defer_loading: None,
+                parameters: codex_tools::JsonSchema::default(),
+                output_schema: None,
+            })
+        }
+
+        fn handle(&self, _invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+            Box::pin(async {
+                let diagnostic = codex_tools::MalformedToolCallDiagnostic {
+                    tool: "structured_write".to_string(),
+                    byte_len: 71,
+                    category: "Eof".to_string(),
+                    excerpt: "{\"path\":\"runtime/engine.js\",\"mode\":\"overwrite\"".to_string(),
+                    finish_reason: None,
+                };
+                Err(FunctionCallError::MalformedToolCall {
+                    message: format!("{diagnostic}"),
+                    diagnostic,
+                })
+            })
+        }
+    }
+
+    impl CoreToolRuntime for MalformedHandler {}
 
     struct CancellationCleanupHandler {
         tool_name: codex_tools::ToolName,
@@ -567,6 +649,55 @@ mod tests {
             message.contains("repeated identical tool call stopped"),
             "{message}"
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn equivalent_malformed_calls_stop_across_sampling_runtimes() -> anyhow::Result<()> {
+        let (session, turn_context) = crate::session::tests::make_session_and_context().await;
+        let session = Arc::new(session);
+        let turn_context = Arc::new(turn_context);
+        let tool_name = codex_tools::ToolName::plain("structured_write");
+        let handler = Arc::new(MalformedHandler {
+            tool_name: tool_name.clone(),
+        }) as Arc<dyn CoreToolRuntime>;
+        let router = Arc::new(ToolRouter::from_parts(
+            ToolRegistry::from_tools([handler]),
+            Vec::new(),
+        ));
+        let tracker = Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new()));
+        let call = |call_id: &str| ToolCall {
+            tool_name: tool_name.clone(),
+            call_id: call_id.to_string(),
+            payload: ToolPayload::Function {
+                arguments: "{\"path\":\"runtime/engine.js\",\"mode\":\"overwrite\"".to_string(),
+            },
+        };
+
+        let first_runtime = ToolCallRuntime::new(
+            Arc::clone(&router),
+            Arc::clone(&session),
+            Arc::clone(&turn_context),
+            Arc::clone(&tracker),
+        );
+        let first = first_runtime
+            .handle_tool_call(call("call-1"), CancellationToken::new())
+            .await?;
+        let ResponseInputItem::FunctionCallOutput { output, .. } = first else {
+            panic!("first malformed call should return a corrective tool result");
+        };
+        assert_eq!(output.success, Some(false));
+
+        // A new runtime represents the next model sampling request in the same user turn.
+        let second_runtime = ToolCallRuntime::new(router, session, turn_context, tracker);
+        let second = second_runtime
+            .handle_tool_call(call("call-2"), CancellationToken::new())
+            .await;
+        let Err(CodexErr::Fatal(message)) = second else {
+            panic!("second equivalent malformed call must stop the turn: {second:?}");
+        };
+        assert!(message.contains("after 2 equivalent malformed tool calls"));
 
         Ok(())
     }

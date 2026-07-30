@@ -4,9 +4,12 @@
   <img src="docs/assets/images/pfterminal-logo.png" alt="PFTerminal - Post Fiat Terminal" width="720">
 </p>
 
-PFTerminal is a crypto-native AI services terminal based on the open-source
-Codex CLI. It defaults to Ambient GLM 5.2 and is being built as one secure
-terminal interface for AI-assisted coding and crypto-native workflows.
+PFTerminal is an open-source, multi-provider coding terminal built on the
+Codex CLI. It keeps Codex's local coding-agent workflow while adding native
+routes for OpenAI, Anthropic, Kimi, GLM, Grok, and other models across direct
+providers, model gateways, prepaid plans, and local inference. It also includes
+encrypted credentials, model-aware agent orchestration, Telegram control, and
+a local Solana wallet for SOL, USDC, and PFTerminal inference plans.
 
 ## Install
 
@@ -76,17 +79,46 @@ rm -rf "${PFTERMINAL_HOME:-$HOME/.pfterminal}"
 
 ## Key Features
 
-- Ambient GLM 5.2 default model path.
-- Provider choices for Ambient, Kimi Code, Z.AI, OpenRouter, Baseten, Vercel, and OpenAI
-  Codex account auth.
+- Multi-provider model routing across OpenAI, Anthropic, Kimi Code, Z.AI,
+  OpenRouter, Ambient, Meta, Baseten, Vercel AI Gateway, Amazon Bedrock, and
+  local Ollama or LM Studio.
+- OpenAI Codex account auth, Claude Code plan auth, PFTerminal prepaid plans,
+  direct API keys, cloud credentials, and configurable custom providers.
+- Models including OpenAI GPT, Anthropic Claude, Kimi K3, GLM 5.2, and Grok,
+  selected with `/model` and available to model-aware agent orchestration.
+- A first-class `/wallet` workflow for creating or restoring a local Solana
+  wallet, viewing SOL and USDC balances, controlling signing access, backing
+  up recovery material, and buying or recovering PFTerminal inference plans.
 - Encrypted `/vault` storage for provider API keys and user credentials.
 - `pfterminal telegram` connector for allowlisted Telegram chats.
 - Codex-level coding workflows in a local terminal.
 - Native pane orchestration for Sauron → Nazgul → Troll → Orc agent workflows.
 - Separate PFTerminal home at `$HOME/.pfterminal`, so it does not collide with
   a stock Codex install.
-- Planned crypto-native services: authentication, Hyperliquid, GPU rentals,
-  staking, borrowing, and related workflows.
+
+## Model Providers
+
+PFTerminal ships provider adapters for the following routes:
+
+| Provider or route | Access |
+| --- | --- |
+| OpenAI | Codex account authentication or an API-backed configuration |
+| Anthropic | Direct Anthropic API keys and Claude Code plan-backed panes |
+| PFTerminal Plan | Prepaid inference plans purchased with USDC through `/wallet` |
+| Kimi Code | Direct Kimi Code access, including Kimi K3 |
+| Z.AI | Direct Z.AI access, including GLM models and an Anthropic-compatible route |
+| OpenRouter | OpenRouter's model catalogue, including Kimi, GLM, Grok, and other models |
+| Ambient | Hosted GLM and Kimi routes |
+| Meta | Meta-hosted model access |
+| Baseten | Baseten routes, including an Anthropic-compatible adapter |
+| Vercel AI Gateway | Responses, Anthropic-compatible, and fast Anthropic routes |
+| Amazon Bedrock | AWS-authenticated Bedrock models |
+| Ollama and LM Studio | Local model servers |
+| Custom providers | Additional provider endpoints configured in `config.toml` |
+
+Use `/providers` for interactive account and API-key setup. Amazon Bedrock,
+local servers, and custom providers use their normal environment or
+`config.toml` configuration.
 
 ## First Run
 
@@ -111,9 +143,12 @@ run shell commands.
 
 Use:
 
-- `/providers` to add Ambient, Kimi Code, Z.AI, OpenRouter, Baseten, Vercel, or OpenAI
-  Codex credentials.
+- `/providers` to sign into OpenAI Codex, Claude Code Plan, or PFTerminal Plan,
+  and to add Anthropic, Ambient, Kimi Code, Z.AI, OpenRouter, Meta, Baseten, or
+  Vercel credentials.
 - `/vault` to manage encrypted credentials.
+- `/wallet` to create or restore a wallet, view SOL and USDC, control signing,
+  and manage PFTerminal inference plans.
 - `/model` or `pfterminal -m <model>` to choose a model.
 - `/spawn` to create and route multi-agent work.
 
@@ -121,7 +156,7 @@ Use:
 
 Slash commands are typed inside the interactive `pfterminal` chat. PFTerminal
 inherits the normal Codex slash commands and adds a few commands for providers,
-credentials, panes, spawned agents, and Task Node.
+credentials, wallets, panes, spawned agents, and Task Node.
 
 ### `/providers`
 
@@ -131,9 +166,38 @@ PFTerminal vault.
 
 Common uses:
 
-- Add an Ambient, Kimi Code, Z.AI, OpenRouter, Baseten, Vercel, or Anthropic API key.
+- Add an Anthropic, Ambient, Kimi Code, Z.AI, OpenRouter, Meta, Baseten, or
+  Vercel API key.
 - Add or refresh OpenAI Codex account auth.
+- Connect Claude Code Plan or an existing PFTerminal Plan.
 - Check which provider key a selected model expects.
+
+### `/wallet`
+
+Use `/wallet` to manage the local Solana wallet and PFTerminal inference plans.
+Wallet secrets stay outside normal chat history and model context. Signing
+access is handled by the local wallet daemon and can be unlocked for one action
+or for a bounded period.
+
+The wallet menu can:
+
+- Create a new wallet or restore one from recovery material.
+- Show the receive address and current SOL and USDC balances.
+- Lock signing globally or unlock it for one action, 5 minutes, 15 minutes,
+  1 hour, or a custom duration.
+- Back up recovery material in a secure view or remove the wallet from the
+  device after recovery material is saved.
+- Buy or upgrade a PFTerminal inference plan with an exact USDC payment.
+- Recover access to an existing paid plan, inspect usage and limits, and view
+  the latest plan receipt.
+
+Useful forms:
+
+- `/wallet` or `/wallet status` opens the wallet menu.
+- `/wallet create` starts wallet creation.
+- `/wallet restore` restores a wallet.
+- `/wallet unlock` unlocks signing for 15 minutes.
+- `/wallet lock` revokes signing from every PFTerminal process.
 
 ### `/vault`
 

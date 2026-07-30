@@ -1,3 +1,45 @@
+# PFTerminal 0.1.26
+
+## Fixed
+
+- Anthropic Messages streams now preserve provider stop reasons. Output or
+  context limits stop the turn without dispatching a potentially truncated
+  tool call.
+- Equivalent malformed tool calls now have a provider-neutral, turn-scoped
+  circuit breaker. The model receives one correction opportunity; a repeated
+  equivalent failure stops the turn instead of consuming capacity forever.
+- Anthropic replay now omits incomplete signed assistant responses and their
+  coupled tool results from the next request without rewriting durable session
+  history. Sessions poisoned by a truncated signed-thinking response can be
+  resumed safely.
+- Image-heavy Anthropic histories now enforce a 30 MB request budget by
+  omitting the oldest images request-locally while preserving text and durable
+  history. An HTTP 413 receives one stricter 15 MB retry.
+
+## Documentation
+
+- The README now leads with PF Terminal's provider breadth and documents the
+  `/wallet` workflow alongside installation and authentication.
+
+## Qualification status
+
+- The repaired binary resumed the original poisoned Opus-plan session with the
+  same thread ID and returned successfully.
+- Fixed-build one-hour endurance runs completed on Opus plan, direct Claude
+  API, Kimi plan, and ChatGPT. The Opus lane processed 38.4 million input
+  tokens—more than twice the failed baseline—without a malformed-call loop,
+  signed-history error, HTTP 413, or unusable session.
+- Focused Anthropic adapter, replay, payload, and malformed-call circuit-breaker
+  tests pass. Full `codex-api` and `codex-tools` suites pass, and the broad
+  `codex-core` library suite completed 2,125 of 2,129 tests with four unrelated
+  pre-existing shell/configuration flakes.
+
+Previous release: 0.1.25.
+
+The changelog can be found on the [releases page](https://github.com/agtico/PfTerminal/releases).
+
+---
+
 # PFTerminal 0.1.25
 
 ## Fixed

@@ -3106,6 +3106,14 @@ async fn try_run_sampling_request(
                     break Err(err);
                 }
                 match finish_reason.as_ref() {
+                    Some(codex_api::CompletionFinishReason::Length) => {
+                        break Err(CodexErr::InvalidRequest(
+                            "the model provider stopped generation at its output or context \
+                             limit; the response may contain an incomplete tool call and the turn \
+                             was stopped without executing further model work"
+                                .to_string(),
+                        ));
+                    }
                     Some(codex_api::CompletionFinishReason::ContentFilter) => {
                         break Err(CodexErr::InvalidRequest(
                             "the model provider stopped generation because content was filtered; \

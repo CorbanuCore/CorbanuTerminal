@@ -193,7 +193,7 @@ async fn build_tool_call_uses_namespace_for_registry_name() -> anyhow::Result<()
 }
 
 #[test]
-fn truncated_structured_write_is_non_retriable_before_dispatch() {
+fn truncated_structured_write_returns_structured_diagnostic() {
     let arguments = format!(
         "{{\"path\":\"dashboard/shielded-navswap-flow-rail-mock.html\",\"mode\":\"overwrite\",\"content\":\"{}",
         "x".repeat(8192)
@@ -208,7 +208,7 @@ fn truncated_structured_write_is_non_retriable_before_dispatch() {
         metadata: None,
     });
 
-    let Err(FunctionCallError::RespondToModel(message)) = result else {
+    let Err(FunctionCallError::MalformedToolCall { message, .. }) = result else {
         panic!("expected retriable malformed tool call error, got {result:?}");
     };
 
