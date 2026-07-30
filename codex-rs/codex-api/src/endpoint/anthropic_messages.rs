@@ -1,5 +1,6 @@
 use crate::auth::SharedAuthProvider;
 use crate::common::AnthropicMessagesRequest;
+use crate::common::CompletionFinishReason;
 use crate::common::ResponseEvent;
 use crate::common::ResponseStream;
 use crate::endpoint::session::EndpointSession;
@@ -259,6 +260,7 @@ struct AnthropicStreamState {
     web_search_results: BTreeMap<usize, AnthropicWebSearchResultState>,
     token_usage: Option<TokenUsage>,
     end_turn: Option<bool>,
+    finish_reason: Option<CompletionFinishReason>,
 }
 
 impl AnthropicStreamState {
@@ -280,6 +282,7 @@ impl AnthropicStreamState {
             web_search_results: BTreeMap::new(),
             token_usage: None,
             end_turn: None,
+            finish_reason: None,
         }
     }
 
@@ -368,6 +371,7 @@ impl AnthropicStreamState {
         true
     }
 
+    #[allow(clippy::collapsible_match)]
     async fn on_content_block_start(
         &mut self,
         event: AnthropicStreamEvent,
@@ -539,21 +543,22 @@ impl AnthropicStreamState {
         if !self.emit_web_search_result(index, tx_event).await {
             return false;
         }
-        self.emit_tool_call(index, tx_event).await
+        // Anthropic reports `stop_reason` in the later `message_delta` event.
+        // Hold client tool calls until `message_stop` so a max-token cutoff
+        // cannot execute a syntactically valid but semantically truncated call.
+        true
     }
 
     fn on_message_delta(&mut self, event: AnthropicStreamEvent) {
         if let Some(usage) = event.usage {
             self.token_usage = Some(usage.into());
         }
-        if let Some(delta) = event.delta {
-            self.end_turn = match delta.stop_reason.as_deref() {
-                Some("end_turn") => Some(true),
-                Some("tool_use") => Some(false),
-                Some("pause_turn") => Some(false),
-                Some(_) => None,
-                None => self.end_turn,
-            };
+        if let Some(delta) = event.delta
+            && let Some(stop_reason) = delta.stop_reason.as_deref()
+        {
+            let (end_turn, finish_reason) = anthropic_completion_state(stop_reason);
+            self.end_turn = end_turn;
+            self.finish_reason = Some(finish_reason);
         }
     }
 
@@ -865,6 +870,17 @@ impl AnthropicStreamState {
                 .await;
             return;
         }
+        if matches!(self.finish_reason, Some(CompletionFinishReason::Length)) {
+            let _ = tx_event
+                .send(Ok(ResponseEvent::Completed {
+                    response_id,
+                    token_usage: self.token_usage.take(),
+                    end_turn: self.end_turn,
+                    finish_reason: self.finish_reason.take(),
+                }))
+                .await;
+            return;
+        }
         if !self.finish_reasoning_item(tx_event).await {
             return;
         }
@@ -908,9 +924,21 @@ impl AnthropicStreamState {
                 response_id,
                 token_usage: self.token_usage.take(),
                 end_turn: self.end_turn,
-                finish_reason: None,
+                finish_reason: self.finish_reason.take(),
             }))
             .await;
+    }
+}
+
+fn anthropic_completion_state(stop_reason: &str) -> (Option<bool>, CompletionFinishReason) {
+    match stop_reason {
+        "end_turn" | "stop_sequence" => (Some(true), CompletionFinishReason::Stop),
+        "tool_use" | "pause_turn" => (Some(false), CompletionFinishReason::ToolCalls),
+        "max_tokens" | "model_context_window_exceeded" => {
+            (Some(false), CompletionFinishReason::Length)
+        }
+        "refusal" => (Some(true), CompletionFinishReason::ContentFilter),
+        other => (None, CompletionFinishReason::Unknown(other.to_string())),
     }
 }
 
@@ -1075,6 +1103,45 @@ mod tests {
         events
     }
 
+    #[test]
+    fn anthropic_stop_reasons_preserve_completion_semantics() {
+        assert_eq!(
+            anthropic_completion_state("end_turn"),
+            (Some(true), CompletionFinishReason::Stop)
+        );
+        assert_eq!(
+            anthropic_completion_state("stop_sequence"),
+            (Some(true), CompletionFinishReason::Stop)
+        );
+        assert_eq!(
+            anthropic_completion_state("tool_use"),
+            (Some(false), CompletionFinishReason::ToolCalls)
+        );
+        assert_eq!(
+            anthropic_completion_state("pause_turn"),
+            (Some(false), CompletionFinishReason::ToolCalls)
+        );
+        assert_eq!(
+            anthropic_completion_state("max_tokens"),
+            (Some(false), CompletionFinishReason::Length)
+        );
+        assert_eq!(
+            anthropic_completion_state("model_context_window_exceeded"),
+            (Some(false), CompletionFinishReason::Length)
+        );
+        assert_eq!(
+            anthropic_completion_state("refusal"),
+            (Some(true), CompletionFinishReason::ContentFilter)
+        );
+        assert_eq!(
+            anthropic_completion_state("future_reason"),
+            (
+                None,
+                CompletionFinishReason::Unknown("future_reason".to_string())
+            )
+        );
+    }
+
     #[tokio::test]
     async fn empty_stream_is_a_failure_not_a_completed_turn() {
         // message_start -> stop_reason -> message_stop with no content block at all.
@@ -1146,6 +1213,55 @@ data: {"type":"message_stop"}
                 .any(|event| matches!(event, Ok(ResponseEvent::Completed { .. }))),
             "a tool-only turn must still complete: {events:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn max_tokens_does_not_emit_or_execute_partial_tool_call() {
+        let events = collect_events(&[
+            br#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_cutoff","model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1}}}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_cutoff","name":"structured_write","input":{}}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"path\":\"runtime/engine.js\""}}
+
+"#,
+            br#"event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+"#,
+            br#"event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"input_tokens":1,"output_tokens":32000}}
+
+"#,
+            br#"event: message_stop
+data: {"type":"message_stop"}
+
+"#,
+        ])
+        .await;
+
+        assert!(
+            !events.iter().any(|event| matches!(
+                event,
+                Ok(ResponseEvent::OutputItemDone(
+                    ResponseItem::FunctionCall { .. } | ResponseItem::CustomToolCall { .. }
+                ))
+            )),
+            "a length-truncated tool call must never be dispatched: {events:?}"
+        );
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Ok(ResponseEvent::Completed {
+                end_turn: Some(false),
+                finish_reason: Some(CompletionFinishReason::Length),
+                ..
+            })
+        )));
     }
 
     #[tokio::test]

@@ -122,11 +122,15 @@ fn malformed_tool_call_error(
         excerpt: safe_argument_excerpt(arguments),
         finish_reason,
     };
-    FunctionCallError::RespondToModel(format!(
+    let message = format!(
         "{diagnostic} parse_error={err}. The arguments were not valid JSON for the `{tool_name}` schema. \
          Re-issue this tool call once with complete, corrected JSON arguments (no unknown fields, all required fields present). \
          If the payload is large, double-check string escaping and that the JSON object is closed."
-    ))
+    );
+    FunctionCallError::MalformedToolCall {
+        diagnostic,
+        message,
+    }
 }
 
 fn serde_json_category_name(category: Category) -> &'static str {

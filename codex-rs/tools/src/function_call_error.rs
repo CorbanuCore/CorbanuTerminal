@@ -5,6 +5,11 @@ use thiserror::Error;
 pub enum FunctionCallError {
     #[error("{0}")]
     RespondToModel(String),
+    #[error("{message}")]
+    MalformedToolCall {
+        diagnostic: MalformedToolCallDiagnostic,
+        message: String,
+    },
     #[error("Fatal error: {0}")]
     Fatal(String),
 }
