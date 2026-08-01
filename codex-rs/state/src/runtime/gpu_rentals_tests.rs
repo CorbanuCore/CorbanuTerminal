@@ -28,7 +28,7 @@ fn create_params(client_operation_id: &str) -> GpuRentalCreateParams {
 }
 
 async fn runtime() -> std::sync::Arc<StateRuntime> {
-    StateRuntime::init(unique_temp_dir(), "test-provider".to_string())
+    StateRuntime::init_for_testing(unique_temp_dir(), "test-provider".to_string())
         .await
         .expect("initialize state runtime")
 }
@@ -87,10 +87,10 @@ async fn expired_quote_never_enters_create_pending() {
 #[tokio::test]
 async fn leases_serialize_two_runtime_instances() {
     let codex_home = unique_temp_dir();
-    let first = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
+    let first = StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
         .await
         .expect("initialize first runtime");
-    let second = StateRuntime::init(codex_home, "test-provider".to_string())
+    let second = StateRuntime::init_for_testing(codex_home, "test-provider".to_string())
         .await
         .expect("initialize second runtime");
     let params = create_params("op-lease");

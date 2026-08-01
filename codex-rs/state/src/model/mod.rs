@@ -42,6 +42,7 @@ pub use thread_metadata::ThreadSection;
 pub use thread_metadata::ThreadSectionsPage;
 pub use thread_metadata::ThreadsPage;
 
+pub(crate) use gpu_rental::GpuRentalRow;
 pub(crate) use thread_goal::ThreadGoalRow;
 pub(crate) use thread_metadata::ThreadRow;
 pub(crate) use thread_metadata::anchor_from_item;

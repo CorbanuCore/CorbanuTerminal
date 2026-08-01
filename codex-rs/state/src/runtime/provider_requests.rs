@@ -476,9 +476,10 @@ mod tests {
     #[tokio::test]
     async fn lease_blocks_second_process_until_ttl() {
         let codex_home = unique_temp_dir();
-        let runtime = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
-            .await
-            .expect("initialize runtime");
+        let runtime =
+            StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
+                .await
+                .expect("initialize runtime");
 
         let first = runtime
             .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
@@ -506,9 +507,10 @@ mod tests {
     #[tokio::test]
     async fn releasing_lease_allows_next_process() {
         let codex_home = unique_temp_dir();
-        let runtime = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
-            .await
-            .expect("initialize runtime");
+        let runtime =
+            StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
+                .await
+                .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(lease) = runtime
             .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
@@ -535,9 +537,10 @@ mod tests {
     #[tokio::test]
     async fn cooldown_only_check_ignores_active_lease() {
         let codex_home = unique_temp_dir();
-        let runtime = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
-            .await
-            .expect("initialize runtime");
+        let runtime =
+            StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
+                .await
+                .expect("initialize runtime");
 
         let first = runtime
             .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
@@ -557,9 +560,10 @@ mod tests {
     #[tokio::test]
     async fn failed_non_rate_limit_result_clears_lease_without_cooldown() {
         let codex_home = unique_temp_dir();
-        let runtime = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
-            .await
-            .expect("initialize runtime");
+        let runtime =
+            StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
+                .await
+                .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(lease) = runtime
             .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
@@ -594,9 +598,10 @@ mod tests {
     #[tokio::test]
     async fn stale_owner_result_or_release_does_not_clear_active_owner() {
         let codex_home = unique_temp_dir();
-        let runtime = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
-            .await
-            .expect("initialize runtime");
+        let runtime =
+            StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
+                .await
+                .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(first) = runtime
             .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 1_000, 1_000)
@@ -649,9 +654,10 @@ mod tests {
     #[tokio::test]
     async fn rate_limit_result_sets_cooldown_and_blocks_retry() {
         let codex_home = unique_temp_dir();
-        let runtime = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
-            .await
-            .expect("initialize runtime");
+        let runtime =
+            StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
+                .await
+                .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(lease) = runtime
             .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
@@ -694,9 +700,10 @@ mod tests {
     #[tokio::test]
     async fn success_result_records_provider_reported_cache_usage() {
         let codex_home = unique_temp_dir();
-        let runtime = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
-            .await
-            .expect("initialize runtime");
+        let runtime =
+            StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
+                .await
+                .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(lease) = runtime
             .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
@@ -759,9 +766,10 @@ mod tests {
     #[tokio::test]
     async fn acquiring_new_lease_clears_stale_result_fields() {
         let codex_home = unique_temp_dir();
-        let runtime = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
-            .await
-            .expect("initialize runtime");
+        let runtime =
+            StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
+                .await
+                .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(first) = runtime
             .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
@@ -811,9 +819,10 @@ mod tests {
     #[tokio::test]
     async fn repeated_rate_limits_back_off_to_sixty_seconds() {
         let codex_home = unique_temp_dir();
-        let runtime = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
-            .await
-            .expect("initialize runtime");
+        let runtime =
+            StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
+                .await
+                .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(first) = runtime
             .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
@@ -873,9 +882,10 @@ mod tests {
     #[tokio::test]
     async fn rate_limit_result_uses_retry_after_when_available() {
         let codex_home = unique_temp_dir();
-        let runtime = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
-            .await
-            .expect("initialize runtime");
+        let runtime =
+            StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
+                .await
+                .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(lease) = runtime
             .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)

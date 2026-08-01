@@ -8,7 +8,7 @@ const NOW_MS: i64 = 1_800_000_000_000;
 
 async fn runtime() -> Arc<StateRuntime> {
     let path = std::env::temp_dir().join(format!("gpu-overlay-test-{}", uuid::Uuid::new_v4()));
-    StateRuntime::init(path, "test-provider".to_string())
+    StateRuntime::init_for_testing(path, "test-provider".to_string())
         .await
         .expect("initialize state")
 }

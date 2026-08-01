@@ -19,9 +19,12 @@ fn communication(message_id: &str) -> InterAgentCommunication {
 
 #[tokio::test]
 async fn mailbox_admission_is_idempotent_and_recoverable() {
-    let runtime = StateRuntime::init(test_support::unique_temp_dir(), "test-provider".to_string())
-        .await
-        .expect("state runtime");
+    let runtime = StateRuntime::init_for_testing(
+        test_support::unique_temp_dir(),
+        "test-provider".to_string(),
+    )
+    .await
+    .expect("state runtime");
     let recipient = ThreadId::new();
     let message = communication("message-1");
 
@@ -77,9 +80,12 @@ async fn mailbox_admission_is_idempotent_and_recoverable() {
 
 #[tokio::test]
 async fn mailbox_records_a_new_attempt_without_changing_logical_identity() {
-    let runtime = StateRuntime::init(test_support::unique_temp_dir(), "test-provider".to_string())
-        .await
-        .expect("state runtime");
+    let runtime = StateRuntime::init_for_testing(
+        test_support::unique_temp_dir(),
+        "test-provider".to_string(),
+    )
+    .await
+    .expect("state runtime");
     let recipient = ThreadId::new();
     let message = communication("message-1");
     runtime
@@ -124,9 +130,12 @@ async fn mailbox_records_a_new_attempt_without_changing_logical_identity() {
 
 #[tokio::test]
 async fn completed_mailbox_message_is_terminal_but_remains_auditable() {
-    let runtime = StateRuntime::init(test_support::unique_temp_dir(), "test-provider".to_string())
-        .await
-        .expect("state runtime");
+    let runtime = StateRuntime::init_for_testing(
+        test_support::unique_temp_dir(),
+        "test-provider".to_string(),
+    )
+    .await
+    .expect("state runtime");
     let recipient = ThreadId::new();
     let message = communication("message-1");
     runtime
@@ -157,9 +166,12 @@ async fn completed_mailbox_message_is_terminal_but_remains_auditable() {
 
 #[tokio::test]
 async fn mailbox_rejects_message_id_reuse_for_different_content() {
-    let runtime = StateRuntime::init(test_support::unique_temp_dir(), "test-provider".to_string())
-        .await
-        .expect("state runtime");
+    let runtime = StateRuntime::init_for_testing(
+        test_support::unique_temp_dir(),
+        "test-provider".to_string(),
+    )
+    .await
+    .expect("state runtime");
     let recipient = ThreadId::new();
     let first = communication("message-1");
     runtime

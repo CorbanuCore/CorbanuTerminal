@@ -24,12 +24,19 @@ use chrono::DateTime;
 use chrono::Utc;
 use codex_protocol::ThreadId;
 use codex_protocol::protocol::RolloutItem;
+#[cfg(test)]
+use codex_utils_absolute_path::test_support::PathExt;
+use log::LevelFilter;
 use serde_json::Value;
+use sqlx::ConnectOptions;
 use sqlx::QueryBuilder;
 use sqlx::Row;
 use sqlx::Sqlite;
 use sqlx::SqliteConnection;
 use sqlx::SqlitePool;
+use sqlx::migrate::Migrator;
+use sqlx::sqlite::SqliteConnectOptions;
+use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::path::PathBuf;
@@ -38,6 +45,7 @@ use std::sync::atomic::AtomicI64;
 use std::time::Instant;
 use tracing::warn;
 
+mod agent_mailbox;
 mod backfill;
 mod external_agent_config_imports;
 mod goals;
@@ -115,6 +123,18 @@ impl StateRuntime {
     }
 
     #[cfg(test)]
+    pub(crate) async fn init_for_testing(
+        sqlite_home: PathBuf,
+        default_provider: String,
+    ) -> anyhow::Result<Arc<Self>> {
+        Self::init(
+            SqliteConfig::new_for_testing(sqlite_home.as_path().abs()),
+            default_provider,
+        )
+        .await
+    }
+
+    #[cfg(test)]
     pub(crate) async fn init_with_telemetry_for_tests(
         sqlite: SqliteConfig,
         default_provider: String,
@@ -129,6 +149,7 @@ impl StateRuntime {
         telemetry_override: Option<&dyn DbTelemetry>,
     ) -> anyhow::Result<Arc<Self>> {
         tokio::fs::create_dir_all(sqlite.home()).await?;
+        sqlite.migrate_legacy_runtime_db_names().await?;
         let state_migrator = runtime_state_migrator();
         let logs_migrator = runtime_logs_migrator();
         let goals_migrator = runtime_goals_migrator();
@@ -137,6 +158,16 @@ impl StateRuntime {
         let logs_path = sqlite.logs_db_path();
         let goals_path = sqlite.goals_db_path();
         let memories_path = sqlite.memories_db_path();
+        validate_applied_migrations(&state_path, &state_migrator)
+            .await
+            .map_err(|source| {
+                RuntimeDbInitError::new(
+                    "state DB",
+                    "validate migrations for",
+                    state_path.as_path(),
+                    source,
+                )
+            })?;
         let pool = match sqlite
             .open_state_db(&state_migrator, telemetry_override)
             .await
@@ -297,13 +328,18 @@ async fn close_sqlite_pools(pools: &[&SqlitePool]) {
 
 /// Open and migrate the rebuildable paginated thread-history database.
 pub async fn open_thread_history_db(sqlite: &SqliteConfig) -> anyhow::Result<SqlitePool> {
+    tokio::fs::create_dir_all(sqlite.home()).await?;
+    sqlite.migrate_legacy_runtime_db_names().await?;
     let migrator = runtime_thread_history_migrator();
     sqlite
         .open_thread_history_db(&migrator, /*telemetry_override*/ None)
         .await
 }
 
-async fn validate_applied_migrations(path: &Path, migrator: &Migrator) -> anyhow::Result<()> {
+pub(super) async fn validate_applied_migrations(
+    path: &Path,
+    migrator: &Migrator,
+) -> anyhow::Result<()> {
     if !tokio::fs::try_exists(path).await? {
         return Ok(());
     }
@@ -413,7 +449,7 @@ mod tests {
     use codex_utils_absolute_path::test_support::PathExt;
     use pretty_assertions::assert_eq;
     use sqlx::SqlitePool;
-    use sqlx::migrate::MigrateError;
+    use sqlx::sqlite::SqliteConnectOptions;
     use std::collections::BTreeMap;
     use std::collections::BTreeSet;
     use std::sync::Mutex;
@@ -467,13 +503,6 @@ mod tests {
         tags.iter()
             .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
             .collect()
-    }
-
-    async fn open_db_pool(path: &Path) -> SqlitePool {
-        crate::SqliteConfig::new_for_testing(path.parent().unwrap_or(path).abs())
-            .open_read_write_pool(path)
-            .await
-            .expect("open sqlite pool")
     }
 
     #[tokio::test]
@@ -530,8 +559,6 @@ mod tests {
         .await
         .expect("insert future migration record");
         pool.close().await;
-        let before = tokio::fs::read(&state_path).await.expect("read state db");
-
         let tolerant_migrator = runtime_state_migrator();
         let tolerant_pool = sqlite
             .open_state_db(&tolerant_migrator, /*telemetry_override*/ None)
@@ -545,9 +572,10 @@ mod tests {
     #[tokio::test]
     async fn init_creates_namespaced_runtime_databases() {
         let codex_home = unique_temp_dir();
-        let runtime = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
-            .await
-            .expect("state runtime should initialize");
+        let runtime =
+            StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
+                .await
+                .expect("state runtime should initialize");
         runtime.close().await;
 
         let filenames = std::fs::read_dir(&codex_home)
@@ -587,9 +615,11 @@ mod tests {
             .expect("apply legacy state schema");
         pool.close().await;
 
-        let runtime = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
-            .await
-            .expect("legacy runtime should initialize");
+        let sqlite = crate::SqliteConfig::new_for_testing(codex_home.as_path().abs());
+        let runtime =
+            StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
+                .await
+                .expect("legacy runtime should initialize");
         runtime.close().await;
 
         assert!(
@@ -598,7 +628,7 @@ mod tests {
                 .expect("check legacy path")
         );
         assert!(
-            tokio::fs::try_exists(state_db_path(&codex_home))
+            tokio::fs::try_exists(sqlite.state_db_path())
                 .await
                 .expect("check namespaced path")
         );
@@ -617,10 +647,11 @@ mod tests {
             .await
             .expect("write upstream database");
 
-        let err = match StateRuntime::init(codex_home, "test-provider".to_string()).await {
-            Ok(_) => panic!("upstream home should be rejected"),
-            Err(err) => err,
-        };
+        let err =
+            match StateRuntime::init_for_testing(codex_home, "test-provider".to_string()).await {
+                Ok(_) => panic!("upstream home should be rejected"),
+                Err(err) => err,
+            };
 
         assert!(
             err.to_string()
