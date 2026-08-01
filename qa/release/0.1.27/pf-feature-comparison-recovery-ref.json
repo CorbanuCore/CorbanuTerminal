@@ -1,0 +1,1082 @@
+{
+  "accepted_difference_count": 0,
+  "accepted_differences": [],
+  "baseline_source": {
+    "commit": "d9e2a383ab02550ba26c525c6c99794dd99ae13a",
+    "requested_ref": "pfterminal-v0.1.26-pre-convergence",
+    "tree": "e8c33e41144a55a2f1b39b4fc354b05f7fc6ead5"
+  },
+  "candidate_source": {
+    "commit": "36efbb23935d6e8f0be9baaa1c7553f67dde89c1",
+    "requested_ref": "refs/pfterminal/recovery/pre-0.1.27-convergence-20260731",
+    "tree": "682056b59af60e58856a99ea5d8cc388ea79700f"
+  },
+  "difference_count": 91,
+  "invalid_allowlist_entries": [],
+  "invalid_allowlist_entry_count": 0,
+  "schema_version": 1,
+  "unresolved_difference_count": 91,
+  "unresolved_differences": [
+    {
+      "baseline": "codex-execpolicy-legacy",
+      "candidate": null,
+      "category": "binary",
+      "id": "binary:missing:codex-execpolicy-legacy",
+      "message": "released binary entry is missing"
+    },
+    {
+      "baseline": "Launch the PFTerminal desktop app (opens the app installer if missing).",
+      "candidate": "Launch the Desktop app (opens the app installer if missing).",
+      "category": "cli",
+      "id": "cli:changed:app:description",
+      "message": "released cli field changed"
+    },
+    {
+      "baseline": "docs",
+      "candidate": null,
+      "category": "slash",
+      "id": "slash:missing:docs",
+      "message": "released slash entry is missing"
+    },
+    {
+      "baseline": "gpu",
+      "candidate": null,
+      "category": "slash",
+      "id": "slash:missing:gpu",
+      "message": "released slash entry is missing"
+    },
+    {
+      "baseline": "orchestrate",
+      "candidate": null,
+      "category": "slash",
+      "id": "slash:missing:orchestrate",
+      "message": "released slash entry is missing"
+    },
+    {
+      "baseline": "panes",
+      "candidate": null,
+      "category": "slash",
+      "id": "slash:missing:panes",
+      "message": "released slash entry is missing"
+    },
+    {
+      "baseline": "spawn",
+      "candidate": null,
+      "category": "slash",
+      "id": "slash:missing:spawn",
+      "message": "released slash entry is missing"
+    },
+    {
+      "baseline": "tasknode",
+      "candidate": null,
+      "category": "slash",
+      "id": "slash:missing:tasknode",
+      "message": "released slash entry is missing"
+    },
+    {
+      "baseline": "telegram",
+      "candidate": null,
+      "category": "slash",
+      "id": "slash:missing:telegram",
+      "message": "released slash entry is missing"
+    },
+    {
+      "baseline": "continue this session in PFTerminal Desktop",
+      "candidate": "continue this session in the Desktop app",
+      "category": "slash",
+      "id": "slash:changed:app:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": false,
+      "candidate": true,
+      "category": "slash",
+      "id": "slash:changed:clear:supports_inline_args",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "exit PFTerminal",
+      "candidate": "exit Codex",
+      "category": "slash",
+      "id": "slash:changed:exit:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": false,
+      "candidate": true,
+      "category": "slash",
+      "id": "slash:changed:fork:supports_inline_args",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "create an AGENTS.md file with instructions for PFTerminal",
+      "candidate": "create an AGENTS.md file with instructions for Codex",
+      "category": "slash",
+      "id": "slash:changed:init:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "log out of PFTerminal",
+      "candidate": "log out of Codex",
+      "category": "slash",
+      "id": "slash:changed:logout:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": false,
+      "candidate": true,
+      "category": "slash",
+      "id": "slash:changed:new:supports_inline_args",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "choose what PFTerminal is allowed to do",
+      "candidate": "choose what Codex is allowed to do",
+      "category": "slash",
+      "id": "slash:changed:permissions:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "choose a communication style for PFTerminal",
+      "candidate": "choose a communication style for Codex",
+      "category": "slash",
+      "id": "slash:changed:personality:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "add provider API keys to the encrypted vault",
+      "candidate": "view configured providers and securely store API keys",
+      "category": "slash",
+      "id": "slash:changed:providers:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": false,
+      "candidate": true,
+      "category": "slash",
+      "id": "slash:changed:providers:supports_inline_args",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": true,
+      "candidate": false,
+      "category": "slash",
+      "id": "slash:changed:providers:available_in_side_conversation",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "exit PFTerminal",
+      "candidate": "exit Codex",
+      "category": "slash",
+      "id": "slash:changed:quit:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "use skills to improve how PFTerminal performs specific tasks",
+      "candidate": "use skills to improve how Codex performs specific tasks",
+      "category": "slash",
+      "id": "slash:changed:skills:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "view account usage or use a rate-limit reset",
+      "candidate": "view account usage or use a usage limit reset",
+      "category": "slash",
+      "id": "slash:changed:usage:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": true,
+      "candidate": false,
+      "category": "slash",
+      "id": "slash:changed:vault:available_in_side_conversation",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "manage SOL, USDC, and PfTerminal inference plans",
+      "candidate": "manage the local wallet and PF Terminal inference plan",
+      "category": "slash",
+      "id": "slash:changed:wallet:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": true,
+      "candidate": false,
+      "category": "slash",
+      "id": "slash:changed:wallet:available_in_side_conversation",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "features.sleep_tool",
+      "candidate": null,
+      "category": "config",
+      "id": "config:missing:features.sleep_tool",
+      "message": "released config entry is missing"
+    },
+    {
+      "baseline": "model_supports_reasoning_summaries",
+      "candidate": null,
+      "category": "config",
+      "id": "config:missing:model_supports_reasoning_summaries",
+      "message": "released config entry is missing"
+    },
+    {
+      "baseline": [
+        "business",
+        "edu",
+        "education",
+        "enterprise",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "go",
+        "hc",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "go",
+        "hc",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:codex-auto-review:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": [
+        "business",
+        "edu",
+        "education",
+        "enterprise",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:gpt-5.2:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": [
+        "business",
+        "edu",
+        "education",
+        "enterprise",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "go",
+        "hc",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "go",
+        "hc",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:gpt-5.4:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": [
+        "business",
+        "edu",
+        "education",
+        "enterprise",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:gpt-5.4-mini:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": [
+        "business",
+        "edu",
+        "education",
+        "enterprise",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:gpt-5.5:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": 372000,
+      "candidate": 272000,
+      "category": "model",
+      "id": "model:changed:gpt-5.6-luna:context_window",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": 372000,
+      "candidate": 272000,
+      "category": "model",
+      "id": "model:changed:gpt-5.6-luna:max_context_window",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": null,
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:gpt-5.6-luna:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": 372000,
+      "candidate": 272000,
+      "category": "model",
+      "id": "model:changed:gpt-5.6-sol:context_window",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": 372000,
+      "candidate": 272000,
+      "category": "model",
+      "id": "model:changed:gpt-5.6-sol:max_context_window",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": null,
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:gpt-5.6-sol:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": 372000,
+      "candidate": 272000,
+      "category": "model",
+      "id": "model:changed:gpt-5.6-terra:context_window",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": 372000,
+      "candidate": 272000,
+      "category": "model",
+      "id": "model:changed:gpt-5.6-terra:max_context_window",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": null,
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:gpt-5.6-terra:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": "thread/turns/items/list",
+      "candidate": null,
+      "category": "app-server",
+      "id": "app-server:missing:thread/turns/items/list",
+      "message": "released app-server entry is missing"
+    },
+    {
+      "baseline": {
+        "aliases": [],
+        "available_during_task": true,
+        "available_in_side_conversation": true,
+        "command": "docs",
+        "description": "open MkDocs documentation in the terminal",
+        "dispatch_bindings": [
+          {
+            "line": 456,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "SlashCommand::Docs => {"
+          },
+          {
+            "line": 940,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "SlashCommand::Docs => {"
+          },
+          {
+            "line": 1335,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "| SlashCommand::Docs"
+          }
+        ],
+        "supports_inline_args": true,
+        "variant": "Docs"
+      },
+      "candidate": null,
+      "category": "integration",
+      "id": "integration:unbound:docs",
+      "message": "protected integration has no slash-command dispatch binding"
+    },
+    {
+      "baseline": "codex-rs/tui/src/mkdocs_overlay.rs",
+      "candidate": null,
+      "category": "integration-path:docs",
+      "id": "integration-path:docs:missing:codex-rs/tui/src/mkdocs_overlay.rs",
+      "message": "released integration-path:docs entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/mkdocs_viewer.rs",
+      "candidate": null,
+      "category": "integration-path:docs",
+      "id": "integration-path:docs:missing:codex-rs/tui/src/mkdocs_viewer.rs",
+      "message": "released integration-path:docs entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/mkdocs_viewer_tests.rs",
+      "candidate": null,
+      "category": "integration-path:docs",
+      "id": "integration-path:docs:missing:codex-rs/tui/src/mkdocs_viewer_tests.rs",
+      "message": "released integration-path:docs entry is missing"
+    },
+    {
+      "baseline": {
+        "aliases": [],
+        "available_during_task": true,
+        "available_in_side_conversation": true,
+        "command": "gpu",
+        "description": "rent, inspect, or terminate GPU capacity",
+        "dispatch_bindings": [
+          {
+            "line": 296,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "SlashCommand::Gpu => {"
+          },
+          {
+            "line": 805,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "SlashCommand::Gpu => {"
+          },
+          {
+            "line": 1330,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "| SlashCommand::Gpu"
+          }
+        ],
+        "supports_inline_args": true,
+        "variant": "Gpu"
+      },
+      "candidate": null,
+      "category": "integration",
+      "id": "integration:unbound:gpu",
+      "message": "protected integration has no slash-command dispatch binding"
+    },
+    {
+      "baseline": "codex-rs/tui/src/chatwidget/gpu_menu.rs",
+      "candidate": null,
+      "category": "integration-path:gpu",
+      "id": "integration-path:gpu:missing:codex-rs/tui/src/chatwidget/gpu_menu.rs",
+      "message": "released integration-path:gpu entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/chatwidget/gpu_menu_tests.rs",
+      "candidate": null,
+      "category": "integration-path:gpu",
+      "id": "integration-path:gpu:missing:codex-rs/tui/src/chatwidget/gpu_menu_tests.rs",
+      "message": "released integration-path:gpu entry is missing"
+    },
+    {
+      "baseline": {
+        "aliases": [],
+        "available_during_task": true,
+        "available_in_side_conversation": true,
+        "command": "orchestrate",
+        "description": "attach and manage native pane whips",
+        "dispatch_bindings": [
+          {
+            "line": 330,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "SlashCommand::Orchestrate => {"
+          },
+          {
+            "line": 844,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "SlashCommand::Orchestrate => {"
+          },
+          {
+            "line": 1324,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "| SlashCommand::Orchestrate"
+          }
+        ],
+        "supports_inline_args": true,
+        "variant": "Orchestrate"
+      },
+      "candidate": null,
+      "category": "integration",
+      "id": "integration:unbound:orchestration",
+      "message": "protected integration has no slash-command dispatch binding"
+    },
+    {
+      "baseline": "codex-rs/tui/src/orchestrate.rs",
+      "candidate": null,
+      "category": "integration-path:orchestration",
+      "id": "integration-path:orchestration:missing:codex-rs/tui/src/orchestrate.rs",
+      "message": "released integration-path:orchestration entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/spawn_orchestration.rs",
+      "candidate": null,
+      "category": "integration-path:orchestration",
+      "id": "integration-path:orchestration:missing:codex-rs/tui/src/spawn_orchestration.rs",
+      "message": "released integration-path:orchestration entry is missing"
+    },
+    {
+      "baseline": {
+        "aliases": [],
+        "available_during_task": true,
+        "available_in_side_conversation": false,
+        "command": "panes",
+        "description": "switch PFTerminal, Claude Code, or agent panes",
+        "dispatch_bindings": [
+          {
+            "line": 338,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "SlashCommand::Panes => {"
+          },
+          {
+            "line": 1322,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "| SlashCommand::Panes"
+          }
+        ],
+        "supports_inline_args": false,
+        "variant": "Panes"
+      },
+      "candidate": null,
+      "category": "integration",
+      "id": "integration:unbound:panes",
+      "message": "protected integration has no slash-command dispatch binding"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/app_integration.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/app_integration.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/bridge.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/bridge.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/bridge_translate.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/bridge_translate.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/command_plan.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/command_plan.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/execution.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/execution.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/mod.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/mod.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/output_parse.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/output_parse.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/pane.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/pane.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/persistence.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/persistence.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/progress.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/progress.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/progress_summarize.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/progress_summarize.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/provider.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/provider.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/registry.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/registry.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/smoke.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/smoke.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/smoke_workflows.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/smoke_workflows.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/tests.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/tests.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/claude_panes/turn_types.rs",
+      "candidate": null,
+      "category": "integration-path:panes",
+      "id": "integration-path:panes:missing:codex-rs/tui/src/claude_panes/turn_types.rs",
+      "message": "released integration-path:panes entry is missing"
+    },
+    {
+      "baseline": {
+        "aliases": [],
+        "available_during_task": true,
+        "available_in_side_conversation": false,
+        "command": "spawn",
+        "description": "orchestrate Nazgul, Troll, and Orc agent roles",
+        "dispatch_bindings": [
+          {
+            "line": 327,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "SlashCommand::Spawn => {"
+          },
+          {
+            "line": 826,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "SlashCommand::Spawn => {"
+          },
+          {
+            "line": 1323,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "| SlashCommand::Spawn"
+          }
+        ],
+        "supports_inline_args": true,
+        "variant": "Spawn"
+      },
+      "candidate": null,
+      "category": "integration",
+      "id": "integration:unbound:spawn",
+      "message": "protected integration has no slash-command dispatch binding"
+    },
+    {
+      "baseline": "codex-rs/core/src/agent/builtins/nazgul.toml",
+      "candidate": null,
+      "category": "integration-path:spawn",
+      "id": "integration-path:spawn:missing:codex-rs/core/src/agent/builtins/nazgul.toml",
+      "message": "released integration-path:spawn entry is missing"
+    },
+    {
+      "baseline": "codex-rs/core/src/agent/builtins/nazgul_base.md",
+      "candidate": null,
+      "category": "integration-path:spawn",
+      "id": "integration-path:spawn:missing:codex-rs/core/src/agent/builtins/nazgul_base.md",
+      "message": "released integration-path:spawn entry is missing"
+    },
+    {
+      "baseline": "codex-rs/core/src/agent/builtins/orc.toml",
+      "candidate": null,
+      "category": "integration-path:spawn",
+      "id": "integration-path:spawn:missing:codex-rs/core/src/agent/builtins/orc.toml",
+      "message": "released integration-path:spawn entry is missing"
+    },
+    {
+      "baseline": "codex-rs/core/src/agent/builtins/orc_base.md",
+      "candidate": null,
+      "category": "integration-path:spawn",
+      "id": "integration-path:spawn:missing:codex-rs/core/src/agent/builtins/orc_base.md",
+      "message": "released integration-path:spawn entry is missing"
+    },
+    {
+      "baseline": "codex-rs/core/src/agent/builtins/standard_base.md",
+      "candidate": null,
+      "category": "integration-path:spawn",
+      "id": "integration-path:spawn:missing:codex-rs/core/src/agent/builtins/standard_base.md",
+      "message": "released integration-path:spawn entry is missing"
+    },
+    {
+      "baseline": "codex-rs/core/src/agent/builtins/troll.toml",
+      "candidate": null,
+      "category": "integration-path:spawn",
+      "id": "integration-path:spawn:missing:codex-rs/core/src/agent/builtins/troll.toml",
+      "message": "released integration-path:spawn entry is missing"
+    },
+    {
+      "baseline": "codex-rs/core/src/agent/builtins/troll_base.md",
+      "candidate": null,
+      "category": "integration-path:spawn",
+      "id": "integration-path:spawn:missing:codex-rs/core/src/agent/builtins/troll_base.md",
+      "message": "released integration-path:spawn entry is missing"
+    },
+    {
+      "baseline": "codex-rs/core/src/agent/control/mailbox.rs",
+      "candidate": null,
+      "category": "integration-path:spawn",
+      "id": "integration-path:spawn:missing:codex-rs/core/src/agent/control/mailbox.rs",
+      "message": "released integration-path:spawn entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/spawn_crew.rs",
+      "candidate": null,
+      "category": "integration-path:spawn",
+      "id": "integration-path:spawn:missing:codex-rs/tui/src/spawn_crew.rs",
+      "message": "released integration-path:spawn entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/spawn_orchestration.rs",
+      "candidate": null,
+      "category": "integration-path:spawn",
+      "id": "integration-path:spawn:missing:codex-rs/tui/src/spawn_orchestration.rs",
+      "message": "released integration-path:spawn entry is missing"
+    },
+    {
+      "baseline": {
+        "aliases": [],
+        "available_during_task": true,
+        "available_in_side_conversation": true,
+        "command": "tasknode",
+        "description": "interact with Task Node tasks and rewards",
+        "dispatch_bindings": [
+          {
+            "line": 335,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "SlashCommand::Tasknode => {"
+          },
+          {
+            "line": 849,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "SlashCommand::Tasknode => {"
+          },
+          {
+            "line": 1325,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "| SlashCommand::Tasknode"
+          }
+        ],
+        "supports_inline_args": true,
+        "variant": "Tasknode"
+      },
+      "candidate": null,
+      "category": "integration",
+      "id": "integration:unbound:tasknode",
+      "message": "protected integration has no slash-command dispatch binding"
+    },
+    {
+      "baseline": "codex-rs/tui/src/chatwidget/tasknode_menu.rs",
+      "candidate": null,
+      "category": "integration-path:tasknode",
+      "id": "integration-path:tasknode:missing:codex-rs/tui/src/chatwidget/tasknode_menu.rs",
+      "message": "released integration-path:tasknode entry is missing"
+    },
+    {
+      "baseline": {
+        "aliases": [],
+        "available_during_task": true,
+        "available_in_side_conversation": true,
+        "command": "telegram",
+        "description": "connect and manage PFTerminal from Telegram",
+        "dispatch_bindings": [
+          {
+            "line": 533,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "SlashCommand::Telegram => {"
+          },
+          {
+            "line": 795,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "SlashCommand::Telegram => match trimmed.to_ascii_lowercase().as_str() {"
+          },
+          {
+            "line": 1329,
+            "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+            "text": "| SlashCommand::Telegram"
+          }
+        ],
+        "supports_inline_args": true,
+        "variant": "Telegram"
+      },
+      "candidate": null,
+      "category": "integration",
+      "id": "integration:unbound:telegram",
+      "message": "protected integration has no slash-command dispatch binding"
+    },
+    {
+      "baseline": "codex-rs/tui/src/chatwidget/telegram_setup.rs",
+      "candidate": null,
+      "category": "integration-path:telegram",
+      "id": "integration-path:telegram:missing:codex-rs/tui/src/chatwidget/telegram_setup.rs",
+      "message": "released integration-path:telegram entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/chatwidget/telegram_setup/api.rs",
+      "candidate": null,
+      "category": "integration-path:telegram",
+      "id": "integration-path:telegram:missing:codex-rs/tui/src/chatwidget/telegram_setup/api.rs",
+      "message": "released integration-path:telegram entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/chatwidget/telegram_setup/api_tests.rs",
+      "candidate": null,
+      "category": "integration-path:telegram",
+      "id": "integration-path:telegram:missing:codex-rs/tui/src/chatwidget/telegram_setup/api_tests.rs",
+      "message": "released integration-path:telegram entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/chatwidget/telegram_setup/service.rs",
+      "candidate": null,
+      "category": "integration-path:telegram",
+      "id": "integration-path:telegram:missing:codex-rs/tui/src/chatwidget/telegram_setup/service.rs",
+      "message": "released integration-path:telegram entry is missing"
+    },
+    {
+      "baseline": "codex-rs/tui/src/chatwidget/telegram_setup/service_tests.rs",
+      "candidate": null,
+      "category": "integration-path:telegram",
+      "id": "integration-path:telegram:missing:codex-rs/tui/src/chatwidget/telegram_setup/service_tests.rs",
+      "message": "released integration-path:telegram entry is missing"
+    }
+  ]
+}
