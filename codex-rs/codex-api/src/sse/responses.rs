@@ -145,7 +145,7 @@ impl From<ResponseCompletedUsage> for TokenUsage {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 struct ResponseCompletedInputTokensDetails {
     cached_tokens: i64,
     #[serde(default)]
@@ -169,6 +169,7 @@ pub struct ResponsesStreamEvent {
     call_id: Option<String>,
     delta: Option<String>,
     text: Option<String>,
+    usage: Option<ResponseCompletedUsage>,
     summary_index: Option<i64>,
     content_index: Option<i64>,
     safety_buffering: Option<Value>,
@@ -231,6 +232,19 @@ impl ResponsesStreamEvent {
             .and_then(|metadata| metadata.get("openai_chatgpt_moderation_metadata"))
             .cloned()
             .map(|metadata| TurnModerationMetadataEvent { metadata })
+    }
+
+    fn token_usage(&self) -> Option<TokenUsage> {
+        if let Some(usage) = self.usage.clone() {
+            return Some(usage.into());
+        }
+
+        self.response
+            .as_ref()
+            .and_then(|response| response.get("usage"))
+            .cloned()
+            .and_then(|usage| serde_json::from_value::<ResponseCompletedUsage>(usage).ok())
+            .map(Into::into)
     }
 
     pub(crate) fn safety_buffering(
@@ -843,6 +857,46 @@ mod tests {
                 reasoning_output_tokens: 5,
                 total_tokens: 110,
             }
+        );
+    }
+
+    #[tokio::test]
+    async fn separate_usage_event_is_attached_to_completed_response() {
+        let events = run_sse(vec![
+            json!({
+                "type": "response.usage",
+                "usage": {
+                    "input_tokens": 100,
+                    "input_tokens_details": {
+                        "cached_tokens": 40,
+                        "cache_write_tokens": 60
+                    },
+                    "output_tokens": 10,
+                    "output_tokens_details": { "reasoning_tokens": 5 },
+                    "total_tokens": 110
+                }
+            }),
+            json!({
+                "type": "response.completed",
+                "response": { "id": "resp1" }
+            }),
+        ])
+        .await;
+
+        assert_matches!(
+            events.as_slice(),
+            [ResponseEvent::Completed {
+                response_id,
+                token_usage: Some(TokenUsage {
+                    input_tokens: 100,
+                    cached_input_tokens: 40,
+                    cache_write_input_tokens: 60,
+                    output_tokens: 10,
+                    reasoning_output_tokens: 5,
+                    total_tokens: 110,
+                }),
+                ..
+            }] if response_id == "resp1"
         );
     }
 
