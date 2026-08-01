@@ -37,9 +37,14 @@ fn retryability_preserves_error_details_distinctions() {
     let errors = [
         (CodexErr::ServerOverloaded, false),
         (
+            CodexErr::PlanEntitlementExceeded("context window is too large".to_string()),
+            false,
+        ),
+        (
             CodexErr::RetryLimit(RetryLimitReachedError {
                 status: StatusCode::TOO_MANY_REQUESTS,
                 request_id: None,
+                retry_after_ms: None,
             }),
             false,
         ),
@@ -625,6 +630,7 @@ fn unexpected_status_payment_required_is_not_retryable() {
     let err = CodexErr::UnexpectedStatus(UnexpectedResponseError {
         status: StatusCode::PAYMENT_REQUIRED,
         body: "payment required".to_string(),
+        user_message: None,
         url: None,
         cf_ray: None,
         request_id: None,
@@ -647,6 +653,7 @@ fn unexpected_status_transient_statuses_are_retryable() {
         let err = CodexErr::UnexpectedStatus(UnexpectedResponseError {
             status,
             body: String::new(),
+            user_message: None,
             url: None,
             cf_ray: None,
             request_id: None,

@@ -814,6 +814,19 @@ impl InterAgentCommunication {
         }
     }
 
+    pub fn validate_mailbox_body(&self) -> Result<(), String> {
+        let body_len = self
+            .encrypted_content
+            .as_ref()
+            .map_or_else(|| self.content.len(), String::len);
+        if body_len > MAX_AGENT_MESSAGE_BYTES {
+            return Err(format!(
+                "agent message is {body_len} bytes; maximum is {MAX_AGENT_MESSAGE_BYTES} bytes"
+            ));
+        }
+        Ok(())
+    }
+
     pub fn set_turn_id_if_missing(&mut self, turn_id: &str) {
         InternalChatMessageMetadataPassthrough::set_turn_id_if_missing(
             &mut self.internal_chat_message_metadata_passthrough,

@@ -321,6 +321,7 @@ impl CodexErr {
 
     codex_err_tuple_constructors!(
         Stream(message: String),
+        PlanEntitlementExceeded(message: String),
         ThreadNotFound(thread_id: ThreadId),
         UnexpectedStatus(error: UnexpectedResponseError),
         InvalidRequest(message: String),
@@ -377,6 +378,7 @@ impl CodexErr {
             | CodexErrorDetails::LandlockSandboxExecutableNotProvided
             | CodexErrorDetails::RetryLimit(_)
             | CodexErrorDetails::ContextWindowExceeded
+            | CodexErrorDetails::PlanEntitlementExceeded(_)
             | CodexErrorDetails::ThreadNotFound(_)
             | CodexErrorDetails::AgentLimitReached { .. }
             | CodexErrorDetails::Spawn
@@ -387,7 +389,6 @@ impl CodexErr {
             CodexErrorDetails::Stream(..)
             | CodexErrorDetails::Timeout
             | CodexErrorDetails::RequestTimeout
-            | CodexErrorDetails::UnexpectedStatus(_)
             | CodexErrorDetails::ResponseStreamFailed(_)
             | CodexErrorDetails::ConnectionFailed(_)
             | CodexErrorDetails::InternalServerError
@@ -395,6 +396,7 @@ impl CodexErr {
             | CodexErrorDetails::Io(_)
             | CodexErrorDetails::Json(_)
             | CodexErrorDetails::TokioJoin(_) => true,
+            CodexErrorDetails::UnexpectedStatus(error) => is_retryable_http_status(error.status),
             #[cfg(target_os = "linux")]
             CodexErrorDetails::LandlockRuleset(_) | CodexErrorDetails::LandlockPathFd(_) => false,
         }

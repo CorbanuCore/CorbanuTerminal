@@ -406,6 +406,9 @@ impl SubAgentActivityItem {
             occurred_at_ms,
             agent_thread_id: self.agent_thread_id,
             agent_path: self.agent_path.clone(),
+            agent_nickname: None,
+            agent_role: None,
+            task_preview: None,
             kind: self.kind,
         })
     }
@@ -634,3 +637,7 @@ impl HasLegacyEvent for EventMsg {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "legacy_events_tests.rs"]
+mod tests;
