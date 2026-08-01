@@ -1,5 +1,9 @@
 # PF Terminal Upstream Codex Convergence Plan
 
+> **Historical evidence only.** Implementation and release execution are governed solely by
+> `PFTERMINAL-0.1.27-SPEC.md`. This plan cannot authorize a feature removal, deprecation, product
+> rename, compatibility waiver, or release decision.
+
 Date: 2026-07-30
 
 ## Objective

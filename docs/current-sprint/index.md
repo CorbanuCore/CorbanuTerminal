@@ -1,7 +1,17 @@
-# Current Security Sprint
+# Current Sprint
 
-The only active PFTerminal sprint material in this folder is security work for
-provider API-key containment.
+## PF Terminal 0.1.27
+
+There is one active implementation and release specification:
+
+- [PF Terminal 0.1.27 Canonical Product-Preserving Codex Convergence Spec](PFTERMINAL-0.1.27-SPEC.md)
+
+The dated convergence plan and baseline are historical evidence, not additional specifications
+or sources of release authority.
+
+## Security work
+
+Provider API-key containment remains an active security workstream.
 
 The vault already exists and is documented in
 [Authentication And Vault](../authentication.md). The current security work is
