@@ -1,0 +1,604 @@
+{
+  "accepted_difference_count": 0,
+  "accepted_differences": [],
+  "baseline_source": {
+    "commit": "d9e2a383ab02550ba26c525c6c99794dd99ae13a",
+    "requested_ref": "pfterminal-v0.1.26-pre-convergence",
+    "tree": "e8c33e41144a55a2f1b39b4fc354b05f7fc6ead5"
+  },
+  "candidate_source": {
+    "commit": "49a829ff05b50ce3f8147acf3df5b4a58e73ae2f",
+    "requested_ref": "HEAD",
+    "tree": "449ba4901203616ca3daf3c2782972248ba26752"
+  },
+  "difference_count": 47,
+  "invalid_allowlist_entries": [],
+  "invalid_allowlist_entry_count": 0,
+  "schema_version": 1,
+  "unresolved_difference_count": 47,
+  "unresolved_differences": [
+    {
+      "baseline": "codex-execpolicy-legacy",
+      "candidate": null,
+      "category": "binary",
+      "id": "binary:missing:codex-execpolicy-legacy",
+      "message": "released binary entry is missing"
+    },
+    {
+      "baseline": "Launch the PFTerminal desktop app (opens the app installer if missing).",
+      "candidate": "Launch the Desktop app (opens the app installer if missing).",
+      "category": "cli",
+      "id": "cli:changed:app:description",
+      "message": "released cli field changed"
+    },
+    {
+      "baseline": "continue this session in PFTerminal Desktop",
+      "candidate": "continue this session in the Desktop app",
+      "category": "slash",
+      "id": "slash:changed:app:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": false,
+      "candidate": true,
+      "category": "slash",
+      "id": "slash:changed:clear:supports_inline_args",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "exit PFTerminal",
+      "candidate": "exit Codex",
+      "category": "slash",
+      "id": "slash:changed:exit:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": false,
+      "candidate": true,
+      "category": "slash",
+      "id": "slash:changed:fork:supports_inline_args",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": false,
+      "candidate": true,
+      "category": "slash",
+      "id": "slash:changed:new:supports_inline_args",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "exit PFTerminal",
+      "candidate": "exit Codex",
+      "category": "slash",
+      "id": "slash:changed:quit:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "view account usage or use a rate-limit reset",
+      "candidate": "view account usage or use a usage limit reset",
+      "category": "slash",
+      "id": "slash:changed:usage:description",
+      "message": "released slash field changed"
+    },
+    {
+      "baseline": "features.sleep_tool",
+      "candidate": null,
+      "category": "config",
+      "id": "config:missing:features.sleep_tool",
+      "message": "released config entry is missing"
+    },
+    {
+      "baseline": "model_supports_reasoning_summaries",
+      "candidate": null,
+      "category": "config",
+      "id": "config:missing:model_supports_reasoning_summaries",
+      "message": "released config entry is missing"
+    },
+    {
+      "baseline": "ambient/large",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:ambient/large",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "claude-fable-5",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:claude-fable-5",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "claude-fable-5-plan",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:claude-fable-5-plan",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "claude-opus-5",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:claude-opus-5",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "claude-opus-5-plan",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:claude-opus-5-plan",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "deepseek/deepseek-v4-pro",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:deepseek/deepseek-v4-pro",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "glm-5.2",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:glm-5.2",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "google/gemini-3.5-flash",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:google/gemini-3.5-flash",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "gpt-5.3-codex",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:gpt-5.3-codex",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "k3",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:k3",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "minimax/minimax-m3",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:minimax/minimax-m3",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "moonshotai/kimi-k2.7-code",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:moonshotai/kimi-k2.7-code",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "moonshotai/kimi-k3",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:moonshotai/kimi-k3",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "muse-spark-1.1",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:muse-spark-1.1",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "openrouter/owl-alpha",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:openrouter/owl-alpha",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "tencent/hy3:free",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:tencent/hy3:free",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "x-ai/grok-4.5",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:x-ai/grok-4.5",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "z-ai/glm-5.2",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:z-ai/glm-5.2",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "zai-org/GLM-5.2",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:zai-org/GLM-5.2",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "zai/glm-5.2",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:zai/glm-5.2",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": "zai/glm-5.2-fast",
+      "candidate": null,
+      "category": "model",
+      "id": "model:missing:zai/glm-5.2-fast",
+      "message": "released model entry is missing"
+    },
+    {
+      "baseline": [
+        "business",
+        "edu",
+        "education",
+        "enterprise",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "go",
+        "hc",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "go",
+        "hc",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:codex-auto-review:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": [
+        "business",
+        "edu",
+        "education",
+        "enterprise",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:gpt-5.2:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": [
+        "business",
+        "edu",
+        "education",
+        "enterprise",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "go",
+        "hc",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "go",
+        "hc",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:gpt-5.4:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": [
+        "business",
+        "edu",
+        "education",
+        "enterprise",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:gpt-5.4-mini:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": [
+        "business",
+        "edu",
+        "education",
+        "enterprise",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:gpt-5.5:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": 372000,
+      "candidate": 272000,
+      "category": "model",
+      "id": "model:changed:gpt-5.6-luna:context_window",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": 372000,
+      "candidate": 272000,
+      "category": "model",
+      "id": "model:changed:gpt-5.6-luna:max_context_window",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": null,
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:gpt-5.6-luna:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": 372000,
+      "candidate": 272000,
+      "category": "model",
+      "id": "model:changed:gpt-5.6-sol:context_window",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": 372000,
+      "candidate": 272000,
+      "category": "model",
+      "id": "model:changed:gpt-5.6-sol:max_context_window",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": null,
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:gpt-5.6-sol:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": 372000,
+      "candidate": 272000,
+      "category": "model",
+      "id": "model:changed:gpt-5.6-terra:context_window",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": 372000,
+      "candidate": 272000,
+      "category": "model",
+      "id": "model:changed:gpt-5.6-terra:max_context_window",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": null,
+      "candidate": [
+        "business",
+        "edu",
+        "edu_plus",
+        "edu_pro",
+        "education",
+        "enterprise",
+        "enterprise_cbp_automation",
+        "enterprise_cbp_usage_based",
+        "finserv",
+        "free",
+        "free_workspace",
+        "go",
+        "hc",
+        "k12",
+        "plus",
+        "pro",
+        "prolite",
+        "quorum",
+        "sci",
+        "self_serve_business_usage_based",
+        "team"
+      ],
+      "category": "model",
+      "id": "model:changed:gpt-5.6-terra:available_in_plans",
+      "message": "released model field changed"
+    },
+    {
+      "baseline": "thread/turns/items/list",
+      "candidate": null,
+      "category": "app-server",
+      "id": "app-server:missing:thread/turns/items/list",
+      "message": "released app-server entry is missing"
+    }
+  ]
+}
