@@ -33,7 +33,10 @@ def keyed(items: Iterable[dict[str, Any]], field: str) -> dict[str, dict[str, An
 
 
 def missing_values(
-    differences: list[Difference], category: str, baseline: Iterable[str], candidate: Iterable[str]
+    differences: list[Difference],
+    category: str,
+    baseline: Iterable[str],
+    candidate: Iterable[str],
 ) -> None:
     candidate_set = set(candidate)
     for value in sorted(set(baseline) - candidate_set):
@@ -75,7 +78,9 @@ def compare_keyed_entries(
 
 
 def compare_migrations(
-    differences: list[Difference], baseline: list[dict[str, str]], candidate: list[dict[str, str]]
+    differences: list[Difference],
+    baseline: list[dict[str, str]],
+    candidate: list[dict[str, str]],
 ) -> None:
     baseline_by_path = keyed(baseline, "path")
     candidate_by_path = keyed(candidate, "path")
@@ -121,7 +126,9 @@ def compare_integrations(
         )
 
 
-def compare_manifests(baseline: dict[str, Any], candidate: dict[str, Any]) -> list[Difference]:
+def compare_manifests(
+    baseline: dict[str, Any], candidate: dict[str, Any]
+) -> list[Difference]:
     differences: list[Difference] = []
     before_entries = baseline["entry_points"]
     after_entries = candidate["entry_points"]
@@ -185,7 +192,12 @@ def compare_manifests(baseline: dict[str, Any], candidate: dict[str, Any]) -> li
             "supported_in_api",
         ),
     )
-    missing_values(differences, "app-server", baseline["app_server_methods"], candidate["app_server_methods"])
+    missing_values(
+        differences,
+        "app-server",
+        baseline["app_server_methods"],
+        candidate["app_server_methods"],
+    )
     for platform, before_paths in baseline["platform_artifacts"].items():
         missing_values(
             differences,
@@ -194,13 +206,17 @@ def compare_manifests(baseline: dict[str, Any], candidate: dict[str, Any]) -> li
             candidate["platform_artifacts"].get(platform, []),
         )
     compare_integrations(
-        differences, baseline["protected_integrations"], candidate["protected_integrations"]
+        differences,
+        baseline["protected_integrations"],
+        candidate["protected_integrations"],
     )
     return differences
 
 
 def apply_allowlist(
-    differences: list[Difference], allowlist: dict[str, Any] | None, candidate_paths: set[str]
+    differences: list[Difference],
+    allowlist: dict[str, Any] | None,
+    candidate_paths: set[str],
 ) -> tuple[list[Difference], list[dict[str, Any]], list[str]]:
     entries = (allowlist or {}).get("differences", [])
     by_id = {entry.get("id"): entry for entry in entries}
@@ -222,10 +238,14 @@ def apply_allowlist(
             continue
         missing_tests = sorted(set(tests) - candidate_paths)
         if missing_tests:
-            invalid.append(f"allowlist tests do not exist for {difference.id}: {missing_tests}")
+            invalid.append(
+                f"allowlist tests do not exist for {difference.id}: {missing_tests}"
+            )
             unresolved.append(difference)
             continue
-        accepted.append({"difference": difference.as_dict(), "acceptance_tests": sorted(set(tests))})
+        accepted.append(
+            {"difference": difference.as_dict(), "acceptance_tests": sorted(set(tests))}
+        )
     return unresolved, accepted, invalid
 
 

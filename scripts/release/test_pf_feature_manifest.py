@@ -19,7 +19,9 @@ def load_module(name: str, filename: str):
 
 
 builder = load_module("pf_feature_manifest_builder", "build_pf_feature_manifest.py")
-comparator = load_module("pf_feature_manifest_comparator", "compare_pf_feature_manifests.py")
+comparator = load_module(
+    "pf_feature_manifest_comparator", "compare_pf_feature_manifests.py"
+)
 
 
 class BuilderTests(unittest.TestCase):
@@ -35,8 +37,7 @@ pub enum SlashCommand {
 """
         variants = builder.enum_variants(source, "SlashCommand")
         names = {
-            variant["variant"]: builder.strum_names(variant)
-            for variant in variants
+            variant["variant"]: builder.strum_names(variant) for variant in variants
         }
         self.assertEqual(
             names,
@@ -98,7 +99,9 @@ class ComparatorTests(unittest.TestCase):
                     "supports_inline_args": True,
                     "available_during_task": True,
                     "available_in_side_conversation": True,
-                    "dispatch_bindings": [{"path": "dispatch.rs", "line": 1, "text": "Wallet"}],
+                    "dispatch_bindings": [
+                        {"path": "dispatch.rs", "line": 1, "text": "Wallet"}
+                    ],
                 }
             ]
             if include_command
@@ -107,7 +110,11 @@ class ComparatorTests(unittest.TestCase):
         return {
             "source": {"commit": "abc"},
             "source_paths": ["tests/wallet_acceptance.rs"],
-            "entry_points": {"binaries": [], "cli_subcommands": [], "tui_slash_commands": commands},
+            "entry_points": {
+                "binaries": [],
+                "cli_subcommands": [],
+                "tui_slash_commands": commands,
+            },
             "configuration": {"property_paths": []},
             "persistence": {"state_migrations": []},
             "model_catalog": [],
@@ -118,16 +125,26 @@ class ComparatorTests(unittest.TestCase):
 
     def test_removed_and_changed_commands_are_reported(self) -> None:
         baseline = self.manifest()
-        removed = comparator.compare_manifests(baseline, self.manifest(include_command=False))
-        changed = comparator.compare_manifests(baseline, self.manifest(command_description="changed"))
+        removed = comparator.compare_manifests(
+            baseline, self.manifest(include_command=False)
+        )
+        changed = comparator.compare_manifests(
+            baseline, self.manifest(command_description="changed")
+        )
         self.assertEqual([item.id for item in removed], ["slash:missing:wallet"])
-        self.assertEqual([item.id for item in changed], ["slash:changed:wallet:description"])
+        self.assertEqual(
+            [item.id for item in changed], ["slash:changed:wallet:description"]
+        )
 
     def test_allowlist_requires_an_existing_acceptance_test(self) -> None:
         difference = comparator.Difference("slash:missing:wallet", "slash", "missing")
         unresolved, accepted, invalid = comparator.apply_allowlist(
             [difference],
-            {"differences": [{"id": difference.id, "acceptance_tests": ["missing.rs"]}]},
+            {
+                "differences": [
+                    {"id": difference.id, "acceptance_tests": ["missing.rs"]}
+                ]
+            },
             {"tests/wallet_acceptance.rs"},
         )
         self.assertEqual(unresolved, [difference])
@@ -138,7 +155,10 @@ class ComparatorTests(unittest.TestCase):
             [difference],
             {
                 "differences": [
-                    {"id": difference.id, "acceptance_tests": ["tests/wallet_acceptance.rs"]}
+                    {
+                        "id": difference.id,
+                        "acceptance_tests": ["tests/wallet_acceptance.rs"],
+                    }
                 ]
             },
             {"tests/wallet_acceptance.rs"},

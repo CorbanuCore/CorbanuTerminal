@@ -25,11 +25,23 @@ PROTECTED_INTEGRATIONS = {
     "gpu": ("Gpu", ("codex-rs/gpu-market/", "codex-rs/tui/src/chatwidget/gpu_")),
     "wallet": ("Wallet", ("codex-rs/wallet/", "codex-rs/tui/src/chatwidget/wallet_")),
     "vault": ("Vault", ("codex-rs/vault/", "codex-rs/tui/src/chatwidget/vault_")),
-    "telegram": ("Telegram", ("codex-rs/telegram/", "codex-rs/tui/src/chatwidget/telegram_")),
-    "tasknode": ("Tasknode", ("codex-rs/task-node/", "codex-rs/tui/src/chatwidget/tasknode_")),
+    "telegram": (
+        "Telegram",
+        ("codex-rs/telegram/", "codex-rs/tui/src/chatwidget/telegram_"),
+    ),
+    "tasknode": (
+        "Tasknode",
+        ("codex-rs/task-node/", "codex-rs/tui/src/chatwidget/tasknode_"),
+    ),
     "spawn": ("Spawn", ("codex-rs/tui/src/spawn_", "codex-rs/core/src/agent/")),
-    "orchestration": ("Orchestrate", ("codex-rs/tui/src/orchestrate.rs", "codex-rs/tui/src/spawn_orchestration.rs")),
-    "panes": ("Panes", ("codex-rs/tui/src/claude_panes/", "codex-rs/tui/src/multi_agents.rs")),
+    "orchestration": (
+        "Orchestrate",
+        ("codex-rs/tui/src/orchestrate.rs", "codex-rs/tui/src/spawn_orchestration.rs"),
+    ),
+    "panes": (
+        "Panes",
+        ("codex-rs/tui/src/claude_panes/", "codex-rs/tui/src/multi_agents.rs"),
+    ),
     "docs": ("Docs", ("codex-rs/tui/src/mkdocs_", "codex-rs/tui/src/pager_overlay.rs")),
 }
 
@@ -59,7 +71,9 @@ class GitTree:
         return str(run_git("rev-parse", f"{self.requested_ref}^{{tree}}")).strip()
 
     def files(self) -> list[str]:
-        output = run_git("ls-tree", "-r", "--name-only", "-z", self.requested_ref, binary=True)
+        output = run_git(
+            "ls-tree", "-r", "--name-only", "-z", self.requested_ref, binary=True
+        )
         assert isinstance(output, bytes)
         return sorted(item.decode() for item in output.split(b"\0") if item)
 
@@ -126,7 +140,11 @@ def strum_names(variant: dict[str, Any]) -> tuple[str, list[str]]:
     attributes = " ".join(variant["attributes"])
     explicit = re.findall(r'(?:to_string|serialize)\s*=\s*"([^"]+)"', attributes)
     canonical_match = re.search(r'to_string\s*=\s*"([^"]+)"', attributes)
-    canonical = canonical_match.group(1) if canonical_match else (explicit[0] if explicit else kebab_case(variant["variant"]))
+    canonical = (
+        canonical_match.group(1)
+        if canonical_match
+        else (explicit[0] if explicit else kebab_case(variant["variant"]))
+    )
     aliases = sorted(set(explicit) - {canonical})
     return canonical, aliases
 
@@ -147,9 +165,15 @@ def description_map(source: str) -> dict[str, str]:
 def bool_variant_set(source: str, function_name: str, expected: bool) -> set[str]:
     body = balanced_body(source, f"fn {function_name}")
     if "matches!" in body:
-        return set(re.findall(r"SlashCommand::([A-Za-z0-9_]+)", body)) if expected else set()
+        return (
+            set(re.findall(r"SlashCommand::([A-Za-z0-9_]+)", body))
+            if expected
+            else set()
+        )
     result: set[str] = set()
-    for match in re.finditer(r"((?:SlashCommand::[A-Za-z0-9_]+\s*\|?\s*)+)=>\s*(true|false)", body):
+    for match in re.finditer(
+        r"((?:SlashCommand::[A-Za-z0-9_]+\s*\|?\s*)+)=>\s*(true|false)", body
+    ):
         if (match.group(2) == "true") == expected:
             result.update(re.findall(r"SlashCommand::([A-Za-z0-9_]+)", match.group(1)))
     return result
@@ -207,13 +231,20 @@ def cargo_binaries(tree: GitTree, files: list[str]) -> list[dict[str, str]]:
                     "name": binary["name"],
                     "crate": package["name"],
                     "manifest": path,
-                    "source": str(PurePosixPath(crate_dir) / binary.get("path", "src/main.rs")),
+                    "source": str(
+                        PurePosixPath(crate_dir) / binary.get("path", "src/main.rs")
+                    ),
                 }
             )
         default_main = str(PurePosixPath(crate_dir) / "src/main.rs")
         if default_main in file_set and not manifest.get("bin"):
             binaries.append(
-                {"name": package["name"], "crate": package["name"], "manifest": path, "source": default_main}
+                {
+                    "name": package["name"],
+                    "crate": package["name"],
+                    "manifest": path,
+                    "source": default_main,
+                }
             )
     return sorted(binaries, key=lambda item: (item["name"], item["manifest"]))
 
@@ -255,7 +286,9 @@ def migrations(tree: GitTree, files: list[str]) -> list[dict[str, str]]:
     result = []
     for path in files:
         if path.startswith("codex-rs/state/migrations/") and path.endswith(".sql"):
-            result.append({"path": path, "sha256": hashlib.sha256(tree.bytes(path)).hexdigest()})
+            result.append(
+                {"path": path, "sha256": hashlib.sha256(tree.bytes(path)).hexdigest()}
+            )
     return result
 
 
@@ -275,24 +308,37 @@ def model_catalog(tree: GitTree) -> list[dict[str, Any]]:
         "visibility",
         "supported_in_api",
     )
-    return [{field: model.get(field) for field in fields if field in model} for model in models]
+    return [
+        {field: model.get(field) for field in fields if field in model}
+        for model in models
+    ]
 
 
 def app_server_methods(tree: GitTree, files: list[str]) -> list[str]:
     methods: set[str] = set()
     for path in files:
-        if not path.startswith("codex-rs/app-server-protocol/src/") or not path.endswith(".rs"):
+        if not path.startswith(
+            "codex-rs/app-server-protocol/src/"
+        ) or not path.endswith(".rs"):
             continue
-        for value in re.findall(r'"([a-z][A-Za-z0-9_-]*/[A-Za-z0-9_./-]+)"', tree.text(path)):
+        for value in re.findall(
+            r'"([a-z][A-Za-z0-9_-]*/[A-Za-z0-9_./-]+)"', tree.text(path)
+        ):
             methods.add(value)
     return sorted(methods)
 
 
-def protected_integrations(tree: GitTree, files: list[str], commands: list[dict[str, Any]]) -> dict[str, Any]:
+def protected_integrations(
+    tree: GitTree, files: list[str], commands: list[dict[str, Any]]
+) -> dict[str, Any]:
     by_variant = {command["variant"]: command for command in commands}
     result = {}
     for name, (variant, prefixes) in PROTECTED_INTEGRATIONS.items():
-        implementation_paths = [path for path in files if any(path.startswith(prefix) for prefix in prefixes)]
+        implementation_paths = [
+            path
+            for path in files
+            if any(path.startswith(prefix) for prefix in prefixes)
+        ]
         result[name] = {
             "slash_command": by_variant.get(variant),
             "implementation_path_count": len(implementation_paths),
@@ -303,10 +349,28 @@ def protected_integrations(tree: GitTree, files: list[str], commands: list[dict[
 
 def platform_artifacts(files: list[str]) -> dict[str, list[str]]:
     return {
-        "linux": [path for path in files if path in {"scripts/install/install.sh"} or "linux" in path.lower() and "release" in path.lower()],
-        "macos": [path for path in files if "macos" in path.lower() or path.lower().endswith(".dmg")],
-        "windows": [path for path in files if path.endswith(".ps1") or "windows" in path.lower() and "release" in path.lower()],
-        "packaging": [path for path in files if path.startswith("scripts/codex_package/")],
+        "linux": [
+            path
+            for path in files
+            if path in {"scripts/install/install.sh"}
+            or "linux" in path.lower()
+            and "release" in path.lower()
+        ],
+        "macos": [
+            path
+            for path in files
+            if "macos" in path.lower() or path.lower().endswith(".dmg")
+        ],
+        "windows": [
+            path
+            for path in files
+            if path.endswith(".ps1")
+            or "windows" in path.lower()
+            and "release" in path.lower()
+        ],
+        "packaging": [
+            path for path in files if path.startswith("scripts/codex_package/")
+        ],
     }
 
 
@@ -317,7 +381,9 @@ def home_markers(tree: GitTree, files: list[str]) -> list[dict[str, Any]]:
         "scripts/install/install.sh",
         "scripts/install/install.ps1",
     ]
-    pattern = re.compile(r"PFTERMINAL_HOME|CODEX_HOME|pfterminal-debug|\.pfterminal(?:-debug)?|\.codex")
+    pattern = re.compile(
+        r"PFTERMINAL_HOME|CODEX_HOME|pfterminal-debug|\.pfterminal(?:-debug)?|\.codex"
+    )
     result = []
     for path in paths:
         if path not in files:
@@ -337,14 +403,24 @@ def build_manifest(tree: GitTree) -> dict[str, Any]:
     schema = json.loads(tree.text(CONFIG_SCHEMA))
     return {
         "schema_version": 1,
-        "source": {"requested_ref": tree.requested_ref, "commit": tree.commit, "tree": tree.tree},
+        "source": {
+            "requested_ref": tree.requested_ref,
+            "commit": tree.commit,
+            "tree": tree.tree,
+        },
         "entry_points": {
             "binaries": cargo_binaries(tree, files),
             "cli_subcommands": cli_subcommands(tree),
             "tui_slash_commands": commands,
         },
-        "configuration": {"schema_path": CONFIG_SCHEMA, "property_paths": schema_property_paths(schema)},
-        "persistence": {"state_migrations": migrations(tree, files), "home_markers": home_markers(tree, files)},
+        "configuration": {
+            "schema_path": CONFIG_SCHEMA,
+            "property_paths": schema_property_paths(schema),
+        },
+        "persistence": {
+            "state_migrations": migrations(tree, files),
+            "home_markers": home_markers(tree, files),
+        },
         "model_catalog": model_catalog(tree),
         "app_server_methods": app_server_methods(tree, files),
         "platform_artifacts": platform_artifacts(files),
@@ -356,12 +432,16 @@ def build_manifest(tree: GitTree) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ref", required=True, help="Git commit, tag, or tree to inventory")
+    parser.add_argument(
+        "--ref", required=True, help="Git commit, tag, or tree to inventory"
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     manifest = build_manifest(GitTree(args.ref))
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    args.output.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 if __name__ == "__main__":
