@@ -149,6 +149,7 @@ pub(super) async fn spawn_review_thread(
         extension_data,
         turn_skills: TurnSkillsContext::new(parent_turn_context.turn_skills.snapshot.clone()),
         turn_timing_state: Arc::new(TurnTimingState::default()),
+        parent_completion_expected: Arc::new(AtomicBool::new(false)),
         terminal_error: Arc::new(Mutex::new(None)),
         model_edit_protocol_state: Arc::new(
             crate::session::turn_context::ModelEditProtocolState::default(),

@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn curated_gpu_models_have_conservative_non_fallback_metadata() {
-    let deepseek = model_info_from_slug("deepseek-ai/DeepSeek-V4-Flash");
+    let deepseek = model_info_from_slug("deepseek-ai/DeepSeek-V4-Flash-0731");
     assert!(!deepseek.used_fallback_model_metadata);
     assert_eq!(deepseek.context_window, Some(384_000));
     assert!(deepseek.model_messages.is_some());
@@ -16,7 +16,11 @@ fn curated_gpu_models_have_conservative_non_fallback_metadata() {
             .iter()
             .map(|preset| preset.effort.clone())
             .collect::<Vec<_>>(),
-        vec![ReasoningEffort::High, ReasoningEffort::XHigh]
+        vec![
+            ReasoningEffort::Low,
+            ReasoningEffort::High,
+            ReasoningEffort::Max,
+        ]
     );
 
     let glm = model_info_from_slug("zai-org/GLM-5.2-FP8");

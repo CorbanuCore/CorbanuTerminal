@@ -5,9 +5,12 @@ use crate::crew_presets;
 use crate::crew_state::CrewCreationStatus;
 use crate::crew_state::CrewInstanceState;
 use crate::spawn_orchestration::SpawnRole;
+use crate::spawn_orchestration::node_id_pane;
+use crate::spawn_orchestration::node_id_thread;
 use crate::spawn_orchestration::pane_node_id;
 use crate::spawn_orchestration::spawn_role_from_agent_type;
 use crate::spawn_orchestration::thread_node_id;
+use crate::tui;
 use codex_protocol::ThreadId;
 use codex_protocol::crew::AgentClass;
 use codex_protocol::crew::CrewSpec;
@@ -18,6 +21,200 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 impl App {
+    /// Permanently remove the one CrewSpec-owned hierarchy while preserving a user-owned root
+    /// that was only bound as Nazgul. This action is intentionally whole-crew-only: member-level
+    /// lifecycle commands remain rejected so Core graph and pane-layout ownership cannot diverge.
+    pub(crate) async fn remove_spawn_crew(
+        &mut self,
+        tui: &mut tui::Tui,
+        app_server: &mut AppServerSession,
+    ) -> Result<String> {
+        if self.spawn_legacy_read_only {
+            return Err(eyre!(
+                "The restored legacy hierarchy has no verified CrewSpec ownership and cannot be removed automatically."
+            ));
+        }
+        let crew = self
+            .spawn_crew
+            .clone()
+            .ok_or_else(|| eyre!("No managed crew exists."))?;
+        let root_node_id = crew
+            .spec
+            .members
+            .iter()
+            .find(|member| member.parent_member_id.is_none())
+            .and_then(|member| crew.member_node_by_id.get(&member.logical_member_id))
+            .cloned();
+        let preserved_bound_root = root_node_id.as_ref().filter(|node_id| {
+            node_id_thread(node_id).is_none()
+                || !self.spawn_parent_by_node.contains_key(node_id.as_str())
+        });
+
+        let mut ordered_nodes = crew
+            .spec
+            .members
+            .iter()
+            .filter_map(|member| {
+                crew.member_node_by_id
+                    .get(&member.logical_member_id)
+                    .cloned()
+            })
+            .collect::<Vec<_>>();
+        for node_id in crew.member_node_by_id.values() {
+            if !ordered_nodes.contains(node_id) {
+                ordered_nodes.push(node_id.clone());
+            }
+        }
+        let member_nodes = ordered_nodes.iter().cloned().collect::<HashSet<_>>();
+        let mut native_thread_ids = Vec::new();
+        let mut claude_pane_ids = Vec::new();
+        for node_id in &ordered_nodes {
+            if preserved_bound_root.is_some_and(|root| root == node_id) {
+                continue;
+            }
+            if let Some(thread_id) = node_id_thread(node_id) {
+                native_thread_ids.push(thread_id);
+            } else if let Some(pane_id) = node_id_pane(node_id) {
+                claude_pane_ids.push(pane_id.to_string());
+            } else {
+                return Err(eyre!(
+                    "Crew member node `{node_id}` is neither a native thread nor a managed Claude pane; no data was removed."
+                ));
+            }
+        }
+
+        // Validate every external artifact boundary before the first destructive mutation.
+        for pane_id in &claude_pane_ids {
+            let pane = self
+                .claude_panes
+                .panes()
+                .iter()
+                .find(|pane| pane.id == *pane_id)
+                .ok_or_else(|| {
+                    eyre!(
+                        "Managed Claude pane `{pane_id}` is missing from the live registry; no data was removed."
+                    )
+                })?;
+            if pane.spawn_role.is_none() {
+                return Err(eyre!(
+                    "Claude pane `{}` is not marked as a managed crew member; no data was removed.",
+                    pane.title
+                ));
+            }
+            let expected = self.config.codex_home.join("panes").join(pane_id);
+            if pane.artifact_dir.as_path() != expected.as_path() {
+                return Err(eyre!(
+                    "Managed Claude pane `{}` has artifact path `{}` outside `{}`; no data was removed.",
+                    pane.title,
+                    pane.artifact_dir.display(),
+                    expected.display()
+                ));
+            }
+        }
+
+        let primary_thread_id = self
+            .primary_thread_id
+            .ok_or_else(|| eyre!("PFTerminal Main is unavailable; no crew data was removed."))?;
+        self.save_active_claude_pane_transcript();
+        self.claude_panes
+            .set_active_user_pane(CODEX_MAIN_PANE_ID)
+            .map_err(|err| eyre!(err.to_string()))?;
+        if self.active_thread_id != Some(primary_thread_id) {
+            self.select_agent_thread_and_discard_side(tui, app_server, primary_thread_id)
+                .await?;
+        }
+
+        // CrewSpec requires parents to precede children. Delete in reverse order so each explicit
+        // child is reconciled before its parent; app-server deletion also shuts down that member's
+        // non-CrewSpec descendants.
+        for thread_id in native_thread_ids.iter().rev().copied() {
+            app_server.thread_delete(thread_id).await.map_err(|err| {
+                eyre!(
+                    "Failed to remove native crew member {thread_id}; CrewSpec ownership was retained for recovery: {err:#}"
+                )
+            })?;
+        }
+        for pane_id in claude_pane_ids.iter().rev() {
+            self.claude_panes
+                .remove_managed_crew_pane(pane_id, self.config.codex_home.as_ref())
+                .map_err(|err| {
+                    eyre!(
+                        "Failed to remove managed Claude pane {pane_id}; CrewSpec ownership was retained for recovery: {err:#}"
+                    )
+                })?;
+            self.claude_pane_transcript_cells.remove(pane_id);
+        }
+
+        let native_thread_set = native_thread_ids.iter().copied().collect::<HashSet<_>>();
+        self.spawn_crew = None;
+        self.spawn_legacy_read_only = false;
+        self.spawn_nazgul_pane_id = None;
+        self.spawn_nazgul_rebind_required = false;
+        self.spawn_parent_by_thread.retain(|child, parent| {
+            !native_thread_set.contains(child) && !native_thread_set.contains(parent)
+        });
+        self.spawn_parent_by_node.retain(|child, parent| {
+            !member_nodes.contains(child) && !member_nodes.contains(parent)
+        });
+        self.spawn_native_runtime_by_node
+            .retain(|node_id, _| !member_nodes.contains(node_id));
+        self.spawn_native_endpoint_by_node
+            .retain(|node_id, thread_id| {
+                !member_nodes.contains(node_id) && !native_thread_set.contains(thread_id)
+            });
+        self.spawn_status_by_thread
+            .retain(|thread_id, _| !native_thread_set.contains(thread_id));
+        self.spawn_waiting_for_agents_by_thread
+            .retain(|thread_id, _| !native_thread_set.contains(thread_id));
+        self.spawn_parent_reports_by_node
+            .retain(|node_id, _| !member_nodes.contains(node_id));
+        self.spawn_dispatch_acks_by_target_task
+            .retain(|(target, _), _| !member_nodes.contains(target));
+        self.spawn_processed_terminal_turns
+            .retain(|(thread_id, _)| !native_thread_set.contains(thread_id));
+        self.spawn_auto_loop_state_by_node
+            .retain(|node_id, _| !member_nodes.contains(node_id));
+        self.spawn_quarantine_notified_by_node
+            .retain(|node_id| !member_nodes.contains(node_id));
+        self.spawn_context_left_by_thread
+            .retain(|thread_id, _| !native_thread_set.contains(thread_id));
+        self.spawn_last_report_seq_by_node
+            .retain(|node_id, _| !member_nodes.contains(node_id));
+        self.spawn_last_dispatch_seq_by_node
+            .retain(|node_id, _| !member_nodes.contains(node_id));
+        self.spawn_last_event_at_by_node
+            .retain(|node_id, _| !member_nodes.contains(node_id));
+        self.orchestrate_whips.retain(|_, whip| {
+            !member_nodes.contains(&whip.target)
+                && whip
+                    .holder
+                    .as_ref()
+                    .is_none_or(|holder| !member_nodes.contains(holder))
+        });
+        self.orchestrate_idle_generation_by_target
+            .retain(|node_id, _| !member_nodes.contains(node_id));
+
+        for thread_id in native_thread_ids.iter().copied() {
+            self.discard_thread_local_state(thread_id).await;
+            // Whole-crew removal is permanent, unlike a normal agent shutdown. Do not leave a
+            // closed navigation/status projection behind after the backend thread and CrewSpec
+            // member have both been deleted.
+            self.agent_navigation.remove(thread_id);
+            self.spawn_status_by_thread.remove(&thread_id);
+        }
+        self.sync_active_agent_label();
+        self.persist_pane_state();
+        Ok(format!(
+            "Removed managed crew {}: {} native member(s), {} Claude member(s){}.",
+            crew.spec.crew_id,
+            native_thread_ids.len(),
+            claude_pane_ids.len(),
+            preserved_bound_root
+                .map(|_| "; preserved the bound user-owned root")
+                .unwrap_or_default()
+        ))
+    }
+
     pub(crate) fn validate_restored_crew_state(&self) -> Result<()> {
         let Some(state) = self.spawn_crew.as_ref() else {
             return Ok(());
@@ -164,7 +361,7 @@ impl App {
         let root_thread_id = self
             .primary_thread_id
             .or(self.active_thread_id)
-            .ok_or_else(|| eyre!("Cannot create a crew before Codex Main has started."))?;
+            .ok_or_else(|| eyre!("Cannot create a crew before PFTerminal Main has started."))?;
         let spawn_config = self.native_spawn_agent_config()?;
         self.ensure_crew_providers_ready(&crew).await?;
         match self.spawn_crew.as_mut() {

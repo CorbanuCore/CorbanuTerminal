@@ -607,6 +607,7 @@ fn write_apps_config(
         format!(
             r#"
 chatgpt_base_url = "{base_url}"
+model_provider = "openai"
 {apps_mcp_product_sku}
 
 [features]

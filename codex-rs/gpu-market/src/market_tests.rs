@@ -496,7 +496,10 @@ async fn local_enforcement_requires_explicit_acknowledgement() {
 
 async fn state() -> Arc<StateRuntime> {
     let path = std::env::temp_dir().join(format!("gpu-market-test-{}", uuid::Uuid::new_v4()));
-    StateRuntime::init(path, "test-provider".to_string())
+    let sqlite = codex_state::SqliteConfig::new_for_testing(
+        path.try_into().expect("absolute temporary state path"),
+    );
+    StateRuntime::init(sqlite, "test-provider".to_string())
         .await
         .expect("initialize state")
 }

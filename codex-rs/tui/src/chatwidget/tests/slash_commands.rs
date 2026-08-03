@@ -1,7 +1,5 @@
 use super::*;
 use crate::bottom_pane::slash_commands::ServiceTierCommand;
-use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
-use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 use pretty_assertions::assert_eq;
 use serial_test::serial;
 
@@ -1740,6 +1738,46 @@ async fn unrecognized_slash_command_is_not_added_to_local_recall() {
 }
 
 #[tokio::test]
+async fn unsupported_inline_args_run_the_control_plane_command_without_model_submission() {
+    let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    submit_composer_text(&mut chat, "/panes Burzum");
+
+    let cells = drain_insert_history(&mut rx);
+    let rendered = cells
+        .iter()
+        .map(|cell| lines_to_single_string(cell))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        rendered.contains("'/panes' does not take inline arguments; running the bare command."),
+        "expected local unsupported-arguments message, got: {rendered:?}"
+    );
+    assert!(chat.bottom_pane.composer_text().is_empty());
+    assert_matches!(op_rx.try_recv(), Err(TryRecvError::Empty));
+}
+
+#[tokio::test]
+async fn near_miss_control_plane_command_is_rejected_without_model_submission() {
+    let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    submit_composer_text(&mut chat, "/pane");
+
+    let cells = drain_insert_history(&mut rx);
+    let rendered = cells
+        .iter()
+        .map(|cell| lines_to_single_string(cell))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        rendered.contains("Unrecognized command '/pane'"),
+        "expected local unknown-command message, got: {rendered:?}"
+    );
+    assert_eq!(chat.bottom_pane.composer_text(), "/pane");
+    assert_matches!(op_rx.try_recv(), Err(TryRecvError::Empty));
+}
+
+#[tokio::test]
 async fn unavailable_slash_command_is_available_from_local_recall() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.bottom_pane.set_task_running(/*running*/ true);
@@ -2287,24 +2325,23 @@ async fn slash_clear_is_disabled_while_task_running() {
 }
 
 #[tokio::test]
-async fn slash_archive_is_disabled_while_task_running() {
+async fn slash_archive_confirms_while_task_running() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.bottom_pane.set_task_running(/*running*/ true);
 
-    chat.dispatch_command(SlashCommand::Archive);
+    chat.bottom_pane
+        .set_composer_text("/archive".to_string(), Vec::new(), Vec::new());
+    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
-    let event = rx.try_recv().expect("expected disabled command error");
-    match event {
-        AppEvent::InsertHistoryCell(cell) => {
-            let rendered = lines_to_single_string(&cell.display_lines(/*width*/ 80));
-            assert!(
-                rendered.contains("'/archive' is disabled while a task is in progress."),
-                "expected /archive task-running error, got {rendered:?}"
-            );
-        }
-        other => panic!("expected InsertHistoryCell error, got {other:?}"),
-    }
-    assert!(rx.try_recv().is_err(), "expected no follow-up events");
+    assert!(chat.bottom_pane.has_active_view());
+    assert_matches!(rx.try_recv(), Err(TryRecvError::Empty));
+    let popup = render_bottom_popup(&chat, /*width*/ 80);
+    assert!(popup.contains("Archive this session?"));
+    assert!(popup.contains("exit PFTerminal"));
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Down));
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    assert_matches!(rx.try_recv(), Ok(AppEvent::ArchiveCurrentThread));
 }
 
 #[tokio::test]
@@ -2472,6 +2509,26 @@ async fn slash_delete_confirmation_requests_current_thread_delete() {
     chat.handle_key_event(KeyEvent::from(KeyCode::Down));
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
 
+    assert_matches!(rx.try_recv(), Ok(AppEvent::DeleteCurrentThread));
+}
+
+#[tokio::test]
+async fn slash_delete_confirms_while_task_running() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.bottom_pane.set_task_running(/*running*/ true);
+    chat.bottom_pane
+        .set_composer_text("/delete".to_string(), Vec::new(), Vec::new());
+
+    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert!(chat.bottom_pane.has_active_view());
+    assert_matches!(rx.try_recv(), Err(TryRecvError::Empty));
+    let popup = render_bottom_popup(&chat, /*width*/ 80);
+    assert!(popup.contains("Delete this session?"));
+    assert!(popup.contains("Permanently delete this session now"));
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Down));
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
     assert_matches!(rx.try_recv(), Ok(AppEvent::DeleteCurrentThread));
 }
 
@@ -3083,6 +3140,118 @@ async fn vault_credential_add_rejects_inline_secret_without_recall_leak() {
 }
 
 #[tokio::test]
+async fn vault_credential_delete_requires_explicit_navigation_and_enter() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.dispatch_command_with_args(
+        SlashCommand::Vault,
+        "credential delete qa/disposable".to_string(),
+        Vec::new(),
+    );
+
+    let popup = render_bottom_popup(&chat, /*width*/ 80);
+    assert!(popup.contains("Delete vault credential \"qa/disposable\"?"));
+    assert!(
+        popup.contains("› Cancel"),
+        "safe default must be Cancel:\n{popup}"
+    );
+    assert!(
+        !popup.contains("1. Cancel") && !popup.contains("2. Delete credential"),
+        "destructive confirmation must not advertise number shortcuts:\n{popup}"
+    );
+
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE));
+    assert!(chat.bottom_pane.has_active_view());
+    assert_matches!(rx.try_recv(), Err(TryRecvError::Empty));
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Down));
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::VaultCredentialDeleteRequested { label }) if label == "qa/disposable"
+    );
+}
+
+#[tokio::test]
+async fn vault_reveal_uses_transient_secure_view_without_history_or_debug_leak() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let marker = "disposable-secure-view-marker";
+
+    let debug = format!(
+        "{:?}",
+        crate::app_event::VaultSecret::new(marker.to_string())
+    );
+    assert_eq!(debug, "<redacted vault secret>");
+    assert!(!debug.contains(marker));
+
+    chat.on_vault_reveal_secret_finished(
+        "qa/disposable".to_string(),
+        Ok(crate::app_event::VaultSecret::new(marker.to_string())),
+    );
+
+    let popup = render_bottom_popup(&chat, /*width*/ 80);
+    assert!(popup.contains("Vault credential — secure view"));
+    assert!(popup.contains("Label: qa/disposable"));
+    assert!(popup.contains(marker));
+    assert!(drain_insert_history(&mut rx).is_empty());
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    assert!(!chat.bottom_pane.has_active_view());
+    assert!(drain_insert_history(&mut rx).is_empty());
+}
+
+#[tokio::test]
+async fn vault_replace_submits_a_redacted_async_event_instead_of_blocking_the_tui() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let marker = "disposable-replacement-marker";
+
+    chat.open_vault_replace_secret("qa/disposable".to_string());
+    for character in marker.chars() {
+        chat.handle_key_event(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE));
+    }
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+
+    match rx.try_recv() {
+        Ok(AppEvent::VaultCredentialReplaceRequested { label, secret }) => {
+            assert_eq!(label, "qa/disposable");
+            assert_eq!(format!("{secret:?}"), "<redacted vault secret>");
+            assert_eq!(secret.into_inner(), marker);
+        }
+        other => panic!("expected asynchronous vault replacement request, got {other:?}"),
+    }
+    assert!(!chat.bottom_pane.has_active_view());
+}
+
+#[tokio::test]
+async fn vault_add_submits_a_redacted_async_event_instead_of_blocking_the_tui() {
+    let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let label = "qa/disposable";
+    let marker = "disposable-add-marker";
+
+    chat.open_vault_credential_add();
+    for character in label.chars() {
+        chat.handle_key_event(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE));
+    }
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    for character in marker.chars() {
+        chat.handle_key_event(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE));
+    }
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+
+    match rx.try_recv() {
+        Ok(AppEvent::VaultCredentialAddRequested { label, secret }) => {
+            assert_eq!(label, "qa/disposable");
+            assert_eq!(format!("{secret:?}"), "<redacted vault secret>");
+            assert_eq!(secret.into_inner(), marker);
+        }
+        other => panic!("expected asynchronous vault add request, got {other:?}"),
+    }
+    assert!(!chat.bottom_pane.has_active_view());
+    assert_matches!(rx.try_recv(), Err(TryRecvError::Empty));
+    assert_matches!(op_rx.try_recv(), Err(TryRecvError::Empty));
+}
+
+#[tokio::test]
 async fn compact_queues_user_messages_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.thread_id = Some(ThreadId::new());
@@ -3113,4 +3282,27 @@ async fn compact_queues_user_messages_snapshot() {
         "compact_queues_user_messages_snapshot",
         normalize_snapshot_paths(term.backend().vt100().screen().contents())
     );
+}
+#[tokio::test]
+async fn test_approval_command_resolves_locally_on_cancel() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.dispatch_command(SlashCommand::TestApproval);
+    chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    let mut rendered_resolution = false;
+    while let Ok(event) = rx.try_recv() {
+        match event {
+            AppEvent::InsertHistoryCell(cell) => {
+                let rendered = lines_to_single_string(&cell.display_lines(80));
+                rendered_resolution |= rendered.contains("Local approval resolved: cancelled.");
+            }
+            AppEvent::SubmitThreadOp {
+                op: Op::PatchApproval { .. },
+                ..
+            } => panic!("debug approval must not be submitted to a thread"),
+            _ => {}
+        }
+    }
+    assert!(rendered_resolution, "expected an explicit local resolution");
 }

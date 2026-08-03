@@ -184,11 +184,18 @@ pub struct CodexThreadSettingsOverrides {
 
 pub struct CodexThread {
     pub(crate) session: Arc<Session>,
+    /// Compatibility view for PF integrations built against the pre-upstream
+    /// `thread.codex.session` access path.
+    pub(crate) codex: LegacyCodexThreadView,
     pub(crate) io: SessionIo,
     pub(crate) session_source: SessionSource,
     session_configured: SessionConfiguredEvent,
     rollout_path: Option<PathBuf>,
     out_of_band_elicitations: Mutex<OutOfBandElicitations>,
+}
+
+pub(crate) struct LegacyCodexThreadView {
+    pub(crate) session: Arc<Session>,
 }
 
 #[derive(Default)]
@@ -215,8 +222,12 @@ impl CodexThread {
         rollout_path: Option<PathBuf>,
         session_source: SessionSource,
     ) -> Self {
+        let codex = LegacyCodexThreadView {
+            session: Arc::clone(&session),
+        };
         Self {
             session,
+            codex,
             io,
             session_source,
             session_configured,
@@ -311,7 +322,7 @@ impl CodexThread {
         message_id: Option<String>,
         assignment_id: Option<String>,
         kind: AgentMessageKind,
-    ) -> CodexResult<String> {
+    ) -> CodexResult<(String, bool)> {
         if message_id.as_ref().is_some_and(|id| id.trim().is_empty()) {
             return Err(CodexErr::InvalidRequest(
                 "agent mailbox message_id must not be empty".to_string(),
@@ -326,7 +337,7 @@ impl CodexThread {
             ));
         }
 
-        let control = &self.codex.session.services.agent_control;
+        let control = &self.session.services.agent_control;
         let author = self
             .session_source
             .get_agent_path()
@@ -337,9 +348,7 @@ impl CodexThread {
                     "target agent {target_thread_id} is missing an agent path"
                 ))
             })?,
-            Err(CodexErr::ThreadNotFound(_))
-                if self.session_source.parent_thread_id() == Some(target_thread_id) =>
-            {
+            Err(_) if self.session_source.parent_thread_id() == Some(target_thread_id) => {
                 let parent_path = author
                     .as_str()
                     .rsplit_once('/')
@@ -351,8 +360,20 @@ impl CodexThread {
             }
             Err(err) => return Err(err),
         };
-        let mut communication =
-            InterAgentCommunication::new(author, recipient, Vec::new(), content, trigger_turn);
+        let effective_trigger_turn = if trigger_turn && kind == AgentMessageKind::TerminalResult {
+            control
+                .auto_processes_terminal_results(target_thread_id)
+                .await
+        } else {
+            trigger_turn
+        };
+        let mut communication = InterAgentCommunication::new(
+            author,
+            recipient,
+            Vec::new(),
+            content,
+            effective_trigger_turn,
+        );
         if let Some(message_id) = message_id {
             communication.message_id = Some(message_id);
         }
@@ -375,9 +396,13 @@ impl CodexThread {
             .ensure_v2_agent_loaded(self.config().await.as_ref().clone(), target_thread_id)
             .await?;
         control
-            .send_inter_agent_communication(target_thread_id, communication)
+            .send_persisted_inter_agent_communication(
+                target_thread_id,
+                communication,
+                /*parent_turn_id*/ None,
+            )
             .await?;
-        Ok(stable_message_id)
+        Ok((stable_message_id, effective_trigger_turn))
     }
 
     /// Persist whether this thread is eligible for future memory generation.
@@ -506,6 +531,7 @@ impl CodexThread {
             active_permission_profile,
             windows_sandbox_level,
             collaboration_mode: Some(collaboration_mode),
+            model_provider,
             reasoning_summary: summary,
             service_tier,
             personality,

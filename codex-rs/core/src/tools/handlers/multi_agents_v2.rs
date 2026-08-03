@@ -15,7 +15,6 @@ use crate::tools::handlers::multi_agents_common::*;
 use crate::tools::handlers::parse_arguments;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::ToolExecutor;
-#[cfg(test)]
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_protocol::AgentPath;
 use codex_protocol::items::CollabAgentTool;
@@ -28,24 +27,84 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::SubAgentActivityKind;
 use codex_tools::ToolName;
+use codex_tools::ToolSpec;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 
 pub(crate) use followup_task::Handler as FollowupTaskHandler;
+pub(crate) use followup_task::PlaintextHandler as PlaintextFollowupTaskHandler;
 pub(crate) use interrupt_agent::Handler as InterruptAgentHandler;
 pub(crate) use list_agents::Handler as ListAgentsHandler;
 pub(crate) use send_message::Handler as SendMessageHandler;
+pub(crate) use send_message::PlaintextHandler as PlaintextSendMessageHandler;
 pub(crate) use spawn::Handler as SpawnAgentHandler;
+pub(crate) use spawn::PlaintextHandler as PlaintextSpawnAgentHandler;
 pub(crate) use wait::Handler as WaitAgentHandler;
 
 mod followup_task;
 mod interrupt_agent;
 mod list_agents;
-mod message_tool;
+pub(crate) mod message_tool;
 mod send_message;
 mod spawn;
 pub(crate) mod wait;
+
+pub(crate) const PLAINTEXT_SPAWN_AGENT_TOOL: &str = "spawn_agent_plaintext";
+pub(crate) const PLAINTEXT_SEND_MESSAGE_TOOL: &str = "send_message_plaintext";
+pub(crate) const PLAINTEXT_FOLLOWUP_TASK_TOOL: &str = "followup_task_plaintext";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CollaborationMessageEncoding {
+    ProviderNative,
+    PlaintextAdapter,
+}
+
+pub(super) fn plaintext_adapter_spec(
+    spec: ToolSpec,
+    adapter_name: &str,
+    native_name: &str,
+) -> ToolSpec {
+    match spec {
+        ToolSpec::Function(mut tool) => {
+            tool.name = adapter_name.to_string();
+            tool.description = format!(
+                "Cross-provider plaintext adapter for `{native_name}`. Use this only when the native OpenAI collaboration call reports that its encrypted assignment cannot be delivered to the target provider. It performs the same Core graph/mailbox operation; never put credentials or other secrets in the message. {}",
+                tool.description
+            );
+            ToolSpec::Function(tool)
+        }
+        other => other,
+    }
+}
+
+pub(super) fn ensure_message_encoding_matches_target(
+    source_provider_id: &str,
+    source: &crate::tools::context::ToolCallSource,
+    target_provider_id: &str,
+    encoding: CollaborationMessageEncoding,
+    native_tool_name: &str,
+    plaintext_tool_name: &str,
+) -> Result<(), FunctionCallError> {
+    if encoding == CollaborationMessageEncoding::PlaintextAdapter {
+        if target_provider_id == OPENAI_PROVIDER_ID {
+            return Err(FunctionCallError::RespondToModel(format!(
+                "target provider `{OPENAI_PROVIDER_ID}` supports the native encrypted collaboration payload; use `{native_tool_name}` instead"
+            )));
+        }
+        return Ok(());
+    }
+
+    let source_is_encrypted_openai_call = source_provider_id == OPENAI_PROVIDER_ID
+        && matches!(source, crate::tools::context::ToolCallSource::Direct);
+    if source_is_encrypted_openai_call && target_provider_id != OPENAI_PROVIDER_ID {
+        return Err(FunctionCallError::RespondToModel(format!(
+            "target provider `{target_provider_id}` cannot consume this OpenAI-encrypted collaboration payload. Call the function named `{plaintext_tool_name}` directly with exactly the same `target` and the plaintext `message`; do not call `{native_tool_name}` again and do not add an `adapter` field. No message was admitted and no target turn was started."
+        )));
+    }
+
+    Ok(())
+}
 
 pub(crate) async fn emit_sub_agent_activity(
     session: &crate::session::session::Session,
@@ -62,12 +121,12 @@ fn communication_from_tool_message(
     recipient: AgentPath,
     message: String,
     source: &crate::tools::context::ToolCallSource,
+    provider_id: &str,
     trigger_turn: bool,
 ) -> InterAgentCommunication {
-    if !matches!(
-        source,
-        crate::tools::context::ToolCallSource::DirectPlaintextMessage
-    ) {
+    if provider_id == OPENAI_PROVIDER_ID
+        && matches!(source, crate::tools::context::ToolCallSource::Direct)
+    {
         return InterAgentCommunication::new_encrypted(
             author,
             recipient,
@@ -99,34 +158,134 @@ pub(super) fn ensure_manager_tool_allowed(
 mod tests {
     use super::*;
 
+    fn assert_plaintext_new_task(source: crate::tools::context::ToolCallSource, provider_id: &str) {
+        let communication = communication_from_tool_message(
+            AgentPath::root(),
+            AgentPath::try_from("/root/worker").expect("agent path"),
+            "do the delegated work".to_string(),
+            &source,
+            provider_id,
+            true,
+        );
+
+        assert_eq!(communication.encrypted_content, None);
+        assert_eq!(
+            communication.content,
+            "Message Type: NEW_TASK\nTask name: /root/worker\nSender: /root\nPayload:\ndo the delegated work"
+        );
+        assert!(matches!(
+            communication.to_model_input_item(),
+            codex_protocol::models::ResponseItem::AgentMessage { content, .. }
+                if matches!(content.as_slice(), [codex_protocol::models::AgentMessageInputContent::InputText { text }] if text.contains("do the delegated work"))
+        ));
+    }
+
     #[test]
-    fn openai_collaboration_tool_payload_is_provider_neutral_plaintext() {
-        let communication = communication_from_model_tool_message(
+    fn openai_collaboration_tool_payload_preserves_native_encryption() {
+        let communication = communication_from_tool_message(
             AgentPath::root(),
             AgentPath::try_from("/root/worker").expect("agent path"),
             "opaque-ciphertext".to_string(),
+            &crate::tools::context::ToolCallSource::Direct,
             OPENAI_PROVIDER_ID,
+            true,
         );
 
-        assert_eq!(communication.content, "opaque-ciphertext");
-        assert_eq!(communication.encrypted_content, None);
+        assert!(communication.content.is_empty());
+        assert_eq!(
+            communication.encrypted_content.as_deref(),
+            Some("opaque-ciphertext")
+        );
     }
 
     #[test]
     fn non_openai_collaboration_tool_payload_is_plaintext() {
-        let communication = communication_from_model_tool_message(
+        let communication = communication_from_tool_message(
             AgentPath::try_from("/root/worker").expect("agent path"),
             AgentPath::root(),
             "ordinary provider report".to_string(),
+            &crate::tools::context::ToolCallSource::Direct,
             "zai",
+            true,
         );
 
-        assert_eq!(communication.content, "ordinary provider report");
+        assert_eq!(
+            communication.content,
+            "Message Type: NEW_TASK\nTask name: /root\nSender: /root/worker\nPayload:\nordinary provider report"
+        );
         assert_eq!(communication.encrypted_content, None);
         assert!(matches!(
             communication.to_model_input_item(),
             codex_protocol::models::ResponseItem::AgentMessage { content, .. }
-                if matches!(content.as_slice(), [codex_protocol::models::AgentMessageInputContent::InputText { text }] if text == "ordinary provider report")
+                if matches!(content.as_slice(), [codex_protocol::models::AgentMessageInputContent::InputText { text }] if text.contains("ordinary provider report"))
         ));
+    }
+
+    #[test]
+    fn non_openai_spawn_task_is_provider_neutral_plaintext() {
+        assert_plaintext_new_task(crate::tools::context::ToolCallSource::Direct, "deepseek");
+        assert_plaintext_new_task(
+            crate::tools::context::ToolCallSource::CodeMode {
+                cell_id: "cell-1".to_string(),
+                runtime_tool_call_id: "tool-1".to_string(),
+            },
+            "deepseek",
+        );
+    }
+
+    #[test]
+    fn explicitly_plaintext_openai_spawn_task_remains_plaintext() {
+        assert_plaintext_new_task(
+            crate::tools::context::ToolCallSource::DirectPlaintextMessage,
+            OPENAI_PROVIDER_ID,
+        );
+    }
+
+    #[test]
+    fn code_mode_openai_message_is_plaintext() {
+        assert_plaintext_new_task(
+            crate::tools::context::ToolCallSource::CodeMode {
+                cell_id: "cell-1".to_string(),
+                runtime_tool_call_id: "tool-1".to_string(),
+            },
+            OPENAI_PROVIDER_ID,
+        );
+    }
+
+    #[test]
+    fn encrypted_openai_message_requires_plaintext_adapter_for_external_target() {
+        let err = ensure_message_encoding_matches_target(
+            OPENAI_PROVIDER_ID,
+            &crate::tools::context::ToolCallSource::Direct,
+            "openrouter",
+            CollaborationMessageEncoding::ProviderNative,
+            "followup_task",
+            PLAINTEXT_FOLLOWUP_TASK_TOOL,
+        )
+        .expect_err("encrypted payload must fail before cross-provider admission");
+        assert_eq!(
+            err,
+            FunctionCallError::RespondToModel(
+                "target provider `openrouter` cannot consume this OpenAI-encrypted collaboration payload. Retry the same target and message once with `followup_task_plaintext`. No message was admitted and no target turn was started.".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn encrypted_openai_spawn_task_remains_encrypted() {
+        let communication = communication_from_tool_message(
+            AgentPath::root(),
+            AgentPath::try_from("/root/worker").expect("agent path"),
+            "opaque-ciphertext".to_string(),
+            &crate::tools::context::ToolCallSource::Direct,
+            OPENAI_PROVIDER_ID,
+            true,
+        );
+
+        assert!(communication.content.is_empty());
+        assert_eq!(
+            communication.encrypted_content.as_deref(),
+            Some("opaque-ciphertext")
+        );
     }
 }

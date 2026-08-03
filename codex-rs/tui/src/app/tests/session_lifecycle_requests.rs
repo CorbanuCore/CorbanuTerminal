@@ -273,6 +273,7 @@ fn session_lifecycle_avoids_redundant_subagent_metadata_reads() -> Result<()> {
                             ),
                             agent_nickname: Some("worker".to_string()),
                             agent_role: Some("worker".to_string()),
+                            agent_class: None,
                         }),
                         root_thread_id.into(),
                         root_thread_id,
@@ -297,6 +298,7 @@ fn session_lifecycle_avoids_redundant_subagent_metadata_reads() -> Result<()> {
                         app.config.clone(),
                         root_thread_id,
                         app.resume_model_settings(),
+                        app.resume_permission_settings(),
                     )
                     .await?;
                 app.enqueue_primary_thread_session(root.session, root.turns)
@@ -306,6 +308,7 @@ fn session_lifecycle_avoids_redundant_subagent_metadata_reads() -> Result<()> {
                         app.config.clone(),
                         child_thread_id,
                         app.resume_model_settings(),
+                        app.resume_permission_settings(),
                     )
                     .await?;
                 let mut tui = crate::tui::test_support::make_test_tui()?;
@@ -415,6 +418,9 @@ fn session_lifecycle_avoids_redundant_subagent_metadata_reads() -> Result<()> {
                         agent_nickname: Some("worker".to_string()),
                         agent_role: Some("worker".to_string()),
                         agent_path: Some("/root/worker".to_string()),
+                        model: None,
+                        last_task_message: None,
+                        last_result_message: None,
                         is_running: false,
                         is_closed: false,
                     })

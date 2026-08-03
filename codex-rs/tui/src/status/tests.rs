@@ -357,9 +357,13 @@ async fn status_snapshot_includes_reasoning_details() {
 async fn status_snapshot_shows_chatgpt_plan_without_email() {
     let temp_home = TempDir::new().expect("temp home");
     write_models_cache(temp_home.path()).expect("write models cache");
+    std::fs::write(
+        temp_home.path().join("config.toml"),
+        "model_provider = \"openai\"\n",
+    )
+    .expect("write OpenAI provider config");
     let mut config = test_config(&temp_home).await;
     config.model = Some("gpt-5.1-codex-max".to_string());
-    config.model_provider_id = "openai".to_string();
     config.cli_auth_credentials_store_mode = AuthCredentialsStoreMode::File;
     set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
 
@@ -1556,6 +1560,41 @@ async fn status_snapshot_truncates_halfwidth_kana_in_narrow_terminal() {
         /*reasoning_effort_override*/ None,
     );
     let rendered_lines = render_lines(&composite.display_lines(/*width*/ 42));
+    let sanitized = sanitize_directory(rendered_lines).join("\n");
+
+    assert_snapshot!(sanitized);
+}
+
+#[tokio::test]
+async fn status_snapshot_uses_command_backed_provider_account_identity() {
+    let temp_home = TempDir::new().expect("temp home");
+    let mut config = test_config(&temp_home).await;
+    config.model_provider_id = "claude-plan".to_string();
+    config.model_provider = ModelProviderInfo::create_claude_plan_provider();
+    set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
+
+    let account = StatusAccountDisplay::ApiKey;
+    let usage = TokenUsage::default();
+    let now = chrono::Local
+        .with_ymd_and_hms(2024, 1, 2, 3, 4, 5)
+        .single()
+        .expect("timestamp");
+    let composite = new_status_output(
+        &config,
+        Some(&account),
+        /*token_info*/ None,
+        &usage,
+        &None,
+        /*thread_name*/ None,
+        /*forked_from*/ None,
+        /*rate_limits*/ None,
+        /*plan_type*/ None,
+        now,
+        "claude-opus-5-plan",
+        Some("Default"),
+        /*reasoning_effort_override*/ None,
+    );
+    let rendered_lines = render_lines(&composite.display_lines(/*width*/ 100));
     let sanitized = sanitize_directory(rendered_lines).join("\n");
 
     assert_snapshot!(sanitized);

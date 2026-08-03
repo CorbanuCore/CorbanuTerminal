@@ -15,6 +15,27 @@ impl ChatWidget {
     ) {
         let home = self.config.codex_home.as_path().to_path_buf();
         let tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let result = WalletDaemonClient::new(home)
+                .status()
+                .await
+                .map(|status| status.wallet_exists)
+                .map_err(|error| error.to_string());
+            tx.send(AppEvent::WalletUnlockPreflightFinished {
+                policy,
+                continuation,
+                result,
+            });
+        });
+    }
+
+    fn show_wallet_unlock_prompt(
+        &mut self,
+        policy: UnlockPolicy,
+        continuation: WalletUnlockContinuation,
+    ) {
+        let home = self.config.codex_home.as_path().to_path_buf();
+        let tx = self.app_event_tx.clone();
         let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
             "wallet-passcode".to_string(),
             "Unlock wallet".to_string(),
@@ -40,6 +61,27 @@ impl ChatWidget {
             }),
         );
         self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn on_wallet_unlock_preflight_finished(
+        &mut self,
+        policy: UnlockPolicy,
+        continuation: WalletUnlockContinuation,
+        result: Result<bool, String>,
+    ) {
+        match result {
+            Ok(true) => self.show_wallet_unlock_prompt(policy, continuation),
+            Ok(false) => {
+                self.add_error_message(
+                    "Cannot unlock wallet: no local wallet exists. Use /wallet create or /wallet restore."
+                        .to_string(),
+                );
+                self.open_wallet_menu();
+            }
+            Err(error) => self.add_error_message(format!(
+                "Cannot check wallet state before unlock: {error}. No passcode was requested."
+            )),
+        }
     }
 
     pub(crate) fn open_wallet_custom_unlock(
@@ -92,7 +134,7 @@ impl ChatWidget {
             }
             Err(error) => {
                 self.add_error_message(format!("Wallet unlock failed: {error}. Try again."));
-                self.open_wallet_unlock(policy, continuation);
+                self.show_wallet_unlock_prompt(policy, continuation);
             }
         }
     }

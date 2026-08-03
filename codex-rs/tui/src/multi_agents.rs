@@ -308,6 +308,9 @@ pub(crate) fn sub_agent_activity_display(item: &ThreadItem) -> Option<SubAgentAc
     Some(SubAgentActivityDisplay {
         thread_id: parse_thread_id(agent_thread_id)?,
         agent_path: agent_path.clone(),
+        agent_nickname: agent_nickname.clone(),
+        agent_role: agent_role.clone(),
+        task_preview: task_preview.clone(),
         is_running_hint,
     })
 }
@@ -743,6 +746,9 @@ mod tests {
             kind: SubAgentActivityKind::Interacted,
             agent_thread_id: ThreadId::new().to_string(),
             agent_path: "/root/child".to_string(),
+            agent_nickname: None,
+            agent_role: None,
+            task_preview: None,
         };
 
         assert_eq!(sub_agent_activity_display(&item), None);

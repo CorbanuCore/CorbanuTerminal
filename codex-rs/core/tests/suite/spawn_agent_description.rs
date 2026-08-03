@@ -25,6 +25,7 @@ use core_test_support::responses::namespace_child_tool;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::test_codex::test_codex;
+use pretty_assertions::assert_eq;
 use serde_json::Value;
 use std::time::Duration;
 use std::time::Instant;
@@ -95,6 +96,7 @@ fn test_model_info(
         supports_image_detail_original: false,
         context_window: Some(272_000),
         max_context_window: None,
+        max_output_tokens: None,
         auto_compact_token_limit: None,
         comp_hash: None,
         effective_context_window_percent: 95,
@@ -196,9 +198,7 @@ async fn spawn_agent_description_lists_visible_models_and_reasoning_efforts() ->
         spawn_agent_description(&body).expect("spawn_agent description should be present");
 
     assert!(
-        description.contains(
-            "- `ambient` / `z-ai/glm-5.2`; metered $0.76/$2.42 per M tok, balanced; text-only; efforts: medium (default), xhigh"
-        ),
+        description.contains("- `openai` / `gpt-5.6-terra`"),
         "expected an eligible exact provider route in spawn_agent description: {description:?}"
     );
     assert!(
@@ -209,7 +209,7 @@ async fn spawn_agent_description_lists_visible_models_and_reasoning_efforts() ->
     );
     assert!(
         description
-            .contains("Current inherited runtime: `ambient` / `visible-model`; effort medium."),
+            .contains("Current inherited runtime: `openai` / `visible-model`; effort medium."),
         "expected the exact parent runtime in the spawn catalogue: {description:?}"
     );
     assert!(
@@ -264,13 +264,11 @@ async fn spawn_agent_description_lists_visible_models_and_reasoning_efforts() ->
     Ok(())
 }
 
-#[test_case(false, false, MULTI_AGENT_V1_NAMESPACE; "v1 hides agent type without roles")]
-#[test_case(true, true, "collaboration"; "v2 exposes agent type with a role")]
+#[test_case(false; "without custom roles")]
+#[test_case(true; "with custom roles")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn configured_agent_roles_control_spawn_agent_type(
-    multi_agent_v2: bool,
+async fn openai_reserved_spawn_schema_is_not_mutated_by_pf_role_configuration(
     has_agent_role: bool,
-    namespace: &str,
 ) -> Result<()> {
     let server = start_mock_server().await;
     let response = mount_sse_once(
@@ -284,17 +282,10 @@ async fn configured_agent_roles_control_spawn_agent_type(
                 .features
                 .enable(Feature::Collab)
                 .expect("test config should allow feature update");
-            if multi_agent_v2 {
-                config
-                    .features
-                    .enable(Feature::MultiAgentV2)
-                    .expect("test config should allow feature update");
-            } else {
-                config
-                    .features
-                    .disable(Feature::MultiAgentV2)
-                    .expect("test config should allow feature update");
-            }
+            config
+                .features
+                .enable(Feature::MultiAgentV2)
+                .expect("test config should allow feature update");
             if has_agent_role {
                 config.agent_roles.insert(
                     "researcher".to_string(),
@@ -311,10 +302,52 @@ async fn configured_agent_roles_control_spawn_agent_type(
 
     test.submit_turn("hello").await?;
 
+    let body = response.single_request().body_json();
+    assert!(!spawn_agent_exposes_agent_type(
+        &body,
+        MULTI_AGENT_V2_NAMESPACE
+    ));
+    let spawn = namespace_child_tool(&body, MULTI_AGENT_V2_NAMESPACE, SPAWN_AGENT_TOOL_NAME)
+        .expect("native spawn should be present");
+    let properties = spawn
+        .pointer("/parameters/properties")
+        .and_then(Value::as_object)
+        .expect("native spawn should use object parameters");
     assert_eq!(
-        spawn_agent_exposes_agent_type(&response.single_request().body_json(), namespace),
-        has_agent_role
+        properties.keys().cloned().collect::<Vec<_>>(),
+        vec![
+            "fork_turns".to_string(),
+            "message".to_string(),
+            "task_name".to_string()
+        ]
     );
+    assert_eq!(
+        spawn.pointer("/parameters/properties/message/encrypted"),
+        Some(&Value::Bool(true))
+    );
+    let tools = body
+        .get("tools")
+        .and_then(Value::as_array)
+        .expect("request should contain tools");
+    for adapter_name in [
+        "spawn_agent_plaintext",
+        "send_message_plaintext",
+        "followup_task_plaintext",
+    ] {
+        let adapter = tools
+            .iter()
+            .find(|tool| tool.get("name").and_then(Value::as_str) == Some(adapter_name))
+            .unwrap_or_else(|| panic!("expected {adapter_name} in the model request"));
+        assert_eq!(
+            adapter.get("type").and_then(Value::as_str),
+            Some("function")
+        );
+        assert_eq!(
+            adapter.pointer("/parameters/properties/message/encrypted"),
+            None,
+            "cross-provider adapter must send an ordinary plaintext message field"
+        );
+    }
     Ok(())
 }
 

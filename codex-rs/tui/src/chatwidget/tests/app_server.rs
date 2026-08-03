@@ -396,6 +396,76 @@ async fn thread_settings_updated_updates_visible_state_without_transcript() {
 }
 
 #[tokio::test]
+async fn retained_thread_and_settings_project_complete_pane_local_provider() {
+    use codex_model_provider_info::ANTHROPIC_BASE_URL;
+    use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+    use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
+    use codex_model_provider_info::ModelProviderInfo;
+    use codex_model_provider_info::OPENROUTER_BASE_URL;
+    use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
+
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.config.model_providers.insert(
+        CLAUDE_PLAN_PROVIDER_ID.to_string(),
+        ModelProviderInfo::create_claude_plan_provider(),
+    );
+    chat.config.model_providers.insert(
+        OPENROUTER_PROVIDER_ID.to_string(),
+        ModelProviderInfo::create_openrouter_provider(),
+    );
+    chat.set_model_provider(
+        DEEPSEEK_PROVIDER_ID.to_string(),
+        ModelProviderInfo::create_deepseek_provider(),
+    );
+
+    let thread_id = ThreadId::new();
+    let mut retained = configured_thread_session(thread_id);
+    retained.model = CLAUDE_FABLE_5_PLAN_MODEL.to_string();
+    retained.model_provider_id = CLAUDE_PLAN_PROVIDER_ID.to_string();
+    chat.handle_thread_session(retained);
+    let _ = drain_insert_history(&mut rx);
+
+    assert_eq!(chat.config_ref().model_provider_id, CLAUDE_PLAN_PROVIDER_ID);
+    assert_eq!(chat.config_ref().model_provider.name, "Claude Plan");
+    assert_eq!(
+        chat.runtime_model_provider_base_url(),
+        Some(ANTHROPIC_BASE_URL)
+    );
+
+    let mut settings = thread_settings_for_test("x-ai/grok-4.5", thread_id);
+    settings.thread_settings.model_provider = OPENROUTER_PROVIDER_ID.to_string();
+    chat.handle_server_notification(
+        ServerNotification::ThreadSettingsUpdated(settings),
+        /*replay_kind*/ None,
+    );
+
+    assert_eq!(chat.config_ref().model_provider_id, OPENROUTER_PROVIDER_ID);
+    assert_eq!(chat.config_ref().model_provider.name, "OpenRouter");
+    assert_eq!(
+        chat.runtime_model_provider_base_url(),
+        Some(OPENROUTER_BASE_URL)
+    );
+
+    let _ = drain_insert_history(&mut rx);
+    chat.dispatch_command(SlashCommand::Status);
+    let rendered = match rx.try_recv() {
+        Ok(AppEvent::InsertHistoryCell(cell)) => {
+            lines_to_single_string(&cell.display_lines(/*width*/ 100))
+        }
+        other => panic!("expected pane-local status output, got {other:?}"),
+    };
+    assert!(
+        rendered.contains("OpenRouter - https://openrouter.ai/api/v1"),
+        "expected /status to use the selected pane provider, got: {rendered}"
+    );
+    assert!(
+        !rendered.contains("DeepSeek"),
+        "expected /status not to leak the parent provider, got: {rendered}"
+    );
+}
+
+#[tokio::test]
 async fn thread_settings_updated_preserves_default_settings_for_plan_mode() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2")).await;
     let thread_id = ThreadId::new();

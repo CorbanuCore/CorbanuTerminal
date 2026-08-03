@@ -213,10 +213,11 @@ fn restored_threads_are_counted_once_and_keep_their_path_reserved() {
         Ok(_) => panic!("the restored thread must consume exactly one configured slot"),
         Err(err) => err,
     };
-    let CodexErr::AgentLimitReached { max_threads } = err else {
+    let codex_protocol::error::CodexErrorDetails::AgentLimitReached { max_threads } = err.details()
+    else {
         panic!("expected CodexErr::AgentLimitReached");
     };
-    assert_eq!(max_threads, 1);
+    assert_eq!(*max_threads, 1);
 
     registry.release_spawned_thread(thread_id);
     let reservation = registry

@@ -12,9 +12,10 @@ pub enum UpdateAction {
     NpmGlobalLatest,
     /// Update via `bun install -g @agticorp/pfterminal@latest`.
     BunGlobalLatest,
-    /// Update via `pnpm add -g @openai/codex@latest`.
+    /// Update via `pnpm add -g @agticorp/pfterminal@latest`.
     PnpmGlobalLatest,
-    /// Update via `brew upgrade codex`.
+    /// Legacy stock-Codex Homebrew action. PF Terminal installations are upgraded through the
+    /// standalone PF installer instead.
     BrewUpgrade,
     /// Update via `curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh`.
     StandaloneUnix,
@@ -29,7 +30,7 @@ impl UpdateAction {
             InstallMethod::Npm => Some(UpdateAction::NpmGlobalLatest),
             InstallMethod::Bun => Some(UpdateAction::BunGlobalLatest),
             InstallMethod::Pnpm => Some(UpdateAction::PnpmGlobalLatest),
-            InstallMethod::Brew => Some(UpdateAction::BrewUpgrade),
+            InstallMethod::Brew => Some(UpdateAction::StandaloneUnix),
             InstallMethod::Standalone { platform, .. } => Some(match platform {
                 StandalonePlatform::Unix => UpdateAction::StandaloneUnix,
                 StandalonePlatform::Windows => UpdateAction::StandaloneWindows,
@@ -41,9 +42,9 @@ impl UpdateAction {
     /// Returns the list of command-line arguments for invoking the update.
     pub fn command_args(self) -> (&'static str, &'static [&'static str]) {
         match self {
-            UpdateAction::NpmGlobalLatest => ("npm", &["install", "-g", "@openai/codex"]),
-            UpdateAction::BunGlobalLatest => ("bun", &["install", "-g", "@openai/codex"]),
-            UpdateAction::PnpmGlobalLatest => ("pnpm", &["add", "-g", "@openai/codex"]),
+            UpdateAction::NpmGlobalLatest => ("npm", &["install", "-g", "@agticorp/pfterminal"]),
+            UpdateAction::BunGlobalLatest => ("bun", &["install", "-g", "@agticorp/pfterminal"]),
+            UpdateAction::PnpmGlobalLatest => ("pnpm", &["add", "-g", "@agticorp/pfterminal"]),
             UpdateAction::BrewUpgrade => ("brew", &["upgrade", "--cask", "codex"]),
             UpdateAction::StandaloneUnix => (
                 "sh",
@@ -172,5 +173,18 @@ mod tests {
                 ][..],
             )
         );
+    }
+
+    #[test]
+    fn package_manager_update_commands_never_target_stock_codex() {
+        for action in [
+            UpdateAction::NpmGlobalLatest,
+            UpdateAction::BunGlobalLatest,
+            UpdateAction::PnpmGlobalLatest,
+        ] {
+            let command = action.command_str();
+            assert!(command.contains("@agticorp/pfterminal"), "{command}");
+            assert!(!command.contains("@openai/codex"), "{command}");
+        }
     }
 }

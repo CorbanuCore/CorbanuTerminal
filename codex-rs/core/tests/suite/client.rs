@@ -1495,6 +1495,7 @@ async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuth
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
         websocket_connect_timeout_ms: None,
+        runtime_policy: Default::default(),
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
@@ -3241,6 +3242,7 @@ async fn azure_responses_request_includes_store_and_prefixed_item_ids() {
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
         websocket_connect_timeout_ms: None,
+        runtime_policy: Default::default(),
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
@@ -3301,6 +3303,7 @@ async fn azure_responses_request_includes_store_and_prefixed_item_ids() {
             text: "content".into(),
         }]),
         encrypted_content: None,
+        anthropic_content_block: None,
         internal_chat_message_metadata_passthrough: None,
     });
     prompt.input.push(ResponseItem::Message {
@@ -3319,6 +3322,7 @@ async fn azure_responses_request_includes_store_and_prefixed_item_ids() {
             query: Some("weather".into()),
             queries: None,
         }),
+        anthropic_content_block: None,
         internal_chat_message_metadata_passthrough: None,
     });
     prompt.input.push(ResponseItem::FunctionCall {
@@ -3904,6 +3908,7 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
         websocket_connect_timeout_ms: None,
+        runtime_policy: Default::default(),
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
@@ -3998,6 +4003,7 @@ async fn env_var_overrides_loaded_auth() {
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
         websocket_connect_timeout_ms: None,
+        runtime_policy: Default::default(),
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,

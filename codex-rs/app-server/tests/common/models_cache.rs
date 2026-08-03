@@ -1,10 +1,13 @@
 use chrono::DateTime;
 use chrono::Utc;
 use codex_core::test_support::all_model_presets;
+use codex_models_manager::bundled_models_response;
 use codex_models_manager::client_version_to_whole;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::openai_models::ConfigShellToolType;
+use codex_protocol::openai_models::ModelBilling;
 use codex_protocol::openai_models::ModelInfo;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::TruncationPolicyConfig;
@@ -48,6 +51,7 @@ fn preset_to_info(preset: &ModelPreset, priority: i32) -> ModelInfo {
         supports_image_detail_original: false,
         context_window: Some(272_000),
         max_context_window: None,
+        max_output_tokens: None,
         auto_compact_token_limit: None,
         comp_hash: None,
         effective_context_window_percent: 95,
@@ -85,6 +89,41 @@ pub fn write_models_cache(codex_home: &Path) -> std::io::Result<()> {
         })
         .collect();
 
+    write_models_cache_with_models(codex_home, models)
+}
+
+/// Writes provider-scoped aliases of the bundled catalog for a custom test provider.
+/// The aliases avoid pretending that a custom endpoint owns reserved built-in model slugs.
+pub fn write_models_cache_for_provider(
+    codex_home: &Path,
+    provider_id: &str,
+) -> std::io::Result<()> {
+    let mut models = bundled_models_response()
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?
+        .models;
+    for model in &mut models {
+        model.slug = format!("{provider_id}/{}", model.slug);
+        model.display_name = model.slug.clone();
+        model.orchestration = match model.orchestration.take() {
+            Some(ModelOrchestrationMetadata::Eligible {
+                capability,
+                billing,
+                ..
+            }) => Some(ModelOrchestrationMetadata::Eligible {
+                provider_id: provider_id.to_string(),
+                capability,
+                billing,
+            }),
+            Some(ModelOrchestrationMetadata::Disabled { capability, .. }) => {
+                Some(ModelOrchestrationMetadata::Eligible {
+                    provider_id: provider_id.to_string(),
+                    capability,
+                    billing: ModelBilling::Local,
+                })
+            }
+            None => None,
+        };
+    }
     write_models_cache_with_models(codex_home, models)
 }
 

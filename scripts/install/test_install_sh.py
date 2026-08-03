@@ -24,7 +24,7 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/openai/codex/releases/tags/"
+                "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
                 f"rust-v{VERSION}"
             ],
         )
@@ -41,9 +41,9 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/openai/codex/releases/tags/"
+                "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
                 f"rust-v{VERSION}",
-                "https://github.com/openai/codex/releases/download/"
+                "https://github.com/agtico/PfTerminal/releases/download/"
                 f"rust-v{VERSION}/codex-package_SHA256SUMS",
             ],
         )
@@ -57,9 +57,9 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/openai/codex/releases/tags/"
+                "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
                 f"rust-v{version}",
-                "https://github.com/openai/codex/releases/download/"
+                "https://github.com/agtico/PfTerminal/releases/download/"
                 f"rust-v{version}/codex-package_SHA256SUMS",
             ],
         )
@@ -72,8 +72,8 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/openai/codex/releases/latest",
-                "https://github.com/openai/codex/releases/download/"
+                "https://api.github.com/repos/agtico/PfTerminal/releases/latest",
+                "https://github.com/agtico/PfTerminal/releases/download/"
                 f"rust-v{VERSION}/codex-package_SHA256SUMS",
             ],
         )
@@ -88,8 +88,8 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/openai/codex/releases/latest",
-                "https://github.com/openai/codex/releases/download/"
+                "https://api.github.com/repos/agtico/PfTerminal/releases/latest",
+                "https://github.com/agtico/PfTerminal/releases/download/"
                 f"rust-v{VERSION}/codex-package_SHA256SUMS",
             ],
         )
@@ -105,7 +105,7 @@ class InstallShTest(unittest.TestCase):
         self.assertIn("/codex-npm-", requests[1])
         self.assertNotIn("codex-package_SHA256SUMS", requests[1])
 
-    def test_macos_install_exposes_code_mode_host_beside_codex(self) -> None:
+    def test_macos_install_exposes_code_mode_host_beside_pfterminal(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             archive_path, checksum_path, metadata_json = create_package_release(root)
@@ -121,17 +121,19 @@ class InstallShTest(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             install_bin = root / "install-bin"
-            current = root / "codex-home" / "packages" / "standalone" / "current"
-            codex_path = install_bin / "codex"
+            current = root / "pfterminal-home" / "packages" / "standalone" / "current"
+            pfterminal_path = install_bin / "pfterminal"
             host_path = install_bin / "codex-code-mode-host"
-            self.assertEqual(os.readlink(codex_path), str(current / "bin" / "codex"))
+            wrapper = pfterminal_path.read_text(encoding="utf-8")
+            self.assertIn(str(current / "bin" / "pfterminal"), wrapper)
+            self.assertIn("$HOME/.pfterminal", wrapper)
             self.assertEqual(
                 os.readlink(host_path),
                 str(current / "bin" / "codex-code-mode-host"),
             )
             self.assertTrue(os.access(host_path, os.X_OK))
 
-    def test_releases_latest_installs_verified_package_by_default(self) -> None:
+    def test_releases_mirror_opt_in_installs_verified_package(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             archive_path, checksum_path, metadata_json = create_package_release(root)
@@ -143,7 +145,7 @@ class InstallShTest(unittest.TestCase):
                 archive_path=archive_path,
                 checksum_path=checksum_path,
                 force_macos=True,
-                use_mirror=None,
+                use_mirror=True,
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -199,7 +201,7 @@ class InstallShTest(unittest.TestCase):
                         archive_path=archive_path,
                         checksum_path=checksum_path,
                         force_macos=True,
-                        use_mirror=None,
+                        use_mirror=True,
                     )
 
                     self.assertEqual(result.returncode, 0, result.stderr)
@@ -207,10 +209,10 @@ class InstallShTest(unittest.TestCase):
                         requests,
                         [
                             "https://releases.openai.com/codex/channels/latest",
-                            "https://api.github.com/repos/openai/codex/releases/latest",
-                            "https://github.com/openai/codex/releases/download/"
+                            "https://api.github.com/repos/agtico/PfTerminal/releases/latest",
+                            "https://github.com/agtico/PfTerminal/releases/download/"
                             f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                            "https://github.com/openai/codex/releases/download/"
+                            "https://github.com/agtico/PfTerminal/releases/download/"
                             f"rust-v{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
                         ],
                     )
@@ -233,7 +235,7 @@ class InstallShTest(unittest.TestCase):
                 archive_path=archive_path,
                 checksum_path=checksum_path,
                 force_macos=True,
-                use_mirror=None,
+                use_mirror=True,
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -241,11 +243,11 @@ class InstallShTest(unittest.TestCase):
                 requests,
                 [
                     f"https://releases.openai.com/codex/releases/{VERSION}/release.json",
-                    "https://api.github.com/repos/openai/codex/releases/tags/"
+                    "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
                     f"rust-v{VERSION}",
-                    "https://github.com/openai/codex/releases/download/"
+                    "https://github.com/agtico/PfTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/openai/codex/releases/download/"
+                    "https://github.com/agtico/PfTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
@@ -263,7 +265,7 @@ class InstallShTest(unittest.TestCase):
                 archive_path=archive_path,
                 checksum_path=checksum_path,
                 force_macos=True,
-                use_mirror=None,
+                use_mirror=True,
                 releases_mode="asset_fallback",
             )
 
@@ -273,10 +275,10 @@ class InstallShTest(unittest.TestCase):
                 [
                     "https://releases.openai.com/codex/channels/latest",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/openai/codex/releases/download/"
+                    "https://github.com/agtico/PfTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package_SHA256SUMS",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
-                    "https://github.com/openai/codex/releases/download/"
+                    "https://github.com/agtico/PfTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
@@ -294,7 +296,7 @@ class InstallShTest(unittest.TestCase):
                 archive_path=archive_path,
                 checksum_path=checksum_path,
                 force_macos=True,
-                use_mirror=None,
+                use_mirror=True,
                 releases_mode="corrupt_assets",
             )
 
@@ -304,10 +306,10 @@ class InstallShTest(unittest.TestCase):
                 [
                     "https://releases.openai.com/codex/channels/latest",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/openai/codex/releases/download/"
+                    "https://github.com/agtico/PfTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package_SHA256SUMS",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
-                    "https://github.com/openai/codex/releases/download/"
+                    "https://github.com/agtico/PfTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
@@ -331,7 +333,7 @@ class InstallShTest(unittest.TestCase):
                 archive_path=archive_path,
                 checksum_path=checksum_path,
                 force_macos=True,
-                use_mirror=None,
+                use_mirror=True,
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -340,9 +342,9 @@ class InstallShTest(unittest.TestCase):
                 [
                     "https://releases.openai.com/codex/channels/latest",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/openai/codex/releases/download/"
+                    "https://github.com/agtico/PfTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                    "https://api.github.com/repos/openai/codex/releases/tags/"
+                    "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
                     f"rust-v{VERSION}",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
                 ],
@@ -375,7 +377,7 @@ class InstallShTest(unittest.TestCase):
                 checksum_path=checksum_path,
                 releases_checksum_path=mirror_checksum_path,
                 force_macos=True,
-                use_mirror=None,
+                use_mirror=True,
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -384,9 +386,9 @@ class InstallShTest(unittest.TestCase):
                 [
                     "https://releases.openai.com/codex/channels/latest",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/openai/codex/releases/download/"
+                    "https://github.com/agtico/PfTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                    "https://api.github.com/repos/openai/codex/releases/tags/"
+                    "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
                     f"rust-v{VERSION}",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
                 ],
@@ -405,7 +407,7 @@ class InstallShTest(unittest.TestCase):
                 archive_path=archive_path,
                 checksum_path=checksum_path,
                 force_macos=True,
-                use_mirror=None,
+                use_mirror=True,
                 releases_mode="corrupt_checksum_and_github",
             )
 
@@ -415,9 +417,9 @@ class InstallShTest(unittest.TestCase):
                 [
                     "https://releases.openai.com/codex/channels/latest",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/openai/codex/releases/download/"
+                    "https://github.com/agtico/PfTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                    "https://api.github.com/repos/openai/codex/releases/tags/"
+                    "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
                     f"rust-v{VERSION}",
                 ],
             )
@@ -476,9 +478,9 @@ class InstallShTest(unittest.TestCase):
                 first_requests,
                 [
                     f"https://releases.openai.com/codex/releases/{VERSION}/release.json",
-                    "https://api.github.com/repos/openai/codex/releases/tags/"
+                    "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
                     f"rust-v{VERSION}",
-                    "https://github.com/openai/codex/releases/download/"
+                    "https://github.com/agtico/PfTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-npm-darwin-arm64-{VERSION}.tgz",
                 ],
             )
@@ -498,7 +500,7 @@ class InstallShTest(unittest.TestCase):
                 second_requests,
                 [
                     f"https://releases.openai.com/codex/releases/{VERSION}/release.json",
-                    "https://api.github.com/repos/openai/codex/releases/tags/"
+                    "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
                     f"rust-v{VERSION}",
                 ],
             )
@@ -602,7 +604,7 @@ def run_installer_in(
                   exit 22
                 fi
                 ;;
-              https://github.com/openai/codex/releases/download/*/codex-package_SHA256SUMS)
+              https://github.com/agtico/PfTerminal/releases/download/*/codex-package_SHA256SUMS)
                 if [ "$CODEX_TEST_RELEASES_MODE" = "corrupt_checksum_and_github" ]; then
                   printf '<html>proxy error</html>\n' >"$output"
                   exit 0
@@ -613,14 +615,14 @@ def run_installer_in(
                   exit 22
                 fi
                 ;;
-              https://github.com/openai/codex/releases/download/*/codex-package-*.tar.gz)
+              https://github.com/agtico/PfTerminal/releases/download/*/codex-package-*.tar.gz)
                 if [ -n "$CODEX_TEST_ARCHIVE_PATH" ]; then
                   cp "$CODEX_TEST_ARCHIVE_PATH" "$output"
                 else
                   exit 22
                 fi
                 ;;
-              https://github.com/openai/codex/releases/download/*/codex-npm-*.tgz)
+              https://github.com/agtico/PfTerminal/releases/download/*/codex-npm-*.tgz)
                 if [ -n "$CODEX_TEST_LEGACY_ARCHIVE_PATH" ]; then
                   cp "$CODEX_TEST_LEGACY_ARCHIVE_PATH" "$output"
                 else
@@ -653,7 +655,7 @@ def run_installer_in(
     env = os.environ.copy()
     env.update(
         {
-            "CODEX_HOME": str(root / "codex-home"),
+            "PFTERMINAL_HOME": str(root / "pfterminal-home"),
             "CODEX_INSTALL_DIR": str(root / "install-bin"),
             "CODEX_NON_INTERACTIVE": "1",
             "CODEX_RELEASE": release,
@@ -712,8 +714,16 @@ def create_package_release(
     (package_dir / "codex-path").mkdir()
     (package_dir / "codex-package.json").write_text("{}\n", encoding="utf-8")
     write_executable(
-        package_dir / "bin" / "codex",
-        f"#!/bin/sh\nprintf 'codex-cli {VERSION}\\n'\n",
+        package_dir / "bin" / "pfterminal",
+        f"#!/bin/sh\nprintf 'pfterminal {VERSION}\\n'\n",
+    )
+    write_executable(
+        package_dir / "bin" / "pfterminal-debug",
+        f"#!/bin/sh\nprintf 'pfterminal {VERSION}\\n'\n",
+    )
+    write_executable(
+        package_dir / "bin" / "pfterminal-walletd",
+        "#!/bin/sh\nexit 0\n",
     )
     write_executable(
         package_dir / "bin" / "codex-code-mode-host",
@@ -754,7 +764,7 @@ def create_legacy_release(root: Path) -> tuple[Path, str]:
     (vendor_dir / "path").mkdir()
     write_executable(
         vendor_dir / "codex" / "codex",
-        f"#!/bin/sh\nprintf 'codex-cli {VERSION}\\n'\n",
+        f"#!/bin/sh\nprintf 'pfterminal {VERSION}\\n'\n",
     )
     write_executable(vendor_dir / "path" / "rg", "#!/bin/sh\nexit 0\n")
 
@@ -791,6 +801,8 @@ def release_metadata(*, compact: bool = False, reorder: bool = False) -> str:
             "x86_64-apple-darwin",
             "aarch64-unknown-linux-musl",
             "x86_64-unknown-linux-musl",
+            "aarch64-unknown-linux-gnu",
+            "x86_64-unknown-linux-gnu",
         )
     ]
     assets.append(

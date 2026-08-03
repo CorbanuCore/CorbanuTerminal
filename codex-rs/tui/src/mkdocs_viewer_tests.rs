@@ -129,3 +129,187 @@ fn rejects_docs_dir_outside_project_root() {
             .contains("docs_dir must stay inside the project root")
     );
 }
+
+#[test]
+fn searches_known_page_content_without_leaving_docs_tree() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs/reference")).expect("docs dirs");
+    fs::write(root.join("mkdocs.yml"), "site_name: Docs\n").expect("mkdocs config");
+    fs::write(root.join("docs/index.md"), "# Home\n\nOrdinary text.").expect("index");
+    fs::write(
+        root.join("docs/reference/api.md"),
+        "# API\n\nUnique provider credential guidance.",
+    )
+    .expect("api");
+
+    let site = load_mkdocs_site(root, /*args*/ None).expect("site");
+    let api_index = site
+        .pages
+        .iter()
+        .position(|page| page.rel_path == Path::new("reference/api.md"))
+        .expect("api page");
+
+    assert!(site.page_matches_query(api_index, "provider credential"));
+    assert!(!site.page_matches_query(site.selected_index, "provider credential"));
+}
+
+#[test]
+fn resolves_relative_site_absolute_directory_and_anchor_links() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs/guide/setup")).expect("docs dirs");
+    fs::create_dir_all(root.join("docs/reference")).expect("reference dirs");
+    fs::write(root.join("mkdocs.yml"), "site_name: Docs\n").expect("mkdocs config");
+    fs::write(root.join("docs/index.md"), "# Home").expect("index");
+    fs::write(root.join("docs/guide/setup/index.md"), "# Setup").expect("setup");
+    fs::write(root.join("docs/reference/api.md"), "# API").expect("api");
+
+    let site = load_mkdocs_site(root, Some("guide/setup/index.md")).expect("site");
+    let from = site.selected_index;
+    let api = site
+        .pages
+        .iter()
+        .position(|page| page.rel_path == Path::new("reference/api.md"))
+        .expect("api page");
+
+    assert_eq!(
+        site.resolve_internal_link(from, "../../reference/api.md#methods")
+            .expect("relative link"),
+        ResolvedDocLink {
+            page_index: api,
+            anchor: Some("methods".to_string()),
+        }
+    );
+    assert_eq!(
+        site.resolve_internal_link(from, "/guide/setup/")
+            .expect("directory link")
+            .page_index,
+        from
+    );
+    assert_eq!(
+        site.resolve_internal_link(from, "#install")
+            .expect("same page anchor"),
+        ResolvedDocLink {
+            page_index: from,
+            anchor: Some("install".to_string()),
+        }
+    );
+}
+
+#[test]
+fn rejects_external_broken_and_escaping_links_with_actionable_errors() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).expect("docs dir");
+    fs::write(root.join("mkdocs.yml"), "site_name: Docs\n").expect("mkdocs config");
+    fs::write(root.join("docs/index.md"), "# Home").expect("index");
+    let site = load_mkdocs_site(root, /*args*/ None).expect("site");
+
+    assert!(
+        site.resolve_internal_link(site.selected_index, "https://example.com")
+            .expect_err("external error")
+            .to_string()
+            .contains("terminal/browser policy")
+    );
+    assert!(
+        site.resolve_internal_link(site.selected_index, "../secret.md")
+            .expect_err("escape error")
+            .to_string()
+            .contains("escapes the configured docs directory")
+    );
+    assert!(
+        site.resolve_internal_link(site.selected_index, "missing.md")
+            .expect_err("missing error")
+            .to_string()
+            .contains("No MkDocs page matched link")
+    );
+}
+
+#[test]
+fn bare_docs_falls_back_to_managed_package_offline_docs() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let workspace = temp.path().join("workspace");
+    let package = temp.path().join("package");
+    fs::create_dir_all(&workspace).expect("workspace");
+    fs::create_dir_all(package.join("docs")).expect("package docs");
+    fs::write(
+        package.join("mkdocs.yml"),
+        "site_name: Packaged PF Terminal\ndocs_dir: docs\n",
+    )
+    .expect("mkdocs config");
+    fs::write(package.join("docs/index.md"), "# Offline Home").expect("index");
+
+    let (config, page_hint) =
+        resolve_mkdocs_request_with_package_root(&workspace, /*args*/ None, Some(&package))
+            .expect("packaged config");
+
+    assert_eq!(config.path, package.join("mkdocs.yml"));
+    assert_eq!(config.docs_dir, package.join("docs"));
+    assert_eq!(page_hint, None);
+}
+
+#[test]
+fn targeted_docs_fall_back_to_managed_package_offline_docs() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let workspace = temp.path().join("workspace");
+    let package = temp.path().join("package");
+    fs::create_dir_all(&workspace).expect("workspace");
+    fs::create_dir_all(package.join("docs/features")).expect("package docs");
+    fs::write(
+        package.join("mkdocs.yml"),
+        "site_name: Packaged PF Terminal\ndocs_dir: docs\n",
+    )
+    .expect("mkdocs config");
+    fs::write(
+        package.join("docs/features/spawn.md"),
+        "# Spawn Orchestration",
+    )
+    .expect("target page");
+
+    let (config, page_hint) = resolve_mkdocs_request_with_package_root(
+        &workspace,
+        Some("features/spawn"),
+        Some(&package),
+    )
+    .expect("packaged target config");
+
+    assert_eq!(config.path, package.join("mkdocs.yml"));
+    assert_eq!(config.docs_dir, package.join("docs"));
+    assert_eq!(page_hint.as_deref(), Some("features/spawn"));
+}
+
+#[test]
+fn docs_path_options_report_a_missing_path() {
+    let temp = tempfile::tempdir().expect("tempdir");
+
+    for option in ["--config", "--docs-dir"] {
+        let error = resolve_mkdocs_request_with_package_root(temp.path(), Some(option), None)
+            .expect_err("missing option path");
+        assert_eq!(
+            error.to_string(),
+            format!("Expected a path after /docs {option}.")
+        );
+    }
+}
+
+#[test]
+fn missing_local_and_packaged_docs_returns_recovery_instruction() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let workspace = temp.path().join("workspace");
+    let package = temp.path().join("broken-package");
+    fs::create_dir_all(&workspace).expect("workspace");
+    fs::create_dir_all(&package).expect("package");
+
+    let error =
+        resolve_mkdocs_request_with_package_root(&workspace, /*args*/ None, Some(&package))
+            .expect_err("missing docs error");
+
+    assert!(
+        error
+            .to_string()
+            .contains("packaged documentation is missing")
+    );
+    assert!(error.to_string().contains("Reinstall PFTerminal"));
+    assert!(error.to_string().contains("/docs --config <path>"));
+}

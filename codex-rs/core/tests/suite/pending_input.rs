@@ -2,19 +2,26 @@ use core_test_support::test_codex::local_selections;
 use std::sync::Arc;
 
 use codex_core::CodexThread;
+use codex_core::StartThreadOptions;
 use codex_core::config::CurrentTimeReminderConfig;
 use codex_extension_items::ExtensionItem;
 use codex_extension_items::sleep::SleepItem;
 use codex_features::Feature;
+use codex_models_manager::bundled_models_response;
 use codex_protocol::AgentPath;
+use codex_protocol::items::CollabAgentTool;
 use codex_protocol::items::TurnItem;
 use codex_protocol::models::PermissionProfile;
+use codex_protocol::openai_models::ToolMode;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::InterAgentCommunication;
+use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::RolloutItem;
 use codex_protocol::protocol::RolloutLine;
+use codex_protocol::protocol::SessionSource;
+use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::user_input::UserInput;
 use core_test_support::context_snapshot;
 use core_test_support::context_snapshot::ContextSnapshotOptions;
@@ -193,7 +200,13 @@ async fn steer_user_input(codex: &CodexThread, text: &str) {
         .expect("steer user input");
 }
 
-async fn enqueue_queue_only_agent_mail(codex: &CodexThread, text: &str) {
+#[derive(Clone, Copy)]
+enum AgentMailDelivery {
+    QueueOnly,
+    TriggerTurn,
+}
+
+async fn enqueue_agent_mail(codex: &CodexThread, text: &str, delivery: AgentMailDelivery) {
     codex
         .submit(Op::InterAgentCommunication {
             communication: InterAgentCommunication::new(
@@ -208,8 +221,12 @@ async fn enqueue_queue_only_agent_mail(codex: &CodexThread, text: &str) {
         .expect("submit queue-only agent mail");
 }
 
-async fn submit_queue_only_agent_mail(codex: &CodexThread, text: &str) {
-    enqueue_queue_only_agent_mail(codex, text).await;
+async fn enqueue_queue_only_agent_mail(codex: &CodexThread, text: &str) {
+    enqueue_agent_mail(codex, text, AgentMailDelivery::QueueOnly).await;
+}
+
+async fn submit_agent_mail(codex: &CodexThread, text: &str, delivery: AgentMailDelivery) {
+    enqueue_agent_mail(codex, text, delivery).await;
     codex
         .submit(Op::RealtimeConversationListVoices)
         .await
@@ -218,6 +235,10 @@ async fn submit_queue_only_agent_mail(codex: &CodexThread, text: &str) {
         matches!(event, EventMsg::RealtimeConversationListVoicesResponse(_))
     })
     .await;
+}
+
+async fn submit_queue_only_agent_mail(codex: &CodexThread, text: &str) {
+    submit_agent_mail(codex, text, AgentMailDelivery::QueueOnly).await;
 }
 
 async fn wait_for_reasoning_item_started(codex: &CodexThread) {
@@ -320,8 +341,11 @@ impl codex_extension_api::ThreadLifecycleContributor<codex_core::config::Config>
 async fn queue_only_agent_mail_wakes_sleeping_root_and_persists_message() {
     const CHILD_MESSAGE: &str = "worker completed";
 
-    let (server, _completions) =
-        start_streaming_sse_server(vec![response_completed_chunks("resp-1")]).await;
+    let (server, _completions) = start_streaming_sse_server(vec![
+        response_completed_chunks("resp-1"),
+        response_completed_chunks("resp-2"),
+    ])
+    .await;
     let mut extensions =
         codex_extension_api::ExtensionRegistryBuilder::<codex_core::config::Config>::new();
     extensions.thread_lifecycle_contributor(Arc::new(SleepingRootExtension));
@@ -337,23 +361,21 @@ async fn queue_only_agent_mail_wakes_sleeping_root_and_persists_message() {
     wait_for_turn_complete(&codex).await;
 
     assert_eq!(server.requests().await.len(), 1);
-    let history = codex
-        .load_history(/*include_archived*/ true)
-        .await
-        .expect("load persisted thread history");
-    assert!(history.items.iter().any(|item| {
-        matches!(
-            item,
-            RolloutItem::ResponseItem(codex_protocol::models::ResponseItem::AgentMessage {
-                content,
-                ..
-            }) if content.iter().any(|content| matches!(
-                content,
-                codex_protocol::models::AgentMessageInputContent::InputText { text }
-                    if text == CHILD_MESSAGE
-            ))
-        )
-    }));
+    submit_user_input(&codex, "acknowledge the worker update").await;
+    wait_for_turn_complete(&codex).await;
+    assert_eq!(server.requests().await.len(), 2);
+    let requests = server.requests().await;
+    let second: Value = from_slice(&requests[1]).expect("parse second request");
+    assert!(
+        second["input"]
+            .as_array()
+            .expect("request input")
+            .iter()
+            .any(|item| {
+                item.get("type").and_then(Value::as_str) == Some("agent_message")
+                    && item["content"] == json!([{"type": "input_text", "text": CHILD_MESSAGE}])
+            })
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -375,22 +397,54 @@ async fn steer_interrupts_wait_agent_and_is_sent_in_follow_up_request() {
     ];
     let (server, _completions) =
         start_streaming_sse_server(vec![first_chunks, response_completed_chunks("resp-2")]).await;
-    let codex = test_codex()
+    let test = test_codex()
         .with_model("gpt-5.4")
         .with_config(|config| {
             config
                 .features
                 .enable(Feature::MultiAgentV2)
                 .expect("test config should allow feature update");
+            let mut model_catalog =
+                bundled_models_response().expect("bundled models.json should parse");
+            let model = model_catalog
+                .models
+                .iter_mut()
+                .find(|model| model.slug == "gpt-5.4")
+                .expect("legacy direct-tool fixture model should exist");
+            model.multi_agent_version = Some(MultiAgentVersion::V2);
+            model.tool_mode = Some(ToolMode::Direct);
+            config.model_catalog = Some(model_catalog);
         })
         .build_with_streaming_server(&server)
         .await
-        .expect("build Codex test session")
-        .codex;
+        .expect("build Codex test session");
+    let mut child_options = StartThreadOptions::new(test.config.clone());
+    child_options.session_source = Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        parent_thread_id: test.session_configured.thread_id,
+        depth: 1,
+        agent_path: Some(AgentPath::try_from("/root/worker").expect("valid child path")),
+        agent_nickname: Some("worker".to_string()),
+        agent_role: Some("worker".to_string()),
+        agent_class: None,
+    }));
+    let _child = test
+        .thread_manager
+        .start_thread(child_options)
+        .await
+        .expect("wait_agent steering fixture should have one eligible child");
+    let codex = test.codex;
 
     submit_user_input(&codex, INITIAL_PROMPT).await;
     wait_for_event(&codex, |event| {
-        matches!(event, EventMsg::CollabWaitingBegin(_))
+        matches!(
+            event,
+            EventMsg::ItemStarted(item_started)
+                if matches!(
+                    &item_started.item,
+                    TurnItem::CollabAgentToolCall(item)
+                        if item.tool == CollabAgentTool::Wait
+                )
+        )
     })
     .await;
 
@@ -409,12 +463,21 @@ async fn steer_interrupts_wait_agent_and_is_sent_in_follow_up_request() {
         vec![INITIAL_PROMPT.to_string(), STEER_PROMPT.to_string()]
     );
     let wait_output = function_call_output_text(&second, WAIT_CALL_ID).expect("wait_agent output");
+    let wait_output = serde_json::from_str::<Value>(wait_output).expect("parse wait_agent output");
+    assert_eq!(wait_output["message"], "Wait interrupted by new input.");
+    assert_eq!(wait_output["timed_out"], false);
+    assert_eq!(wait_output["waiting_for"], "/root");
+    assert_eq!(wait_output["consecutive_empty_waits"], 0);
     assert_eq!(
-        serde_json::from_str::<Value>(wait_output).expect("parse wait_agent output"),
-        json!({
-            "message": "Wait interrupted by new input.",
-            "timed_out": false,
-        })
+        wait_output["agents"],
+        json!([{
+            "agent_name": "/root/worker",
+            "agent_nickname": "worker",
+            "agent_role": "worker",
+            "agent_status": "pending_init",
+            "last_result_message": null,
+            "last_task_message": null,
+        }])
     );
 
     server.shutdown().await;
@@ -811,12 +874,14 @@ async fn queued_inter_agent_mail_does_not_restart_after_final_answer() {
     let mut requests = server.requests().await;
     assert_eq!(requests.len(), 1);
     let request: Value = from_slice(&requests[0]).expect("parse request");
-    assert!(
-        request["input"]
-            .as_array()
-            .expect("request input")
-            .iter()
-            .all(|item| item.get("type").and_then(Value::as_str) != Some("agent_message"))
+    let first_input = request["input"].as_array().expect("request input");
+    let first_agent_message = first_input
+        .iter()
+        .find(|item| item.get("type").and_then(Value::as_str) == Some("agent_message"))
+        .expect("idle queue-only mail should join the next admitted human turn");
+    assert_eq!(
+        first_agent_message["content"],
+        json!([{"type": "input_text", "text": "queued child update"}])
     );
 
     submit_user_input(&codex, "second prompt").await;
@@ -829,7 +894,7 @@ async fn queued_inter_agent_mail_does_not_restart_after_final_answer() {
     let agent_message = input
         .iter()
         .find(|item| item.get("type").and_then(Value::as_str) == Some("agent_message"))
-        .expect("queued child update should be included in the next turn");
+        .expect("the admitted child update should remain in conversation history");
     assert_eq!(
         agent_message["content"],
         json!([{"type": "input_text", "text": "queued child update"}])

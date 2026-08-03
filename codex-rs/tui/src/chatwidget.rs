@@ -497,7 +497,9 @@ const ASK_FOR_APPROVAL_LABEL: &str = "Ask for approval";
 const APPROVE_FOR_ME_LABEL: &str = "Approve for me";
 const AUTO_REVIEW_DESCRIPTION: &str = "Only ask for actions detected as potentially unsafe.";
 const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
-const DEFAULT_STATUS_LINE_ITEMS: [&str; 2] = ["model-with-reasoning", "current-dir"];
+const DEFAULT_STATUS_LINE_ITEMS: [&str; 4] =
+    ["model-with-reasoning", "current-dir", "brand", "tps"];
+const MAX_AGENT_COPY_HISTORY: usize = 32;
 
 /// Common initialization parameters shared by all `ChatWidget` constructors.
 pub(crate) struct ChatWidgetInit {
@@ -926,6 +928,7 @@ fn patch_approval_request_from_params(
         changes: HashMap::new(),
         reason: params.reason,
         grant_root: params.grant_root,
+        response_destination: crate::approval_events::ApprovalResponseDestination::Thread,
     }
 }
 

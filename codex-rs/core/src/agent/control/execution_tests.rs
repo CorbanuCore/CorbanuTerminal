@@ -84,22 +84,28 @@ fn execution_guards_do_not_derive_capacity_policy_from_role_names() {
     let _worker = control
         .execution_guard(MultiAgentVersion::V2, &worker_source)
         .expect("worker should occupy the only worker slot");
-    let Err(CodexErr::AgentLimitReached { max_threads }) =
-        control.ensure_execution_capacity(MultiAgentVersion::V2, &worker_source)
-    else {
+    let Err(err) = control.ensure_execution_capacity(MultiAgentVersion::V2, &worker_source) else {
         panic!("another worker should remain capacity limited");
     };
-    assert_eq!(max_threads, 1);
+    let CodexErrorDetails::AgentLimitReached { max_threads } = err.details() else {
+        panic!("expected AgentLimitReached");
+    };
+    assert_eq!(*max_threads, 1);
 
-    let Err(CodexErr::AgentLimitReached { max_threads }) =
-        control.ensure_execution_capacity(MultiAgentVersion::V2, &nazgul_source)
-    else {
+    let Err(err) = control.ensure_execution_capacity(MultiAgentVersion::V2, &nazgul_source) else {
         panic!("display roles must not bypass native execution capacity");
     };
-    assert_eq!(max_threads, 1);
+    let CodexErrorDetails::AgentLimitReached { max_threads } = err.details() else {
+        panic!("expected AgentLimitReached");
+    };
+    assert_eq!(*max_threads, 1);
+    let err = match control.try_execution_guard(MultiAgentVersion::V2, &nazgul_source) {
+        Ok(_) => panic!("display roles must remain capacity limited"),
+        Err(err) => err,
+    };
     assert!(matches!(
-        control.try_execution_guard(MultiAgentVersion::V2, &nazgul_source),
-        Err(CodexErr::AgentLimitReached { max_threads: 1 })
+        err.details(),
+        CodexErrorDetails::AgentLimitReached { max_threads: 1 }
     ));
 }
 
@@ -128,9 +134,13 @@ async fn capacity_waiter_unblocks_after_atomic_worker_reservation_is_released() 
         .try_execution_guard(MultiAgentVersion::V2, &source)
         .expect("first reservation")
         .expect("worker reservation");
+    let err = match control.try_execution_guard(MultiAgentVersion::V2, &source) {
+        Ok(_) => panic!("second worker must be capacity limited"),
+        Err(err) => err,
+    };
     assert!(matches!(
-        control.try_execution_guard(MultiAgentVersion::V2, &source),
-        Err(CodexErr::AgentLimitReached { max_threads: 1 })
+        err.details(),
+        CodexErrorDetails::AgentLimitReached { max_threads: 1 }
     ));
 
     let waiting_control = control.clone();

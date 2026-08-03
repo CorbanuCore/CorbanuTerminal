@@ -51,6 +51,7 @@ use pretty_assertions::assert_eq;
 use serde_json::Value;
 use std::fs::FileTimes;
 use std::fs::OpenOptions;
+use std::future::Future;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -60,6 +61,25 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+fn run_current_thread_test_with_stack<F>(name: &str, future: F) -> Result<()>
+where
+    F: Future<Output = Result<()>> + Send + 'static,
+{
+    const TEST_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
+    let handle = std::thread::Builder::new()
+        .name(name.to_string())
+        .stack_size(TEST_STACK_SIZE_BYTES)
+        .spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
+            runtime.block_on(future)
+        })?;
+    handle
+        .join()
+        .map_err(|_| anyhow::anyhow!("{name} test thread panicked"))?
+}
 
 #[tokio::test]
 async fn thread_unarchive_moves_rollout_back_into_sessions_directory() -> Result<()> {
@@ -230,8 +250,15 @@ async fn thread_unarchive_moves_rollout_back_into_sessions_directory() -> Result
     Ok(())
 }
 
-#[tokio::test]
-async fn thread_unarchive_preserves_pathless_store_metadata() -> Result<()> {
+#[test]
+fn thread_unarchive_preserves_pathless_store_metadata() -> Result<()> {
+    run_current_thread_test_with_stack(
+        "thread-unarchive-pathless-store-metadata",
+        thread_unarchive_preserves_pathless_store_metadata_impl(),
+    )
+}
+
+async fn thread_unarchive_preserves_pathless_store_metadata_impl() -> Result<()> {
     let codex_home = TempDir::new()?;
     let store_id = Uuid::new_v4().to_string();
     MockResponsesConfig::new("http://127.0.0.1:1")

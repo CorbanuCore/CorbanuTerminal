@@ -51,6 +51,7 @@ async fn openai_model_header_mismatch_emits_model_rerouted_notification_v2() -> 
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
+        .with_env_overrides(&[("OPENAI_API_KEY", Some("test-api-key"))])
         .build_initialized()
         .await?;
     let ThreadStartResponse { thread, .. } = mcp
@@ -109,6 +110,7 @@ async fn cyber_policy_response_emits_typed_error_notification_v2() -> Result<()>
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
+        .with_env_overrides(&[("OPENAI_API_KEY", Some("test-api-key"))])
         .build_initialized()
         .await?;
     let ThreadStartResponse { thread, .. } = mcp
@@ -177,6 +179,7 @@ async fn response_model_field_mismatch_emits_model_rerouted_notification_v2_when
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
+        .with_env_overrides(&[("OPENAI_API_KEY", Some("test-api-key"))])
         .build_initialized()
         .await?;
     let ThreadStartResponse { thread, .. } = mcp
@@ -237,6 +240,7 @@ async fn model_verification_emits_typed_notification_and_warning_v2() -> Result<
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
+        .with_env_overrides(&[("OPENAI_API_KEY", Some("test-api-key"))])
         .build_initialized()
         .await?;
     let ThreadStartResponse { thread, .. } = mcp
@@ -302,6 +306,7 @@ async fn turn_moderation_metadata_emits_typed_notification_v2() -> Result<()> {
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
+        .with_env_overrides(&[("OPENAI_API_KEY", Some("test-api-key"))])
         .build_initialized()
         .await?;
     let ThreadStartResponse { thread, .. } = mcp
@@ -485,6 +490,8 @@ fn is_warning_user_message_item(item: &ThreadItem) -> bool {
 fn create_config_toml(codex_home: &std::path::Path, server_uri: &str) -> std::io::Result<()> {
     MockResponsesConfig::new(server_uri)
         .with_model(REQUESTED_MODEL)
+        .with_builtin_model_provider("openai")
+        .with_root_config(&format!("openai_base_url = \"{server_uri}/v1\""))
         .disable_feature(Feature::RemoteModels)
         .enable_feature(Feature::Personality)
         .write(codex_home)

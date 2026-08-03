@@ -52,6 +52,7 @@ mod doctor;
 mod exec_server_telemetry;
 mod marketplace_cmd;
 mod mcp_cmd;
+mod pfterminal_home;
 mod plugin_cmd;
 mod remote_control_cmd;
 #[cfg(target_os = "windows")]
@@ -141,7 +142,7 @@ enum Subcommand {
     /// Internal vault helpers for PFTerminal integrations.
     Vault(VaultCommand),
 
-    /// Internal: print the active Claude Code OAuth token for the Codex-native Claude Plan provider.
+    /// Internal: print the active Claude Code OAuth token for the PFTerminal-native Claude Plan provider.
     #[clap(hide = true, name = "internal-claude-oauth-token")]
     InternalClaudeOauthToken,
 
@@ -182,7 +183,7 @@ enum Subcommand {
     /// [experimental] Manage the app-server daemon with remote control enabled.
     RemoteControl(RemoteControlCommand),
 
-    /// Launch the Desktop app (opens the app installer if missing).
+    /// Launch the PFTerminal desktop app (opens the app installer if missing).
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     App(app_cmd::AppCommand),
 
@@ -463,7 +464,7 @@ type HostSandboxArgs = UnsupportedSandboxArgs;
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 #[derive(Debug, Parser)]
 struct UnsupportedSandboxArgs {
-    /// Layer $CODEX_HOME/<name>.config.toml on top of the base user config.
+    /// Layer $PFTERMINAL_HOME/<name>.config.toml on top of the base user config.
     #[arg(long = "profile", short = 'p')]
     pub config_profile: Option<ProfileV2Name>,
 
@@ -628,7 +629,7 @@ struct AppServerCommand {
     #[command(flatten)]
     code_mode_host: codex_app_server::AppServerCodeModeHostArgs,
 
-    /// Error out when config.toml contains fields that are not recognized by this version of Codex.
+    /// Error out when config.toml contains fields that are not recognized by this version of PFTerminal.
     #[arg(long = "strict-config", default_value_t = false)]
     strict_config: bool,
 
@@ -968,7 +969,11 @@ async fn run_session_archive_cli_command(
         },
     )
     .await
-    .map_err(|err| anyhow::anyhow!("{err}"))
+    .map_err(|err| anyhow::anyhow!("{}", format_error_report(err)))
+}
+
+fn format_error_report(error: impl std::fmt::Display) -> String {
+    format!("{error:#}")
 }
 
 fn delete_action(target: &str, force: bool) -> anyhow::Result<codex_tui::SessionArchiveAction> {
@@ -1073,6 +1078,7 @@ fn stage_str(stage: Stage) -> &'static str {
 }
 
 fn main() -> anyhow::Result<()> {
+    pfterminal_home::configure_for_entrypoint(env!("CARGO_BIN_NAME"))?;
     let remote_control_disabled = codex_app_server::take_remote_control_disabled_env();
     arg0_dispatch_or_else(move |arg0_paths: Arg0DispatchPaths| async move {
         cli_main(arg0_paths, remote_control_disabled).await?;
@@ -1143,7 +1149,7 @@ async fn cli_main(
                 root_remote_auth_token_env.as_deref(),
                 "review",
             )?;
-            let mut exec_cli = ExecCli::try_parse_from(["codex", "exec"])?;
+            let mut exec_cli = ExecCli::try_parse_from(["pfterminal", "exec"])?;
             exec_cli
                 .shared
                 .inherit_exec_root_options(&interactive.shared);
@@ -2350,8 +2356,10 @@ async fn run_internal_gpu_controller(command: GpuControllerCommand) -> anyhow::R
         .cli_overrides(cli_kv_overrides)
         .build()
         .await?;
-    std::fs::create_dir_all(&config.sqlite_home)?;
-    let controller_lock_path = config.sqlite_home.join("gpu-controller.lock");
+    let sqlite = config.sqlite_config().clone();
+    let sqlite_home = sqlite.home().to_path_buf();
+    std::fs::create_dir_all(&sqlite_home)?;
+    let controller_lock_path = sqlite_home.join("gpu-controller.lock");
     let controller_lock = std::fs::OpenOptions::new()
         .create(true)
         .read(true)
@@ -2362,8 +2370,7 @@ async fn run_internal_gpu_controller(command: GpuControllerCommand) -> anyhow::R
         Err(std::fs::TryLockError::WouldBlock) => return Ok(()),
         Err(std::fs::TryLockError::Error(error)) => return Err(error.into()),
     }
-    let state =
-        StateRuntime::init(config.sqlite_home.clone(), "gpu-controller".to_string()).await?;
+    let state = StateRuntime::init(sqlite, "gpu-controller".to_string()).await?;
     let installation_id = codex_core::resolve_installation_id(&config.codex_home).await?;
     let credentials = Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
         codex_vault::Vault::new(config.codex_home.to_path_buf()),
@@ -2554,6 +2561,7 @@ fn provider_vault_label_allowed_for_auth_helper(label: &str) -> bool {
             | "provider/anthropic_api_key"
             | "provider/ambient_api_key"
             | "provider/kimi_api_key"
+            | "provider/deepseek_api_key"
             | "provider/baseten_api_key"
             | "provider/openrouter_api_key"
             | "provider/model_api_key"
@@ -3024,9 +3032,12 @@ fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli)
 }
 
 fn print_completion(cmd: CompletionCommand) {
+    write_completion(cmd.shell, &mut std::io::stdout());
+}
+
+fn write_completion<W: std::io::Write>(shell: Shell, writer: &mut W) {
     let mut app = MultitoolCli::command();
-    let name = "codex";
-    generate(cmd.shell, &mut app, name, &mut std::io::stdout());
+    generate(shell, &mut app, "pfterminal", writer);
 }
 
 #[cfg(test)]
@@ -3036,6 +3047,37 @@ mod tests {
     use codex_protocol::ThreadId;
     use codex_tui::TokenUsage;
     use pretty_assertions::assert_eq;
+
+    #[test]
+    fn completion_scripts_register_pfterminal_for_every_shell() {
+        for shell in [
+            Shell::Bash,
+            Shell::Zsh,
+            Shell::Fish,
+            Shell::PowerShell,
+            Shell::Elvish,
+        ] {
+            let mut bytes = Vec::new();
+            write_completion(shell, &mut bytes);
+            let script = String::from_utf8(bytes).expect("completion should be UTF-8");
+            assert!(
+                script.contains("pfterminal"),
+                "{shell:?} completion omitted the executable name"
+            );
+            for stale_registration in [
+                "_codex",
+                "#compdef codex",
+                "CommandName 'codex'",
+                "arg-completer[codex]",
+                "complete -c codex",
+            ] {
+                assert!(
+                    !script.contains(stale_registration),
+                    "{shell:?} completion retained stale registration {stale_registration:?}"
+                );
+            }
+        }
+    }
 
     #[tokio::test]
     async fn updater_http_client_factory_honors_respect_system_proxy() {
@@ -3429,6 +3471,9 @@ mod tests {
             "provider/kimi_api_key"
         ));
         assert!(provider_vault_label_allowed_for_auth_helper(
+            "provider/deepseek_api_key"
+        ));
+        assert!(provider_vault_label_allowed_for_auth_helper(
             "provider/model_api_key"
         ));
         assert!(provider_vault_label_allowed_for_auth_helper(
@@ -3624,6 +3669,20 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "--force requires a session UUID; names must be confirmed interactively"
+        );
+    }
+
+    #[test]
+    fn error_report_format_preserves_context_chain() {
+        use anyhow::Context;
+
+        let error = Err::<(), _>(anyhow::anyhow!("missing session"))
+            .context("failed to delete session")
+            .expect_err("fixture should fail");
+
+        assert_eq!(
+            format_error_report(error),
+            "failed to delete session: missing session"
         );
     }
 

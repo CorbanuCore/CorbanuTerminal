@@ -5,7 +5,8 @@ expression: popup
   Select Model and Effort
   Kimi Code plan
 
-  OpenAI  Ambient  [Kimi Code]  Z.AI  Claude Plan  Anthropic  Meta  Vercel  Baseten  OpenRouter
+  OpenAI  Ambient  [Kimi Code]  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel  Baseten
+  OpenRouter
 
 › 1. Kimi Code K3 (current)  Model: k3. Kimi K3 through your Kimi Code plan. Context is plan-
                              dependent: up to 256K on Moderato (the default assumption) and up to

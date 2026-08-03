@@ -141,10 +141,13 @@ async fn auto_compaction_remote_emits_started_and_completed_items() -> Result<()
     .await;
 
     let codex_home = TempDir::new()?;
-    compaction_config(&server.uri(), REMOTE_AUTO_COMPACT_LIMIT)
+    MockResponsesConfig::new(&server.uri())
+        .with_builtin_model_provider("openai")
+        .with_root_config(&format!("openai_base_url = \"{}/v1\"", server.uri()))
+        .with_root_config(&format!(
+            "compact_prompt = \"{COMPACT_PROMPT}\"\nmodel_auto_compact_token_limit = {REMOTE_AUTO_COMPACT_LIMIT}"
+        ))
         .disable_feature(Feature::RemoteCompactionV2)
-        .with_provider_name("OpenAI")
-        .with_provider_config("requires_openai_auth = true")
         .write(codex_home.path())?;
     write_chatgpt_auth(
         codex_home.path(),

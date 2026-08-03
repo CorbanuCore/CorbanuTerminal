@@ -372,6 +372,9 @@ pub struct ConfigToml {
     pub model_reasoning_effort: Option<ReasoningEffort>,
     pub plan_mode_reasoning_effort: Option<ReasoningEffort>,
     pub model_reasoning_summary: Option<ReasoningSummary>,
+    /// Compatibility override that can force-enable reasoning summaries for
+    /// providers whose catalogue metadata does not advertise them.
+    pub model_supports_reasoning_summaries: Option<bool>,
     /// Optional verbosity control for GPT-5 models (Responses API `text.verbosity`).
     pub model_verbosity: Option<Verbosity>,
 

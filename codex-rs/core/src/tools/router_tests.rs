@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::config::Config;
+use crate::function_tool::FunctionCallError;
 use crate::session::step_context::StepContext;
 use crate::session::tests::make_session_and_context;
 use crate::session::turn_context::TurnContext;
@@ -72,6 +73,25 @@ fn tool_log_payload_redacts_plaintext_multi_agent_messages() {
         tool_log_payload(&payload, &ToolCallSource::Direct),
         payload.log_payload()
     );
+}
+
+#[test]
+fn cross_provider_collaboration_adapters_are_classified_as_plaintext() {
+    for name in [
+        "spawn_agent_plaintext",
+        "send_message_plaintext",
+        "followup_task_plaintext",
+    ] {
+        let call = ToolCall {
+            tool_name: ToolName::plain(name),
+            call_id: "call-1".to_string(),
+            payload: ToolPayload::Function {
+                arguments: json!({"message": "delegated task"}).to_string(),
+            },
+            encrypted_function_args: None,
+        };
+        assert_eq!(call.direct_source(), ToolCallSource::DirectPlaintextMessage);
+    }
 }
 
 impl codex_extension_api::ToolContributor for ExtensionEchoContributor {
@@ -266,7 +286,8 @@ fn truncated_structured_write_returns_structured_diagnostic() {
         namespace: None,
         arguments,
         call_id: "call-truncated-structured-write".to_string(),
-        metadata: None,
+        encrypted_function_args: None,
+        internal_chat_message_metadata_passthrough: None,
     });
 
     let Err(FunctionCallError::MalformedToolCall { message, .. }) = result else {

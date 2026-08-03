@@ -2993,7 +2993,31 @@ impl ChatComposer {
                     .lines()
                     .next()
                     .unwrap_or("")
-                    .starts_with('/'));
+                    .starts_with('/')
+                || self.draft.paste_burst.pending_text_starts_with('/'));
+        // A short command can arrive entirely inside the rapid-input buffer. Materialize it before
+        // applying Enter semantics; otherwise the first Enter becomes a pasted newline and the
+        // operator must press Enter again. This is a protocol-boundary rule for every slash
+        // command, not a command-name special case.
+        if in_slash_context
+            && let Some(pasted) = self.draft.paste_burst.flush_before_modified_input()
+        {
+            self.handle_paste(pasted);
+        }
+        // Some terminals and TUI drivers deliver an ordinary single-line prompt as a rapid
+        // character burst followed immediately by the user's real submit Enter. Once the input
+        // is long enough to distinguish that case from a short multiline paste, materialize the
+        // buffered text before running the normal submission path.
+        if !should_queue
+            && !self.draft.disable_paste_burst
+            && self
+                .draft
+                .paste_burst
+                .single_line_burst_enter_should_submit(self.draft.textarea.text())
+            && let Some(pasted) = self.draft.paste_burst.flush_before_modified_input()
+        {
+            self.handle_paste(pasted);
+        }
         if !should_queue
             && !self.draft.disable_paste_burst
             && self.draft.paste_burst.is_active()
@@ -3018,6 +3042,7 @@ impl ChatComposer {
         if let Some(result) = self.handle_parent_owned_submission() {
             return result;
         }
+
         if should_queue {
             if let Some(pasted) = self.draft.paste_burst.flush_before_modified_input() {
                 self.handle_paste(pasted);
@@ -3179,14 +3204,25 @@ impl ChatComposer {
         );
         let trimmed_rest = inline_command.rest.trim();
         args_elements = Self::trim_text_elements(inline_command.rest, trimmed_rest, args_elements);
-        let SlashCommandItem::Builtin(cmd) = command else {
-            return None;
-        };
-        Some(InputResult::CommandWithArgs(
-            cmd,
-            trimmed_rest.to_string(),
-            args_elements,
-        ))
+        Some(match command {
+            SlashCommandItem::Builtin(cmd) => {
+                InputResult::CommandWithArgs(cmd, trimmed_rest.to_string(), args_elements)
+            }
+            SlashCommandItem::ServiceTier(command) => {
+                self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+                    history_cell::new_info_event(
+                        format!(
+                            "'/{}' does not take inline arguments; running the bare command.",
+                            command.name
+                        ),
+                        /*hint*/ None,
+                    ),
+                )));
+                self.draft.textarea.set_text_clearing_elements("");
+                self.draft.is_bash_mode = false;
+                InputResult::ServiceTierCommand(command)
+            }
+        })
     }
 
     /// Expand pending placeholders and extract normalized inline-command args.
@@ -8565,6 +8601,36 @@ mod tests {
         assert!(matches!(result, InputResult::Command(SlashCommand::Diff)));
     }
 
+    #[test]
+    fn rapid_short_slash_commands_dispatch_on_first_enter() {
+        use crate::slash_command::SlashCommand;
+        use crossterm::event::KeyCode;
+        use crossterm::event::KeyEvent;
+        use crossterm::event::KeyModifiers;
+
+        for (text, expected) in [
+            ("/panes", SlashCommand::Panes),
+            ("/docs", SlashCommand::Docs),
+        ] {
+            let (mut composer, _rx) = new_test_composer();
+            let mut now = Instant::now();
+            for character in text.chars() {
+                let _ = composer.handle_input_basic_with_time(
+                    KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE),
+                    now,
+                );
+                now += Duration::from_millis(1);
+            }
+
+            let (result, _) =
+                composer.handle_submission_with_time(/*should_queue*/ false, now);
+
+            assert_eq!(result, InputResult::Command(expected), "command {text}");
+            assert!(composer.draft.textarea.text().is_empty(), "command {text}");
+            assert!(!composer.is_in_paste_burst(), "command {text}");
+        }
+    }
+
     /// Behavior: if a burst is buffering text and the user presses a non-char key, flush the
     /// buffered burst *before* applying that key so the buffer cannot get stuck.
     #[test]
@@ -9531,6 +9597,42 @@ mod tests {
     }
 
     #[test]
+    fn available_slash_commands_dispatch_while_task_running_without_popup() {
+        use crossterm::event::KeyCode;
+        use crossterm::event::KeyEvent;
+        use crossterm::event::KeyModifiers;
+
+        let (tx, _rx) = unbounded_channel::<AppEvent>();
+        let sender = AppEventSender::new(tx);
+        let mut composer = ChatComposer::new(
+            /*has_input_focus*/ true,
+            sender,
+            /*enhanced_keys_supported*/ false,
+            "Ask PFTerminal to do anything".to_string(),
+            /*disable_paste_burst*/ false,
+        );
+        composer.set_task_running(/*running*/ true);
+
+        composer
+            .draft
+            .textarea
+            .set_text_clearing_elements("/archive");
+        let (bare_result, _needs_redraw) =
+            composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(InputResult::Command(SlashCommand::Archive), bare_result);
+        assert!(composer.draft.textarea.is_empty());
+
+        composer
+            .draft
+            .textarea
+            .set_text_clearing_elements("/status");
+        let (adjacent_result, _needs_redraw) =
+            composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(InputResult::Command(SlashCommand::Status), adjacent_result);
+        assert!(composer.draft.textarea.is_empty());
+    }
+
+    #[test]
     fn enter_queues_when_queue_submissions_is_enabled() {
         use crossterm::event::KeyCode;
         use crossterm::event::KeyEvent;
@@ -9819,7 +9921,7 @@ mod tests {
     }
 
     #[test]
-    fn slash_tab_completion_wins_over_queueing_while_task_running() {
+    fn slash_tab_queues_partial_slash_prompt_while_task_running() {
         use crossterm::event::KeyCode;
         use crossterm::event::KeyEvent;
         use crossterm::event::KeyModifiers;
@@ -9840,12 +9942,14 @@ mod tests {
         let (result, _needs_redraw) =
             composer.handle_key_event(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
 
-        assert_eq!(result, InputResult::None);
-        assert_eq!(composer.draft.textarea.text(), "/model ");
-        assert_eq!(
-            composer.draft.textarea.cursor(),
-            composer.draft.textarea.text().len()
-        );
+        match result {
+            InputResult::Queued { text, action, .. } => {
+                assert_eq!(text, "/mo");
+                assert_eq!(action, QueuedInputAction::ParseSlash);
+            }
+            other => panic!("expected partial slash prompt to queue, got {other:?}"),
+        }
+        assert!(composer.draft.textarea.text().is_empty());
     }
 
     #[test]

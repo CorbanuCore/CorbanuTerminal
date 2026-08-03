@@ -18,8 +18,8 @@ use super::source::run_external_agent_config_source_prompt;
 
 pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_NO_ITEMS_MESSAGE: &str =
     "No compatible setup was found to import.";
-pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_REMOTE_UNAVAILABLE_MESSAGE: &str = "Import from other apps is unavailable in remote sessions. Start Codex locally and run /import.";
-pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_DAEMON_UNAVAILABLE_MESSAGE: &str = "Import from other apps is unavailable while Codex is connected to the local app-server daemon. Stop the daemon, restart Codex, and run /import.";
+pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_REMOTE_UNAVAILABLE_MESSAGE: &str = "Import from other apps is unavailable in remote sessions. Start PFTerminal locally and run /import.";
+pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_DAEMON_UNAVAILABLE_MESSAGE: &str = "Import from other apps is unavailable while PFTerminal is connected to the local app-server daemon. Stop the daemon, restart PFTerminal, and run /import.";
 
 pub(crate) enum ExternalAgentConfigMigrationFlowOutcome {
     Started(Vec<Line<'static>>),
@@ -257,6 +257,7 @@ pub(crate) async fn handle_external_agent_config_migration_prompt(
     tui: &mut tui::Tui,
     app_server: &mut AppServerSession,
     config: &Config,
+    tui_events: &mut tokio::sync::mpsc::UnboundedReceiver<tui::TuiEvent>,
 ) -> Result<ExternalAgentConfigMigrationFlowOutcome, String> {
     if app_server.uses_remote_workspace() {
         return Err(EXTERNAL_AGENT_CONFIG_MIGRATION_REMOTE_UNAVAILABLE_MESSAGE.to_string());
@@ -312,7 +313,8 @@ pub(crate) async fn handle_external_agent_config_migration_prompt(
             .iter()
             .map(|detected| detected.source)
             .collect::<Vec<_>>();
-        let Some(source) = run_external_agent_config_source_prompt(tui, &sources).await else {
+        let Some(source) = run_external_agent_config_source_prompt(tui, &sources, tui_events).await
+        else {
             return Ok(ExternalAgentConfigMigrationFlowOutcome::Cancelled);
         };
         source
@@ -334,6 +336,7 @@ pub(crate) async fn handle_external_agent_config_migration_prompt(
             &detected_items,
             &selected_items,
             error.as_deref(),
+            tui_events,
         )
         .await
         {

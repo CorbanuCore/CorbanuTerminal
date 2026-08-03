@@ -1,11 +1,12 @@
 ---
 source: tui/src/status/tests.rs
+assertion_line: 2149
 expression: sanitized
 ---
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│  >_ PFTerminal (v0.1.11)                                                    │
+│  >_ PFTerminal (v0.1.27)                                                    │
 │                                                                             │
 │  Model:            gpt-5.1-codex                                            │
 │  Model provider:   Ambient                                                  │

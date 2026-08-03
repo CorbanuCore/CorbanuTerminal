@@ -222,6 +222,12 @@ pub enum AgentClass {
     },
 }
 
+/// Maximum number of consecutive automatically triggered manager turns that may each dispatch
+/// more crew work. The next terminal result remains queued until fresh operator or assignment
+/// input resumes the same agent. Core enforces this for native agents; the TUI uses the same
+/// policy for external-pane adapters.
+pub const CREW_AUTO_DISPATCH_CHAIN_LIMIT: u32 = 3;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(rename_all = "snake_case", export_to = "v2/")]

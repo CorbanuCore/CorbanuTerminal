@@ -256,6 +256,7 @@ fn reference_context_item() -> TurnContextItem {
         network: None,
         file_system_sandbox_policy: None,
         model: "gpt-test".to_string(),
+        model_provider: None,
         comp_hash: None,
         personality: None,
         collaboration_mode: None,
@@ -287,6 +288,7 @@ fn reasoning_msg(text: &str) -> ResponseItem {
             text: text.to_string(),
         }]),
         encrypted_content: None,
+        anthropic_content_block: None,
         internal_chat_message_metadata_passthrough: None,
     }
 }
@@ -299,6 +301,7 @@ fn reasoning_with_encrypted_content(len: usize) -> ResponseItem {
         }],
         content: None,
         encrypted_content: Some("a".repeat(len)),
+        anthropic_content_block: None,
         internal_chat_message_metadata_passthrough: None,
     }
 }
@@ -346,6 +349,7 @@ fn filters_non_api_messages() {
                     text: "thinking...".to_string(),
                 }]),
                 encrypted_content: None,
+                anthropic_content_block: None,
                 internal_chat_message_metadata_passthrough: None,
             },
             ResponseItem::Message {

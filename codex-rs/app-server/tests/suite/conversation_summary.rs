@@ -30,6 +30,7 @@ use codex_thread_store::ThreadStore;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::test_path_buf;
 use pretty_assertions::assert_eq;
+use std::future::Future;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -109,8 +110,15 @@ async fn get_conversation_summary_by_thread_id_reads_rollout() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn get_conversation_summary_by_thread_id_reads_pathless_store_thread() -> Result<()> {
+#[test]
+fn get_conversation_summary_by_thread_id_reads_pathless_store_thread() -> Result<()> {
+    run_current_thread_test_with_stack(
+        "conversation-summary-pathless-store-thread",
+        get_conversation_summary_by_thread_id_reads_pathless_store_thread_impl(),
+    )
+}
+
+async fn get_conversation_summary_by_thread_id_reads_pathless_store_thread_impl() -> Result<()> {
     let codex_home = TempDir::new()?;
     let store_id = Uuid::new_v4().to_string();
     create_config_toml_with_in_memory_thread_store(codex_home.path(), &store_id)?;
@@ -198,6 +206,25 @@ async fn get_conversation_summary_by_thread_id_reads_pathless_store_thread() -> 
 
     client.shutdown().await?;
     Ok(())
+}
+
+fn run_current_thread_test_with_stack<F>(name: &str, future: F) -> Result<()>
+where
+    F: Future<Output = Result<()>> + Send + 'static,
+{
+    const TEST_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
+    let handle = std::thread::Builder::new()
+        .name(name.to_string())
+        .stack_size(TEST_STACK_SIZE_BYTES)
+        .spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
+            runtime.block_on(future)
+        })?;
+    handle
+        .join()
+        .map_err(|_| anyhow::anyhow!("{name} test thread panicked"))?
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

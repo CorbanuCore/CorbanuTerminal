@@ -102,6 +102,10 @@ async fn responses_lite_uses_input_items_for_instructions_and_tools() -> Result<
         })
         .with_config(|config| {
             config.base_instructions = Some("test instructions".to_string());
+            // This request-shape test does not execute code-mode calls. Keep the
+            // requested Code Mode surface even when the standalone host binary is
+            // not part of the focused codex-core test build.
+            config.code_mode.disable_in_process_fallback = true;
         });
     let test = builder.build(&server).await?;
 

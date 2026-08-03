@@ -8,6 +8,14 @@ use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::PermissionProfile;
 
 impl App {
+    pub(crate) fn primary_session_model(&self, thread_id: ThreadId) -> Option<&str> {
+        self.primary_session_configured
+            .as_ref()
+            .filter(|session| session.thread_id == thread_id)
+            .map(|session| session.model.as_str())
+            .filter(|model| !model.trim().is_empty())
+    }
+
     pub(super) async fn sync_active_thread_service_tier_to_cached_session(&mut self) {
         let Some(active_thread_id) = self.active_thread_id else {
             return;

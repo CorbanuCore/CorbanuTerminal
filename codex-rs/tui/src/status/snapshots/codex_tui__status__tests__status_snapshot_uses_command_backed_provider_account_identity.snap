@@ -1,0 +1,21 @@
+---
+source: tui/src/status/tests.rs
+assertion_line: 1600
+expression: sanitized
+---
+/status
+
+╭─────────────────────────────────────────────────────────────────────────────────╮
+│  >_ PFTerminal (v0.1.27)                                                        │
+│                                                                                 │
+│  Model:                claude-opus-5-plan                                       │
+│  Model provider:       Claude Plan                                              │
+│  Directory: [[workspace]]                                                       │
+│  Permissions:          Custom (workspace with network access, Ask for approval) │
+│  Agents.md:            <none>                                                   │
+│  Account:              Claude Plan account connected                            │
+│  Collaboration mode:   Default                                                  │
+│                                                                                 │
+│  Token usage:          0 total  (0 input + 0 output)                            │
+│  Limits:               data not available yet                                   │
+╰─────────────────────────────────────────────────────────────────────────────────╯

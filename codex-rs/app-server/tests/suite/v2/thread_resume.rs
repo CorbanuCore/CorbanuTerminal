@@ -30,6 +30,8 @@ use codex_app_server_protocol::McpToolCallAppContext;
 use codex_app_server_protocol::PatchApplyStatus;
 use codex_app_server_protocol::PatchChangeKind;
 use codex_app_server_protocol::RequestId;
+use codex_app_server_protocol::SandboxMode;
+use codex_app_server_protocol::SandboxPolicy;
 use codex_app_server_protocol::ServerNotification;
 use codex_app_server_protocol::ServerRequest;
 use codex_app_server_protocol::SessionSource;
@@ -720,6 +722,84 @@ async fn thread_resume_preserves_persisted_approvals_reviewer() -> Result<()> {
     } = timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(resume_id)).await??;
 
     assert_eq!(approvals_reviewer, ApprovalsReviewer::AutoReview);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn thread_resume_preserves_persisted_permissions_over_broader_current_defaults() -> Result<()>
+{
+    let server = create_mock_responses_server_repeating_assistant("Done").await;
+    let codex_home = TempDir::new()?;
+    MockResponsesConfig::new(&server.uri())
+        .with_sandbox_mode("danger-full-access")
+        .write(codex_home.path())?;
+
+    let thread_id = {
+        let mut mcp = TestAppServer::builder()
+            .with_codex_home(codex_home.path())
+            .without_auto_env()
+            .build_initialized()
+            .await?;
+
+        let start_id = mcp
+            .send_thread_start_request(ThreadStartParams {
+                model: Some("gpt-5.4".to_string()),
+                approval_policy: Some(AskForApproval::Never),
+                sandbox: Some(SandboxMode::WorkspaceWrite),
+                ..Default::default()
+            })
+            .await?;
+        let ThreadStartResponse { thread, .. } =
+            timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(start_id)).await??;
+
+        let turn_id = mcp
+            .send_turn_start_request(TurnStartParams {
+                thread_id: thread.id.clone(),
+                client_user_message_id: None,
+                input: vec![UserInput::Text {
+                    text: "materialize restricted thread settings".to_string(),
+                    text_elements: Vec::new(),
+                }],
+                ..Default::default()
+            })
+            .await?;
+        timeout(
+            DEFAULT_READ_TIMEOUT,
+            mcp.read_stream_until_response_message(RequestId::Integer(turn_id)),
+        )
+        .await??;
+        timeout(
+            DEFAULT_READ_TIMEOUT,
+            mcp.read_stream_until_notification_message("turn/completed"),
+        )
+        .await??;
+
+        thread.id
+    };
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .build_initialized()
+        .await?;
+    let resume_id = mcp
+        .send_thread_resume_request(ThreadResumeParams {
+            thread_id,
+            ..Default::default()
+        })
+        .await?;
+    let ThreadResumeResponse {
+        approval_policy,
+        sandbox,
+        ..
+    } = timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(resume_id)).await??;
+
+    assert_eq!(approval_policy, AskForApproval::Never);
+    assert!(
+        matches!(sandbox, SandboxPolicy::WorkspaceWrite { .. }),
+        "expected persisted workspace-write policy, got {sandbox:?}"
+    );
 
     Ok(())
 }

@@ -246,6 +246,8 @@ pub enum Feature {
     RolloutBudget,
     /// Add current-time reminders to model-visible context.
     CurrentTimeReminder,
+    /// Compatibility flag for the released standalone input-interruptible sleep tool.
+    SleepTool,
     /// Route MCP tool approval prompts through the MCP elicitation request path.
     ToolCallMcpElicitation,
     /// Prompt Codex Apps connector auth failures through MCP URL elicitations.
@@ -1352,6 +1354,12 @@ pub const FEATURES: &[FeatureSpec] = &[
         default_enabled: false,
     },
     FeatureSpec {
+        id: Feature::SleepTool,
+        key: "sleep_tool",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
         id: Feature::CollaborationModes,
         key: "collaboration_modes",
         stage: Stage::Removed,
@@ -1421,7 +1429,7 @@ pub const FEATURES: &[FeatureSpec] = &[
         )) {
             Stage::Experimental {
                 name: "Prevent sleep while running",
-                menu_description: "Keep your computer awake while Codex is running a thread.",
+                menu_description: "Keep your computer awake while PFTerminal is running a thread.",
                 announcement: "NEW: Prevent sleep while running is now available in /experimental.",
             }
         } else {

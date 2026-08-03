@@ -122,3 +122,32 @@ async fn failed_unlock_reopens_the_passcode_prompt_for_the_same_flow() {
     assert!(rendered.contains("Unlock wallet"));
     assert!(rendered.contains("Wallet passcode — masked"));
 }
+
+#[tokio::test]
+async fn unlock_preflight_does_not_request_a_secret_when_no_wallet_exists() {
+    let (mut chat, _tx, mut event_rx, _op_rx) =
+        crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+
+    chat.on_wallet_unlock_preflight_finished(
+        UnlockPolicy::Timed {
+            duration_seconds: 900,
+        },
+        WalletUnlockContinuation::WalletMenu,
+        Ok(false),
+    );
+
+    let mut rendered_history = String::new();
+    while let Ok(event) = event_rx.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            for line in cell.display_lines(80) {
+                for span in line.spans {
+                    rendered_history.push_str(&span.content);
+                }
+                rendered_history.push('\n');
+            }
+        }
+    }
+    assert!(rendered_history.contains("no local wallet exists"));
+    let popup = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 69);
+    assert!(!popup.contains("Wallet passcode — masked"));
+}

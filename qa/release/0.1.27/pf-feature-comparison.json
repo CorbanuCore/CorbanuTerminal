@@ -1,0 +1,57 @@
+{
+  "accepted_difference_count": 3,
+  "accepted_differences": [
+    {
+      "acceptance_tests": [
+        "codex-rs/tui/src/chatwidget/tests/slash_commands.rs"
+      ],
+      "difference": {
+        "baseline": false,
+        "candidate": true,
+        "category": "slash",
+        "id": "slash:changed:clear:supports_inline_args",
+        "message": "released slash field changed"
+      }
+    },
+    {
+      "acceptance_tests": [
+        "codex-rs/tui/src/chatwidget/tests/slash_commands.rs"
+      ],
+      "difference": {
+        "baseline": false,
+        "candidate": true,
+        "category": "slash",
+        "id": "slash:changed:fork:supports_inline_args",
+        "message": "released slash field changed"
+      }
+    },
+    {
+      "acceptance_tests": [
+        "codex-rs/tui/src/chatwidget/tests/slash_commands.rs"
+      ],
+      "difference": {
+        "baseline": false,
+        "candidate": true,
+        "category": "slash",
+        "id": "slash:changed:new:supports_inline_args",
+        "message": "released slash field changed"
+      }
+    }
+  ],
+  "baseline_source": {
+    "commit": "d9e2a383ab02550ba26c525c6c99794dd99ae13a",
+    "requested_ref": "pfterminal-v0.1.26-pre-convergence",
+    "tree": "e8c33e41144a55a2f1b39b4fc354b05f7fc6ead5"
+  },
+  "candidate_source": {
+    "commit": "bae40ac64b2825957a9b56abb954e70eacf18550",
+    "requested_ref": "bae40ac64b2825957a9b56abb954e70eacf18550",
+    "tree": "ea2ae2d9a57c9b94b2cae22cb756f85f29ea98da"
+  },
+  "difference_count": 3,
+  "invalid_allowlist_entries": [],
+  "invalid_allowlist_entry_count": 0,
+  "schema_version": 1,
+  "unresolved_difference_count": 0,
+  "unresolved_differences": []
+}

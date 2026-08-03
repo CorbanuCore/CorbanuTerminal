@@ -43,6 +43,11 @@ use codex_http_client::OutboundProxyPolicy;
 use codex_http_client::RouteAwareClientPool;
 use codex_login::CodexAuth;
 use codex_login::auth::AgentIdentityAuthPolicy;
+use codex_login::login_with_provider_api_key;
+use codex_model_provider_info::AMBIENT_API_KEY_ENV_VAR;
+use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
+use codex_model_provider_info::AMBIENT_GLM_5_2_CONTEXT_WINDOW;
+use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
@@ -73,6 +78,7 @@ use codex_protocol::permissions::FileSystemPath;
 use codex_protocol::permissions::FileSystemSandboxEntry;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::FileSystemSpecialPath;
+use codex_protocol::protocol::AgentMessageKind;
 use codex_protocol::protocol::NonSteerableTurnKind;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::TurnEnvironmentSelections;
@@ -2217,13 +2223,16 @@ async fn subagent_activity_emits_matching_start_and_completion() {
 async fn record_inter_agent_communication_sets_turn_id_in_rollout_and_resume() {
     let (mut session, turn_context) = make_session_and_context().await;
     let rollout_path = attach_thread_persistence(&mut session).await;
-    let communication = InterAgentCommunication::new(
+    let mut communication = InterAgentCommunication::new(
         AgentPath::root().join("worker").expect("worker path"),
         AgentPath::root(),
         Vec::new(),
         "child done".to_string(),
         /*trigger_turn*/ false,
     );
+    communication.id = Some(ResponseItemId::from_server("amsg_test".to_string()));
+    let mut expected_communication = communication.clone();
+    expected_communication.set_turn_id_if_missing(&turn_context.sub_id);
     let mut expected_item = communication.to_model_input_item();
     expected_item.set_turn_id_if_missing(&turn_context.sub_id);
 
@@ -2256,12 +2265,8 @@ async fn record_inter_agent_communication_sets_turn_id_in_rollout_and_resume() {
         })
         .cloned()
         .collect::<Vec<_>>();
-    let expected_persisted_items = vec![
-        RolloutItem::InterAgentCommunicationMetadata {
-            trigger_turn: false,
-        },
-        RolloutItem::ResponseItem(expected_item.clone()),
-    ];
+    let expected_persisted_items =
+        vec![RolloutItem::InterAgentCommunication(expected_communication)];
     assert_eq!(
         strip_response_item_ids_from_json(serde_json::to_value(persisted_items).unwrap()),
         strip_response_item_ids_from_json(serde_json::to_value(expected_persisted_items).unwrap())
@@ -2317,7 +2322,7 @@ async fn record_inter_agent_communication_preserves_item_id_in_rollout_and_resum
         panic!("expected resumed rollout history");
     };
     let persisted_item_id = resumed.history.iter().find_map(|item| match item {
-        RolloutItem::ResponseItem(item @ ResponseItem::AgentMessage { .. }) => item.id(),
+        RolloutItem::InterAgentCommunication(communication) => communication.id.as_ref(),
         _ => None,
     });
     assert_eq!(
@@ -3473,6 +3478,7 @@ async fn record_initial_history_forked_hydrates_previous_turn_settings() {
         network: None,
         file_system_sandbox_policy: None,
         model: previous_model.to_string(),
+        model_provider: None,
         comp_hash: None,
         personality: turn_context.personality,
         collaboration_mode: Some(turn_context.collaboration_mode()),
@@ -3529,6 +3535,7 @@ async fn record_initial_history_forked_hydrates_previous_turn_settings() {
         session.previous_turn_settings().await,
         Some(PreviousTurnSettings {
             model: previous_model.to_string(),
+            model_provider: None,
             comp_hash: None,
             realtime_active: Some(turn_context.realtime_active),
         })
@@ -3572,6 +3579,7 @@ async fn thread_rollback_drops_last_turn_from_history() {
     sess.persist_rollout_items(&rollout_items).await;
     sess.set_previous_turn_settings(Some(PreviousTurnSettings {
         model: "stale-model".to_string(),
+        model_provider: None,
         comp_hash: None,
         realtime_active: Some(tc.realtime_active),
     }))
@@ -3763,6 +3771,7 @@ async fn thread_rollback_recomputes_previous_turn_settings_and_reference_context
     .await;
     sess.set_previous_turn_settings(Some(PreviousTurnSettings {
         model: "stale-model".to_string(),
+        model_provider: None,
         comp_hash: None,
         realtime_active: None,
     }))
@@ -3780,6 +3789,7 @@ async fn thread_rollback_recomputes_previous_turn_settings_and_reference_context
         sess.previous_turn_settings().await,
         Some(PreviousTurnSettings {
             model: tc.model_info.slug.clone(),
+            model_provider: Some(tc.config.model_provider_id.clone()),
             comp_hash: None,
             realtime_active: Some(tc.realtime_active),
         })
@@ -3891,6 +3901,7 @@ async fn thread_rollback_restores_cleared_reference_context_item_after_compactio
         RolloutItem::TurnContext(TurnContextItem {
             turn_id: Some(rolled_back_turn_id.clone()),
             model: "rolled-back-model".to_string(),
+            model_provider: None,
             comp_hash: None,
             ..first_context_item.clone()
         }),
@@ -4808,7 +4819,7 @@ async fn session_new_turn_refreshes_runtime_gpu_provider_endpoint_without_resele
     const NOW_MS: i64 = 1_800_000_000_000;
     let state_home = tempfile::tempdir().expect("state home");
     let state = codex_state::StateRuntime::init(
-        state_home.path().to_path_buf(),
+        codex_state::SqliteConfig::from_sqlite_home(state_home.path().abs()),
         "runtime-provider-test".to_string(),
     )
     .await
@@ -4876,9 +4887,9 @@ async fn session_new_turn_refreshes_runtime_gpu_provider_endpoint_without_resele
             .expect("register runtime provider")
     );
 
-    let sqlite_home = state_home.path().to_path_buf();
+    let sqlite_home = state_home.path().abs();
     let session = make_session_with_config(move |config| {
-        config.sqlite_home = sqlite_home;
+        config.sqlite = codex_state::SqliteConfig::from_sqlite_home(sqlite_home);
         assert!(!config.model_providers.contains_key(runtime_provider_id));
     })
     .await
@@ -6091,7 +6102,7 @@ async fn make_session_and_context_for_home(codex_home: &Path) -> (Session, TurnC
                 .enabled(Feature::ConcurrentReasoningSummaries),
             /*attestation_provider*/ None,
             config.http_client_factory(),
-        ),
+        )),
         executed_tool_calls,
         code_mode_service: crate::tools::code_mode::CodeModeService::new(
             Arc::new(codex_code_mode::DisabledCodeModeSessionProvider),
@@ -8313,7 +8324,7 @@ where
                 .enabled(Feature::ConcurrentReasoningSummaries),
             /*attestation_provider*/ None,
             config.http_client_factory(),
-        ),
+        )),
         executed_tool_calls,
         code_mode_service: crate::tools::code_mode::CodeModeService::new(
             Arc::new(codex_code_mode::DisabledCodeModeSessionProvider),
@@ -8388,6 +8399,16 @@ where
         fork_persistence: ForkPersistence::Copied,
         next_internal_sub_id: AtomicU64::new(0),
     });
+
+    if start_submission_loop {
+        let loop_session = Arc::clone(&session);
+        let loop_config = Arc::clone(&config);
+        tokio::spawn(Box::pin(super::handlers::submission_loop(
+            loop_session,
+            loop_config,
+            rx_sub,
+        )));
+    }
 
     session.mark_mcp_runtime_dirty();
     (session, turn_context, rx_event)
@@ -9717,6 +9738,7 @@ async fn build_initial_context_restates_realtime_start_when_reference_context_is
     turn_context.realtime_active = true;
     let previous_turn_settings = PreviousTurnSettings {
         model: turn_context.model_info.slug.clone(),
+        model_provider: None,
         comp_hash: None,
         realtime_active: Some(true),
     };
@@ -9992,6 +10014,7 @@ async fn build_initial_context_prepends_model_switch_message() {
     let (session, turn_context) = make_session_and_context().await;
     let previous_turn_settings = PreviousTurnSettings {
         model: "previous-regular-model".to_string(),
+        model_provider: None,
         comp_hash: None,
         realtime_active: None,
     };
@@ -10046,6 +10069,7 @@ async fn record_context_updates_and_set_reference_context_item_persists_full_rei
     session
         .set_previous_turn_settings(Some(PreviousTurnSettings {
             model: previous_context.model_info.slug.clone(),
+            model_provider: None,
             comp_hash: None,
             realtime_active: Some(previous_context.realtime_active),
         }))
@@ -10174,6 +10198,52 @@ impl SessionTask for CompletingTask {
     ) -> SessionTaskResult {
         Ok(None)
     }
+}
+
+#[tokio::test]
+async fn turn_admission_records_parent_completion_ownership() {
+    let (sess, direct_turn, rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        Arc::clone(&direct_turn),
+        vec![TurnInput::UserInput {
+            content: vec![UserInput::Text {
+                text: "operator task".to_string(),
+                text_elements: Vec::new(),
+            }],
+            client_id: None,
+        }],
+        CompletingTask,
+    )
+    .await;
+    let _ = recv_terminal_event(&rx, TerminalEventKind::TurnComplete).await;
+    assert!(
+        !direct_turn
+            .parent_completion_expected
+            .load(std::sync::atomic::Ordering::Acquire)
+    );
+
+    let delegated_turn = sess.new_default_turn().await;
+    sess.spawn_task(
+        Arc::clone(&delegated_turn),
+        vec![TurnInput::InterAgentCommunication(
+            InterAgentCommunication::new(
+                AgentPath::root(),
+                AgentPath::try_from("/root/worker").expect("worker path"),
+                Vec::new(),
+                "delegated task".to_string(),
+                /*trigger_turn*/ true,
+            )
+            .with_kind(AgentMessageKind::FollowUp),
+        )],
+        CompletingTask,
+    )
+    .await;
+    let _ = recv_terminal_event(&rx, TerminalEventKind::TurnComplete).await;
+    assert!(
+        delegated_turn
+            .parent_completion_expected
+            .load(std::sync::atomic::Ordering::Acquire)
+    );
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -10678,31 +10748,9 @@ async fn task_finish_starts_follow_up_turn_for_leftover_pending_user_input() {
     sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
         .await;
 
-    let history = sess.clone_history().await;
-    let expected = ResponseItem::Message {
-        id: None,
-        role: "user".to_string(),
-        content: vec![ContentItem::InputText {
-            text: "late pending input".to_string(),
-        }],
-        phase: None,
-        internal_chat_message_metadata_passthrough: None,
-    };
-    assert!(
-        strip_response_item_ids(&strip_metadata_from_items(history.raw_items()))
-            .contains(&expected),
-        "expected pending input to be persisted into history on turn completion"
-    );
-
     let first = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
         .await
-        .expect("expected raw response item event")
-        .expect("channel open");
-    assert!(matches!(first.msg, EventMsg::RawResponseItem(_)));
-
-    let second = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
-        .await
-        .expect("expected item started event")
+        .expect("expected original turn complete event")
         .expect("channel open");
     assert!(matches!(
         first.msg,
@@ -10836,13 +10884,16 @@ async fn task_finish_starts_turn_for_trigger_turn_mailbox_tail() {
         .defer_mailbox_delivery_to_next_turn(&sess.active_turn, &tc.sub_id)
         .await;
     sess.input_queue
-        .enqueue_mailbox_communication(InterAgentCommunication::new(
-            AgentPath::try_from("/root/worker").expect("worker path should parse"),
-            AgentPath::root(),
-            Vec::new(),
-            "late trigger update".to_string(),
-            /*trigger_turn*/ true,
-        ))
+        .enqueue_mailbox_communication(
+            InterAgentCommunication::new(
+                AgentPath::try_from("/root/worker").expect("worker path should parse"),
+                AgentPath::root(),
+                Vec::new(),
+                "late trigger update".to_string(),
+                /*trigger_turn*/ true,
+            ),
+            /*parent_turn_id*/ None,
+        )
         .await;
 
     sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
@@ -10899,6 +10950,7 @@ async fn non_steerable_turn_defers_user_input_until_completion() {
             thread_settings: ThreadSettingsOverrides::default(),
         },
         /*client_user_message_id*/ None,
+        /*parent_turn_id*/ None,
     )
     .await;
 
@@ -10970,6 +11022,7 @@ async fn non_steerable_defer_race_starts_fresh_turn_without_error() {
                 thread_settings: ThreadSettingsOverrides::default(),
             },
             /*client_user_message_id*/ None,
+            /*parent_turn_id*/ None,
         )
         .await;
     });
@@ -11058,7 +11111,7 @@ async fn interrupt_clears_steered_input_without_follow_up_turn() {
 
     assert!(sess.active_turn.lock().await.is_none());
     assert_eq!(
-        Vec::<TurnInput>::new(),
+        (Vec::<TurnInput>::new(), None),
         sess.input_queue.get_pending_input(&sess.active_turn).await
     );
     assert!(
@@ -11426,10 +11479,13 @@ async fn steer_input_returns_active_turn_id() {
     assert_eq!(turn_id, tc.sub_id);
     assert_eq!(
         sess.input_queue.get_pending_input(&sess.active_turn).await,
-        vec![TurnInput::UserInput {
-            content: steer_input,
-            client_id: Some("delivery-steer-1".to_string()),
-        }]
+        (
+            vec![TurnInput::UserInput {
+                content: steer_input,
+                client_id: Some("delivery-steer-1".to_string()),
+            }],
+            None,
+        )
     );
 }
 
@@ -11558,6 +11614,51 @@ async fn trigger_turn_mailbox_mail_waits_for_next_turn_after_answer_boundary() {
     sess.abort_all_tasks(TurnAbortReason::Replaced).await;
 
     assert!(sess.input_queue.has_trigger_turn_mailbox_items().await);
+}
+
+#[tokio::test]
+async fn admitted_terminal_result_mailbox_task_counts_as_native_auto_turn() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    drop(
+        sess.services
+            .agent_control
+            .begin_native_agent_turn(sess.thread_id, /*terminal_result_only*/ false),
+    );
+    sess.input_queue
+        .enqueue_mailbox_communication(
+            InterAgentCommunication::new(
+                AgentPath::try_from("/root/worker").expect("worker path should parse"),
+                AgentPath::root(),
+                Vec::new(),
+                "terminal child result".to_string(),
+                /*trigger_turn*/ true,
+            )
+            .with_kind(AgentMessageKind::TerminalResult),
+            /*parent_turn_id*/ None,
+        )
+        .await;
+
+    sess.spawn_task(
+        Arc::clone(&tc),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    sess.services
+        .agent_control
+        .note_native_agent_dispatch(sess.thread_id);
+
+    assert_eq!(
+        sess.services
+            .agent_control
+            .native_auto_loop_state_for_test(sess.thread_id),
+        Some((true, 1, true, true)),
+        "mailbox input moved through InputQueue must still classify the task as terminal-result-only"
+    );
+    sess.abort_all_tasks(TurnAbortReason::Replaced).await;
 }
 
 #[tokio::test]

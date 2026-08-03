@@ -109,6 +109,64 @@ fn responses_lite_request_copies_strip_image_details() {
 }
 
 #[test]
+fn non_openai_context_adapter_keeps_only_latest_dynamic_sections() {
+    let mut items = vec![
+        ResponseItem::Message {
+            id: None,
+            role: "developer".to_string(),
+            content: vec![
+                ContentItem::InputText {
+                    text: "Persistent role doctrine.".to_string(),
+                },
+                ContentItem::InputText {
+                    text: "<permissions instructions>old never</permissions instructions>"
+                        .to_string(),
+                },
+                ContentItem::InputText {
+                    text: "<model_switch>old model</model_switch>".to_string(),
+                },
+            ],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        },
+        ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText {
+                text: "keep the conversation".to_string(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        },
+        ResponseItem::Message {
+            id: None,
+            role: "developer".to_string(),
+            content: vec![
+                ContentItem::InputText {
+                    text: "<permissions instructions>current on-request</permissions instructions>"
+                        .to_string(),
+                },
+                ContentItem::InputText {
+                    text: "<model_switch>current model</model_switch>".to_string(),
+                },
+            ],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        },
+    ];
+
+    retain_latest_contextual_developer_fragments(&mut items);
+
+    let serialized = serde_json::to_string(&items).expect("serialize adapted context");
+    assert!(serialized.contains("Persistent role doctrine."));
+    assert!(serialized.contains("keep the conversation"));
+    assert!(serialized.contains("current on-request"));
+    assert!(serialized.contains("current model"));
+    assert!(!serialized.contains("old never"));
+    assert!(!serialized.contains("old model"));
+}
+
+#[test]
 fn serializes_text_verbosity_when_set() {
     let input: Vec<ResponseItem> = vec![];
     let req = ResponsesApiRequest {
@@ -266,20 +324,21 @@ fn ambient_fast_request_serializes_plain_string_input() {
         instructions: String::new(),
         previous_response_id: None,
         input: vec![ResponseItem::Message {
-            id: Some("msg_1".to_string()),
+            id: Some(codex_protocol::ResponseItemId::with_suffix("msg", "1")),
             role: "user".to_string(),
             content: vec![ContentItem::InputText {
                 text: "Reply exactly OK_FAST_PATH_123".to_string(),
             }],
             phase: None,
-            metadata: None,
+            internal_chat_message_metadata_passthrough: None,
         }],
-        tools: vec![],
+        tools: Some(empty_tools().into()),
         tool_choice: "auto".to_string(),
         parallel_tool_calls: false,
         reasoning: None,
         store: false,
         stream: true,
+        stream_options: None,
         include: vec![],
         prompt_cache_key: None,
         service_tier: None,

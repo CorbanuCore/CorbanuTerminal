@@ -28,6 +28,7 @@ impl ChatWidget {
                 ),
             ],
             initial_selected_idx: Some(0),
+            allow_number_shortcuts: false,
             footer_hint: Some(standard_popup_hint_line()),
             ..Default::default()
         });
@@ -100,6 +101,7 @@ impl ChatWidget {
                 },
             ],
             initial_selected_idx: Some(0),
+            allow_number_shortcuts: false,
             footer_hint: Some(standard_popup_hint_line()),
             ..Default::default()
         });

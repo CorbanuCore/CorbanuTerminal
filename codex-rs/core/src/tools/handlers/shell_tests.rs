@@ -7,7 +7,7 @@ use pretty_assertions::assert_eq;
 
 use crate::config::PermissionProfileSnapshot;
 use crate::exec_env::CODEX_PERMISSION_PROFILE_ENV_VAR;
-use crate::exec_env::create_env;
+use crate::exec_env::create_shell_tool_env;
 use crate::exec_env::inject_permission_profile_env;
 use crate::sandboxing::SandboxPermissions;
 use crate::session::step_context::StepContext;
@@ -112,7 +112,13 @@ async fn shell_command_handler_to_exec_params_uses_selected_environment() {
         Vec::new(),
         Some(selected_shell),
     );
-    let mut expected_env = create_env(
+    let provider_env_keys = turn_context
+        .config
+        .model_providers
+        .values()
+        .filter_map(|provider| provider.env_key.as_deref())
+        .chain(turn_context.config.model_provider.env_key.as_deref());
+    let mut expected_env = create_shell_tool_env(
         &turn_context.config.permissions.shell_environment_policy,
         Some(session.thread_id),
         provider_env_keys,
@@ -200,7 +206,11 @@ async fn shell_command_handler_removes_provider_auth_env_from_exec_params() {
         &params,
         &session,
         &turn_context,
-        session.thread_id,
+        turn_context
+            .environments
+            .primary()
+            .expect("primary environment"),
+        turn_context.cwd.clone(),
         /*allow_login_shell*/ true,
     )
     .expect("exec params");

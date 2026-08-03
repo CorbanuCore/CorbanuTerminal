@@ -12,9 +12,13 @@ use codex_app_server_protocol::ThreadSectionMoveResponse;
 use codex_extension_api::ExtensionDataInit;
 use codex_protocol::AgentPath;
 use codex_protocol::config_types::MultiAgentMode;
+use codex_protocol::crew::AgentClass;
+use codex_protocol::crew::RetentionPolicy;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
+use codex_protocol::protocol::SessionSource as CoreSessionSource;
+use codex_protocol::protocol::SubAgentSource as CoreSubAgentSource;
 use codex_protocol::protocol::ThreadHistoryMode;
 
 const THREAD_LIST_DEFAULT_LIMIT: usize = 25;
@@ -195,6 +199,56 @@ fn merge_persisted_resume_metadata(
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PersistedThreadRuntime {
+    model: String,
+    model_provider: Option<String>,
+    reasoning_effort: Option<codex_protocol::openai_models::ReasoningEffort>,
+}
+
+fn latest_persisted_thread_runtime(history: &[RolloutItem]) -> Option<PersistedThreadRuntime> {
+    history.iter().rev().find_map(|item| match item {
+        RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) => {
+            let settings = &event.thread_settings;
+            Some(PersistedThreadRuntime {
+                model: settings.model.clone(),
+                model_provider: Some(settings.model_provider_id.clone()),
+                reasoning_effort: settings.reasoning_effort.clone(),
+            })
+        }
+        RolloutItem::TurnContext(turn_context) => Some(PersistedThreadRuntime {
+            model: turn_context.model.clone(),
+            model_provider: turn_context.model_provider.clone(),
+            reasoning_effort: turn_context.effort.clone(),
+        }),
+        _ => None,
+    })
+}
+
+fn apply_persisted_thread_runtime(
+    request_overrides: &mut Option<HashMap<String, serde_json::Value>>,
+    typesafe_overrides: &mut ConfigOverrides,
+    runtime: &PersistedThreadRuntime,
+) {
+    typesafe_overrides.model = Some(runtime.model.clone());
+    if let Some(model_provider) = runtime.model_provider.as_ref() {
+        typesafe_overrides.model_provider = Some(model_provider.clone());
+    }
+    match runtime.reasoning_effort.as_ref() {
+        Some(reasoning_effort) => {
+            request_overrides.get_or_insert_with(HashMap::new).insert(
+                "model_reasoning_effort".to_string(),
+                serde_json::Value::String(reasoning_effort.to_string()),
+            );
+        }
+        None => {
+            if let Some(overrides) = request_overrides.as_mut() {
+                overrides.remove("model_reasoning_effort");
+            }
+        }
+    }
+}
+
 fn merge_persisted_approvals_reviewer(
     history: &[RolloutItem],
     request_overrides: Option<&HashMap<String, serde_json::Value>>,
@@ -213,6 +267,58 @@ fn merge_persisted_approvals_reviewer(
         }
         _ => None,
     });
+}
+
+fn has_permission_resume_override(
+    request_overrides: Option<&HashMap<String, serde_json::Value>>,
+    typesafe_overrides: &ConfigOverrides,
+) -> bool {
+    typesafe_overrides.approval_policy.is_some()
+        || typesafe_overrides.sandbox_mode.is_some()
+        || typesafe_overrides.permission_profile.is_some()
+        || typesafe_overrides.default_permissions.is_some()
+        || request_overrides.is_some_and(|overrides| {
+            [
+                "approval_policy",
+                "sandbox_mode",
+                "default_permissions",
+                "permission_profiles",
+                "sandbox_workspace_write",
+            ]
+            .iter()
+            .any(|key| overrides.contains_key(*key))
+        })
+}
+
+/// Restores the last acknowledged permission contract when `thread/resume` does not carry an
+/// explicit permission override. This keeps a restricted thread restricted even when the current
+/// user's defaults are broader than the settings persisted in that thread.
+fn merge_persisted_permissions(
+    history: &[RolloutItem],
+    request_overrides: Option<&HashMap<String, serde_json::Value>>,
+    typesafe_overrides: &mut ConfigOverrides,
+) {
+    if has_permission_resume_override(request_overrides, typesafe_overrides) {
+        return;
+    }
+
+    let persisted = history.iter().rev().find_map(|item| match item {
+        RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) => Some((
+            event.thread_settings.approval_policy,
+            event.thread_settings.permission_profile.clone(),
+        )),
+        RolloutItem::TurnContext(turn_context) => Some((
+            turn_context.approval_policy,
+            turn_context.permission_profile(),
+        )),
+        _ => None,
+    });
+    let Some((approval_policy, permission_profile)) = persisted else {
+        return;
+    };
+
+    typesafe_overrides.approval_policy = Some(approval_policy);
+    typesafe_overrides.permission_profile = Some(permission_profile);
 }
 
 fn normalize_thread_list_cwd_filters(
@@ -543,7 +649,7 @@ impl ThreadRequestProcessor {
         let (source_thread_id, source_thread) = self.load_thread(&source_thread_id).await?;
         let target_thread_id = ThreadId::from_string(&target_thread_id)
             .map_err(|err| invalid_request(format!("invalid target thread id: {err}")))?;
-        let message_id = source_thread
+        let (message_id, trigger_turn) = source_thread
             .send_agent_message(
                 target_thread_id,
                 content,
@@ -926,6 +1032,29 @@ impl ThreadRequestProcessor {
             .map(|response| Some(response.into()))
     }
 
+    pub(crate) async fn thread_turns_items_list(
+        &self,
+        params: ThreadTurnsItemsListParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        let response = self
+            .thread_items_list_response_inner(ThreadItemsListParams {
+                thread_id: params.thread_id,
+                turn_id: Some(params.turn_id),
+                cursor: params.cursor,
+                limit: params.limit,
+                sort_direction: params.sort_direction,
+            })
+            .await?;
+        Ok(Some(
+            ThreadTurnsItemsListResponse {
+                data: response.data.into_iter().map(|entry| entry.item).collect(),
+                next_cursor: response.next_cursor,
+                backwards_cursor: response.backwards_cursor,
+            }
+            .into(),
+        ))
+    }
+
     pub(crate) async fn thread_shell_command(
         &self,
         request_id: &ConnectionRequestId,
@@ -1211,11 +1340,14 @@ impl ThreadRequestProcessor {
                 history_mode.map(Into::into),
                 session_start_source,
                 thread_source.map(Into::into),
+                spawn_agent_parent_thread_id,
+                spawn_agent_role,
                 environments,
                 service_name,
                 allow_provider_model_fallback,
                 experimental_raw_events,
                 request_trace,
+                response_kind,
                 initial_config_warnings,
             )
             .await
@@ -1288,11 +1420,14 @@ impl ThreadRequestProcessor {
         history_mode: Option<ThreadHistoryMode>,
         session_start_source: Option<codex_app_server_protocol::ThreadStartSource>,
         thread_source: Option<codex_protocol::protocol::ThreadSource>,
+        spawn_agent_parent_thread_id: Option<String>,
+        spawn_agent_role: Option<String>,
         environment_selections: Option<Vec<TurnEnvironmentSelection>>,
         service_name: Option<String>,
         allow_provider_model_fallback: bool,
         experimental_raw_events: bool,
         request_trace: Option<W3cTraceContext>,
+        response_kind: ThreadStartResponseKind,
         initial_config_warnings: Arc<Vec<ConfigWarningNotification>>,
     ) -> Result<(), JSONRPCErrorError> {
         let thread_start_started_at = std::time::Instant::now();
@@ -1465,6 +1600,14 @@ impl ThreadRequestProcessor {
         }
         let dynamic_tools = dynamic_tools.unwrap_or_default();
         let is_spawn_agent_thread = spawn_session_source.is_some();
+        // PFTerminal's TUI treats a successfully created Main or operator pane as
+        // durable product state even before its first model turn.  Core's normal
+        // lazy thread persistence is still useful for other app-server clients,
+        // but leaving TUI threads lazy makes an empty Main ID and every no-task
+        // `/panes` child impossible to resume after process exit.
+        let materialize_new_thread = is_spawn_agent_thread
+            || (app_server_client_name.as_deref() == Some(CODEX_TUI_CLIENT_NAME)
+                && !config.ephemeral);
         if !dynamic_tools.is_empty() {
             validate_dynamic_tools(&dynamic_tools).map_err(invalid_request)?;
         }
@@ -1497,7 +1640,12 @@ impl ThreadRequestProcessor {
                     codex_app_server_protocol::ThreadStartSource::Clear => InitialHistory::Cleared,
                 },
                 history_mode,
-                thread_source,
+                session_source: spawn_session_source,
+                thread_source: if is_spawn_agent_thread {
+                    Some(codex_protocol::protocol::ThreadSource::Subagent)
+                } else {
+                    thread_source
+                },
                 dynamic_tools,
                 metrics_service_name: service_name,
                 parent_trace: request_trace,
@@ -1533,13 +1681,13 @@ impl ThreadRequestProcessor {
         )
         .await?;
 
-        if is_spawn_agent_thread {
+        if materialize_new_thread {
             thread.ensure_rollout_materialized().await;
             if let Err(err) = thread.flush_rollout().await {
                 tracing::warn!(
                     thread_id = %thread_id,
                     error = %err,
-                    "failed to flush newly spawned agent rollout"
+                    "failed to flush newly created durable TUI/agent rollout"
                 );
             }
         }
@@ -1622,14 +1770,32 @@ impl ThreadRequestProcessor {
             multi_agent_mode: MultiAgentMode::ExplicitRequestOnly,
         };
         let notif = thread_started_notification(thread);
-        listener_task_context
-            .outgoing
-            .send_response_with_thread_originator(request_id, response, thread_originator)
-            .instrument(tracing::info_span!(
-                "app_server.thread_start.send_response",
-                otel.name = "app_server.thread_start.send_response",
-            ))
-            .await;
+        match response_kind {
+            ThreadStartResponseKind::ThreadStart => {
+                listener_task_context
+                    .outgoing
+                    .send_response_with_thread_originator(request_id, response, thread_originator)
+                    .instrument(tracing::info_span!(
+                        "app_server.thread_start.send_response",
+                        otel.name = "app_server.thread_start.send_response",
+                    ))
+                    .await;
+            }
+            ThreadStartResponseKind::ThreadSpawnAgent { .. } => {
+                listener_task_context
+                    .outgoing
+                    .send_response_with_thread_originator(
+                        request_id,
+                        ThreadSpawnAgentResponse::from(response),
+                        thread_originator,
+                    )
+                    .instrument(tracing::info_span!(
+                        "app_server.thread_start.send_spawn_agent_response",
+                        otel.name = "app_server.thread_start.send_spawn_agent_response",
+                    ))
+                    .await;
+            }
+        }
 
         listener_task_context
             .outgoing
@@ -3404,7 +3570,7 @@ impl ThreadRequestProcessor {
         );
         let has_explicit_model_resume_override =
             has_model_resume_override(request_overrides.as_ref(), &typesafe_overrides);
-        let persisted_metadata = self
+        let persisted_reasoning_effort = self
             .load_and_apply_persisted_resume_metadata(
                 &thread_history,
                 &mut request_overrides,
@@ -3425,11 +3591,7 @@ impl ThreadRequestProcessor {
                 return Ok(());
             }
         };
-        if !has_explicit_model_resume_override
-            && persisted_metadata
-                .as_ref()
-                .is_some_and(|metadata| metadata.reasoning_effort.is_none())
-        {
+        if !has_explicit_model_resume_override && matches!(persisted_reasoning_effort, Some(None)) {
             config.model_reasoning_effort = None;
         }
 
@@ -3676,23 +3838,50 @@ impl ThreadRequestProcessor {
         thread_history: &InitialHistory,
         request_overrides: &mut Option<HashMap<String, serde_json::Value>>,
         typesafe_overrides: &mut ConfigOverrides,
-    ) -> Option<ThreadMetadata> {
+    ) -> Option<Option<codex_protocol::openai_models::ReasoningEffort>> {
         let InitialHistory::Resumed(resumed_history) = thread_history else {
             return None;
         };
+        merge_persisted_permissions(
+            &resumed_history.history,
+            request_overrides.as_ref(),
+            typesafe_overrides,
+        );
         merge_persisted_approvals_reviewer(
             &resumed_history.history,
             request_overrides.as_ref(),
             typesafe_overrides,
         );
-        let state_db_ctx = self.state_db.clone()?;
-        let persisted_metadata = state_db_ctx
-            .get_thread(resumed_history.conversation_id)
-            .await
-            .ok()
-            .flatten()?;
-        merge_persisted_resume_metadata(request_overrides, typesafe_overrides, &persisted_metadata);
-        Some(persisted_metadata)
+        let had_explicit_model_override =
+            has_model_resume_override(request_overrides.as_ref(), typesafe_overrides);
+        let persisted_metadata = match self.state_db.as_ref() {
+            Some(state_db_ctx) => state_db_ctx
+                .get_thread(resumed_history.conversation_id)
+                .await
+                .ok()
+                .flatten(),
+            None => None,
+        };
+        if let Some(persisted_metadata) = persisted_metadata.as_ref() {
+            merge_persisted_resume_metadata(
+                request_overrides,
+                typesafe_overrides,
+                persisted_metadata,
+            );
+        }
+
+        // JSONL is canonical. SQLite can lag or be overwritten by a resume response whose
+        // SessionConfigured event predates a later thread/settings/update. When the caller did
+        // not explicitly override runtime selection, the newest durable settings/turn context
+        // must win over that projection.
+        if !had_explicit_model_override
+            && let Some(runtime) = latest_persisted_thread_runtime(&resumed_history.history)
+        {
+            apply_persisted_thread_runtime(request_overrides, typesafe_overrides, &runtime);
+            return Some(runtime.reasoning_effort);
+        }
+
+        persisted_metadata.map(|metadata| metadata.reasoning_effort)
     }
 
     #[tracing::instrument(level = "trace", skip_all)]

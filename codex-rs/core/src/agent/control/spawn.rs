@@ -99,6 +99,34 @@ async fn load_agent_model_context(
     }
 }
 
+fn latest_runtime_from_model_context(
+    history: &[RolloutItem],
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<codex_protocol::openai_models::ReasoningEffort>,
+) {
+    let mut model = None;
+    let mut model_provider: Option<String> = None;
+    let mut reasoning_effort = None;
+    for item in history {
+        match item {
+            RolloutItem::TurnContext(turn_context) => {
+                model = Some(turn_context.model.clone());
+                model_provider = turn_context.model_provider.clone();
+                reasoning_effort = turn_context.effort.clone();
+            }
+            RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) => {
+                model = Some(event.thread_settings.model.clone());
+                model_provider = Some(event.thread_settings.model_provider_id.clone());
+                reasoning_effort = event.thread_settings.reasoning_effort.clone();
+            }
+            _ => {}
+        }
+    }
+    (model, model_provider, reasoning_effort)
+}
+
 impl AgentControl {
     /// Restore persisted V2 agent identities without reopening their runtimes.
     pub(crate) async fn restore_v2_agent_metadata(
@@ -234,6 +262,7 @@ impl AgentControl {
             return Ok(());
         }
         if self.state.agent_metadata_for_thread(thread_id).is_none() {
+            warn!(%thread_id, "cannot cold-load V2 agent without restored metadata");
             return Err(CodexErr::ThreadNotFound(thread_id));
         }
 
@@ -243,43 +272,15 @@ impl AgentControl {
                 include_archived: true,
                 include_history: false,
             })
-            .await?;
-        let stored_model = stored_thread.model.clone().ok_or_else(|| {
-            CodexErr::InvalidRequest(format!(
-                "cannot resume agent {thread_id}: its persisted runtime has no model"
-            ))
-        })?;
-        let stored_provider = config
-            .model_providers
-            .get(&stored_thread.model_provider)
-            .cloned()
-            .ok_or_else(|| {
-                CodexErr::InvalidRequest(format!(
-                    "cannot resume agent {thread_id}: persisted provider `{}` is not configured",
-                    stored_thread.model_provider
-                ))
-            })?;
-        config.model = Some(stored_model);
-        config.model_provider_id = stored_thread.model_provider;
-        config.model_provider = stored_provider;
-        config.model_reasoning_effort = stored_thread.reasoning_effort.clone();
+            .await
+            .inspect_err(|err| warn!(%thread_id, %err, "failed to read stored V2 agent"))?;
         let stored_source = stored_thread.source.clone();
         let stored_parent_thread_id = stored_thread.parent_thread_id;
-        let history = load_agent_model_context(&state, thread_id, stored_thread.history_mode)
-            .await?
-            .ok_or(CodexErr::ThreadNotFound(thread_id))?;
-        let initial_history = InitialHistory::Resumed(ResumedHistory {
-            conversation_id: thread_id,
-            history: Arc::new(history),
-            rollout_path: stored_thread.rollout_path,
-        });
-        if initial_history.get_multi_agent_version() != Some(MultiAgentVersion::V2) {
-            return Err(CodexErr::ThreadNotFound(thread_id));
-        }
-        let (session_source, _) = initial_history
-            .get_resumed_session_sources()
-            .unwrap_or((stored_source, None));
-        if let Some(role_name) = session_source.get_agent_role() {
+        let stored_role = stored_thread
+            .agent_role
+            .clone()
+            .or_else(|| stored_source.get_agent_role());
+        if let Some(role_name) = stored_role.as_deref() {
             let runtime_approval_policy = config.permissions.approval_policy.value();
             let runtime_approvals_reviewer = config.approvals_reviewer;
             let runtime_cwd = config.cwd.clone();
@@ -296,7 +297,10 @@ impl AgentControl {
                 ),
             };
 
-            apply_role_to_config_for_multi_agent_v2(&mut config, Some(&role_name))
+            // Reapply the persisted role before resolving the stored runtime. Role files may own
+            // custom provider definitions; resolving first makes a valid cold-resumed agent look
+            // unconfigured. The persisted provider/model below still win over role-file changes.
+            apply_role_to_config_for_multi_agent_v2(&mut config, Some(role_name))
                 .await
                 .map_err(CodexErr::InvalidRequest)?;
             config
@@ -315,6 +319,71 @@ impl AgentControl {
                     CodexErr::InvalidRequest(format!("permission_profile is invalid: {err}"))
                 })?;
         }
+        let history = load_agent_model_context(&state, thread_id, stored_thread.history_mode)
+            .await
+            .inspect_err(|err| warn!(%thread_id, %err, "failed to load V2 agent history"))?
+            .ok_or_else(|| {
+                warn!(%thread_id, "stored V2 agent has no resumable history");
+                CodexErr::ThreadNotFound(thread_id)
+            })?;
+        let (history_model, history_provider, history_reasoning_effort) =
+            latest_runtime_from_model_context(&history);
+        let stored_model = stored_thread
+            .model
+            .clone()
+            .or(history_model)
+            .ok_or_else(|| {
+                CodexErr::InvalidRequest(format!(
+                    "cannot resume agent {thread_id}: its persisted runtime has no model"
+                ))
+            })?;
+        let stored_provider_id = if stored_thread.model_provider.is_empty() {
+            history_provider.ok_or_else(|| {
+                CodexErr::InvalidRequest(format!(
+                    "cannot resume agent {thread_id}: its persisted runtime has no provider"
+                ))
+            })?
+        } else {
+            stored_thread.model_provider.clone()
+        };
+        let stored_provider = config
+            .model_providers
+            .get(&stored_provider_id)
+            .cloned()
+            .ok_or_else(|| {
+                CodexErr::InvalidRequest(format!(
+                    "cannot resume agent {thread_id}: persisted provider `{stored_provider_id}` is not configured"
+                ))
+            })?;
+        config.model = Some(stored_model);
+        config.model_provider_id = stored_provider_id;
+        config.model_provider = stored_provider;
+        config.model_reasoning_effort = stored_thread
+            .reasoning_effort
+            .clone()
+            .or(history_reasoning_effort);
+        let initial_history = InitialHistory::Resumed(ResumedHistory {
+            conversation_id: thread_id,
+            history: Arc::new(history),
+            rollout_path: stored_thread.rollout_path,
+        });
+        // Older persisted histories can predate the explicit V2 marker even though the
+        // current runtime and agent graph are V2. The configured feature is therefore an
+        // equally authoritative recovery signal at this cold-load boundary.
+        if config.multi_agent_version_from_features() != MultiAgentVersion::V2
+            && initial_history.get_multi_agent_version() != Some(MultiAgentVersion::V2)
+        {
+            warn!(
+                %thread_id,
+                configured_version = ?config.multi_agent_version_from_features(),
+                persisted_version = ?initial_history.get_multi_agent_version(),
+                "refusing to cold-load an agent without a V2 recovery signal"
+            );
+            return Err(CodexErr::ThreadNotFound(thread_id));
+        }
+        let (session_source, _) = initial_history
+            .get_resumed_session_sources()
+            .unwrap_or((stored_source, None));
         let residency_slot = self
             .reserve_v2_residency_slot(&state, &config, Some(thread_id))
             .await?;
@@ -354,6 +423,7 @@ impl AgentControl {
                     self.touch_loaded_v2_residency(&state, thread_id).await;
                     return Ok(());
                 }
+                warn!(%thread_id, %err, "failed to resume persisted V2 agent runtime");
                 Err(err)
             }
         }
@@ -395,10 +465,16 @@ impl AgentControl {
                 )));
             }
         }
-        let initial_operation_uses_v2_mailbox = multi_agent_version == MultiAgentVersion::V2
-            && matches!(initial_operation, Op::InterAgentCommunication { .. });
-        if !initial_operation_uses_v2_mailbox && let Some(session_source) = session_source.as_ref()
-        {
+        if let Some(session_source) = session_source.as_ref() {
+            self.prepare_durable_thread_spawn_parent(session_source, config.ephemeral)
+                .await?;
+        }
+        let initial_input_uses_v2_mailbox = multi_agent_version == MultiAgentVersion::V2
+            && matches!(
+                &initial_input,
+                SpawnInitialInput::InterAgentCommunication(..)
+            );
+        if !initial_input_uses_v2_mailbox && let Some(session_source) = session_source.as_ref() {
             self.ensure_execution_capacity(multi_agent_version, session_source)?;
         }
         let agent_max_threads = config.effective_agent_max_threads(multi_agent_version);
@@ -539,12 +615,12 @@ impl AgentControl {
         // TODO(jif) add helper for drain
         state.notify_thread_created(new_thread.thread_id);
 
-        self.persist_thread_spawn_edge_for_source(
+        self.persist_durable_thread_spawn(
             new_thread.thread.as_ref(),
             new_thread.thread_id,
             notification_source.as_ref(),
         )
-        .await;
+        .await?;
 
         match initial_input {
             SpawnInitialInput::UserInput(input) => {
@@ -976,6 +1052,7 @@ impl AgentControl {
                 agent_path,
                 agent_role: _,
                 agent_nickname: _,
+                agent_class,
             }) => self.prepare_thread_spawn(
                 &mut reservation,
                 &config,
@@ -984,6 +1061,7 @@ impl AgentControl {
                 agent_path.or(resumed_agent_path),
                 resumed_agent_role,
                 resumed_agent_nickname,
+                agent_class,
             )?,
             other => (other, AgentMetadata::default()),
         };
@@ -1025,12 +1103,12 @@ impl AgentControl {
                 agent_metadata.agent_path.clone(),
             );
         }
-        self.persist_thread_spawn_edge_for_source(
+        self.persist_durable_thread_spawn(
             resumed_thread.thread.as_ref(),
             resumed_thread.thread_id,
             Some(&notification_source),
         )
-        .await;
+        .await?;
 
         Ok((resumed_thread.thread_id, multi_agent_version))
     }

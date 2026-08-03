@@ -1,31 +1,35 @@
 # Core Integrations
 
-Status: current repository state as of 2026-06-23.
+Status: current v0.1.27 repository state as of 2026-08-02.
 
 PFTerminal is a Codex CLI fork with product-specific model provider,
 onboarding, packaging, and branding changes.
 
 The important boundary: PFTerminal still uses the Codex execution engine, tool
 system, approval flows, sandboxing, and session mechanics, while adding OpenAI
-Codex account login, Ambient, Z.AI, OpenRouter, Baseten, and Vercel as
-first-class provider choices.
+Codex, Claude Plan, Anthropic, Ambient, Kimi Code, Z.AI, DeepSeek, OpenRouter,
+Meta, Baseten, Vercel, and PFTerminal Plan as first-class provider choices.
 
 ## What Exists Now
 
 | Area | Current state | Primary paths |
 | --- | --- | --- |
-| OpenAI Codex account | Built-in provider named `openai`, using Codex account auth and visible as GPT-5.5 under Coding Plans. | `codex-rs/model-provider-info/src/lib.rs`, `codex-rs/tui/src/chatwidget/provider_credentials.rs` |
+| OpenAI Codex account | Built-in provider named `openai`, using Codex account auth and exposing the release-visible GPT-5.5/5.6 catalog. | `codex-rs/model-provider-info/src/lib.rs`, `codex-rs/tui/src/chatwidget/provider_credentials.rs` |
+| Claude routes | Claude Plan account models and direct Anthropic Opus/Fable API-key models remain distinct billing/auth routes. | `codex-rs/model-provider-info/src/lib.rs` |
 | Ambient provider | Built-in provider named `ambient`, using `AMBIENT_API_KEY` and the Chat Completions wire shape. | `codex-rs/model-provider-info/src/lib.rs` |
-| Ambient default model | Bundled model `zai-org/GLM-5.2-FP8`, displayed as `Ambient GLM 5.2`. | `codex-rs/models-manager/models.json` |
+| Ambient default model | Bundled model `z-ai/glm-5.2`, displayed as `Ambient GLM 5.2`, plus Ambient Kimi K2.7 Code. | `codex-rs/models-manager/models.json` |
+| Kimi Code provider | Built-in provider `kimi-code` using `KIMI_API_KEY` and current model `k3`. | `codex-rs/model-provider-info/src/lib.rs` |
 | Z.AI provider | Built-in provider named `zai`, using `ZAI_API_KEY` and the Z.AI coding plan API base URL. | `codex-rs/model-provider-info/src/lib.rs` |
-| OpenRouter provider | Built-in provider named `openrouter`, using `OPENROUTER_API_KEY` and OpenRouter metered model slugs. | `codex-rs/model-provider-info/src/lib.rs` |
+| DeepSeek provider | Direct Responses route `deepseek-v4-flash`, backed by `DEEPSEEK_API_KEY`. | `codex-rs/model-provider-info/src/lib.rs` |
+| OpenRouter provider | Built-in metered provider including pinned `deepseek/deepseek-v4-flash-0731`, DeepSeek Pro, Kimi K3, Grok, MiniMax, Gemini, Owl, and Tencent routes. | `codex-rs/model-provider-info/src/lib.rs`, `codex-rs/models-manager/models.json` |
+| Meta provider | Built-in `meta` route using `MODEL_API_KEY` and Muse Spark 1.1. | `codex-rs/model-provider-info/src/lib.rs` |
 | Baseten provider | Built-in provider named `baseten`, using `BASETEN_API_KEY` and Baseten GLM 5.2. | `codex-rs/model-provider-info/src/lib.rs` |
 | Vercel provider | Built-in provider named `vercel`, using `AI_GATEWAY_API_KEY` and Vercel AI Gateway GLM 5.2 models. | `codex-rs/model-provider-info/src/lib.rs` |
 | Provider key vault | Provider keys are stored in encrypted vault labels such as `provider/zai_api_key`. | `codex-rs/login/src/auth/provider_key_vault.rs`, `codex-rs/vault/` |
 | GLM request shaping | Ambient and Z.AI requests map PFTerminal reasoning levels to provider-specific `reasoning_effort`, `enable_thinking`, and `emit_usage` fields. | `codex-rs/core/src/client.rs` |
 | Ambient/Z.AI input conversion | Responses-style turn items are flattened for Ambient/Z.AI string input, while hidden reasoning is not replayed. | `codex-rs/codex-api/src/common.rs` |
-| Onboarding | Provider picker supports OpenAI Codex account device login plus Ambient, Z.AI, OpenRouter, Baseten, and Vercel API keys. | `codex-rs/tui/src/onboarding/auth.rs` |
-| Model picker | The PFTerminal model picker groups OpenAI Codex/Ambient/Z.AI under Coding Plans and OpenRouter/Baseten/Vercel under Pay Per API Call. | `codex-rs/tui/src/chatwidget/model_popups.rs` |
+| Onboarding | Provider picker supports the account/plan and API-key routes listed above, with keys stored through the masked vault boundary. | `codex-rs/tui/src/onboarding/auth.rs`, `codex-rs/tui/src/chatwidget/provider_credentials.rs` |
+| Model picker | The PFTerminal model picker groups current routes by provider and preserves exact provider/model/effort identity. | `codex-rs/tui/src/chatwidget/model_popups.rs` |
 | Product branding | TUI, login prompts, installer messages, package names, and status surfaces use PFTerminal/Post Fiat Terminal branding. | `codex-rs/tui/`, `codex-rs/login/`, `codex-cli/`, `scripts/install/` |
 
 ## Design line

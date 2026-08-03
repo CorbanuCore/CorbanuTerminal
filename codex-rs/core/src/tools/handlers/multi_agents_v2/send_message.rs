@@ -31,11 +31,50 @@ impl Handler {
         handle_message_string_tool(
             invocation,
             MessageDeliveryMode::QueueOnly,
+            CollaborationMessageEncoding::ProviderNative,
             args.target,
             args.message,
         )
         .await
         .map(boxed_tool_output)
+    }
+}
+
+pub(crate) struct PlaintextHandler;
+
+impl ToolExecutor<ToolInvocation> for PlaintextHandler {
+    fn tool_name(&self) -> ToolName {
+        ToolName::plain(PLAINTEXT_SEND_MESSAGE_TOOL)
+    }
+
+    fn spec(&self) -> ToolSpec {
+        plaintext_adapter_spec(
+            create_send_message_tool(),
+            PLAINTEXT_SEND_MESSAGE_TOOL,
+            "send_message",
+        )
+    }
+
+    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+        Box::pin(async move {
+            let arguments = function_arguments(invocation.payload.clone())?;
+            let args: SendMessageArgs = parse_arguments(&arguments)?;
+            handle_message_string_tool(
+                invocation,
+                MessageDeliveryMode::QueueOnly,
+                CollaborationMessageEncoding::PlaintextAdapter,
+                args.target,
+                args.message,
+            )
+            .await
+            .map(boxed_tool_output)
+        })
+    }
+}
+
+impl CoreToolRuntime for PlaintextHandler {
+    fn matches_kind(&self, payload: &ToolPayload) -> bool {
+        matches!(payload, ToolPayload::Function { .. })
     }
 }
 

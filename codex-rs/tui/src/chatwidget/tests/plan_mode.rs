@@ -475,6 +475,7 @@ async fn advanced_reasoning_selection_in_plan_mode_uses_expected_scope() {
                 event,
                 AppEvent::OpenPlanReasoningScopePrompt {
                     model,
+                    provider: _,
                     effort: Some(ReasoningEffortConfig::Max),
                 } if model == "gpt-5.4"
             )));

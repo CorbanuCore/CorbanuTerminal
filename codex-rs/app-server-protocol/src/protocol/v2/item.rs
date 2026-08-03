@@ -909,6 +909,9 @@ impl From<CoreTurnItem> for ThreadItem {
                 kind: activity.kind.into(),
                 agent_thread_id: activity.agent_thread_id.to_string(),
                 agent_path: String::from(activity.agent_path),
+                agent_nickname: None,
+                agent_role: None,
+                task_preview: None,
             },
             CoreTurnItem::WebSearch(search) => ThreadItem::WebSearch(WebSearchItem {
                 id: search.id,

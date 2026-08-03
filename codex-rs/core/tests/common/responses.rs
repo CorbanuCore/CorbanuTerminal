@@ -1099,6 +1099,49 @@ pub async fn mount_sse_once(server: &MockServer, body: String) -> ResponseMock {
     response_mock
 }
 
+/// Mounts one SSE body for any number of response requests while capturing each request.
+pub async fn mount_sse_repeating(server: &MockServer, body: String) -> ResponseMock {
+    let (mock, response_mock) = base_mock();
+    mock.respond_with(sse_response(body)).mount(server).await;
+    response_mock
+}
+
+fn chat_completions_mock() -> (MockBuilder, ResponseMock) {
+    let response_mock = ResponseMock::new();
+    let mock = Mock::given(method("POST"))
+        .and(path_regex(".*/chat/completions$"))
+        .and(response_mock.clone());
+    (mock, response_mock)
+}
+
+pub async fn mount_sse_once_chat_completions(server: &MockServer, body: String) -> ResponseMock {
+    let (mock, response_mock) = chat_completions_mock();
+    mock.respond_with(sse_response(body))
+        .up_to_n_times(1)
+        .mount(server)
+        .await;
+    response_mock
+}
+
+pub fn chat_completions_sse(model: &str, text: &str) -> String {
+    let id = "chatcmpl-test";
+    let delta = serde_json::json!({
+        "id": id,
+        "model": model,
+        "choices": [{"delta": {"role": "assistant", "content": text}}],
+    });
+    let usage = serde_json::json!({
+        "id": id,
+        "choices": [],
+        "usage": {
+            "prompt_tokens": 1,
+            "completion_tokens": 1,
+            "total_tokens": 2
+        },
+    });
+    format!("data: {delta}\n\ndata: {usage}\n\ndata: [DONE]\n\n")
+}
+
 pub async fn mount_compact_json_once(server: &MockServer, body: serde_json::Value) -> ResponseMock {
     mount_compact_response_once(
         server,

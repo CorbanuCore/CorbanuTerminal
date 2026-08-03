@@ -37,11 +37,13 @@ pub(crate) struct TurnInputQueue {
 pub(crate) struct InputQueue {
     activity_tx: watch::Sender<InputQueueActivity>,
     mailbox_pending_mails: Mutex<VecDeque<PendingMailboxCommunication>>,
+    capacity_wait_scheduled: AtomicBool,
 }
 
 struct PendingMailboxCommunication {
     communication: InterAgentCommunication,
     parent_turn_id: Option<String>,
+    ready_for_admitted_turn: bool,
 }
 
 impl InputQueue {
@@ -52,6 +54,16 @@ impl InputQueue {
             mailbox_pending_mails: Mutex::new(VecDeque::new()),
             capacity_wait_scheduled: AtomicBool::new(false),
         }
+    }
+
+    pub(crate) fn try_schedule_capacity_wait(&self) -> bool {
+        self.capacity_wait_scheduled
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
+
+    pub(crate) fn finish_capacity_wait(&self) {
+        self.capacity_wait_scheduled.store(false, Ordering::Release);
     }
 
     pub(crate) async fn subscribe_activity(
@@ -77,6 +89,7 @@ impl InputQueue {
         (activity_rx, pending_activity)
     }
 
+    #[cfg(test)]
     pub(crate) async fn enqueue_mailbox_communication(
         &self,
         communication: InterAgentCommunication,
@@ -86,9 +99,40 @@ impl InputQueue {
             .lock()
             .await
             .push_back(PendingMailboxCommunication {
+                ready_for_admitted_turn: communication.trigger_turn,
                 communication,
                 parent_turn_id,
             });
+        self.activity_tx.send_replace(InputQueueActivity::Mailbox);
+    }
+
+    /// Enqueues mailbox delivery relative to the session's actual task boundary.
+    ///
+    /// Holding `active_turn` while the queue entry is created closes the race with task
+    /// completion: mail received after the task has been detached is immediately eligible for
+    /// the next admitted human turn, while mail received during the task is advanced by that
+    /// task's terminal boundary.
+    pub(crate) async fn enqueue_mailbox_communication_for_session(
+        &self,
+        active_turn: &Mutex<Option<ActiveTurn>>,
+        communication: InterAgentCommunication,
+        parent_turn_id: Option<String>,
+    ) {
+        let active_turn = active_turn.lock().await;
+        let ready_for_admitted_turn = communication.trigger_turn
+            || active_turn
+                .as_ref()
+                .and_then(|active_turn| active_turn.task.as_ref())
+                .is_none();
+        self.mailbox_pending_mails
+            .lock()
+            .await
+            .push_back(PendingMailboxCommunication {
+                communication,
+                parent_turn_id,
+                ready_for_admitted_turn,
+            });
+        drop(active_turn);
         self.activity_tx.send_replace(InputQueueActivity::Mailbox);
     }
 
@@ -111,6 +155,42 @@ impl InputQueue {
             .await
             .drain(..)
             .collect::<Vec<_>>();
+        Self::mailbox_input_items(pending_mails)
+    }
+
+    /// Drains only mail that is eligible to join a newly admitted human turn.
+    ///
+    /// Trigger-turn mail is immediately eligible. Queue-only mail becomes eligible after one
+    /// active-turn boundary, which prevents mail queued while idle from being pulled into the
+    /// very next request while still allowing it to accompany the following human turn.
+    pub(crate) async fn drain_ready_mailbox_input_items(&self) -> (Vec<TurnInput>, Option<String>) {
+        let ready_mails = {
+            let mut pending_mails = self.mailbox_pending_mails.lock().await;
+            let mut ready_mails = Vec::new();
+            let mut waiting_mails = VecDeque::new();
+            while let Some(mail) = pending_mails.pop_front() {
+                if mail.ready_for_admitted_turn {
+                    ready_mails.push(mail);
+                } else {
+                    waiting_mails.push_back(mail);
+                }
+            }
+            *pending_mails = waiting_mails;
+            ready_mails
+        };
+        Self::mailbox_input_items(ready_mails)
+    }
+
+    /// Advances queue-only mail across a completed turn boundary without starting a turn.
+    pub(crate) async fn mark_mailbox_ready_for_next_turn(&self) {
+        for mail in self.mailbox_pending_mails.lock().await.iter_mut() {
+            mail.ready_for_admitted_turn = true;
+        }
+    }
+
+    fn mailbox_input_items(
+        pending_mails: Vec<PendingMailboxCommunication>,
+    ) -> (Vec<TurnInput>, Option<String>) {
         let parent_turn_id = pending_mails
             .iter()
             .filter(|mail| mail.communication.trigger_turn)
@@ -228,7 +308,50 @@ impl InputQueue {
         &self,
         active_turn: &Mutex<Option<ActiveTurn>>,
     ) -> (Vec<TurnInput>, Option<String>) {
-        let (pending_input, accepts_mailbox_delivery) = {
+        let (pending_input, accepts_mailbox_delivery) =
+            Self::take_turn_pending_input(active_turn).await;
+        if !accepts_mailbox_delivery {
+            return (pending_input, None);
+        }
+        let (mailbox_items, parent_turn_id) = self.drain_mailbox_input_items().await;
+        if pending_input.is_empty() {
+            (mailbox_items, parent_turn_id)
+        } else {
+            let mut pending_input = pending_input;
+            pending_input.extend(mailbox_items);
+            (pending_input, parent_turn_id)
+        }
+    }
+
+    /// Takes input while admitting a task without bypassing mailbox turn-boundary eligibility.
+    ///
+    /// A task start may inherit user steering from a reserved active-turn slot, but queue-only
+    /// collaboration mail must remain session-pending until it has crossed a completed turn
+    /// boundary. Draining the entire mailbox here converts that mail into a same-turn follow-up
+    /// and can create a mail-only model turn before the next human prompt.
+    pub(crate) async fn get_pending_input_for_task_start(
+        &self,
+        active_turn: &Mutex<Option<ActiveTurn>>,
+    ) -> (Vec<TurnInput>, Option<String>) {
+        let (pending_input, accepts_mailbox_delivery) =
+            Self::take_turn_pending_input(active_turn).await;
+        if !accepts_mailbox_delivery {
+            return (pending_input, None);
+        }
+        let (mailbox_items, parent_turn_id) = self.drain_ready_mailbox_input_items().await;
+        if pending_input.is_empty() {
+            (mailbox_items, parent_turn_id)
+        } else {
+            let mut pending_input = pending_input;
+            pending_input.extend(mailbox_items);
+            (pending_input, parent_turn_id)
+        }
+    }
+
+    async fn take_turn_pending_input(
+        active_turn: &Mutex<Option<ActiveTurn>>,
+    ) -> (Vec<TurnInput>, bool) {
+        {
             let mut active = active_turn.lock().await;
             match active.as_mut() {
                 Some(active_turn) => {
@@ -244,17 +367,6 @@ impl InputQueue {
                 }
                 None => (Vec::new(), true),
             }
-        };
-        if !accepts_mailbox_delivery {
-            return (pending_input, None);
-        }
-        let (mailbox_items, parent_turn_id) = self.drain_mailbox_input_items().await;
-        if pending_input.is_empty() {
-            (mailbox_items, parent_turn_id)
-        } else {
-            let mut pending_input = pending_input;
-            pending_input.extend(mailbox_items);
-            (pending_input, parent_turn_id)
         }
     }
 
@@ -481,5 +593,76 @@ mod tests {
             .enqueue_mailbox_communication(trigger_mail, /*parent_turn_id*/ None)
             .await;
         assert!(input_queue.has_trigger_turn_mailbox_items().await);
+    }
+
+    #[tokio::test]
+    async fn admitted_turn_drain_waits_one_boundary_for_queue_only_mail() {
+        let input_queue = InputQueue::new();
+        let queued_mail = make_mail(
+            AgentPath::try_from("/root/worker").expect("agent path"),
+            AgentPath::root(),
+            "queued",
+            /*trigger_turn*/ false,
+        );
+        input_queue
+            .enqueue_mailbox_communication(queued_mail.clone(), /*parent_turn_id*/ None)
+            .await;
+
+        assert_eq!(
+            input_queue.drain_ready_mailbox_input_items().await,
+            (Vec::new(), None)
+        );
+        input_queue.mark_mailbox_ready_for_next_turn().await;
+        assert_eq!(
+            input_queue.drain_ready_mailbox_input_items().await,
+            (vec![TurnInput::InterAgentCommunication(queued_mail)], None)
+        );
+    }
+
+    #[tokio::test]
+    async fn idle_session_makes_queue_only_mail_ready_for_next_turn() {
+        let input_queue = InputQueue::new();
+        let active_turn = Mutex::new(None);
+        let queued_mail = make_mail(
+            AgentPath::try_from("/root/worker").expect("agent path"),
+            AgentPath::root(),
+            "queued while idle",
+            /*trigger_turn*/ false,
+        );
+
+        input_queue
+            .enqueue_mailbox_communication_for_session(
+                &active_turn,
+                queued_mail.clone(),
+                /*parent_turn_id*/ None,
+            )
+            .await;
+
+        assert_eq!(
+            input_queue.drain_ready_mailbox_input_items().await,
+            (vec![TurnInput::InterAgentCommunication(queued_mail)], None)
+        );
+    }
+
+    #[tokio::test]
+    async fn admitted_turn_drain_accepts_trigger_mail_immediately() {
+        let input_queue = InputQueue::new();
+        let trigger_mail = make_mail(
+            AgentPath::try_from("/root/worker").expect("agent path"),
+            AgentPath::root(),
+            "trigger",
+            /*trigger_turn*/ true,
+        );
+        input_queue
+            .enqueue_mailbox_communication(trigger_mail.clone(), Some("parent-turn".to_string()))
+            .await;
+
+        assert_eq!(
+            input_queue.drain_ready_mailbox_input_items().await,
+            (
+                vec![TurnInput::InterAgentCommunication(trigger_mail)],
+                Some("parent-turn".to_string())
+            )
+        );
     }
 }

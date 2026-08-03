@@ -1777,6 +1777,7 @@ fn write_connectors_config(codex_home: &std::path::Path, base_url: &str) -> std:
         format!(
             r#"
 chatgpt_base_url = "{base_url}"
+model_provider = "openai"
 mcp_oauth_credentials_store = "file"
 
 [features]
@@ -1793,6 +1794,7 @@ fn write_connectors_and_plugins_config(codex_home: &Path, base_url: &str) -> std
         format!(
             r#"
 chatgpt_base_url = "{base_url}"
+model_provider = "openai"
 mcp_oauth_credentials_store = "file"
 
 [features]

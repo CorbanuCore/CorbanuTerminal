@@ -442,6 +442,8 @@ impl ChatWidget {
                     ..Default::default()
                 },
             ],
+            initial_selected_idx: Some(1),
+            allow_number_shortcuts: false,
             on_cancel: Some(Box::new(move |tx| {
                 tx.send(AppEvent::OpenPluginsList {
                     cwd: cwd_for_on_cancel.clone(),

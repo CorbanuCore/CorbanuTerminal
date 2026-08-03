@@ -200,6 +200,7 @@ async fn thread_settings_update(
         active_permission_profile,
         windows_sandbox_level,
         collaboration_mode: Some(collaboration_mode),
+        model_provider,
         reasoning_summary: summary,
         service_tier,
         personality,
@@ -234,6 +235,11 @@ pub(super) async fn user_input_or_turn_inner(
     else {
         unreachable!();
     };
+    if !items.is_empty() {
+        sess.services
+            .agent_control
+            .note_native_operator_input(sess.thread_id);
+    }
     let emit_thread_settings_applied = thread_settings != ThreadSettingsOverrides::default();
     let mut updates = if emit_thread_settings_applied {
         thread_settings_update(sess, thread_settings).await
@@ -272,26 +278,54 @@ pub(super) async fn user_input_or_turn_inner(
             if let Some(id) = parent_turn_id {
                 current_context.turn_metadata_state.set_parent_turn_id(id);
             }
-            if let Some(responsesapi_client_metadata) = responsesapi_client_metadata {
-                current_context
-                    .turn_metadata_state
-                    .set_responsesapi_client_metadata(responsesapi_client_metadata);
-            }
-            current_context.session_telemetry.user_prompt(&items);
-            let additional_context_input = {
-                let mut state = sess.state.lock().await;
-                state.additional_context.merge(additional_context)
-            };
-            let mut task_input = additional_context_input
-                .into_iter()
-                .map(ResponseItem::from)
-                .map(TurnInput::ResponseItem)
-                .collect::<Vec<_>>();
-            if !items.is_empty() {
-                task_input.push(TurnInput::UserInput {
-                    content: items,
-                    client_id: client_user_message_id,
-                });
+            spawn_regular_turn_for_no_active_input(
+                sess,
+                &current_context,
+                items,
+                additional_context,
+                client_user_message_id,
+                responsesapi_client_metadata,
+                /*record_user_prompt*/ true,
+            )
+            .await;
+        }
+        Err(SteerInputError::ActiveTurnNotSteerable { .. }) => {
+            #[cfg(test)]
+            active_turn_not_steerable_defer_hook_for_test().await;
+
+            match sess
+                .defer_user_input_until_active_turn_finished(
+                    items.clone(),
+                    additional_context.clone(),
+                    client_user_message_id.clone(),
+                )
+                .await
+            {
+                Ok(_) => {
+                    current_context.session_telemetry.user_prompt(&items);
+                }
+                Err(SteerInputError::NoActiveTurn(items)) => {
+                    if let Some(id) = parent_turn_id {
+                        current_context.turn_metadata_state.set_parent_turn_id(id);
+                    }
+                    spawn_regular_turn_for_no_active_input(
+                        sess,
+                        &current_context,
+                        items,
+                        additional_context,
+                        client_user_message_id,
+                        responsesapi_client_metadata,
+                        /*record_user_prompt*/ true,
+                    )
+                    .await;
+                }
+                Err(err) => {
+                    sess.send_event_raw(Event {
+                        id: sub_id,
+                        msg: EventMsg::Error(err.to_error_event()),
+                    })
+                    .await;
+                }
             }
         }
         Err(err) => {
@@ -321,8 +355,7 @@ async fn spawn_regular_turn_for_no_active_input(
     if record_user_prompt {
         current_context.session_telemetry.user_prompt(&items);
     }
-    sess.refresh_mcp_servers_if_requested(current_context, Some(sess.mcp_elicitation_reviewer()))
-        .await;
+    sess.refresh_mcp_if_dirty().await;
     let additional_context_input = {
         let mut state = sess.state.lock().await;
         state.additional_context.merge(additional_context)
@@ -332,6 +365,19 @@ async fn spawn_regular_turn_for_no_active_input(
         .map(ResponseItem::from)
         .map(TurnInput::ResponseItem)
         .collect::<Vec<_>>();
+    // Queue-only collaboration mail must join the next admitted turn before its first model
+    // request. Leaving it in the session mailbox until after the user's request has already been
+    // sampled creates an unnecessary continuation and can loop when that continuation has no new
+    // model output. The submission loop serializes this idle-to-active boundary, so draining here
+    // also preserves mailbox order relative to the newly admitted user input.
+    let (mailbox_input, mailbox_parent_turn_id) =
+        sess.input_queue.drain_ready_mailbox_input_items().await;
+    task_input.extend(mailbox_input);
+    if let Some(parent_turn_id) = mailbox_parent_turn_id {
+        current_context
+            .turn_metadata_state
+            .set_parent_turn_id(parent_turn_id);
+    }
     if !items.is_empty() {
         task_input.push(TurnInput::UserInput {
             content: items,
@@ -356,7 +402,11 @@ pub async fn inter_agent_communication(
 ) {
     let trigger_turn = communication.trigger_turn;
     sess.input_queue
-        .enqueue_mailbox_communication(communication, parent_turn_id.filter(|_| trigger_turn))
+        .enqueue_mailbox_communication_for_session(
+            &sess.active_turn,
+            communication,
+            parent_turn_id.filter(|_| trigger_turn),
+        )
         .await;
     crate::agent_communication::emit_agent_communication_receive(&sub_id);
     if trigger_turn || sess.has_outstanding_durable_sleep() {

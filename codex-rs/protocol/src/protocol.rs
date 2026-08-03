@@ -46,6 +46,7 @@ use crate::models::MessagePhase;
 use crate::models::PermissionProfile;
 use crate::models::ResponseInputItem;
 use crate::models::ResponseItem;
+use crate::models::ResponseItemMetadata;
 use crate::models::SandboxEnforcement;
 use crate::models::WebSearchAction;
 use crate::num_format::format_with_separators;
@@ -784,6 +785,9 @@ pub struct InterAgentCommunication {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub internal_chat_message_metadata_passthrough: Option<InternalChatMessageMetadataPassthrough>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub metadata: Option<ResponseItemMetadata>,
     pub trigger_turn: bool,
 }
 
@@ -811,6 +815,7 @@ impl InterAgentCommunication {
             content,
             encrypted_content: None,
             internal_chat_message_metadata_passthrough: None,
+            metadata: None,
             trigger_turn,
         }
     }
@@ -838,6 +843,7 @@ impl InterAgentCommunication {
             content: String::new(),
             encrypted_content: Some(encrypted_content),
             internal_chat_message_metadata_passthrough: None,
+            metadata: None,
             trigger_turn,
         }
     }
@@ -3419,6 +3425,8 @@ pub struct TurnContextItem {
     pub file_system_sandbox_policy: Option<FileSystemSandboxPolicy>,
     pub model: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comp_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub personality: Option<Personality>,
@@ -4775,6 +4783,7 @@ mod tests {
             content: "review the diff".to_string(),
             encrypted_content: None,
             internal_chat_message_metadata_passthrough: None,
+            metadata: None,
             trigger_turn: true,
         };
         communication.set_turn_id_if_missing("turn-1");
@@ -4848,6 +4857,31 @@ mod tests {
                         encrypted_content: "encrypted payload".to_string(),
                     },
                 ],
+                internal_chat_message_metadata_passthrough: None,
+            }
+        );
+    }
+
+    #[test]
+    fn terminal_result_preserves_native_agent_message_envelope() {
+        let communication = InterAgentCommunication::new(
+            AgentPath::root().join("worker").expect("author path"),
+            AgentPath::root(),
+            Vec::new(),
+            "Message Type: FINAL_ANSWER\nPayload:\nPFQA_CHILD_OK".to_string(),
+            /*trigger_turn*/ false,
+        )
+        .with_kind(AgentMessageKind::TerminalResult);
+
+        assert_eq!(
+            communication.to_model_input_item(),
+            ResponseItem::AgentMessage {
+                id: None,
+                author: "/root/worker".to_string(),
+                recipient: "/root".to_string(),
+                content: vec![AgentMessageInputContent::InputText {
+                    text: "Message Type: FINAL_ANSWER\nPayload:\nPFQA_CHILD_OK".to_string(),
+                }],
                 internal_chat_message_metadata_passthrough: None,
             }
         );
@@ -6302,6 +6336,7 @@ mod tests {
                 },
             ])),
             model: "gpt-5".to_string(),
+            model_provider: None,
             comp_hash: None,
             personality: None,
             collaboration_mode: None,

@@ -85,6 +85,7 @@ use core_test_support::responses;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
+use std::future::Future;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
@@ -96,6 +97,25 @@ use uuid::Uuid;
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(25);
 #[cfg(not(windows))]
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+fn run_current_thread_test_with_stack<F>(name: &str, future: F) -> Result<()>
+where
+    F: Future<Output = Result<()>> + Send + 'static,
+{
+    const TEST_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
+    let handle = std::thread::Builder::new()
+        .name(name.to_string())
+        .stack_size(TEST_STACK_SIZE_BYTES)
+        .spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
+            runtime.block_on(future)
+        })?;
+    handle
+        .join()
+        .map_err(|_| anyhow::anyhow!("{name} test thread panicked"))?
+}
 
 #[tokio::test]
 async fn thread_read_returns_summary_without_turns() -> Result<()> {
@@ -715,8 +735,15 @@ async fn thread_search_occurrences_reads_paginated_projection() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn thread_turns_list_reads_store_history_without_rollout_path() -> Result<()> {
+#[test]
+fn thread_turns_list_reads_store_history_without_rollout_path() -> Result<()> {
+    run_current_thread_test_with_stack(
+        "thread-turns-list-pathless-store-history",
+        thread_turns_list_reads_store_history_without_rollout_path_impl(),
+    )
+}
+
+async fn thread_turns_list_reads_store_history_without_rollout_path_impl() -> Result<()> {
     let codex_home = TempDir::new()?;
     let thread_id = codex_protocol::ThreadId::from_string("00000000-0000-4000-8000-000000000123")?;
     let store_id = Uuid::new_v4().to_string();
@@ -787,8 +814,16 @@ async fn thread_turns_list_reads_store_history_without_rollout_path() -> Result<
     Ok(())
 }
 
-#[tokio::test]
-async fn thread_read_loaded_include_turns_reads_store_history_without_rollout_path() -> Result<()> {
+#[test]
+fn thread_read_loaded_include_turns_reads_store_history_without_rollout_path() -> Result<()> {
+    run_current_thread_test_with_stack(
+        "thread-read-loaded-pathless-store-history",
+        thread_read_loaded_include_turns_reads_store_history_without_rollout_path_impl(),
+    )
+}
+
+async fn thread_read_loaded_include_turns_reads_store_history_without_rollout_path_impl()
+-> Result<()> {
     let codex_home = TempDir::new()?;
     let store_id = Uuid::new_v4().to_string();
     MockResponsesConfig::new("http://127.0.0.1:1")
@@ -893,8 +928,15 @@ async fn thread_read_loaded_include_turns_reads_store_history_without_rollout_pa
     Ok(())
 }
 
-#[tokio::test]
-async fn thread_list_includes_store_thread_without_rollout_path() -> Result<()> {
+#[test]
+fn thread_list_includes_store_thread_without_rollout_path() -> Result<()> {
+    run_current_thread_test_with_stack(
+        "thread-list-includes-pathless-store-thread",
+        thread_list_includes_store_thread_without_rollout_path_impl(),
+    )
+}
+
+async fn thread_list_includes_store_thread_without_rollout_path_impl() -> Result<()> {
     let codex_home = TempDir::new()?;
     let thread_id = codex_protocol::ThreadId::from_string("00000000-0000-4000-8000-000000000124")?;
     let store_id = Uuid::new_v4().to_string();

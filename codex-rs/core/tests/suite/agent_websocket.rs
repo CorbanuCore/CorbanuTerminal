@@ -41,6 +41,12 @@ async fn websocket_model_switch_to_responses_lite_omits_top_level_tools() -> Res
             model_info.use_responses_lite = true;
             model_info.tool_mode = Some(ToolMode::CodeMode);
         })
+        .with_config(|config| {
+            // This request-shape test does not execute code-mode calls. Keep the
+            // requested Code Mode surface even when the standalone host binary is
+            // not part of the focused codex-core test build.
+            config.code_mode.disable_in_process_fallback = true;
+        })
         .with_model("gpt-5.2");
     let test = builder.build_with_websocket_server(&server).await?;
 

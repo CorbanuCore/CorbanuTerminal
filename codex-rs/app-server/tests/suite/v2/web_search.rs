@@ -107,18 +107,16 @@ async fn assert_standalone_web_search_round_trips_output(
     let codex_home = TempDir::new()?;
     let config = MockResponsesConfig::new(&server.uri())
         .with_root_config(&format!("chatgpt_base_url = \"{}\"", server.uri()))
-        .enable_feature(Feature::StandaloneWebSearch)
-        .with_provider_config("supports_websockets = false");
+        .enable_feature(Feature::StandaloneWebSearch);
     let config = match provider {
         WebSearchProvider::ChatGpt => config
-            .with_model_provider("openai-custom")
-            .with_provider_name("OpenAI")
-            .with_provider_base_url(&format!("{}/api/codex", server.uri()))
-            .with_provider_config("requires_openai_auth = true"),
+            .with_builtin_model_provider("openai")
+            .with_root_config(&format!("openai_base_url = \"{}/api/codex\"", server.uri())),
         WebSearchProvider::CustomResponses => config
             .with_model_provider("custom-responses")
             .with_provider_name("Custom Responses")
             .with_provider_base_url(&format!("{}/v1", server.uri()))
+            .with_provider_config("supports_websockets = false")
             .with_provider_config("env_key = \"CUSTOM_RESPONSES_API_KEY\"")
             .with_provider_config("supports_standalone_web_search = true")
             .with_provider_config("requires_openai_auth = false"),

@@ -687,6 +687,13 @@ client_request_definitions! {
         serialization: None,
         response: v2::ThreadItemsListResponse,
     },
+    #[experimental("thread/turns/items/list")]
+    ThreadTurnsItemsList => "thread/turns/items/list" {
+        params: v2::ThreadTurnsItemsListParams,
+        // Compatibility alias over the same append-only item store.
+        serialization: None,
+        response: v2::ThreadTurnsItemsListResponse,
+    },
     /// Append raw Responses API items to the thread history without starting a user turn.
     ThreadInjectItems => "thread/inject_items" {
         params: v2::ThreadInjectItemsParams,

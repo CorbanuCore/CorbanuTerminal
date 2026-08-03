@@ -352,6 +352,11 @@ impl ChatWidget {
             self.rate_limit_switch_prompt = RateLimitSwitchPromptState::Idle;
             return;
         }
+        // Do not replace a completed Plan workflow with a model-switch nudge. The pending state
+        // can be reconsidered after the user leaves Plan mode.
+        if self.collaboration_modes_enabled() && self.active_mode_kind() == ModeKind::Plan {
+            return;
+        }
         if !matches!(
             self.rate_limit_switch_prompt,
             RateLimitSwitchPromptState::Pending

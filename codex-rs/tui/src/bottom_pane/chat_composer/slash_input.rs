@@ -15,6 +15,7 @@ use crate::bottom_pane::slash_commands::ServiceTierCommand;
 use crate::bottom_pane::slash_commands::SlashCommandItem;
 use crate::bottom_pane::slash_commands::find_slash_command;
 use crate::bottom_pane::slash_commands::has_slash_command_prefix;
+use crate::key_hint::KeyBindingListExt;
 use crate::slash_command::SlashCommand;
 use codex_protocol::user_input::ByteRange;
 use codex_protocol::user_input::TextElement;
@@ -115,7 +116,7 @@ impl<'a> SlashInput<'a> {
         }
 
         let command = self.command(name)?;
-        command.supports_inline_args().then_some(InlineCommand {
+        Some(InlineCommand {
             command,
             rest,
             rest_offset,
@@ -223,6 +224,13 @@ impl ChatComposer {
             return (InputResult::None, true);
         }
         self.footer.mode = reset_mode_after_activity(self.footer.mode);
+        // Tab is the explicit queue binding while a task is running. Honor that
+        // before slash-popup completion so every slash-led prompt follows the
+        // same deferred validation and FIFO path as ordinary queued input.
+        if self.is_task_running && self.queue_keys.is_pressed(key_event) {
+            self.popups.active = ActivePopup::None;
+            return self.handle_submission(/*should_queue*/ true);
+        }
         let ActivePopup::Command(popup) = &mut self.popups.active else {
             unreachable!();
         };

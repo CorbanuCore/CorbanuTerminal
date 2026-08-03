@@ -226,11 +226,29 @@ pub enum ChatReasoningProtocol {
     PreservedRequired,
 }
 
+/// Scalar `reasoning_effort` dialect for an OpenAI-compatible Chat Completions model.
+///
+/// The exact model catalogue selects this dialect; provider and model-name heuristics do not.
+#[derive(
+    Debug, Default, Clone, Copy, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq, Display,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum ChatReasoningEffortProtocol {
+    #[default]
+    ProviderDefault,
+    NoneHighMaxDefaultHigh,
+    LowHighMaxRequiredDefaultMax,
+    HighMaxDefaultHigh,
+}
+
 /// Chat Completions protocol capabilities that cannot be inferred from the provider alone.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq)]
 pub struct ChatCompletionsCapabilities {
     #[serde(default)]
     pub reasoning_protocol: ChatReasoningProtocol,
+    #[serde(default)]
+    pub reasoning_effort_protocol: ChatReasoningEffortProtocol,
 }
 
 /// Billing data for an exact provider/model route.

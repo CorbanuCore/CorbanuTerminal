@@ -32,6 +32,7 @@ use codex_app_server_protocol::PluginReadResponse;
 use codex_app_server_protocol::PluginUninstallResponse;
 use codex_app_server_protocol::SkillsListResponse;
 use codex_app_server_protocol::Thread;
+use codex_app_server_protocol::ThreadAgentMessageParams;
 use codex_app_server_protocol::ThreadGoalStatus;
 use codex_connectors::AppInfo;
 use codex_file_search::FileMatch;
@@ -79,6 +80,13 @@ pub(crate) enum ThreadGoalSetMode {
 pub(crate) struct HistoryBatchEntryResponse {
     pub(crate) offset: usize,
     pub(crate) entry: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct GpuAuthorizationPromptState {
+    pub(crate) maximum_hourly_microusd: Option<i64>,
+    pub(crate) maximum_total_microusd: Option<i64>,
+    pub(crate) validation_error: Option<String>,
 }
 
 /// Persistent-history data routed back to the thread that requested it.
@@ -236,6 +244,30 @@ impl fmt::Debug for WalletSecret {
     }
 }
 
+pub(crate) struct VaultSecret(String);
+
+impl VaultSecret {
+    pub(crate) fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    pub(crate) fn into_inner(mut self) -> String {
+        std::mem::take(&mut self.0)
+    }
+}
+
+impl Drop for VaultSecret {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl fmt::Debug for VaultSecret {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("<redacted vault secret>")
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct WalletCreatedResult {
     pub(crate) address: String,
@@ -368,6 +400,10 @@ pub(crate) enum AppEvent {
     },
     /// Show the current orchestration tree.
     OpenSpawnStatus,
+    /// Confirm permanent removal of the complete managed `/spawn` crew.
+    OpenRemoveSpawnCrewConfirmation,
+    /// Permanently remove every owned member of the managed `/spawn` crew.
+    RemoveSpawnCrew,
     /// Handle a native `/orchestrate` whip command.
     HandleOrchestrateCommand {
         args: String,
@@ -531,6 +567,10 @@ pub(crate) enum AppEvent {
     },
     /// Start or refresh GitHub-backed Task Node terminal linking.
     OpenTaskNodeLink,
+    /// Task Node GitHub link request finished loading.
+    TaskNodeLinkResult {
+        result: Result<serde_json::Value, String>,
+    },
     /// Show Task Node account/task status.
     OpenTaskNodeStatus,
     /// Task Node account/task status loaded.
@@ -687,6 +727,10 @@ pub(crate) enum AppEvent {
     },
     /// Remove the local Task Node terminal session.
     LogoutTaskNode,
+    /// Local Task Node logout and best-effort remote revoke finished.
+    TaskNodeLogoutResult {
+        result: Result<String, String>,
+    },
 
     /// Fork the current thread into a transient side conversation.
     StartSide {
@@ -1484,6 +1528,16 @@ pub(crate) enum AppEvent {
     /// Open the masked vault credential-entry overlay.
     OpenVaultCredentialAdd,
 
+    VaultCredentialAddRequested {
+        label: String,
+        secret: VaultSecret,
+    },
+
+    VaultCredentialAdded {
+        label: String,
+        result: Result<(), String>,
+    },
+
     OpenWallet,
     OpenWalletPlanUsage,
     WalletPlanUsageReady {
@@ -1501,6 +1555,11 @@ pub(crate) enum AppEvent {
     OpenWalletUnlock {
         policy: codex_wallet_daemon::UnlockPolicy,
         continuation: WalletUnlockContinuation,
+    },
+    WalletUnlockPreflightFinished {
+        policy: codex_wallet_daemon::UnlockPolicy,
+        continuation: WalletUnlockContinuation,
+        result: Result<bool, String>,
     },
     OpenWalletCustomUnlock {
         validation_error: Option<String>,
@@ -1571,6 +1630,43 @@ pub(crate) enum AppEvent {
     /// Copy a vault credential secret to the clipboard without writing it to history.
     OpenVaultCopySecret {
         label: String,
+    },
+
+    /// Reveal a vault secret only inside a host-owned secure view.
+    OpenVaultRevealSecret {
+        label: String,
+    },
+
+    VaultRevealSecretFinished {
+        label: String,
+        result: Result<VaultSecret, String>,
+    },
+
+    OpenVaultReplaceSecret {
+        label: String,
+    },
+
+    VaultCredentialReplaceRequested {
+        label: String,
+        secret: VaultSecret,
+    },
+
+    VaultCredentialReplaced {
+        label: String,
+        result: Result<(), String>,
+    },
+
+    ConfirmVaultCredentialDelete {
+        label: String,
+    },
+
+    VaultCredentialDeleteRequested {
+        label: String,
+    },
+
+    VaultCredentialDeleted {
+        label: String,
+        result: Result<bool, String>,
     },
 
     VaultMenuCredentialsReady {

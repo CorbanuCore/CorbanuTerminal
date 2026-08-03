@@ -286,6 +286,10 @@ mod tests {
                     supports_websockets = true
                     supports_standalone_web_search = true
 
+                    [model_providers.local.runtime_policy]
+                    request_body_max_bytes = 30_000_000
+                    retry_request_body_max_bytes = 15_000_000
+
                     [features]
                     plugins = false
                 }
@@ -318,6 +322,7 @@ mod tests {
             requires_openai_auth: false,
             supports_websockets: true,
             supports_standalone_web_search: true,
+            runtime_policy: Default::default(),
         }
     }
 }

@@ -73,3 +73,15 @@ fn parses_config_isolation_flags() {
     assert!(cli.ignore_user_config);
     assert!(cli.ignore_rules);
 }
+
+#[test]
+fn help_uses_pfterminal_command_and_home_identity() {
+    let error = Cli::try_parse_from(["pfterminal", "--help"]).expect_err("help exits early");
+    let help = error.to_string();
+
+    assert!(help.contains("Usage: pfterminal exec"));
+    assert!(help.contains("$PFTERMINAL_HOME/config.toml"));
+    assert!(help.contains("running PFTerminal outside a Git repository"));
+    assert!(!help.contains("Usage: codex exec"));
+    assert!(!help.contains("$CODEX_HOME/config.toml"));
+}

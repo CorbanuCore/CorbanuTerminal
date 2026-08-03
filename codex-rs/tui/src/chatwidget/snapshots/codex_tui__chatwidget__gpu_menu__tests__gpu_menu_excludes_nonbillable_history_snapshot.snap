@@ -15,29 +15,24 @@ expression: rendered
   3. Configure Vast.ai API key                                      Masked entry stored in the
                                                                     PFTerminal vault; replacing a
                                                                     key is supported.
-  4. Rent deepseek-ai/DeepSeek-V4-Flash · 2× NVIDIA H200            deepseek-flash-2xh200 rev
-                                                                    deepseek-v4-flash-sglang-
-                                                                    v0.5.15-post1-2xh200-r2 ·
+  4. Rent deepseek-ai/DeepSeek-V4-Flash-0731 · 2× NVIDIA H200       deepseek-flash-2xh200 rev
+                                                                    deepseek-v4-flash-0731-sglang-
+                                                                    v0.5.15-post1-2xh200-r3 ·
                                                                     qualified · 2× NVIDIA H200 ·
                                                                     Select to search compatible
                                                                     capacity
-  5. Rent deepseek-ai/DeepSeek-V4-Flash · 4× NVIDIA H200            deepseek-flash-4xh200 rev
-                                                                    deepseek-v4-flash-sglang-
-                                                                    v0.5.12-4xh200-r1 · qualified
-                                                                    · 4× NVIDIA H200 · Select to
-                                                                    search compatible capacity
-  6. Rent zai-org/GLM-5.2-FP8 · 8× NVIDIA H200                      glm-5.2-fp8-8xh200 rev glm-
+  5. Rent zai-org/GLM-5.2-FP8 · 8× NVIDIA H200                      glm-5.2-fp8-8xh200 rev glm-
                                                                     5.2-fp8-sglang-v0.5.15-post1-
                                                                     r1 · qualified · 8× NVIDIA
                                                                     H200 · Select to search
                                                                     compatible capacity
-  7. Rent huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF … huihui-deepseek-v4-flash-q4k-
+  6. Rent huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF … huihui-deepseek-v4-flash-q4k-
                                                                     2xh200-experimental rev
                                                                     huihui-deepseek-v4-flash-q4k-
                                                                     ds4-tp2-r4 · experimental · 2×
                                                                     NVIDIA H200 · Select to search
                                                                     compatible capacity
-  8. Rent huihui-ai/Huihui-GLM-5.2-abliterated-GGUF · 2× NVIDIA H2… huihui-glm-5.2-iq1m-2xh200-
+  7. Rent huihui-ai/Huihui-GLM-5.2-abliterated-GGUF · 2× NVIDIA H2… huihui-glm-5.2-iq1m-2xh200-
                                                                     experimental rev huihui-glm-
                                                                     5.2-iq1m-llamacpp-2xh200-r5 ·
                                                                     experimental · 2× NVIDIA H200

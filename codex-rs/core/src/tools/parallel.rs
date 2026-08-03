@@ -30,7 +30,11 @@ use crate::tools::router::ToolCall;
 use crate::tools::router::ToolCallSource;
 use crate::tools::router::ToolRouter;
 use codex_protocol::error::CodexErr;
+#[cfg(test)]
+use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ResponseInputItem;
+
+const MAX_IDENTICAL_TOOL_CALLS_PER_TURN: u8 = 3;
 
 struct ToolCallTimingGuard {
     started_at: Instant,
@@ -52,13 +56,31 @@ pub(crate) struct ToolCallRuntime {
     tool_call_counts: Arc<RwLock<HashMap<String, u8>>>,
 }
 
+pub(crate) trait IntoToolStepContext {
+    fn into_tool_step_context(self) -> Arc<StepContext>;
+}
+
+impl IntoToolStepContext for Arc<StepContext> {
+    fn into_tool_step_context(self) -> Arc<StepContext> {
+        self
+    }
+}
+
+#[cfg(test)]
+impl IntoToolStepContext for Arc<crate::session::turn_context::TurnContext> {
+    fn into_tool_step_context(self) -> Arc<StepContext> {
+        StepContext::for_test(self)
+    }
+}
+
 impl ToolCallRuntime {
     pub(crate) fn new(
         router: Arc<ToolRouter>,
         session: Arc<Session>,
-        step_context: Arc<StepContext>,
+        step_context: impl IntoToolStepContext,
         tracker: SharedTurnDiffTracker,
     ) -> Self {
+        let step_context = step_context.into_tool_step_context();
         Self {
             router,
             session,
@@ -127,6 +149,8 @@ impl ToolCallRuntime {
         let invocation_cancellation_token = cancellation_token.clone();
         let wait_for_runtime_cancellation = self.router.tool_waits_for_runtime_cancellation(&call);
         let started = Instant::now();
+        let tool_call_counts = Arc::clone(&self.tool_call_counts);
+        let tool_signature = tool_call_signature(&call);
         let tool_call_timing_guard =
             ToolCallTimingGuard::capture(started, &session.thread_id, &turn.sub_id, &call, &source);
         let execution_started_at = tool_call_timing_guard
@@ -150,6 +174,18 @@ impl ToolCallRuntime {
 
         let mut dispatch_handle: AbortOnDropHandle<Result<AnyToolResult, FunctionCallError>> =
             AbortOnDropHandle::new(tokio::spawn(async move {
+                let identical_count = {
+                    let mut counts = tool_call_counts.write().await;
+                    let count = counts.entry(tool_signature).or_insert(0);
+                    *count = count.saturating_add(1);
+                    *count
+                };
+                if identical_count > MAX_IDENTICAL_TOOL_CALLS_PER_TURN {
+                    return Err(FunctionCallError::RespondToModel(format!(
+                        "repeated identical tool call stopped after {MAX_IDENTICAL_TOOL_CALLS_PER_TURN} attempts: {}. Change approach; do not retry the same tool payload again.",
+                        dispatch_call.tool_name
+                    )));
+                }
                 if let Some(tool_runtime) = tool_runtime
                     && let Some(readiness) = tool_runtime.wait_until_ready(&session)
                 {
@@ -883,6 +919,7 @@ mod tests {
                         payload: ToolPayload::Function {
                             arguments: "{\"cmd\":\"pwd\"}".to_string(),
                         },
+                        encrypted_function_args: None,
                     },
                     cancellation_token.clone(),
                 )
@@ -901,6 +938,7 @@ mod tests {
                     payload: ToolPayload::Function {
                         arguments: "{\"cmd\":\"pwd\"}".to_string(),
                     },
+                    encrypted_function_args: None,
                 },
                 cancellation_token,
             )
@@ -940,6 +978,7 @@ mod tests {
             payload: ToolPayload::Function {
                 arguments: "{\"path\":\"runtime/engine.js\",\"mode\":\"overwrite\"".to_string(),
             },
+            encrypted_function_args: None,
         };
 
         let first_runtime = ToolCallRuntime::new(
@@ -961,8 +1000,11 @@ mod tests {
         let second = second_runtime
             .handle_tool_call(call("call-2"), CancellationToken::new())
             .await;
-        let Err(CodexErr::Fatal(message)) = second else {
+        let Err(err) = second else {
             panic!("second equivalent malformed call must stop the turn: {second:?}");
+        };
+        let CodexErrorDetails::Fatal(message) = err.details() else {
+            panic!("expected fatal malformed-call guard, got {err:?}");
         };
         assert!(message.contains("after 2 equivalent malformed tool calls"));
 

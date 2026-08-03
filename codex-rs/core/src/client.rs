@@ -32,6 +32,9 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
 use codex_api::AgentIdentityTelemetry;
+use codex_api::AnthropicMessagesClient as ApiAnthropicMessagesClient;
+use codex_api::AnthropicMessagesOptions as ApiAnthropicMessagesOptions;
+use codex_api::AnthropicMessagesRequest;
 use codex_api::ApiError;
 use codex_api::AuthProvider;
 use codex_api::ChatCacheControl;
@@ -90,9 +93,13 @@ use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
 use codex_protocol::config_types::Verbosity as VerbosityConfig;
+use codex_protocol::config_types::WebSearchContextSize;
+use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::ContentItem;
+use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::models::plaintext_agent_message_content;
+use codex_protocol::openai_models::ChatReasoningEffortProtocol;
 use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
@@ -111,6 +118,8 @@ use futures::StreamExt;
 use http::HeaderMap as ApiHeaderMap;
 use http::HeaderValue;
 use http::StatusCode;
+use serde_json::Value;
+use serde_json::json;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::mpsc;
@@ -124,8 +133,6 @@ use tracing::instrument;
 use tracing::trace;
 use tracing::warn;
 
-use crate::anthropic_payload::ANTHROPIC_MESSAGES_REQUEST_BUDGET_BYTES;
-use crate::anthropic_payload::ANTHROPIC_MESSAGES_RETRY_BUDGET_BYTES;
 use crate::anthropic_payload::enforce_anthropic_payload_budget;
 use crate::anthropic_payload::is_anthropic_payload_too_large;
 use crate::attestation::AttestationContext;
@@ -134,6 +141,7 @@ use crate::attestation::X_OAI_ATTESTATION_HEADER;
 use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
 use crate::client_common::ResponseStream;
+use crate::client_common::retain_latest_contextual_developer_fragments;
 use crate::feedback_tags;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::responses_metadata::subagent_header_value;
@@ -187,11 +195,9 @@ const REALTIME_CALLS_ENDPOINT: &str = "/realtime/calls";
 const RESPONSES_ENDPOINT: &str = "/responses";
 const CHAT_COMPLETIONS_ENDPOINT: &str = "/chat/completions";
 const ANTHROPIC_MESSAGES_ENDPOINT: &str = "/messages";
-const ANTHROPIC_MESSAGES_DEFAULT_MAX_TOKENS: i64 = 32_000;
 const ANTHROPIC_MESSAGES_MAX_CACHE_CONTROL_BLOCKS: usize = 4;
 const ANTHROPIC_WEB_SEARCH_TOOL_TYPE: &str = "web_search_20260209";
 const ANTHROPIC_WEB_SEARCH_TOOL_TYPE_LEGACY: &str = "web_search_20250305";
-const ANTHROPIC_WEB_SEARCH_MAX_USES: i64 = 8;
 const CLAUDE_CODE_IDENTITY_PROMPT: &str =
     "You are Claude Code, Anthropic's official CLI for Claude.";
 const RESPONSES_COMPACT_ENDPOINT: &str = "/responses/compact";
@@ -243,7 +249,6 @@ struct ModelClientState {
     model_verbosity: Option<VerbosityConfig>,
     enable_request_compression: bool,
     include_timing_metrics: bool,
-    http_client: reqwest::Client,
     beta_features_header: Option<String>,
     concurrent_reasoning_summaries_enabled: bool,
     include_attestation: bool,
@@ -357,7 +362,7 @@ fn responses_request_properties_match(
     let ResponsesApiRequest {
         model: previous_model,
         instructions: previous_instructions,
-        previous_response_id: _,
+        previous_response_id,
         input: _,
         tools: previous_tools,
         tool_choice: previous_tool_choice,
@@ -374,13 +379,13 @@ fn responses_request_properties_match(
         thinking_budget: previous_thinking_budget,
         emit_usage: previous_emit_usage,
         enable_thinking: previous_enable_thinking,
-        reasoning_effort: previous_zai_reasoning_effort,
+        reasoning_effort: previous_reasoning_effort,
         provider_options: previous_provider_options,
     } = previous;
     let ResponsesApiRequest {
         model: current_model,
         instructions: current_instructions,
-        previous_response_id: _,
+        previous_response_id: current_previous_response_id,
         input: _,
         tools: current_tools,
         tool_choice: current_tool_choice,
@@ -397,12 +402,13 @@ fn responses_request_properties_match(
         thinking_budget: current_thinking_budget,
         emit_usage: current_emit_usage,
         enable_thinking: current_enable_thinking,
-        reasoning_effort: current_zai_reasoning_effort,
+        reasoning_effort: current_reasoning_effort,
         provider_options: current_provider_options,
     } = current;
 
     previous_model == current_model
         && previous_instructions == current_instructions
+        && previous_response_id == current_previous_response_id
         && previous_tools == current_tools
         && previous_tool_choice == current_tool_choice
         && previous_parallel_tool_calls == current_parallel_tool_calls
@@ -418,8 +424,29 @@ fn responses_request_properties_match(
         && previous_thinking_budget == current_thinking_budget
         && previous_emit_usage == current_emit_usage
         && previous_enable_thinking == current_enable_thinking
-        && previous_zai_reasoning_effort == current_zai_reasoning_effort
+        && previous_reasoning_effort == current_reasoning_effort
         && previous_provider_options == current_provider_options
+}
+
+fn response_items_equal_ignoring_internal_metadata(
+    previous: &ResponseItem,
+    current: &ResponseItem,
+) -> bool {
+    if previous == current {
+        return true;
+    }
+
+    let mut previous = previous.clone();
+    // Item ids are transport metadata, not conversation content. The durable history may assign
+    // a canonical id to a provider item that arrived without one, so requiring id equality would
+    // reject an otherwise exact incremental continuation. Tool linkage remains protected by the
+    // semantic `call_id` fields compared below as part of the full item value.
+    previous.set_id(/*new_id*/ None);
+    previous.clear_internal_chat_message_metadata_passthrough();
+    let mut current = current.clone();
+    current.set_id(/*new_id*/ None);
+    current.clear_internal_chat_message_metadata_passthrough();
+    previous == current
 }
 
 fn incremental_items_for_request(
@@ -447,7 +474,9 @@ fn incremental_items_for_request(
     let previous_items = previous_request.input.iter().chain(response_items);
     if !previous_items
         .zip(request_items_to_compare)
-        .all(response_items_equal_ignoring_metadata)
+        .all(|(previous, current)| {
+            response_items_equal_ignoring_internal_metadata(previous, current)
+        })
     {
         trace!("incremental request failed, items didn't match");
         return None;
@@ -456,19 +485,6 @@ fn incremental_items_for_request(
         return None;
     }
     Some(incremental_items.to_vec())
-}
-
-fn response_items_equal_ignoring_metadata(previous: (&ResponseItem, &ResponseItem)) -> bool {
-    let (previous, current) = previous;
-    if previous == current {
-        return true;
-    }
-
-    let mut previous = previous.clone();
-    previous.clear_metadata();
-    let mut current = current.clone();
-    current.clear_metadata();
-    previous == current
 }
 
 fn items_after_last_model_output(input: &[ResponseItem]) -> Option<Vec<ResponseItem>> {
@@ -514,33 +530,16 @@ fn append_synthetic_responses_user_turn(input: &mut Vec<ResponseItem>) {
             text: "Continue.".to_string(),
         }],
         phase: None,
-        metadata: None,
+        internal_chat_message_metadata_passthrough: None,
     });
 }
 
-#[cfg(test)]
-fn ensure_responses_input_ends_with_user_turn(input: &mut Vec<ResponseItem>) {
-    if responses_input_needs_synthetic_user_turn(input) {
-        append_synthetic_responses_user_turn(input);
-    }
-}
-
-/// Whether an outbound Responses `input` contains at least one user-role message.
-///
-/// The Vercel gateway rejects `previous_response_id` continuations whose `input`
-/// holds only tool results (`invalid_request_error`: "At least one user message
-/// is required in the input"), which broke tool-call follow-up turns.
 fn responses_input_includes_user_message(items: &[ResponseItem]) -> bool {
     items
         .iter()
         .any(|item| matches!(item, ResponseItem::Message { role, .. } if role == "user"))
 }
 
-/// Adopts a server-state incremental continuation only when the incremental
-/// `input` is a shape the Vercel gateway accepts (at least one user-role
-/// message). Otherwise the request is left as a full-context replay with no
-/// `previous_response_id`; server-conversation state still updates from the
-/// response, so later user-initiated continuations stay incremental.
 fn apply_http_server_state_continuation(
     request: &mut ResponsesApiRequest,
     response_id: String,
@@ -552,13 +551,19 @@ fn apply_http_server_state_continuation(
     }
     if !responses_input_includes_user_message(&incremental_items) {
         debug!(
-            "skipping server-state incremental continuation without a user message; \
-             sending full-context responses request"
+            "skipping server-state incremental continuation without a user message; sending full-context responses request"
         );
         return;
     }
     request.previous_response_id = Some(response_id);
     request.input = incremental_items;
+}
+
+#[cfg(test)]
+fn ensure_responses_input_ends_with_user_turn(input: &mut Vec<ResponseItem>) {
+    if responses_input_needs_synthetic_user_turn(input) {
+        append_synthetic_responses_user_turn(input);
+    }
 }
 
 fn is_model_output_item(item: &ResponseItem) -> bool {
@@ -577,6 +582,7 @@ fn is_model_output_item(item: &ResponseItem) -> bool {
         ResponseItem::FunctionCallOutput { .. }
         | ResponseItem::ToolSearchOutput { .. }
         | ResponseItem::CustomToolCallOutput { .. }
+        | ResponseItem::AdditionalTools { .. }
         | ResponseItem::CompactionTrigger { .. }
         | ResponseItem::Other => false,
     }
@@ -652,24 +658,11 @@ fn response_event_name(event: &ResponseEvent) -> &'static str {
         ResponseEvent::ReasoningSummaryDelta { .. } => "reasoning_summary_delta",
         ResponseEvent::ReasoningContentDelta { .. } => "reasoning_content_delta",
         ResponseEvent::ReasoningSummaryPartAdded { .. } => "reasoning_summary_part_added",
+        ResponseEvent::ReasoningSummaryDone { .. } => "reasoning_summary_done",
+        ResponseEvent::SafetyBuffering(_) => "safety_buffering",
         ResponseEvent::RateLimits(_) => "rate_limits",
         ResponseEvent::ModelsEtag(_) => "models_etag",
     }
-}
-
-fn response_items_equal_ignoring_internal_metadata(
-    previous: &ResponseItem,
-    current: &ResponseItem,
-) -> bool {
-    if previous == current {
-        return true;
-    }
-
-    let mut previous = previous.clone();
-    previous.clear_internal_chat_message_metadata_passthrough();
-    let mut current = current.clone();
-    current.clear_internal_chat_message_metadata_passthrough();
-    previous == current
 }
 
 impl WebsocketSession {
@@ -756,7 +749,6 @@ impl ModelClient {
                 model_verbosity,
                 enable_request_compression,
                 include_timing_metrics,
-                http_client: build_reqwest_client(),
                 beta_features_header,
                 concurrent_reasoning_summaries_enabled,
                 include_attestation,
@@ -784,10 +776,6 @@ impl ModelClient {
         self.prompt_cache_key_override
             .clone()
             .unwrap_or_else(|| responses_metadata.session_id.clone())
-    }
-
-    fn http_transport(&self) -> ReqwestTransport {
-        ReqwestTransport::new(self.state.http_client.clone())
     }
 
     pub(crate) fn seed_server_response_id(&self, response_id: String) {
@@ -830,6 +818,70 @@ impl ModelClient {
             websocket_session: self.take_cached_websocket_session(),
             turn_state: Arc::new(OnceLock::new()),
         }
+    }
+
+    /// Creates a turn-scoped client for the provider committed in the current
+    /// thread settings.
+    ///
+    /// A thread may switch providers after startup. Reusing the session-scoped
+    /// client's original transport would keep sending the newly selected model
+    /// to the old base URL. Same-provider turns retain the cached WebSocket;
+    /// cross-provider turns receive isolated transport and fallback state.
+    pub(crate) fn new_session_for_provider(
+        &self,
+        provider_info: &ModelProviderInfo,
+    ) -> ModelClientSession {
+        self.for_provider(provider_info).new_session()
+    }
+
+    /// Returns a client whose transport and authentication are bound to the
+    /// supplied provider. Same-provider calls retain the session cache.
+    pub(crate) fn for_provider(&self, provider_info: &ModelProviderInfo) -> Self {
+        if self.state.provider.info() == provider_info {
+            return self.clone();
+        }
+
+        let auth_manager = self.state.provider.auth_manager();
+        let provider = create_model_provider(provider_info.clone(), auth_manager);
+        let codex_api_key_env_enabled = provider
+            .auth_manager()
+            .as_ref()
+            .is_some_and(|manager| manager.codex_api_key_env_enabled());
+        let auth_env_telemetry =
+            collect_auth_env_telemetry(provider.info(), codex_api_key_env_enabled);
+        let include_attestation = provider.supports_attestation();
+        Self {
+            state: Arc::new(ModelClientState {
+                thread_id: self.state.thread_id,
+                provider,
+                auth_env_telemetry,
+                session_source: self.state.session_source.clone(),
+                originator: self.state.originator.clone(),
+                model_verbosity: self.state.model_verbosity,
+                enable_request_compression: self.state.enable_request_compression,
+                include_timing_metrics: self.state.include_timing_metrics,
+                beta_features_header: self.state.beta_features_header.clone(),
+                concurrent_reasoning_summaries_enabled: self
+                    .state
+                    .concurrent_reasoning_summaries_enabled,
+                include_attestation,
+                attestation_provider: self.state.attestation_provider.clone(),
+                disable_websockets: AtomicBool::new(false),
+                agent_identity_session_fallback: self.state.agent_identity_session_fallback.clone(),
+                cached_websocket_session: StdMutex::new(WebsocketSession::default()),
+                server_conversation_state: Arc::new(StdMutex::new(None)),
+            }),
+            agent_identity_policy: self.agent_identity_policy,
+            prompt_cache_key_override: self.prompt_cache_key_override.clone(),
+            http_client_factory: self.http_client_factory.clone(),
+        }
+    }
+
+    pub(crate) fn session_matches_provider(
+        session: &ModelClientSession,
+        provider_info: &ModelProviderInfo,
+    ) -> bool {
+        session.client.state.provider.info() == provider_info
     }
 
     pub(crate) fn auth_manager(&self) -> Option<Arc<AuthManager>> {
@@ -935,6 +987,9 @@ impl ModelClient {
             text,
             ..
         } = request;
+        // `/responses/compact` accepts a terminal assistant item as history. The synthetic user
+        // continuation is a sampling compatibility shim and must never enter the compaction
+        // payload or the canonical post-compaction history.
         self.prepare_response_items_for_request(&mut input);
         let payload = ApiCompactionInput {
             model: &model,
@@ -1058,8 +1113,11 @@ impl ModelClient {
             reasoning: effort
                 .map(reasoning_effort_for_request)
                 .map(|effort| Reasoning {
+                    enabled: None,
                     effort: Some(effort),
+                    max_tokens: None,
                     summary: None,
+                    exclude: None,
                     context: None,
                 }),
         };
@@ -1159,12 +1217,15 @@ impl ModelClient {
         summary: ReasoningSummaryConfig,
     ) -> Reasoning {
         Reasoning {
+            enabled: None,
             effort: effort
                 .or_else(|| model_info.default_reasoning_level.clone())
                 .map(reasoning_effort_for_request),
             summary: (model_info.supports_reasoning_summary_parameter
                 && summary != ReasoningSummaryConfig::None)
                 .then_some(summary),
+            max_tokens: None,
+            exclude: None,
             // When Responses Lite is disabled, omit context so Responses uses the default,
             // which is currently `current_turn`.
             context: model_info
@@ -1179,78 +1240,74 @@ impl ModelClient {
         wants_deep_reasoning(effort).then_some("max")
     }
 
-    fn baseten_reasoning_effort(
-        upstream_model: &str,
+    fn chat_reasoning_effort(
+        protocol: ChatReasoningEffortProtocol,
         effort: Option<&ReasoningEffortConfig>,
-    ) -> Option<String> {
-        // Baseten's GLM-5.2 accepts exactly {none, high, max} for
-        // `reasoning_effort` and returns 400 for anything else; other Baseten
-        // models take the wider range or ignore the field
-        // (docs.baseten.co/inference/model-apis/reasoning, retrieved 2026-07-02).
-        let is_glm52 = upstream_model.to_ascii_lowercase().contains("glm-5.2");
-        let Some(effort) = effort.map(ReasoningEffortConfig::as_str) else {
-            // Nothing configured anywhere (new slugs have no catalog default):
-            // GLM-5.2's shallow server default abandons hard tasks early, so
-            // standardize it to "high"; other models keep their server default.
-            return is_glm52.then(|| "high".to_string());
+    ) -> Result<Option<String>> {
+        let deep_effort = || {
+            matches!(
+                effort,
+                Some(
+                    ReasoningEffortConfig::XHigh
+                        | ReasoningEffortConfig::Max
+                        | ReasoningEffortConfig::Ultra
+                )
+            ) || matches!(
+                effort,
+                Some(ReasoningEffortConfig::Custom(value))
+                    if matches!(value.as_str(), "xhigh" | "max" | "deep" | "extra_high" | "extra-high" | "ultra")
+            )
         };
-        if is_glm52 {
-            let mapped = match effort {
-                "none" => "none",
-                "xhigh" | "max" | "deep" | "extra_high" | "extra-high" => "max",
-                _ => "high",
-            };
-            Some(mapped.to_string())
-        } else {
-            Some(effort.to_string())
-        }
-    }
 
-    /// Kimi Code K3 accepts exactly `low`, `high`, and `max` (default) for
-    /// `reasoning_effort`; anything else is rejected server-side. Map the
-    /// PFTerminal effort ladder onto that set so unsupported values are
-    /// normalized locally instead of producing a remote HTTP 400.
-    fn kimi_code_reasoning_effort(effort: Option<&ReasoningEffortConfig>) -> Result<String> {
-        let mapped = match effort {
-            Some(ReasoningEffortConfig::None) => {
-                return Err(CodexErr::InvalidRequest(
-                    "Kimi Code K3 requires preserved reasoning; reasoning effort `none` would \
-                     select K2.6 instead"
-                        .to_string(),
-                ));
+        match protocol {
+            ChatReasoningEffortProtocol::ProviderDefault => Ok(None),
+            ChatReasoningEffortProtocol::NoneHighMaxDefaultHigh => {
+                let value = if matches!(effort, Some(ReasoningEffortConfig::None)) {
+                    "none"
+                } else if deep_effort() {
+                    "max"
+                } else {
+                    "high"
+                };
+                Ok(Some(value.to_string()))
             }
-            Some(ReasoningEffortConfig::Minimal) | Some(ReasoningEffortConfig::Low) => "low",
-            Some(ReasoningEffortConfig::Medium) | Some(ReasoningEffortConfig::High) => "high",
-            Some(ReasoningEffortConfig::XHigh) => "max",
-            Some(ReasoningEffortConfig::Custom(value)) => match value.as_str() {
-                "low" | "light" | "minimum" | "min" => "low",
-                "medium" | "high" => "high",
-                "xhigh" | "max" | "ultra" => "max",
-                unsupported => {
-                    return Err(CodexErr::InvalidRequest(format!(
-                        "Kimi Code K3 does not support reasoning effort `{unsupported}`; use low, high, or max"
-                    )));
+            ChatReasoningEffortProtocol::LowHighMaxRequiredDefaultMax => {
+                let value = match effort {
+                    Some(ReasoningEffortConfig::None) => {
+                        return Err(CodexErr::InvalidRequest(
+                            "this route requires preserved reasoning; use low, high, or max"
+                                .to_string(),
+                        ));
+                    }
+                    Some(ReasoningEffortConfig::Minimal | ReasoningEffortConfig::Low) => "low",
+                    Some(ReasoningEffortConfig::Medium | ReasoningEffortConfig::High) => "high",
+                    Some(
+                        ReasoningEffortConfig::XHigh
+                        | ReasoningEffortConfig::Max
+                        | ReasoningEffortConfig::Ultra,
+                    ) => "max",
+                    Some(ReasoningEffortConfig::Custom(value)) => match value.as_str() {
+                        "low" | "light" | "minimum" | "min" => "low",
+                        "medium" | "high" => "high",
+                        "xhigh" | "max" | "ultra" => "max",
+                        unsupported => {
+                            return Err(CodexErr::InvalidRequest(format!(
+                                "this route does not support reasoning effort `{unsupported}`; use low, high, or max"
+                            )));
+                        }
+                    },
+                    None => "max",
+                };
+                Ok(Some(value.to_string()))
+            }
+            ChatReasoningEffortProtocol::HighMaxDefaultHigh => {
+                if matches!(effort, Some(ReasoningEffortConfig::None)) {
+                    Ok(None)
+                } else {
+                    Ok(Some(if deep_effort() { "max" } else { "high" }.to_string()))
                 }
-            },
-            None => "max",
-        };
-        Ok(mapped.to_string())
-    }
-
-    fn native_deepseek_v4_reasoning_effort(
-        upstream_model: &str,
-        effort: Option<&ReasoningEffortConfig>,
-    ) -> Option<String> {
-        let normalized_model = upstream_model.to_ascii_lowercase();
-        if !normalized_model.contains("deepseek-v4-") {
-            return None;
+            }
         }
-        let mapped = match effort.map(ReasoningEffortConfig::as_str) {
-            Some("none") => return None,
-            Some("xhigh" | "max" | "deep" | "extra_high" | "extra-high") => "max",
-            _ => "high",
-        };
-        Some(mapped.to_string())
     }
 
     /// OpenRouter's unified `reasoning` object is the only thinking control it
@@ -1358,6 +1415,8 @@ impl ModelClient {
         let mut input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
         let is_openai = self.state.provider.info().is_openai();
         if !is_openai {
+            retain_latest_contextual_developer_fragments(&mut input);
+            adapt_plaintext_collaboration_messages_for_responses(&mut input);
             for item in &mut input {
                 item.clear_internal_chat_message_metadata_passthrough();
                 if let ResponseItem::FunctionCall {
@@ -1369,6 +1428,32 @@ impl ModelClient {
                 }
             }
         }
+        let uses_zai_reasoning =
+            self.state.provider.info().is_ambient() || self.state.provider.info().is_zai();
+        let ambient_reasoning_effort = uses_zai_reasoning
+            .then(|| {
+                Self::ambient_zai_reasoning_effort(
+                    effort
+                        .as_ref()
+                        .or(model_info.default_reasoning_level.as_ref()),
+                )
+                .map(str::to_string)
+            })
+            .flatten();
+        let ambient_enable_thinking =
+            uses_zai_reasoning.then_some(ambient_reasoning_effort.is_some());
+        let vercel_provider_options = self
+            .state
+            .provider
+            .info()
+            .is_vercel_gateway()
+            .then(|| vercel_gateway_provider_options(&model_info.slug))
+            .flatten();
+        let vercel_wants_thinking = wants_deep_reasoning(
+            effort
+                .as_ref()
+                .or(model_info.default_reasoning_level.as_ref()),
+        );
         let (instructions, tools) = if model_info.use_responses_lite {
             let tools = create_tools_json_for_responses_api(&prompt.tools)?;
             let mut prefix = vec![ResponseItem::AdditionalTools {
@@ -1395,14 +1480,26 @@ impl ModelClient {
                 Some(create_tools_raw_json_for_responses_api(&prompt.tools)?.into()),
             )
         };
-        let reasoning = Self::build_reasoning(model_info, effort, summary);
+        let mut reasoning = Self::build_reasoning(model_info, effort, summary);
+        if vercel_provider_options.is_some() {
+            reasoning.effort = Some(if vercel_wants_thinking {
+                ReasoningEffortConfig::XHigh
+            } else {
+                ReasoningEffortConfig::None
+            });
+        }
         let stream_options = (self.state.concurrent_reasoning_summaries_enabled
             && is_openai
+            && !uses_zai_reasoning
             && reasoning.summary.is_some())
         .then_some(StreamOptions {
             reasoning_summary_delivery: codex_api::ReasoningSummaryDelivery::SequentialCutoff,
         });
-        let include = vec!["reasoning.encrypted_content".to_string()];
+        let include = if uses_zai_reasoning {
+            Vec::new()
+        } else {
+            vec!["reasoning.encrypted_content".to_string()]
+        };
         let verbosity = if model_info.support_verbosity {
             self.state.model_verbosity.or(model_info.default_verbosity)
         } else {
@@ -1419,24 +1516,30 @@ impl ModelClient {
             &prompt.output_schema,
             prompt.output_schema_strict,
         );
-        let prompt_cache_key = Some(self.prompt_cache_key(responses_metadata));
-        let service_tier = model_info.service_tier_for_request(service_tier);
+        let prompt_cache_key =
+            (!uses_zai_reasoning).then(|| self.prompt_cache_key(responses_metadata));
+        let service_tier = if uses_zai_reasoning {
+            None
+        } else {
+            model_info.service_tier_for_request(service_tier)
+        };
         let request = ResponsesApiRequest {
             model: model_info.slug.clone(),
             instructions,
+            previous_response_id: None,
             input,
             tools,
             tool_choice: "auto".to_string(),
             parallel_tool_calls: prompt.parallel_tool_calls && !model_info.use_responses_lite,
-            reasoning: Some(reasoning),
-            store: provider.is_azure_responses_endpoint(),
+            reasoning: (!uses_zai_reasoning).then_some(reasoning),
+            store: provider.is_azure_responses_endpoint() || self.state.provider.info().is_vercel(),
             stream: true,
             stream_options,
             include,
             service_tier,
             prompt_cache_key,
             text,
-            client_metadata,
+            client_metadata: (!uses_zai_reasoning).then(|| responses_metadata.client_metadata()),
             thinking_budget: None,
             emit_usage: uses_zai_reasoning.then_some(true),
             enable_thinking: ambient_enable_thinking,
@@ -1444,6 +1547,312 @@ impl ModelClient {
             provider_options: vercel_provider_options,
         };
         Ok(request)
+    }
+
+    fn build_chat_completions_request(
+        &self,
+        prompt: &Prompt,
+        model_info: &ModelInfo,
+        effort: Option<ReasoningEffortConfig>,
+        responses_metadata: &CodexResponsesMetadata,
+    ) -> Result<ChatCompletionsRequest> {
+        let mut messages = Vec::new();
+        let instructions = prompt.base_instructions.text.trim();
+        if !instructions.is_empty() {
+            messages.push(ChatMessage {
+                role: "system".to_string(),
+                content: Some(ChatMessageContent::text(instructions.to_string())),
+                reasoning_content: None,
+                tool_call_id: None,
+                tool_calls: Vec::new(),
+            });
+        }
+
+        let mut input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
+        if !self.state.provider.info().is_openai() {
+            retain_latest_contextual_developer_fragments(&mut input);
+        }
+        let mut skipped_tool_call_ids = HashSet::new();
+        append_chat_messages_for_response_items(
+            input,
+            &mut messages,
+            &mut skipped_tool_call_ids,
+            model_info.chat_completions.reasoning_protocol,
+        );
+
+        // GLM chat streams proper tool calls when OpenAI's `strict` function
+        // flag is omitted. Keep the JSON schema, but drop that
+        // provider-incompatible wrapper bit for Ambient and Z.AI.
+        let uses_zai_reasoning =
+            self.state.provider.info().is_ambient() || self.state.provider.info().is_zai();
+        let strip_strict_from_tools = uses_zai_reasoning || self.state.provider.info().is_baseten();
+        let mut tools = create_tools_json_for_chat_completions(
+            &prompt.tools,
+            strip_strict_from_tools,
+            self.state.provider.info().is_zai(),
+        )?;
+        // OpenRouter web search must ride the request-level `plugins` field. A
+        // non-function entry in `tools` makes every GLM host ineligible and
+        // diverts the request to a tool-middleware tier with a fixed ~10s
+        // header hold (openrouter-parity IC probes, 2026-07-02).
+        let openrouter_web_plugins = self
+            .state
+            .provider
+            .info()
+            .is_openrouter()
+            .then(|| {
+                prompt.tools.iter().find_map(|tool| match tool {
+                    ToolSpec::WebSearch {
+                        search_context_size,
+                        ..
+                    } => Some(openrouter_web_plugin(*search_context_size)),
+                    _ => None,
+                })
+            })
+            .flatten()
+            .map(|plugin| vec![plugin]);
+        if self.state.provider.info().is_zai() {
+            let has_native_web_search = tools
+                .iter()
+                .any(|tool| tool.get("type").and_then(Value::as_str) == Some("web_search"));
+            let has_function_tools = tools
+                .iter()
+                .any(|tool| tool.get("type").and_then(Value::as_str) == Some("function"));
+            if has_native_web_search && has_function_tools {
+                // Z.AI rejects mixed native web_search + function-tool payloads.
+                // Preserve client-executed function tools here; without them the
+                // coding agent cannot run shell/file actions and turns stop after
+                // the model merely says what it would do.
+                tools.retain(|tool| tool.get("type").and_then(Value::as_str) != Some("web_search"));
+            }
+        }
+        let ambient_reasoning_effort = uses_zai_reasoning
+            .then(|| {
+                Self::ambient_zai_reasoning_effort(
+                    effort
+                        .as_ref()
+                        .or(model_info.default_reasoning_level.as_ref()),
+                )
+                .map(str::to_string)
+            })
+            .flatten();
+        // `enable_thinking` is honoured by Z.AI direct only. Ambient takes the
+        // `reasoning` object instead; sending both would leave the ignored
+        // field on the wire for no reason.
+        let ambient_enable_thinking = self
+            .state
+            .provider
+            .info()
+            .is_zai()
+            .then_some(ambient_reasoning_effort.is_some());
+        let response_format = prompt.output_schema.as_ref().map(|schema| {
+            json!({
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "codex_output_schema",
+                    "strict": prompt.output_schema_strict,
+                    "schema": schema,
+                }
+            })
+        });
+        let chat_cache_policy = self.chat_cache_policy(model_info);
+        if chat_cache_policy.explicit_cache_control {
+            apply_chat_cache_control(&mut messages);
+        }
+
+        let upstream_model =
+            chat_completions_upstream_model(&model_info.slug, self.state.provider.info());
+        let vercel_provider_options = self
+            .state
+            .provider
+            .info()
+            .is_vercel_gateway()
+            .then(|| vercel_gateway_provider_options(upstream_model))
+            .flatten();
+        let provider_reasoning = if self.state.provider.info().is_openrouter() {
+            Self::openrouter_reasoning(model_info, effort.as_ref())?
+        } else if self.state.provider.info().is_ambient() {
+            Some(Self::ambient_reasoning(ambient_reasoning_effort.as_deref()))
+        } else if vercel_provider_options.is_some() {
+            Some(Self::vercel_reasoning(model_info, effort.as_ref()))
+        } else {
+            None
+        };
+        let catalogue_reasoning_effort = Self::chat_reasoning_effort(
+            model_info.chat_completions.reasoning_effort_protocol,
+            effort
+                .as_ref()
+                .or(model_info.default_reasoning_level.as_ref()),
+        )?;
+
+        Ok(ChatCompletionsRequest {
+            model: upstream_model.to_string(),
+            messages,
+            stream: true,
+            stream_options: Some(ChatStreamOptions {
+                include_usage: true,
+            }),
+            tool_choice: (!tools.is_empty()).then(|| "auto".to_string()),
+            parallel_tool_calls: (!tools.is_empty() && prompt.parallel_tool_calls).then_some(true),
+            prompt_cache_key: chat_cache_policy
+                .prompt_cache_key
+                .then(|| self.prompt_cache_key(responses_metadata)),
+            tools,
+            response_format,
+            emit_usage: uses_zai_reasoning.then_some(true),
+            enable_thinking: ambient_enable_thinking,
+            reasoning_effort: ambient_reasoning_effort.or(catalogue_reasoning_effort),
+            reasoning: provider_reasoning,
+            provider: self.state.provider.info().chat_completions_provider.clone(),
+            plugins: openrouter_web_plugins,
+            provider_options: vercel_provider_options,
+        })
+    }
+
+    fn build_anthropic_messages_request(
+        &self,
+        prompt: &Prompt,
+        model_info: &ModelInfo,
+        effort: Option<ReasoningEffortConfig>,
+    ) -> Result<AnthropicMessagesRequest> {
+        self.build_anthropic_messages_request_with_history_repair(
+            prompt, model_info, effort, /*repair_incomplete_latest_assistant*/ false,
+        )
+    }
+
+    fn build_anthropic_messages_request_with_history_repair(
+        &self,
+        prompt: &Prompt,
+        model_info: &ModelInfo,
+        effort: Option<ReasoningEffortConfig>,
+        repair_incomplete_latest_assistant: bool,
+    ) -> Result<AnthropicMessagesRequest> {
+        let mut system = Vec::new();
+        let instructions = prompt.base_instructions.text.trim();
+        let is_claude_plan = is_claude_plan_model_slug(&model_info.slug);
+        let cache_control = anthropic_cache_control(is_claude_plan);
+        if is_claude_plan {
+            system.push(json!({
+                "type": "text",
+                "text": CLAUDE_CODE_IDENTITY_PROMPT,
+            }));
+        }
+        if !instructions.is_empty() {
+            let instruction_block = json!({
+                "type": "text",
+                "text": instructions,
+            });
+            system.push(instruction_block);
+        }
+        apply_anthropic_cache_control_to_last_system_block(&mut system, &cache_control);
+
+        let mut input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
+        if !self.state.provider.info().is_openai() {
+            retain_latest_contextual_developer_fragments(&mut input);
+        }
+        let mut messages = Vec::new();
+        let mut skipped_tool_call_ids = HashSet::new();
+        for item in input {
+            append_anthropic_message_for_response_item(
+                item,
+                &mut messages,
+                &mut skipped_tool_call_ids,
+            );
+        }
+        let removed_incomplete_signed_response =
+            remove_latest_signed_thinking_only_assistant_message(&mut messages);
+        if repair_incomplete_latest_assistant && !removed_incomplete_signed_response {
+            remove_latest_signed_thinking_assistant_message(&mut messages);
+        }
+        ensure_anthropic_messages_end_with_user_turn(&mut messages);
+        apply_anthropic_cache_control_to_last_user_messages(&mut messages, &cache_control);
+
+        let tools = create_tools_json_for_anthropic_messages(
+            &prompt.tools,
+            &cache_control,
+            self.state
+                .provider
+                .info()
+                .runtime_policy
+                .web_search_max_uses,
+        )?;
+        let tool_choice = (!tools.is_empty()).then(|| json!({ "type": "auto" }));
+        let upstream_model = anthropic_upstream_model(&model_info.slug);
+        let (mut thinking, output_config) = anthropic_reasoning_for_model_and_effort(
+            upstream_model,
+            effort
+                .as_ref()
+                .or(model_info.default_reasoning_level.as_ref()),
+        );
+        let provider_options = self
+            .state
+            .provider
+            .info()
+            .is_vercel_gateway()
+            .then(|| vercel_gateway_provider_options(upstream_model))
+            .flatten();
+        // Third-party slugs on this wire think by default, so an omitted
+        // `thinking` block is not the same as thinking off. Only Anthropic's
+        // own models treat the omission that way.
+        if provider_options.is_some() && thinking.is_none() {
+            thinking = Some(json!({ "type": "disabled" }));
+        }
+
+        let mut request = AnthropicMessagesRequest {
+            model: upstream_model.to_string(),
+            system,
+            messages,
+            tools,
+            tool_choice,
+            stream: true,
+            max_tokens: model_info.max_output_tokens.ok_or_else(|| {
+                CodexErr::InvalidRequest(format!(
+                    "model `{}` has no catalogued maximum output token limit",
+                    model_info.slug
+                ))
+            })?,
+            thinking,
+            output_config,
+            provider_options,
+        };
+        let payload_report = enforce_anthropic_payload_budget(
+            &mut request,
+            self.state
+                .provider
+                .info()
+                .runtime_policy
+                .request_body_max_bytes,
+        )?;
+        if payload_report.omitted_images > 0 {
+            warn!(
+                original_bytes = payload_report.original_bytes,
+                final_bytes = payload_report.final_bytes,
+                omitted_images = payload_report.omitted_images,
+                "omitted older images from Anthropic request to enforce provider payload budget"
+            );
+        }
+        Ok(request)
+    }
+
+    fn chat_cache_policy(&self, model_info: &ModelInfo) -> ChatCachePolicy {
+        let provider = self.state.provider.info();
+        let slug = model_info.slug.as_str();
+
+        if provider.is_openrouter() {
+            return ChatCachePolicy {
+                explicit_cache_control: chat_model_supports_openai_compatible_cache_control(slug),
+                prompt_cache_key: false,
+            };
+        }
+
+        if provider.is_vercel() {
+            return ChatCachePolicy {
+                explicit_cache_control: chat_model_supports_vercel_cache_control(slug),
+                prompt_cache_key: true,
+            };
+        }
+
+        ChatCachePolicy::default()
     }
 
     fn prepare_response_items_for_request(&self, input: &mut [ResponseItem]) {
@@ -1455,7 +1864,11 @@ impl ModelClient {
     }
 
     fn responses_input_needs_synthetic_user_turn(&self, input: &[ResponseItem]) -> bool {
-        !self.state.provider.info().is_openai() && responses_input_needs_synthetic_user_turn(input)
+        // This is conversation-shape normalization, not a provider-specific compatibility hack.
+        // Collaboration mail and completed assistant output are model output for every Responses
+        // endpoint; when either is terminal, append a request-only user continuation so the next
+        // sample cannot be interpreted as an assistant prefill.
+        responses_input_needs_synthetic_user_turn(input)
     }
 
     /// Returns whether the Responses-over-WebSocket transport is active for this session.
@@ -1512,6 +1925,16 @@ impl ModelClient {
 
     pub(crate) async fn prewarm_auth(&self) -> Result<()> {
         self.current_client_setup().await.map(|_| ())
+    }
+
+    fn unauthorized_recovery(&self) -> Option<UnauthorizedRecovery> {
+        if self.state.provider.info().env_key.is_some() {
+            return None;
+        }
+        self.state
+            .provider
+            .auth_manager()
+            .map(|manager| manager.unauthorized_recovery())
     }
 
     /// Opens a websocket connection using the same header and telemetry wiring as normal turns.
@@ -1688,9 +2111,12 @@ impl ModelClientSession {
                 serde_json::to_vec(&request)?
             }
             WireApi::Chat => {
-                let request = self
-                    .client
-                    .build_chat_completions_request(prompt, model_info, effort)?;
+                let request = self.client.build_chat_completions_request(
+                    prompt,
+                    model_info,
+                    effort,
+                    responses_metadata,
+                )?;
                 serde_json::to_vec(&request)?
             }
             WireApi::Anthropic => {
@@ -1752,6 +2178,262 @@ impl ModelClientSession {
     /// We only reuse an incremental input delta when non-input request fields are unchanged and
     /// `input` is a strict extension of the previous known input. Server-returned output items
     /// are treated as part of the baseline so we do not resend them.
+    async fn build_chat_completions_options(
+        &self,
+        responses_metadata: &CodexResponsesMetadata,
+    ) -> ApiChatCompletionsOptions {
+        ApiChatCompletionsOptions {
+            session_id: Some(responses_metadata.session_id.to_string()),
+            thread_id: Some(responses_metadata.thread_id.to_string()),
+            session_source: Some(self.client.state.session_source.clone()),
+            extra_headers: {
+                let mut headers = ApiHeaderMap::new();
+                if let Ok(header_value) = HeaderValue::from_str(&responses_metadata.installation_id)
+                {
+                    headers.insert(X_CODEX_INSTALLATION_ID_HEADER, header_value);
+                }
+                if self.client.state.provider.info().is_openrouter()
+                    && let Ok(header_value) =
+                        HeaderValue::from_str(&responses_metadata.session_id.to_string())
+                {
+                    // OpenRouter uses this header as the provider-sticky
+                    // conversation key. Its `session-id` header is unrelated,
+                    // and `prompt_cache_key` is an OpenAI/Vercel body field.
+                    headers.insert("x-session-id", header_value);
+                }
+                if let Some(header_value) = self.client.generate_attestation_header_for().await {
+                    headers.insert(X_OAI_ATTESTATION_HEADER, header_value);
+                }
+                headers
+            },
+            same_turn_attempt_index: None,
+            actionable_silence_timeout: Some(
+                self.client
+                    .state
+                    .provider
+                    .info()
+                    .stream_actionable_timeout(),
+            ),
+        }
+    }
+
+    async fn build_anthropic_messages_options(
+        &self,
+        responses_metadata: &CodexResponsesMetadata,
+    ) -> ApiAnthropicMessagesOptions {
+        ApiAnthropicMessagesOptions {
+            session_id: Some(responses_metadata.session_id.to_string()),
+            thread_id: Some(responses_metadata.thread_id.to_string()),
+            session_source: Some(self.client.state.session_source.clone()),
+            extra_headers: {
+                let mut headers = ApiHeaderMap::new();
+                if let Ok(header_value) = HeaderValue::from_str(&responses_metadata.installation_id)
+                {
+                    headers.insert(X_CODEX_INSTALLATION_ID_HEADER, header_value);
+                }
+                if let Some(header_value) = self.client.generate_attestation_header_for().await {
+                    headers.insert(X_OAI_ATTESTATION_HEADER, header_value);
+                }
+                headers
+            },
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[instrument(
+        name = "model_client.stream_anthropic_messages_api",
+        level = "info",
+        skip_all,
+        fields(
+            model = %model_info.slug,
+            wire_api = %self.client.state.provider.info().wire_api,
+            transport = "anthropic_messages_http",
+            http.method = "POST",
+            api.path = "messages",
+            turn.has_metadata_header = responses_metadata.has_turn_metadata()
+        )
+    )]
+    async fn stream_anthropic_messages_api(
+        &self,
+        prompt: &Prompt,
+        model_info: &ModelInfo,
+        session_telemetry: &SessionTelemetry,
+        effort: Option<ReasoningEffortConfig>,
+        responses_metadata: &CodexResponsesMetadata,
+        inference_trace: &InferenceTraceContext,
+    ) -> Result<ResponseStream> {
+        let mut auth_recovery = self.client.unauthorized_recovery();
+        let mut pending_retry = PendingUnauthorizedRetry::default();
+        let mut signed_thinking_history_retry_used = false;
+        let mut payload_retry_used = false;
+        loop {
+            let provider_request_started_at = Instant::now();
+            trace_stream_timing(
+                "anthropic_http_before_client_setup",
+                provider_request_started_at,
+            );
+            let client_setup = self.client.current_client_setup().await?;
+            trace_stream_timing(
+                "anthropic_http_after_client_setup",
+                provider_request_started_at,
+            );
+            let transport = self
+                .client
+                .build_api_transport(&client_setup.api_provider, ANTHROPIC_MESSAGES_ENDPOINT)?;
+            let request_auth_context = AuthRequestTelemetryContext::new(
+                client_setup.auth.as_ref().map(CodexAuth::auth_mode),
+                client_setup.api_auth.as_ref(),
+                client_setup.agent_identity_telemetry.clone(),
+                pending_retry,
+            );
+            let (request_telemetry, sse_telemetry) = Self::build_streaming_telemetry(
+                session_telemetry,
+                request_auth_context,
+                RequestRouteTelemetry::for_endpoint(ANTHROPIC_MESSAGES_ENDPOINT),
+                self.client.state.auth_env_telemetry.clone(),
+            );
+            let mut options = self
+                .build_anthropic_messages_options(responses_metadata)
+                .await;
+            trace_stream_timing(
+                "anthropic_http_before_build_request",
+                provider_request_started_at,
+            );
+            let mut request = self
+                .client
+                .build_anthropic_messages_request_with_history_repair(
+                    prompt,
+                    model_info,
+                    effort.clone(),
+                    signed_thinking_history_retry_used,
+                )?;
+            if payload_retry_used {
+                let payload_report = enforce_anthropic_payload_budget(
+                    &mut request,
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .runtime_policy
+                        .retry_request_body_max_bytes,
+                )?;
+                warn!(
+                    original_bytes = payload_report.original_bytes,
+                    final_bytes = payload_report.final_bytes,
+                    omitted_images = payload_report.omitted_images,
+                    "retrying Anthropic request with stricter payload budget after HTTP 413"
+                );
+            }
+            trace_stream_timing(
+                "anthropic_http_after_build_request",
+                provider_request_started_at,
+            );
+            let inference_trace_attempt = inference_trace.start_attempt();
+            inference_trace_attempt.add_request_headers(&mut options.extra_headers);
+            inference_trace_attempt.record_started(&request);
+            maybe_dump_anthropic_messages_request(&request);
+            let client = ApiAnthropicMessagesClient::new(
+                transport,
+                client_setup.api_provider,
+                client_setup.api_auth,
+            )
+            .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
+            trace_stream_timing(
+                "anthropic_http_before_stream_request",
+                provider_request_started_at,
+            );
+            let stream_result = client.stream_request(request, options).await;
+            trace_stream_timing(
+                if stream_result.is_ok() {
+                    "anthropic_http_stream_request_ok"
+                } else {
+                    "anthropic_http_stream_request_err"
+                },
+                provider_request_started_at,
+            );
+
+            match stream_result {
+                Ok(stream) => {
+                    let (stream, _) = map_response_stream(
+                        stream,
+                        session_telemetry.clone(),
+                        inference_trace_attempt,
+                        Arc::clone(&self.client.state.provider),
+                        None,
+                    );
+                    return Ok(stream);
+                }
+                Err(ApiError::Transport(
+                    unauthorized_transport @ TransportError::Http { status, .. },
+                )) if status == StatusCode::UNAUTHORIZED => {
+                    let response_debug_context =
+                        extract_response_debug_context(&unauthorized_transport);
+                    inference_trace_attempt.record_failed(
+                        &unauthorized_transport,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    pending_retry = PendingUnauthorizedRetry::from_recovery(
+                        handle_unauthorized(
+                            unauthorized_transport,
+                            &mut auth_recovery,
+                            session_telemetry,
+                            &self.client.state.provider,
+                        )
+                        .await?,
+                    );
+                    continue;
+                }
+                Err(err)
+                    if !signed_thinking_history_retry_used
+                        && is_anthropic_signed_thinking_history_rejection(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    warn!(
+                        "Anthropic rejected an incomplete signed-thinking assistant response; \
+                         removing that response from this request and retrying once"
+                    );
+                    signed_thinking_history_retry_used = true;
+                    continue;
+                }
+                Err(err) if !payload_retry_used && is_anthropic_payload_too_large(&err) => {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    warn!(
+                        "Anthropic rejected the request with HTTP 413; pruning additional older \
+                         images and retrying once"
+                    );
+                    payload_retry_used = true;
+                    continue;
+                }
+                Err(err) => {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    return Err(err);
+                }
+            }
+        }
+    }
+
     fn get_incremental_items(
         &self,
         request: &ResponsesApiRequest,
@@ -1857,10 +2539,6 @@ impl ModelClientSession {
         }
     }
 
-    /// Drops every source `prepare_http_server_state_request` can draw a
-    /// `previous_response_id` continuation from, so the next attempt in the
-    /// retry loop rebuilds as a full-context request. Used to self-heal after
-    /// the provider rejects a server-state continuation.
     fn clear_http_server_conversation_state(&mut self) {
         {
             let handle = self.client.server_conversation_state_handle();
@@ -2063,10 +2741,13 @@ impl ModelClientSession {
             trace_stream_timing("chat_http_before_client_setup", provider_request_started_at);
             let client_setup = self.client.current_client_setup().await?;
             trace_stream_timing("chat_http_after_client_setup", provider_request_started_at);
-            let transport = self.client.http_transport();
+            let transport = self
+                .client
+                .build_api_transport(&client_setup.api_provider, CHAT_COMPLETIONS_ENDPOINT)?;
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
+                client_setup.agent_identity_telemetry.clone(),
                 pending_retry,
             );
             let (request_telemetry, sse_telemetry) = Self::build_streaming_telemetry(
@@ -2090,9 +2771,12 @@ impl ModelClientSession {
                 "chat_http_before_build_request",
                 provider_request_started_at,
             );
-            let request =
-                self.client
-                    .build_chat_completions_request(prompt, model_info, effort.clone())?;
+            let request = self.client.build_chat_completions_request(
+                prompt,
+                model_info,
+                effort.clone(),
+                responses_metadata,
+            )?;
             trace_stream_timing("chat_http_after_build_request", provider_request_started_at);
             let inference_trace_attempt = inference_trace.start_attempt();
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
@@ -2124,6 +2808,7 @@ impl ModelClientSession {
                         stream,
                         session_telemetry.clone(),
                         inference_trace_attempt,
+                        Arc::clone(&self.client.state.provider),
                         None,
                     );
                     return Ok(stream);
@@ -2143,6 +2828,7 @@ impl ModelClientSession {
                             unauthorized_transport,
                             &mut auth_recovery,
                             session_telemetry,
+                            &self.client.state.provider,
                         )
                         .await?,
                     );
@@ -2151,7 +2837,7 @@ impl ModelClientSession {
                 Err(err) => {
                     let response_debug_context =
                         extract_response_debug_context_from_api_error(&err);
-                    let err = map_api_error(err);
+                    let err = self.client.state.provider.map_api_error(err);
                     inference_trace_attempt.record_failed(
                         &err,
                         response_debug_context.request_id.as_deref(),
@@ -2234,6 +2920,22 @@ impl ModelClientSession {
                 service_tier.clone(),
                 responses_metadata,
             )?;
+            let logical_request = request.clone();
+            let uses_http_server_state = self.client.state.provider.info().is_vercel();
+            let append_user_turn = self
+                .client
+                .responses_input_needs_synthetic_user_turn(&logical_request.input);
+            if uses_http_server_state {
+                self.prepare_http_server_state_request(
+                    &mut request,
+                    &logical_request,
+                    append_user_turn,
+                );
+            }
+            if append_user_turn && request.previous_response_id.is_none() {
+                append_synthetic_responses_user_turn(&mut request.input);
+            }
+            let request_used_server_state = request.previous_response_id.is_some();
             self.client
                 .prepare_response_items_for_request(&mut request.input);
             let request_session_telemetry =
@@ -2242,10 +2944,6 @@ impl ModelClientSession {
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
             inference_trace_attempt.record_started(&request);
             maybe_dump_responses_request(&request);
-            if uses_http_server_state {
-                self.websocket_session.last_request = Some(logical_request.clone());
-                self.websocket_session.last_response_from_untraced_warmup = false;
-            }
             let client = ApiResponsesClient::new(
                 transport,
                 client_setup.api_provider,
@@ -2274,15 +2972,13 @@ impl ModelClientSession {
                             logical_request.clone(),
                         )
                     });
-                    let (stream, last_response_rx) = map_response_stream(
+                    let (stream, _) = map_response_stream(
                         stream,
                         request_session_telemetry,
                         inference_trace_attempt,
                         Arc::clone(&self.client.state.provider),
+                        server_conversation_update,
                     );
-                    if uses_http_server_state {
-                        self.websocket_session.last_response_rx = Some(last_response_rx);
-                    }
                     return Ok(stream);
                 }
                 Err(ApiError::Transport(
@@ -2312,11 +3008,6 @@ impl ModelClientSession {
                     && request_used_server_state
                     && !server_state_retry_used =>
                 {
-                    // Self-heal: the provider rejected a `previous_response_id`
-                    // continuation (e.g. the Vercel gateway requires a user
-                    // message in `input`). Drop the server-conversation state
-                    // and retry once with a full-context request instead of
-                    // failing the turn.
                     let response_debug_context =
                         extract_response_debug_context(&bad_request_transport);
                     inference_trace_attempt.record_failed(
@@ -2325,8 +3016,7 @@ impl ModelClientSession {
                         /*output_items*/ &[],
                     );
                     warn!(
-                        "server-state responses continuation rejected with 400; \
-                         clearing server conversation state and retrying with full context"
+                        "server-state responses continuation rejected with 400; clearing server conversation state and retrying with full context"
                     );
                     self.clear_http_server_conversation_state();
                     server_state_retry_used = true;
@@ -2527,6 +3217,7 @@ impl ModelClientSession {
                 request_session_telemetry,
                 inference_trace_attempt,
                 Arc::clone(&self.client.state.provider),
+                None,
             );
             self.websocket_session.last_response_rx = Some(last_request_rx);
             return Ok(WebsocketStreamOutcome::Stream(stream));
@@ -2650,7 +3341,7 @@ impl ModelClientSession {
             service_tier,
             responses_metadata,
             inference_trace,
-            1,
+            /*same_turn_attempt_index*/ 1,
         )
         .await
     }
@@ -3024,6 +3715,7 @@ fn append_chat_message_for_response_item(
         | ResponseItem::ToolSearchOutput { .. }
         | ResponseItem::WebSearchCall { .. }
         | ResponseItem::ImageGenerationCall { .. }
+        | ResponseItem::AdditionalTools { .. }
         | ResponseItem::Compaction { .. }
         | ResponseItem::CompactionTrigger { .. }
         | ResponseItem::ContextCompaction { .. }
@@ -3085,7 +3777,9 @@ fn content_items_to_chat_content(content: &[ContentItem]) -> Option<ChatMessageC
             ContentItem::InputImage { image_url, detail } => {
                 Some(chat_image_part(image_url.clone(), *detail))
             }
-            ContentItem::InputText { .. } | ContentItem::OutputText { .. } => None,
+            ContentItem::InputText { .. }
+            | ContentItem::OutputText { .. }
+            | ContentItem::InputAudio { .. } => None,
         })
         .collect::<Vec<_>>();
 
@@ -3107,9 +3801,8 @@ fn chat_tool_result_image_parts(
                 detail,
             } => Some(chat_image_part(image_url.clone(), *detail)),
             codex_protocol::models::FunctionCallOutputContentItem::InputText { .. }
-            | codex_protocol::models::FunctionCallOutputContentItem::EncryptedContent { .. } => {
-                None
-            }
+            | codex_protocol::models::FunctionCallOutputContentItem::EncryptedContent { .. }
+            | codex_protocol::models::FunctionCallOutputContentItem::InputAudio { .. } => None,
         })
         .collect()
 }
@@ -3121,7 +3814,7 @@ fn content_items_to_chat_text(content: &[ContentItem]) -> Option<String> {
             ContentItem::InputText { text } | ContentItem::OutputText { text } => {
                 (!text.trim().is_empty()).then_some(text.as_str())
             }
-            ContentItem::InputImage { .. } => None,
+            ContentItem::InputImage { .. } | ContentItem::InputAudio { .. } => None,
         })
         .collect::<Vec<_>>();
 
@@ -3177,6 +3870,9 @@ fn anthropic_tool_result_content(
                     } => Some(anthropic_image_block(image_url)),
                     codex_protocol::models::FunctionCallOutputContentItem::EncryptedContent {
                         ..
+                    }
+                    | codex_protocol::models::FunctionCallOutputContentItem::InputAudio {
+                        ..
                     } => None,
                 })
                 .collect(),
@@ -3207,6 +3903,35 @@ fn plaintext_collaboration_message(
     ))
 }
 
+/// Keep native `AgentMessage` items in durable Core history while adapting them at the provider
+/// boundary for Responses-compatible endpoints that do not implement OpenAI's collaboration item.
+/// Ordinary user text is the portable external-input role and avoids the synthetic `Continue.`
+/// turn that would otherwise hide the task from the recipient model.
+fn adapt_plaintext_collaboration_messages_for_responses(input: &mut [ResponseItem]) {
+    for item in input {
+        let replacement = match item {
+            ResponseItem::AgentMessage {
+                author,
+                recipient,
+                content,
+                ..
+            } => plaintext_collaboration_message(author, recipient, content).map(|text| {
+                ResponseItem::Message {
+                    id: None,
+                    role: "user".to_string(),
+                    content: vec![ContentItem::InputText { text }],
+                    phase: None,
+                    internal_chat_message_metadata_passthrough: None,
+                }
+            }),
+            _ => None,
+        };
+        if let Some(replacement) = replacement {
+            *item = replacement;
+        }
+    }
+}
+
 fn append_anthropic_message_for_response_item(
     item: ResponseItem,
     messages: &mut Vec<Value>,
@@ -3230,7 +3955,9 @@ fn append_anthropic_message_for_response_item(
                         })
                     }
                     ContentItem::InputImage { image_url, .. } => anthropic_image_block(&image_url),
-                    ContentItem::InputText { .. } | ContentItem::OutputText { .. } => continue,
+                    ContentItem::InputText { .. }
+                    | ContentItem::OutputText { .. }
+                    | ContentItem::InputAudio { .. } => continue,
                 };
                 push_anthropic_message(messages, role, block);
             }
@@ -3336,6 +4063,7 @@ fn append_anthropic_message_for_response_item(
         | ResponseItem::ToolSearchOutput { .. }
         | ResponseItem::WebSearchCall { .. }
         | ResponseItem::ImageGenerationCall { .. }
+        | ResponseItem::AdditionalTools { .. }
         | ResponseItem::Compaction { .. }
         | ResponseItem::CompactionTrigger { .. }
         | ResponseItem::ContextCompaction { .. }
@@ -3754,10 +4482,11 @@ fn anthropic_thinking_for_effort(effort: Option<&ReasoningEffortConfig>) -> Opti
 fn create_tools_json_for_anthropic_messages(
     tools: &[ToolSpec],
     cache_control: &Value,
+    web_search_max_uses: Option<u32>,
 ) -> Result<Vec<Value>> {
     let mut tools = tools
         .iter()
-        .filter_map(tool_spec_to_anthropic_tool)
+        .filter_map(|tool| tool_spec_to_anthropic_tool(tool, web_search_max_uses))
         .collect::<Result<Vec<_>>>()?;
     tools.sort_by_key(|tool| {
         usize::from(
@@ -3784,7 +4513,10 @@ fn mark_last_anthropic_tool_cache_control(tools: &mut [Value], cache_control: &V
     }
 }
 
-fn tool_spec_to_anthropic_tool(tool: &ToolSpec) -> Option<Result<Value>> {
+fn tool_spec_to_anthropic_tool(
+    tool: &ToolSpec,
+    web_search_max_uses: Option<u32>,
+) -> Option<Result<Value>> {
     match tool {
         ToolSpec::Function(_) => Some(serde_json::to_value(tool).map_err(Into::into).and_then(
             |value| {
@@ -3797,14 +4529,17 @@ fn tool_spec_to_anthropic_tool(tool: &ToolSpec) -> Option<Result<Value>> {
         ToolSpec::WebSearch { .. } => Some(Ok(anthropic_web_search_tool_with_type(
             tool,
             ANTHROPIC_WEB_SEARCH_TOOL_TYPE,
+            web_search_max_uses,
         ))),
-        ToolSpec::Namespace(_) | ToolSpec::ToolSearch { .. } | ToolSpec::ImageGeneration { .. } => {
-            None
-        }
+        ToolSpec::Namespace(_) | ToolSpec::ToolSearch { .. } => None,
     }
 }
 
-fn anthropic_web_search_tool_with_type(tool: &ToolSpec, tool_type: &str) -> Value {
+fn anthropic_web_search_tool_with_type(
+    tool: &ToolSpec,
+    tool_type: &str,
+    web_search_max_uses: Option<u32>,
+) -> Value {
     let ToolSpec::WebSearch {
         filters,
         user_location,
@@ -3817,7 +4552,9 @@ fn anthropic_web_search_tool_with_type(tool: &ToolSpec, tool_type: &str) -> Valu
     let mut object = serde_json::Map::new();
     object.insert("type".to_string(), json!(tool_type));
     object.insert("name".to_string(), json!("web_search"));
-    object.insert("max_uses".to_string(), json!(ANTHROPIC_WEB_SEARCH_MAX_USES));
+    if let Some(max_uses) = web_search_max_uses {
+        object.insert("max_uses".to_string(), json!(max_uses));
+    }
     object.insert("allowed_callers".to_string(), json!(["direct"]));
     if let Some(filters) = filters
         && let Some(allowed_domains) = filters.allowed_domains.as_ref()
@@ -3901,10 +4638,7 @@ fn tool_spec_to_chat_tool(
         )),
         ToolSpec::Freeform(tool) => Some(Ok(freeform_tool_to_chat_tool(tool, strip_strict))),
         ToolSpec::WebSearch { .. } if zai_native_web_search => Some(Ok(zai_web_search_tool())),
-        ToolSpec::Namespace(_)
-        | ToolSpec::ToolSearch { .. }
-        | ToolSpec::ImageGeneration { .. }
-        | ToolSpec::WebSearch { .. } => None,
+        ToolSpec::Namespace(_) | ToolSpec::ToolSearch { .. } | ToolSpec::WebSearch { .. } => None,
     }
 }
 
@@ -4070,6 +4804,7 @@ fn map_response_stream(
     session_telemetry: SessionTelemetry,
     inference_trace_attempt: InferenceTraceAttempt,
     provider: SharedModelProvider,
+    server_conversation_update: Option<(SharedServerConversationState, ResponsesApiRequest)>,
 ) -> (ResponseStream, oneshot::Receiver<LastResponse>) {
     let codex_api::ResponseStream {
         rx_event,
@@ -4079,21 +4814,23 @@ fn map_response_stream(
         rx_event,
         upstream_request_id: None,
     };
-    map_response_events(
+    map_response_events_with_server_state(
         upstream_request_id,
         api_stream,
         session_telemetry,
         inference_trace_attempt,
         provider,
+        server_conversation_update,
     )
 }
 
-fn map_response_events<S>(
+fn map_response_events_with_server_state<S>(
     upstream_request_id: Option<String>,
     api_stream: S,
     session_telemetry: SessionTelemetry,
     inference_trace_attempt: InferenceTraceAttempt,
     provider: SharedModelProvider,
+    server_conversation_update: Option<(SharedServerConversationState, ResponsesApiRequest)>,
 ) -> (ResponseStream, oneshot::Receiver<LastResponse>)
 where
     S: futures::Stream<Item = std::result::Result<ResponseEvent, ApiError>>
@@ -4261,6 +4998,30 @@ where
             consumer_dropped: consumer_dropped_for_stream,
         },
         rx_last_response,
+    )
+}
+
+#[cfg(test)]
+fn map_response_events<S>(
+    upstream_request_id: Option<String>,
+    api_stream: S,
+    session_telemetry: SessionTelemetry,
+    inference_trace_attempt: InferenceTraceAttempt,
+    provider: SharedModelProvider,
+) -> (ResponseStream, oneshot::Receiver<LastResponse>)
+where
+    S: futures::Stream<Item = std::result::Result<ResponseEvent, ApiError>>
+        + Unpin
+        + Send
+        + 'static,
+{
+    map_response_events_with_server_state(
+        upstream_request_id,
+        api_stream,
+        session_telemetry,
+        inference_trace_attempt,
+        provider,
+        None,
     )
 }
 

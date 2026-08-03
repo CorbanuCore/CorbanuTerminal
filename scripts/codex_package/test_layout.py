@@ -16,7 +16,7 @@ from codex_package.targets import TARGET_SPECS
 
 class PackageLayoutTest(unittest.TestCase):
     def test_macos_package_preserves_prebuilt_resource_binaries(self) -> None:
-        for variant_name in ("codex", "codex-app-server"):
+        for variant_name in ("pfterminal", "codex", "codex-app-server"):
             for target in ("aarch64-apple-darwin", "x86_64-apple-darwin"):
                 with self.subTest(variant=variant_name, target=target):
                     with tempfile.TemporaryDirectory() as temp_dir:
@@ -36,6 +36,12 @@ class PackageLayoutTest(unittest.TestCase):
                             code_mode_host_bin=touch_executable(
                                 root / "codex-code-mode-host"
                             ),
+                            extra_bins={
+                                extra.entrypoint_name(spec): touch_executable(
+                                    root / extra.entrypoint_name(spec)
+                                )
+                                for extra in variant.extra_binaries
+                            },
                             rg_bin=rg_bin,
                             zsh_bin=zsh_bin,
                             bwrap_bin=None,
@@ -73,6 +79,7 @@ class PackageLayoutTest(unittest.TestCase):
             inputs = PackageInputs(
                 entrypoint_bin=touch_executable(root / "codex-app-server"),
                 code_mode_host_bin=touch_executable(root / "codex-code-mode-host"),
+                extra_bins={},
                 rg_bin=touch_executable(root / "rg"),
                 zsh_bin=None,
                 bwrap_bin=touch_executable(root / "bwrap"),

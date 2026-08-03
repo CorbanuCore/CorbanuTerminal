@@ -28,6 +28,8 @@ use codex_features::Feature;
 use codex_model_provider::create_model_provider;
 use codex_model_provider_info::AMAZON_BEDROCK_GPT_5_4_MODEL_ID;
 use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
+use codex_model_provider_info::DEEPSEEK_DEFAULT_MODEL;
+use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_models_manager::manager::StaticModelsManager;
@@ -241,7 +243,7 @@ fn apply_guardian_mock_turn_config(turn: &mut TurnContext, config: Arc<Config>) 
         GUARDIAN_TEST_MODEL,
         &config.to_models_manager_config(),
     );
-    turn.collaboration_mode.settings.model = GUARDIAN_TEST_MODEL.to_string();
+    turn.model_info.slug = GUARDIAN_TEST_MODEL.to_string();
 }
 
 async fn guardian_test_session_turn_and_rx(
@@ -3019,6 +3021,92 @@ async fn guardian_review_session_config_preserves_context_overrides_for_same_eff
             guardian_config.model_auto_compact_token_limit,
         ),
         (Some(128_000), Some(100_000))
+    );
+}
+
+#[tokio::test]
+async fn guardian_review_session_config_keeps_deepseek_review_on_deepseek() {
+    let (mut session, mut turn) = crate::session::tests::make_session_and_context().await;
+    let mut config = (*turn.config).clone();
+    config.model = Some(DEEPSEEK_DEFAULT_MODEL.to_string());
+    config.model_provider_id = DEEPSEEK_PROVIDER_ID.to_string();
+    config.model_provider = ModelProviderInfo::create_deepseek_provider();
+    let config = Arc::new(config);
+    session.services.models_manager = test_support::models_manager_with_provider(
+        config.codex_home.to_path_buf(),
+        Arc::clone(&session.services.auth_manager),
+        config.model_provider.clone(),
+    );
+    turn.config = Arc::clone(&config);
+    turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
+    turn.model_info = construct_model_info_offline_for_tests(
+        DEEPSEEK_DEFAULT_MODEL,
+        &config.to_models_manager_config(),
+    );
+
+    let guardian_config = guardian_review_session_config(&session, &turn)
+        .await
+        .expect("DeepSeek guardian config")
+        .spawn_config;
+    let mut expected_provider = ModelProviderInfo::create_deepseek_provider();
+    expected_provider.request_max_retries = Some(1);
+    expected_provider.stream_max_retries = Some(1);
+
+    assert_eq!(
+        (
+            guardian_config.model,
+            guardian_config.model_provider_id,
+            guardian_config.model_provider,
+        ),
+        (
+            Some(DEEPSEEK_DEFAULT_MODEL.to_string()),
+            DEEPSEEK_PROVIDER_ID.to_string(),
+            expected_provider,
+        )
+    );
+}
+
+#[tokio::test]
+async fn guardian_review_session_config_uses_active_model_for_unknown_provider() {
+    let (mut session, mut turn) = crate::session::tests::make_session_and_context().await;
+    let mut config = (*turn.config).clone();
+    config.model = Some("custom-active-model".to_string());
+    config.model_provider_id = "custom-provider".to_string();
+    config.model_provider = ModelProviderInfo {
+        name: "Custom Provider".to_string(),
+        base_url: Some("https://custom-provider.example/v1".to_string()),
+        ..ModelProviderInfo::default()
+    };
+    let config = Arc::new(config);
+    let parent_model = construct_model_info_offline_for_tests(
+        "custom-active-model",
+        &config.to_models_manager_config(),
+    );
+    let openai_hidden_model = construct_model_info_offline_for_tests(
+        codex_model_provider::DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL,
+        &config.to_models_manager_config(),
+    );
+    session.services.models_manager = Arc::new(StaticModelsManager::new(
+        Some(Arc::clone(&session.services.auth_manager)),
+        ModelsResponse {
+            models: vec![parent_model.clone(), openai_hidden_model],
+        },
+    ));
+    turn.config = Arc::clone(&config);
+    turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
+    turn.model_info = parent_model;
+
+    let guardian_config = guardian_review_session_config(&session, &turn)
+        .await
+        .expect("custom-provider guardian config")
+        .spawn_config;
+
+    assert_eq!(
+        (guardian_config.model, guardian_config.model_provider_id,),
+        (
+            Some("custom-active-model".to_string()),
+            "custom-provider".to_string(),
+        )
     );
 }
 

@@ -245,7 +245,7 @@ impl From<ThreadStartResponse> for ThreadSpawnAgentResponse {
             sandbox: response.sandbox,
             active_permission_profile: response.active_permission_profile,
             reasoning_effort: response.reasoning_effort,
-            multi_agent_mode: response.multi_agent_mode,
+            multi_agent_mode: Some(response.multi_agent_mode),
         }
     }
 }
@@ -1624,6 +1624,32 @@ pub struct ThreadItemsListResponse {
     pub next_cursor: Option<String>,
     /// Opaque cursor to pass as `cursor` when reversing `sortDirection`.
     /// This is only populated when the page contains at least one item.
+    pub backwards_cursor: Option<String>,
+}
+
+/// Released compatibility request for listing the items in one turn.
+/// New clients should use `thread/items/list` with `turn_id` populated.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadTurnsItemsListParams {
+    pub thread_id: String,
+    pub turn_id: String,
+    #[ts(optional = nullable)]
+    pub cursor: Option<String>,
+    #[ts(optional = nullable)]
+    pub limit: Option<u32>,
+    #[ts(optional = nullable)]
+    pub sort_direction: Option<SortDirection>,
+}
+
+/// Released compatibility response for `thread/turns/items/list`.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadTurnsItemsListResponse {
+    pub data: Vec<ThreadItem>,
+    pub next_cursor: Option<String>,
     pub backwards_cursor: Option<String>,
 }
 

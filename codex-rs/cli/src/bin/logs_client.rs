@@ -130,13 +130,11 @@ async fn main() -> anyhow::Result<()> {
 
 async fn resolve_sqlite_config(args: &Args) -> anyhow::Result<SqliteConfig> {
     if let Some(db_path) = args.db.as_ref() {
+        let db_path = AbsolutePathBuf::relative_to_current_dir(db_path)?;
         let sqlite_home = db_path
             .parent()
-            .map(ToOwned::to_owned)
-            .unwrap_or_else(|| PathBuf::from("."));
-        return Ok(SqliteConfig::from_sqlite_home(
-            AbsolutePathBuf::relative_to_current_dir(sqlite_home)?,
-        ));
+            .ok_or_else(|| anyhow::anyhow!("logs database path has no parent directory"))?;
+        return Ok(SqliteConfig::from_sqlite_home(sqlite_home).with_logs_db_path(db_path));
     }
 
     let mut config_builder = ConfigBuilder::default();

@@ -40,6 +40,8 @@ pub(crate) struct AgentMetadata {
     pub(crate) agent_path: Option<AgentPath>,
     pub(crate) agent_nickname: Option<String>,
     pub(crate) agent_role: Option<String>,
+    pub(crate) last_task_message: Option<String>,
+    pub(crate) last_result_message: Option<String>,
 }
 
 fn format_agent_nickname(name: &str, nickname_reset_count: usize) -> String {
@@ -203,7 +205,51 @@ impl AgentRegistry {
             .collect()
     }
 
-    fn register_spawned_thread(&self, agent_metadata: AgentMetadata) {
+    pub(crate) fn update_last_task_message(&self, thread_id: ThreadId, message: String) {
+        let mut active_agents = self
+            .active_agents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let path = active_agents.thread_paths.get(&thread_id).cloned();
+        if let Some(metadata) = path.and_then(|path| active_agents.agent_tree.get_mut(&path)) {
+            metadata.last_task_message = Some(message);
+        }
+    }
+
+    pub(crate) fn clear_last_task_message(&self, thread_id: ThreadId) {
+        let mut active_agents = self
+            .active_agents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let path = active_agents.thread_paths.get(&thread_id).cloned();
+        if let Some(metadata) = path.and_then(|path| active_agents.agent_tree.get_mut(&path)) {
+            metadata.last_task_message = None;
+        }
+    }
+
+    pub(crate) fn update_last_result_message(&self, thread_id: ThreadId, message: String) {
+        let mut active_agents = self
+            .active_agents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let path = active_agents.thread_paths.get(&thread_id).cloned();
+        if let Some(metadata) = path.and_then(|path| active_agents.agent_tree.get_mut(&path)) {
+            metadata.last_result_message = Some(message);
+        }
+    }
+
+    pub(crate) fn clear_last_result_message(&self, thread_id: ThreadId) {
+        let mut active_agents = self
+            .active_agents
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let path = active_agents.thread_paths.get(&thread_id).cloned();
+        if let Some(metadata) = path.and_then(|path| active_agents.agent_tree.get_mut(&path)) {
+            metadata.last_result_message = None;
+        }
+    }
+
+    pub(crate) fn register_spawned_thread(&self, agent_metadata: AgentMetadata) {
         let Some(thread_id) = agent_metadata.agent_id else {
             return;
         };
@@ -245,7 +291,8 @@ impl AgentRegistry {
             .active_agents
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let is_new_non_root = !active_agents.agent_tree.contains_key(&key)
+        let is_new_non_root = !active_agents.thread_paths.contains_key(&thread_id)
+            && !active_agents.agent_tree.contains_key(&key)
             && !agent_metadata
                 .agent_path
                 .as_ref()
@@ -253,7 +300,17 @@ impl AgentRegistry {
         if let Some(agent_nickname) = agent_metadata.agent_nickname.clone() {
             active_agents.used_agent_nicknames.insert(agent_nickname);
         }
-        active_agents.agent_tree.insert(key, agent_metadata);
+        if let Some(previous_key) = active_agents.thread_paths.insert(thread_id, key.clone())
+            && previous_key != key
+        {
+            active_agents.agent_tree.remove(previous_key.as_str());
+        }
+        if let Some(previous_metadata) = active_agents.agent_tree.insert(key, agent_metadata)
+            && let Some(previous_thread_id) = previous_metadata.agent_id
+            && previous_thread_id != thread_id
+        {
+            active_agents.thread_paths.remove(&previous_thread_id);
+        }
         drop(active_agents);
         if is_new_non_root {
             self.total_count.fetch_add(1, Ordering::AcqRel);

@@ -9,7 +9,8 @@ impl AgentControl {
         agent_id: ThreadId,
     ) -> CodexResult<()> {
         let state = self.upgrade()?;
-        let Some(state_db) = state.state_db() else {
+        let thread = state.get_thread(agent_id).await?;
+        let Some(state_db) = thread.state_db() else {
             return Ok(());
         };
         let messages = state_db
@@ -20,7 +21,6 @@ impl AgentControl {
                     "failed to read recoverable mailbox for agent {agent_id}: {err}"
                 ))
             })?;
-        let thread = state.get_thread(agent_id).await?;
         for message in messages {
             let message_id = message.communication.message_id.clone().ok_or_else(|| {
                 CodexErr::Fatal(format!(
@@ -45,7 +45,6 @@ impl AgentControl {
                 }
                 AgentMailboxPhase::Submitted => {
                     if thread
-                        .codex
                         .session
                         .has_applied_agent_message_id(&message_id)
                         .await
@@ -114,8 +113,12 @@ impl AgentControl {
                 | AgentMailboxPhase::Cancelled
                 | AgentMailboxPhase::TerminalFailure => continue,
             }
-            self.send_inter_agent_communication(agent_id, message.communication)
-                .await?;
+            self.send_persisted_inter_agent_communication(
+                agent_id,
+                message.communication,
+                /*parent_turn_id*/ None,
+            )
+            .await?;
         }
         Ok(())
     }
@@ -132,7 +135,8 @@ impl AgentControl {
             CodexErr::InvalidRequest("agent mailbox message has no message_id".to_string())
         })?;
         let state = self.upgrade()?;
-        let Some(state_db) = state.state_db() else {
+        let thread = state.get_thread(agent_id).await?;
+        let Some(state_db) = thread.state_db() else {
             return Ok(());
         };
         let admission = state_db
@@ -165,10 +169,11 @@ impl AgentControl {
         Ok(())
     }
 
-    pub(crate) async fn send_inter_agent_communication(
+    pub(crate) async fn send_persisted_inter_agent_communication(
         &self,
         agent_id: ThreadId,
         mut communication: InterAgentCommunication,
+        parent_turn_id: Option<String>,
     ) -> CodexResult<String> {
         let message_id = communication.ensure_message_identity().to_string();
         communication
@@ -183,7 +188,11 @@ impl AgentControl {
         }
         let last_task_message = last_task_message_from_communication(&communication);
         let state = self.upgrade()?;
-        let state_db = state.state_db();
+        let state_db = state
+            .get_thread(agent_id)
+            .await
+            .ok()
+            .and_then(|thread| thread.state_db());
         if let Some(state_db) = state_db.as_ref() {
             let admission = state_db
                 .admit_agent_message(
@@ -284,7 +293,17 @@ impl AgentControl {
             communication: communication.clone(),
         };
         let result = self
-            .handle_thread_request_result(agent_id, &state, state.send_op(agent_id, op).await)
+            .handle_thread_request_result(
+                agent_id,
+                &state,
+                state
+                    .send_op(
+                        agent_id,
+                        op,
+                        parent_turn_id.filter(|_| communication.trigger_turn),
+                    )
+                    .await,
+            )
             .await;
         match &result {
             Ok(_) => {

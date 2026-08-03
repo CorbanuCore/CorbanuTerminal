@@ -18,6 +18,7 @@ use ratatui::text::Line;
 use ratatui::text::Span;
 
 use codex_vault::Vault;
+use codex_vault::VaultKeyStorage;
 use codex_vault::format_timestamp;
 
 /// The result of parsing a `/vault` invocation, rendered into display lines for the chat history.
@@ -69,11 +70,12 @@ pub fn handle_vault_command_with_vault(args: &str, vault: &Vault) -> Vec<Line<'s
                         }
                     }
                 }
-                "reveal" | "export" => {
-                    // These surface the raw secret. v0 does not print secrets to chat history
-                    // (which would enter the transcript). Route to the secure reveal flow.
-                    secure_reveal_hint_lines(action)
-                }
+                "reveal" | "export" => match (parts.next(), parts.next()) {
+                    (Some(label), None) => secure_reveal_hint_lines(action, label),
+                    _ => usage_error(format!(
+                        "/vault credential {action} <label> — exactly one label is required"
+                    )),
+                },
                 "help" | "h" | "?" => help_lines(),
                 other => usage_error(format!(
                     "Unknown `/vault credential {other}` subcommand. Try `/vault help`."
@@ -119,7 +121,7 @@ fn help_lines() -> Vec<Line<'static>> {
         ),
         (
             "/vault unlock",
-            "the vault is unlocked via the OS keyring (no password)",
+            "the vault unlocks through its protected key source (no chat password)",
         ),
         (
             "/vault lock",
@@ -142,9 +144,16 @@ fn status_lines(vault: &Vault) -> Vec<Line<'static>> {
     match vault.list() {
         Ok(entries) => {
             let count = entries.len();
+            let key_source = match vault.key_storage() {
+                VaultKeyStorage::NotInitialized => "not initialized",
+                VaultKeyStorage::OperatingSystemKeyring => "OS keyring",
+                VaultKeyStorage::LocalFileFallback => "local protected fallback (0600)",
+                VaultKeyStorage::ConfiguredKeyring => "configured keyring",
+            };
             vec![
                 Line::from(vec!["Vault status".bold().cyan()]),
-                Line::from(vec!["  state:      ".dim(), "unlocked (OS keyring)".into()]),
+                Line::from(vec!["  state:      ".dim(), "available".into()]),
+                Line::from(vec!["  key source: ".dim(), key_source.into()]),
                 Line::from(vec![
                     "  backend:    ".dim(),
                     "encrypted (age + keyring passphrase)".into(),
@@ -263,7 +272,7 @@ fn credential_add_hint_lines() -> Vec<Line<'static>> {
     ]
 }
 
-fn secure_reveal_hint_lines(action: &str) -> Vec<Line<'static>> {
+fn secure_reveal_hint_lines(action: &str, label: &str) -> Vec<Line<'static>> {
     vec![
         Line::from(vec![format!("Vault credential {action}").bold().cyan()]),
         Line::from(""),
@@ -273,7 +282,9 @@ fn secure_reveal_hint_lines(action: &str) -> Vec<Line<'static>> {
         ]),
         Line::from(""),
         Line::from(vec![
-            "TODO(vault): open a secure reveal/export modal for the requested label.".dim(),
+            "The interactive TUI opens the secure view for credential ".dim(),
+            Span::from(label.to_string()).cyan(),
+            ". Non-interactive parsing never emits the secret.".dim(),
         ]),
     ]
 }
@@ -283,12 +294,12 @@ fn lock_status_lines() -> Vec<Line<'static>> {
         Line::from(vec!["Vault lock state".bold().cyan()]),
         Line::from(""),
         Line::from(vec![
-            "v0 unlock is implicit per session: the OS keyring passphrase gates decryption, ".dim(),
+            "v0 unlock is implicit per session: the protected key source gates decryption, ".dim(),
             "so there is no separate password to type.".dim(),
         ]),
         Line::from(""),
         Line::from(vec![
-            "While the keyring is available, the vault stays unlocked for the session ".dim(),
+            "While that key source is available, the vault stays unlocked for the session ".dim(),
             "and credentials resolve by label without re-entry.".dim(),
         ]),
     ]
@@ -352,8 +363,16 @@ mod tests {
         let dir = tempdir().unwrap();
         let vault = vault_with_entry(dir.path());
         let lines = handle_vault_command_with_vault("status", &vault);
-        assert_contains(&lines, "unlocked (OS keyring)");
+        assert_contains(&lines, "available");
+        assert_contains(&lines, "configured keyring");
         assert_contains(&lines, "credentials");
+    }
+
+    #[test]
+    fn status_reports_uninitialized_default_storage_truthfully() {
+        let dir = tempdir().unwrap();
+        let lines = handle_vault_command(dir.path(), "status");
+        assert_contains(&lines, "not initialized");
     }
 
     #[test]
@@ -427,7 +446,7 @@ mod tests {
         for action in ["reveal", "export"] {
             let lines = handle_vault_command(Path::new("/tmp"), &format!("credential {action} x"));
             assert_contains(&lines, "secure popout");
-            assert_contains(&lines, "TODO(vault)");
+            assert_contains(&lines, "interactive TUI opens the secure view");
         }
     }
 

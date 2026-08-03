@@ -1,6 +1,7 @@
 # MkDocs Terminal Viewer
 
-Status: Milestone 1 source navigator implemented; live reload, search,
+Status: Source navigator, bounded full-text filtering, internal-link navigation,
+history, anchors, and packaged offline fallback implemented. Live reload,
 agent-facing docs APIs, and optional `mkdocs serve` remain planned.
 
 ## Problem Statement
@@ -28,10 +29,13 @@ Add a terminal-native MkDocs viewer to PFTerminal. From inside PFTerminal:
 ```
 
 The implemented source navigator discovers the current MkDocs project, displays
-a page index beside the rendered Markdown page, supports direct page hints, and
-supports explicit config/docs-dir selection. The longer-term viewer should add
-live reload and expose an agent-control API so agents can open docs pages or
-search docs without shelling out to broad filesystem commands.
+a page index beside the rendered Markdown page, supports direct page hints,
+bounded path/content filtering, internal link and anchor navigation, back/forward
+history, and explicit config/docs-dir selection. An npm-managed installation
+falls back to the packaged offline copy of this same MkDocs tree when the current
+workspace has no MkDocs project. The longer-term viewer should add live reload
+and expose an agent-control API so agents can open docs pages or search docs
+without shelling out to broad filesystem commands.
 
 ## Non-Goals
 
@@ -149,8 +153,9 @@ Recommended keybindings:
 | `PgDown` / `PgUp` | page down/up |
 | `g` / `G` | top/bottom |
 | `Tab` | switch focus between nav and page |
-| `Enter` | open selected nav item or link |
-| `b` | back |
+| `Enter` | open the selected nav item; in page focus open the link picker |
+| `o` | open the current page's link picker |
+| `b` / `f` | back/forward through followed-link history |
 | `/` | search docs |
 | `n` / `N` | next/previous search hit |
 | `r` | reload current project |
@@ -182,12 +187,22 @@ pfterminal docs serve --dev-addr 127.0.0.1:8123
 /docs --docs-dir /home/pfrpc/repos/PfTerminal/docs exec.md
 ```
 
-The viewer has two focus modes. In index mode, use `j`/`k` or arrow keys to
+The viewer has two primary focus modes. In index mode, use `j`/`k` or arrow keys to
 move through the page index, `/` to filter the page index, and `Enter` or
 Right-arrow to read the selected page. In page mode, use `j`/`k` or arrow keys
 to scroll the rendered page by one line, `Ctrl+d`/`Ctrl+u` to scroll by half a
 page, `Ctrl+f`/`Ctrl+b` or Space to scroll by a page, and `Esc`, Left-arrow, or
-Tab to return to the page index. `q` closes the viewer.
+Tab to return to the page index. `Enter` or `o` opens a bounded link picker;
+internal relative, site-absolute, extensionless/directory, generated-heading,
+explicit-heading, and HTML-anchor targets stay inside the known docs tree.
+`b` and `f` navigate followed-link history. `/` filters the known page set by
+path and bounded page content without shelling out. `q` closes the viewer.
+
+When launched by the npm wrapper, `CODEX_MANAGED_PACKAGE_ROOT` identifies the
+installed package. Bare `/docs` prefers the nearest workspace `mkdocs.yml`, then
+falls back to `<package-root>/mkdocs.yml` and its packaged `docs/` tree. If
+neither exists, the chat shows a reinstall or explicit `--config` recovery
+instruction.
 
 ### Agent API
 
@@ -352,8 +367,13 @@ from raw Markdown. For that case, add an optional validation mode:
 - After selecting a page, arrow keys and `j`/`k` scroll the page by one line
   until the user returns to the page index.
 - Page-index filtering is interactive and does not run broad shell searches.
+- Page filtering matches bounded content as well as paths.
+- A page link picker follows internal links, resolves MkDocs paths and anchors,
+  and supports back/forward history without escaping `docs_dir`.
+- The npm staging artifact contains `mkdocs.yml` plus `docs/`, and bare `/docs`
+  can load that offline tree through managed-package-root provenance.
 - Missing MkDocs config, missing `docs_dir`, or invalid page hints produce a
-  concise error in the chat view.
+  concise error in the chat view immediately, without waiting for another key.
 
 The remaining gates describe the full target product and are not all satisfied
 by the Milestone 1 implementation.

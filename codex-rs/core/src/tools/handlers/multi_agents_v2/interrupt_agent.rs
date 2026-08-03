@@ -1,6 +1,9 @@
 use super::*;
+use crate::agent_communication::AgentCommunicationContext;
+use crate::agent_communication::AgentCommunicationKind;
 use crate::tools::handlers::multi_agents_spec::create_interrupt_agent_tool_v2;
 use codex_protocol::error::CodexErrorDetails;
+use codex_protocol::models::ResponseItemMetadata;
 use codex_tools::ToolSpec;
 
 pub(crate) struct Handler;
@@ -36,12 +39,16 @@ async fn handle_interrupt_agent(
     ensure_manager_tool_allowed(&turn, "interrupt_agent")?;
     let arguments = function_arguments(payload)?;
     let args: InterruptAgentArgs = parse_arguments(&arguments)?;
-    let reason = args.reason.trim();
-    if reason.is_empty() {
-        return Err(FunctionCallError::RespondToModel(
-            "interrupt reason must not be empty".to_string(),
-        ));
-    }
+    // OpenAI's reserved collaboration schema exposes only `target`. Keep the richer PF reason
+    // outside that wire contract and synthesize a truthful audit reason when the native call does
+    // not provide one. Provider-neutral callers may still supply the explicit reason exposed by
+    // their superset schema.
+    let reason = args
+        .reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|reason| !reason.is_empty())
+        .unwrap_or("Native collaboration interrupt requested");
     let superseding_task = args
         .superseding_task
         .map(|task| task.trim().to_string())
@@ -128,6 +135,35 @@ async fn handle_interrupt_agent(
         Err(err) => Err(collab_agent_error(agent_id, err)),
     };
     result?;
+    if !matches!(status, AgentStatus::NotFound | AgentStatus::Unloaded) {
+        // The runtime owns this plaintext audit record. Keep it typed as a control request so the
+        // target pane and durable mailbox retain the full actor/reason/process tuple.
+        let mut communication = InterAgentCommunication::new(
+            actor_path,
+            receiver_agent_path.clone(),
+            Vec::new(),
+            format!("CONTROL EVENT — INTERRUPT\n{audit_copy}"),
+            /*trigger_turn*/ true,
+        )
+        .with_kind(codex_protocol::protocol::AgentMessageKind::ControlRequest);
+        communication
+            .metadata
+            .get_or_insert_with(ResponseItemMetadata::default)
+            .source_call_id = Some(call_id.clone());
+        let context =
+            AgentCommunicationContext::new(AgentCommunicationKind::Message, session.thread_id);
+        session
+            .services
+            .agent_control
+            .send_inter_agent_communication(
+                agent_id,
+                communication,
+                context,
+                Some(turn.sub_id.clone()),
+            )
+            .await
+            .map_err(|err| collab_agent_error(agent_id, err))?;
+    }
     emit_sub_agent_activity(
         &session,
         &turn,
@@ -160,7 +196,7 @@ impl CoreToolRuntime for Handler {
 #[serde(deny_unknown_fields)]
 struct InterruptAgentArgs {
     target: String,
-    reason: String,
+    reason: Option<String>,
     superseding_task: Option<String>,
 }
 
@@ -189,5 +225,31 @@ impl ToolOutput for InterruptAgentResult {
 
     fn code_mode_result(&self, _payload: &ToolPayload) -> JsonValue {
         tool_output_code_mode_result(self, "interrupt_agent")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::InterruptAgentArgs;
+
+    #[test]
+    fn accepts_openai_reserved_target_only_arguments() {
+        let args: InterruptAgentArgs =
+            serde_json::from_str(r#"{"target":"/root/worker"}"#).expect("target-only args");
+
+        assert_eq!(args.target, "/root/worker");
+        assert_eq!(args.reason, None);
+        assert_eq!(args.superseding_task, None);
+    }
+
+    #[test]
+    fn retains_provider_neutral_interrupt_metadata() {
+        let args: InterruptAgentArgs = serde_json::from_str(
+            r#"{"target":"/root/worker","reason":"new priority","superseding_task":"task-2"}"#,
+        )
+        .expect("provider-neutral args");
+
+        assert_eq!(args.reason.as_deref(), Some("new priority"));
+        assert_eq!(args.superseding_task.as_deref(), Some("task-2"));
     }
 }

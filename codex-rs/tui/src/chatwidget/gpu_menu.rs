@@ -354,6 +354,8 @@ impl ChatWidget {
                     ..Default::default()
                 },
             ],
+            initial_selected_idx: Some(1),
+            allow_number_shortcuts: false,
             ..Default::default()
         });
     }
@@ -422,6 +424,7 @@ impl ChatWidget {
             )),
             items,
             is_searchable: false,
+            allow_number_shortcuts: false,
             ..Default::default()
         });
     }

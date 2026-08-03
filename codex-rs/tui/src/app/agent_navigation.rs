@@ -123,6 +123,8 @@ impl AgentNavigationState {
             self.order.push(thread_id);
         }
         let (
+            previous_agent_nickname,
+            previous_agent_role,
             previous_agent_path,
             previous_model,
             previous_last_task_message,
@@ -133,6 +135,8 @@ impl AgentNavigationState {
             .get(&thread_id)
             .map(|entry| {
                 (
+                    entry.agent_nickname.clone(),
+                    entry.agent_role.clone(),
                     entry.agent_path.clone(),
                     entry.model.clone(),
                     entry.last_task_message.clone(),
@@ -140,12 +144,14 @@ impl AgentNavigationState {
                     entry.is_running,
                 )
             })
-            .unwrap_or((None, None, None, None, false));
+            .unwrap_or((None, None, None, None, None, None, false));
         self.threads.insert(
             thread_id,
             AgentPickerThreadEntry {
-                agent_nickname,
-                agent_role,
+                // Partial liveness/status projections frequently omit display metadata. Missing
+                // fields are not deletion instructions; explicit setters own intentional clears.
+                agent_nickname: agent_nickname.or(previous_agent_nickname),
+                agent_role: agent_role.or(previous_agent_role),
                 agent_path: previous_agent_path,
                 model: previous_model,
                 last_task_message: previous_last_task_message,
@@ -174,6 +180,15 @@ impl AgentNavigationState {
                     is_closed: false,
                 });
         entry.agent_path = Some(activity.agent_path);
+        if activity.agent_nickname.is_some() {
+            entry.agent_nickname = activity.agent_nickname;
+        }
+        if activity.agent_role.is_some() {
+            entry.agent_role = activity.agent_role;
+        }
+        if activity.task_preview.is_some() {
+            entry.last_task_message = activity.task_preview;
+        }
         if activity.is_running_hint
             && !entry.is_closed
             && !self.stopped_threads.contains(&activity.thread_id)
@@ -556,6 +571,24 @@ mod tests {
             state.ordered_thread_ids(),
             vec![main_thread_id, first_agent_id, second_agent_id]
         );
+    }
+
+    #[test]
+    fn upsert_with_partial_metadata_preserves_existing_display_identity() {
+        let (mut state, _main_thread_id, first_agent_id, _second_agent_id) = populated_state();
+
+        state.upsert(
+            first_agent_id,
+            /*agent_nickname*/ None,
+            /*agent_role*/ None,
+            /*is_closed*/ false,
+        );
+
+        let entry = state
+            .get(&first_agent_id)
+            .expect("agent should remain cached");
+        assert_eq!(entry.agent_nickname.as_deref(), Some("Robie"));
+        assert_eq!(entry.agent_role.as_deref(), Some("explorer"));
     }
 
     #[test]

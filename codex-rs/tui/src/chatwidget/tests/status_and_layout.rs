@@ -1550,13 +1550,13 @@ async fn rate_limit_switch_prompt_shows_once_per_session() {
     chat.maybe_show_pending_rate_limit_prompt();
     assert!(matches!(
         chat.rate_limit_switch_prompt,
-        RateLimitSwitchPromptState::Idle
+        RateLimitSwitchPromptState::Shown
     ));
 
     chat.on_rate_limit_snapshot(Some(snapshot(/*percent*/ 95.0)));
     assert!(matches!(
         chat.rate_limit_switch_prompt,
-        RateLimitSwitchPromptState::Idle
+        RateLimitSwitchPromptState::Shown
     ));
 }
 
@@ -1614,6 +1614,9 @@ async fn rate_limit_switch_prompt_respects_hidden_notice() {
 async fn rate_limit_switch_prompt_does_not_defer_without_visible_nudge_model() {
     let (mut chat, _, _) = make_chatwidget_manual(Some("gpt-5")).await;
     chat.has_chatgpt_account = true;
+    let mut models = chat.model_catalog.try_list_models().expect("model catalog");
+    models.retain(|preset| preset.model != NUDGE_MODEL_SLUG);
+    chat.model_catalog = Arc::new(ModelCatalog::new(models));
 
     chat.bottom_pane.set_task_running(/*running*/ true);
     chat.on_rate_limit_snapshot(Some(snapshot(/*percent*/ 90.0)));
@@ -1634,6 +1637,9 @@ async fn rate_limit_switch_prompt_does_not_defer_without_visible_nudge_model() {
 async fn rate_limit_switch_prompt_does_not_open_hidden_nudge_popup() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5")).await;
     chat.has_chatgpt_account = true;
+    let mut models = chat.model_catalog.try_list_models().expect("model catalog");
+    models.retain(|preset| preset.model != NUDGE_MODEL_SLUG);
+    chat.model_catalog = Arc::new(ModelCatalog::new(models));
 
     chat.on_rate_limit_snapshot(Some(snapshot(/*percent*/ 92.0)));
     chat.maybe_show_pending_rate_limit_prompt();
@@ -2040,7 +2046,7 @@ async fn ctrl_c_interrupts_agent_turn_even_if_bottom_pane_running_state_is_stale
     chat.handle_key_event(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
 
     match op_rx.try_recv() {
-        Ok(Op::Interrupt { .. }) => {}
+        Ok(Op::Interrupt) => {}
         other => panic!("expected Op::Interrupt, got {other:?}"),
     }
 }

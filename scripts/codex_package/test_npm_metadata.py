@@ -31,7 +31,11 @@ class NpmMetadataTest(unittest.TestCase):
                 (staging_dir / "package.json").read_text(encoding="utf-8")
             )
 
+            self.assertTrue((staging_dir / "mkdocs.yml").is_file())
+            self.assertTrue((staging_dir / "docs" / "index.md").is_file())
+
         self.assertEqual(package_json["bin"], {"pfterminal": "bin/codex.js"})
+        self.assertEqual(package_json["files"], ["bin/codex.js", "mkdocs.yml", "docs"])
 
 
 if __name__ == "__main__":

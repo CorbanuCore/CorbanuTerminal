@@ -1,6 +1,7 @@
 use super::*;
 use crate::SkillsService;
 use crate::config::ConfigBuilder;
+use crate::config::PermissionProfileSnapshot;
 use crate::skills_load_input_from_config;
 use codex_config::ConfigLayerStackOrdering;
 use codex_core_plugins::PluginsManager;
@@ -172,6 +173,38 @@ async fn built_in_hierarchy_roles_preserve_selected_permissions() {
             config.permissions.effective_permission_profile(),
             PermissionProfile::Disabled
         );
+    }
+}
+
+#[tokio::test]
+async fn built_in_hierarchy_roles_preserve_runtime_only_permissions() {
+    for role_name in ["nazgul", "troll", "orc"] {
+        let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+        config
+            .permissions
+            .set_permission_profile_from_session_snapshot(PermissionProfileSnapshot::legacy(
+                PermissionProfile::Disabled,
+            ))
+            .expect("runtime danger-full-access profile should be accepted");
+        config
+            .permissions
+            .approval_policy
+            .set(AskForApproval::Never)
+            .expect("runtime never-approve policy should be accepted");
+
+        apply_role_to_config(&mut config, Some(role_name))
+            .await
+            .expect("built-in hierarchy role should apply");
+
+        assert_eq!(
+            config.permissions.approval_policy.value(),
+            AskForApproval::Never
+        );
+        assert_eq!(
+            config.permissions.effective_permission_profile(),
+            PermissionProfile::Disabled
+        );
+        assert_eq!(config.permissions.active_permission_profile(), None);
     }
 }
 
@@ -745,9 +778,24 @@ async fn hierarchy_role_base_precedence_over_standard_model_defaults_is_determin
 #[test]
 fn nazgul_prompt_keeps_troll_as_middle_management_boundary() {
     assert!(NAZGUL_BASE.contains("do not micromanage Orc ICs"));
-    assert!(NAZGUL_BASE.contains("Target Trolls for execution milestones"));
-    assert!(NAZGUL_BASE.contains("direct Orc dispatch is only for"));
+    assert!(NAZGUL_BASE.contains("Prefer Trolls"));
+    assert!(NAZGUL_BASE.contains("use Orcs directly only"));
     assert!(NAZGUL_BASE.contains("delegate to Trolls, inspect, and verify"));
+}
+
+#[test]
+fn hierarchy_roles_use_native_reusable_agent_lifecycle() {
+    for manager_base in [NAZGUL_BASE, TROLL_BASE] {
+        assert!(manager_base.contains("followup_task"));
+        assert!(manager_base.contains("send_message"));
+        assert!(manager_base.contains("Completion leaves"));
+        assert!(manager_base.contains("does not shut down"));
+        assert!(manager_base.contains("reuse that canonical path"));
+        assert!(!manager_base.contains("<pfterminal_send_task"));
+    }
+    assert!(ORC_BASE.contains("ends the current turn, not your agent session"));
+    assert!(ORC_BASE.contains("same identity"));
+    assert!(ORC_BASE.contains("do not shut yourself down"));
 }
 
 #[test]

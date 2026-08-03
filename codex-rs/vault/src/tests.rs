@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::Barrier;
 
 use chrono::Utc;
 use codex_keyring_store::tests::MockKeyringStore;
@@ -238,17 +239,20 @@ fn persistence_across_vault_instances() {
 
 #[test]
 fn distinct_labels_do_not_collide_at_secret_layer() {
-    // Regression: `a/b`, `a.b`, `a_b`, `a-b`, and case variants must map to DISTINCT secret
-    // records so adding one never overwrites another's stored secret.
+    // Regression: separator and case variants must map to DISTINCT secret records so adding one
+    // never overwrites another's stored secret.
+    let labels = ["a/b", "a.b", "a_b", "a-b", "MyLabel", "mylabel"];
+    let secret_names = labels
+        .into_iter()
+        .map(|label| secret_name_for(label).expect("valid secret name"))
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(secret_names.len(), labels.len());
+
+    // Exercise the original separator-collision failure end to end through encrypted storage.
+    // The exhaustive uniqueness assertion above keeps the expensive age integration below the
+    // repository's per-test timeout while still covering every collision class.
     let (_dir, _keyring, vault) = test_vault();
-    for (label, secret) in [
-        ("a/b", "slash"),
-        ("a.b", "dot"),
-        ("a_b", "underscore"),
-        ("a-b", "hyphen"),
-        ("MyLabel", "mixed"),
-        ("mylabel", "lower"),
-    ] {
+    for (label, secret) in [("a/b", "slash"), ("a.b", "dot")] {
         vault
             .add(api_key_entry(label, secret))
             .unwrap_or_else(|e| panic!("adding {label:?} failed: {e:?}"));
@@ -257,11 +261,81 @@ fn distinct_labels_do_not_collide_at_secret_layer() {
     // Each label independently resolves to its own secret — no clobbering.
     assert_eq!(vault.reveal("a/b").unwrap(), "slash");
     assert_eq!(vault.reveal("a.b").unwrap(), "dot");
-    assert_eq!(vault.reveal("a_b").unwrap(), "underscore");
-    assert_eq!(vault.reveal("a-b").unwrap(), "hyphen");
-    assert_eq!(vault.reveal("MyLabel").unwrap(), "mixed");
-    assert_eq!(vault.reveal("mylabel").unwrap(), "lower");
 
-    // All six metadata entries survive.
-    assert_eq!(vault.list().unwrap().len(), 6);
+    // Both metadata entries survive.
+    assert_eq!(vault.list().unwrap().len(), 2);
+}
+
+#[test]
+fn concurrent_unique_adds_preserve_every_credential() {
+    const WRITERS: usize = 2;
+    let (_dir, _keyring, vault) = test_vault();
+    let vault = Arc::new(vault);
+    let barrier = Arc::new(Barrier::new(WRITERS));
+    let handles = (0..WRITERS)
+        .map(|index| {
+            let vault = Arc::clone(&vault);
+            let barrier = Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                barrier.wait();
+                let label = format!("concurrent/{index:02}");
+                let secret = format!("secret-{index:02}");
+                vault.add(api_key_entry(&label, &secret))
+            })
+        })
+        .collect::<Vec<_>>();
+
+    for handle in handles {
+        handle.join().expect("writer thread").expect("vault add");
+    }
+
+    let listed = vault.list().expect("list concurrent credentials");
+    assert_eq!(
+        listed
+            .into_iter()
+            .map(|credential| credential.label)
+            .collect::<Vec<_>>(),
+        vec!["concurrent/00".to_string(), "concurrent/01".to_string()]
+    );
+}
+
+#[test]
+fn wrong_key_fails_closed_without_replacing_encrypted_state() {
+    let (dir, _keyring, vault) = test_vault();
+    vault
+        .add(api_key_entry("protected", "original-secret"))
+        .expect("seed vault");
+    let encrypted_path = dir.path().join("secrets").join("local.age");
+    let encrypted_before = std::fs::read(&encrypted_path).expect("encrypted vault");
+
+    let wrong_key_vault = Vault::new_with_keyring_store(
+        dir.path().to_path_buf(),
+        Arc::new(MockKeyringStore::default()),
+    );
+    assert!(wrong_key_vault.list().is_err());
+    assert_eq!(
+        std::fs::read(&encrypted_path).expect("encrypted vault after failed read"),
+        encrypted_before
+    );
+    assert_eq!(
+        vault.reveal("protected").expect("original key still works"),
+        "original-secret"
+    );
+}
+
+#[test]
+fn corrupt_encrypted_state_fails_closed() {
+    let (dir, keyring, vault) = test_vault();
+    vault
+        .add(api_key_entry("protected", "original-secret"))
+        .expect("seed vault");
+    let encrypted_path = dir.path().join("secrets").join("local.age");
+    let mut bytes = std::fs::read(&encrypted_path).expect("encrypted vault");
+    let payload_offset = bytes.len() / 2;
+    bytes[payload_offset] = b'!';
+    std::fs::write(&encrypted_path, bytes).expect("corrupt encrypted vault fixture");
+
+    let reopened = Vault::new_with_keyring_store(dir.path().to_path_buf(), keyring);
+    assert!(reopened.list().is_err());
+    assert!(reopened.reveal("protected").is_err());
 }

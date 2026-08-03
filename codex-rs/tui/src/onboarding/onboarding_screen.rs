@@ -34,6 +34,8 @@ use codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR;
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_API_KEY_ENV_VAR;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
+use codex_model_provider_info::DEEPSEEK_API_KEY_ENV_VAR;
+use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_API_KEY_ENV_VAR;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::META_API_KEY_ENV_VAR;
@@ -124,6 +126,7 @@ struct ApiKeyEntryContext {
 const OPENROUTER_PROVIDER_NAME: &str = "OpenRouter";
 const META_PROVIDER_NAME: &str = "Meta";
 const BASETEN_PROVIDER_NAME: &str = "Baseten";
+const DEEPSEEK_PROVIDER_NAME: &str = "DeepSeek";
 const KIMI_CODE_PROVIDER_NAME: &str = "Kimi Code";
 const VERCEL_PROVIDER_NAME: &str = "Vercel";
 
@@ -140,6 +143,11 @@ const RECOMMENDED_PROVIDER_API_KEY_OPTIONS: &[(&str, &str, &str)] = &[
         KIMI_CODE_API_KEY_ENV_VAR,
     ),
     (ZAI_PROVIDER_ID, "Z.AI", ZAI_API_KEY_ENV_VAR),
+    (
+        DEEPSEEK_PROVIDER_ID,
+        DEEPSEEK_PROVIDER_NAME,
+        DEEPSEEK_API_KEY_ENV_VAR,
+    ),
     (
         OPENROUTER_PROVIDER_ID,
         OPENROUTER_PROVIDER_NAME,
@@ -208,11 +216,12 @@ fn provider_api_key_sort_rank(provider_id: &str) -> usize {
         AMBIENT_PROVIDER_ID => 1,
         KIMI_CODE_PROVIDER_ID => 2,
         ZAI_PROVIDER_ID => 3,
-        OPENROUTER_PROVIDER_ID => 4,
-        META_PROVIDER_ID => 5,
-        BASETEN_PROVIDER_ID => 6,
-        VERCEL_PROVIDER_ID => 7,
-        _ => 8,
+        DEEPSEEK_PROVIDER_ID => 4,
+        OPENROUTER_PROVIDER_ID => 5,
+        META_PROVIDER_ID => 6,
+        BASETEN_PROVIDER_ID => 7,
+        VERCEL_PROVIDER_ID => 8,
+        _ => 9,
     }
 }
 
@@ -222,6 +231,7 @@ pub(crate) fn provider_api_key_display_name(provider: &ApiKeyProviderOption) -> 
         AMBIENT_API_KEY_ENV_VAR => "Provider: Ambient API Key".to_string(),
         KIMI_CODE_API_KEY_ENV_VAR => "Provider: Kimi Code API Key".to_string(),
         ZAI_API_KEY_ENV_VAR => "Provider: Z.AI API Key".to_string(),
+        DEEPSEEK_API_KEY_ENV_VAR => "Provider: DeepSeek API Key".to_string(),
         OPENROUTER_API_KEY_ENV_VAR => "Provider: OpenRouter API Key".to_string(),
         META_API_KEY_ENV_VAR => "Provider: Meta API Key".to_string(),
         BASETEN_API_KEY_ENV_VAR => "Provider: Baseten API Key".to_string(),
@@ -337,33 +347,39 @@ impl OnboardingScreen {
     }
 
     fn current_steps_mut(&mut self) -> Vec<&mut Step> {
-        let mut out: Vec<&mut Step> = Vec::new();
-        for step in self.steps.iter_mut() {
-            match step.get_step_state() {
-                StepState::Hidden => continue,
-                StepState::Complete => out.push(step),
-                StepState::InProgress => {
-                    out.push(step);
-                    break;
-                }
-            }
-        }
-        out
+        let states = self
+            .steps
+            .iter()
+            .map(StepStateProvider::get_step_state)
+            .collect::<Vec<_>>();
+        let welcome_index = self
+            .steps
+            .iter()
+            .position(|step| matches!(step, Step::Welcome(_)));
+        let visible_indices = visible_step_indices(&states, welcome_index);
+        self.steps
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(index, step)| visible_indices.contains(&index).then_some(step))
+            .collect()
     }
 
     fn current_steps(&self) -> Vec<&Step> {
-        let mut out: Vec<&Step> = Vec::new();
-        for step in self.steps.iter() {
-            match step.get_step_state() {
-                StepState::Hidden => continue,
-                StepState::Complete => out.push(step),
-                StepState::InProgress => {
-                    out.push(step);
-                    break;
-                }
-            }
-        }
-        out
+        let states = self
+            .steps
+            .iter()
+            .map(StepStateProvider::get_step_state)
+            .collect::<Vec<_>>();
+        let welcome_index = self
+            .steps
+            .iter()
+            .position(|step| matches!(step, Step::Welcome(_)));
+        let visible_indices = visible_step_indices(&states, welcome_index);
+        self.steps
+            .iter()
+            .enumerate()
+            .filter_map(|(index, step)| visible_indices.contains(&index).then_some(step))
+            .collect()
     }
 
     fn should_suppress_animations(&self) -> bool {
@@ -632,6 +648,28 @@ impl StepStateProvider for Step {
     }
 }
 
+fn visible_step_indices(states: &[StepState], welcome_index: Option<usize>) -> Vec<usize> {
+    let active_index = states
+        .iter()
+        .position(|state| *state == StepState::InProgress);
+    states
+        .iter()
+        .enumerate()
+        .filter_map(|(index, state)| {
+            if *state == StepState::Hidden {
+                return None;
+            }
+            match active_index {
+                Some(active_index) if Some(index) == welcome_index || index == active_index => {
+                    Some(index)
+                }
+                Some(_) => None,
+                None => Some(index),
+            }
+        })
+        .collect()
+}
+
 impl WidgetRef for Step {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         match self {
@@ -745,6 +783,11 @@ pub(crate) async fn run_onboarding_app(
             }
         }
     }
+    // `TuiEventStream` shares the broker-owned crossterm source. The onboarding stream can leave
+    // that source registered with its now-stale task waker when this sequential screen exits.
+    // Recreate the source before App installs its own stream so the painted composer also accepts
+    // keyboard input without requiring a process restart.
+    tui.resume_events();
     Ok(OnboardingResult {
         directory_trust_persisted,
         should_exit: onboarding_screen.should_exit(),
@@ -804,10 +847,12 @@ mod tests {
     use super::ApiKeyEntryContext;
     use super::OnboardingScreen;
     use super::Step;
+    use super::StepState;
     use super::StepStateProvider;
     use super::persist_selected_trust;
     use super::sort_and_dedupe_provider_api_key_options;
     use super::suppress_quit_while_typing_api_key;
+    use super::visible_step_indices;
     use crate::onboarding::auth::ApiKeyProviderOption;
     use crate::onboarding::trust_directory::TrustDirectorySelection;
     use crate::onboarding::trust_directory::TrustDirectoryWidget;
@@ -894,6 +939,83 @@ mod tests {
                 .map(|option| (option.id.as_str(), option.env_var.as_str()))
                 .collect::<Vec<_>>(),
             vec![("ambient", "AMBIENT_API_KEY"), ("zai", "ZAI_API_KEY")]
+        );
+    }
+
+    #[test]
+    fn provider_api_key_options_rank_and_label_deepseek_as_a_first_class_provider() {
+        let mut options = vec![
+            ApiKeyProviderOption {
+                id: codex_model_provider_info::OPENROUTER_PROVIDER_ID.to_string(),
+                name: "OpenRouter".to_string(),
+                env_var: codex_model_provider_info::OPENROUTER_API_KEY_ENV_VAR.to_string(),
+            },
+            ApiKeyProviderOption {
+                id: codex_model_provider_info::DEEPSEEK_PROVIDER_ID.to_string(),
+                name: "DeepSeek".to_string(),
+                env_var: codex_model_provider_info::DEEPSEEK_API_KEY_ENV_VAR.to_string(),
+            },
+            ApiKeyProviderOption {
+                id: codex_model_provider_info::ZAI_PROVIDER_ID.to_string(),
+                name: "Z.AI".to_string(),
+                env_var: codex_model_provider_info::ZAI_API_KEY_ENV_VAR.to_string(),
+            },
+        ];
+
+        sort_and_dedupe_provider_api_key_options(&mut options);
+
+        assert_eq!(
+            options
+                .iter()
+                .map(|option| option.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                codex_model_provider_info::ZAI_PROVIDER_ID,
+                codex_model_provider_info::DEEPSEEK_PROVIDER_ID,
+                codex_model_provider_info::OPENROUTER_PROVIDER_ID,
+            ]
+        );
+        assert_eq!(
+            super::provider_api_key_display_name(&options[1]),
+            "Provider: DeepSeek API Key"
+        );
+    }
+
+    #[test]
+    fn onboarding_keeps_welcome_and_the_current_required_step_visible() {
+        assert_eq!(
+            visible_step_indices(
+                &[
+                    StepState::Complete,
+                    StepState::Complete,
+                    StepState::InProgress,
+                ],
+                Some(0),
+            ),
+            vec![0, 2],
+            "a completed auth panel must not hide the active trust step"
+        );
+        assert_eq!(
+            visible_step_indices(&[StepState::Complete, StepState::InProgress], Some(0),),
+            vec![0, 1],
+            "welcome and active auth should remain visible together"
+        );
+        assert_eq!(
+            visible_step_indices(
+                &[
+                    StepState::Hidden,
+                    StepState::Complete,
+                    StepState::InProgress
+                ],
+                Some(0),
+            ),
+            vec![2],
+            "hidden welcome and completed intermediate steps must not consume the viewport"
+        );
+        assert_eq!(
+            visible_step_indices(&[StepState::Complete, StepState::Complete], Some(0),),
+            vec![0, 1],
+            "the final completed frame remains renderable before onboarding exits"
         );
     }
 

@@ -181,6 +181,10 @@ pub(crate) struct SelectionViewParams {
     pub tabs: Vec<SelectionTab>,
     pub initial_tab_id: Option<String>,
     pub is_searchable: bool,
+    /// Whether bare number keys immediately select and accept numbered rows.
+    /// Disable this for destructive, billable, or security-sensitive confirmations so an
+    /// unrelated digit cannot commit the action without explicit navigation and Enter.
+    pub allow_number_shortcuts: bool,
     pub search_placeholder: Option<String>,
     pub col_width_mode: ColumnWidthMode,
     pub row_display: SelectionRowDisplay,
@@ -233,6 +237,7 @@ impl Default for SelectionViewParams {
             tabs: Vec::new(),
             initial_tab_id: None,
             is_searchable: false,
+            allow_number_shortcuts: true,
             search_placeholder: None,
             col_width_mode: ColumnWidthMode::AutoVisible,
             row_display: SelectionRowDisplay::Wrapped,
@@ -270,6 +275,7 @@ pub(crate) struct ListSelectionView {
     dismiss_after_child_accept: bool,
     app_event_tx: AppEventSender,
     is_searchable: bool,
+    allow_number_shortcuts: bool,
     search_query: String,
     search_placeholder: Option<String>,
     col_width_mode: ColumnWidthMode,
@@ -401,6 +407,7 @@ impl ListSelectionView {
             dismiss_after_child_accept: false,
             app_event_tx,
             is_searchable: params.is_searchable,
+            allow_number_shortcuts: params.allow_number_shortcuts,
             search_query: String::new(),
             search_placeholder: if params.is_searchable {
                 params.search_placeholder
@@ -592,9 +599,9 @@ impl ListSelectionView {
                     };
                     let name_with_marker = format!("{name}{marker}");
                     let is_disabled = item.is_disabled || item.disabled_reason.is_some();
-                    let wrap_prefix = if self.is_searchable {
-                        // The number keys don't work when search is enabled (since we let the
-                        // numbers be used for the search query).
+                    let wrap_prefix = if self.is_searchable || !self.allow_number_shortcuts {
+                        // Search reserves numbers for the query. Safety-sensitive confirmations
+                        // suppress numbering because their number keys do not accept actions.
                         format!("{prefix} ")
                     } else if is_disabled {
                         if let Some(disabled_gutter_marker) = item.disabled_gutter_marker {
@@ -700,6 +707,35 @@ impl ListSelectionView {
             .filter(|(_, item)| Self::item_is_enabled(item))
             .nth(number - 1)
             .map(|(idx, _)| idx)
+    }
+
+    fn run_selected_shortcut(&mut self, key_event: KeyEvent) -> bool {
+        let Some(actual_idx) = self.selected_actual_idx() else {
+            return false;
+        };
+        let app_event_tx = self.app_event_tx.clone();
+        let (matched, should_dismiss) = {
+            let Some(item) = self.active_items().get(actual_idx) else {
+                return false;
+            };
+            if !Self::item_is_enabled(item) {
+                return false;
+            }
+            let mut matched = false;
+            let mut should_dismiss = false;
+            for shortcut in &item.selected_shortcuts {
+                if shortcut.key.is_press(key_event) {
+                    matched = true;
+                    should_dismiss |= shortcut.dismiss_on_select;
+                    (shortcut.action)(&app_event_tx);
+                }
+            }
+            (matched, should_dismiss)
+        };
+        if should_dismiss {
+            self.completion = Some(ViewCompletion::Accepted);
+        }
+        matched
     }
 
     fn move_up(&mut self) {
@@ -1058,10 +1094,11 @@ impl BottomPaneView for ListSelectionView {
                     self.accept();
                     return;
                 }
-                if let Some(idx) = c
-                    .to_digit(10)
-                    .map(|d| d as usize)
-                    .and_then(|number| self.actual_idx_for_enabled_number(number))
+                if self.allow_number_shortcuts
+                    && let Some(idx) = c
+                        .to_digit(10)
+                        .map(|d| d as usize)
+                        .and_then(|number| self.actual_idx_for_enabled_number(number))
                 {
                     self.state.selected_idx = Some(idx);
                     self.accept();
@@ -2281,6 +2318,50 @@ mod tests {
         view.handle_key_event(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE));
 
         assert_eq!(view.take_last_selected_index(), Some(3));
+    }
+
+    #[test]
+    fn number_shortcuts_disabled_requires_explicit_navigation_and_accept() {
+        let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
+        let tx = AppEventSender::new(tx_raw);
+        let mut view = ListSelectionView::new(
+            SelectionViewParams {
+                items: vec![
+                    SelectionItem {
+                        name: "Cancel".to_string(),
+                        dismiss_on_select: true,
+                        ..Default::default()
+                    },
+                    SelectionItem {
+                        name: "Remove wallet".to_string(),
+                        dismiss_on_select: true,
+                        ..Default::default()
+                    },
+                ],
+                initial_selected_idx: Some(0),
+                allow_number_shortcuts: false,
+                ..Default::default()
+            },
+            tx,
+            crate::keymap::RuntimeKeymap::defaults().list,
+        );
+
+        let rendered = render_lines_with_width(&view, /*width*/ 60);
+        assert!(rendered.contains("› Cancel"), "got:\n{rendered}");
+        assert!(rendered.contains("  Remove wallet"), "got:\n{rendered}");
+        assert!(
+            !rendered.contains("1. Cancel") && !rendered.contains("2. Remove wallet"),
+            "safety confirmation must not advertise disabled number shortcuts; got:\n{rendered}"
+        );
+
+        // A digit embedded in unrelated input must neither move selection nor commit an action.
+        view.handle_key_event(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE));
+        assert_eq!(view.selected_actual_idx(), Some(0));
+        assert_eq!(view.take_last_selected_index(), None);
+
+        view.handle_key_event(KeyEvent::from(KeyCode::Down));
+        view.handle_key_event(KeyEvent::from(KeyCode::Enter));
+        assert_eq!(view.take_last_selected_index(), Some(1));
     }
 
     #[test]

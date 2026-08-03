@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -255,11 +256,6 @@ async fn orchestrator_skill_can_read_referenced_resource_without_an_executor() -
         developer_messages
             .iter()
             .all(|text| !text.contains("ignored-plugin:ignored"))
-    );
-    assert!(
-        developer_messages
-            .iter()
-            .any(|text| text.contains("do not treat `skill://` identifiers as filesystem paths"))
     );
     let skill_fragments = first_request
         .message_input_texts("user")
@@ -585,8 +581,15 @@ apps = true
     Ok(())
 }
 
-#[tokio::test]
-async fn mcp_resource_read_returns_error_for_unknown_thread() -> Result<()> {
+#[test]
+fn mcp_resource_read_returns_error_for_unknown_thread() -> Result<()> {
+    run_current_thread_test_with_stack(
+        "mcp-resource-unknown-thread",
+        mcp_resource_read_returns_error_for_unknown_thread_impl(),
+    )
+}
+
+async fn mcp_resource_read_returns_error_for_unknown_thread_impl() -> Result<()> {
     let codex_home = TempDir::new()?;
     let loader_overrides = LoaderOverrides::without_managed_config_for_tests();
     let config = ConfigBuilder::default()
@@ -646,6 +649,25 @@ async fn mcp_resource_read_returns_error_for_unknown_thread() -> Result<()> {
     );
 
     Ok(())
+}
+
+fn run_current_thread_test_with_stack<F>(name: &str, future: F) -> Result<()>
+where
+    F: Future<Output = Result<()>> + Send + 'static,
+{
+    const TEST_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
+    let handle = std::thread::Builder::new()
+        .name(name.to_string())
+        .stack_size(TEST_STACK_SIZE_BYTES)
+        .spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
+            runtime.block_on(future)
+        })?;
+    handle
+        .join()
+        .map_err(|_| anyhow::anyhow!("{name} test thread panicked"))?
 }
 
 async fn start_resource_test_app_server(

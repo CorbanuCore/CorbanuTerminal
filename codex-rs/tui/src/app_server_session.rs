@@ -322,6 +322,15 @@ pub(crate) enum ResumeModelSettings {
     RestoreFromThread,
 }
 
+/// Determines where permission settings come from when resuming a thread.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ResumePermissionSettings {
+    /// Sends the current config's permission contract as an explicit operator override.
+    OverrideFromCurrentConfig,
+    /// Omits permission overrides so app-server restores the contract saved with the thread.
+    RestoreFromThread,
+}
+
 impl ThreadParamsMode {
     fn model_provider_from_config(self, config: &Config) -> Option<String> {
         match self {
@@ -422,6 +431,13 @@ impl AppServerSession {
     pub(crate) async fn bootstrap(&mut self, config: &Config) -> Result<AppServerBootstrap> {
         let started_at = Instant::now();
         let account = self.read_account().await?;
+        let auth_status = match self.read_auth_status().await {
+            Ok(status) => Some(status),
+            Err(err) => {
+                tracing::warn!("auth/status read failed during TUI bootstrap: {err}");
+                None
+            }
+        };
         // `hooks/list` holds the global config queue during startup. Submit models and config
         // requirements together so an uncached model fetch can overlap both config requests.
         let model_request_id = self.next_request_id();
@@ -536,7 +552,16 @@ impl AppServerSession {
         let has_chatgpt_account = auth_status_mode
             .map(AuthMode::has_chatgpt_account)
             .unwrap_or(account_has_chatgpt_account);
-        let auth_mode = auth_status_mode.map(TelemetryAuthMode::from).or(auth_mode);
+        let auth_mode = auth_status_mode
+            .map(|mode| match mode {
+                AuthMode::ApiKey | AuthMode::BedrockApiKey => TelemetryAuthMode::ApiKey,
+                AuthMode::Chatgpt
+                | AuthMode::ChatgptAuthTokens
+                | AuthMode::Headers
+                | AuthMode::AgentIdentity
+                | AuthMode::PersonalAccessToken => TelemetryAuthMode::Chatgpt,
+            })
+            .or(auth_mode);
         let requires_openai_auth = auth_status
             .as_ref()
             .and_then(|status| status.requires_openai_auth)
@@ -686,6 +711,40 @@ impl AppServerSession {
         started_thread_from_start_response(response, config, self.thread_params_mode()).await
     }
 
+    /// Starts an operator-owned pane with its own model runtime.
+    ///
+    /// User panes must use `thread/start`, not `thread/spawnAgent`: the latter creates a
+    /// parent-controlled sub-agent whose direct-input lock is enforced by both app-server and the
+    /// TUI. Keeping this distinction at the protocol boundary prevents a later liveness refresh
+    /// from reclassifying an interactive `/panes` thread as view-only.
+    pub(crate) async fn start_user_pane_thread(
+        &mut self,
+        config: &Config,
+        model: String,
+        model_provider: Option<String>,
+        reasoning_effort: Option<codex_protocol::openai_models::ReasoningEffort>,
+    ) -> Result<AppServerStartedThread> {
+        let request_id = self.next_request_id();
+        let mut session_config = self.session_config_with_effective_service_tier(config);
+        session_config.model = Some(model);
+        session_config.model_reasoning_effort = reasoning_effort;
+        let mut params = thread_start_params_from_config(
+            &session_config,
+            self.thread_params_mode(),
+            self.remote_cwd_override.as_deref(),
+            /*session_start_source*/ None,
+        );
+        params.model_provider = model_provider.or(params.model_provider);
+        let response: ThreadStartResponse = self
+            .client
+            .request_typed(ClientRequest::ThreadStart { request_id, params })
+            .await
+            .map_err(|err| {
+                bootstrap_request_error("thread/start failed while creating user pane", err)
+            })?;
+        started_thread_from_start_response(response, config, self.thread_params_mode()).await
+    }
+
     pub(crate) async fn spawn_agent_thread(
         &mut self,
         config: &Config,
@@ -802,11 +861,26 @@ impl AppServerSession {
             .wrap_err("thread/sendAgentMessage failed")
     }
 
+    pub(crate) fn agent_message_target_not_found(
+        error: &color_eyre::Report,
+        target_thread_id: ThreadId,
+    ) -> bool {
+        let Some(TypedRequestError::Server { method, source }) =
+            error.downcast_ref::<TypedRequestError>()
+        else {
+            return false;
+        };
+        method == "thread/sendAgentMessage"
+            && source.code == JSONRPC_INVALID_REQUEST
+            && source.message == format!("thread not found: {target_thread_id}")
+    }
+
     pub(crate) async fn resume_thread(
         &mut self,
         config: Config,
         thread_id: ThreadId,
         model_settings: ResumeModelSettings,
+        permission_settings: ResumePermissionSettings,
     ) -> Result<AppServerStartedThread> {
         let request_id = self.next_request_id();
         let session_config = if model_settings == ResumeModelSettings::RestoreFromThread {
@@ -824,6 +898,7 @@ impl AppServerSession {
                     self.thread_params_mode(),
                     self.remote_cwd_override.as_deref(),
                     model_settings,
+                    permission_settings,
                 ),
             })
             .await
@@ -1954,16 +2029,23 @@ fn thread_resume_params_from_config(
     thread_params_mode: ThreadParamsMode,
     remote_cwd_override: Option<&std::path::Path>,
     model_settings: ResumeModelSettings,
+    permission_settings: ResumePermissionSettings,
 ) -> ThreadResumeParams {
-    let permissions = permissions_selection_from_config(&config, thread_params_mode);
-    let sandbox = permissions
-        .is_none()
+    let override_permissions =
+        permission_settings == ResumePermissionSettings::OverrideFromCurrentConfig;
+    let permissions = override_permissions
+        .then(|| permissions_selection_from_config(&config, thread_params_mode))
+        .flatten();
+    let sandbox = override_permissions
         .then(|| {
-            sandbox_mode_from_permission_profile(
-                &config.permissions.effective_permission_profile(),
-                config.cwd.as_path(),
-            )
+            permissions.is_none().then(|| {
+                sandbox_mode_from_permission_profile(
+                    &config.permissions.effective_permission_profile(),
+                    config.cwd.as_path(),
+                )
+            })
         })
+        .flatten()
         .flatten();
     let mut config_overrides = config_request_overrides_from_config(&config);
     if model_settings == ResumeModelSettings::RestoreFromThread
@@ -1988,8 +2070,11 @@ fn thread_resume_params_from_config(
         service_tier: service_tier_override_from_config(&config),
         cwd: thread_cwd_from_config(&config, thread_params_mode, remote_cwd_override),
         runtime_workspace_roots: Some(config.workspace_roots.clone()),
-        approval_policy: Some(config.permissions.approval_policy.value().into()),
-        approvals_reviewer: approvals_reviewer_override_from_config(&config),
+        approval_policy: override_permissions
+            .then(|| config.permissions.approval_policy.value().into()),
+        approvals_reviewer: override_permissions
+            .then(|| approvals_reviewer_override_from_config(&config))
+            .flatten(),
         sandbox,
         permissions,
         config: config_overrides,
@@ -2087,7 +2172,9 @@ async fn started_thread_from_spawn_agent_response(
         sandbox: response.sandbox,
         active_permission_profile: response.active_permission_profile,
         reasoning_effort: response.reasoning_effort,
-        multi_agent_mode: response.multi_agent_mode,
+        multi_agent_mode: response
+            .multi_agent_mode
+            .unwrap_or(MultiAgentMode::ExplicitRequestOnly),
     };
     started_thread_from_start_response(response, config, thread_params_mode).await
 }
@@ -2367,12 +2454,16 @@ mod tests {
     #[tokio::test]
     async fn injected_turn_start_failure_persists_error_with_full_chain() {
         let temp_dir = TempDir::new().expect("create temporary PFTerminal home");
-        let state = codex_state::StateRuntime::init(
-            temp_dir.path().to_path_buf(),
-            "test-provider".to_string(),
-        )
-        .await
-        .expect("initialize runtime databases");
+        let sqlite = codex_state::SqliteConfig::new_for_testing(
+            temp_dir
+                .path()
+                .to_path_buf()
+                .try_into()
+                .expect("absolute temporary PFTerminal home"),
+        );
+        let state = codex_state::StateRuntime::init(sqlite.clone(), "test-provider".to_string())
+            .await
+            .expect("initialize runtime databases");
         let log_db = codex_state::log_db::start(state.clone());
         let subscriber = tracing_subscriber::registry().with(log_db.clone());
         let dispatch = tracing::Dispatch::new(subscriber);
@@ -2407,13 +2498,13 @@ mod tests {
             row.thread_id.as_deref(),
             Some(thread_id.to_string().as_str())
         );
-        assert!(temp_dir.path().join(codex_state::LOGS_DB_FILENAME).exists());
+        assert!(sqlite.logs_db_path().exists());
     }
 
     #[test]
     fn auth_dot_json_backend_detection_honors_explicit_chatgpt_mode() {
         let auth = AuthDotJson {
-            auth_mode: Some(AuthMode::Chatgpt),
+            auth_mode: Some(codex_protocol::auth::AuthMode::Chatgpt),
             openai_api_key: Some("sk-test-key".to_string()),
             tokens: None,
             last_refresh: None,
@@ -2424,7 +2515,7 @@ mod tests {
         assert!(auth_dot_json_has_codex_backend_auth(&auth));
 
         let auth = AuthDotJson {
-            auth_mode: Some(AuthMode::ApiKey),
+            auth_mode: Some(codex_protocol::auth::AuthMode::ApiKey),
             openai_api_key: Some("sk-test-key".to_string()),
             tokens: None,
             last_refresh: None,
@@ -2661,6 +2752,7 @@ mod tests {
             ThreadParamsMode::Remote,
             /*remote_cwd_override*/ None,
             ResumeModelSettings::OverrideFromCurrentConfig,
+            ResumePermissionSettings::OverrideFromCurrentConfig,
         );
         let fork = thread_fork_params_from_config(
             config,
@@ -2714,6 +2806,7 @@ mod tests {
             ThreadParamsMode::Remote,
             Some(remote_cwd.as_path()),
             ResumeModelSettings::RestoreFromThread,
+            ResumePermissionSettings::RestoreFromThread,
         );
 
         assert_eq!(resume.cwd, Some(remote_cwd.to_string_lossy().to_string()));
@@ -2809,6 +2902,7 @@ mod tests {
             ThreadParamsMode::Remote,
             Some(remote_cwd.as_path()),
             ResumeModelSettings::OverrideFromCurrentConfig,
+            ResumePermissionSettings::OverrideFromCurrentConfig,
         );
         let fork = thread_fork_params_from_config(
             config,
@@ -2849,6 +2943,7 @@ mod tests {
         config.bypass_hook_trust = true;
         config.agent_max_depth = 7;
         config.service_tier = Some(ServiceTier::Fast.request_value().to_string());
+        let expected_model_provider = config.model_provider_id.clone();
         let thread_id = ThreadId::new();
 
         let start = thread_start_params_from_config(
@@ -2863,6 +2958,7 @@ mod tests {
             ThreadParamsMode::Embedded,
             /*remote_cwd_override*/ None,
             ResumeModelSettings::OverrideFromCurrentConfig,
+            ResumePermissionSettings::OverrideFromCurrentConfig,
         );
         let fork = thread_fork_params_from_config(
             config,
@@ -2885,16 +2981,13 @@ mod tests {
             ("bypass_hook_trust".to_string(), true.into()),
             ("agents.max_depth".to_string(), serde_json::json!(7)),
         ]);
-        let expected_resume_config = HashMap::from([
-            ("personality".to_string(), string("pragmatic")),
-            ("web_search".to_string(), string("disabled")),
-            ("bypass_hook_trust".to_string(), true.into()),
-            ("agents.max_depth".to_string(), serde_json::json!(7)),
-        ]);
         assert_eq!(start.config, Some(expected_config.clone()));
-        assert_eq!(resume.model, None);
-        assert_eq!(resume.model_provider, None);
-        assert_eq!(resume.config, Some(expected_resume_config));
+        assert_eq!(resume.model.as_deref(), Some("current-config-model"));
+        assert_eq!(
+            resume.model_provider.as_deref(),
+            Some(expected_model_provider.as_str())
+        );
+        assert_eq!(resume.config, Some(expected_config.clone()));
         assert_eq!(fork.config, Some(expected_config));
     }
 
@@ -2913,10 +3006,15 @@ mod tests {
             ThreadParamsMode::Embedded,
             /*remote_cwd_override*/ None,
             ResumeModelSettings::RestoreFromThread,
+            ResumePermissionSettings::RestoreFromThread,
         );
 
         assert_eq!(params.model, None);
         assert_eq!(params.model_provider, None);
+        assert_eq!(params.approval_policy, None);
+        assert_eq!(params.approvals_reviewer, None);
+        assert_eq!(params.sandbox, None);
+        assert_eq!(params.permissions, None);
         assert_eq!(
             params.config,
             Some(HashMap::from([
@@ -2932,8 +3030,45 @@ mod tests {
                     "web_search".to_string(),
                     serde_json::Value::String("cached".to_string()),
                 ),
+                ("agents.max_depth".to_string(), serde_json::json!(1)),
             ]))
         );
+    }
+
+    #[tokio::test]
+    async fn thread_resume_params_forward_explicit_permission_session_flags() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let config = ConfigBuilder::default()
+            .codex_home(temp_dir.path().to_path_buf())
+            .cli_overrides(vec![
+                (
+                    "approval_policy".to_string(),
+                    toml::Value::String("never".to_string()),
+                ),
+                (
+                    "sandbox_mode".to_string(),
+                    toml::Value::String("workspace-write".to_string()),
+                ),
+            ])
+            .build()
+            .await
+            .expect("config should build");
+
+        let params = thread_resume_params_from_config(
+            config,
+            ThreadId::new(),
+            ThreadParamsMode::Embedded,
+            /*remote_cwd_override*/ None,
+            ResumeModelSettings::RestoreFromThread,
+            ResumePermissionSettings::OverrideFromCurrentConfig,
+        );
+
+        assert_eq!(params.approval_policy, Some(AskForApproval::Never));
+        assert_eq!(
+            params.sandbox,
+            Some(codex_app_server_protocol::SandboxMode::WorkspaceWrite)
+        );
+        assert_eq!(params.permissions, None);
     }
 
     #[tokio::test]
@@ -2972,7 +3107,12 @@ mod tests {
         app_server.available_models = vec![preset];
 
         let resumed = app_server
-            .resume_thread(config, thread_id, ResumeModelSettings::RestoreFromThread)
+            .resume_thread(
+                config,
+                thread_id,
+                ResumeModelSettings::RestoreFromThread,
+                ResumePermissionSettings::RestoreFromThread,
+            )
             .await?;
 
         assert_eq!(resumed.session.service_tier, None);
@@ -3002,6 +3142,7 @@ mod tests {
                 config.clone(),
                 source_thread_id,
                 ResumeModelSettings::RestoreFromThread,
+                ResumePermissionSettings::RestoreFromThread,
             )
             .await?;
         app_server
@@ -3123,6 +3264,7 @@ mod tests {
             ThreadParamsMode::Embedded,
             /*remote_cwd_override*/ None,
             ResumeModelSettings::OverrideFromCurrentConfig,
+            ResumePermissionSettings::OverrideFromCurrentConfig,
         );
         let control_fork = thread_fork_params_from_config(
             config.clone(),
@@ -3153,6 +3295,7 @@ mod tests {
             ThreadParamsMode::Embedded,
             /*remote_cwd_override*/ None,
             ResumeModelSettings::OverrideFromCurrentConfig,
+            ResumePermissionSettings::OverrideFromCurrentConfig,
         );
         let treatment_fork = thread_fork_params_from_config(
             config,

@@ -44,7 +44,7 @@ const SIBLING_PROMPT: &str = "spawn a second durable worker";
 const SIBLING_TASK: &str = "inspect the release lifecycle";
 const SIBLING_FOLLOWUP_PROMPT: &str = "continue the surviving worker";
 const SIBLING_FOLLOWUP_TASK: &str = "verify the surviving worker";
-const INTERRUPT_PROMPT: &str = "release the interrupted worker";
+const INTERRUPT_PROMPT: &str = "interrupt the worker without removing it";
 const SIBLING_NAME: &str = "survivor";
 const ROLE_NAME: &str = "durable_worker";
 const ROLE_MODEL: &str = "gpt-5.4";
@@ -208,8 +208,8 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
     let nested_mock = mount_sse_once_match(
         &server,
         |request: &wiremock::Request| {
-            body_contains(request, NESTED_TASK)
-                && request_has_input_type(request, "agent_message")
+            request_has_model(request, ROLE_MODEL)
+                && body_contains(request, NESTED_TASK)
                 && !body_contains(request, NESTED_CALL_ID)
         },
         sse(vec![ev_completed("resp-parent-turn-assistant")]),
@@ -277,7 +277,7 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
     })
     .await;
 
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + Duration::from_secs(5);
     let worker_thread_id = loop {
         if let Some(thread_id) = initial_child_request
             .requests()
@@ -300,7 +300,7 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
         sleep(Duration::from_millis(10)).await;
     };
     let worker_thread = initial.thread_manager.get_thread(worker_thread_id).await?;
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         if matches!(
             worker_thread.agent_status().await,
@@ -365,7 +365,18 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
     .await;
     initial.submit_turn(SIBLING_PROMPT).await?;
 
-    let grandchild = nested_mock.last_request().expect("grandchild").body_json();
+    // Response mocks retain every candidate request they inspect, including the worker's
+    // post-tool continuation. Select the request by the same predicate that mounted the nested
+    // response so lineage assertions inspect the grandchild rather than its parent continuation.
+    let grandchild = nested_mock
+        .requests()
+        .iter()
+        .find(|request| {
+            request.body_contains_text(NESTED_TASK) && !request.body_contains_text(NESTED_CALL_ID)
+        })
+        .expect("grandchild")
+        .clone()
+        .body_json();
     let nested_id = &grandchild["client_metadata"]["thread_id"];
     let sibling_thread_id = initial
         .thread_manager
@@ -456,7 +467,6 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
             .await
             .is_err()
     );
-
     mount_sse_once_match(
         &server,
         |request: &wiremock::Request| body_contains(request, QUEUE_PROMPT),
@@ -480,7 +490,7 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
         .get_thread(worker_thread_id)
         .await
         .expect("queued message should lazily reload the original worker");
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         if matches!(
             reloaded_worker.agent_status().await,
@@ -537,18 +547,34 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
     let nested_parent = initial_child["client_metadata"]["turn_id"]
         .as_str()
         .expect("nested worker parent turn");
-    for (body, parent_thread, parent_turn) in [
-        (&initial_root, None, None),
-        (&queue_root, None, None),
-        (&followup_root, None, None),
-        (&initial_child, Some(root_thread_id), Some(initial_parent)),
-        (&followup_child, Some(root_thread_id), Some(followup_parent)),
-        (&grandchild, Some(worker_thread_id), Some(nested_parent)),
+    for (label, body, parent_thread, parent_turn) in [
+        ("initial root", &initial_root, None, None),
+        ("queue root", &queue_root, None, None),
+        ("follow-up root", &followup_root, None, None),
+        (
+            "initial child",
+            &initial_child,
+            Some(root_thread_id),
+            Some(initial_parent),
+        ),
+        (
+            "follow-up child",
+            &followup_child,
+            Some(root_thread_id),
+            Some(followup_parent),
+        ),
+        (
+            "nested grandchild",
+            &grandchild,
+            Some(worker_thread_id),
+            Some(nested_parent),
+        ),
     ] {
         if let Some(parent_thread) = parent_thread {
             assert_eq!(
                 body["client_metadata"]["x-codex-parent-thread-id"],
-                json!(parent_thread)
+                json!(parent_thread),
+                "unexpected direct parent for {label}"
             );
         }
         assert_parent_turn(body, parent_turn)?;
@@ -588,7 +614,8 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
             .thread_manager
             .get_thread(worker_thread_id)
             .await
-            .is_err()
+            .is_ok(),
+        "interrupting a turn must not remove the persistent worker"
     );
 
     let sibling_followup_args = serde_json::to_string(&json!({

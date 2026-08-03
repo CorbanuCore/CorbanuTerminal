@@ -274,6 +274,7 @@ impl ChatWidget {
                 },
             ],
             initial_selected_idx: Some(1),
+            allow_number_shortcuts: false,
             on_cancel: Some(Box::new(move |_| {
                 confirmation_gate.store(true, Ordering::Release);
             })),

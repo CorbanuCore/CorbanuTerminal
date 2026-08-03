@@ -32,12 +32,50 @@ impl ToolExecutor<ToolInvocation> for Handler {
     }
 
     fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
-        Box::pin(async move { handle_spawn_agent(invocation).await.map(boxed_tool_output) })
+        Box::pin(async move {
+            handle_spawn_agent(invocation, CollaborationMessageEncoding::ProviderNative)
+                .await
+                .map(boxed_tool_output)
+        })
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct PlaintextHandler {
+    options: SpawnAgentToolOptions,
+}
+
+impl PlaintextHandler {
+    pub(crate) fn new(options: SpawnAgentToolOptions) -> Self {
+        Self { options }
+    }
+}
+
+impl ToolExecutor<ToolInvocation> for PlaintextHandler {
+    fn tool_name(&self) -> ToolName {
+        ToolName::plain(PLAINTEXT_SPAWN_AGENT_TOOL)
+    }
+
+    fn spec(&self) -> ToolSpec {
+        plaintext_adapter_spec(
+            create_spawn_agent_tool_v2(self.options.clone()),
+            PLAINTEXT_SPAWN_AGENT_TOOL,
+            "spawn_agent",
+        )
+    }
+
+    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+        Box::pin(async move {
+            handle_spawn_agent(invocation, CollaborationMessageEncoding::PlaintextAdapter)
+                .await
+                .map(boxed_tool_output)
+        })
     }
 }
 
 async fn handle_spawn_agent(
     invocation: ToolInvocation,
+    encoding: CollaborationMessageEncoding,
 ) -> Result<SpawnAgentResult, FunctionCallError> {
     let ToolInvocation {
         session,
@@ -48,6 +86,7 @@ async fn handle_spawn_agent(
         ..
     } = invocation;
     let turn = &step_context.turn;
+    ensure_manager_tool_allowed(turn, "spawn_agent")?;
     let arguments = function_arguments(payload)?;
     let args: SpawnAgentArgs = parse_arguments(&arguments)?;
     let fork_mode = args.fork_mode()?;
@@ -60,44 +99,8 @@ async fn handle_spawn_agent(
 
     let session_source = turn.session_source.clone();
     let child_depth = next_thread_spawn_depth(&session_source);
-    let mut config =
-        build_agent_spawn_config(&session.get_base_instructions().await, turn.as_ref())?;
-    if let Some(service_tier) = args.service_tier.as_ref() {
-        config.service_tier = Some(service_tier.clone());
-    }
-    let is_full_history_fork = matches!(fork_mode, Some(SpawnAgentForkMode::FullHistory));
-    if is_full_history_fork {
-        reject_full_fork_agent_type_override(role_name)?;
-    }
-    apply_requested_spawn_agent_model_overrides(
-        &session,
-        turn.as_ref(),
-        &mut config,
-        args.model.as_deref(),
-        args.reasoning_effort.clone(),
-    )
-    .await?;
-    if !is_full_history_fork {
-        apply_spawn_agent_role(&session, &mut config, role_name).await?;
-    }
-    apply_spawn_agent_service_tier(
-        &session,
-        &mut config,
-        turn.config.service_tier.as_deref(),
-        args.service_tier.as_deref(),
-    )
-    .await?;
-    apply_spawn_agent_runtime_overrides(&mut config, turn.as_ref())?;
-    ensure_spawn_provider_authorized(&config, &config.model_provider_id)?;
-    ensure_spawn_runtime_eligible(&session, &config).await?;
-    let resolved_model_provider = config.model_provider_id.clone();
-    let resolved_model = config
-        .model
-        .clone()
-        .unwrap_or_else(|| turn.model_info.slug.clone());
-    let resolved_reasoning_effort = config.model_reasoning_effort.clone();
-    let resolved_service_tier = config.service_tier.clone();
-
+    // Resolve the canonical path before runtime policy so malformed task names produce the
+    // actionable routing error regardless of the parent runtime's current catalogue lifecycle.
     let spawn_source = thread_spawn_source(
         session.thread_id,
         &turn.session_source,
@@ -111,6 +114,89 @@ async fn handle_spawn_agent(
             "spawned agent is missing a canonical task name".to_string(),
         )
     })?;
+    let child_runtime_was_selected = args.model_provider.is_some()
+        || args.model.is_some()
+        || args.reasoning_effort.is_some()
+        || role_name.is_some()
+        || turn.config.agent_default_subagent_model.is_some()
+        || turn
+            .config
+            .agent_default_subagent_reasoning_effort
+            .is_some();
+    let mut config =
+        build_agent_spawn_config(&session.get_base_instructions().await, turn.as_ref())?;
+    if let Some(service_tier) = args.service_tier.as_ref() {
+        config.service_tier = Some(service_tier.clone());
+    }
+    let is_full_history_fork = matches!(fork_mode, Some(SpawnAgentForkMode::FullHistory));
+    if is_full_history_fork {
+        reject_full_fork_agent_type_override(role_name)?;
+    }
+    if is_full_history_fork || args.model_provider.is_none() {
+        apply_requested_spawn_agent_model_overrides(
+            &session,
+            turn.as_ref(),
+            &mut config,
+            args.model.as_deref(),
+            args.reasoning_effort.clone(),
+        )
+        .await?;
+        if !is_full_history_fork {
+            // Legacy same-provider model selection retains the established role precedence.
+            apply_spawn_agent_role(&session, &mut config, role_name).await?;
+        }
+    } else {
+        // An explicit provider/model pair is a complete runtime selection. Apply the role first
+        // so its instruction and sandbox layers survive while the requested runtime wins.
+        apply_spawn_agent_role(&session, &mut config, role_name).await?;
+        apply_requested_spawn_agent_runtime_overrides(
+            &session,
+            turn.as_ref(),
+            &mut config,
+            args.model_provider.as_deref(),
+            args.model.as_deref(),
+            args.reasoning_effort.clone(),
+        )
+        .await?;
+    }
+    apply_spawn_agent_service_tier(
+        &session,
+        &mut config,
+        turn.config.service_tier.as_deref(),
+        args.service_tier.as_deref(),
+    )
+    .await?;
+    apply_spawn_agent_runtime_overrides(&mut config, turn.as_ref())?;
+    ensure_spawn_provider_authorized(&config, &config.model_provider_id)?;
+    // Existing sessions may legitimately run a model that has since been hidden or disabled in
+    // the refreshed catalogue. Inheriting that already-authorized runtime preserves the active
+    // session contract; selections made specifically for the child still fail closed.
+    if child_runtime_was_selected {
+        ensure_spawn_runtime_eligible(&session, &config).await?;
+    }
+    let resolved_model_provider = config.model_provider_id.clone();
+    let resolved_model = config
+        .model
+        .clone()
+        .unwrap_or_else(|| turn.model_info.slug.clone());
+    let resolved_reasoning_effort = config.model_reasoning_effort.clone();
+    let resolved_service_tier = config.service_tier.clone();
+
+    ensure_message_encoding_matches_target(
+        &turn.config.model_provider_id,
+        &source,
+        &resolved_model_provider,
+        encoding,
+        "spawn_agent",
+        PLAINTEXT_SPAWN_AGENT_TOOL,
+    )?;
+    let source = match encoding {
+        CollaborationMessageEncoding::ProviderNative => source,
+        CollaborationMessageEncoding::PlaintextAdapter => {
+            crate::tools::context::ToolCallSource::DirectPlaintextMessage
+        }
+    };
+
     let author = turn
         .session_source
         .get_agent_path()
@@ -120,6 +206,7 @@ async fn handle_spawn_agent(
         new_agent_path.clone(),
         message,
         &source,
+        &turn.config.model_provider_id,
         /*trigger_turn*/ true,
     );
     let context = AgentCommunicationContext::new(AgentCommunicationKind::Spawn, session.thread_id);
@@ -144,6 +231,10 @@ async fn handle_spawn_agent(
     .await
     .map_err(collab_spawn_error)?;
     let new_thread_id = spawned_agent.thread_id;
+    session
+        .services
+        .agent_control
+        .note_native_agent_dispatch(session.thread_id);
     let agent_snapshot = session
         .services
         .agent_control
@@ -188,6 +279,12 @@ async fn handle_spawn_agent(
 }
 
 impl CoreToolRuntime for Handler {
+    fn matches_kind(&self, payload: &ToolPayload) -> bool {
+        matches!(payload, ToolPayload::Function { .. })
+    }
+}
+
+impl CoreToolRuntime for PlaintextHandler {
     fn matches_kind(&self, payload: &ToolPayload) -> bool {
         matches!(payload, ToolPayload::Function { .. })
     }

@@ -13,6 +13,8 @@ const LOGIN_CHATGPT_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const ACCOUNT_TOKEN_USAGE_FETCH_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 10);
 const ACCOUNT_WORKSPACE_MESSAGES_FETCH_TIMEOUT: Duration =
     Duration::from_millis(/*millis*/ 1000);
+const OPENROUTER_PROVIDER_ID: &str = "openrouter";
+const OPENROUTER_API_KEY_ENV_VAR: &str = "OPENROUTER_API_KEY";
 // Login overrides are intentionally available only in debug builds.
 #[cfg(debug_assertions)]
 const LOGIN_ISSUER_OVERRIDE_ENV_VAR: &str = "CODEX_APP_SERVER_LOGIN_ISSUER";
@@ -403,6 +405,78 @@ impl AccountRequestProcessor {
         }
     }
 
+    async fn login_provider_api_key_common(
+        &self,
+        provider: &str,
+        api_key: &str,
+    ) -> std::result::Result<(), JSONRPCErrorError> {
+        if self.auth_manager.is_external_chatgpt_auth_active() {
+            return Err(self.external_auth_active_error());
+        }
+
+        let provider_key_id = if let Some(provider_info) = self.config.model_providers.get(provider)
+        {
+            let Some(provider_key_id) = provider_info.env_key.as_deref() else {
+                return Err(invalid_request(format!(
+                    "Model provider `{provider}` does not accept provider API key login."
+                )));
+            };
+            provider_key_id
+        } else if provider == OPENROUTER_PROVIDER_ID {
+            OPENROUTER_API_KEY_ENV_VAR
+        } else {
+            return Err(invalid_request(format!(
+                "Model provider `{provider}` is not configured."
+            )));
+        };
+
+        {
+            let mut guard = self.active_login.lock().await;
+            if let Some(active) = guard.take() {
+                drop(active);
+            }
+        }
+
+        let codex_home = self.config.codex_home.to_path_buf();
+        let provider_key_id = provider_key_id.to_string();
+        let api_key = api_key.to_string();
+        let auth_credentials_store_mode = self.config.cli_auth_credentials_store_mode;
+        let auth_keyring_backend_kind = self.config.auth_keyring_backend_kind();
+        tokio::task::spawn_blocking(move || {
+            codex_login::login_with_provider_api_key(
+                &codex_home,
+                &provider_key_id,
+                &api_key,
+                auth_credentials_store_mode,
+                auth_keyring_backend_kind,
+            )
+        })
+        .await
+        .map_err(|err| internal_error(format!("provider API key storage task failed: {err}")))?
+        .map_err(|err| internal_error(format!("failed to save provider API key: {err}")))?;
+        self.auth_manager.reload().await;
+        Ok(())
+    }
+
+    async fn login_provider_api_key_v2(
+        &self,
+        request_id: ConnectionRequestId,
+        provider: String,
+        api_key: String,
+    ) {
+        let result = self
+            .login_provider_api_key_common(&provider, &api_key)
+            .await
+            .map(|()| LoginAccountResponse::ApiKey {});
+        let logged_in = result.is_ok();
+        self.outgoing.send_result(request_id, result).await;
+
+        if logged_in {
+            self.send_login_success_notifications(/*login_id*/ None)
+                .await;
+        }
+    }
+
     async fn login_amazon_bedrock_v2(
         &self,
         request_id: ConnectionRequestId,
@@ -466,6 +540,7 @@ impl AccountRequestProcessor {
     async fn login_chatgpt_common(
         &self,
         codex_streamlined_login: bool,
+        allow_forced_api_for_provider_login: bool,
         login_success_page: LoginSuccessPage,
     ) -> std::result::Result<LoginServerOptions, JSONRPCErrorError> {
         let config = self.config.as_ref();
@@ -544,7 +619,11 @@ impl AccountRequestProcessor {
         login_success_page: LoginSuccessPage,
     ) -> Result<LoginAccountResponse, JSONRPCErrorError> {
         let opts = self
-            .login_chatgpt_common(codex_streamlined_login, login_success_page)
+            .login_chatgpt_common(
+                codex_streamlined_login,
+                /*allow_forced_api_for_provider_login*/ false,
+                login_success_page,
+            )
             .await?;
         let server = run_login_server(opts)
             .map_err(|err| internal_error(format!("failed to start login server: {err}")))?;
@@ -626,6 +705,7 @@ impl AccountRequestProcessor {
         let opts = self
             .login_chatgpt_common(
                 /*codex_streamlined_login*/ false,
+                allow_forced_api_for_provider_login,
                 LoginSuccessPage::default(),
             )
             .await?;
@@ -970,6 +1050,10 @@ impl AccountRequestProcessor {
         // then no auth step is required; otherwise, default to requiring auth.
         let config = self.load_latest_config().await;
         let requires_openai_auth = config.model_provider.requires_openai_auth;
+        let cached_codex_backend_auth = self
+            .auth_manager
+            .auth_cached()
+            .is_some_and(|auth| auth.uses_codex_backend());
 
         let response = if !requires_openai_auth {
             GetAuthStatusResponse {

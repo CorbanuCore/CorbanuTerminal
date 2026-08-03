@@ -112,11 +112,22 @@ pub struct RuntimeDbPath {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SqliteConfig {
     sqlite_home: AbsolutePathBuf,
+    logs_db_path_override: Option<AbsolutePathBuf>,
 }
 
 impl SqliteConfig {
     pub fn from_sqlite_home(sqlite_home: AbsolutePathBuf) -> Self {
-        Self { sqlite_home }
+        Self {
+            sqlite_home,
+            logs_db_path_override: None,
+        }
+    }
+
+    /// Override the logs database path while retaining the shared SQLite home for other runtime
+    /// databases.
+    pub fn with_logs_db_path(mut self, logs_db_path: AbsolutePathBuf) -> Self {
+        self.logs_db_path_override = Some(logs_db_path);
+        self
     }
 
     pub fn new_for_testing(sqlite_home: AbsolutePathBuf) -> Self {
@@ -132,9 +143,21 @@ impl SqliteConfig {
         STATE_DB.path(self.home())
     }
 
+    /// Return whether this home already contains state that can supply runtime overlays.
+    ///
+    /// Configuration loading uses this check before opening the state runtime so read-only CLI
+    /// commands do not create an otherwise absent state database. The legacy filename remains a
+    /// valid source because runtime initialization adopts it into the PF namespace.
+    pub fn has_existing_state_db(&self) -> bool {
+        self.state_db_path().exists() || self.home().join(STATE_DB.legacy_filename).exists()
+    }
+
     /// Return the path to the logs database.
     pub fn logs_db_path(&self) -> PathBuf {
-        LOGS_DB.path(self.home())
+        self.logs_db_path_override.as_ref().map_or_else(
+            || LOGS_DB.path(self.home()),
+            codex_utils_absolute_path::AbsolutePathBuf::to_path_buf,
+        )
     }
 
     /// Return the path to the goals database.

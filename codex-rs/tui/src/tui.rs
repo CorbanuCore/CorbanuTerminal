@@ -639,7 +639,7 @@ impl Tui {
     #[cfg(test)]
     pub(crate) fn for_dispatch_integration_test() -> std::io::Result<Self> {
         let backend = CrosstermBackend::new(stdout());
-        let terminal = CustomTerminal::with_test_screen_size(
+        let terminal = CustomTerminal::with_screen_size_and_cursor_position_for_test(
             backend,
             ratatui::layout::Size {
                 width: 100,
@@ -673,6 +673,11 @@ impl Tui {
 
     pub fn frame_requester(&self) -> FrameRequester {
         self.frame_requester.clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn subscribe_draw_requests(&self) -> broadcast::Receiver<()> {
+        self.draw_tx.subscribe()
     }
 
     pub fn enhanced_keys_supported(&self) -> bool {

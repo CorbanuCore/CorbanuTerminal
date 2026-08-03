@@ -11,7 +11,9 @@
     "node": ">=16"
   },
   "files": [
-    "bin/codex.js"
+    "bin/codex.js",
+    "mkdocs.yml",
+    "docs"
   ],
   "repository": {
     "type": "git",

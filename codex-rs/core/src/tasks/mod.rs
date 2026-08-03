@@ -31,6 +31,8 @@ use crate::hook_runtime::record_additional_contexts;
 use crate::hook_runtime::record_pending_input;
 use crate::session::TurnInput;
 use crate::session::session::Session;
+use crate::session::turn::turn_inputs_are_terminal_result_only;
+use crate::session::turn::turn_inputs_expect_parent_completion;
 use crate::session::turn_context::TurnContext;
 use crate::state::ActiveTurn;
 use crate::state::RunningTask;
@@ -341,8 +343,14 @@ impl Session {
             turn_context.multi_agent_version,
             &turn_context.session_source,
         );
-        self.start_task_with_execution_guard(turn_context, input, task, agent_execution_guard)
-            .await;
+        self.start_task_with_execution_guard(
+            turn_context,
+            input,
+            task,
+            mailbox_parent_provenance,
+            agent_execution_guard,
+        )
+        .await;
     }
 
     async fn start_task_with_execution_guard<T: SessionTask + Send + Sync + 'static>(
@@ -350,6 +358,7 @@ impl Session {
         turn_context: Arc<TurnContext>,
         input: Vec<TurnInput>,
         task: T,
+        mailbox_parent_provenance: MailboxParentProvenance,
         agent_execution_guard: Option<AgentExecutionGuard>,
     ) {
         let task: Arc<dyn AnySessionTask> = Arc::new(task);
@@ -374,8 +383,25 @@ impl Session {
             .await
             .clear_turn(&turn_context.sub_id);
 
-        let (pending_items, parent_turn_id) =
-            self.input_queue.get_pending_input(&self.active_turn).await;
+        let (pending_items, parent_turn_id) = self
+            .input_queue
+            .get_pending_input_for_task_start(&self.active_turn)
+            .await;
+        // Pending-work wakes deliberately start RegularTask with empty explicit input and move
+        // mailbox items through InputQueue. Classify the complete admitted task here, after that
+        // move, so a terminal-result turn cannot masquerade as fresh operator work.
+        let terminal_result_only =
+            turn_inputs_are_terminal_result_only(input.iter().chain(pending_items.iter()));
+        let parent_completion_expected =
+            turn_inputs_expect_parent_completion(input.iter().chain(pending_items.iter()));
+        turn_context.parent_completion_expected.store(
+            parent_completion_expected,
+            std::sync::atomic::Ordering::Release,
+        );
+        let native_auto_turn_guard = self
+            .services
+            .agent_control
+            .begin_native_agent_turn(self.thread_id, terminal_result_only);
         if let (MailboxParentProvenance::Attribute, Some(id)) =
             (mailbox_parent_provenance, parent_turn_id)
         {
@@ -472,6 +498,7 @@ impl Session {
             turn_context: Arc::clone(&turn_context),
             turn_extension_data,
             _agent_execution_guard: agent_execution_guard,
+            _native_auto_turn_guard: native_auto_turn_guard,
             _timer: timer,
         };
         turn.task = Some(running_task);
@@ -517,13 +544,13 @@ impl Session {
             return;
         }
 
-        let turn_context = self.new_default_turn_with_sub_id(sub_id).await;
+        let turn_context = self.new_default_turn_with_sub_id(sub_id.clone()).await;
         let agent_execution_guard = match self.services.agent_control.try_execution_guard(
             turn_context.multi_agent_version,
             &turn_context.session_source,
         ) {
             Ok(guard) => guard,
-            Err(CodexErr::AgentLimitReached { .. }) => {
+            Err(err) if matches!(err.details(), CodexErrorDetails::AgentLimitReached { .. }) => {
                 if self.input_queue.try_schedule_capacity_wait() {
                     let session = Arc::clone(self);
                     tokio::spawn(async move {
@@ -552,14 +579,14 @@ impl Session {
             *active_turn = Some(ActiveTurn::default());
         }
 
-        let turn_context = self.new_default_turn_with_sub_id(sub_id).await;
         self.maybe_emit_model_warnings_for_turn(turn_context.as_ref())
             .await;
-        self.start_task(
+        self.start_task_with_execution_guard(
             turn_context,
             Vec::new(),
             RegularTask::new(),
             MailboxParentProvenance::Attribute,
+            agent_execution_guard,
         )
         .await;
     }
@@ -650,10 +677,10 @@ impl Session {
         turn_context: Arc<TurnContext>,
         task_result: SessionTaskResult,
     ) {
-        let (last_agent_message, abort_reason) = match task_result {
-            Ok(last_agent_message) => (last_agent_message, None),
+        let (last_agent_message, abort_reason, completed_naturally) = match task_result {
+            Ok(last_agent_message) => (last_agent_message, None, true),
             Err(err) if matches!(err.details(), CodexErrorDetails::TurnAborted) => {
-                (None, Some(TurnAbortReason::Interrupted))
+                (None, Some(TurnAbortReason::Interrupted), false)
             }
             Err(err) => {
                 warn!(%err, "session task returned an unexpected error");
@@ -668,7 +695,7 @@ impl Session {
                     EventMsg::Error(err.to_error_event(/*message_prefix*/ None)),
                 )
                 .await;
-                (None, None)
+                (None, None, false)
             }
         };
         turn_context
@@ -700,6 +727,10 @@ impl Session {
         };
         self.finish_turn_mailbox_messages(turn_state.as_ref(), completed_naturally)
             .await;
+        // Queue-only mail deliberately does not wake an idle thread or join the immediately
+        // following admitted request. Crossing this terminal boundary makes it eligible to join
+        // the next human turn without creating a model-only continuation loop.
+        self.input_queue.mark_mailbox_ready_for_next_turn().await;
         let mut follow_up_input = Vec::new();
         if !pending_input.is_empty() {
             for pending_input_item in pending_input {
@@ -915,16 +946,21 @@ impl Session {
                 false
             }
         };
-        if cleared_active_turn {
-            self.emit_thread_idle_lifecycle_if_idle().await;
-        }
         // Regular items were flushed before this terminal event was appended; buffering
         // thread writers may not flush it without another explicit barrier.
         if let Err(err) = self.flush_rollout().await {
             warn!("failed to flush rollout after emitting terminal turn event: {err}");
         }
+        // A completed task owns the pending inputs it detached above. Dispatch them even if a
+        // concurrent lifecycle update replaced the active-turn slot while terminal hooks ran;
+        // coupling delivery to slot cleanup loses accepted user input during that race.
+        if !follow_up_input.is_empty() {
+            self.submit_follow_up_input(follow_up_input).await;
+            return;
+        }
         if cleared_active_turn {
             self.maybe_start_turn_for_pending_work().await;
+            self.emit_thread_idle_lifecycle_if_idle().await;
         }
     }
 

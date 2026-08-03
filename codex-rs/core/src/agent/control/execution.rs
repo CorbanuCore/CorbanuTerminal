@@ -36,7 +36,7 @@ impl AgentControl {
         thread_id: ThreadId,
         op: &Op,
     ) -> CodexResult<()> {
-        self.ensure_execution_capacity_for_turn_start(thread_id, op_starts_turn(op))
+        self.ensure_execution_capacity_for_turn_start(thread_id, op_starts_worker_turn(op))
             .await
     }
 
@@ -98,8 +98,10 @@ impl AgentControl {
         Arc::clone(&self.agent_execution_limiter)
             .try_guard()
             .map(Some)
-            .ok_or_else(|| CodexErr::AgentLimitReached {
-                max_threads: self.agent_execution_limiter.max_threads(),
+            .ok_or_else(|| {
+                CodexErr::new(CodexErrorDetails::AgentLimitReached {
+                    max_threads: self.agent_execution_limiter.max_threads(),
+                })
             })
     }
 

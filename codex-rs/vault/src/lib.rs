@@ -25,6 +25,7 @@
 //! the keyring is available, with no repeated secret entry.
 
 use std::collections::BTreeMap;
+use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -38,6 +39,7 @@ use codex_secrets::SecretName;
 use codex_secrets::SecretScope;
 use codex_secrets::SecretsBackendKind;
 use codex_secrets::SecretsManager;
+use codex_secrets::local_keyring_fallback_path;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -46,12 +48,16 @@ use sha2::Sha256;
 use strum_macros::AsRefStr;
 use strum_macros::Display;
 use thiserror::Error;
+use zeroize::Zeroizing;
 
 #[cfg(test)]
 mod tests;
 
 /// Stable secret name holding the vault metadata index.
 const VAULT_INDEX_SECRET_NAME: &str = "VAULT_INDEX";
+
+/// File used to serialize complete vault transactions across threads and processes.
+const VAULT_LOCK_FILE_NAME: &str = ".vault.lock";
 
 /// Version of the on-disk vault index schema. Bumped on breaking changes to
 /// [`VaultIndex`] / [`VaultCredentialMeta`].
@@ -209,6 +215,17 @@ pub struct AddCredential {
 #[derive(Clone)]
 pub struct Vault {
     secrets: SecretsManager,
+    codex_home: PathBuf,
+    uses_default_keyring: bool,
+}
+
+/// Non-secret description of where the encrypted vault passphrase is kept.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VaultKeyStorage {
+    NotInitialized,
+    OperatingSystemKeyring,
+    LocalFileFallback,
+    ConfiguredKeyring,
 }
 
 impl std::fmt::Debug for Vault {
@@ -220,8 +237,12 @@ impl std::fmt::Debug for Vault {
 impl Vault {
     /// Create a vault backed by the default OS keyring store.
     pub fn new(codex_home: PathBuf) -> Self {
-        let secrets = SecretsManager::new(codex_home, SecretsBackendKind::Local);
-        Self { secrets }
+        let secrets = SecretsManager::new(codex_home.clone(), SecretsBackendKind::Local);
+        Self {
+            secrets,
+            codex_home,
+            uses_default_keyring: true,
+        }
     }
 
     /// Create a vault backed by a custom keyring store (used by tests and
@@ -231,41 +252,71 @@ impl Vault {
         keyring_store: Arc<dyn KeyringStore>,
     ) -> Self {
         let secrets = SecretsManager::new_with_keyring_store_and_namespace(
-            codex_home,
+            codex_home.clone(),
             SecretsBackendKind::Local,
             keyring_store,
             LocalSecretsNamespace::ManagedSecrets,
         );
-        Self { secrets }
+        Self {
+            secrets,
+            codex_home,
+            uses_default_keyring: false,
+        }
+    }
+
+    /// Report the active passphrase storage mechanism without opening or
+    /// exposing the passphrase itself.
+    pub fn key_storage(&self) -> VaultKeyStorage {
+        if !self.uses_default_keyring {
+            return VaultKeyStorage::ConfiguredKeyring;
+        }
+        if local_keyring_fallback_path(&self.codex_home).is_file() {
+            VaultKeyStorage::LocalFileFallback
+        } else if self.codex_home.join("secrets").join("local.age").is_file() {
+            VaultKeyStorage::OperatingSystemKeyring
+        } else {
+            VaultKeyStorage::NotInitialized
+        }
     }
 
     /// Add a new credential. Returns [`VaultError::CredentialExists`] if the label is taken.
     pub fn add(&self, entry: AddCredential) -> Result<(), VaultError> {
-        let label = normalize_label(&entry.label)?;
-        if entry.secret.trim().is_empty() {
+        let AddCredential {
+            label: entry_label,
+            credential_type,
+            provider,
+            notes,
+            revocation_notes,
+            secret,
+        } = entry;
+        let label = normalize_label(&entry_label)?;
+        let secret = Zeroizing::new(secret);
+        if secret.trim().is_empty() {
             return Err(VaultError::EmptySecret);
         }
-        let mut index = self.load_index()?;
-        if index.credentials.contains_key(&label) {
-            return Err(VaultError::CredentialExists { label });
-        }
+        self.with_storage_lock(|| {
+            let mut index = self.load_index()?;
+            if index.credentials.contains_key(&label) {
+                return Err(VaultError::CredentialExists { label });
+            }
 
-        let now = Utc::now().timestamp();
-        let meta = VaultCredentialMeta {
-            label: label.clone(),
-            credential_type: entry.credential_type,
-            provider: entry.provider,
-            notes: entry.notes,
-            revocation_notes: entry.revocation_notes,
-            created_at: now,
-            updated_at: now,
-            storage_backend: StorageBackend::EncryptedSecrets,
-        };
+            let now = Utc::now().timestamp();
+            let meta = VaultCredentialMeta {
+                label: label.clone(),
+                credential_type,
+                provider,
+                notes,
+                revocation_notes,
+                created_at: now,
+                updated_at: now,
+                storage_backend: StorageBackend::EncryptedSecrets,
+            };
 
-        self.write_secret(&label, &entry.secret)?;
-        index.credentials.insert(label, meta);
-        self.save_index(&index)?;
-        Ok(())
+            self.write_secret(&label, secret.as_str())?;
+            index.credentials.insert(label, meta);
+            self.save_index(&index)?;
+            Ok(())
+        })
     }
 
     /// Update an existing credential's secret and optional metadata fields.
@@ -279,87 +330,121 @@ impl Vault {
         revocation_notes: Option<Option<String>>,
     ) -> Result<VaultCredentialMeta, VaultError> {
         let label = normalize_label(label)?;
-        let mut index = self.load_index()?;
-        let meta = index
-            .credentials
-            .get_mut(&label)
-            .ok_or_else(|| VaultError::NotFound {
-                label: label.clone(),
-            })?;
+        self.with_storage_lock(|| {
+            let mut index = self.load_index()?;
+            let meta = index
+                .credentials
+                .get_mut(&label)
+                .ok_or_else(|| VaultError::NotFound {
+                    label: label.clone(),
+                })?;
 
-        if let Some(secret) = secret {
-            if secret.trim().is_empty() {
-                return Err(VaultError::EmptySecret);
+            if let Some(secret) = secret {
+                let secret = Zeroizing::new(secret);
+                if secret.trim().is_empty() {
+                    return Err(VaultError::EmptySecret);
+                }
+                self.write_secret(&label, secret.as_str())?;
             }
-            self.write_secret(&label, &secret)?;
-        }
-        if let Some(provider) = provider {
-            meta.provider = provider;
-        }
-        if let Some(notes) = notes {
-            meta.notes = notes;
-        }
-        if let Some(revocation_notes) = revocation_notes {
-            meta.revocation_notes = revocation_notes;
-        }
-        meta.updated_at = Utc::now().timestamp();
-        let updated = meta.clone();
-        self.save_index(&index)?;
-        Ok(updated)
+            if let Some(provider) = provider {
+                meta.provider = provider;
+            }
+            if let Some(notes) = notes {
+                meta.notes = notes;
+            }
+            if let Some(revocation_notes) = revocation_notes {
+                meta.revocation_notes = revocation_notes;
+            }
+            meta.updated_at = Utc::now().timestamp();
+            let updated = meta.clone();
+            self.save_index(&index)?;
+            Ok(updated)
+        })
     }
 
     /// Delete a credential and its secret. Returns `true` if anything was removed.
     pub fn delete(&self, label: &str) -> Result<bool, VaultError> {
         let normalized = normalize_label(label)?;
-        let mut index = self.load_index()?;
-        let removed_meta = index.credentials.remove(&normalized).is_some();
-        let removed_secret = self.delete_secret(&normalized)?;
-        if removed_meta {
-            self.save_index(&index)?;
-        }
-        Ok(removed_meta || removed_secret)
+        self.with_storage_lock(|| {
+            let mut index = self.load_index()?;
+            let removed_meta = index.credentials.remove(&normalized).is_some();
+            if removed_meta {
+                self.save_index(&index)?;
+            }
+            let removed_secret = self.delete_secret(&normalized)?;
+            Ok(removed_meta || removed_secret)
+        })
     }
 
     /// List metadata for all stored credentials (no secret material).
     pub fn list(&self) -> Result<Vec<VaultCredentialMeta>, VaultError> {
-        let index = self.load_index()?;
-        Ok(index.credentials.into_values().collect())
+        self.with_storage_lock(|| {
+            let index = self.load_index()?;
+            Ok(index.credentials.into_values().collect())
+        })
     }
 
     /// Return metadata for a single credential (no secret material).
     pub fn show(&self, label: &str) -> Result<VaultCredentialMeta, VaultError> {
         let normalized = normalize_label(label)?;
-        let index = self.load_index()?;
-        index
-            .credentials
-            .get(&normalized)
-            .cloned()
-            .ok_or_else(|| VaultError::NotFound {
-                label: normalized.clone(),
-            })
+        self.with_storage_lock(|| {
+            let index = self.load_index()?;
+            index
+                .credentials
+                .get(&normalized)
+                .cloned()
+                .ok_or_else(|| VaultError::NotFound {
+                    label: normalized.clone(),
+                })
+        })
     }
 
     /// Reveal the raw secret value for a credential. Only call this from an
     /// explicit user action (`/vault credential reveal` / `/vault credential export`).
     pub fn reveal(&self, label: &str) -> Result<String, VaultError> {
         let normalized = normalize_label(label)?;
-        // Validate the label exists in the index before attempting decryption.
-        let index = self.load_index()?;
-        if !index.credentials.contains_key(&normalized) {
-            return Err(VaultError::NotFound { label: normalized });
-        }
-        self.read_secret(&normalized)?
-            .ok_or_else(|| VaultError::NotFound { label: normalized })
+        self.with_storage_lock(|| {
+            // Validate the label exists in the index before attempting decryption.
+            let index = self.load_index()?;
+            if !index.credentials.contains_key(&normalized) {
+                return Err(VaultError::NotFound { label: normalized });
+            }
+            self.read_secret(&normalized)?
+                .ok_or_else(|| VaultError::NotFound { label: normalized })
+        })
     }
 
     /// Whether a credential with the given label exists.
     pub fn exists(&self, label: &str) -> Result<bool, VaultError> {
         let normalized = normalize_label(label)?;
-        let index = self.load_index()?;
-        Ok(index.credentials.contains_key(&normalized))
+        self.with_storage_lock(|| {
+            let index = self.load_index()?;
+            Ok(index.credentials.contains_key(&normalized))
+        })
     }
 
     // ---- index helpers ----
+
+    fn with_storage_lock<T>(
+        &self,
+        operation: impl FnOnce() -> Result<T, VaultError>,
+    ) -> Result<T, VaultError> {
+        let secrets_dir = self.codex_home.join("secrets");
+        std::fs::create_dir_all(&secrets_dir)
+            .context("failed to create vault secrets directory")?;
+        let lock_path = secrets_dir.join(VAULT_LOCK_FILE_NAME);
+        let lock_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .with_context(|| format!("failed to open vault lock {}", lock_path.display()))?;
+        lock_file
+            .lock()
+            .with_context(|| format!("failed to lock vault {}", lock_path.display()))?;
+        operation()
+    }
 
     fn load_index(&self) -> Result<VaultIndex, VaultError> {
         let name = index_secret_name()?;

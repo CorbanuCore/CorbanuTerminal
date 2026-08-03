@@ -28,6 +28,16 @@ fn title_preview_line(chat: &mut ChatWidget, items: &[TerminalTitleItem]) -> Str
     line_text(preview)
 }
 
+#[tokio::test]
+async fn terminal_title_app_name_uses_pfterminal_identity() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    assert_eq!(
+        title_preview_line(&mut chat, &[TerminalTitleItem::AppName]),
+        "pfterminal"
+    );
+}
+
 fn combined_preview_snapshot(
     chat: &mut ChatWidget,
     status_items: &[StatusLineItem],

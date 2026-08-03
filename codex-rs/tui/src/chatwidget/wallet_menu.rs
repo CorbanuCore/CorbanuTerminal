@@ -467,14 +467,23 @@ impl ChatWidget {
         let home = self.config.codex_home.as_path().to_path_buf();
         let tx = self.app_event_tx.clone();
         tokio::spawn(async move {
-            let result = WalletDaemonClient::new(home).lock().await;
-            let cell: Box<dyn HistoryCell> = match result {
-                Ok(()) => Box::new(history_cell::new_info_event(
-                    "Wallet locked in every PfTerminal process.".to_string(),
+            let client = WalletDaemonClient::new(home);
+            let cell: Box<dyn HistoryCell> = match client.status().await {
+                Ok(status) if !status.wallet_exists => Box::new(history_cell::new_info_event(
+                    "No local wallet exists; there is nothing to lock.".to_string(),
                     None,
                 )),
+                Ok(_) => match client.lock().await {
+                    Ok(()) => Box::new(history_cell::new_info_event(
+                        "Wallet locked in every PfTerminal process.".to_string(),
+                        None,
+                    )),
+                    Err(error) => Box::new(history_cell::new_error_event(format!(
+                        "Wallet lock failed: {error}"
+                    ))),
+                },
                 Err(error) => Box::new(history_cell::new_error_event(format!(
-                    "Wallet lock failed: {error}"
+                    "Wallet lock failed while checking wallet state: {error}"
                 ))),
             };
             tx.send(AppEvent::InsertHistoryCell(cell));
@@ -694,20 +703,30 @@ impl ChatWidget {
         self.show_selection_view(SelectionViewParams {
             view_id: Some("wallet-plan-confirm"),
             header: Box::new(header),
-            items: vec![SelectionItem {
-                name: format!("Pay {} USDC", plan.price_usdc),
-                description: Some(
-                    "Sign the exact x402 USDC transfer and activate the provider".to_string(),
-                ),
-                is_disabled: remaining_usdc.is_none_or(|(_, remaining)| remaining.is_none()),
-                actions: vec![Box::new(move |tx| {
-                    tx.send(AppEvent::WalletPlanPurchaseRequested {
-                        plan: selected.clone(),
-                    })
-                })],
-                dismiss_on_select: true,
-                ..Default::default()
-            }],
+            items: vec![
+                SelectionItem {
+                    name: "Cancel".to_string(),
+                    description: Some("Return without signing or sending USDC".to_string()),
+                    dismiss_on_select: true,
+                    ..Default::default()
+                },
+                SelectionItem {
+                    name: format!("Pay {} USDC", plan.price_usdc),
+                    description: Some(
+                        "Sign the exact x402 USDC transfer and activate the provider".to_string(),
+                    ),
+                    is_disabled: remaining_usdc.is_none_or(|(_, remaining)| remaining.is_none()),
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::WalletPlanPurchaseRequested {
+                            plan: selected.clone(),
+                        })
+                    })],
+                    dismiss_on_select: true,
+                    ..Default::default()
+                },
+            ],
+            initial_selected_idx: Some(0),
+            allow_number_shortcuts: false,
             footer_hint: Some(standard_popup_hint_line()),
             ..Default::default()
         });

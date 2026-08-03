@@ -149,6 +149,12 @@ pub(crate) struct RestoredClaudePane {
 pub(crate) struct PaneLayoutState {
     pub(crate) version: u32,
     pub(crate) codex_thread_id: Option<String>,
+    /// Operator-owned native panes created through `/panes`.
+    ///
+    /// These are independent `thread/start` sessions, not Core-managed spawn children, so they
+    /// need explicit layout membership to be reattached when the owning Main session resumes.
+    #[serde(default)]
+    pub(crate) codex_user_pane_ids: Vec<String>,
     pub(crate) active_user_pane_id: Option<String>,
     pub(crate) spawn_nazgul_pane_id: Option<String>,
     #[serde(default)]

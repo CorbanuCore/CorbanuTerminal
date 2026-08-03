@@ -63,7 +63,7 @@ pub(super) async fn enrich_loaded_threads<T>(
                 AgentStatus::Errored(_) => {
                     thread.status = ThreadStatus::SystemError;
                 }
-                AgentStatus::Shutdown | AgentStatus::NotFound => {
+                AgentStatus::Shutdown | AgentStatus::NotFound | AgentStatus::Unloaded => {
                     thread.status = ThreadStatus::NotLoaded;
                     return;
                 }

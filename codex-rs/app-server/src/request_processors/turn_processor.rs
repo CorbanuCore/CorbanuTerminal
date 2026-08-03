@@ -2,6 +2,7 @@ use super::*;
 use codex_agent_extension::AgentInvocation;
 use codex_agent_extension::AgentRun;
 use codex_agent_extension::AgentRunner;
+use codex_protocol::crew::AgentClass;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputContentItem;
@@ -29,6 +30,20 @@ pub(super) fn can_accept_direct_input(
             session_source,
             SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
         )
+        || human_addressable_crew_member(session_source)
+}
+
+fn human_addressable_crew_member(session_source: &SessionSource) -> bool {
+    matches!(
+        session_source,
+        SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            agent_class: Some(AgentClass::CrewMember {
+                human_addressable: true,
+                ..
+            }),
+            ..
+        })
+    )
 }
 
 fn validate_user_input_image_urls(input: &[V2UserInput]) -> Result<(), JSONRPCErrorError> {
@@ -125,7 +140,7 @@ fn map_additional_context(
 
 fn turn_start_submission_error(err: &CodexErr) -> JSONRPCErrorError {
     let mut error = internal_error(format!("failed to start turn: {err}"));
-    if let CodexErr::AgentLimitReached { max_threads } = err {
+    if let CodexErrorDetails::AgentLimitReached { max_threads } = err.details() {
         error.data = Some(serde_json::json!({
             "turn_start_error": "execution_capacity",
             "max_threads": max_threads,
@@ -144,6 +159,7 @@ fn direct_input_to_v2_thread_spawn_is_blocked(
             session_source,
             SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
         )
+        && !human_addressable_crew_member(session_source)
         && app_server_client_name != Some("codex-tui")
 }
 
@@ -243,7 +259,7 @@ impl TurnRequestProcessor {
         app_server_client_name: Option<&str>,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         validate_user_input_image_urls(&params.input)?;
-        self.turn_steer_inner(request_id, params)
+        self.turn_steer_inner(request_id, params, app_server_client_name)
             .await
             .map(|response| Some(response.into()))
     }
@@ -369,9 +385,10 @@ impl TurnRequestProcessor {
         app_server_client_name: Option<&str>,
     ) -> Result<(), JSONRPCErrorError> {
         let config_snapshot = thread.config_snapshot().await;
-        if !can_accept_direct_input(
+        if direct_input_to_v2_thread_spawn_is_blocked(
             thread.multi_agent_version(),
             &config_snapshot.session_source,
+            app_server_client_name,
         ) {
             let error = invalid_request(DIRECT_INPUT_TO_MULTI_AGENT_V2_SUBAGENT_ERROR);
             self.track_error_response(request_id, &error, /*error_type*/ None);
@@ -1565,7 +1582,10 @@ mod tests {
 
     #[test]
     fn execution_capacity_turn_start_error_is_structured() {
-        let error = turn_start_submission_error(&CodexErr::AgentLimitReached { max_threads: 4 });
+        let error =
+            turn_start_submission_error(&CodexErr::new(CodexErrorDetails::AgentLimitReached {
+                max_threads: 4,
+            }));
 
         assert_eq!(
             error.data,
@@ -1598,6 +1618,58 @@ mod tests {
             Some(MultiAgentVersion::V2),
             &source,
             Some("codex-tui"),
+        ));
+        assert!(direct_input_to_v2_thread_spawn_is_blocked(
+            Some(MultiAgentVersion::V2),
+            &source,
+            Some("another-client"),
+        ));
+    }
+
+    #[test]
+    fn human_addressable_crew_members_accept_direct_input_from_every_client() {
+        let source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            parent_thread_id: ThreadId::new(),
+            depth: 1,
+            agent_path: None,
+            agent_nickname: Some("Angmar".to_string()),
+            agent_role: Some("nazgul".to_string()),
+            agent_class: Some(AgentClass::CrewMember {
+                crew_id: "pfterminal-crew".to_string(),
+                logical_member_id: "nazgul".to_string(),
+                human_addressable: true,
+            }),
+        });
+
+        assert!(can_accept_direct_input(
+            Some(MultiAgentVersion::V2),
+            &source,
+        ));
+        assert!(!direct_input_to_v2_thread_spawn_is_blocked(
+            Some(MultiAgentVersion::V2),
+            &source,
+            Some("another-client"),
+        ));
+    }
+
+    #[test]
+    fn non_human_addressable_crew_members_remain_parent_controlled() {
+        let source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            parent_thread_id: ThreadId::new(),
+            depth: 1,
+            agent_path: None,
+            agent_nickname: Some("background-worker".to_string()),
+            agent_role: Some("worker".to_string()),
+            agent_class: Some(AgentClass::CrewMember {
+                crew_id: "background-crew".to_string(),
+                logical_member_id: "worker".to_string(),
+                human_addressable: false,
+            }),
+        });
+
+        assert!(!can_accept_direct_input(
+            Some(MultiAgentVersion::V2),
+            &source,
         ));
         assert!(direct_input_to_v2_thread_spawn_is_blocked(
             Some(MultiAgentVersion::V2),

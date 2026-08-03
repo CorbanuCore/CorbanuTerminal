@@ -19,6 +19,18 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use serde::Deserialize;
 use serde::Serialize;
 
+/// Where a TUI approval decision must be delivered.
+///
+/// Normal requests resolve against their owning thread. Locally generated previews (for example
+/// the debug approval exerciser) terminate inside the TUI and must never be forwarded as an
+/// unowned thread operation.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum ApprovalResponseDestination {
+    #[default]
+    Thread,
+    Local,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ExecApprovalRequestEvent {
     pub(crate) call_id: String,
@@ -118,4 +130,6 @@ pub(crate) struct ApplyPatchApprovalRequestEvent {
     pub(crate) reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) grant_root: Option<PathBuf>,
+    #[serde(default)]
+    pub(crate) response_destination: ApprovalResponseDestination,
 }

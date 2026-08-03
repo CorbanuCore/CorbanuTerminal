@@ -4,10 +4,12 @@ use anyhow::Error;
 use anyhow::Result;
 use app_test_support::ChatGptAuthFixture;
 use app_test_support::TestAppServer;
+use app_test_support::to_response;
 use app_test_support::write_chatgpt_auth;
 use app_test_support::write_models_cache;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::JSONRPCError;
+use codex_app_server_protocol::JSONRPCResponse;
 use codex_app_server_protocol::Model;
 use codex_app_server_protocol::ModelListParams;
 use codex_app_server_protocol::ModelListResponse;
@@ -166,15 +168,16 @@ async fn list_models_returns_all_models_with_large_limit() -> Result<()> {
 #[tokio::test]
 async fn list_models_returns_ambient_default_catalog() -> Result<()> {
     let codex_home = TempDir::new()?;
-    let mut mcp = TestAppServer::new_with_env(
-        codex_home.path(),
-        &[
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .with_env_overrides(&[
             (OPENAI_API_KEY_ENV_VAR, None),
             (AMBIENT_API_KEY_ENV_VAR, None),
             (ZAI_API_KEY_ENV_VAR, None),
-        ],
-    )
-    .await?;
+        ])
+        .build()
+        .await?;
 
     timeout(DEFAULT_TIMEOUT, mcp.initialize()).await??;
 
@@ -337,11 +340,15 @@ openai_base_url = "{server_uri}/v1"
             description: "Focused".to_string(),
         },
     ];
+    // The remote item is merged into PFTerminal's global catalog; the global
+    // picker default remains authoritative rather than making a one-item
+    // remote response the default model.
+    expected_items[0].is_default = false;
 
     // The models manager uses a global bundled catalog as its base and merges the
     // remote `/models` response into it, so this test pins remote presence and
     // endpoint usage rather than asserting that the remote catalog is exclusive.
-    assert!(items.contains(&expected_remote_item));
+    assert!(items.contains(&expected_items[0]));
     assert!(next_cursor.is_none());
     assert_eq!(
         models_mock.requests().len(),

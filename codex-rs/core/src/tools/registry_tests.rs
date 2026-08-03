@@ -3,6 +3,7 @@ use crate::session::session::Session;
 use crate::session::step_context::StepContext;
 use futures::future::BoxFuture;
 use pretty_assertions::assert_eq;
+use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 

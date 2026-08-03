@@ -142,10 +142,34 @@ async fn apply_role_to_config_inner(
         .flatten();
     let preserve_current_provider = role_layer_toml.get("model_provider").is_none();
     let preserve_current_service_tier = role_layer_toml.get("service_tier").is_none();
+    // Runtime permission changes (CLI flags, `/permissions`, or a restored thread snapshot) are
+    // held on `Config` and are not necessarily represented in its persisted layer stack. Rebuilding
+    // that stack for an unrelated role layer must not silently reset a spawned child to defaults.
+    // A role that explicitly declares permission-related configuration still owns that policy.
+    let role_sets_permissions = [
+        "approval_policy",
+        "approvals_reviewer",
+        "sandbox_mode",
+        "default_permissions",
+        "permissions",
+        "network",
+        "shell_environment_policy",
+        "allow_login_shell",
+        "windows",
+    ]
+    .into_iter()
+    .any(|key| role_layer_toml.get(key).is_some());
+    let preserved_runtime_permissions =
+        (!role_sets_permissions).then(|| config.permissions.clone());
+    let preserved_runtime_approvals_reviewer =
+        (!role_sets_permissions).then_some(config.approvals_reviewer);
     let role_reasoning_effort = role_layer_toml
         .get("model_reasoning_effort")
         .and_then(TomlValue::as_str)
         .and_then(|value| ReasoningEffort::from_str(value).ok());
+    let preserved_runtime_reasoning_effort = (!is_built_in && role_reasoning_effort.is_none())
+        .then_some(config.model_reasoning_effort.clone())
+        .flatten();
 
     let mut next_config = reload::build_next_config(
         config,
@@ -162,7 +186,19 @@ async fn apply_role_to_config_inner(
     }
     if let Some(reasoning_effort) = role_reasoning_effort {
         next_config.model_reasoning_effort = Some(reasoning_effort);
+    } else if let Some(reasoning_effort) = preserved_runtime_reasoning_effort {
+        next_config.model_reasoning_effort = Some(reasoning_effort);
     }
+    if let Some(permissions) = preserved_runtime_permissions {
+        next_config.permissions = permissions;
+    }
+    if let Some(approvals_reviewer) = preserved_runtime_approvals_reviewer {
+        next_config.approvals_reviewer = approvals_reviewer;
+    }
+    // The caller may raise the depth at runtime for a PF crew topology (for example,
+    // root -> Troll -> Orc). Rebuilding from persisted layers must not collapse that effective
+    // runtime limit back to the upstream default when a role file is applied.
+    next_config.agent_max_depth = config.agent_max_depth;
     *config = next_config;
     Ok(())
 }
@@ -222,8 +258,6 @@ mod reload {
         preserve_current_service_tier: bool,
     ) -> anyhow::Result<Config> {
         let preserve_current_model = role_layer_toml.get("model").is_none();
-        let preserve_current_reasoning_effort =
-            role_layer_toml.get("model_reasoning_effort").is_none();
         let mut overrides = reload_overrides(
             config,
             preserve_current_model,
@@ -242,7 +276,7 @@ mod reload {
         let config_layer_stack = build_config_layer_stack(config, &role_layer_toml)?;
         let merged_config = deserialize_effective_config(config, &config_layer_stack)?;
 
-        let mut next_config = Config::load_config_with_layer_stack(
+        let next_config = Config::load_config_with_layer_stack(
             LOCAL_FS.as_ref(),
             merged_config,
             overrides,
@@ -250,11 +284,6 @@ mod reload {
             config_layer_stack,
         )
         .await?;
-        if preserve_current_reasoning_effort {
-            next_config
-                .model_reasoning_effort
-                .clone_from(&config.model_reasoning_effort);
-        }
         Ok(next_config)
     }
 
@@ -314,9 +343,6 @@ mod reload {
                 .then(|| config.model.clone())
                 .flatten(),
             cwd: Some(config.cwd.to_path_buf()),
-            model: preserve_current_model
-                .then(|| config.model.clone())
-                .flatten(),
             model_provider: preserve_current_provider.then(|| config.model_provider_id.clone()),
             service_tier: preserve_current_service_tier.then(|| config.service_tier.clone()),
             codex_linux_sandbox_exe: config.codex_linux_sandbox_exe.clone(),

@@ -40,7 +40,8 @@ pub struct ToolCall {
 
 impl ToolCall {
     pub(crate) fn direct_source(&self) -> ToolCallSource {
-        if self.tool_name.namespace.as_deref() == Some("collaboration")
+        let is_unencrypted_reserved_collaboration_call = self.tool_name.namespace.as_deref()
+            == Some("collaboration")
             && matches!(
                 self.tool_name.name.as_str(),
                 "spawn_agent" | "send_message" | "followup_task"
@@ -48,8 +49,13 @@ impl ToolCall {
             && self
                 .encrypted_function_args
                 .as_ref()
-                .is_some_and(Vec::is_empty)
-        {
+                .is_some_and(Vec::is_empty);
+        let is_cross_provider_plaintext_adapter = self.tool_name.namespace.is_none()
+            && matches!(
+                self.tool_name.name.as_str(),
+                "spawn_agent_plaintext" | "send_message_plaintext" | "followup_task_plaintext"
+            );
+        if is_unencrypted_reserved_collaboration_call || is_cross_provider_plaintext_adapter {
             ToolCallSource::DirectPlaintextMessage
         } else {
             ToolCallSource::Direct

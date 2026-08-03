@@ -30,14 +30,19 @@ Visible OpenRouter models are bundled in
 
 | Slug | Display name | Listed pricing text |
 | --- | --- | --- |
-| `z-ai/glm-5.2` | OpenRouter GLM 5.2 | `$0.98/M input`, `$3.08/M output` |
-| `minimax/minimax-m3` | OpenRouter MiniMax M3 | `$0.30/M input`, `$1.20/M output` |
+| `deepseek/deepseek-v4-flash-0731` | OpenRouter DeepSeek V4 Flash 0731 | `$0.14/M input`, `$0.0028/M cached input`, `$0.28/M output` |
+| `deepseek/deepseek-v4-pro` | OpenRouter DeepSeek V4 Pro | `$0.435/M input`, `$0.87/M output` |
+| `moonshotai/kimi-k3` | OpenRouter Kimi K3 | `$3.00/M input`, `$0.30/M cached input`, `$15.00/M output` |
+| `x-ai/grok-4.5` | OpenRouter Grok 4.5 | `$2.00/M input`, `$6.00/M output` |
+| `minimax/minimax-m3` | OpenRouter MiniMax M3 | `$0.60/M input`, `$2.40/M output` |
 | `openrouter/owl-alpha` | OpenRouter Owl Alpha | `$0/M input`, `$0/M output` |
 | `google/gemini-3.5-flash` | OpenRouter Gemini 3.5 Flash | `$1.50/M input`, `$9.00/M output` |
+| `tencent/hy3:free` | OpenRouter Tencent Hy3 Free | `$0/M input`, `$0/M output` |
 
-OpenRouter GLM supports `high` and `xhigh` reasoning levels in the current
-model metadata. The other visible OpenRouter models are listed without a
-default reasoning level unless the model metadata specifies one.
+DeepSeek V4 Flash is intentionally pinned to the exact
+`deepseek/deepseek-v4-flash-0731` slug. Direct DeepSeek uses provider
+`deepseek` and model `deepseek-v4-flash`; the two billing and routing paths are
+distinct and must remain visible as such.
 
 ## Model And Provider Selection
 
@@ -47,7 +52,10 @@ PFTerminal maps these model slugs to provider `openrouter` in
 Examples:
 
 ```bash
-pfterminal -m z-ai/glm-5.2
+pfterminal -m deepseek/deepseek-v4-flash-0731
+pfterminal -m deepseek/deepseek-v4-pro
+pfterminal -m moonshotai/kimi-k3
+pfterminal -m x-ai/grok-4.5
 pfterminal -m minimax/minimax-m3
 pfterminal -m openrouter/owl-alpha
 pfterminal -m google/gemini-3.5-flash

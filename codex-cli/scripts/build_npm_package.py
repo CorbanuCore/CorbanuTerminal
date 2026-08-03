@@ -234,6 +234,8 @@ def stage_sources(staging_dir: Path, version: str, package: str) -> None:
         bin_dir = staging_dir / "bin"
         bin_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(CODEX_CLI_ROOT / "bin" / "codex.js", bin_dir / "codex.js")
+        shutil.copy2(REPO_ROOT / "mkdocs.yml", staging_dir / "mkdocs.yml")
+        shutil.copytree(REPO_ROOT / "docs", staging_dir / "docs")
 
         readme_src = REPO_ROOT / "README.md"
         if readme_src.exists():
@@ -292,7 +294,7 @@ def stage_sources(staging_dir: Path, version: str, package: str) -> None:
         package_json["version"] = version
 
     if package == "codex":
-        package_json["files"] = ["bin/codex.js"]
+        package_json["files"] = ["bin/codex.js", "mkdocs.yml", "docs"]
         package_json["optionalDependencies"] = {
             CODEX_PLATFORM_PACKAGES[platform_package]["npm_name"]: (
                 f"npm:{CODEX_NPM_NAME}@"

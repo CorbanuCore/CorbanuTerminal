@@ -449,6 +449,7 @@ pub(crate) fn wrapped_protocol_event_type(event: &EventMsg) -> Option<&'static s
         | EventMsg::TurnModerationMetadata(_)
         | EventMsg::ContextCompacted(_)
         | EventMsg::ThreadSettingsApplied(_)
+        | EventMsg::ModelResponseCompleted(_)
         | EventMsg::EnvironmentConnected(_)
         | EventMsg::EnvironmentDisconnected(_)
         | EventMsg::TokenCount(_)

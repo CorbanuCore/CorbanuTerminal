@@ -57,6 +57,13 @@ def build_package_dir(
         bin_dir / f"codex-code-mode-host{spec.exe_suffix}",
         is_windows=spec.is_windows,
     )
+    for extra in variant.extra_binaries:
+        output_name = extra.entrypoint_name(spec)
+        copy_executable(
+            inputs.extra_bins[output_name],
+            bin_dir / output_name,
+            is_windows=spec.is_windows,
+        )
     copy_executable(inputs.rg_bin, path_dir / spec.rg_name, is_windows=spec.is_windows)
 
     if inputs.zsh_bin is not None:
@@ -153,6 +160,10 @@ def validate_package_dir(
         Path("codex-path") / spec.rg_name,
     ]
     executable_files = list(required_files)
+    for extra in variant.extra_binaries:
+        extra_path = Path("bin") / extra.entrypoint_name(spec)
+        required_files.append(extra_path)
+        executable_files.append(extra_path)
 
     if include_zsh:
         zsh_path = Path("codex-resources") / ZSH_RESOURCE_PATH

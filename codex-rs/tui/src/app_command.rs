@@ -103,6 +103,10 @@ impl AppCommand {
         Self::Interrupt
     }
 
+    pub(crate) fn interrupt_and_restore_prompt_if_no_output() -> Self {
+        Self::Interrupt
+    }
+
     pub(crate) fn clean_background_terminals() -> Self {
         Self::CleanBackgroundTerminals
     }

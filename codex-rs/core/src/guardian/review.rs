@@ -6,6 +6,7 @@ use codex_analytics::GuardianReviewTerminalStatus;
 use codex_analytics::GuardianReviewTrackContext;
 use codex_analytics::GuardianReviewedAction;
 use codex_core_plugins::PluginCommandAttribution;
+use codex_model_provider::DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::CodexErrorInfo;
@@ -737,7 +738,12 @@ pub(super) async fn guardian_review_session_config(
             turn.config.http_client_factory(),
         )
         .await;
-    let default_review_model_id = turn.provider.approval_review_preferred_model();
+    let provider_review_model_id = turn.provider.approval_review_preferred_model();
+    let default_review_model_id = turn.provider.resolve_background_helper_model(
+        provider_review_model_id,
+        DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL,
+        turn.model_info.slug.as_str(),
+    );
     let preferred_reasoning_effort = |supports_low: bool, fallback| {
         if supports_low {
             Some(codex_protocol::openai_models::ReasoningEffort::Low)
@@ -746,7 +752,7 @@ pub(super) async fn guardian_review_session_config(
         }
     };
     let model_override = turn.model_info.auto_review_model_override.as_deref();
-    let review_model_id = model_override.unwrap_or(default_review_model_id);
+    let review_model_id = model_override.unwrap_or(default_review_model_id.as_str());
     let review_model = available_models
         .iter()
         .find(|preset| preset.model == review_model_id);

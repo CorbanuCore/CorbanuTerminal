@@ -33,6 +33,9 @@ impl App {
         // A committed cell can unblock a settled /usage card that was waiting
         // behind a transient active cell or a provisional stream tail.
         self.chat_widget.request_pending_usage_output_insertion();
+        // History insertions frequently arrive from background AppEvents while the operator is
+        // idle. Flush queued terminal lines immediately instead of waiting for another keypress.
+        tui.frame_requester().schedule_frame();
     }
 
     pub(super) fn pending_usage_output_insertion_blocked(&self) -> bool {

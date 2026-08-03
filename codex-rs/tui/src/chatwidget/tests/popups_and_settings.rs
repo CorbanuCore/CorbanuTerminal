@@ -1,6 +1,7 @@
 use super::*;
 use crate::app_event::ConnectorsSnapshot;
 use crate::chatwidget::connectors::ConnectorsCacheState;
+use crate::spawn_orchestration::SpawnRole;
 use codex_app_server_protocol::HookErrorInfo;
 use codex_app_server_protocol::HooksListEntry;
 use codex_app_server_protocol::HooksListResponse;
@@ -20,6 +21,8 @@ use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+use codex_model_provider_info::DEEPSEEK_DEFAULT_MODEL;
+use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_K3_MODEL;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
@@ -816,6 +819,7 @@ async fn plugins_popup_removes_user_configured_marketplace_flow() {
         confirmation
     );
 
+    chat.handle_key_event(KeyEvent::from(KeyCode::Up));
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
     let marketplace_display_name = match rx.try_recv() {
         Ok(AppEvent::OpenMarketplaceRemoveLoading {
@@ -3382,6 +3386,46 @@ async fn model_selection_popup_openrouter_provider_snapshot() {
 }
 
 #[tokio::test]
+async fn spawn_model_selection_popup_deepseek_provider_snapshot() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some(AMBIENT_DEFAULT_MODEL)).await;
+    chat.thread_id = Some(ThreadId::new());
+    let presets = chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    chat.open_all_models_popup_for_purpose(
+        presets,
+        spawn_model_purpose(SpawnRole::Orc, None, DEEPSEEK_DEFAULT_MODEL),
+    );
+
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 110, /*height*/ 24);
+    assert_chatwidget_snapshot!("spawn_model_selection_popup_deepseek_provider", popup);
+    assert!(popup.contains("PFTerminal Orc pane - DeepSeek API key"));
+    assert!(popup.contains("[DeepSeek]"));
+    assert!(popup.contains("DeepSeek V4 Flash 0731 (Direct) (current)"));
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    let (preset, purpose) = loop {
+        match rx.try_recv().expect("DeepSeek reasoning event") {
+            AppEvent::OpenReasoningPopup { model, purpose } => break (model, purpose),
+            AppEvent::SettingsSelectionClosed => continue,
+            event => panic!("unexpected event: {event:?}"),
+        }
+    };
+    chat.open_reasoning_popup_for_purpose(preset, purpose);
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::CreateSpawnAgent {
+            model,
+            provider: Some(provider),
+            ..
+        }) if model == DEEPSEEK_DEFAULT_MODEL && provider == DEEPSEEK_PROVIDER_ID
+    );
+}
+
+#[tokio::test]
 async fn model_selection_popup_kimi_code_provider_snapshot() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some(KIMI_CODE_K3_MODEL)).await;
     chat.thread_id = Some(ThreadId::new());
@@ -3407,7 +3451,7 @@ async fn model_selection_popup_kimi_code_provider_snapshot() {
     chat.open_reasoning_popup_for_purpose(model, purpose);
     let reasoning_popup = render_bottom_popup(&chat, /*width*/ 100);
     assert_chatwidget_snapshot!("kimi_code_reasoning_popup", reasoning_popup);
-    for label in ["Low", "High", "max (default)"] {
+    for label in ["Low", "High", "More reasoning…"] {
         assert!(
             reasoning_popup.contains(label),
             "expected Kimi reasoning option {label:?} in picker:\n{reasoning_popup}"
@@ -3438,12 +3482,12 @@ async fn spawn_model_selection_popup_snapshot() {
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 30);
     assert_chatwidget_snapshot!("spawn_model_selection_popup", popup);
-    assert!(popup.contains("Codex Nazgul pane - OpenAI Codex plan"));
+    assert!(popup.contains("PFTerminal Nazgul pane - OpenAI Codex plan"));
     assert!(popup.contains("GPT-5.6-Sol (current)"));
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Right));
     let switched = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 30);
-    assert!(switched.contains("Codex Nazgul pane - Ambient coding plan"));
+    assert!(switched.contains("PFTerminal Nazgul pane - Ambient coding plan"));
     assert!(switched.lines().any(|line| line.contains('›')));
 }
 
@@ -3460,7 +3504,7 @@ async fn codex_pane_model_picker_uses_provider_tabs_and_opens_name_prompt() {
     );
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 30);
-    assert!(popup.contains("New Codex pane - OpenAI Codex plan"));
+    assert!(popup.contains("New PFTerminal pane - OpenAI Codex plan"));
     assert!(popup.contains("GPT-5.6-Sol (current)"));
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
@@ -3566,6 +3610,7 @@ async fn spawn_single_effort_model_creates_directly_for_troll() {
         is_default: true,
         upgrade: None,
         show_in_picker: true,
+        multi_agent_version: None,
         availability_nux: None,
         supported_in_api: true,
         input_modalities: default_input_modalities(),
@@ -4092,6 +4137,17 @@ async fn model_picker_selects_kimi_k3_with_required_max_reasoning() {
         "expected Kimi K3 selection to use the model apply path"
     );
 
+    // Max is intentionally behind the explicit advanced-effort step.
+    chat.handle_key_event(KeyEvent::from(KeyCode::Down));
+    chat.handle_key_event(KeyEvent::from(KeyCode::Down));
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    let advanced_preset = std::iter::from_fn(|| rx.try_recv().ok()).find_map(|event| match event {
+        AppEvent::OpenAdvancedReasoningPopup { model } => Some(model),
+        _ => None,
+    });
+    chat.open_advanced_reasoning_popup(advanced_preset.expect("Kimi advanced reasoning popup"));
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+
     let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
     assert!(events.iter().any(|event| matches!(
         event,
@@ -4100,8 +4156,7 @@ async fn model_picker_selects_kimi_k3_with_required_max_reasoning() {
     )));
     assert!(events.iter().any(|event| matches!(
         event,
-        AppEvent::UpdateReasoningEffort(Some(ReasoningEffortConfig::Custom(effort)))
-            if effort == "max"
+        AppEvent::UpdateReasoningEffort(Some(ReasoningEffortConfig::Max))
     )));
 }
 
@@ -4395,6 +4450,7 @@ async fn max_reasoning_selection_persists_model_selection() {
         event,
         AppEvent::PersistModelSelection {
             model,
+            provider: _,
             effort: Some(ReasoningEffortConfig::Max),
         } if model == "gpt-5.4"
     )));
@@ -4705,12 +4761,9 @@ async fn advanced_only_reasoning_option_requires_explicit_selection() {
 }
 
 #[tokio::test]
-async fn auto_model_advertising_advanced_effort_opens_reasoning_picker() {
+async fn curated_model_advertising_advanced_effort_opens_reasoning_picker() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     let mut preset = get_available_model(&chat, "gpt-5.6-terra");
-    preset.id = "codex-auto-test".to_string();
-    preset.model = "codex-auto-test".to_string();
-    preset.display_name = "codex-auto-test".to_string();
     preset.default_reasoning_effort = ReasoningEffortConfig::Medium;
     preset
         .supported_reasoning_efforts

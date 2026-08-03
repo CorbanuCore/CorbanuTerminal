@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/status_and_layout.rs
+assertion_line: 2072
 expression: snapshot
 ---
 "                                                                                "
@@ -8,4 +9,4 @@ expression: snapshot
 "                                                                                "
 "› Ask PFTerminal to do anything                                                 "
 "                                                                                "
-"  gpt-5.6-sol default · /tmp/project                Goal paused (/goal resume)  "
+"  Ambient GLM 5.2 standard · /tmp/project · Post F… Goal paused (/goal resume)  "

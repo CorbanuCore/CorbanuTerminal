@@ -18,6 +18,7 @@ use codex_protocol::models::is_local_audio_close_tag_text;
 use codex_protocol::models::is_local_audio_open_tag_text;
 use codex_protocol::models::is_local_image_close_tag_text;
 use codex_protocol::models::is_local_image_open_tag_text;
+use codex_protocol::models::plaintext_agent_message_content;
 use codex_protocol::protocol::APPS_INSTRUCTIONS_OPEN_TAG;
 use codex_protocol::protocol::COLLABORATION_MODE_OPEN_TAG;
 use codex_protocol::protocol::CONTEXT_WINDOW_GUIDANCE_OPEN_TAG;
@@ -78,16 +79,27 @@ pub(crate) fn has_non_contextual_dev_message_content(message: &[ContentItem]) ->
 }
 
 fn is_contextual_dev_fragment(content_item: &ContentItem) -> bool {
+    contextual_dev_fragment_key(content_item).is_some()
+}
+
+/// Returns the stable contextual section marker for a developer fragment.
+///
+/// Turn-scoped runtime instructions are persisted for audit and replay, but non-OpenAI providers
+/// must not receive contradictory historical versions of the same section in one request.
+pub(crate) fn contextual_dev_fragment_key(content_item: &ContentItem) -> Option<&'static str> {
     let ContentItem::InputText { text } = content_item else {
-        return false;
+        return None;
     };
 
     let trimmed = text.trim_start();
-    CONTEXTUAL_DEVELOPER_PREFIXES.iter().any(|prefix| {
-        trimmed
-            .get(..prefix.len())
-            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(prefix))
-    })
+    CONTEXTUAL_DEVELOPER_PREFIXES
+        .iter()
+        .copied()
+        .find(|prefix| {
+            trimmed
+                .get(..prefix.len())
+                .is_some_and(|candidate| candidate.eq_ignore_ascii_case(prefix))
+        })
 }
 
 fn parse_user_message(message: &[ContentItem]) -> Option<UserMessageItem> {
@@ -194,7 +206,10 @@ pub fn parse_turn_item(item: &ResponseItem) -> Option<TurnItem> {
         ResponseItem::AgentMessage { id, content, .. } => plaintext_agent_message_content(content)
             .map(|text| {
                 TurnItem::AgentMessage(AgentMessageItem {
-                    id: id.clone().unwrap_or_else(|| Uuid::new_v4().to_string()),
+                    id: id
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| Uuid::new_v4().to_string()),
                     content: vec![AgentMessageContent::Text { text }],
                     phase: Some(MessagePhase::Commentary),
                     memory_citation: None,

@@ -23,6 +23,10 @@ const TASKNODE_CONTEXT_VIEW_ID: &str = "tasknode-context";
 const TASKNODE_CHAT_VIEW_ID: &str = "tasknode-chat";
 const TASKNODE_SESSION_LABEL: &str = "tasknode/session";
 const TASKNODE_MENU_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+// Task Node requests run on dedicated worker threads, so tolerate a temporarily saturated
+// production web process without freezing the TUI or retrying mutation requests. Fly health and
+// route telemetry can exceed the former 15-second deadline during load spikes.
+const TASKNODE_HTTP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct TaskNodeMenuCountsCache {
@@ -98,25 +102,40 @@ impl ChatWidget {
     }
 
     pub(crate) fn open_tasknode_link(&mut self) {
+        self.add_info_message("Starting Task Node GitHub link...".to_string(), None);
         let codex_home = self.config.codex_home.as_path().to_path_buf();
-        match TaskNodeClient::new_without_token().start_github_link() {
+        let tx = self.app_event_tx.clone();
+        let spawn_result = std::thread::Builder::new()
+            .name("tasknode-link".to_string())
+            .spawn(move || {
+                let result = TaskNodeClient::new_without_token()
+                    .start_github_link()
+                    .and_then(|started| {
+                        let session = TaskNodeLocalSession {
+                            origin: tasknode_origin(),
+                            account_id: None,
+                            github_username: None,
+                            terminal_token: None,
+                            expires_at: None,
+                            pending_request_id: Some(started.request_id.clone()),
+                            pending_poll_token: Some(started.poll_token.clone()),
+                            pending_verification_url: Some(started.verification_url.clone()),
+                        };
+                        session.save(&codex_home).map_err(|err| {
+                            format!("Failed to store Task Node link request: {err}")
+                        })?;
+                        serde_json::to_value(started).map_err(|err| err.to_string())
+                    });
+                tx.send(AppEvent::TaskNodeLinkResult { result });
+            });
+        if let Err(err) = spawn_result {
+            self.add_error_message(format!("Task Node link worker failed: {err}"));
+        }
+    }
+
+    pub(crate) fn handle_tasknode_link_result(&mut self, result: Result<Value, String>) {
+        match parse_tasknode_value::<TerminalAuthStartResponse>(result, "link") {
             Ok(started) => {
-                let session = TaskNodeLocalSession {
-                    origin: tasknode_origin(),
-                    account_id: None,
-                    github_username: None,
-                    terminal_token: None,
-                    expires_at: None,
-                    pending_request_id: Some(started.request_id.clone()),
-                    pending_poll_token: Some(started.poll_token.clone()),
-                    pending_verification_url: Some(started.verification_url.clone()),
-                };
-                if let Err(err) = session.save(&codex_home) {
-                    self.add_error_message(format!(
-                        "Failed to store Task Node link request: {err}"
-                    ));
-                    return;
-                }
                 let mut hint = tasknode_link_hint(&started.verification_url);
                 if tasknode_should_open_browser()
                     && let Err(err) = webbrowser::open(&started.verification_url)
@@ -892,17 +911,38 @@ impl ChatWidget {
 
     pub(crate) fn logout_tasknode(&mut self) {
         let codex_home = self.config.codex_home.as_path().to_path_buf();
-        let session = TaskNodeLocalState::load(&codex_home).ok().flatten();
-        if let Some(token) = session.as_ref().and_then(|s| s.terminal_token.clone()) {
-            let _ = TaskNodeClient::new(token).revoke();
-        }
         self.tasknode_menu_counts = None;
         self.tasknode_menu_poll_generation = self.tasknode_menu_poll_generation.wrapping_add(1);
-        match Vault::new(codex_home).delete(TASKNODE_SESSION_LABEL) {
-            Ok(_) => self.add_info_message("Task Node session removed.".to_string(), None),
-            Err(err) => {
-                self.add_error_message(format!("Failed to remove Task Node session: {err}"))
-            }
+        self.add_info_message("Removing Task Node session...".to_string(), None);
+        let tx = self.app_event_tx.clone();
+        let spawn_result = std::thread::Builder::new()
+            .name("tasknode-logout".to_string())
+            .spawn(move || {
+                let session = TaskNodeLocalState::load(&codex_home).ok().flatten();
+                let revoke_error = session
+                    .as_ref()
+                    .and_then(|session| session.terminal_token.clone())
+                    .and_then(|token| TaskNodeClient::new(token).revoke().err());
+                let result = Vault::new(codex_home)
+                    .delete(TASKNODE_SESSION_LABEL)
+                    .map(|_| match revoke_error {
+                        Some(error) => format!(
+                            "Task Node session removed locally; remote revoke failed: {error}"
+                        ),
+                        None => "Task Node session removed.".to_string(),
+                    })
+                    .map_err(|err| format!("Failed to remove Task Node session: {err}"));
+                tx.send(AppEvent::TaskNodeLogoutResult { result });
+            });
+        if let Err(err) = spawn_result {
+            self.add_error_message(format!("Task Node logout worker failed: {err}"));
+        }
+    }
+
+    pub(crate) fn handle_tasknode_logout_result(&mut self, result: Result<String, String>) {
+        match result {
+            Ok(message) => self.add_info_message(message, None),
+            Err(error) => self.add_error_message(error),
         }
     }
 
@@ -2957,7 +2997,7 @@ impl TaskNodeClient {
 fn tasknode_http_client() -> Result<reqwest::blocking::Client, TaskNodeClientError> {
     reqwest::blocking::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))
-        .timeout(std::time::Duration::from_secs(15))
+        .timeout(TASKNODE_HTTP_TIMEOUT)
         .build()
         .map_err(|err| TaskNodeClientError::Http(tasknode_reqwest_error(err)))
 }
@@ -3111,7 +3151,7 @@ impl std::fmt::Display for TaskNodeClientError {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct TerminalAuthStartResponse {
     #[serde(rename = "requestId")]
     request_id: String,

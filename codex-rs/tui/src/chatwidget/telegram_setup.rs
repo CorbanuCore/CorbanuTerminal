@@ -160,13 +160,26 @@ impl ChatWidget {
                 "Stops the connector, removes Telegram authorization, and deletes the bot token from the vault."
                     .to_string(),
             ),
-            items: vec![SelectionItem {
-                name: "Disconnect and forget bot".to_string(),
-                description: Some("The bot itself remains in Telegram and can be reconnected later.".to_string()),
-                actions: vec![Box::new(|tx| tx.send(AppEvent::DisconnectTelegram))],
-                dismiss_on_select: true,
-                ..Default::default()
-            }],
+            items: vec![
+                SelectionItem {
+                    name: "Cancel".to_string(),
+                    description: Some("Keep Telegram connected.".to_string()),
+                    dismiss_on_select: true,
+                    ..Default::default()
+                },
+                SelectionItem {
+                    name: "Disconnect and forget bot".to_string(),
+                    description: Some(
+                        "The bot itself remains in Telegram and can be reconnected later."
+                            .to_string(),
+                    ),
+                    actions: vec![Box::new(|tx| tx.send(AppEvent::DisconnectTelegram))],
+                    dismiss_on_select: true,
+                    ..Default::default()
+                },
+            ],
+            initial_selected_idx: Some(0),
+            allow_number_shortcuts: false,
             ..Default::default()
         });
     }
@@ -448,7 +461,6 @@ pub(crate) async fn discover_chats(codex_home: PathBuf) -> Result<TelegramDiscov
 fn approval_policy_name(policy: AskForApproval) -> &'static str {
     match policy {
         AskForApproval::UnlessTrusted => "untrusted",
-        AskForApproval::OnFailure => "on-failure",
         AskForApproval::OnRequest => "on-request",
         AskForApproval::Granular(_) => "on-request",
         AskForApproval::Never => "never",

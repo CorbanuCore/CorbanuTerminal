@@ -1,6 +1,10 @@
 use super::multi_agents_common::MAX_SPAWN_AGENT_MODEL_OVERRIDES;
 use super::multi_agents_common::model_supports_multi_agent_backend;
+use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::ModelBilling;
+use codex_protocol::openai_models::ModelCapabilityTier;
 use codex_protocol::openai_models::ModelPreset;
+use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiNamespace;
@@ -14,7 +18,8 @@ use std::collections::BTreeMap;
 pub const MULTI_AGENT_V1_NAMESPACE: &str = "multi_agent_v1";
 const MULTI_AGENT_V1_NAMESPACE_DESCRIPTION: &str = "Tools for spawning and managing sub-agents.";
 
-const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE: &str = "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed.";
+const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V1: &str = "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed.";
+const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2: &str = "Spawned agents inherit your current provider and model by default. Omit both `model_provider` and `model` to inherit that runtime. To use another runtime, set both fields explicitly.";
 const SPAWN_AGENT_TYPE_OVERRIDE_DESCRIPTION_V1: &str = "Agent type override for the new agent. Omit to inherit the parent agent type with a full-history fork; otherwise, `default` is used.";
 const SPAWN_AGENT_MODEL_OVERRIDE_DESCRIPTION: &str =
     "Model override for the new agent. Omit unless an explicit override is needed.";
@@ -22,6 +27,7 @@ const SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION: &str = "Provider override for t
 const SPAWN_AGENT_SERVICE_TIER_OVERRIDE_DESCRIPTION: &str =
     "Service tier override for the new agent. Omit unless explicitly requested.";
 const MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION: usize = 64;
+const MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION: usize = MAX_SPAWN_AGENT_MODEL_OVERRIDES;
 
 #[derive(Debug, Clone)]
 pub struct SpawnAgentToolOptions {
@@ -35,10 +41,19 @@ pub struct SpawnAgentToolOptions {
     pub usage_hint_text: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpawnAgentRuntime {
+    pub model_provider: String,
+    pub model: String,
+    pub reasoning_effort: Option<ReasoningEffort>,
+    pub service_tier: Option<String>,
+}
+
 impl Default for SpawnAgentToolOptions {
     fn default() -> Self {
         Self {
             available_models: Vec::new(),
+            inherited_runtime: None,
             agent_type_description: String::new(),
             expose_agent_type: true,
             hide_agent_type_model_reasoning: false,
@@ -68,10 +83,14 @@ impl Default for WaitAgentTimeoutOptions {
 
 pub fn create_spawn_agent_tool_v1(options: SpawnAgentToolOptions) -> ToolSpec {
     let available_models_description = (!options.hide_agent_type_model_reasoning).then(|| {
-        spawn_agent_models_description(&options.available_models, options.multi_agent_version)
+        spawn_agent_models_description(
+            &options.available_models,
+            options.multi_agent_version,
+            options.inherited_runtime.as_ref(),
+        )
     });
-    let inherited_model_guidance =
-        (!options.hide_agent_type_model_reasoning).then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE);
+    let inherited_model_guidance = (!options.hide_agent_type_model_reasoning)
+        .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V1);
     let return_value_description =
         "Returns the spawned agent id plus the user-facing nickname when available.";
     let mut properties = spawn_agent_common_properties_v1(&options.agent_type_description);
@@ -103,11 +122,15 @@ pub fn create_spawn_agent_tool_v1(options: SpawnAgentToolOptions) -> ToolSpec {
 
 pub fn create_spawn_agent_tool_v2(options: SpawnAgentToolOptions) -> ToolSpec {
     let available_models_description = options.expose_spawn_agent_model_overrides.then(|| {
-        spawn_agent_models_description(&options.available_models, options.multi_agent_version)
+        spawn_agent_models_description(
+            &options.available_models,
+            options.multi_agent_version,
+            options.inherited_runtime.as_ref(),
+        )
     });
     let inherited_model_guidance = (options.expose_spawn_agent_model_overrides
         && !options.hide_agent_type_model_reasoning)
-        .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE);
+        .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2);
     let mut properties = spawn_agent_common_properties_v2(&options.agent_type_description);
     if !options.expose_agent_type {
         properties.remove("agent_type");
@@ -374,6 +397,104 @@ pub fn create_interrupt_agent_tool_v2() -> ToolSpec {
     })
 }
 
+/// Restore the pinned first-party Responses contract for collaboration tools.
+///
+/// OpenAI reserves the `collaboration.*` function names and rejects requests when their schemas
+/// diverge from the native Codex contract. PF Terminal may expose richer routing and lifecycle
+/// metadata to other providers, but that metadata must stay outside the reserved first-party wire
+/// schema. The runtime handlers intentionally continue to accept the provider-neutral superset.
+pub(crate) fn apply_openai_reserved_collaboration_schema(spec: ToolSpec) -> ToolSpec {
+    match spec {
+        ToolSpec::Function(tool) => {
+            ToolSpec::Function(apply_openai_reserved_collaboration_function_schema(tool))
+        }
+        ToolSpec::Namespace(mut namespace) => {
+            namespace.tools = namespace
+                .tools
+                .into_iter()
+                .map(|tool| match tool {
+                    ResponsesApiNamespaceTool::Function(tool) => {
+                        ResponsesApiNamespaceTool::Function(
+                            apply_openai_reserved_collaboration_function_schema(tool),
+                        )
+                    }
+                })
+                .collect();
+            ToolSpec::Namespace(namespace)
+        }
+        spec => spec,
+    }
+}
+
+fn apply_openai_reserved_collaboration_function_schema(
+    mut tool: ResponsesApiTool,
+) -> ResponsesApiTool {
+    match tool.name.as_str() {
+        "spawn_agent" => {
+            if let Some(properties) = tool.parameters.properties.as_mut() {
+                // The first-party reserved surface deliberately contains only assignment,
+                // canonical task name, and history-fork controls. PF role and runtime selection
+                // are applied by the product's typed spawn request before this model-visible
+                // protocol boundary.
+                for property in [
+                    "agent_type",
+                    "model_provider",
+                    "model",
+                    "reasoning_effort",
+                    "service_tier",
+                ] {
+                    properties.remove(property);
+                }
+                if let Some(message) = properties.get_mut("message") {
+                    message.encrypted = Some(true);
+                }
+            }
+            tool.description = spawn_agent_tool_description_v2(
+                /*available_models_description*/ None, /*inherited_model_guidance*/ None,
+                /*usage_hint_text*/ None,
+            );
+            tool.output_schema = Some(openai_spawn_agent_output_schema_v2(
+                /*hide_agent_metadata*/ true,
+            ));
+        }
+        "send_message" | "followup_task" => {
+            if let Some(message) = tool
+                .parameters
+                .properties
+                .as_mut()
+                .and_then(|properties| properties.get_mut("message"))
+            {
+                message.encrypted = Some(true);
+            }
+        }
+        "wait_agent" => {
+            tool.output_schema = Some(openai_wait_output_schema_v2());
+        }
+        "interrupt_agent" => {
+            let properties = BTreeMap::from([(
+                "target".to_string(),
+                JsonSchema::string(Some(
+                    "Agent id or canonical task name to interrupt (from spawn_agent).".to_string(),
+                )),
+            )]);
+            tool.description = "Interrupt an agent's current turn, if any, and return its previous status. The agent remains available for messages and follow-up tasks.".to_string();
+            tool.parameters = JsonSchema::object(
+                properties,
+                Some(vec!["target".to_string()]),
+                Some(false.into()),
+            );
+            tool.output_schema = Some(agent_previous_status_output_schema(
+                "The agent status observed before the interrupt request was handled.",
+            ));
+        }
+        "list_agents" => {
+            tool.output_schema = Some(openai_list_agents_output_schema());
+        }
+        _ => {}
+    }
+    tool
+}
+
 fn interrupt_agent_output_schema() -> Value {
     json!({
         "type": "object",
@@ -497,6 +618,38 @@ fn spawn_agent_output_schema_v2(hide_agent_metadata: bool) -> Value {
     })
 }
 
+fn openai_spawn_agent_output_schema_v2(hide_agent_metadata: bool) -> Value {
+    if hide_agent_metadata {
+        return json!({
+            "type": "object",
+            "properties": {
+                "task_name": {
+                    "type": "string",
+                    "description": "Canonical task name for the spawned agent."
+                }
+            },
+            "required": ["task_name"],
+            "additionalProperties": false
+        });
+    }
+
+    json!({
+        "type": "object",
+        "properties": {
+            "task_name": {
+                "type": "string",
+                "description": "Canonical task name for the spawned agent."
+            },
+            "nickname": {
+                "type": ["string", "null"],
+                "description": "User-facing nickname for the spawned agent when available."
+            }
+        },
+        "required": ["task_name", "nickname"],
+        "additionalProperties": false
+    })
+}
+
 fn send_input_output_schema() -> Value {
     json!({
         "type": "object",
@@ -531,6 +684,35 @@ fn list_agents_output_schema() -> Value {
                         "agent_role": {
                             "type": ["string", "null"],
                             "description": "Role name for the agent when available, for example troll or orc."
+                        },
+                        "agent_status": {
+                            "description": "Last known status of the agent.",
+                            "allOf": [agent_status_output_schema()]
+                        }
+                    },
+                    "required": ["agent_name", "agent_status"],
+                    "additionalProperties": false
+                },
+                "description": "Live agents visible in the current root thread tree."
+            }
+        },
+        "required": ["agents"],
+        "additionalProperties": false
+    })
+}
+
+fn openai_list_agents_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agents": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "agent_name": {
+                            "type": "string",
+                            "description": "Canonical task name for the agent when available, otherwise the agent id."
                         },
                         "agent_status": {
                             "description": "Last known status of the agent.",
@@ -637,6 +819,24 @@ fn wait_output_schema_v2() -> Value {
             }
         },
         "required": ["message", "timed_out", "waiting_for", "wake_conditions", "consecutive_empty_waits", "watchdog_escalated", "agents"],
+        "additionalProperties": false
+    })
+}
+
+fn openai_wait_output_schema_v2() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "message": {
+                "type": "string",
+                "description": "Brief wait summary without the agent's final content."
+            },
+            "timed_out": {
+                "type": "boolean",
+                "description": "Whether the wait call returned because no mailbox update arrived before the timeout."
+            }
+        },
+        "required": ["message", "timed_out"],
         "additionalProperties": false
     })
 }
@@ -899,12 +1099,30 @@ Note that passing `fork_turns="none"` will not pass any surrounding context to t
 fn spawn_agent_models_description(
     models: &[ModelPreset],
     multi_agent_version: MultiAgentVersion,
+    inherited_runtime: Option<&SpawnAgentRuntime>,
 ) -> String {
+    let inherited_runtime = inherited_runtime.map_or_else(
+        || "Current inherited runtime: unavailable.".to_string(),
+        |runtime| {
+            let effort = runtime
+                .reasoning_effort
+                .as_ref()
+                .map_or("provider default", ReasoningEffort::as_str);
+            let service_tier = runtime
+                .service_tier
+                .as_deref()
+                .map_or_else(String::new, |tier| format!("; service tier {tier}"));
+            format!(
+                "Current inherited runtime: `{}` / `{}`; effort {effort}{service_tier}.",
+                runtime.model_provider, runtime.model
+            )
+        },
+    );
     let visible_models: Vec<&ModelPreset> = models
         .iter()
         .filter(|model| model.show_in_picker)
         .filter(|model| model_supports_multi_agent_backend(model, multi_agent_version))
-        .take(MAX_SPAWN_AGENT_MODEL_OVERRIDES)
+        .take(MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION)
         .collect();
     if visible_models.is_empty() {
         return format!(

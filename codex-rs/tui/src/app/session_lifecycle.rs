@@ -22,7 +22,7 @@ pub(super) enum ThreadAttachPresentation {
 /// Reports whether a loaded-thread backfill completed and which descendants already had their
 /// liveness metadata refreshed, allowing the picker to skip duplicate `thread/read` requests.
 #[derive(Default)]
-pub(super) struct LoadedSubagentBackfill {
+pub(crate) struct LoadedSubagentBackfill {
     pub(super) completed: bool,
     pub(super) refreshed_thread_ids: HashSet<ThreadId>,
 }
@@ -257,6 +257,10 @@ impl App {
         agent_role: Option<String>,
         is_closed: bool,
     ) {
+        let existing = self.agent_navigation.get(&thread_id);
+        let agent_nickname =
+            agent_nickname.or_else(|| existing.and_then(|entry| entry.agent_nickname.clone()));
+        let agent_role = agent_role.or_else(|| existing.and_then(|entry| entry.agent_role.clone()));
         self.chat_widget.set_collab_agent_metadata(
             thread_id,
             agent_nickname.clone(),
@@ -307,7 +311,7 @@ impl App {
                 );
                 self.upsert_agent_picker_thread(
                     thread_id,
-                    thread.agent_nickname.or_else(|| {
+                    thread.name.or(thread.agent_nickname).or_else(|| {
                         existing_entry
                             .as_ref()
                             .and_then(|entry| entry.agent_nickname.clone())
@@ -381,7 +385,12 @@ impl App {
         }
 
         let (session, turns, live_attached) = match app_server
-            .resume_thread(self.config.clone(), thread_id, self.resume_model_settings())
+            .resume_thread(
+                self.config.clone(),
+                thread_id,
+                self.resume_model_settings(),
+                self.resume_permission_settings(),
+            )
             .await
         {
             Ok(started) => {
@@ -652,6 +661,8 @@ impl App {
                 }
                 self.enqueue_primary_thread_session(started.session, started.turns)
                     .await?;
+                self.restore_codex_user_panes_from_saved_state(app_server)
+                    .await;
                 self.restore_native_spawn_panes_from_saved_state(app_server)
                     .await;
                 self.audit_restored_assignments();
@@ -1036,12 +1047,19 @@ impl App {
                 resume_config.clone(),
                 target_session.thread_id,
                 self.resume_model_settings(),
+                self.resume_permission_settings(),
             )
             .await
         {
             Ok(resumed) => {
                 let resumed_thread_id = resumed.session.thread_id;
                 self.shutdown_current_thread(app_server).await;
+                apply_persisted_resume_runtime(
+                    &mut resume_config,
+                    Some(resumed.session.model.as_str()),
+                    resumed.session.model_provider_id.as_str(),
+                    resumed.session.reasoning_effort.clone(),
+                );
                 self.config = resume_config;
                 tui.set_notification_settings(
                     self.config.tui_notifications.method,

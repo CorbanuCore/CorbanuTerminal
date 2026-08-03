@@ -234,18 +234,24 @@ impl ChatWidget {
     }
 
     pub(super) fn on_agent_reasoning_delta(&mut self, delta: String) {
-        self.record_tps_stream_delta(&delta);
+        let tps_status_changed = self.tps_estimator.record_stream_delta(&delta);
         // For reasoning deltas, do not stream to history. Accumulate the
         // current reasoning block and extract the first bold element
         // (between **/**) as the chunk header. Show this header as status.
         self.reasoning_buffer.push_str(&delta);
 
         if self.safety_buffering_is_waiting() {
+            if tps_status_changed {
+                self.refresh_status_surfaces();
+            }
             return;
         }
 
         if self.unified_exec_wait_streak.is_some() {
             // Unified exec waiting should take precedence over reasoning-derived status headers.
+            if tps_status_changed {
+                self.refresh_status_surfaces();
+            }
             return;
         }
 
@@ -254,6 +260,9 @@ impl ChatWidget {
         }
         let Some(header) = self.reasoning_header.as_deref() else {
             // Fallback while we don't yet have a bold header: leave existing header as-is.
+            if tps_status_changed {
+                self.refresh_status_surfaces();
+            }
             return;
         };
 
@@ -267,10 +276,13 @@ impl ChatWidget {
                 .status_widget()
                 .is_none_or(|status| status.header() == header)
         {
+            if tps_status_changed {
+                self.refresh_status_surfaces();
+            }
             return;
         }
 
-        // Update the shimmer header to the extracted reasoning chunk header.
+        // Updating the shimmer header also schedules the redraw needed for a TPS change.
         let header = header.to_string();
         self.status_state.terminal_title_status_kind = TerminalTitleStatusKind::Thinking;
         if !self.set_status_header(header) {

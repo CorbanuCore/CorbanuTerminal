@@ -259,7 +259,14 @@ pub struct TurnContext {
     pub(crate) extension_data: Arc<codex_extension_api::ExtensionData>,
     pub(crate) turn_skills: TurnSkillsContext,
     pub(crate) turn_timing_state: Arc<TurnTimingState>,
+    /// Whether this turn was admitted from collaboration work that requested a model turn.
+    /// Direct operator turns in a managed child pane must not report their result to the
+    /// child's structural parent.
+    pub(crate) parent_completion_expected: Arc<AtomicBool>,
     pub(crate) terminal_error: Arc<Mutex<Option<ErrorEvent>>>,
+    pub(crate) model_edit_protocol_state: Arc<ModelEditProtocolState>,
+    pub(crate) explicit_tool_budget_state: Arc<ExplicitToolBudgetState>,
+    pub(crate) malformed_tool_call_state: Arc<MalformedToolCallState>,
     pub(crate) server_model_warning_emitted: AtomicBool,
     pub(crate) provider_cache_pressure_warning_emitted: AtomicBool,
     pub(crate) model_verification_emitted: AtomicBool,
@@ -342,6 +349,79 @@ impl TurnContext {
             .features
             .apps_enabled_for_auth(uses_codex_backend)
             && self.config.orchestrator_mcp_enabled
+    }
+
+    pub(crate) fn record_strict_apply_patch_grammar_failure(&self) -> PatchFallbackTransition {
+        self.model_edit_protocol_state.record_grammar_failure()
+    }
+
+    pub(crate) fn record_strict_apply_patch_parse_success(&self) {
+        self.model_edit_protocol_state.record_parse_success();
+    }
+
+    pub(crate) fn structured_edit_fallback_enabled(&self) -> bool {
+        self.model_edit_protocol_state.fallback_enabled()
+    }
+
+    pub(crate) async fn record_malformed_tool_call(&self, signature: String) -> u8 {
+        self.malformed_tool_call_state.record(signature).await
+    }
+
+    pub(crate) fn set_explicit_shell_command_budget(&self, limit: u64) {
+        if limit == 0 {
+            return;
+        }
+        let mut current = self
+            .explicit_tool_budget_state
+            .shell_command_limit
+            .load(Ordering::Acquire);
+        loop {
+            if current != 0 && current <= limit {
+                return;
+            }
+            match self
+                .explicit_tool_budget_state
+                .shell_command_limit
+                .compare_exchange(current, limit, Ordering::AcqRel, Ordering::Acquire)
+            {
+                Ok(_) => return,
+                Err(next) => current = next,
+            }
+        }
+    }
+
+    pub(crate) fn record_shell_command_against_explicit_budget(
+        &self,
+    ) -> Result<Option<(u64, u64)>, u64> {
+        let limit = self
+            .explicit_tool_budget_state
+            .shell_command_limit
+            .load(Ordering::Acquire);
+        if limit == 0 {
+            return Ok(None);
+        }
+
+        let mut used = self
+            .explicit_tool_budget_state
+            .shell_commands_used
+            .load(Ordering::Acquire);
+        loop {
+            if used >= limit {
+                return Err(limit);
+            }
+            match self
+                .explicit_tool_budget_state
+                .shell_commands_used
+                .compare_exchange(
+                    used,
+                    used.saturating_add(1),
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                ) {
+                Ok(_) => return Ok(Some((used.saturating_add(1), limit))),
+                Err(next) => used = next,
+            }
+        }
     }
 
     pub(crate) async fn with_model(
@@ -428,6 +508,7 @@ impl TurnContext {
             extension_data: Arc::clone(&self.extension_data),
             turn_skills: self.turn_skills.clone(),
             turn_timing_state: Arc::clone(&self.turn_timing_state),
+            parent_completion_expected: Arc::clone(&self.parent_completion_expected),
             terminal_error: Arc::clone(&self.terminal_error),
             model_edit_protocol_state: Arc::clone(&self.model_edit_protocol_state),
             explicit_tool_budget_state: Arc::clone(&self.explicit_tool_budget_state),
@@ -501,6 +582,7 @@ impl TurnContext {
             network: self.turn_context_network_item(),
             file_system_sandbox_policy: self.non_legacy_file_system_sandbox_policy(),
             model: self.model_info.slug.clone(),
+            model_provider: Some(self.config.model_provider_id.clone()),
             comp_hash: self.model_info.comp_hash.clone(),
             personality: self.personality,
             collaboration_mode: Some(self.collaboration_mode()),
@@ -728,6 +810,7 @@ impl Session {
             extension_data,
             turn_skills: TurnSkillsContext::new(skills_snapshot),
             turn_timing_state: Arc::new(TurnTimingState::default()),
+            parent_completion_expected: Arc::new(AtomicBool::new(false)),
             terminal_error: Arc::new(Mutex::new(None)),
             model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
             explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
@@ -804,6 +887,8 @@ impl Session {
             permission_profile_changed,
             previous_config,
             new_config,
+            model_client_configuration,
+            stale_startup_prewarm,
         ) = match update_result {
             Ok(update) => update,
             Err(err) => {

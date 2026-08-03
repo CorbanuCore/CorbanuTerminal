@@ -89,9 +89,23 @@ pub(crate) struct SessionServices {
     pub(crate) attestation_provider: Option<Arc<dyn AttestationProvider>>,
     pub(crate) time_provider: Arc<dyn TimeProvider>,
     /// Session-scoped model client shared across turns.
-    pub(crate) model_client: ModelClient,
+    pub(crate) model_client: ArcSwap<ModelClient>,
     pub(crate) executed_tool_calls: Option<Arc<ExecutedToolCallRecorder>>,
     pub(crate) code_mode_service: CodeModeService,
     pub(crate) tool_search_handler_cache: ToolSearchHandlerCache,
     pub(crate) turn_environments: Arc<ThreadEnvironments>,
+}
+
+impl SessionServices {
+    pub(crate) fn model_client(&self) -> Arc<ModelClient> {
+        self.model_client.load_full()
+    }
+
+    pub(crate) fn replace_model_client(&self, model_client: ModelClient) {
+        self.model_client.store(Arc::new(model_client));
+    }
+
+    pub(crate) fn new_model_client_session(&self) -> ModelClientSession {
+        self.model_client().new_session()
+    }
 }

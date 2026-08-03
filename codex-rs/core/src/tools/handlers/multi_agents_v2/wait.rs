@@ -3,6 +3,7 @@ use crate::agent::control::ListedAgent;
 use crate::session::InputQueueActivity;
 use crate::tools::handlers::multi_agents_spec::WaitAgentTimeoutOptions;
 use crate::tools::handlers::multi_agents_spec::create_wait_agent_tool_v2;
+use codex_protocol::ThreadId;
 use codex_tools::ToolSpec;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -191,7 +192,11 @@ impl Handler {
             session
                 .services
                 .agent_control
-                .send_inter_agent_communication(parent_thread_id, communication)
+                .send_persisted_inter_agent_communication(
+                    parent_thread_id,
+                    communication,
+                    /*parent_turn_id*/ None,
+                )
                 .await
                 .map_err(|err| collab_agent_error(parent_thread_id, err))?;
         }

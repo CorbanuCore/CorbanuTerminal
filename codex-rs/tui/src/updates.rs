@@ -59,6 +59,7 @@ pub fn get_upgrade_version(config: &Config) -> Option<String> {
 
 const PFTERMINAL_LATEST_RELEASE_URL: &str =
     "https://api.github.com/repos/agtico/PfTerminal/releases/latest";
+const HOMEBREW_CASK_API_URL: &str = "https://formulae.brew.sh/api/cask/codex.json";
 
 #[derive(Deserialize, Debug, Clone)]
 struct ReleaseInfo {
@@ -134,7 +135,7 @@ async fn fetch_latest_github_release_version(
     let ReleaseInfo {
         tag_name: latest_tag_name,
     } = client_pool
-        .get(LATEST_RELEASE_URL)
+        .get(PFTERMINAL_LATEST_RELEASE_URL)
         .headers(default_headers())
         .send()
         .await?

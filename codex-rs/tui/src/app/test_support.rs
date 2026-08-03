@@ -85,6 +85,7 @@ pub(super) async fn make_test_app() -> App {
         orchestrate_now_override: None,
         orchestrate_idle_generation_by_target: Box::new(HashMap::new()),
         side_threads: HashMap::new(),
+        claude_panes: Default::default(),
         abandoned_side_threads: HashSet::new(),
         active_thread_id: None,
         active_thread_rx: None,

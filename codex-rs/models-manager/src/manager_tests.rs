@@ -11,6 +11,12 @@ use codex_login::ExternalAuth;
 use codex_login::ExternalAuthRefreshContext;
 use codex_login::TokenData;
 use codex_protocol::auth::AuthMode;
+use codex_protocol::openai_models::ChatReasoningProtocol;
+use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::ModelBilling;
+use codex_protocol::openai_models::ModelCapabilityTier;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
+use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
@@ -29,6 +35,15 @@ mod model_info_overrides_tests;
 
 const DEFAULT_HTTP_CLIENT_FACTORY: HttpClientFactory =
     HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault);
+const STANDARD_BASE: &str = include_str!("../../core/src/agent/builtins/standard_base.md");
+const STANDARD_BASE_OUTCOME_MARKER: &str = "inspect code before changing it, keep edits scoped";
+const STANDARD_BASE_EVIDENCE_MARKER: &str = "only narrate when needed";
+const OLD_STANDARD_BASE_MARKER: &str = "Narrate as you work";
+const GPT55_GUIDE_MARKER: &str = "vivid inner life";
+
+fn assert_standard_base(actual: &str) {
+    assert_eq!(actual.trim_end(), STANDARD_BASE.trim_end());
+}
 
 fn remote_model(slug: &str, display: &str, priority: i32) -> ModelInfo {
     remote_model_with_visibility(slug, display, priority, "list")
@@ -235,9 +250,13 @@ async fn manager_without_cache_fetches_on_every_refresh() {
         )
         .await;
 
-    assert_eq!(catalog.models, remote_models);
+    assert_models_contain(&catalog.models, &remote_models);
+    assert_models_contain(
+        &catalog.models,
+        &load_remote_models_from_file().expect("bundled models should parse"),
+    );
     assert_eq!(second_catalog, catalog);
-    assert_eq!(manager.get_remote_models().await, remote_models);
+    assert_eq!(manager.get_remote_models().await, catalog.models);
     assert_eq!(endpoint.fetch_count(), 2);
 }
 
@@ -600,14 +619,20 @@ async fn chatgpt_cache_does_not_evict_pfterminal_provider_models() {
         openai_manager_for_tests(codex_home.path().to_path_buf(), fetch_endpoint.clone());
 
     fetch_manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("initial refresh succeeds");
 
     let cache_endpoint = TestModelsEndpoint::new(Vec::new());
     let cache_manager = openai_manager_for_tests(codex_home.path().to_path_buf(), cache_endpoint);
     let available = cache_manager
-        .list_models(RefreshStrategy::OnlineIfUncached)
+        .list_models(
+            RefreshStrategy::OnlineIfUncached,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await;
     let slugs = available
         .iter()
@@ -645,7 +670,10 @@ async fn remote_model_overlay_preserves_bundled_orchestration_metadata() {
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
 
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("refresh succeeds");
 
@@ -733,7 +761,9 @@ async fn chatgpt_catalog_keeps_verified_gpt_5_6_models_when_remote_omits_them() 
     let endpoint = TestModelsEndpoint::new(vec![Vec::new()]);
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
 
-    let available = manager.list_models(RefreshStrategy::Online).await;
+    let available = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
     let picker_visibility = available
         .iter()
         .filter(|model| model.model.starts_with("gpt-5.6-"))
@@ -770,7 +800,9 @@ async fn chatgpt_catalog_honors_explicit_remote_hiding_for_gpt_5_6_models() {
     let endpoint = TestModelsEndpoint::new(vec![remote_models]);
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
 
-    let available = manager.list_models(RefreshStrategy::Online).await;
+    let available = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
 
     assert!(
         available
@@ -797,7 +829,9 @@ async fn chatgpt_catalog_shows_server_advertised_gpt_5_6_models() {
     let endpoint = TestModelsEndpoint::new(vec![remote_models]);
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
 
-    let available = manager.list_models(RefreshStrategy::Online).await;
+    let available = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
     assert!(
         available
             .iter()
@@ -808,10 +842,10 @@ async fn chatgpt_catalog_shows_server_advertised_gpt_5_6_models() {
         .find(|model| model.model == "gpt-5.6-sol")
         .expect("server-advertised Sol should be available");
     assert!(
-        sol.supported_reasoning_efforts.iter().any(
-            |level| matches!(&level.effort, ReasoningEffort::Custom(value) if value == "ultra")
-        ),
-        "runtime model metadata must preserve server-advertised custom efforts"
+        sol.supported_reasoning_efforts
+            .iter()
+            .any(|level| level.effort == ReasoningEffort::Ultra),
+        "runtime model metadata must preserve server-advertised typed efforts"
     );
     let advertised = available
         .into_iter()
@@ -857,7 +891,9 @@ async fn remote_catalog_preserves_bundled_reasoning_when_remote_omits_it() {
     let endpoint = TestModelsEndpoint::new(vec![vec![remote_model]]);
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
 
-    let available = manager.list_models(RefreshStrategy::Online).await;
+    let available = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
     let deepseek = available
         .iter()
         .find(|model| model.model == "deepseek/deepseek-v4-pro")
@@ -1439,11 +1475,64 @@ fn bundled_models_json_tracks_verified_image_capabilities() {
         "z-ai/glm-5.2",
         "zai/glm-5.2",
         "deepseek/deepseek-v4-pro",
+        "deepseek/deepseek-v4-flash-0731",
         "tencent/hy3:free",
         "openrouter/owl-alpha",
     ] {
         assert!(!supports_images(slug), "{slug} should remain text-only");
     }
+}
+
+#[test]
+fn bundled_claude_5_models_have_provider_reported_output_limits() {
+    // Verified against Anthropic's authenticated `/v1/models/{model_id}` responses on 2026-08-01.
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+
+    for slug in [
+        "claude-opus-5-plan",
+        "claude-fable-5-plan",
+        "claude-opus-5",
+        "claude-fable-5",
+    ] {
+        let model = response
+            .models
+            .iter()
+            .find(|model| model.slug == slug)
+            .unwrap_or_else(|| panic!("bundled models.json should include {slug}"));
+        assert_eq!(
+            model.max_output_tokens,
+            Some(128_000),
+            "{slug} must be requestable on the Anthropic wire"
+        );
+    }
+}
+
+#[tokio::test]
+async fn remote_catalog_cannot_erase_bundled_output_limit() {
+    let mut remote_model = crate::bundled_models_response()
+        .expect("bundled models should parse")
+        .models
+        .into_iter()
+        .find(|model| model.slug == "claude-opus-5")
+        .expect("bundled catalog should include Claude Opus 5");
+    remote_model.max_output_tokens = None;
+
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(vec![vec![remote_model]]);
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+    manager
+        .refresh_available_models(RefreshStrategy::Online, &DEFAULT_HTTP_CLIENT_FACTORY)
+        .await
+        .expect("refresh succeeds");
+
+    let opus = manager
+        .get_remote_models()
+        .await
+        .into_iter()
+        .find(|model| model.slug == "claude-opus-5")
+        .expect("remote overlay should retain Claude Opus 5");
+    assert_eq!(opus.max_output_tokens, Some(128_000));
 }
 
 #[test]
@@ -1481,8 +1570,8 @@ fn bundled_models_json_contains_gpt_5_6_family_metadata() {
                     ReasoningEffort::Medium,
                     ReasoningEffort::High,
                     ReasoningEffort::XHigh,
-                    ReasoningEffort::Custom("max".to_string()),
-                    ReasoningEffort::Custom("ultra".to_string()),
+                    ReasoningEffort::Max,
+                    ReasoningEffort::Ultra,
                 ],
                 ModelVisibility::List,
             ),
@@ -1495,8 +1584,8 @@ fn bundled_models_json_contains_gpt_5_6_family_metadata() {
                     ReasoningEffort::Medium,
                     ReasoningEffort::High,
                     ReasoningEffort::XHigh,
-                    ReasoningEffort::Custom("max".to_string()),
-                    ReasoningEffort::Custom("ultra".to_string()),
+                    ReasoningEffort::Max,
+                    ReasoningEffort::Ultra,
                 ],
                 ModelVisibility::List,
             ),
@@ -1509,7 +1598,7 @@ fn bundled_models_json_contains_gpt_5_6_family_metadata() {
                     ReasoningEffort::Medium,
                     ReasoningEffort::High,
                     ReasoningEffort::XHigh,
-                    ReasoningEffort::Custom("max".to_string()),
+                    ReasoningEffort::Max,
                 ],
                 ModelVisibility::List,
             ),
@@ -1734,7 +1823,9 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
         "openrouter/owl-alpha",
         "google/gemini-3.5-flash",
         "x-ai/grok-4.5",
+        "deepseek-v4-flash",
         "deepseek/deepseek-v4-pro",
+        "deepseek/deepseek-v4-flash-0731",
         "tencent/hy3:free",
         "muse-spark-1.1",
         "claude-opus-5-plan",
@@ -1790,10 +1881,7 @@ fn bundled_models_json_contains_kimi_code_k3() {
     assert_eq!(kimi.display_name, "Kimi Code K3");
     assert_eq!(kimi.context_window, Some(262_144));
     assert_eq!(kimi.max_context_window, Some(1_048_576));
-    assert_eq!(
-        kimi.default_reasoning_level,
-        Some(ReasoningEffort::Custom("max".to_string()))
-    );
+    assert_eq!(kimi.default_reasoning_level, Some(ReasoningEffort::Max));
     assert_eq!(
         kimi.supported_reasoning_levels
             .iter()
@@ -1802,7 +1890,7 @@ fn bundled_models_json_contains_kimi_code_k3() {
         vec![
             ReasoningEffort::Low,
             ReasoningEffort::High,
-            ReasoningEffort::Custom("max".to_string()),
+            ReasoningEffort::Max,
         ]
     );
     assert!(kimi.supports_parallel_tool_calls);
@@ -1884,20 +1972,43 @@ fn bundled_models_json_contains_openrouter_models() {
         ]
     );
 
-    let deepseek = openrouter_model("deepseek/deepseek-v4-pro");
-    assert_eq!(deepseek.display_name, "OpenRouter DeepSeek V4 Pro");
-    assert_eq!(deepseek.context_window, Some(1_048_576));
+    let deepseek_pro = openrouter_model("deepseek/deepseek-v4-pro");
+    assert_eq!(deepseek_pro.display_name, "OpenRouter DeepSeek V4 Pro");
+    assert_eq!(deepseek_pro.context_window, Some(1_048_576));
     assert_eq!(
-        deepseek.default_reasoning_level,
+        deepseek_pro.default_reasoning_level,
         Some(ReasoningEffort::High)
     );
     assert_eq!(
-        deepseek
+        deepseek_pro
             .supported_reasoning_levels
             .iter()
             .map(|level| level.effort.clone())
             .collect::<Vec<_>>(),
         vec![ReasoningEffort::High, ReasoningEffort::XHigh]
+    );
+
+    let deepseek_flash = openrouter_model("deepseek/deepseek-v4-flash-0731");
+    assert_eq!(
+        deepseek_flash.display_name,
+        "OpenRouter DeepSeek V4 Flash 0731"
+    );
+    assert_eq!(deepseek_flash.context_window, Some(1_048_576));
+    assert_eq!(
+        deepseek_flash.default_reasoning_level,
+        Some(ReasoningEffort::High)
+    );
+    assert_eq!(
+        deepseek_flash
+            .supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            ReasoningEffort::Low,
+            ReasoningEffort::High,
+            ReasoningEffort::Max,
+        ]
     );
 
     let hy3 = openrouter_model("tencent/hy3:free");
@@ -1919,10 +2030,7 @@ fn bundled_models_json_contains_openrouter_models() {
     let kimi = openrouter_model("moonshotai/kimi-k3");
     assert_eq!(kimi.display_name, "OpenRouter Kimi K3");
     assert_eq!(kimi.context_window, Some(1_048_576));
-    assert_eq!(
-        kimi.default_reasoning_level,
-        Some(ReasoningEffort::Custom("max".to_string()))
-    );
+    assert_eq!(kimi.default_reasoning_level, Some(ReasoningEffort::Max));
     assert_eq!(
         kimi.supported_reasoning_levels
             .iter()
@@ -1931,7 +2039,7 @@ fn bundled_models_json_contains_openrouter_models() {
         vec![
             ReasoningEffort::Low,
             ReasoningEffort::High,
-            ReasoningEffort::Custom("max".to_string()),
+            ReasoningEffort::Max,
         ]
     );
     assert_eq!(
@@ -1949,7 +2057,7 @@ fn bundled_models_json_contains_openrouter_models() {
             .contains("$3.00/M input, $0.30/M cached input, $15.00/M output")
     );
 
-    for model in [grok, deepseek, hy3, kimi] {
+    for model in [grok, deepseek_pro, deepseek_flash, hy3, kimi] {
         assert_eq!(model.visibility, ModelVisibility::List);
         assert!(!model.supports_parallel_tool_calls);
         assert_standard_base(&model.base_instructions);
@@ -1988,7 +2096,7 @@ fn bundled_models_json_contains_openrouter_models() {
             ReasoningEffort::Medium,
             ReasoningEffort::High,
             ReasoningEffort::XHigh,
-            ReasoningEffort::Custom("max".to_string()),
+            ReasoningEffort::Max,
         ]
     );
     assert_eq!(claude_opus.visibility, ModelVisibility::List);
@@ -2009,7 +2117,7 @@ fn bundled_models_json_contains_openrouter_models() {
     assert_eq!(claude_fable_plan.display_name, "Claude Fable 5 Plan");
     assert_eq!(
         claude_fable_plan.description.as_deref(),
-        Some("Claude Fable 5 through Claude Code subscription auth in the Codex harness.")
+        Some("Claude Fable 5 through Claude Code subscription auth in PFTerminal.")
     );
     assert_eq!(claude_fable_plan.context_window, Some(1_000_000));
     assert_eq!(
@@ -2027,7 +2135,7 @@ fn bundled_models_json_contains_openrouter_models() {
             ReasoningEffort::Medium,
             ReasoningEffort::High,
             ReasoningEffort::XHigh,
-            ReasoningEffort::Custom("max".to_string()),
+            ReasoningEffort::Max,
         ]
     );
     assert_eq!(claude_fable_plan.visibility, ModelVisibility::List);
@@ -2091,6 +2199,7 @@ fn bundled_models_json_contains_openrouter_models() {
 
     assert_eq!(vercel_glm.display_name, "Vercel GLM 5.2");
     assert_eq!(vercel_glm.context_window, Some(1_048_576));
+    assert_eq!(vercel_glm.max_output_tokens, Some(128_000));
     assert_eq!(
         vercel_glm.default_reasoning_level,
         Some(ReasoningEffort::Medium)
@@ -2120,6 +2229,7 @@ fn bundled_models_json_contains_openrouter_models() {
 
     assert_eq!(vercel_fast.display_name, "Vercel GLM 5.2 Fast");
     assert_eq!(vercel_fast.context_window, Some(1_048_576));
+    assert_eq!(vercel_fast.max_output_tokens, Some(128_000));
     assert_eq!(
         vercel_fast.default_reasoning_level,
         Some(ReasoningEffort::Medium)
@@ -2161,4 +2271,45 @@ fn bundled_models_json_contains_openrouter_models() {
             ReasoningEffort::High,
         ]
     );
+}
+
+#[test]
+fn bundled_models_json_contains_direct_deepseek_flash() {
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+    let deepseek = response
+        .models
+        .iter()
+        .find(|model| model.slug == "deepseek-v4-flash")
+        .expect("bundled models.json should include direct DeepSeek V4 Flash");
+
+    assert_eq!(deepseek.display_name, "DeepSeek V4 Flash 0731 (Direct)");
+    assert_eq!(deepseek.context_window, Some(1_048_576));
+    assert_eq!(deepseek.max_context_window, Some(1_048_576));
+    assert_eq!(deepseek.max_output_tokens, Some(384_000));
+    assert_eq!(
+        deepseek.default_reasoning_level,
+        Some(ReasoningEffort::High)
+    );
+    assert_eq!(
+        deepseek
+            .supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![ReasoningEffort::High, ReasoningEffort::Max]
+    );
+    assert_eq!(
+        deepseek.orchestration,
+        Some(ModelOrchestrationMetadata::Eligible {
+            provider_id: "deepseek".to_string(),
+            capability: ModelCapabilityTier::Fast,
+            billing: ModelBilling::Metered {
+                input_milli_usd_per_million_tokens: 140,
+                output_milli_usd_per_million_tokens: 280,
+                cached_input_milli_usd_per_million_tokens: Some(3),
+            },
+        })
+    );
+    assert_standard_base(&deepseek.base_instructions);
 }

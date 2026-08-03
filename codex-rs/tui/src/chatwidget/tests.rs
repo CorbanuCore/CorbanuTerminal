@@ -10,6 +10,7 @@ pub(super) use crate::app_event::AppEvent;
 pub(super) use crate::app_event::ExitMode;
 pub(super) use crate::app_event_sender::AppEventSender;
 pub(super) use crate::approval_events::ApplyPatchApprovalRequestEvent;
+pub(super) use crate::approval_events::ApprovalResponseDestination;
 pub(super) use crate::approval_events::ExecApprovalRequestEvent;
 pub(super) use crate::bottom_pane::LocalImageAttachment;
 pub(super) use crate::bottom_pane::MentionBinding;

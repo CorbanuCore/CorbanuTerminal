@@ -48,6 +48,16 @@ const MCP_OAUTH_SECRETS_FILENAME: &str = "mcp_oauth.age";
 const LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR: u8 = 16;
 const LOCAL_SECRETS_MAX_SCRYPT_WORK_FACTOR: u8 = 20;
 
+/// Returns the path used by the default file-backed keyring fallback for this
+/// state home. The path is derived from the same service/account identity as
+/// [`LocalSecretsBackend`], so callers can report the active storage mode
+/// without reading the key.
+pub fn local_keyring_fallback_path(codex_home: &Path) -> PathBuf {
+    let account = compute_keyring_account(codex_home);
+    LocalFallbackKeyringStore::new(codex_home.to_path_buf())
+        .fallback_path(keyring_service(), &account)
+}
+
 /// Selects the local encrypted file used by a `LocalSecretsBackend`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum LocalSecretsNamespace {

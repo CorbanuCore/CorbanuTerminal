@@ -742,6 +742,10 @@ impl TestCodexBuilder {
         // specific model can still override this with a config mutator.
         config.model = Some("gpt-5.5".to_string());
         config.cwd = cwd_override;
+        // The mock transport is the OpenAI provider with only its base URL replaced. Keep the
+        // structured provider identity in sync so exact-route validation never observes a
+        // provider object from one route paired with another route's ID.
+        config.model_provider_id = "openai".to_string();
         config.model_provider = model_provider;
         if let Ok(path) = codex_utils_cargo_bin::cargo_bin("codex") {
             config.codex_self_exe = Some(path);

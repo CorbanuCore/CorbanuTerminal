@@ -122,6 +122,15 @@ impl ChatWidget {
     /// When there are queued user messages, restore them into the composer
     /// separated by newlines rather than auto-submitting the next one.
     pub(super) fn on_interrupted_turn(&mut self, reason: TurnAbortReason) {
+        const PRESERVED_INTERRUPT_NOTE: &str = "turn interrupted; process preserved";
+        for process in &mut self.unified_exec_processes {
+            if process.interrupt_notes.last().map(String::as_str) != Some(PRESERVED_INTERRUPT_NOTE)
+            {
+                process
+                    .interrupt_notes
+                    .push(PRESERVED_INTERRUPT_NOTE.to_string());
+            }
+        }
         // Finalize, log a gentle prompt, and clear running state.
         self.finalize_turn();
         let send_pending_steers_immediately =

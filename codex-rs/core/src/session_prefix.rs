@@ -8,7 +8,7 @@ use crate::context::InterAgentCompletionMessage;
 use crate::context::SubagentNotification;
 
 const COMPLETION_MESSAGE_MAX_TOKENS: usize = 1_000;
-const COMPLETION_MESSAGE_ENVELOPE_TOKEN_RESERVE: usize = 100;
+const COMPLETION_MESSAGE_ENVELOPE_TOKEN_RESERVE: usize = 240;
 const ERROR_MAX_TOKENS: usize =
     COMPLETION_MESSAGE_MAX_TOKENS - COMPLETION_MESSAGE_ENVELOPE_TOKEN_RESERVE;
 const ERROR_NEXT_ACTION: &str = "This agent's turn failed. If you still need this agent, use the available collaboration tools to give it another task.";

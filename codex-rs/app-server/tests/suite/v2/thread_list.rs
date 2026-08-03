@@ -1339,6 +1339,7 @@ async fn thread_list_reports_loaded_subagent_direct_input_capability() -> Result
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             }),
         )?;
         let path = rollout_path(codex_home.path(), filename_ts, &thread_id);

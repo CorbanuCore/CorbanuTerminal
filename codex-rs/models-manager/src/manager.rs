@@ -4,7 +4,6 @@ use crate::config::ModelsManagerConfig;
 use crate::model_info;
 use codex_http_client::HttpClientFactory;
 use codex_login::AuthManager;
-use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::error::Result as CoreResult;
 use codex_protocol::openai_models::ModelInfo;
@@ -442,6 +441,13 @@ impl OpenAiModelsManager {
                 if !bundled.supported_reasoning_levels.is_empty() {
                     model.default_reasoning_level = bundled.default_reasoning_level.clone();
                     model.supported_reasoning_levels = bundled.supported_reasoning_levels.clone();
+                }
+                // A cached or provider-supplied discovery record may predate required output-limit
+                // metadata. Preserve the bundled route capability when the overlay omits it so a
+                // stale models_cache.json cannot make a selectable model fail before its first
+                // request.
+                if model.max_output_tokens.is_none() {
+                    model.max_output_tokens = bundled.max_output_tokens;
                 }
                 model.orchestration = bundled.orchestration.clone();
                 model.chat_completions = bundled.chat_completions.clone();

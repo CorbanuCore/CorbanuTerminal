@@ -114,6 +114,7 @@ struct StatusHistoryCell {
     remote_connection: Option<RemoteConnectionStatus>,
     show_chatgpt_usage_link: bool,
     account: Option<StatusAccountDisplay>,
+    account_value: Option<String>,
     thread_name: Option<String>,
     session_id: Option<String>,
     forked_from: Option<String>,
@@ -321,6 +322,7 @@ impl StatusHistoryCell {
         let model_provider = format_model_provider(config, runtime_model_provider_base_url);
         let show_chatgpt_usage_link = config.model_provider.requires_openai_auth;
         let account = compose_account_display(account_display);
+        let account_value = status_account_value(config, account_display);
         let session_id = session_id.as_ref().map(std::string::ToString::to_string);
         let forked_from = forked_from.map(|id| id.to_string());
         let default_usage = TokenUsage::default();
@@ -362,6 +364,7 @@ impl StatusHistoryCell {
                 remote_connection: remote_connection.cloned(),
                 show_chatgpt_usage_link,
                 account,
+                account_value,
                 thread_name,
                 session_id,
                 forked_from,
@@ -703,6 +706,40 @@ fn status_approval_label(
     approval.to_string()
 }
 
+fn status_account_value(
+    config: &Config,
+    account_display: Option<&StatusAccountDisplay>,
+) -> Option<String> {
+    let provider = &config.model_provider;
+    if provider.auth.is_some() {
+        return Some(format!("{} account connected", provider.name));
+    }
+    if provider.aws.is_some() {
+        return Some(format!("{} AWS credentials", provider.name));
+    }
+
+    let environment_key_present = provider
+        .env_key
+        .as_deref()
+        .and_then(std::env::var_os)
+        .is_some_and(|value| !value.is_empty());
+    if environment_key_present || provider.experimental_bearer_token.is_some() {
+        return Some(format!("{} API key configured", provider.name));
+    }
+
+    account_display.map(|account| match account {
+        StatusAccountDisplay::ChatGpt { email, plan } => match (email, plan) {
+            (Some(email), Some(plan)) => format!("{email} ({plan})"),
+            (Some(email), None) => email.clone(),
+            (None, Some(plan)) => plan.clone(),
+            (None, None) => "ChatGPT".to_string(),
+        },
+        StatusAccountDisplay::ApiKey => {
+            "OpenAI API key configured (run pfterminal login to use ChatGPT)".to_string()
+        }
+    })
+}
+
 impl HistoryCell for StatusHistoryCell {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         let mut lines: Vec<Line<'static>> = Vec::new();
@@ -718,17 +755,7 @@ impl HistoryCell for StatusHistoryCell {
             return Vec::new();
         }
 
-        let account_value = self.account.as_ref().map(|account| match account {
-            StatusAccountDisplay::ChatGpt { email, plan } => match (email, plan) {
-                (Some(email), Some(plan)) => format!("{email} ({plan})"),
-                (Some(email), None) => email.clone(),
-                (None, Some(plan)) => plan.clone(),
-                (None, None) => "ChatGPT".to_string(),
-            },
-            StatusAccountDisplay::ApiKey => {
-                "API key configured (run pfterminal login to use ChatGPT)".to_string()
-            }
-        });
+        let account_value = self.account_value.clone();
 
         let mut labels: Vec<String> = vec!["Model", "Directory", "Permissions", "Agents.md"]
             .into_iter()

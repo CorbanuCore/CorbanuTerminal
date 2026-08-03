@@ -1,9 +1,10 @@
 ---
 source: tui/src/chatwidget/tests/side.rs
+assertion_line: 447
 expression: terminal.backend()
 ---
 "                                                                                "
 "                                                                                "
-"› Ask Codex to do anything                                                      "
+"› Ask PFTerminal to do anything                                                 "
 "                                                                                "
-"  gpt-5.6-sol                                                ctrl + / for side  "
+"  Ambient GLM 5.2                                            ctrl + / for side  "

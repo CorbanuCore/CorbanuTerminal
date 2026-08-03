@@ -789,7 +789,8 @@ pub(crate) struct App {
     /// Terminal turn notifications are observed both on receipt and during buffered replay. Keep
     /// orchestration side effects idempotent across those two delivery paths.
     pub(crate) spawn_processed_terminal_turns: HashSet<(ThreadId, String)>,
-    /// Loop-breaker state for auto child-report processing turns, keyed by parent node id.
+    /// Edge-adapter loop breaker for external Claude-pane child-report turns. Native crew
+    /// lifecycle policy lives in Core's agent controller.
     pub(crate) spawn_auto_loop_state_by_node:
         HashMap<String, crate::spawn_orchestration::SpawnAutoLoopState>,
     /// False after resume until a live operator/non-auto turn proves current intent.
@@ -809,8 +810,9 @@ pub(crate) struct App {
     #[allow(clippy::box_collection)]
     pub(crate) orchestrate_idle_generation_by_target: Box<HashMap<String, u64>>,
     side_threads: HashMap<ThreadId, SideThreadState>,
+    pub(crate) claude_panes: crate::claude_panes::ClaudePaneRegistry,
     abandoned_side_threads: HashSet<ThreadId>,
-    active_thread_id: Option<ThreadId>,
+    pub(crate) active_thread_id: Option<ThreadId>,
     active_thread_rx: Option<mpsc::Receiver<ThreadBufferedEvent>>,
     pub(crate) primary_thread_id: Option<ThreadId>,
     last_subagent_backfill_attempt: Option<ThreadId>,
@@ -882,6 +884,7 @@ fn gpu_runtime_model_preset(provider: &codex_state::GpuRuntimeProvider) -> Optio
             capability: ModelCapabilityTier::Balanced,
             billing: ModelBilling::Local,
         }),
+        multi_agent_version: None,
         display_name: provider.model_id.clone(),
         description: format!(
             "{} · active GPU rental {} · ${:.4}/hour",
@@ -1096,7 +1099,7 @@ impl App {
             config.tui_notifications.condition,
         );
 
-        let startup_resume_model_override = match (
+        let _startup_resume_model_override = match (
             startup_resume_model_override,
             &session_selection,
             state_db.as_ref(),
@@ -1143,7 +1146,15 @@ impl App {
             );
         }
         let mut model = config.model.clone().unwrap_or(bootstrap.default_model);
-        let available_models = bootstrap.available_models;
+        let mut available_models = bootstrap.available_models;
+        if let Some(state_db) = state_db.as_ref() {
+            match state_db.list_gpu_runtime_providers().await {
+                Ok(providers) => {
+                    available_models.extend(providers.iter().filter_map(gpu_runtime_model_preset))
+                }
+                Err(error) => tracing::warn!(%error, "failed to load GPU rental model catalog"),
+            }
+        }
         let remote_connection = crate::status::remote_connection::remote_connection_status_value(
             &app_server_target,
             app_server.server_version(),
@@ -1276,8 +1287,18 @@ impl App {
                     &config,
                     &harness_overrides,
                 );
+                let permission_settings =
+                    config_persistence::resume_permission_settings_for_overrides(
+                        &config,
+                        &harness_overrides,
+                    );
                 let resumed = app_server
-                    .resume_thread(config.clone(), target_session.thread_id, model_settings)
+                    .resume_thread(
+                        config.clone(),
+                        target_session.thread_id,
+                        model_settings,
+                        permission_settings,
+                    )
                     .await
                     .map_err(|err| session_start_error("resume", &target_session, err))?;
                 let init = crate::chatwidget::ChatWidgetInit {
@@ -1388,6 +1409,16 @@ See the PFTerminal keymap documentation for supported actions and examples."
             config.codex_home.as_ref(),
             restored_pane_layout.as_ref(),
         );
+        let restored_codex_user_pane_ids = restored_pane_layout
+            .as_ref()
+            .map(|layout| {
+                layout
+                    .codex_user_pane_ids
+                    .iter()
+                    .filter_map(|thread_id| ThreadId::from_string(thread_id).ok())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let restored_spawn_nazgul_pane_id = restored_pane_layout
             .as_ref()
             .and_then(|layout| layout.spawn_nazgul_pane_id.clone())
@@ -1582,6 +1613,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
                 restored_orchestrate_idle_generation_by_target,
             ),
             side_threads: HashMap::new(),
+            claude_panes: restored_claude_panes,
             abandoned_side_threads: HashSet::new(),
             active_thread_id: None,
             active_thread_rx: None,
@@ -1595,6 +1627,12 @@ See the PFTerminal keymap documentation for supported actions and examples."
             pending_plugin_enabled_writes: HashMap::new(),
             pending_hook_enabled_writes: HashMap::new(),
         };
+        for thread_id in restored_codex_user_pane_ids {
+            app.upsert_agent_picker_thread(
+                thread_id, /*agent_nickname*/ None, /*agent_role*/ None,
+                /*is_closed*/ false,
+            );
+        }
         app.refresh_gpu_spend_indicator().await;
         // A rental outlives the TUI that created it. Reattach the independent reconciler on
         // every startup; its process lock deduplicates concurrent PFTerminal processes and it
@@ -1629,6 +1667,8 @@ See the PFTerminal keymap documentation for supported actions and examples."
             }
             app.enqueue_primary_thread_session(started.session, started.turns)
                 .await?;
+            app.restore_codex_user_panes_from_saved_state(&mut app_server)
+                .await;
             app.restore_native_spawn_panes_from_saved_state(&mut app_server)
                 .await;
             app.audit_restored_assignments();
@@ -1739,15 +1779,25 @@ See the PFTerminal keymap documentation for supported actions and examples."
             loop {
                 let control = select! {
                     Some(event) = app_event_rx.recv() => {
-                        match Box::pin(app.handle_event(tui, &mut app_server, event)).await {
-                            Ok(control) => control,
-                            Err(err) => {
-                                tracing::error!(error = ?err, "contained app event handler failure");
-                                app.chat_widget.add_error_message(format!(
-                                    "A command failed but PFTerminal is still running: {err:#}"
-                                ));
-                                AppRunControl::Continue
-                            },
+                        if matches!(event, AppEvent::OpenExternalAgentConfigMigration) {
+                            app.handle_external_agent_config_migration_event(
+                                tui,
+                                &mut app_server,
+                                &mut tui_event_rx,
+                            )
+                            .await;
+                            AppRunControl::Continue
+                        } else {
+                            match Box::pin(app.handle_event(tui, &mut app_server, event)).await {
+                                Ok(control) => control,
+                                Err(err) => {
+                                    tracing::error!(error = ?err, "contained app event handler failure");
+                                    app.chat_widget.add_error_message(format!(
+                                        "A command failed but PFTerminal is still running: {err:#}"
+                                    ));
+                                    AppRunControl::Continue
+                                },
+                            }
                         }
                     }
                     active = async {
@@ -1861,6 +1911,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
                                         tracing::warn!(%error, "old app-server shutdown after reconnect failed");
                                     }
                                 });
+                                app.restore_codex_user_panes_from_saved_state(&mut app_server).await;
                                 app.restore_native_spawn_panes_from_saved_state(&mut app_server).await;
                                 listen_for_app_server_events = true;
                                 app_server_reconnect_failure_notified = false;
@@ -2119,9 +2170,7 @@ fn apply_persisted_resume_runtime(
 ) -> Option<ResumeModelOverride> {
     let model = model?.to_string();
     config.model = Some(model.clone());
-    if let Some(reasoning_effort) = reasoning_effort {
-        config.model_reasoning_effort = Some(reasoning_effort);
-    }
+    config.model_reasoning_effort = reasoning_effort;
     if let Some(provider) = config.model_providers.get(model_provider).cloned() {
         config.model_provider_id = model_provider.to_string();
         config.model_provider = provider;

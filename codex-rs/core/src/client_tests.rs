@@ -29,13 +29,12 @@ use codex_login::auth::AgentIdentityAuthPolicy;
 use codex_model_provider::BearerAuthProvider;
 use codex_model_provider::SharedModelProvider;
 use codex_model_provider::create_model_provider;
+use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
+use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
 use codex_model_provider_info::CHATGPT_CODEX_BASE_URL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
-use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::WireApi;
@@ -43,14 +42,11 @@ use codex_model_provider_info::create_oss_provider_with_base_url;
 use codex_otel::SessionTelemetry;
 use codex_protocol::ThreadId;
 use codex_protocol::auth::AuthMode;
+use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
-use codex_protocol::models::ReasoningItemContent;
-use codex_protocol::models::ReasoningItemReasoningSummary;
 use codex_protocol::models::ResponseItem;
-use codex_protocol::models::WebSearchAction;
-use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::InternalSessionSource;
@@ -64,11 +60,6 @@ use codex_rollout_trace::RawTraceEventPayload;
 use codex_rollout_trace::RolloutTrace;
 use codex_rollout_trace::TraceWriter;
 use codex_rollout_trace::replay_bundle;
-use codex_tools::FreeformTool;
-use codex_tools::FreeformToolFormat;
-use codex_tools::JsonSchema;
-use codex_tools::ResponsesApiTool;
-use codex_tools::ToolSpec;
 use futures::StreamExt;
 use pretty_assertions::assert_eq;
 use serde_json::json;
@@ -102,6 +93,81 @@ const TEST_CHATGPT_ID_TOKEN: &str = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJlbWF
 const TEST_INSTALLATION_ID: &str = "11111111-1111-4111-8111-111111111111";
 
 #[test]
+fn non_openai_responses_request_sends_only_current_dynamic_context() {
+    let client = test_model_client(SessionSource::Cli);
+    let provider = client
+        .state
+        .provider
+        .info()
+        .to_api_provider(/*auth_mode*/ None)
+        .expect("test API provider");
+    let prompt = Prompt {
+        input: vec![
+            ResponseItem::Message {
+                id: None,
+                role: "developer".to_string(),
+                content: vec![
+                    ContentItem::InputText {
+                        text: "Persistent Nazgul role doctrine.".to_string(),
+                    },
+                    ContentItem::InputText {
+                        text: "<permissions instructions>old never</permissions instructions>"
+                            .to_string(),
+                    },
+                ],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::Message {
+                id: None,
+                role: "developer".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "<permissions instructions>current on-request</permissions instructions>"
+                        .to_string(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::Message {
+                id: None,
+                role: "user".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "Write outside the workspace only after approval.".to_string(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+        ],
+        ..Default::default()
+    };
+    let responses_metadata = test_responses_metadata_for_client(
+        &client,
+        /*turn_id*/ None,
+        format!("{}:0", client.state.thread_id),
+        /*parent_thread_id*/ None,
+        TestCodexResponsesRequestKind::Turn,
+    );
+
+    let request = client
+        .build_responses_request(
+            &provider,
+            &prompt,
+            &test_model_info(),
+            /*effort*/ None,
+            super::ReasoningSummaryConfig::None,
+            /*service_tier*/ None,
+            &responses_metadata,
+        )
+        .expect("non-OpenAI Responses request");
+    let serialized = serde_json::to_string(&request.input).expect("serialize request input");
+
+    assert!(serialized.contains("Persistent Nazgul role doctrine."));
+    assert!(serialized.contains("current on-request"));
+    assert!(serialized.contains("Write outside the workspace only after approval."));
+    assert!(!serialized.contains("old never"));
+}
+
+#[test]
 fn responses_input_normalizes_accidental_assistant_prefill_without_changing_user_turns() {
     let message = |role: &str, text: &str| ResponseItem::Message {
         id: None,
@@ -110,7 +176,7 @@ fn responses_input_normalizes_accidental_assistant_prefill_without_changing_user
             text: text.to_string(),
         }],
         phase: None,
-        metadata: None,
+        internal_chat_message_metadata_passthrough: None,
     };
     let child_message = |text: &str| ResponseItem::AgentMessage {
         id: None,
@@ -119,7 +185,7 @@ fn responses_input_normalizes_accidental_assistant_prefill_without_changing_user
         content: vec![AgentMessageInputContent::InputText {
             text: text.to_string(),
         }],
-        metadata: None,
+        internal_chat_message_metadata_passthrough: None,
     };
     let cases = [
         (
@@ -185,12 +251,12 @@ fn responses_input_normalizes_accidental_assistant_prefill_without_changing_user
             vec![
                 message("user", "Compact this conversation."),
                 message("assistant", "Earlier result."),
-                ResponseItem::CompactionTrigger { metadata: None },
+                ResponseItem::CompactionTrigger {},
             ],
             vec![
                 message("user", "Compact this conversation."),
                 message("assistant", "Earlier result."),
-                ResponseItem::CompactionTrigger { metadata: None },
+                ResponseItem::CompactionTrigger {},
             ],
         ),
     ];
@@ -202,6 +268,54 @@ fn responses_input_normalizes_accidental_assistant_prefill_without_changing_user
 }
 
 #[test]
+fn non_openai_responses_adapts_native_child_mail_to_visible_user_input() {
+    let plaintext = ResponseItem::AgentMessage {
+        id: None,
+        author: "/root".to_string(),
+        recipient: "/root/worker".to_string(),
+        content: vec![AgentMessageInputContent::InputText {
+            text: "Message Type: NEW_TASK\nPayload:\ndo the work".to_string(),
+        }],
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let encrypted = ResponseItem::AgentMessage {
+        id: None,
+        author: "/root".to_string(),
+        recipient: "/root/worker".to_string(),
+        content: vec![AgentMessageInputContent::EncryptedContent {
+            encrypted_content: "opaque-ciphertext".to_string(),
+        }],
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let display_only = ResponseItem::AgentMessage {
+        id: None,
+        author: "not-a-canonical-agent".to_string(),
+        recipient: "/root/worker".to_string(),
+        content: vec![AgentMessageInputContent::InputText {
+            text: "display transcript".to_string(),
+        }],
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let mut input = vec![plaintext, encrypted.clone(), display_only.clone()];
+
+    super::adapt_plaintext_collaboration_messages_for_responses(&mut input);
+
+    assert!(matches!(
+        input.first(),
+        Some(ResponseItem::Message { id: None, role, content, .. })
+            if role == "user"
+                && matches!(content.as_slice(), [ContentItem::InputText { text }]
+                    if text.contains("<inter_agent_message")
+                        && text.contains("do the work"))
+    ));
+    assert_eq!(input.get(1), Some(&encrypted));
+    assert_eq!(input.get(2), Some(&display_only));
+    assert!(!super::responses_input_needs_synthetic_user_turn(
+        &input[..1]
+    ));
+}
+
+#[test]
 fn claude_plan_request_maps_typed_child_mail_to_user_input() {
     let message = |role: &str, text: &str| ResponseItem::Message {
         id: None,
@@ -210,7 +324,7 @@ fn claude_plan_request_maps_typed_child_mail_to_user_input() {
             text: text.to_string(),
         }],
         phase: None,
-        metadata: None,
+        internal_chat_message_metadata_passthrough: None,
     };
     let child_message = ResponseItem::AgentMessage {
         id: None,
@@ -224,7 +338,7 @@ fn claude_plan_request_maps_typed_child_mail_to_user_input() {
             )
             .to_string(),
         }],
-        metadata: None,
+        internal_chat_message_metadata_passthrough: None,
     };
     let prompt = super::Prompt {
         input: vec![
@@ -445,7 +559,7 @@ fn anthropic_fable_request_repairs_live_tool_then_commentary_history_shape() {
                     text: "Inspect the accessibility gate.".to_string(),
                 }],
                 phase: None,
-                metadata: None,
+                internal_chat_message_metadata_passthrough: None,
             },
             ResponseItem::FunctionCall {
                 id: None,
@@ -453,7 +567,8 @@ fn anthropic_fable_request_repairs_live_tool_then_commentary_history_shape() {
                 namespace: None,
                 arguments: r#"{"cmd":"node test/accessibility.test.mjs"}"#.to_string(),
                 call_id: "toolu_live_fable".to_string(),
-                metadata: None,
+                encrypted_function_args: None,
+                internal_chat_message_metadata_passthrough: None,
             },
             ResponseItem::Message {
                 id: None,
@@ -462,13 +577,13 @@ fn anthropic_fable_request_repairs_live_tool_then_commentary_history_shape() {
                     text: "I am checking the result now.".to_string(),
                 }],
                 phase: None,
-                metadata: None,
+                internal_chat_message_metadata_passthrough: None,
             },
             ResponseItem::FunctionCallOutput {
                 id: None,
                 call_id: "toolu_live_fable".to_string(),
                 output: FunctionCallOutputPayload::from_text("accessibility: ok".to_string()),
-                metadata: None,
+                internal_chat_message_metadata_passthrough: None,
             },
         ],
         ..Default::default()
@@ -849,6 +964,7 @@ fn test_anthropic_opus_model_info() -> ModelInfo {
         "supports_parallel_tool_calls": true,
         "supports_image_detail_original": false,
         "context_window": 1000000,
+        "max_output_tokens": 128000,
         "auto_compact_token_limit": null,
         "experimental_supported_tools": []
     }))
@@ -860,6 +976,28 @@ fn test_claude_plan_model_info() -> ModelInfo {
     model.slug = CLAUDE_PLAN_MODEL.to_string();
     model.display_name = "Claude Opus 5 Plan".to_string();
     model
+}
+
+#[test]
+fn anthropic_request_uses_model_limit_above_legacy_32k_cap() {
+    let prompt = super::Prompt {
+        input: vec![ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText {
+                text: "Inspect the repository.".to_string(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        ..Default::default()
+    };
+
+    let request = test_model_client(SessionSource::Cli)
+        .build_anthropic_messages_request(&prompt, &test_anthropic_opus_model_info(), None)
+        .expect("Anthropic Opus request");
+
+    assert_eq!(request.max_tokens, 128_000);
 }
 
 fn test_claude_fable_model_info() -> ModelInfo {

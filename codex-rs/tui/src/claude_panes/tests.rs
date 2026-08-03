@@ -9,6 +9,8 @@ use codex_model_provider_info::AMBIENT_KIMI_K2_7_CODE_MODEL;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
+use sha2::Digest;
+use sha2::Sha256;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -181,6 +183,151 @@ fn registry_restores_persisted_pane_metadata() {
             .iter()
             .any(|pane| pane.id == unlisted_pane_id)
     );
+}
+
+#[test]
+fn registry_removes_idle_operator_pane_artifacts_and_restoration_membership() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let mut registry = ClaudePaneRegistry::new();
+    let pane_id = registry
+        .create_pane(
+            ClaudeProviderProfileKind::ClaudePlan,
+            std::env::current_dir().expect("cwd"),
+            codex_home.path(),
+        )
+        .expect("create pane");
+    let artifact_dir = codex_home.path().join("panes").join(&pane_id);
+    std::fs::write(
+        artifact_dir.join("turn-0001.jsonl"),
+        "preserved until delete",
+    )
+    .expect("write artifact");
+
+    let removed = registry
+        .remove_operator_pane(&pane_id, codex_home.path())
+        .expect("remove pane");
+
+    assert!(!removed.interrupted_running_turn);
+    assert_eq!(registry.active_user_pane_id(), CODEX_MAIN_PANE_ID);
+    assert!(registry.panes().is_empty());
+    assert!(!artifact_dir.exists());
+    let layout = PaneLayoutState {
+        version: PANE_LAYOUT_VERSION,
+        claude_pane_ids: vec![pane_id],
+        ..Default::default()
+    };
+    assert!(
+        ClaudePaneRegistry::restore_from_disk(codex_home.path(), Some(&layout))
+            .panes()
+            .is_empty()
+    );
+}
+
+#[test]
+fn registry_cancels_running_operator_pane_before_removing_artifacts() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let mut registry = ClaudePaneRegistry::new();
+    let pane_id = registry
+        .create_pane(
+            ClaudeProviderProfileKind::ClaudePlan,
+            std::env::current_dir().expect("cwd"),
+            codex_home.path(),
+        )
+        .expect("create pane");
+    let cancel_token = CancellationToken::new();
+    let pane = registry
+        .panes
+        .iter_mut()
+        .find(|pane| pane.id == pane_id)
+        .expect("pane");
+    pane.status = ClaudePaneStatus::Running;
+    pane.cancel_token = Some(cancel_token.clone());
+
+    let removed = registry
+        .remove_operator_pane(&pane_id, codex_home.path())
+        .expect("remove running pane");
+
+    assert!(removed.interrupted_running_turn);
+    assert!(cancel_token.is_cancelled());
+    assert!(registry.panes().is_empty());
+    assert!(!codex_home.path().join("panes").join(&pane_id).exists());
+}
+
+#[test]
+fn registry_refuses_independent_managed_claude_pane_removal() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let mut registry = ClaudePaneRegistry::new();
+    let pane_id = registry
+        .create_pane_with_role(
+            ClaudeProviderProfileKind::ClaudePlan,
+            std::env::current_dir().expect("cwd"),
+            codex_home.path(),
+            Some(SpawnRole::Orc),
+            Some("Snaga".to_string()),
+        )
+        .expect("create managed pane");
+    let artifact_dir = codex_home.path().join("panes").join(&pane_id);
+
+    let error = registry
+        .remove_operator_pane(&pane_id, codex_home.path())
+        .expect_err("managed pane must be protected");
+
+    assert!(error.to_string().contains("whole-crew lifecycle"));
+    assert!(artifact_dir.exists());
+    assert_eq!(registry.panes().len(), 1);
+}
+
+#[test]
+fn registry_removes_running_managed_pane_only_through_crew_boundary() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let mut registry = ClaudePaneRegistry::new();
+    let pane_id = registry
+        .create_pane_with_role(
+            ClaudeProviderProfileKind::ClaudePlan,
+            std::env::current_dir().expect("cwd"),
+            codex_home.path(),
+            Some(SpawnRole::Troll),
+            Some("Burzum".to_string()),
+        )
+        .expect("create managed pane");
+    let cancel_token = CancellationToken::new();
+    let pane = registry
+        .panes
+        .iter_mut()
+        .find(|pane| pane.id == pane_id)
+        .expect("pane");
+    pane.status = ClaudePaneStatus::Running;
+    pane.cancel_token = Some(cancel_token.clone());
+
+    let removed = registry
+        .remove_managed_crew_pane(&pane_id, codex_home.path())
+        .expect("whole-crew boundary removes pane");
+
+    assert!(removed.interrupted_running_turn);
+    assert!(cancel_token.is_cancelled());
+    assert!(registry.panes().is_empty());
+    assert!(!codex_home.path().join("panes").join(&pane_id).exists());
+}
+
+#[test]
+fn registry_crew_boundary_refuses_operator_created_pane() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let mut registry = ClaudePaneRegistry::new();
+    let pane_id = registry
+        .create_pane(
+            ClaudeProviderProfileKind::ClaudePlan,
+            std::env::current_dir().expect("cwd"),
+            codex_home.path(),
+        )
+        .expect("create operator pane");
+
+    let error = registry
+        .remove_managed_crew_pane(&pane_id, codex_home.path())
+        .expect_err("crew boundary must not remove operator pane");
+
+    assert!(error.to_string().contains("not owned by the managed crew"));
+    assert!(codex_home.path().join("panes").join(&pane_id).exists());
+    assert_eq!(registry.panes().len(), 1);
 }
 
 #[test]
@@ -499,6 +646,7 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
     let layout = PaneLayoutState {
         version: 0,
         codex_thread_id: Some("019f0657-1d67-7103-9d65-89e71587347d".to_string()),
+        codex_user_pane_ids: vec!["019f0e22-e6e9-7e02-9cca-9dc18667b3e5".to_string()],
         active_user_pane_id: Some("claude-active".to_string()),
         spawn_nazgul_pane_id: Some("claude-root".to_string()),
         spawn_nazgul_rebind_required: true,
@@ -529,6 +677,7 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
     .expect("layout");
     assert_eq!(restored.version, PANE_LAYOUT_VERSION);
     assert_eq!(restored.codex_thread_id, layout.codex_thread_id);
+    assert_eq!(restored.codex_user_pane_ids, layout.codex_user_pane_ids);
     assert_eq!(
         restored.active_user_pane_id.as_deref(),
         Some("claude-active")
@@ -561,6 +710,30 @@ fn pane_layout_persistence_round_trips_root_binding_and_parent_map() {
     assert_eq!(restored_claude.target_pane_id, "pane:claude-active");
     assert_eq!(restored.spawn_next_dispatch_seq, 42);
     assert_eq!(restored.spawn_processed_dispatch_seq_ids, vec![39, 41]);
+}
+
+#[test]
+fn pane_layout_load_finds_owner_when_layout_contains_only_codex_user_panes() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let root_thread = "019f1e4e-c71e-7e23-893f-ffb64b8744bb";
+    let user_pane_thread = "019f1e4e-f4f6-7ff3-892a-b836a10f2957";
+    let layout = PaneLayoutState {
+        version: PANE_LAYOUT_VERSION,
+        codex_thread_id: Some(root_thread.to_string()),
+        codex_user_pane_ids: vec![user_pane_thread.to_string()],
+        ..Default::default()
+    };
+
+    persist_pane_layout(codex_home.path(), &layout).expect("persist user-pane-only layout");
+
+    let by_owner = load_pane_layout(codex_home.path(), Some(root_thread))
+        .expect("owner should load its user-pane-only layout");
+    assert_eq!(by_owner.codex_user_pane_ids, vec![user_pane_thread]);
+
+    let by_member = load_pane_layout(codex_home.path(), Some(user_pane_thread))
+        .expect("member should resolve its owning Main layout");
+    assert_eq!(by_member.codex_thread_id.as_deref(), Some(root_thread));
+    assert_eq!(by_member.codex_user_pane_ids, vec![user_pane_thread]);
 }
 
 #[test]
@@ -647,6 +820,74 @@ fn pane_layout_load_finds_related_root_layout_for_native_spawn_thread() {
 }
 
 #[test]
+fn pane_layout_load_prefers_most_complete_matching_crew_when_exact_owner_has_stale_subset() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let resumable_main = "019f1e50-0000-7000-8000-000000000001";
+    let empty_new_main = "019f1e50-0000-7000-8000-000000000002";
+    let nazgul_node = "thread:019f1e50-0000-7000-8000-000000000003";
+
+    let mut complete_crew =
+        crate::crew_state::CrewInstanceState::begin(crate::crew_presets::standard_crew_spec())
+            .expect("valid crew");
+    for member in complete_crew.spec.members.clone() {
+        complete_crew
+            .record_member(
+                &member.logical_member_id,
+                &format!("thread:{}", member.logical_member_id),
+            )
+            .expect("record crew member");
+    }
+    complete_crew.mark_ready().expect("complete crew is ready");
+
+    let mut stale_crew = complete_crew.clone();
+    stale_crew.spec.members.truncate(1);
+    stale_crew
+        .member_node_by_id
+        .retain(|member_id, _| member_id == "nazgul");
+    stale_crew
+        .mark_ready()
+        .expect("stale root-only crew is valid");
+
+    let complete_layout = PaneLayoutState {
+        version: PANE_LAYOUT_VERSION,
+        codex_thread_id: Some(empty_new_main.to_string()),
+        active_user_pane_id: Some(CODEX_MAIN_PANE_ID.to_string()),
+        spawn_nazgul_pane_id: Some(nazgul_node.to_string()),
+        spawn_crew: Some(complete_crew.clone()),
+        ..Default::default()
+    };
+    let stale_exact_layout = PaneLayoutState {
+        version: PANE_LAYOUT_VERSION,
+        codex_thread_id: Some(resumable_main.to_string()),
+        active_user_pane_id: Some(CODEX_MAIN_PANE_ID.to_string()),
+        spawn_nazgul_pane_id: Some(nazgul_node.to_string()),
+        spawn_crew: Some(stale_crew),
+        ..Default::default()
+    };
+
+    // Persist the stale exact match last. Recovery must prioritize durable crew completeness over
+    // mtime because a resumed Main thread can receive a fresh layout id without ever producing a
+    // rollout, making that newer id impossible to select from `resume`.
+    persist_pane_layout(codex_home.path(), &complete_layout).expect("complete layout");
+    persist_pane_layout(codex_home.path(), &stale_exact_layout).expect("stale exact layout");
+
+    let restored =
+        load_pane_layout(codex_home.path(), Some(resumable_main)).expect("related complete layout");
+    assert_eq!(
+        restored.codex_thread_id.as_deref(),
+        Some(empty_new_main),
+        "the richest matching CrewSpec must survive even when its layout owner has no rollout"
+    );
+    assert_eq!(
+        restored
+            .spawn_crew
+            .as_ref()
+            .map(|crew| crew.spec.members.len()),
+        Some(complete_crew.spec.members.len())
+    );
+}
+
+#[test]
 fn pane_layout_recovers_verified_previous_generation_after_corruption() {
     let codex_home = tempfile::tempdir().expect("codex home");
     let thread_id = "019f2b89-775c-7dc1-9d20-4fdf7e990199";
@@ -708,6 +949,123 @@ fn pane_layout_bad_checksum_recovers_verified_previous_generation() {
     assert_eq!(
         restored.active_user_pane_id.as_deref(),
         Some("checksum-previous")
+    );
+}
+
+#[test]
+fn pane_layout_checksum_accepts_a_verified_prior_schema_with_new_default_fields_absent() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let thread_id = "019f2b89-775c-7dc1-9d20-4fdf7e990349";
+    let layout = PaneLayoutState {
+        codex_thread_id: Some(thread_id.to_string()),
+        spawn_nazgul_pane_id: Some(format!("thread:{thread_id}")),
+        spawn_parent_by_node: BTreeMap::from([(
+            "thread:019f2b89-775c-7dc1-9d20-4fdf7e990350".to_string(),
+            format!("thread:{thread_id}"),
+        )]),
+        ..Default::default()
+    };
+    persist_pane_layout(codex_home.path(), &layout).expect("current schema");
+    let primary = persisted_layout_path(codex_home.path(), thread_id);
+    let mut persisted: Value =
+        serde_json::from_slice(&std::fs::read(&primary).expect("primary")).expect("JSON");
+    let raw_layout = persisted["layout"].as_object_mut().expect("layout object");
+    assert!(raw_layout.shift_remove("codex_user_pane_ids").is_some());
+    let checksum = format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(raw_layout).expect("raw prior-schema layout"))
+    );
+    persisted["checksum"] = Value::String(checksum);
+    std::fs::write(
+        &primary,
+        serde_json::to_vec_pretty(&persisted).expect("prior-schema JSON"),
+    )
+    .expect("write prior schema");
+
+    let restored =
+        load_pane_layout(codex_home.path(), Some(thread_id)).expect("verified prior-schema layout");
+
+    assert!(restored.codex_user_pane_ids.is_empty());
+    assert_eq!(restored.spawn_nazgul_pane_id, layout.spawn_nazgul_pane_id);
+    assert_eq!(restored.spawn_parent_by_node, layout.spawn_parent_by_node);
+}
+
+#[test]
+fn pane_layout_persistence_refuses_to_destroy_the_only_unverified_generation() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let thread_id = "019f2b89-775c-7dc1-9d20-4fdf7e990379";
+    let original = PaneLayoutState {
+        codex_thread_id: Some(thread_id.to_string()),
+        spawn_nazgul_pane_id: Some(format!("thread:{thread_id}")),
+        ..Default::default()
+    };
+    persist_pane_layout(codex_home.path(), &original).expect("original");
+    let primary = persisted_layout_path(codex_home.path(), thread_id);
+    let corrupt_contents = b"{recoverable but currently unreadable".to_vec();
+    std::fs::write(&primary, &corrupt_contents).expect("corrupt primary");
+
+    let replacement = PaneLayoutState {
+        codex_thread_id: Some(thread_id.to_string()),
+        ..Default::default()
+    };
+    let error = persist_pane_layout(codex_home.path(), &replacement)
+        .expect_err("unverified state must fail closed");
+
+    assert!(
+        error
+            .to_string()
+            .contains("refusing to overwrite pane layout")
+    );
+    assert_eq!(
+        std::fs::read(&primary).expect("preserved primary"),
+        corrupt_contents
+    );
+    assert!(!primary.with_extension("json.previous").exists());
+}
+
+#[test]
+fn pane_layout_persistence_refuses_to_destroy_two_unverified_generations() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let thread_id = "019f2b89-775c-7dc1-9d20-4fdf7e990389";
+    let first = PaneLayoutState {
+        codex_thread_id: Some(thread_id.to_string()),
+        active_user_pane_id: Some("first-generation".to_string()),
+        ..Default::default()
+    };
+    persist_pane_layout(codex_home.path(), &first).expect("first generation");
+    let second = PaneLayoutState {
+        codex_thread_id: Some(thread_id.to_string()),
+        active_user_pane_id: Some("second-generation".to_string()),
+        ..Default::default()
+    };
+    persist_pane_layout(codex_home.path(), &second).expect("second generation");
+
+    let primary = persisted_layout_path(codex_home.path(), thread_id);
+    let previous = primary.with_extension("json.previous");
+    let corrupt_primary = b"{unverified current generation".to_vec();
+    let corrupt_previous = b"{unverified recovery generation".to_vec();
+    std::fs::write(&primary, &corrupt_primary).expect("corrupt primary");
+    std::fs::write(&previous, &corrupt_previous).expect("corrupt previous");
+
+    let replacement = PaneLayoutState {
+        codex_thread_id: Some(thread_id.to_string()),
+        ..Default::default()
+    };
+    let error = persist_pane_layout(codex_home.path(), &replacement)
+        .expect_err("two unverified generations must fail closed");
+
+    assert!(
+        error
+            .to_string()
+            .contains("refusing to overwrite pane layout")
+    );
+    assert_eq!(
+        std::fs::read(&primary).expect("preserved primary"),
+        corrupt_primary
+    );
+    assert_eq!(
+        std::fs::read(&previous).expect("preserved previous"),
+        corrupt_previous
     );
 }
 
@@ -896,11 +1254,10 @@ fn deterministic_dispatch_process_crash_matrix_recovers_readable_state() {
             cut,
             "server_accept_before_response" | "response_before_local_tombstone"
         );
-        let test_filter = if rpc_cut {
-            "app::tests::dispatch_integration::lost_wait_steer_response_reconciles_without_start_fallback"
-        } else {
-            "claude_panes::tests::dispatch_process_cut_child"
-        };
+        // Each cut must terminate at its exact persisted checkpoint. The separate dispatch
+        // integration suite exercises the live mailbox RPC; it cannot substitute for injecting
+        // a process death between an accepted request and its local acknowledgement.
+        let test_filter = "claude_panes::tests::dispatch_process_cut_child";
         let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
             .args(["--exact", test_filter, "--nocapture"])
             .env("PFTERMINAL_DISPATCH_CRASH_HOME", home.path())
@@ -1669,7 +2026,7 @@ fn top_level_new_pane_items_are_collapsed() {
         .map(|item| item.name.as_str())
         .collect::<Vec<_>>();
 
-    assert_eq!(names, vec!["+ Codex Pane", "+ Claude Pane"]);
+    assert_eq!(names, vec!["+ PFTerminal Pane", "+ Claude Pane"]);
     assert!(
         names
             .iter()
@@ -2221,6 +2578,47 @@ async fn stop_claude_child_reaps_running_process() {
         .expect("child should be killed and reaped");
 
     assert!(child.try_wait().expect("query child status").is_some());
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn stop_claude_child_kills_detached_tool_process_group() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let detached_pid_path = dir.path().join("detached-tool.pid");
+    let mut command = Command::new("sh");
+    command.args([
+        "-c",
+        "setsid sh -c 'echo $$ > \"$PFTERMINAL_DETACHED_PID_FILE\"; exec sleep 60' & wait",
+    ]);
+    command.env("PFTERMINAL_DETACHED_PID_FILE", &detached_pid_path);
+    command.kill_on_drop(true);
+    command.process_group(0);
+    let mut child = command.spawn().expect("spawn detached tool fixture");
+
+    let detached_pid = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Ok(contents) = tokio::fs::read_to_string(&detached_pid_path).await
+                && let Ok(pid) = contents.trim().parse::<libc::pid_t>()
+            {
+                break pid;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("detached tool should publish its pid");
+
+    stop_claude_child(&mut child)
+        .await
+        .expect("Claude root and detached tool should be killed");
+
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while std::path::Path::new(&format!("/proc/{detached_pid}")).exists() {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("detached tool should be reaped after tree cleanup");
 }
 
 #[cfg(unix)]

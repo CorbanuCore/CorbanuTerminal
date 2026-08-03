@@ -163,26 +163,34 @@ PFTerminal ships built-in providers. You do not need to define these providers
 manually in `config.toml`; you only need a credential for the provider you plan
 to use.
 
-| Provider   | Provider id  | Key name             | Model(s) shown in `/model`                                                              |
-| ---------- | ------------ | -------------------- | --------------------------------------------------------------------------------------- |
-| OpenAI Codex | `openai`   | Codex account login  | `gpt-5.5`                                                                               |
-| Ambient    | `ambient`    | `AMBIENT_API_KEY`    | `zai-org/GLM-5.2-FP8`                                                                   |
-| Z.AI       | `zai`        | `ZAI_API_KEY`        | `glm-5.2`                                                                               |
-| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | `z-ai/glm-5.2`, `minimax/minimax-m3`, `openrouter/owl-alpha`, `google/gemini-3.5-flash` |
-| Baseten    | `baseten`    | `BASETEN_API_KEY`    | `zai-org/GLM-5.2`                                                                       |
-| Vercel     | `vercel`     | `AI_GATEWAY_API_KEY` | `zai/glm-5.2`, `zai/glm-5.2-fast`                                                       |
+| Provider     | Provider id  | Credential            | Current model examples                                      |
+| ------------ | ------------ | --------------------- | ----------------------------------------------------------- |
+| OpenAI Codex | `openai`     | Codex account login   | `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`             |
+| Claude Plan  | `claude-plan`| Claude Code login     | `claude-opus-5-plan`, `claude-fable-5-plan`                 |
+| Anthropic    | `anthropic`  | `ANTHROPIC_API_KEY`   | `claude-opus-5`, `claude-fable-5`                           |
+| Ambient      | `ambient`    | `AMBIENT_API_KEY`     | `z-ai/glm-5.2`, `moonshotai/kimi-k2.7-code`                 |
+| Kimi Code    | `kimi-code`  | `KIMI_API_KEY`        | `k3`                                                        |
+| Z.AI         | `zai`        | `ZAI_API_KEY`         | `glm-5.2`                                                   |
+| DeepSeek     | `deepseek`   | `DEEPSEEK_API_KEY`    | `deepseek-v4-flash`                                         |
+| OpenRouter   | `openrouter` | `OPENROUTER_API_KEY`  | `deepseek/deepseek-v4-flash-0731`, `moonshotai/kimi-k3`, and other catalogued routes |
+| Meta         | `meta`       | `MODEL_API_KEY`       | `muse-spark-1.1`                                            |
+| Baseten      | `baseten`    | `BASETEN_API_KEY`     | `zai-org/GLM-5.2`                                           |
+| Vercel       | `vercel`     | `AI_GATEWAY_API_KEY`  | `zai/glm-5.2`, `zai/glm-5.2-fast`                           |
 
-The first-run provider picker and `/providers` can start OpenAI Codex account
-device login or accept Ambient, Z.AI, OpenRouter, Baseten, or Vercel API keys.
-Provider keys entered through the PFTerminal UI are stored in the encrypted
-vault and are available from any working directory.
+The first-run provider picker and `/providers` expose account/plan routes and
+all of the API-key rows above. Provider keys entered through the PFTerminal UI
+are stored in the encrypted vault and are available from any working directory.
 
 You can also provide keys through environment variables:
 
 ```bash
+export ANTHROPIC_API_KEY="..."
 export AMBIENT_API_KEY="..."
+export KIMI_API_KEY="..."
 export ZAI_API_KEY="..."
+export DEEPSEEK_API_KEY="..."
 export OPENROUTER_API_KEY="..."
+export MODEL_API_KEY="..."
 export BASETEN_API_KEY="..."
 export AI_GATEWAY_API_KEY="..."
 ```
@@ -196,13 +204,17 @@ and listed in the PFTerminal vault.
 PFTerminal stores provider API keys in the encrypted vault. Provider keys use
 stable labels derived from their key names:
 
-| Provider key         | Vault label                   |
-| -------------------- | ----------------------------- |
-| `AMBIENT_API_KEY`    | `provider/ambient_api_key`    |
-| `ZAI_API_KEY`        | `provider/zai_api_key`        |
-| `OPENROUTER_API_KEY` | `provider/openrouter_api_key` |
-| `BASETEN_API_KEY`    | `provider/baseten_api_key`    |
-| `AI_GATEWAY_API_KEY` | `provider/ai_gateway_api_key` |
+| Provider key          | Vault label                    |
+| --------------------- | ------------------------------ |
+| `ANTHROPIC_API_KEY`   | `provider/anthropic_api_key`   |
+| `AMBIENT_API_KEY`     | `provider/ambient_api_key`     |
+| `KIMI_API_KEY`        | `provider/kimi_api_key`        |
+| `ZAI_API_KEY`         | `provider/zai_api_key`         |
+| `DEEPSEEK_API_KEY`    | `provider/deepseek_api_key`    |
+| `OPENROUTER_API_KEY`  | `provider/openrouter_api_key`  |
+| `MODEL_API_KEY`       | `provider/model_api_key`       |
+| `BASETEN_API_KEY`     | `provider/baseten_api_key`     |
+| `AI_GATEWAY_API_KEY`  | `provider/ai_gateway_api_key`  |
 
 The vault backend is the Codex managed-secrets substrate:
 
@@ -239,37 +251,37 @@ context.
 Use `/model` in the TUI or pass `-m` at startup.
 
 ```bash
-pfterminal -m zai-org/GLM-5.2-FP8      # Ambient GLM 5.2
-pfterminal -m gpt-5.5                  # OpenAI Codex account
-pfterminal -m glm-5.2                  # Z.AI GLM 5.2
-pfterminal -m z-ai/glm-5.2             # OpenRouter GLM 5.2
-pfterminal -m minimax/minimax-m3       # OpenRouter MiniMax M3
-pfterminal -m openrouter/owl-alpha     # OpenRouter Owl Alpha
-pfterminal -m google/gemini-3.5-flash  # OpenRouter Gemini 3.5 Flash
-pfterminal -m zai-org/GLM-5.2          # Baseten GLM 5.2
-pfterminal -m zai/glm-5.2              # Vercel GLM 5.2
-pfterminal -m zai/glm-5.2-fast         # Vercel GLM 5.2 Fast
+pfterminal -m gpt-5.6-luna                         # OpenAI Codex account
+pfterminal -m claude-opus-5                        # direct Anthropic API
+pfterminal -m k3                                   # Kimi Code
+pfterminal -m glm-5.2                              # Z.AI GLM 5.2
+pfterminal -m deepseek-v4-flash                    # direct DeepSeek Responses API
+pfterminal -m deepseek/deepseek-v4-flash-0731     # pinned OpenRouter route
+pfterminal -m muse-spark-1.1                       # Meta
+pfterminal -m zai/glm-5.2-fast                     # Vercel GLM 5.2 Fast
 ```
 
-The `/model` picker groups models into:
+The `/model` picker groups models by account/provider route. Current categories
+include:
 
-- `Coding Plans`: OpenAI Codex, Ambient, and Z.AI plan-backed models.
-- `Pay Per API Call`: OpenRouter, Baseten, and Vercel metered models.
+- account and coding-plan routes such as OpenAI, Claude Plan, Ambient, Kimi
+  Code, Z.AI, and PFTerminal Plan; and
+- metered API-key routes such as Anthropic, DeepSeek, OpenRouter, Meta,
+  Baseten, and Vercel.
 
 Current visible model metadata:
 
-| Model                     | Provider   | Notes                                                                        |
-| ------------------------- | ---------- | ---------------------------------------------------------------------------- |
-| `gpt-5.5`                 | OpenAI     | Codex account model exposed through provider `openai`                        |
-| `zai-org/GLM-5.2-FP8`     | Ambient    | Ambient default GLM 5.2 coding model                                         |
-| `glm-5.2`                 | Z.AI       | Z.AI coding-plan GLM 5.2                                                     |
-| `zai-org/GLM-5.2`         | Baseten    | GLM 5.2, listed as `$1.50/M input`, `$0.30/M cached input`, `$4.50/M output` |
-| `zai/glm-5.2`             | Vercel     | GLM 5.2, listed as `$1.40/M input`, `$0.26/M cached input`, `$4.40/M output` |
-| `zai/glm-5.2-fast`        | Vercel     | GLM 5.2 Fast, listed as `$3.00/M input`, `$0.50/M cached input`, `$10.25/M output` |
-| `z-ai/glm-5.2`            | OpenRouter | GLM 5.2, listed as `$0.98/M input`, `$3.08/M output`                         |
-| `minimax/minimax-m3`      | OpenRouter | MiniMax M3, listed as `$0.30/M input`, `$1.20/M output`                      |
-| `openrouter/owl-alpha`    | OpenRouter | Owl Alpha, listed as `$0/M input`, `$0/M output`                             |
-| `google/gemini-3.5-flash` | OpenRouter | Gemini 3.5 Flash, listed as `$1.50/M input`, `$9.00/M output`                |
+| Model                                  | Provider   | Notes                                                     |
+| -------------------------------------- | ---------- | --------------------------------------------------------- |
+| `gpt-5.6-sol/luna/terra`               | OpenAI     | Codex account model family                                |
+| `claude-opus-5[-plan]`                 | Anthropic / Claude Plan | Direct API and plan-backed variants              |
+| `k3`                                   | Kimi Code  | Current direct Kimi coding route                          |
+| `deepseek-v4-flash`                    | DeepSeek   | Direct Responses route; DeepSeek V4 Flash 0731            |
+| `deepseek/deepseek-v4-flash-0731`      | OpenRouter | Exact pinned OpenRouter DeepSeek Flash route               |
+| `deepseek/deepseek-v4-pro`             | OpenRouter | OpenRouter DeepSeek V4 Pro route                           |
+| `moonshotai/kimi-k3`                   | OpenRouter | Metered Kimi K3 route                                     |
+| `muse-spark-1.1`                       | Meta       | Meta API route                                            |
+| `glm-5.2` and provider-specific slugs  | Multiple   | Ambient, Z.AI, Baseten, Vercel, and OpenRouter GLM routes |
 
 ## Basic Verification
 

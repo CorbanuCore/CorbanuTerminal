@@ -19,6 +19,7 @@ use crate::app::app_server_requests::ResolvedAppServerRequest;
 use crate::app_command::AppCommand as Op;
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
+use crate::approval_events::ApprovalResponseDestination;
 use crate::bottom_pane::BottomPaneView;
 use crate::bottom_pane::CancellationEvent;
 use crate::bottom_pane::list_selection_view::ListSelectionView;
@@ -108,6 +109,7 @@ pub(crate) struct ApplyPatchApprovalRequest {
     pub reason: Option<String>,
     pub cwd: AbsolutePathBuf,
     pub changes: HashMap<PathBuf, FileChange>,
+    pub response_destination: ApprovalResponseDestination,
 }
 
 #[derive(Clone, Debug)]
@@ -440,13 +442,30 @@ impl ApprovalOverlay {
     }
 
     fn handle_patch_decision(&self, id: &str, decision: FileChangeApprovalDecision) {
-        let Some(thread_id) = self
-            .current_request
-            .as_ref()
-            .map(ApprovalRequest::thread_id)
-        else {
+        let Some(request) = self.current_request.as_ref() else {
             return;
         };
+        if matches!(
+            request,
+            ApprovalRequest::ApplyPatch(ApplyPatchApprovalRequest {
+                response_destination: ApprovalResponseDestination::Local,
+                ..
+            })
+        ) {
+            let outcome = match decision {
+                FileChangeApprovalDecision::Accept => "accepted",
+                FileChangeApprovalDecision::AcceptForSession => "accepted for this session",
+                FileChangeApprovalDecision::Decline => "declined",
+                FileChangeApprovalDecision::Cancel => "cancelled",
+            };
+            self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+                crate::history_cell::PlainHistoryCell::new(vec![
+                    format!("Local approval resolved: {outcome}.").into(),
+                ]),
+            )));
+            return;
+        }
+        let thread_id = request.thread_id();
         self.app_event_tx
             .patch_approval(thread_id, id.to_string(), decision);
     }
@@ -2073,6 +2092,7 @@ mod tests {
             reason: None,
             cwd: absolute_path("/tmp"),
             changes,
+            response_destination: ApprovalResponseDestination::Thread,
         });
         let keymap = crate::keymap::RuntimeKeymap::defaults();
         let view = ApprovalOverlay::new(

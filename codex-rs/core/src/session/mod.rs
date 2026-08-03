@@ -305,6 +305,7 @@ impl SteerInputError {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PreviousTurnSettings {
     pub(crate) model: String,
+    pub(crate) model_provider: Option<String>,
     pub(crate) comp_hash: Option<String>,
     pub(crate) realtime_active: Option<bool>,
 }
@@ -1315,6 +1316,8 @@ impl Session {
     }
 
     async fn record_initial_history(&self, conversation_history: InitialHistory) {
+        let initial_history_started_at = Instant::now();
+        Self::trace_session_timing("record_initial_history_start", initial_history_started_at);
         let (is_subagent, is_paginated_subagent) = {
             let state = self.state.lock().await;
             let session_configuration = &state.session_configuration;
@@ -1599,7 +1602,14 @@ impl Session {
     ) -> ConstraintResult<()> {
         self.ensure_runtime_model_provider(&mut updates).await;
         let notify_config_contributors = !self.services.extensions.config_contributors().is_empty();
-        let (previous_config, new_config, permission_profile_changed, mcp_inputs_changed) = {
+        let (
+            previous_config,
+            new_config,
+            permission_profile_changed,
+            mcp_inputs_changed,
+            model_client_configuration,
+            stale_startup_prewarm,
+        ) = {
             let mut state = self.state.lock().await;
             let updated = match state.session_configuration.apply(&updates) {
                 Ok(updated) => updated,
@@ -1618,6 +1628,18 @@ impl Session {
             let permission_profile_changed =
                 previous_permission_profile != updated_permission_profile;
             let mcp_inputs_changed = state.session_configuration.mcp_inputs_differ(&updated);
+            let model_provider_changed = state
+                .session_configuration
+                .original_config_do_not_use
+                .model_provider_id
+                != updated.original_config_do_not_use.model_provider_id
+                || state.session_configuration.provider != updated.provider;
+            let model_client_configuration = model_provider_changed.then(|| updated.clone());
+            let stale_startup_prewarm = if model_provider_changed {
+                state.take_session_startup_prewarm()
+            } else {
+                None
+            };
             if updates.environments.is_some() {
                 self.services
                     .turn_environments
@@ -1632,6 +1654,8 @@ impl Session {
                 new_config,
                 permission_profile_changed,
                 mcp_inputs_changed,
+                model_client_configuration,
+                stale_startup_prewarm,
             )
         };
         self.emit_config_changed_contributors(previous_config.as_ref(), new_config.as_ref());
@@ -1682,8 +1706,9 @@ impl Session {
                     state
                         .session_configuration
                         .original_config_do_not_use
-                        .sqlite_home
-                        .clone(),
+                        .sqlite
+                        .home()
+                        .to_path_buf(),
                     state
                         .session_configuration
                         .original_config_do_not_use
@@ -1723,16 +1748,24 @@ impl Session {
         let config = configuration.original_config_do_not_use.as_ref();
         ModelClient::new(
             Some(Arc::clone(&self.services.auth_manager)),
+            if config.features.enabled(Feature::UseAgentIdentity) {
+                codex_login::auth::AgentIdentityAuthPolicy::ChatGptAuth
+            } else {
+                codex_login::auth::AgentIdentityAuthPolicy::JwtOnly
+            },
             self.thread_id,
             configuration.provider.clone(),
             configuration.session_source.clone(),
+            configuration.originator.clone(),
             config.model_verbosity,
             config.features.enabled(Feature::EnableRequestCompression),
             config.features.enabled(Feature::RuntimeMetrics),
             Self::build_model_client_beta_features_header(config),
-            /*item_ids_enabled*/
-            config.features.enabled(Feature::ItemIds) || configuration.provider.is_meta(),
+            config
+                .features
+                .enabled(Feature::ConcurrentReasoningSummaries),
             self.services.attestation_provider.clone(),
+            config.http_client_factory(),
         )
         .with_prompt_cache_key_override(
             crate::guardian::prompt_cache_key_override_for_review_session(
@@ -2068,6 +2101,13 @@ impl Session {
             return;
         }
 
+        if !turn_context
+            .parent_completion_expected
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return;
+        }
+
         let SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
             parent_thread_id,
             agent_path: Some(child_agent_path),
@@ -2138,13 +2178,18 @@ impl Session {
             .agent_control
             .auto_processes_terminal_results(parent_thread_id)
             .await;
-        let communication = InterAgentCommunication::new(
+        let mut communication = InterAgentCommunication::new(
             child_agent_path.clone(),
             parent_agent_path,
             Vec::new(),
             message,
-            /*trigger_turn*/ false,
+            trigger_turn,
         );
+        communication.kind = Some(codex_protocol::protocol::AgentMessageKind::TerminalResult);
+        communication.message_id = Some(format!(
+            "completion:{}:{}",
+            self.thread_id, turn_context.sub_id
+        ));
         let context =
             AgentCommunicationContext::new(AgentCommunicationKind::Result, self.thread_id);
         if let Err(err) = self
@@ -3319,6 +3364,19 @@ impl Session {
         mut communication: InterAgentCommunication,
     ) {
         communication.set_turn_id_if_missing(&turn_context.sub_id);
+        if communication.id.as_ref().is_none_or(|id| id.is_empty()) {
+            communication.id = Some(ResponseItemId::new("amsg"));
+        }
+        let message_id = communication.message_id.clone();
+        if let Some(message_id) = message_id.as_ref()
+            && !self
+                .applied_agent_message_ids
+                .lock()
+                .await
+                .insert(message_id.clone())
+        {
+            return;
+        }
         let response_item = communication.to_model_input_item();
         let items = self.prepare_conversation_items_for_history(
             turn_context,
@@ -3334,13 +3392,54 @@ impl Session {
                 turn_context.model_info.truncation_policy.into(),
             );
         }
-        self.persist_rollout_items(&[
-            RolloutItem::InterAgentCommunicationMetadata {
-                trigger_turn: communication.trigger_turn,
-            },
-            RolloutItem::ResponseItem(response_item),
-        ])
-        .await;
+        self.persist_rollout_items(&[RolloutItem::InterAgentCommunication(communication)])
+            .await;
+        if let Some(message_id) = message_id
+            && let Some(state_db) = self.state_db()
+        {
+            match self.flush_rollout().await {
+                Ok(()) => {
+                    if self
+                        .track_agent_message_for_turn(&turn_context.sub_id, message_id.clone())
+                        .await
+                    {
+                        match state_db
+                            .transition_agent_message(
+                                &message_id,
+                                codex_state::AgentMailboxPhase::Submitted,
+                                codex_state::AgentMailboxPhase::ProviderRunning,
+                                crate::turn_timing::now_unix_timestamp_ms(),
+                            )
+                            .await
+                        {
+                            Ok(true) => {}
+                            Ok(false) => warn!(
+                                %message_id,
+                                "agent mailbox message could not enter provider_running from its current state"
+                            ),
+                            Err(err) => warn!(
+                                %err,
+                                %message_id,
+                                "failed to mark agent mailbox message provider_running"
+                            ),
+                        }
+                    } else if let Err(err) = state_db
+                        .mark_agent_message_completed(
+                            &message_id,
+                            crate::turn_timing::now_unix_timestamp_ms(),
+                        )
+                        .await
+                    {
+                        warn!(%err, %message_id, "failed to complete locally applied mailbox message");
+                    }
+                }
+                Err(err) => warn!(
+                    %err,
+                    %message_id,
+                    "leaving agent mailbox message recoverable because its rollout did not flush"
+                ),
+            }
+        }
         self.send_raw_response_items(turn_context, items).await;
         // Plaintext inter-agent controls are operator-visible transcript content. Raw response
         // notifications preserve provider compatibility, but app-server clients render the
@@ -3415,6 +3514,24 @@ impl Session {
         )
         .await;
         true
+    }
+
+    fn record_server_model_identity(
+        self: &Arc<Self>,
+        turn_context: &Arc<TurnContext>,
+        server_model: &str,
+    ) {
+        let requested_model = turn_context.model_info.slug.as_str();
+        if server_model.eq_ignore_ascii_case(requested_model) {
+            info!("server reported model {server_model} (matches requested model)");
+            return;
+        }
+        info!(
+            model_provider = %turn_context.config.model_provider_id,
+            requested_model,
+            reported_model = server_model,
+            "provider reported a different model identity; recording it without inferring a reroute reason"
+        );
     }
 
     pub(crate) async fn emit_model_verification(
@@ -4327,6 +4444,7 @@ impl Session {
         let sub = Submission {
             id: Uuid::now_v7().to_string(),
             op,
+            parent_turn_id: None,
             client_user_message_id,
             trace: current_span_w3c_trace_context(),
         };

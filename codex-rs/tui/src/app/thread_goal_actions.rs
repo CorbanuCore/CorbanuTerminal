@@ -320,6 +320,8 @@ impl App {
             )),
             footer_hint: Some(standard_popup_hint_line()),
             items,
+            initial_selected_idx: Some(1),
+            allow_number_shortcuts: false,
             ..Default::default()
         });
     }

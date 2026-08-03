@@ -7,17 +7,14 @@ use codex_login::CodexAuth;
 use codex_mcp::ToolInfo;
 use codex_model_provider::create_model_provider;
 use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
-use codex_model_provider_info::META_PROVIDER_ID;
+use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_models_manager::model_info;
-use codex_protocol::AgentPath;
-use codex_protocol::ThreadId;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
-use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ApplyPatchToolType;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::InputModality;
@@ -307,6 +304,34 @@ fn use_bedrock_provider(turn: &mut TurnContext) {
         config.model_provider = provider_info.clone();
     });
     turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+}
+
+fn use_zai_provider(turn: &mut TurnContext) {
+    let provider_info = ModelProviderInfo::create_zai_provider();
+    update_config(turn, |config| {
+        config.model_provider_id = ZAI_PROVIDER_ID.to_string();
+        config.model_provider = provider_info.clone();
+    });
+    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+}
+
+fn use_openrouter_provider(turn: &mut TurnContext) {
+    let provider_info = ModelProviderInfo::create_openrouter_provider();
+    update_config(turn, |config| {
+        config.model_provider_id = OPENROUTER_PROVIDER_ID.to_string();
+        config.model_provider = provider_info.clone();
+    });
+    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+}
+
+fn use_claude_plan_provider(turn: &mut TurnContext) {
+    let provider_info = ModelProviderInfo::create_claude_plan_provider();
+    update_config(turn, |config| {
+        config.model_provider_id = CLAUDE_PLAN_PROVIDER_ID.to_string();
+        config.model_provider = provider_info.clone();
+    });
+    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+    turn.model_info = model_info::model_info_from_slug("claude-fable-5-plan");
 }
 
 struct TestNamespaceExtensionTool {
@@ -896,6 +921,16 @@ async fn sleep_tool_follows_current_time_config() {
         enabled.namespace_function_names("clock"),
         ["curr_time", "sleep"]
     );
+}
+
+#[tokio::test]
+async fn released_sleep_tool_flag_still_exposes_sleep_without_time_reminders() {
+    let plan = probe(|turn| {
+        set_feature(turn, Feature::SleepTool, /*enabled*/ true);
+    })
+    .await;
+
+    assert_eq!(plan.namespace_function_names("clock"), ["sleep"]);
 }
 
 #[tokio::test]
@@ -1654,7 +1689,10 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
             "expected v1 spawn_agent to expose `{property}`"
         );
     }
-    assert!(!properties.contains_key("agent_type"));
+    assert!(
+        properties.contains_key("agent_type"),
+        "PF Terminal's built-in hierarchy roles must remain selectable in the native v1 surface"
+    );
 
     let v2 = probe(|turn| {
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
@@ -1709,12 +1747,15 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
         .properties
         .as_ref()
         .expect("spawn_agent should use object params");
-    for property in ["model", "reasoning_effort"] {
+    for property in [
+        "model_provider",
+        "model",
+        "reasoning_effort",
+        "service_tier",
+    ] {
         assert!(spawn_agent_properties.contains_key(property));
     }
-    for property in ["agent_type", "service_tier"] {
-        assert!(!spawn_agent_properties.contains_key(property));
-    }
+    assert!(spawn_agent_properties.contains_key("agent_type"));
     let spawn_agent_description = spawn_agent.description.as_str();
     assert!(!spawn_agent_description.contains("max_concurrent_threads_per_session"));
     assert!(spawn_agent_description.contains(
@@ -1789,8 +1830,37 @@ async fn multi_agent_v2_advertises_cross_provider_catalog_from_third_party_paren
 }
 
 #[tokio::test]
+async fn multi_agent_v2_flattens_collaboration_tools_for_anthropic_messages() {
+    let plan = probe(|turn| {
+        use_claude_plan_provider(turn);
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+    })
+    .await;
+
+    let collaboration_tools = [
+        "spawn_agent",
+        "send_message",
+        "followup_task",
+        "wait_agent",
+        "interrupt_agent",
+        "list_agents",
+    ];
+    plan.assert_visible_contains(&collaboration_tools);
+    plan.assert_registered_contains(&collaboration_tools);
+    plan.assert_visible_lacks(&[MULTI_AGENT_V2_NAMESPACE]);
+    for tool_name in collaboration_tools {
+        assert_eq!(plan.exposure(tool_name), ToolExposure::DirectModelOnly);
+        let ToolSpec::Function(tool) = plan.visible_spec(tool_name) else {
+            panic!("expected `{tool_name}` to be an Anthropic-compatible function tool");
+        };
+        assert_eq!(tool.name, tool_name);
+    }
+}
+
+#[tokio::test]
 async fn multi_agent_v2_message_schemas_are_provider_neutral_plaintext() {
     let plan = probe(|turn| {
+        use_bedrock_provider(turn);
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
     })
     .await;
@@ -1818,6 +1888,116 @@ async fn multi_agent_v2_message_schemas_are_provider_neutral_plaintext() {
             None
         );
     }
+}
+
+#[tokio::test]
+async fn multi_agent_v2_openai_plan_uses_reserved_collaboration_schemas() {
+    let plan = probe(|turn| {
+        use_openai_provider(turn);
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+    })
+    .await;
+    let ToolSpec::Namespace(namespace) = plan.visible_spec(MULTI_AGENT_V2_NAMESPACE) else {
+        panic!("expected {MULTI_AGENT_V2_NAMESPACE} namespace");
+    };
+    let function = |name: &str| {
+        namespace
+            .tools
+            .iter()
+            .find_map(|tool| match tool {
+                ResponsesApiNamespaceTool::Function(tool) if tool.name == name => Some(tool),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("expected {name} in {MULTI_AGENT_V2_NAMESPACE}"))
+    };
+
+    for tool_name in ["spawn_agent", "send_message", "followup_task"] {
+        let properties = function(tool_name)
+            .parameters
+            .properties
+            .as_ref()
+            .expect("collaboration tool should use object params");
+        assert_eq!(
+            properties
+                .get("message")
+                .and_then(|schema| schema.encrypted),
+            Some(true),
+            "{tool_name} must retain OpenAI's reserved encrypted-message annotation"
+        );
+    }
+    for adapter_name in [
+        "spawn_agent_plaintext",
+        "send_message_plaintext",
+        "followup_task_plaintext",
+    ] {
+        let ToolSpec::Function(adapter) = plan.visible_spec(adapter_name) else {
+            panic!("expected {adapter_name} as a provider adapter function");
+        };
+        let properties = adapter
+            .parameters
+            .properties
+            .as_ref()
+            .expect("adapter should use object params");
+        assert_eq!(
+            properties
+                .get("message")
+                .and_then(|schema| schema.encrypted),
+            None,
+            "{adapter_name} must provide plaintext cross-provider transport"
+        );
+        assert!(
+            adapter
+                .description
+                .contains("Cross-provider plaintext adapter")
+        );
+    }
+    assert_eq!(
+        function("spawn_agent")
+            .parameters
+            .properties
+            .as_ref()
+            .expect("spawn params")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec![
+            "fork_turns".to_string(),
+            "message".to_string(),
+            "task_name".to_string()
+        ]
+    );
+    assert_eq!(
+        function("spawn_agent")
+            .output_schema
+            .as_ref()
+            .expect("spawn output schema")["required"],
+        serde_json::json!(["task_name"])
+    );
+    assert_eq!(
+        function("interrupt_agent")
+            .parameters
+            .properties
+            .as_ref()
+            .expect("interrupt params")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec!["target".to_string()]
+    );
+    assert_eq!(
+        function("wait_agent")
+            .output_schema
+            .as_ref()
+            .expect("wait output schema")["required"],
+        serde_json::json!(["message", "timed_out"])
+    );
+    assert_eq!(
+        function("list_agents")
+            .output_schema
+            .as_ref()
+            .expect("list output schema")["properties"]["agents"]["items"]["required"],
+        serde_json::json!(["agent_name", "agent_status"])
+    );
 }
 
 #[tokio::test]
@@ -2050,6 +2230,9 @@ async fn code_mode_only_can_expose_namespaced_multi_agent_v2_as_normal_tools() {
             "wait",
             "request_user_input",
             "agents",
+            "spawn_agent_plaintext",
+            "send_message_plaintext",
+            "followup_task_plaintext",
             // Hosted Responses tool.
             "web_search",
         ]

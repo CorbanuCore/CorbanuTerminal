@@ -203,7 +203,7 @@ impl ChatWidget {
                 self.bottom_pane.show_selection_view(SelectionViewParams {
                     title: Some("Archive this session?".to_string()),
                     subtitle: Some(
-                        "Are you sure? This will archive the current session and exit Codex"
+                        "Are you sure? This will archive the current session and exit PFTerminal"
                             .to_string(),
                     ),
                     footer_hint: Some(standard_popup_hint_line()),
@@ -224,6 +224,7 @@ impl ChatWidget {
                             ..Default::default()
                         },
                     ],
+                    allow_number_shortcuts: false,
                     ..Default::default()
                 });
                 self.request_redraw();
@@ -252,6 +253,7 @@ impl ChatWidget {
                             ..Default::default()
                         },
                     ],
+                    allow_number_shortcuts: false,
                     ..Default::default()
                 });
                 self.request_redraw();
@@ -573,6 +575,7 @@ impl ChatWidget {
                 use std::collections::HashMap;
 
                 use crate::approval_events::ApplyPatchApprovalRequestEvent;
+                use crate::approval_events::ApprovalResponseDestination;
                 use crate::diff_model::FileChange;
 
                 self.on_apply_patch_approval_request(
@@ -597,6 +600,7 @@ impl ChatWidget {
                         ]),
                         reason: None,
                         grant_root: Some(PathBuf::from("/tmp")),
+                        response_destination: ApprovalResponseDestination::Local,
                     },
                 );
             }
@@ -621,6 +625,17 @@ impl ChatWidget {
             return;
         }
         if !cmd.supports_inline_args() {
+            self.add_info_message(
+                format!(
+                    "'/{}' does not take inline arguments; running the bare command.",
+                    cmd.command()
+                ),
+                /*hint*/ None,
+            );
+            self.bottom_pane
+                .set_composer_text(String::new(), Vec::new(), Vec::new());
+            self.bottom_pane.set_composer_pending_pastes(Vec::new());
+            self.bottom_pane.drain_pending_submission_state();
             self.dispatch_command(cmd);
             return;
         }
@@ -757,12 +772,16 @@ impl ChatWidget {
                 // `/vault credential add` opens the secure (masked) entry overlay rather than
                 // accepting a secret as chat text. Reject extra args so accidental inline secrets
                 // do not enter local slash-command recall.
-                let mut parts = trimmed.split_whitespace();
-                if matches!(
-                    (parts.next(), parts.next()),
-                    (Some("credential"), Some("add"))
-                ) {
-                    if parts.next().is_some() {
+                let parts = trimmed.split_whitespace().collect::<Vec<_>>();
+                let credential_action = parts
+                    .first()
+                    .is_some_and(|part| part.eq_ignore_ascii_case("credential"));
+                if credential_action
+                    && parts
+                        .get(1)
+                        .is_some_and(|part| part.eq_ignore_ascii_case("add"))
+                {
+                    if parts.len() != 2 {
                         self.bottom_pane.clear_pending_slash_command_history();
                         self.add_error_message(
                             "Do not type vault secrets inline. Run `/vault credential add` with no arguments and enter the secret in the secure modal.".to_string(),
@@ -772,6 +791,42 @@ impl ChatWidget {
                     self.open_vault_credential_add();
                     return;
                 }
+                if credential_action
+                    && parts.get(1).is_some_and(|part| {
+                        part.eq_ignore_ascii_case("reveal") || part.eq_ignore_ascii_case("export")
+                    })
+                {
+                    if let [_, _, label] = parts.as_slice() {
+                        self.reveal_vault_secret((*label).to_string());
+                    } else {
+                        self.add_error_message(
+                            "Usage: /vault credential reveal <label>".to_string(),
+                        );
+                    }
+                    return;
+                }
+                let direct_delete = parts.first().is_some_and(|part| {
+                    part.eq_ignore_ascii_case("delete") || part.eq_ignore_ascii_case("rm")
+                });
+                let credential_delete = credential_action
+                    && parts
+                        .get(1)
+                        .is_some_and(|part| part.eq_ignore_ascii_case("delete"));
+                if direct_delete || credential_delete {
+                    let label = if direct_delete {
+                        (parts.len() == 2).then(|| parts[1])
+                    } else {
+                        (parts.len() == 3).then(|| parts[2])
+                    };
+                    if let Some(label) = label {
+                        self.confirm_vault_credential_delete(label.to_string());
+                    } else {
+                        self.add_error_message(
+                            "Usage: /vault credential delete <label>".to_string(),
+                        );
+                    }
+                    return;
+                }
                 let codex_home = self.config.codex_home.clone();
                 let args = trimmed.to_string();
                 let tx = self.app_event_tx.clone();
@@ -779,12 +834,9 @@ impl ChatWidget {
                     let task = tokio::task::spawn_blocking(move || {
                         crate::vault_command::handle_vault_command(&codex_home, &args)
                     });
-                    let lines = match tokio::time::timeout(std::time::Duration::from_secs(10), task)
-                        .await
-                    {
-                        Ok(Ok(lines)) => lines,
-                        Ok(Err(err)) => vec![Line::from(format!("Vault task failed: {err}"))],
-                        Err(_) => vec![Line::from("Vault operation timed out.")],
+                    let lines = match task.await {
+                        Ok(lines) => lines,
+                        Err(err) => vec![Line::from(format!("Vault task failed: {err}"))],
                     };
                     tx.send(AppEvent::InsertHistoryCell(Box::new(
                         PlainHistoryCell::new(lines),

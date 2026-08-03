@@ -379,7 +379,6 @@ impl AgentMarkdownCell {
     /// `markdown_source` must be the raw source accumulated by the stream controller, not already
     /// wrapped terminal lines. Passing rendered lines here would make future resize reflow preserve
     /// stale wrapping instead of repairing it.
-    #[cfg(test)]
     pub(crate) fn new(markdown_source: String, cwd: &Path) -> Self {
         Self::new_with_inline_visualizations(
             markdown_source,

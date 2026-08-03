@@ -17,6 +17,7 @@ mod sanitizer;
 
 pub use local::LocalSecretsBackend;
 pub use local::LocalSecretsNamespace;
+pub use local::local_keyring_fallback_path;
 pub use sanitizer::redact_secrets;
 
 const KEYRING_SERVICE: &str = "codex";

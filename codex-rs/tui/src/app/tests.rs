@@ -2,6 +2,7 @@
 
 #[path = "tests/advanced_reasoning_tests.rs"]
 mod advanced_reasoning_tests;
+mod dispatch_integration;
 mod model_catalog;
 mod plugin_catalog;
 mod rate_limits;
@@ -39,6 +40,7 @@ use crate::history_cell::new_session_info;
 use crate::multi_agents::AgentPickerThreadEntry;
 use crate::multi_agents::SubAgentActivityDisplay;
 use crate::spawn_orchestration::thread_node_id;
+use crate::status::StatusAccountDisplay;
 use assert_matches::assert_matches;
 
 use crate::app_command::AppCommand as Op;
@@ -174,12 +176,14 @@ async fn tui_event_drainer_keeps_polling_during_in_process_event_flood() {
                 event_tx
                     .send(
                         codex_app_server_client::InProcessServerEvent::ServerNotification(
-                            ServerNotification::AgentMessageDelta(AgentMessageDeltaNotification {
-                                thread_id: format!("child-thread-{agent_index}"),
-                                turn_id: "turn".to_string(),
-                                item_id: format!("agent-item-{agent_index}"),
-                                delta: "streaming-output\n".to_string(),
-                            }),
+                            Box::new(ServerNotification::AgentMessageDelta(
+                                AgentMessageDeltaNotification {
+                                    thread_id: format!("child-thread-{agent_index}"),
+                                    turn_id: "turn".to_string(),
+                                    item_id: format!("agent-item-{agent_index}"),
+                                    delta: "streaming-output\n".to_string(),
+                                },
+                            )),
                         ),
                     )
                     .expect("simulated app-server event receiver should stay alive");
@@ -192,12 +196,7 @@ async fn tui_event_drainer_keeps_polling_during_in_process_event_flood() {
 
     time::timeout(std::time::Duration::from_secs(2), async {
         loop {
-            if drained
-                .watchdog
-                .pending_events
-                .load(AtomicOrdering::Relaxed)
-                == 512
-            {
+            if drained.watchdog.pending_events.load(Ordering::Relaxed) == 512 {
                 break;
             }
             tokio::task::yield_now().await;
@@ -214,13 +213,7 @@ async fn tui_event_drainer_keeps_polling_during_in_process_event_flood() {
             .expect("drained terminal event should be available");
         drained.watchdog.note_handled();
     }
-    assert_eq!(
-        drained
-            .watchdog
-            .pending_events
-            .load(AtomicOrdering::Relaxed),
-        0
-    );
+    assert_eq!(drained.watchdog.pending_events.load(Ordering::Relaxed), 0);
     flood_task
         .await
         .expect("simulated app-server event flood should finish");
@@ -1563,7 +1556,7 @@ async fn collab_receiver_notification_caches_result_preview() {
         Some("orc".to_string()),
         /*is_closed*/ false,
     );
-    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(Box::new(
         ServerNotification::ItemCompleted(codex_app_server_protocol::ItemCompletedNotification {
             thread_id: ThreadId::new().to_string(),
             turn_id: "turn-1".to_string(),
@@ -1586,7 +1579,7 @@ async fn collab_receiver_notification_caches_result_preview() {
                 )]),
             },
         }),
-    ));
+    )));
 
     assert_eq!(
         app.agent_navigation
@@ -1594,6 +1587,193 @@ async fn collab_receiver_notification_caches_result_preview() {
             .and_then(|entry| entry.last_result_message.as_deref()),
         Some("created animated proof card")
     );
+}
+
+#[tokio::test]
+async fn native_followup_dispatch_transitions_only_the_matching_assignment() {
+    let mut app = make_test_app().await;
+    write_test_whip(
+        &app,
+        "native-assignment",
+        "# assignment: native-assignment\nComplete the worker task.",
+    );
+    let manager_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000611").expect("manager id");
+    let first_worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000612").expect("worker id");
+    let second_worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000613").expect("worker id");
+    let unrelated_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000614").expect("unrelated id");
+    for (thread_id, name) in [
+        (manager_thread_id, "Manager"),
+        (first_worker_thread_id, "First Worker"),
+        (second_worker_thread_id, "Second Worker"),
+        (unrelated_thread_id, "Unrelated"),
+    ] {
+        app.upsert_agent_picker_thread(
+            thread_id,
+            Some(name.to_string()),
+            None,
+            /*is_closed*/ false,
+        );
+    }
+    let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
+    let first_worker_node = crate::spawn_orchestration::thread_node_id(first_worker_thread_id);
+    let second_worker_node = crate::spawn_orchestration::thread_node_id(second_worker_thread_id);
+    app.handle_orchestrate_command(format!(
+        "attach {first_worker_node} native-assignment --mode review --holder {manager_node} --for 8h"
+    ));
+    app.handle_orchestrate_command(format!(
+        "attach {second_worker_node} native-assignment --mode review --holder {manager_node} --for 8h"
+    ));
+
+    let completed_send = |receiver_thread_id: ThreadId, call_id: &str| {
+        ServerNotification::ItemCompleted(ItemCompletedNotification {
+            thread_id: manager_thread_id.to_string(),
+            turn_id: "turn-1".to_string(),
+            completed_at_ms: 0,
+            item: ThreadItem::SubAgentActivity {
+                id: call_id.to_string(),
+                kind: codex_app_server_protocol::SubAgentActivityKind::Interacted,
+                agent_thread_id: receiver_thread_id.to_string(),
+                agent_path: format!("/root/worker-{receiver_thread_id}"),
+                agent_nickname: None,
+                agent_role: None,
+                task_preview: None,
+            },
+        })
+    };
+
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(Box::new(completed_send(
+        unrelated_thread_id,
+        "send-unrelated",
+    ))));
+    assert!(matches!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Drafting,
+            ..
+        })
+    ));
+    assert!(matches!(
+        app.orchestrate_whips
+            .get("assignment-2")
+            .map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Drafting,
+            ..
+        })
+    ));
+
+    // Deliberately dispatch to the other active assignment than the legacy holder-only lookup
+    // returns. Native delivery identifies both endpoints and must not collapse multiple
+    // assignments managed by the same durable thread onto an arbitrary HashMap entry.
+    let holder_only_target = app
+        .assignment_dispatch_target_for_holder(&manager_node)
+        .expect("one active assignment")
+        .1;
+    let (matching_thread_id, matching_assignment_id, other_assignment_id) =
+        if holder_only_target == first_worker_node {
+            (second_worker_thread_id, "assignment-2", "assignment-1")
+        } else {
+            (first_worker_thread_id, "assignment-1", "assignment-2")
+        };
+
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(Box::new(completed_send(
+        matching_thread_id,
+        "send-worker",
+    ))));
+    let assignment = app
+        .orchestrate_whips
+        .get(matching_assignment_id)
+        .expect("assignment should remain registered");
+    assert!(matches!(
+        assignment.kind,
+        crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Executing,
+            execution_started_utc: Some(_),
+            ..
+        }
+    ));
+    assert_eq!(
+        assignment.last_dispatch_result.as_deref(),
+        Some("delivered")
+    );
+    let other_assignment = app
+        .orchestrate_whips
+        .get(other_assignment_id)
+        .expect("other assignment should remain registered");
+    assert!(matches!(
+        other_assignment.kind,
+        crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Drafting,
+            ..
+        }
+    ));
+    assert_eq!(other_assignment.last_dispatch_result, None);
+}
+
+#[tokio::test]
+async fn native_direct_parent_assignment_uses_core_result_delivery_without_duplicate_mandate() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(
+        &app,
+        "native-parent-assignment",
+        "# assignment: native-parent-assignment\nComplete the worker task.",
+    );
+    let manager_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000621").expect("manager id");
+    let worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000622").expect("worker id");
+    for (thread_id, name) in [(manager_thread_id, "Manager"), (worker_thread_id, "Worker")] {
+        app.upsert_agent_picker_thread(
+            thread_id,
+            Some(name.to_string()),
+            None,
+            /*is_closed*/ false,
+        );
+    }
+    let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
+    let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
+    app.spawn_parent_by_node
+        .insert(worker_node.clone(), manager_node.clone());
+    app.handle_orchestrate_command(format!(
+        "attach {worker_node} native-parent-assignment --mode review --holder {manager_node} --for 8h"
+    ));
+    while app_event_rx.try_recv().is_ok() {}
+    app.note_whip_holder_dispatched(&manager_node, &worker_node);
+
+    app.note_whip_target_idle_with_fire_control(
+        &worker_node,
+        Some("NATIVE_PARENT_RESULT"),
+        true,
+        true,
+    );
+
+    assert!(
+        drain_spawn_agent_tasks_for(&mut app_event_rx, manager_thread_id).is_empty(),
+        "Core already delivers a direct native child's result to its parent Manager"
+    );
+    assert_eq!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .and_then(|whip| whip.last_target_output.as_deref()),
+        Some("NATIVE_PARENT_RESULT")
+    );
+
+    app.note_whip_target_idle_with_fire_control(&manager_node, Some("WHIP_DONE"), false, true);
+    assert!(matches!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Done,
+            ..
+        })
+    ));
 }
 
 #[tokio::test]
@@ -1798,6 +1978,411 @@ async fn pane_spawn_tree_disables_restored_unloaded_native_rows() {
 }
 
 #[tokio::test]
+async fn pane_picker_keeps_failed_operator_restore_visible_without_automatic_retry() {
+    let mut app = make_test_app().await;
+    let main_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000241").expect("valid thread id");
+    let failed_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000242").expect("valid thread id");
+    let pending_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000243").expect("valid thread id");
+
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+    app.upsert_agent_picker_thread(
+        failed_thread_id,
+        Some("Unavailable Pane".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ true,
+    );
+    app.upsert_agent_picker_thread(
+        pending_thread_id,
+        Some("Pending Pane".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
+
+    assert_eq!(
+        app.restorable_operator_owned_codex_user_pane_ids(),
+        vec![pending_thread_id],
+        "a failed pane must not be retried automatically whenever /panes opens"
+    );
+
+    let items = app.pane_picker_items();
+    let failed_item = items
+        .iter()
+        .find(|item| item.name.contains("Unavailable Pane"))
+        .expect("failed pane remains inspectable");
+    assert!(failed_item.is_disabled);
+    assert!(failed_item.actions.is_empty());
+    assert!(!failed_item.dismiss_on_select);
+    assert!(
+        failed_item
+            .disabled_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("no replay transcript or live session"))
+    );
+}
+
+#[tokio::test]
+async fn terminal_operator_pane_lifecycle_removes_layout_membership_and_falls_back_to_main() {
+    let mut app = make_test_app().await;
+    let main_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000251").expect("valid thread id");
+    let operator_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000252").expect("valid thread id");
+    let managed_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000253").expect("valid thread id");
+
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(operator_thread_id);
+    app.upsert_agent_picker_thread(
+        operator_thread_id,
+        Some("Archive Me".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        managed_thread_id,
+        Some("Keep Managed".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+
+    assert!(app.forget_terminal_operator_pane(operator_thread_id));
+    assert_eq!(app.active_thread_id, Some(main_thread_id));
+    assert!(app.agent_navigation.get(&operator_thread_id).is_none());
+    assert!(app.agent_navigation.get(&managed_thread_id).is_some());
+    assert!(!app.forget_terminal_operator_pane(managed_thread_id));
+    assert!(
+        app.pane_picker_items()
+            .iter()
+            .all(|item| !item.name.contains("Archive Me"))
+    );
+}
+
+#[tokio::test]
+async fn terminal_lifecycle_scope_blocks_external_managed_and_parent_owned_panes() {
+    let mut app = make_test_app().await;
+    let main_thread_id = ThreadId::new();
+    let operator_thread_id = ThreadId::new();
+    let crew_thread_id = ThreadId::new();
+    let parent_owned_thread_id = ThreadId::new();
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(operator_thread_id);
+    app.upsert_agent_picker_thread(
+        operator_thread_id,
+        Some("Operator".to_string()),
+        None,
+        false,
+    );
+
+    assert!(
+        app.terminal_thread_lifecycle_block_reason("archive", main_thread_id)
+            .is_none()
+    );
+    assert!(
+        app.terminal_thread_lifecycle_block_reason("delete", operator_thread_id)
+            .is_none()
+    );
+
+    app.ensure_custom_spawn_root(crate::claude_panes::CODEX_MAIN_PANE_ID)
+        .expect("bind custom root");
+    app.record_custom_spawn_member(
+        &crate::spawn_orchestration::thread_node_id(crew_thread_id),
+        crate::claude_panes::CODEX_MAIN_PANE_ID,
+        crate::spawn_orchestration::SpawnRole::Orc,
+        "Snaga".to_string(),
+        crate::dispatch_queue::SavedNativeSpawnRuntime {
+            model: "deepseek-v4-flash".to_string(),
+            provider: "deepseek".to_string(),
+            reasoning_effort: Some(codex_protocol::openai_models::ReasoningEffort::High),
+        },
+    )
+    .expect("record managed crew member");
+    let crew_reason = app
+        .terminal_thread_lifecycle_block_reason("delete", crew_thread_id)
+        .expect("managed member must be protected");
+    assert!(crew_reason.contains("managed /spawn member"));
+    assert!(crew_reason.contains("native graph and pane layout"));
+
+    app.agent_navigation
+        .mark_parent_owned(parent_owned_thread_id);
+    assert!(
+        app.terminal_thread_lifecycle_block_reason("archive", parent_owned_thread_id)
+            .is_some_and(|reason| reason.contains("parent-controlled task worker"))
+    );
+
+    let claude_pane_id = app
+        .claude_panes
+        .create_pane_without_vault_for_test(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+        )
+        .expect("create Claude pane");
+    app.claude_panes
+        .set_active_user_pane(&claude_pane_id)
+        .expect("activate Claude pane");
+    let claude_reason = app
+        .terminal_thread_lifecycle_block_reason("archive", main_thread_id)
+        .expect("external pane must not fall back to Main");
+    assert!(claude_reason.contains("cannot target Claude pane"));
+    assert!(claude_reason.contains("Select Main"));
+}
+
+#[tokio::test]
+async fn delete_current_thread_routes_active_claude_pane_to_external_cleanup() {
+    let mut app = make_test_app().await;
+    app.primary_thread_id = Some(ThreadId::new());
+    let pane_id = app
+        .claude_panes
+        .create_pane_without_vault_for_test(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+        )
+        .expect("create Claude pane");
+    let artifact_dir = app.config.codex_home.join("panes").join(&pane_id);
+    let cancel_token = tokio_util::sync::CancellationToken::new();
+    let pane = app
+        .claude_panes
+        .panes
+        .iter_mut()
+        .find(|pane| pane.id == pane_id)
+        .expect("pane");
+    pane.status = crate::claude_panes::ClaudePaneStatus::Running;
+    pane.cancel_token = Some(cancel_token.clone());
+
+    let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(
+        app.chat_widget.config_ref(),
+    ))
+    .await
+    .expect("embedded app server");
+    let control = Box::pin(app.delete_current_thread(&mut app_server)).await;
+
+    assert!(matches!(
+        control,
+        AppRunControl::Exit(ExitReason::UserRequested)
+    ));
+    assert!(cancel_token.is_cancelled());
+    assert!(app.claude_panes.panes().is_empty());
+    assert_eq!(app.claude_panes.active_user_pane_id(), CODEX_MAIN_PANE_ID);
+    assert!(!artifact_dir.exists());
+}
+
+#[tokio::test]
+async fn active_claude_pane_routes_before_native_thread_resolution() {
+    let (mut app, mut event_rx, _op_rx) = make_test_app_with_channels().await;
+    app.active_thread_id = None;
+    app.claude_panes
+        .create_pane_without_vault_for_test(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+        )
+        .expect("create Claude pane");
+    let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(
+        app.chat_widget.config_ref(),
+    ))
+    .await
+    .expect("embedded app server");
+
+    app.submit_active_thread_op(&mut app_server, claude_pane_text_op("/panes"))
+        .await
+        .expect("route external pane command");
+
+    assert!(
+        std::iter::from_fn(|| event_rx.try_recv().ok())
+            .any(|event| matches!(event, AppEvent::OpenPanePicker)),
+        "the selected external pane must consume input before native-thread lookup"
+    );
+}
+
+#[test]
+fn whole_crew_removal_deletes_mixed_members_and_preserves_bound_main() -> Result<()> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .thread_stack_size(8 * 1024 * 1024)
+        .enable_all()
+        .build()?;
+    runtime.block_on(async {
+        let mut app = Box::new(make_test_app().await);
+        let mut app_server = start_config_write_test_app_server(&app).await?;
+        let main = app_server.start_thread(&app.config).await?;
+        let main_thread_id = main.session.thread_id;
+        app.primary_thread_id = Some(main_thread_id);
+        app.active_thread_id = Some(main_thread_id);
+        app.primary_session_configured = Some(main.session.clone());
+        app.set_spawn_nazgul_pane_binding(CODEX_MAIN_PANE_ID.to_string());
+
+        let provider = app.config.model_provider_id.clone();
+        let model = app.chat_widget.current_model().to_string();
+        let effort = app.chat_widget.current_reasoning_effort();
+        let spec = codex_protocol::crew::CrewSpec {
+            schema_version: codex_protocol::crew::CURRENT_CREW_SCHEMA_VERSION,
+            crew_id: "mixed-removal-fixture".to_string(),
+            preset_id: None,
+            members: vec![
+                codex_protocol::crew::CrewMemberSpec {
+                    logical_member_id: "nazgul".to_string(),
+                    display_name: "Main".to_string(),
+                    role_profile: "nazgul".to_string(),
+                    parent_member_id: None,
+                    runtime_request: codex_protocol::crew::RuntimeRequest::exact(
+                        provider.clone(),
+                        model.clone(),
+                        effort.clone(),
+                    ),
+                },
+                codex_protocol::crew::CrewMemberSpec {
+                    logical_member_id: "troll".to_string(),
+                    display_name: "Burzum".to_string(),
+                    role_profile: "troll".to_string(),
+                    parent_member_id: Some("nazgul".to_string()),
+                    runtime_request: codex_protocol::crew::RuntimeRequest::exact(
+                        provider.clone(),
+                        model.clone(),
+                        effort.clone(),
+                    ),
+                },
+                codex_protocol::crew::CrewMemberSpec {
+                    logical_member_id: "orc".to_string(),
+                    display_name: "Snaga".to_string(),
+                    role_profile: "orc".to_string(),
+                    parent_member_id: Some("troll".to_string()),
+                    runtime_request: codex_protocol::crew::RuntimeRequest::exact(
+                        provider.clone(),
+                        model.clone(),
+                        effort.clone(),
+                    ),
+                },
+            ],
+            policy: codex_protocol::crew::CrewPolicy {
+                delegation_mode: codex_protocol::crew::DelegationMode::Proactive,
+                allow_ephemeral_descendants: true,
+                provider_allowlist: vec![provider.clone()],
+                maximum_spend_usd: None,
+            },
+        };
+        let mut crew = crate::crew_state::CrewInstanceState::begin(spec).expect("valid crew");
+        crew.record_member("nazgul", CODEX_MAIN_PANE_ID)
+            .expect("map bound Main");
+
+        let spawn_config = app.native_spawn_agent_config()?;
+        let troll = app_server
+            .spawn_agent_thread_with_class(
+                &spawn_config,
+                main_thread_id,
+                "troll".to_string(),
+                Some("Burzum".to_string()),
+                codex_protocol::crew::AgentClass::CrewMember {
+                    crew_id: crew.spec.crew_id.clone(),
+                    logical_member_id: "troll".to_string(),
+                    human_addressable: true,
+                },
+                model,
+                Some(provider),
+                effort,
+                /*base_instructions*/ None,
+            )
+            .await?;
+        let troll_thread_id = troll.session.thread_id;
+        let troll_node_id = crate::spawn_orchestration::thread_node_id(troll_thread_id);
+        app.register_spawn_agent_pane(
+            troll_thread_id,
+            main_thread_id,
+            crate::spawn_orchestration::pane_node_id(CODEX_MAIN_PANE_ID),
+            Some("Burzum".to_string()),
+            "troll",
+            troll,
+            true,
+        )
+        .await;
+        crew.record_member("troll", &troll_node_id)
+            .expect("map Troll");
+
+        let orc_pane_id = app
+            .claude_panes
+            .create_pane_with_role(
+                crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+                app.config.cwd.to_path_buf(),
+                app.config.codex_home.as_ref(),
+                Some(crate::spawn_orchestration::SpawnRole::Orc),
+                Some("Snaga".to_string()),
+            )
+            .expect("create managed Claude Orc");
+        let orc_node_id = crate::spawn_orchestration::pane_node_id(&orc_pane_id);
+        app.spawn_parent_by_node
+            .insert(orc_node_id.clone(), troll_node_id.clone());
+        crew.record_member("orc", &orc_node_id).expect("map Orc");
+        crew.mark_ready().expect("ready crew");
+        app.spawn_crew = Some(crew);
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let orc_pane = app
+            .claude_panes
+            .panes
+            .iter_mut()
+            .find(|pane| pane.id == orc_pane_id)
+            .expect("Orc pane");
+        orc_pane.status = crate::claude_panes::ClaudePaneStatus::Running;
+        orc_pane.cancel_token = Some(cancel_token.clone());
+        app.claude_panes
+            .set_active_user_pane(&orc_pane_id)
+            .expect("select Orc");
+        let orc_artifact_dir = app.config.codex_home.join("panes").join(&orc_pane_id);
+
+        let mut tui = crate::tui::test_support::make_test_tui()?;
+        let result = Box::pin(app.remove_spawn_crew(&mut tui, &mut app_server)).await?;
+
+        assert!(result.contains("preserved the bound user-owned root"));
+        assert!(cancel_token.is_cancelled());
+        assert!(!orc_artifact_dir.exists());
+        assert!(app.claude_panes.panes().is_empty());
+        assert!(app.spawn_crew.is_none());
+        assert!(app.spawn_parent_by_node.is_empty());
+        assert_eq!(app.claude_panes.active_user_pane_id(), CODEX_MAIN_PANE_ID);
+        assert_eq!(app.active_thread_id, Some(main_thread_id));
+        let empty_rows = app.spawn_tree_items(/*show_task_actions*/ false);
+        assert_eq!(empty_rows.len(), 1);
+        assert_eq!(empty_rows[0].name, "No managed crew");
+        assert!(empty_rows[0].is_disabled);
+        assert!(
+            empty_rows.iter().all(|row| !row.name.contains("Nazgul")),
+            "removing a crew must not reclassify the surviving Main pane as its Nazgul"
+        );
+        app_server
+            .thread_read(main_thread_id, /*include_turns*/ false)
+            .await
+            .expect("bound Main must survive");
+        assert!(
+            app_server
+                .thread_read(troll_thread_id, /*include_turns*/ false)
+                .await
+                .is_err(),
+            "native managed member must be permanently deleted"
+        );
+        Ok(())
+    })
+}
+
+#[tokio::test]
+async fn empty_spawn_tree_does_not_synthesize_main_as_nazgul() {
+    let mut app = make_test_app().await;
+    let main_thread_id = ThreadId::new();
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+
+    let rows = app.spawn_tree_items(/*show_task_actions*/ false);
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].name, "No managed crew");
+    assert!(rows[0].is_disabled);
+    assert!(rows.iter().all(|row| !row.name.contains("Nazgul")));
+    assert!(rows.iter().all(|row| !row.name.contains("Main")));
+}
+
+#[tokio::test]
 async fn pane_spawn_tree_hides_superseded_saved_native_duplicates() {
     let mut app = make_test_app().await;
     let main_thread_id =
@@ -1922,8 +2507,18 @@ async fn duplicate_live_native_replacements_are_pruned() {
 
     app.prune_duplicate_live_native_spawn_threads();
 
-    assert!(app.agent_navigation.get(&old_snaga_thread_id).is_none());
-    assert!(app.agent_navigation.get(&old_ghash_thread_id).is_none());
+    assert!(
+        app.agent_navigation.get(&old_snaga_thread_id).is_none(),
+        "saved Snaga should be replaced by a live endpoint; navigation={:?}; endpoints={:?}",
+        app.agent_navigation.ordered_threads(),
+        app.spawn_native_endpoint_by_node
+    );
+    assert!(
+        app.agent_navigation.get(&old_ghash_thread_id).is_none(),
+        "saved Ghash should be replaced by a live endpoint; navigation={:?}; endpoints={:?}",
+        app.agent_navigation.ordered_threads(),
+        app.spawn_native_endpoint_by_node
+    );
     assert!(app.agent_navigation.get(&new_snaga_thread_id).is_some());
     assert!(app.agent_navigation.get(&new_ghash_thread_id).is_some());
     let child_thread_ids = app
@@ -1936,8 +2531,30 @@ async fn duplicate_live_native_replacements_are_pruned() {
         })
         .collect::<Vec<_>>();
     assert_eq!(child_thread_ids.len(), 2);
-    assert!(child_thread_ids.contains(&new_snaga_thread_id));
-    assert!(child_thread_ids.contains(&new_ghash_thread_id));
+    assert!(child_thread_ids.contains(&old_snaga_thread_id));
+    assert!(child_thread_ids.contains(&old_ghash_thread_id));
+    assert_eq!(
+        app.spawn_native_endpoint_by_node
+            [&crate::spawn_orchestration::thread_node_id(old_snaga_thread_id)],
+        new_snaga_thread_id
+    );
+    assert_eq!(
+        app.spawn_native_endpoint_by_node
+            [&crate::spawn_orchestration::thread_node_id(old_ghash_thread_id)],
+        new_ghash_thread_id
+    );
+    assert!(
+        !app.spawn_parent_by_node
+            .contains_key(&crate::spawn_orchestration::thread_node_id(
+                new_snaga_thread_id
+            ))
+    );
+    assert!(
+        !app.spawn_parent_by_node
+            .contains_key(&crate::spawn_orchestration::thread_node_id(
+                new_ghash_thread_id
+            ))
+    );
 }
 
 #[tokio::test]
@@ -1957,6 +2574,15 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
     let mut app_server = start_config_write_test_app_server(&app).await?;
     let main = app_server.start_thread(&app.config).await?;
     let main_thread_id = main.session.thread_id;
+    let main_rollout_path = main
+        .session
+        .rollout_path
+        .as_ref()
+        .expect("PFTerminal Main should have a local rollout path");
+    assert!(
+        main_rollout_path.is_file(),
+        "a no-task PFTerminal Main must be durable before panes reference its layout"
+    );
     app.primary_thread_id = Some(main_thread_id);
     app.active_thread_id = Some(main_thread_id);
     app.primary_session_configured = Some(main.session.clone());
@@ -2022,8 +2648,12 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
         true,
     )
     .await;
-    app.thread_event_channels.remove(&troll_thread_id);
-    assert!(!app.thread_has_loaded_session(troll_thread_id));
+    app.thread_event_channels
+        .get_mut(&troll_thread_id)
+        .expect("registered Troll channel")
+        .mark_replay_only();
+    assert!(app.thread_event_channels.contains_key(&troll_thread_id));
+    assert!(!app.native_agent_thread_has_loaded_session(troll_thread_id));
 
     let old_snaga_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000251").expect("valid thread id");
@@ -2048,13 +2678,56 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
         Some("orc".to_string()),
         /*is_closed*/ true,
     );
+    // Durable restoration is CrewSpec-backed. Register the saved logical members so the
+    // restoration boundary does not mistake these deliberate no-rollout fixtures for unrelated
+    // legacy task agents when Main itself is already durable.
+    app.ensure_custom_spawn_root(&crate::spawn_orchestration::thread_node_id(
+        nazgul_thread_id,
+    ))
+    .expect("record durable Nazgul root");
+    app.record_custom_spawn_member(
+        &troll_node_id,
+        &crate::spawn_orchestration::thread_node_id(nazgul_thread_id),
+        crate::spawn_orchestration::SpawnRole::Troll,
+        "Burzum".to_string(),
+        crate::dispatch_queue::SavedNativeSpawnRuntime {
+            model: App::STANDARD_TROLL_MODEL.to_string(),
+            provider: OPENAI_PROVIDER_ID.to_string(),
+            reasoning_effort: Some(ReasoningEffortConfig::XHigh),
+        },
+    )
+    .expect("record durable Troll");
+    for (node_id, nickname) in [(&old_snaga_node_id, "Snaga"), (&old_ghash_node_id, "Ghash")] {
+        app.record_custom_spawn_member(
+            node_id,
+            &troll_node_id,
+            crate::spawn_orchestration::SpawnRole::Orc,
+            nickname.to_string(),
+            crate::dispatch_queue::SavedNativeSpawnRuntime {
+                model: App::STANDARD_ORC_MODEL.to_string(),
+                provider: OPENAI_PROVIDER_ID.to_string(),
+                reasoning_effort: Some(ReasoningEffortConfig::XHigh),
+            },
+        )
+        .expect("record durable Orc");
+    }
 
     app.restore_native_spawn_panes_from_saved_state(&mut app_server)
         .await;
 
-    assert!(app.agent_navigation.get(&old_snaga_thread_id).is_none());
-    assert!(app.agent_navigation.get(&old_ghash_thread_id).is_none());
-    assert!(app.thread_has_loaded_session(troll_thread_id));
+    assert!(
+        app.agent_navigation.get(&old_snaga_thread_id).is_none(),
+        "saved Snaga should be replaced by a live endpoint; navigation={:?}; endpoints={:?}",
+        app.agent_navigation.ordered_threads(),
+        app.spawn_native_endpoint_by_node
+    );
+    assert!(
+        app.agent_navigation.get(&old_ghash_thread_id).is_none(),
+        "saved Ghash should be replaced by a live endpoint; navigation={:?}; endpoints={:?}",
+        app.agent_navigation.ordered_threads(),
+        app.spawn_native_endpoint_by_node
+    );
+    assert!(app.native_agent_thread_has_loaded_session(troll_thread_id));
     assert_eq!(
         app.agent_navigation
             .get(&troll_thread_id)
@@ -2101,7 +2774,7 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
     assert!(restored_names.contains(&"Ghash"), "{restored_names:?}");
     for (thread_id, entry) in restored_orcs {
         assert!(!entry.is_closed);
-        assert!(app.thread_has_loaded_session(thread_id));
+        assert!(app.native_agent_thread_has_loaded_session(thread_id));
     }
     let items = app.spawn_tree_items(/*show_task_actions*/ false);
     assert!(
@@ -2173,6 +2846,8 @@ async fn nazgul_can_be_bound_to_a_codex_agent_pane() {
         /*agent_role*/ None,
         /*is_closed*/ false,
     );
+    app.agent_navigation
+        .set_running(codex_pane_thread_id, /*is_running*/ true);
 
     // The Nazgul picker should offer the Codex agent pane as a bindable target.
     let picker_items = app.nazgul_codex_pane_picker_items();
@@ -2183,6 +2858,14 @@ async fn nazgul_can_be_bound_to_a_codex_agent_pane() {
 
     // Bind the Codex agent pane as the Nazgul root.
     let node_id = crate::spawn_orchestration::thread_node_id(codex_pane_thread_id);
+    app.spawn_native_runtime_by_node.insert(
+        node_id.clone(),
+        crate::dispatch_queue::SavedNativeSpawnRuntime {
+            model: app.chat_widget.current_model().to_string(),
+            provider: app.config.model_provider_id.clone(),
+            reasoning_effort: app.config.model_reasoning_effort.clone(),
+        },
+    );
     app.bind_spawn_nazgul_pane(node_id.clone());
     assert_eq!(app.spawn_nazgul_pane_id.as_deref(), Some(node_id.as_str()));
 
@@ -2201,6 +2884,33 @@ async fn nazgul_can_be_bound_to_a_codex_agent_pane() {
         !nazgul_item.name.contains("thread:"),
         "bound Codex pane should not leak the raw thread node id: {}",
         nazgul_item.name
+    );
+    assert_eq!(
+        nazgul_item.description.as_deref(),
+        Some(
+            "Root role binding; running; 00000000-0000-0000-0000-000000000302; same user pane listed above."
+        ),
+        "bound Nazgul must project the same live running state as other managed native roles"
+    );
+
+    app.spawn_status_by_thread.insert(
+        codex_pane_thread_id,
+        codex_app_server_protocol::CollabAgentState {
+            status: codex_app_server_protocol::CollabAgentStatus::Completed,
+            message: Some("finished root work".to_string()),
+        },
+    );
+    let completed_items = app.spawn_tree_items(/*show_task_actions*/ false);
+    let completed_nazgul_item = completed_items
+        .iter()
+        .find(|item| item.name.starts_with("Nazgul:"))
+        .expect("completed status tree has a Nazgul row");
+    assert_eq!(
+        completed_nazgul_item.description.as_deref(),
+        Some(
+            "Root role binding; completed; 00000000-0000-0000-0000-000000000302; same user pane listed above."
+        ),
+        "bound Nazgul must project terminal state through the shared managed-role boundary"
     );
 
     // When the bound Codex pane is the active thread (and the user pane is Codex Main), the
@@ -2261,6 +2971,19 @@ async fn codex_main_bound_nazgul_turn_receives_domain_neutral_hierarchy_context(
     app.primary_thread_id = Some(main_thread_id);
     app.active_thread_id = Some(main_thread_id);
     app.bind_spawn_nazgul_pane(CODEX_MAIN_PANE_ID.to_string());
+    let troll_runtime = crate::dispatch_queue::SavedNativeSpawnRuntime {
+        model: app.chat_widget.current_model().to_string(),
+        provider: app.config.model_provider_id.clone(),
+        reasoning_effort: app.config.model_reasoning_effort.clone(),
+    };
+    app.record_custom_spawn_member(
+        &crate::spawn_orchestration::thread_node_id(troll_thread_id),
+        CODEX_MAIN_PANE_ID,
+        crate::spawn_orchestration::SpawnRole::Troll,
+        "Burzum".to_string(),
+        troll_runtime,
+    )
+    .expect("register Troll in the bound CrewSpec");
     app.upsert_agent_picker_thread(
         troll_thread_id,
         Some("Burzum".to_string()),
@@ -2292,6 +3015,7 @@ async fn pane_picker_separates_user_panes_from_managed_spawn_crew() {
     let mut app = make_test_app().await;
     let manager_thread = ThreadId::new();
     let worker_thread = ThreadId::new();
+    let parent_controlled_thread = ThreadId::new();
     app.upsert_agent_picker_thread(
         manager_thread,
         Some("Codex manager".to_string()),
@@ -2306,13 +3030,35 @@ async fn pane_picker_separates_user_panes_from_managed_spawn_crew() {
     );
     app.spawn_parent_by_thread
         .insert(worker_thread, manager_thread);
+    let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread);
+    app.spawn_native_runtime_by_node.insert(
+        manager_node.clone(),
+        crate::dispatch_queue::SavedNativeSpawnRuntime {
+            model: app.chat_widget.current_model().to_string(),
+            provider: app.config.model_provider_id.clone(),
+            reasoning_effort: app.config.model_reasoning_effort.clone(),
+        },
+    );
+    app.bind_spawn_nazgul_pane(manager_node);
+    app.upsert_agent_picker_thread(
+        parent_controlled_thread,
+        Some("Task-only subagent".to_string()),
+        Some("default".to_string()),
+        false,
+    );
+    app.agent_navigation
+        .mark_parent_owned(parent_controlled_thread);
     let items = app.pane_picker_items();
     let names = items
         .iter()
         .map(|item| item.name.as_str())
         .collect::<Vec<_>>();
-    assert!(names.contains(&"Codex - Codex manager"));
-    assert!(names.contains(&"Codex - Codex worker"));
+    assert!(names.contains(&"PFTerminal - Codex manager"));
+    assert!(names.contains(&"PFTerminal - Codex worker"));
+    assert!(
+        !names.contains(&"PFTerminal - Task-only subagent"),
+        "parent-controlled Core workers are not operator-owned user panes"
+    );
 
     let user_index = names
         .iter()
@@ -2335,6 +3081,69 @@ async fn pane_picker_separates_user_panes_from_managed_spawn_crew() {
             .find(|item| item.name.starts_with("Nazgul:"))
             .and_then(|item| item.description.as_deref())
             .is_some_and(|description| description.contains("same user pane listed above"))
+    );
+}
+
+#[tokio::test]
+async fn pane_picker_marks_exactly_the_active_native_thread_current() {
+    let mut app = make_test_app().await;
+    let main_thread = ThreadId::new();
+    let user_thread = ThreadId::new();
+    app.primary_thread_id = Some(main_thread);
+    app.active_thread_id = Some(user_thread);
+    app.upsert_agent_picker_thread(
+        main_thread,
+        Some("Main".to_string()),
+        Some("default".to_string()),
+        false,
+    );
+    app.upsert_agent_picker_thread(
+        user_thread,
+        Some("Matrix Twin".to_string()),
+        Some("default".to_string()),
+        false,
+    );
+    app.primary_session_configured = Some(ThreadSessionState {
+        model: "deepseek-v4-flash".to_string(),
+        ..test_thread_session(main_thread, test_path_buf("/tmp/main"))
+    });
+    app.agent_navigation
+        .set_model(user_thread, Some("gpt-5.6-sol".to_string()));
+    app.chat_widget.set_model("gpt-5.6-sol");
+
+    let items = app.pane_picker_items();
+    let main = items
+        .iter()
+        .find(|item| item.name == "PFTerminal - Main")
+        .expect("Main pane row");
+    let user = items
+        .iter()
+        .find(|item| item.name == "PFTerminal - Matrix Twin")
+        .expect("operator pane row");
+
+    assert!(
+        !main.is_current,
+        "inactive Main must not be labelled current"
+    );
+    assert!(
+        user.is_current,
+        "active native pane must be labelled current"
+    );
+    assert_eq!(
+        items.iter().filter(|item| item.is_current).count(),
+        1,
+        "the pane picker must project one current pane"
+    );
+    assert_snapshot!(
+        format!(
+            "Main: {}\nMatrix Twin: {}",
+            main.description.as_deref().expect("Main description"),
+            user.description.as_deref().expect("operator pane description")
+        ),
+        @r###"
+    Main: deepseek-v4-flash; idle
+    Matrix Twin: gpt-5.6-sol; idle
+    "###
     );
 }
 
@@ -2485,7 +3294,8 @@ async fn restored_spawn_resume_uses_saved_runtime_instead_of_parent_runtime() {
         reasoning_effort: Some(ReasoningEffortConfig::High),
     };
 
-    let (resume_config, model_override) = app.native_spawn_resume_request(Some(&saved_runtime));
+    let (resume_config, model_override, permission_settings) =
+        app.native_spawn_resume_request(Some(&saved_runtime));
 
     assert_eq!(
         resume_config.model.as_deref(),
@@ -2501,6 +3311,19 @@ async fn restored_spawn_resume_uses_saved_runtime_instead_of_parent_runtime() {
             model: Some(codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL.to_string()),
             model_provider: Some(CLAUDE_PLAN_PROVIDER_ID.to_string()),
         })
+    );
+    assert_eq!(
+        permission_settings,
+        crate::app_server_session::ResumePermissionSettings::RestoreFromThread
+    );
+
+    app.harness_overrides.sandbox_mode = Some(SandboxMode::WorkspaceWrite);
+    app.harness_overrides.approval_policy =
+        Some(codex_protocol::protocol::AskForApproval::OnRequest);
+    let (_, _, permission_settings) = app.native_spawn_resume_request(Some(&saved_runtime));
+    assert_eq!(
+        permission_settings,
+        crate::app_server_session::ResumePermissionSettings::OverrideFromCurrentConfig
     );
 }
 
@@ -2590,6 +3413,155 @@ async fn manually_assembled_multimodel_spawn_crew_is_crewspec_backed() {
     );
     crew.spec.validate().expect("custom crew stays valid");
     assert!(!app.spawn_legacy_read_only);
+}
+
+#[tokio::test]
+async fn restored_crewspec_roles_drive_spawn_and_pane_projection_when_liveness_omits_roles() {
+    let mut app = make_test_app().await;
+    let main_thread_id = ThreadId::new();
+    let nazgul_thread_id = ThreadId::new();
+    let troll_thread_id = ThreadId::new();
+    let orc_thread_id = ThreadId::new();
+    let nazgul_node = crate::spawn_orchestration::thread_node_id(nazgul_thread_id);
+    let troll_node = crate::spawn_orchestration::thread_node_id(troll_thread_id);
+    let orc_node = crate::spawn_orchestration::thread_node_id(orc_thread_id);
+    let runtime = crate::dispatch_queue::SavedNativeSpawnRuntime {
+        model: "deepseek-v4-flash".to_string(),
+        provider: "deepseek".to_string(),
+        reasoning_effort: Some(ReasoningEffortConfig::High),
+    };
+
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+    app.spawn_nazgul_pane_id = Some(nazgul_node.clone());
+    app.spawn_native_runtime_by_node
+        .insert(nazgul_node.clone(), runtime.clone());
+    app.ensure_custom_spawn_root(&nazgul_node)
+        .expect("restore CrewSpec Nazgul");
+    app.record_custom_spawn_member(
+        &troll_node,
+        &nazgul_node,
+        crate::spawn_orchestration::SpawnRole::Troll,
+        "Burzum".to_string(),
+        runtime.clone(),
+    )
+    .expect("restore CrewSpec Troll");
+    app.record_custom_spawn_member(
+        &orc_node,
+        &troll_node,
+        crate::spawn_orchestration::SpawnRole::Orc,
+        "Snaga".to_string(),
+        runtime,
+    )
+    .expect("restore CrewSpec Orc");
+    app.spawn_parent_by_node.insert(
+        nazgul_node.clone(),
+        crate::spawn_orchestration::pane_node_id(crate::claude_panes::CODEX_MAIN_PANE_ID),
+    );
+    app.spawn_parent_by_node
+        .insert(troll_node.clone(), nazgul_node.clone());
+    app.spawn_parent_by_node
+        .insert(orc_node.clone(), troll_node.clone());
+    for (node, thread_id, nickname) in [
+        (&nazgul_node, nazgul_thread_id, "Angmar"),
+        (&troll_node, troll_thread_id, "Burzum"),
+        (&orc_node, orc_thread_id, "Snaga"),
+    ] {
+        app.spawn_native_endpoint_by_node
+            .insert(node.clone(), thread_id);
+        // `thread/list` and other liveness projections may omit role metadata. CrewSpec must
+        // remain sufficient to render and operate every persistent member.
+        app.upsert_agent_picker_thread(
+            thread_id,
+            Some(nickname.to_string()),
+            /*agent_role*/ None,
+            /*is_closed*/ false,
+        );
+    }
+
+    let rows = app.spawn_tree_items(/*show_task_actions*/ false);
+
+    let nazgul_row = rows
+        .iter()
+        .find(|row| row.name.contains("Nazgul: Angmar"))
+        .expect("restored Nazgul row");
+    let nazgul_search = nazgul_row
+        .search_value
+        .as_deref()
+        .expect("Nazgul row must be searchable");
+    assert!(nazgul_search.contains("Angmar"));
+    assert!(nazgul_search.contains(nazgul_thread_id.to_string().as_str()));
+    assert!(rows.iter().any(|row| row.name.contains("Burzum [troll]")));
+    assert!(rows.iter().any(|row| row.name.contains("Snaga [orc]")));
+    assert!(app.spawn_context_for_thread(troll_thread_id).is_some());
+    assert!(app.spawn_context_for_thread(orc_thread_id).is_some());
+}
+
+#[tokio::test]
+async fn custom_spawn_core_classes_match_persisted_crew_identity() {
+    let mut app = make_test_app().await;
+    let root_class = app
+        .prepare_custom_spawn_root(
+            "Angmar".to_string(),
+            crate::dispatch_queue::SavedNativeSpawnRuntime {
+                model: "deepseek-v4-flash".to_string(),
+                provider: "deepseek".to_string(),
+                reasoning_effort: Some(ReasoningEffortConfig::High),
+            },
+        )
+        .expect("prepare custom root identity");
+    let codex_protocol::crew::AgentClass::CrewMember {
+        crew_id,
+        logical_member_id,
+        human_addressable,
+    } = root_class
+    else {
+        panic!("custom root must be a persistent crew member");
+    };
+    assert_eq!(logical_member_id, "nazgul");
+    assert!(human_addressable);
+    assert_eq!(
+        app.spawn_crew.as_ref().expect("prepared crew").spec.crew_id,
+        crew_id
+    );
+
+    app.ensure_custom_spawn_root("thread:angmar")
+        .expect("materialize prepared root identity");
+    let troll_class = app
+        .custom_spawn_member_agent_class(crate::spawn_orchestration::SpawnRole::Troll)
+        .expect("allocate Troll identity from the same crew");
+    let codex_protocol::crew::AgentClass::CrewMember {
+        crew_id: troll_crew_id,
+        logical_member_id: troll_member_id,
+        human_addressable: troll_human_addressable,
+    } = troll_class
+    else {
+        panic!("custom Troll must be a persistent crew member");
+    };
+    assert_eq!(troll_crew_id, crew_id);
+    assert_eq!(troll_member_id, "troll-1");
+    assert!(troll_human_addressable);
+
+    app.record_custom_spawn_member(
+        "thread:burzum",
+        "thread:angmar",
+        crate::spawn_orchestration::SpawnRole::Troll,
+        "Burzum".to_string(),
+        crate::dispatch_queue::SavedNativeSpawnRuntime {
+            model: "claude-opus-5-plan".to_string(),
+            provider: "claude-plan".to_string(),
+            reasoning_effort: Some(ReasoningEffortConfig::High),
+        },
+    )
+    .expect("persist Troll using the reserved Core identity");
+    let crew = app.spawn_crew.as_ref().expect("ready custom crew");
+    assert_eq!(
+        crew.member_node_by_id
+            .get(&troll_member_id)
+            .map(String::as_str),
+        Some("thread:burzum")
+    );
+    assert_eq!(crew.spec.crew_id, crew_id);
 }
 
 #[tokio::test]
@@ -2744,14 +3716,14 @@ async fn native_turn_completion_is_projection_only_and_never_schedules_tui_deliv
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let (parent_thread_id, child_thread_id) = register_native_dispatch_pair(&mut app);
 
-    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(Box::new(
         turn_completed_with_agent_message(
             child_thread_id,
             "turn-native-terminal",
             TurnStatus::Completed,
             "native terminal result",
         ),
-    ));
+    )));
 
     while let Ok(event) = rx.try_recv() {
         assert!(
@@ -2763,11 +3735,15 @@ async fn native_turn_completion_is_projection_only_and_never_schedules_tui_deliv
             "native completion is already delivered by core and must not create a second TUI transport"
         );
     }
+    let projected_reports = app
+        .spawn_parent_reports_by_node
+        .get(&thread_node_id(parent_thread_id))
+        .expect("native completion should be projected into durable parent context");
     assert!(
-        app.spawn_parent_reports_by_node
-            .get(&thread_node_id(parent_thread_id))
-            .is_none_or(std::collections::VecDeque::is_empty),
-        "native completion must not enter the edge-adapter report store"
+        projected_reports
+            .iter()
+            .any(|report| report.contains("result=native terminal result")),
+        "projection must retain the result without scheduling a second delivery"
     );
     assert_eq!(
         app.agent_navigation
@@ -2998,11 +3974,15 @@ async fn turn_start_failure_is_buffered_in_only_the_affected_pane() {
             .await;
         assert!(affected_store.buffer.iter().any(|event| matches!(
             event,
-            ThreadBufferedEvent::Notification(ServerNotification::Error(notification))
-                if !notification.will_retry
-                    && notification.error.message.contains("pane remains available")
-                    && notification.error.additional_details.as_deref()
-                        == Some("turn/start failed in TUI: injected transport fault")
+            ThreadBufferedEvent::Notification(notification)
+                if matches!(
+                    notification.as_ref(),
+                    ServerNotification::Error(notification)
+                        if !notification.will_retry
+                            && notification.error.message.contains("pane remains available")
+                            && notification.error.additional_details.as_deref()
+                                == Some("turn/start failed in TUI: injected transport fault")
+                )
         )));
     }
 
@@ -3041,7 +4021,7 @@ async fn recovered_turn_start_failure_remains_visible_in_active_pane_history() {
 }
 
 #[tokio::test]
-async fn failed_dispatch_records_sender_visible_ack_without_fake_pane_cell() {
+async fn failed_dispatch_records_durable_ack_without_fake_native_transport() {
     let (mut app, mut rx, _op_rx) = make_test_app_with_channels().await;
     let (troll_thread_id, _orc_thread_id) = register_native_dispatch_pair(&mut app);
     app.spawn_operator_input_seen = true;
@@ -3064,8 +4044,10 @@ async fn failed_dispatch_records_sender_visible_ack_without_fake_pane_cell() {
         report.contains("dispatch_ack; #78") && report.contains("status=failed")
     }));
     let failure_ack_turns = drain_spawn_agent_tasks_for(&mut rx, troll_thread_id);
-    assert_eq!(failure_ack_turns.len(), 1);
-    assert!(failure_ack_turns[0].contains("status=failed"));
+    assert!(
+        failure_ack_turns.is_empty(),
+        "native agents receive tool results from core; TUI must not synthesize a second turn"
+    );
     assert!(
         !app.claude_pane_transcript_cells
             .contains_key(&source_node_id),
@@ -3074,7 +4056,7 @@ async fn failed_dispatch_records_sender_visible_ack_without_fake_pane_cell() {
 }
 
 #[tokio::test]
-async fn troll_spawn_task_submission_names_existing_orc_panes() {
+async fn troll_spawn_task_submission_keeps_mailbox_payload_free_of_synthetic_context() {
     let mut app = make_test_app().await;
     let main_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000132").expect("valid thread id");
@@ -3134,23 +4116,20 @@ async fn troll_spawn_task_submission_names_existing_orc_panes() {
     let task =
         app.spawn_agent_task_for_submission(troll_thread_id, "Build the site and review it.");
 
-    assert!(task.contains("<pfterminal_spawn_troll_task_context>"));
-    assert!(task.contains("Existing Orc panes assigned to you:"));
-    assert!(task.contains("Snaga [orc]"));
-    assert!(task.contains(&snaga_thread_id.to_string()));
-    assert!(task.contains("canonical_task_name=/root/troll_burzum/orc_snaga"));
-    assert!(task.contains("Ghash [orc]"));
-    assert!(task.contains(&ghash_thread_id.to_string()));
-    assert!(task.contains("Do not call spawn_agent"));
-    assert!(task.contains("followup_task"));
-    assert!(task.contains("send_message"));
-    assert!(!task.contains("pfterminal_send_task"));
-    assert!(task.contains("Task from Sauron/Nazgul:"));
-    assert!(task.ends_with("Build the site and review it."));
+    assert_eq!(task, "Build the site and review it.");
+    let context = app
+        .spawn_context_for_thread(troll_thread_id)
+        .expect("Troll should receive live Core application context");
+    assert!(context.contains("Snaga [orc]"));
+    assert!(context.contains("/root/troll_burzum/orc_snaga"));
+    assert!(context.contains("Ghash [orc]"));
+    assert!(context.contains("followup_task"));
+    assert!(context.contains("send_message"));
+    assert!(!context.contains("<pfterminal_send_task"));
 }
 
 #[tokio::test]
-async fn troll_spawn_task_submission_keeps_context_when_no_orcs_exist() {
+async fn troll_live_context_reports_when_no_orcs_exist() {
     let mut app = make_test_app().await;
     let main_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000136").expect("valid thread id");
@@ -3171,11 +4150,44 @@ async fn troll_spawn_task_submission_keeps_context_when_no_orcs_exist() {
     let task =
         app.spawn_agent_task_for_submission(troll_thread_id, "Build the site and review it.");
 
-    assert!(task.contains("<pfterminal_spawn_troll_task_context>"));
-    assert!(task.contains("No existing Orc panes are assigned to you yet."));
-    assert!(task.contains("create or request Orc panes before claiming completion"));
-    assert!(task.contains("Task from Sauron/Nazgul:"));
-    assert!(task.ends_with("Build the site and review it."));
+    assert_eq!(task, "Build the site and review it.");
+    let context = app
+        .spawn_context_for_thread(troll_thread_id)
+        .expect("Troll should receive live Core application context");
+    assert!(context.contains("Orcs assigned to you:"));
+    assert!(context.contains("none assigned yet"));
+}
+
+#[tokio::test]
+async fn orc_spawn_task_submission_is_the_literal_user_assignment() {
+    let mut app = make_test_app().await;
+    let main_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000138").expect("valid thread id");
+    let troll_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000139").expect("valid thread id");
+    let orc_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000140").expect("valid thread id");
+
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+    app.upsert_agent_picker_thread(
+        orc_thread_id,
+        Some("Snaga".to_string()),
+        Some("orc".to_string()),
+        /*is_closed*/ false,
+    );
+    app.spawn_parent_by_thread
+        .insert(orc_thread_id, troll_thread_id);
+
+    let task = app.spawn_agent_task_for_submission(
+        orc_thread_id,
+        "Run the acceptance command and report its literal output.",
+    );
+
+    assert_eq!(
+        task,
+        "Run the acceptance command and report its literal output."
+    );
 }
 
 #[tokio::test]
@@ -3266,9 +4278,9 @@ async fn native_spawn_turn_completion_updates_status_and_result_preview() {
     app.agent_navigation
         .set_last_task_message(orc_thread_id, Some("build components".to_string()));
 
-    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(Box::new(
         turn_started_notification(orc_thread_id, "turn-1"),
-    ));
+    )));
     assert_eq!(
         app.spawn_status_by_thread
             .get(&orc_thread_id)
@@ -3276,14 +4288,14 @@ async fn native_spawn_turn_completion_updates_status_and_result_preview() {
         Some(&codex_app_server_protocol::CollabAgentStatus::Running)
     );
 
-    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(Box::new(
         turn_completed_with_agent_message(
             orc_thread_id,
             "turn-1",
             TurnStatus::Completed,
             "Created the missing components and npm run build passed cleanly.",
         ),
-    ));
+    )));
 
     let status = app
         .spawn_status_by_thread
@@ -3344,19 +4356,19 @@ async fn stale_receiver_running_status_does_not_hide_completed_orc_report() {
         crate::spawn_orchestration::thread_node_id(troll_thread_id),
     );
 
-    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(Box::new(
         turn_started_notification(orc_thread_id, "turn-1"),
-    ));
-    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+    )));
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(Box::new(
         turn_completed_with_agent_message(
             orc_thread_id,
             "turn-1",
             TurnStatus::Completed,
             "Wrote /tmp/pfterminal-orc-proof.txt and verified it.",
         ),
-    ));
+    )));
 
-    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(Box::new(
         ServerNotification::ItemCompleted(codex_app_server_protocol::ItemCompletedNotification {
             thread_id: troll_thread_id.to_string(),
             turn_id: "turn-wait".to_string(),
@@ -3379,23 +4391,26 @@ async fn stale_receiver_running_status_does_not_hide_completed_orc_report() {
                 )]),
             },
         }),
-    ));
+    )));
 
-    let context = app.spawn_agent_task_for_submission(troll_thread_id, "review child reports");
+    let context = app
+        .spawn_context_for_thread(troll_thread_id)
+        .expect("Troll should receive live lifecycle context");
     assert!(
-        context.contains("Snaga [orc]; status=completed; has_new_report=true"),
-        "Troll roster must show the completed Orc and report marker, got: {context}"
+        context.contains("Snaga [orc]; status=completed"),
+        "Troll roster must show the completed Orc, got: {context}"
     );
     assert!(
         !context.contains("Snaga [orc]; status=running"),
         "stale receiver status must not regress the completed Orc to running, got: {context}"
     );
-    assert!(context.contains("Recent child reports delivered to this pane:"));
-    assert!(context.contains("result=Wrote /tmp/pfterminal-orc-proof.txt and verified it."));
+    assert!(!context.contains("has_new_report="));
+    assert!(!context.contains("Recent child reports delivered to this pane:"));
+    assert!(!context.contains("result=Wrote /tmp/pfterminal-orc-proof.txt and verified it."));
 }
 
 #[tokio::test]
-async fn native_orc_completion_is_reported_to_parent_troll_context() {
+async fn native_orc_completion_is_projected_but_not_reinjected_into_parent_context() {
     let mut app = make_test_app().await;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000231").expect("valid thread id");
@@ -3431,10 +4446,22 @@ async fn native_orc_completion_is_reported_to_parent_troll_context() {
     .await
     .expect("completion should enqueue");
 
-    let context = app.spawn_agent_task_for_submission(troll_thread_id, "review child reports");
-    assert!(context.contains("Recent child reports delivered to this pane:"));
-    assert!(context.contains("Snaga [orc]; status=completed; has_new_report=true"));
-    assert!(context.contains("result=Found two latency issues and no blockers."));
+    let context = app
+        .spawn_context_for_thread(troll_thread_id)
+        .expect("Troll should receive live lifecycle context");
+    assert!(context.contains("Snaga [orc]; status=completed"));
+    assert!(!context.contains("has_new_report="));
+    assert!(!context.contains("Recent child reports delivered to this pane:"));
+    assert!(!context.contains("result=Found two latency issues and no blockers."));
+    let reports = app
+        .spawn_parent_reports_by_node
+        .get(&crate::spawn_orchestration::thread_node_id(troll_thread_id))
+        .expect("TUI should retain a display projection of the result");
+    assert!(
+        reports
+            .iter()
+            .any(|report| report.contains("result=Found two latency issues and no blockers."))
+    );
 }
 
 #[tokio::test]
@@ -3710,12 +4737,12 @@ async fn native_spawn_turn_interrupt_updates_status_without_closing_app() {
     app.spawn_parent_by_thread
         .insert(orc_thread_id, troll_thread_id);
 
-    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(Box::new(
         turn_started_notification(orc_thread_id, "turn-1"),
-    ));
-    app.handle_thread_event_now(ThreadBufferedEvent::Notification(
+    )));
+    app.handle_thread_event_now(ThreadBufferedEvent::Notification(Box::new(
         turn_completed_notification(orc_thread_id, "turn-1", TurnStatus::Interrupted),
-    ));
+    )));
 
     let status = app
         .spawn_status_by_thread
@@ -3902,7 +4929,8 @@ async fn claude_orc_completion_is_reported_to_parent_troll_context() {
         .spawn_context_for_user_pane(&troll_pane_id)
         .expect("Troll pane should receive spawn context");
     assert!(context.contains("Recent child reports delivered to this pane:"));
-    assert!(context.contains("Claude Code Snaga [orc] - Opus 5 Claude Plan; status=success"));
+    assert!(context.contains("Claude Code Snaga [orc] - Opus 5 Claude Plan"));
+    assert!(context.contains("status=idle"));
     assert!(context.contains("result=Implemented the mock website and npm run build passed."));
 }
 
@@ -4499,7 +5527,7 @@ async fn assignment_manager_empty_completion_retries_current_turn_once_then_paus
 }
 
 #[tokio::test]
-async fn inactive_assignment_manager_completed_dispatch_reaches_worker_once() {
+async fn inactive_native_manager_text_never_dispatches_to_worker() {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
     write_test_whip(
         &app,
@@ -4565,9 +5593,10 @@ async fn inactive_assignment_manager_completed_dispatch_reaches_worker_once() {
     )
     .await
     .expect("enqueue inactive Manager message completion");
-    let delivered = drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id)
-        .expect("completed Manager message should reach Worker at notification ingress");
-    assert!(delivered.contains("Review the branch and report concrete defects."));
+    assert!(
+        drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id).is_none(),
+        "native Manager output is display text, never an inter-agent transport"
+    );
 
     let completed = turn_completed_with_agent_message(
         manager_thread_id,
@@ -4580,14 +5609,14 @@ async fn inactive_assignment_manager_completed_dispatch_reaches_worker_once() {
         .expect("enqueue inactive Manager completion");
     assert!(
         drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id).is_none(),
-        "TurnCompleted must reconcile with the already dispatched ItemCompleted"
+        "TurnCompleted must not parse native assistant text as a task"
     );
     assert!(matches!(
         app.orchestrate_whips
             .get("assignment-1")
             .map(|whip| &whip.kind),
         Some(crate::orchestrate::WhipKind::Assignment {
-            phase: crate::orchestrate::AssignmentPhase::Executing,
+            phase: crate::orchestrate::AssignmentPhase::Drafting,
             ..
         })
     ));
@@ -4597,7 +5626,7 @@ async fn inactive_assignment_manager_completed_dispatch_reaches_worker_once() {
         .expect("replay inactive Manager completion");
     assert!(
         drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id).is_none(),
-        "terminal notification replay must not dispatch the same task twice"
+        "terminal notification replay must remain transport-free"
     );
 }
 
@@ -5499,6 +6528,111 @@ async fn child_report_auto_duplicate_child_report_does_not_trigger_duplicate_tur
 }
 
 #[tokio::test]
+async fn external_pane_auto_dispatch_chain_pauses_and_resumes_on_fresh_input() {
+    let (mut app, mut app_event_rx, troll_pane_id, orc_pane_id) =
+        make_child_report_auto_claude_pane_app().await;
+    let troll_node_id = crate::spawn_orchestration::pane_node_id(&troll_pane_id);
+
+    for cycle in 0..codex_protocol::crew::CREW_AUTO_DISPATCH_CHAIN_LIMIT {
+        app.record_spawn_child_report_for_claude_pane(
+            &orc_pane_id,
+            "done",
+            Some(&format!("cycle {cycle} result")),
+        );
+        let auto_tasks = drain_claude_pane_task_events(&mut app_event_rx);
+        assert_eq!(
+            auto_tasks
+                .iter()
+                .filter(|(pane_id, _)| pane_id == &troll_pane_id)
+                .count(),
+            1
+        );
+        app.note_spawn_turn_started_for_auto_loop(&troll_node_id);
+        app.dispatch_spawn_task_blocks(
+            &troll_pane_id,
+            vec![crate::spawn_orchestration::SpawnTaskDispatch {
+                target: orc_pane_id.clone(),
+                task: format!("cycle {cycle} follow-up"),
+                seq: Some(700 + u64::from(cycle)),
+            }],
+        );
+        let dispatched_tasks = drain_claude_pane_task_events(&mut app_event_rx);
+        assert_eq!(
+            dispatched_tasks
+                .iter()
+                .filter(|(pane_id, _)| pane_id == &orc_pane_id)
+                .count(),
+            1
+        );
+        app.note_spawn_turn_completed_for_auto_loop(&troll_node_id);
+    }
+
+    app.record_spawn_child_report_for_claude_pane(
+        &orc_pane_id,
+        "done",
+        Some("the report after the configured chain limit"),
+    );
+    assert!(
+        drain_claude_pane_task_events(&mut app_event_rx)
+            .iter()
+            .all(|(pane_id, _)| pane_id != &troll_pane_id),
+        "the next report must remain visible without starting another paid parent turn"
+    );
+    assert_eq!(
+        app.spawn_auto_loop_state_by_node[&troll_node_id].chain,
+        codex_protocol::crew::CREW_AUTO_DISPATCH_CHAIN_LIMIT
+    );
+
+    // A real user task is represented by a non-pending turn start and resumes the same pane.
+    app.note_spawn_turn_started_for_auto_loop(&troll_node_id);
+    app.note_spawn_turn_completed_for_auto_loop(&troll_node_id);
+    app.record_spawn_child_report_for_claude_pane(
+        &orc_pane_id,
+        "done",
+        Some("fresh result after operator input"),
+    );
+    assert_eq!(
+        drain_claude_pane_task_events(&mut app_event_rx)
+            .iter()
+            .filter(|(pane_id, _)| pane_id == &troll_pane_id)
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn external_pane_auto_acknowledgement_terminates_dispatch_chain() {
+    let (mut app, mut app_event_rx, troll_pane_id, orc_pane_id) =
+        make_child_report_auto_claude_pane_app().await;
+    let troll_node_id = crate::spawn_orchestration::pane_node_id(&troll_pane_id);
+
+    app.record_spawn_child_report_for_claude_pane(&orc_pane_id, "done", Some("first result"));
+    drain_claude_pane_task_events(&mut app_event_rx);
+    app.note_spawn_turn_started_for_auto_loop(&troll_node_id);
+    app.dispatch_spawn_task_blocks(
+        &troll_pane_id,
+        vec![crate::spawn_orchestration::SpawnTaskDispatch {
+            target: orc_pane_id.clone(),
+            task: "one follow-up".to_string(),
+            seq: Some(801),
+        }],
+    );
+    drain_claude_pane_task_events(&mut app_event_rx);
+    app.note_spawn_turn_completed_for_auto_loop(&troll_node_id);
+    assert_eq!(app.spawn_auto_loop_state_by_node[&troll_node_id].chain, 1);
+
+    app.record_spawn_child_report_for_claude_pane(
+        &orc_pane_id,
+        "done",
+        Some("acknowledge this result"),
+    );
+    drain_claude_pane_task_events(&mut app_event_rx);
+    app.note_spawn_turn_started_for_auto_loop(&troll_node_id);
+    app.note_spawn_turn_completed_for_auto_loop(&troll_node_id);
+    assert_eq!(app.spawn_auto_loop_state_by_node[&troll_node_id].chain, 0);
+}
+
+#[tokio::test]
 async fn native_nazgul_sees_live_troll_and_orc_tree_even_if_spawned_before_them() {
     // The bug: a spawned Nazgul's base_instructions are frozen at spawn time, so if it was created
     // before its Troll/Orcs it would forever answer "none spawned yet". The fix renders the live
@@ -5698,6 +6832,41 @@ More text that never finished"#;
 }
 
 #[tokio::test]
+async fn manual_troll_spawn_uses_bound_native_nazgul_as_core_parent() {
+    let mut app = make_test_app().await;
+    let main_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000305").expect("valid main id");
+    let nazgul_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000306").expect("valid Nazgul id");
+    let nazgul_node_id = crate::spawn_orchestration::thread_node_id(nazgul_thread_id);
+
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+    app.upsert_agent_picker_thread(
+        nazgul_thread_id,
+        Some("Angmar".to_string()),
+        Some("nazgul".to_string()),
+        /*is_closed*/ false,
+    );
+    app.set_spawn_nazgul_pane_binding(nazgul_node_id.clone());
+
+    assert_eq!(
+        app.backend_parent_thread_for_spawn(
+            crate::spawn_orchestration::SpawnRole::Troll,
+            Some(&nazgul_node_id),
+        ),
+        Some(nazgul_thread_id)
+    );
+    assert_eq!(
+        app.logical_parent_node_for_spawn(
+            crate::spawn_orchestration::SpawnRole::Troll,
+            Some(&nazgul_node_id),
+        ),
+        nazgul_node_id
+    );
+}
+
+#[tokio::test]
 async fn active_native_nazgul_turn_receives_live_spawn_context_with_orcs() {
     // Direct user input in the active Nazgul pane uses the normal active-thread submit path, not
     // SubmitSpawnAgentTask. It still must receive live hierarchy context; otherwise the Nazgul sees
@@ -5761,7 +6930,7 @@ async fn active_native_nazgul_turn_receives_live_spawn_context_with_orcs() {
 }
 
 #[tokio::test]
-async fn claude_orc_completion_is_reported_to_native_troll_context() {
+async fn claude_orc_completion_uses_core_edge_message_not_native_prompt_reinjection() {
     let mut app = make_test_app().await;
     let troll_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000234").expect("valid thread id");
@@ -5806,10 +6975,13 @@ async fn claude_orc_completion_is_reported_to_native_troll_context() {
         }),
     );
 
-    let context = app.spawn_agent_task_for_submission(troll_thread_id, "review child reports");
-    assert!(context.contains("Recent child reports delivered to this pane:"));
-    assert!(context.contains("Claude Code Snaga [orc] - Opus 5 Claude Plan; status=success"));
-    assert!(context.contains("result=Finished the latency benchmark table and saved the output."));
+    let context = app
+        .spawn_context_for_thread(troll_thread_id)
+        .expect("Troll should receive live lifecycle context");
+    assert!(!context.contains("Recent child reports delivered to this pane:"));
+    assert!(context.contains("Claude Code Snaga [orc] - Opus 5 Claude Plan"));
+    assert!(context.contains("status=idle"));
+    assert!(!context.contains("result=Finished the latency benchmark table and saved the output."));
 }
 
 #[tokio::test]
@@ -5817,9 +6989,9 @@ async fn unbound_main_does_not_persist_nazgul_role_metadata() {
     let mut app = make_test_app().await;
     let codex_home = tempdir().expect("codex home");
     app.config.codex_home = codex_home.path().to_path_buf().abs();
-    app.config.sqlite_home = codex_home.path().to_path_buf();
+    app.config.sqlite = codex_state::SqliteConfig::new_for_testing(codex_home.path().abs());
     let state_db = codex_state::StateRuntime::init(
-        codex_home.path().to_path_buf(),
+        app.config.sqlite.clone(),
         app.config.model_provider_id.clone(),
     )
     .await
@@ -5849,9 +7021,9 @@ async fn bound_nazgul_root_persists_role_metadata_to_state_db() {
     let mut app = make_test_app().await;
     let codex_home = tempdir().expect("codex home");
     app.config.codex_home = codex_home.path().to_path_buf().abs();
-    app.config.sqlite_home = codex_home.path().to_path_buf();
+    app.config.sqlite = codex_state::SqliteConfig::new_for_testing(codex_home.path().abs());
     let state_db = codex_state::StateRuntime::init(
-        codex_home.path().to_path_buf(),
+        app.config.sqlite.clone(),
         app.config.model_provider_id.clone(),
     )
     .await
@@ -5895,10 +7067,10 @@ async fn native_spawn_registration_persists_started_session_model_provider_pair(
     let mut app = make_test_app().await;
     let codex_home = tempdir().expect("codex home");
     app.config.codex_home = codex_home.path().to_path_buf().abs();
-    app.config.sqlite_home = codex_home.path().to_path_buf();
+    app.config.sqlite = codex_state::SqliteConfig::new_for_testing(codex_home.path().abs());
     app.config.model_provider_id = "claude-plan".to_string();
     let state_db = codex_state::StateRuntime::init(
-        codex_home.path().to_path_buf(),
+        app.config.sqlite.clone(),
         app.config.model_provider_id.clone(),
     )
     .await
@@ -5924,6 +7096,7 @@ async fn native_spawn_registration_persists_started_session_model_provider_pair(
             ..test_thread_session(troll_thread_id, test_path_buf("/tmp/project"))
         },
         turns: Vec::new(),
+        blocks_direct_input: false,
     };
     app.register_spawn_agent_pane(
         troll_thread_id,
@@ -5949,6 +7122,255 @@ async fn native_spawn_registration_persists_started_session_model_provider_pair(
         metadata.reasoning_effort,
         Some(ReasoningEffortConfig::XHigh)
     );
+}
+
+async fn codex_user_pane_remains_interactive_after_liveness_refresh_impl() -> Result<()> {
+    let (app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let mut app = Box::new(app);
+    let mut app_server = start_config_write_test_app_server(&app).await?;
+    let main = app_server.start_thread(&app.config).await?;
+    let main_thread_id = main.session.thread_id;
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+    app.primary_session_configured = Some(main.session.clone());
+    app.thread_event_channels.insert(
+        main_thread_id,
+        ThreadEventChannel::new_with_session(/*capacity*/ 4, main.session, main.turns),
+    );
+
+    let pane_config = app.native_spawn_agent_config()?;
+    let model = app.chat_widget.current_model().to_string();
+    let provider = app.config.model_provider_id.clone();
+    let started = app_server
+        .start_user_pane_thread(
+            &pane_config,
+            model,
+            Some(provider),
+            app.chat_widget.current_reasoning_effort(),
+        )
+        .await?;
+    assert!(
+        !started.blocks_direct_input,
+        "operator-created panes must be server-authored user threads"
+    );
+    let pane_rollout_path = started
+        .session
+        .rollout_path
+        .as_ref()
+        .expect("PFTerminal user pane should have a local rollout path");
+    assert!(
+        pane_rollout_path.is_file(),
+        "a no-task operator pane must be durable immediately after thread/start"
+    );
+    let pane_thread_id = started.session.thread_id;
+    app.register_codex_user_pane(
+        &mut app_server,
+        pane_thread_id,
+        Some("Interactive".to_string()),
+        started,
+    )
+    .await;
+
+    let persisted_pane = app_server
+        .thread_read(pane_thread_id, /*include_turns*/ false)
+        .await?;
+    assert_eq!(
+        persisted_pane.name.as_deref(),
+        Some("Interactive"),
+        "operator-pane creation must persist its friendly name through the app-server authority"
+    );
+
+    let mut tui = crate::tui::test_support::make_test_tui()?;
+    // Selection carries the full replay/reattachment state machine. Pin that nested future on the
+    // heap so this test also guards against accidentally embedding it in its caller's stack frame.
+    Box::pin(app.select_agent_thread(&mut tui, &mut app_server, pane_thread_id)).await?;
+    while app_event_rx.try_recv().is_ok() {}
+    assert!(!app.agent_navigation.is_parent_owned(pane_thread_id));
+    assert_eq!(
+        app.agent_navigation
+            .get(&pane_thread_id)
+            .and_then(|entry| entry.agent_nickname.as_deref()),
+        Some("Interactive"),
+        "liveness refresh must not erase the operator-assigned pane name"
+    );
+
+    app.chat_widget
+        .restore_user_message_to_composer("operator pane input".into());
+    app.chat_widget
+        .handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert!(
+        std::iter::from_fn(|| app_event_rx.try_recv().ok())
+            .any(|event| matches!(event, AppEvent::CodexOp(Op::UserTurn { .. }))),
+        "operator-created pane input must reach the normal user-turn path"
+    );
+    app_server.shutdown().await?;
+    Ok(())
+}
+
+#[test]
+fn codex_user_pane_remains_interactive_after_liveness_refresh() -> Result<()> {
+    // The Rust test harness uses a much smaller stack than the terminal process. Run this
+    // full-App integration fixture on an explicitly sized test thread; the production behavior
+    // remains exercised with the ordinary Tokio runtime and no environment-variable override.
+    std::thread::Builder::new()
+        .name("codex-user-pane-liveness".to_string())
+        .stack_size(16 * 1024 * 1024)
+        .spawn(|| {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?
+                .block_on(codex_user_pane_remains_interactive_after_liveness_refresh_impl())
+        })
+        .expect("spawn user-pane liveness test thread")
+        .join()
+        .expect("user-pane liveness test thread panicked")
+}
+
+#[tokio::test]
+async fn human_addressable_spawn_pane_remains_interactive_after_liveness_refresh() -> Result<()> {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let mut app_server = start_config_write_test_app_server(&app).await?;
+    let main = app_server.start_thread(&app.config).await?;
+    let main_thread_id = main.session.thread_id;
+    app.primary_thread_id = Some(main_thread_id);
+    app.active_thread_id = Some(main_thread_id);
+    app.primary_session_configured = Some(main.session.clone());
+    app.thread_event_channels.insert(
+        main_thread_id,
+        ThreadEventChannel::new_with_session(/*capacity*/ 4, main.session, main.turns),
+    );
+
+    let spawn_config = app.native_spawn_agent_config()?;
+    let model = app.chat_widget.current_model().to_string();
+    let provider = app.config.model_provider_id.clone();
+    let started = app_server
+        .spawn_agent_thread(
+            &spawn_config,
+            main_thread_id,
+            "nazgul".to_string(),
+            Some("Angmar".to_string()),
+            model,
+            Some(provider),
+            app.chat_widget.current_reasoning_effort(),
+            /*base_instructions*/ None,
+        )
+        .await?;
+    assert!(
+        !started.blocks_direct_input,
+        "human-addressable /spawn panes must accept operator input"
+    );
+    let pane_thread_id = started.session.thread_id;
+    app.register_spawn_agent_pane(
+        pane_thread_id,
+        main_thread_id,
+        crate::spawn_orchestration::thread_node_id(main_thread_id),
+        Some("Angmar".to_string()),
+        "nazgul",
+        started,
+        true,
+    )
+    .await;
+
+    let mut tui = crate::tui::test_support::make_test_tui()?;
+    app.select_agent_thread(&mut tui, &mut app_server, pane_thread_id)
+        .await?;
+    while app_event_rx.try_recv().is_ok() {}
+    assert!(!app.agent_navigation.is_parent_owned(pane_thread_id));
+
+    app.chat_widget
+        .restore_user_message_to_composer("manage the Troll and Orc review crew".into());
+    app.chat_widget
+        .handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert!(
+        std::iter::from_fn(|| app_event_rx.try_recv().ok())
+            .any(|event| matches!(event, AppEvent::CodexOp(Op::UserTurn { .. }))),
+        "operator input in a human-addressable /spawn pane must reach the normal user-turn path"
+    );
+    app_server.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_spawn_config_inherits_active_thread_permissions_not_stale_app_defaults() {
+    let mut app = make_test_app().await;
+
+    // Reproduce the real boundary: the app-level config still contains persisted defaults while
+    // the active thread reflects CLI/runtime permission overrides.
+    app.config
+        .permissions
+        .set_permission_profile(PermissionProfile::workspace_write())
+        .expect("workspace profile should be accepted");
+    app.config
+        .permissions
+        .approval_policy
+        .set(AskForApproval::OnRequest.to_core())
+        .expect("on-request should be accepted");
+    app.chat_widget
+        .set_permission_profile_from_session_snapshot(PermissionProfileSnapshot::legacy(
+            PermissionProfile::Disabled,
+        ))
+        .expect("danger-full-access profile should be accepted");
+    app.chat_widget.set_approval_policy(AskForApproval::Never);
+
+    let spawn_config = app
+        .native_spawn_agent_config()
+        .expect("native spawn config");
+
+    assert_eq!(
+        spawn_config.permissions.approval_policy.value(),
+        AskForApproval::Never.to_core()
+    );
+    assert_eq!(
+        spawn_config.permissions.effective_permission_profile(),
+        PermissionProfile::Disabled
+    );
+    assert_eq!(spawn_config.permissions.active_permission_profile(), None);
+}
+
+#[tokio::test]
+async fn app_server_spawn_preserves_active_thread_yolo_permissions() -> Result<()> {
+    let mut app = make_test_app().await;
+    let mut app_server = start_config_write_test_app_server(&app).await?;
+    let main = app_server.start_thread(&app.config).await?;
+
+    app.chat_widget
+        .set_permission_profile_from_session_snapshot(PermissionProfileSnapshot::legacy(
+            PermissionProfile::Disabled,
+        ))?;
+    app.chat_widget.set_approval_policy(AskForApproval::Never);
+    let spawn_config = app.native_spawn_agent_config()?;
+    assert_eq!(
+        spawn_config.permissions.approval_policy.value(),
+        AskForApproval::Never.to_core()
+    );
+    assert_eq!(
+        spawn_config.permissions.effective_permission_profile(),
+        PermissionProfile::Disabled
+    );
+    assert_eq!(spawn_config.permissions.active_permission_profile(), None);
+    let started = app_server
+        .spawn_agent_thread(
+            &spawn_config,
+            main.session.thread_id,
+            "nazgul".to_string(),
+            Some("Angmar".to_string()),
+            app.chat_widget.current_model().to_string(),
+            Some(app.config.model_provider_id.clone()),
+            app.chat_widget.current_reasoning_effort(),
+            /*base_instructions*/ None,
+        )
+        .await?;
+
+    assert_eq!(started.session.approval_policy, AskForApproval::Never);
+    assert_eq!(
+        started.session.permission_profile,
+        PermissionProfile::Disabled
+    );
+    assert_eq!(started.session.active_permission_profile, None);
+    app_server.shutdown().await?;
+    Ok(())
 }
 
 #[test]
@@ -6188,6 +7610,22 @@ async fn native_spawn_auth_guard_blocks_unauthenticated_openai() {
 }
 
 #[tokio::test]
+async fn native_spawn_auth_guard_accepts_openai_api_key_auth() {
+    let mut app = make_test_app().await;
+    app.chat_widget.update_account_state(
+        Some(StatusAccountDisplay::ApiKey),
+        /*plan_type*/ None,
+        /*has_chatgpt_account*/ false,
+        /*has_codex_backend_auth*/ false,
+    );
+
+    assert_eq!(
+        app.native_spawn_provider_auth_error(Some(OPENAI_PROVIDER_ID)),
+        None
+    );
+}
+
+#[tokio::test]
 async fn spawn_provider_allowlist_is_operator_policy_not_model_choice() {
     let mut app = make_test_app().await;
     app.config.agent_provider_allowlist = Some(vec![
@@ -6403,6 +7841,9 @@ async fn open_agent_picker_preserves_running_hints_until_observed_completion() -
         .record_sub_agent_activity(SubAgentActivityDisplay {
             thread_id,
             agent_path: "/root/child".to_string(),
+            agent_nickname: None,
+            agent_role: None,
+            task_preview: None,
             is_running_hint: true,
         });
 
@@ -6412,6 +7853,9 @@ async fn open_agent_picker_preserves_running_hints_until_observed_completion() -
         agent_nickname: None,
         agent_role: None,
         agent_path: Some("/root/child".to_string()),
+        model: None,
+        last_task_message: None,
+        last_result_message: None,
         is_running: true,
         is_closed: false,
     };
@@ -6458,6 +7902,9 @@ async fn open_agent_picker_preserves_running_hints_until_observed_completion() -
         .record_sub_agent_activity(SubAgentActivityDisplay {
             thread_id,
             agent_path: "/root/child".to_string(),
+            agent_nickname: None,
+            agent_role: None,
+            task_preview: None,
             is_running_hint: true,
         });
 
@@ -6537,6 +7984,9 @@ async fn open_agent_picker_selects_path_backed_agent() -> Result<()> {
         .record_sub_agent_activity(SubAgentActivityDisplay {
             thread_id,
             agent_path: "/root/worker".to_string(),
+            agent_nickname: None,
+            agent_role: None,
+            task_preview: None,
             is_running_hint: true,
         });
 
@@ -6754,6 +8204,7 @@ fn selected_and_resumed_threads_use_server_capability_for_v1_and_v2_children() -
                     agent_path: None,
                     agent_nickname: Some(format!("child-{index}")),
                     agent_role: Some("worker".to_string()),
+                    agent_class: None,
                 }),
                 model_provider: Some(app.config.model_provider_id.clone()),
                 multi_agent_version: Some(multi_agent_version),
@@ -6784,6 +8235,9 @@ fn selected_and_resumed_threads_use_server_capability_for_v1_and_v2_children() -
             .record_sub_agent_activity(SubAgentActivityDisplay {
                 thread_id: child_thread_ids[0],
                 agent_path: "/root/child-0".to_string(),
+                agent_nickname: None,
+                agent_role: None,
+                task_preview: None,
                 is_running_hint: true,
             });
         app.thread_event_channels.remove(&child_thread_ids[1]);
@@ -6799,6 +8253,9 @@ fn selected_and_resumed_threads_use_server_capability_for_v1_and_v2_children() -
                 agent_nickname: Some("child-0".to_string()),
                 agent_role: Some("worker".to_string()),
                 agent_path: Some("/root/child-0".to_string()),
+                model: None,
+                last_task_message: None,
+                last_result_message: None,
                 is_running: true,
                 is_closed: false,
             })
@@ -6839,6 +8296,7 @@ fn selected_and_resumed_threads_use_server_capability_for_v1_and_v2_children() -
                 app.config.clone(),
                 child_thread_ids[1],
                 app.resume_model_settings(),
+                app.resume_permission_settings(),
             )
             .await?;
         assert!(resumed.blocks_direct_input);
@@ -6866,7 +8324,7 @@ fn selected_and_resumed_threads_use_server_capability_for_v1_and_v2_children() -
 }
 
 #[test]
-fn attach_live_thread_for_selection_rejects_empty_non_ephemeral_fallback_threads() -> Result<()> {
+fn attach_live_thread_for_selection_accepts_empty_live_threads() -> Result<()> {
     const WORKER_THREADS: usize = 1;
     const TEST_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
 
@@ -6894,16 +8352,15 @@ fn attach_live_thread_for_selection_rejects_empty_non_ephemeral_fallback_threads
             /*is_closed*/ false,
         );
 
-        let err = app
+        let live_attached = app
             .attach_live_thread_for_selection(&mut app_server, thread_id)
-            .await
-            .expect_err("empty fallback should not attach as a blank replay-only thread");
+            .await?;
 
-        assert_eq!(
-            err.to_string(),
-            format!("Agent thread {thread_id} is not yet available for replay or live attach.")
+        assert!(
+            live_attached,
+            "fresh durable panes must retain their live listener"
         );
-        assert!(!app.thread_event_channels.contains_key(&thread_id));
+        assert!(app.thread_event_channels.contains_key(&thread_id));
         Ok(())
     })
 }
@@ -7020,6 +8477,7 @@ async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()
             config,
             parent_thread_id,
             crate::app_server_session::ResumeModelSettings::RestoreFromThread,
+            crate::app_server_session::ResumePermissionSettings::RestoreFromThread,
         )
         .await?;
     app.enqueue_primary_thread_session(started.session, started.turns)
@@ -9756,6 +11214,7 @@ async fn make_test_app() -> App {
         orchestrate_now_override: None,
         orchestrate_idle_generation_by_target: Box::new(HashMap::new()),
         side_threads: HashMap::new(),
+        claude_panes: Default::default(),
         abandoned_side_threads: HashSet::new(),
         active_thread_id: None,
         active_thread_rx: None,
@@ -9852,6 +11311,7 @@ async fn make_test_app_with_channels() -> (
             orchestrate_now_override: None,
             orchestrate_idle_generation_by_target: Box::new(HashMap::new()),
             side_threads: HashMap::new(),
+            claude_panes: Default::default(),
             abandoned_side_threads: HashSet::new(),
             active_thread_id: None,
             active_thread_rx: None,
@@ -11667,6 +13127,7 @@ async fn prompt_edit_forks_before_selected_prompt_and_preserves_source() -> Resu
             config.clone(),
             source_thread_id,
             crate::app_server_session::ResumeModelSettings::OverrideFromCurrentConfig,
+            crate::app_server_session::ResumePermissionSettings::OverrideFromCurrentConfig,
         )
         .await?;
     app.enqueue_primary_thread_session(started.session, started.turns)
@@ -11776,6 +13237,7 @@ async fn prompt_edit_before_first_prompt_starts_fresh_thread() -> Result<()> {
             config.clone(),
             source_thread_id,
             crate::app_server_session::ResumeModelSettings::OverrideFromCurrentConfig,
+            crate::app_server_session::ResumePermissionSettings::OverrideFromCurrentConfig,
         )
         .await?;
     app.enqueue_primary_thread_session(started.session, started.turns)
@@ -12914,4 +14376,24 @@ async fn closed_nazgul_binding_is_stale_and_requires_rebind() {
     assert_eq!(app.spawn_nazgul_pane_id, None);
     assert!(app.spawn_nazgul_rebind_required);
     assert!(app.resolve_spawn_task_target("Nazgul").is_err());
+}
+
+#[tokio::test]
+async fn background_history_insertion_requests_a_frame_without_user_input() -> Result<()> {
+    let mut app = make_test_app().await;
+    let mut tui = crate::tui::test_support::make_test_tui()?;
+    let mut draw_requests = tui.subscribe_draw_requests();
+
+    app.insert_history_cell(
+        &mut tui,
+        Box::new(PlainHistoryCell::new(vec![Line::from(
+            "asynchronous vault result",
+        )])),
+    );
+
+    tokio::time::timeout(Duration::from_millis(250), draw_requests.recv())
+        .await
+        .expect("history insertion should schedule a frame")
+        .expect("draw notification channel should remain open");
+    Ok(())
 }

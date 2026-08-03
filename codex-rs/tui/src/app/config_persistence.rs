@@ -6,6 +6,11 @@
 
 use super::*;
 use codex_config::ConfigLayerSource;
+use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
+use codex_model_provider_info::AMBIENT_KIMI_K2_7_CODE_MODEL;
+use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
+use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
+use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 #[cfg(target_os = "windows")]
 use codex_utils_approval_presets::ApprovalPreset;
 
@@ -53,6 +58,52 @@ pub(super) fn resume_model_settings_for_overrides(
         crate::app_server_session::ResumeModelSettings::OverrideFromCurrentConfig
     } else {
         crate::app_server_session::ResumeModelSettings::RestoreFromThread
+    }
+}
+
+/// A resume inherits the thread's last acknowledged permission contract unless this invocation
+/// explicitly selected a different contract. User config remains the default for new threads;
+/// only CLI/session flags and a selected profile are resume overrides.
+pub(super) fn resume_permission_settings_for_overrides(
+    config: &Config,
+    harness_overrides: &ConfigOverrides,
+) -> crate::app_server_session::ResumePermissionSettings {
+    let has_layer_override = config
+        .config_layer_stack
+        .layers_high_to_low()
+        .into_iter()
+        .any(|layer| {
+            matches!(
+                &layer.name,
+                ConfigLayerSource::SessionFlags
+                    | ConfigLayerSource::User {
+                        profile: Some(_),
+                        ..
+                    }
+            ) && [
+                "approval_policy",
+                "approvals_reviewer",
+                "sandbox_mode",
+                "default_permissions",
+                "permission_profiles",
+                "sandbox_workspace_write",
+                "workspace_roots",
+            ]
+            .iter()
+            .any(|key| layer.config.get(*key).is_some())
+        });
+    if harness_overrides.approval_policy.is_some()
+        || harness_overrides.approvals_reviewer.is_some()
+        || harness_overrides.sandbox_mode.is_some()
+        || harness_overrides.permission_profile.is_some()
+        || harness_overrides.default_permissions.is_some()
+        || !harness_overrides.additional_writable_roots.is_empty()
+        || harness_overrides.workspace_roots.is_some()
+        || has_layer_override
+    {
+        crate::app_server_session::ResumePermissionSettings::OverrideFromCurrentConfig
+    } else {
+        crate::app_server_session::ResumePermissionSettings::RestoreFromThread
     }
 }
 
@@ -880,6 +931,12 @@ impl App {
         resume_model_settings_for_overrides(&self.config, &self.harness_overrides)
     }
 
+    pub(crate) fn resume_permission_settings(
+        &self,
+    ) -> crate::app_server_session::ResumePermissionSettings {
+        resume_permission_settings_for_overrides(&self.config, &self.harness_overrides)
+    }
+
     pub(super) fn on_update_personality(&mut self, personality: Personality) {
         self.config.personality = Some(personality);
         self.chat_widget.set_personality(personality);
@@ -1473,6 +1530,78 @@ mod tests {
         assert_eq!(
             app.resume_model_settings(),
             crate::app_server_session::ResumeModelSettings::OverrideFromCurrentConfig
+        );
+    }
+
+    #[tokio::test]
+    async fn resume_permission_settings_preserves_only_explicit_permission_overrides() {
+        let mut app = make_test_app().await;
+
+        assert_eq!(
+            app.resume_permission_settings(),
+            crate::app_server_session::ResumePermissionSettings::RestoreFromThread
+        );
+        let profile_path = test_path_buf("/tmp/work.config.toml").abs();
+        let profile = "work"
+            .parse::<codex_config::ProfileV2Name>()
+            .expect("valid profile name");
+        for key in [
+            "approval_policy",
+            "approvals_reviewer",
+            "sandbox_mode",
+            "default_permissions",
+            "permission_profiles",
+            "sandbox_workspace_write",
+            "workspace_roots",
+        ] {
+            let config = TomlValue::Table(toml::map::Map::from_iter([(
+                key.to_string(),
+                TomlValue::String("value".to_string()),
+            )]));
+            app.config.config_layer_stack = ConfigLayerStack::new(
+                vec![ConfigLayerEntry::new(
+                    ConfigLayerSource::SessionFlags,
+                    config.clone(),
+                )],
+                Default::default(),
+                Default::default(),
+            )
+            .expect("session flags layer stack");
+            assert_eq!(
+                app.resume_permission_settings(),
+                crate::app_server_session::ResumePermissionSettings::OverrideFromCurrentConfig
+            );
+
+            app.config.config_layer_stack = ConfigLayerStack::default()
+                .with_user_config_profile(&profile_path, Some(&profile), config)
+                .expect("user config profile layer stack");
+            assert_eq!(
+                app.resume_permission_settings(),
+                crate::app_server_session::ResumePermissionSettings::OverrideFromCurrentConfig
+            );
+        }
+
+        app.config.config_layer_stack = ConfigLayerStack::default()
+            .with_user_config(
+                &profile_path,
+                TomlValue::Table(toml::map::Map::from_iter([(
+                    "sandbox_mode".to_string(),
+                    TomlValue::String("danger-full-access".to_string()),
+                )])),
+            )
+            .expect("user config layer stack");
+        assert_eq!(
+            app.resume_permission_settings(),
+            crate::app_server_session::ResumePermissionSettings::RestoreFromThread
+        );
+
+        app.harness_overrides.sandbox_mode =
+            Some(codex_protocol::config_types::SandboxMode::WorkspaceWrite);
+        app.harness_overrides.approval_policy =
+            Some(codex_protocol::protocol::AskForApproval::Never);
+        assert_eq!(
+            app.resume_permission_settings(),
+            crate::app_server_session::ResumePermissionSettings::OverrideFromCurrentConfig
         );
     }
 

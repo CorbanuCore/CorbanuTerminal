@@ -12,6 +12,8 @@ use codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR;
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_API_KEY_ENV_VAR;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
+use codex_model_provider_info::DEEPSEEK_API_KEY_ENV_VAR;
+use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_API_KEY_ENV_VAR;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::META_API_KEY_ENV_VAR;
@@ -73,6 +75,11 @@ const PROVIDER_CREDENTIAL_OPTIONS: &[ProviderCredentialOption] = &[
         provider_id: ZAI_PROVIDER_ID,
         provider_name: "Z.AI",
         env_key: ZAI_API_KEY_ENV_VAR,
+    },
+    ProviderCredentialOption::ProviderApiKey {
+        provider_id: DEEPSEEK_PROVIDER_ID,
+        provider_name: "DeepSeek",
+        env_key: DEEPSEEK_API_KEY_ENV_VAR,
     },
     ProviderCredentialOption::ProviderApiKey {
         provider_id: OPENROUTER_PROVIDER_ID,
@@ -375,31 +382,43 @@ fn provider_credential_item(
     api_key_status: &impl Fn(&str) -> String,
 ) -> SelectionItem {
     match option {
-        ProviderCredentialOption::CodexAccount => SelectionItem {
-            name: "Provider: OpenAI Codex Account".to_string(),
-            description: Some(codex_account_status.to_string()),
-            actions: vec![Box::new(|tx| {
-                tx.send(AppEvent::OpenCodexAccountDeviceLogin);
-            })],
-            dismiss_on_select: true,
-            ..Default::default()
-        },
-        ProviderCredentialOption::ClaudeCodePlan => SelectionItem {
-            name: "Provider: Claude Code Plan".to_string(),
-            description: Some(claude_status.to_string()),
-            actions: vec![Box::new(|tx| {
-                tx.send(AppEvent::OpenClaudeCodePlanLogin);
-            })],
-            dismiss_on_select: true,
-            ..Default::default()
-        },
-        ProviderCredentialOption::PfTerminalPlan => SelectionItem {
-            name: "Provider: PfTerminal Plan".to_string(),
-            description: Some(pfterminal_plan_status.to_string()),
-            actions: vec![Box::new(|tx| tx.send(AppEvent::OpenWallet))],
-            dismiss_on_select: true,
-            ..Default::default()
-        },
+        ProviderCredentialOption::CodexAccount => {
+            let name = "Provider: OpenAI Codex Account".to_string();
+            SelectionItem {
+                name: name.clone(),
+                search_value: Some(name),
+                description: Some(codex_account_status.to_string()),
+                actions: vec![Box::new(|tx| {
+                    tx.send(AppEvent::OpenCodexAccountDeviceLogin);
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            }
+        }
+        ProviderCredentialOption::ClaudeCodePlan => {
+            let name = "Provider: Claude Code Plan".to_string();
+            SelectionItem {
+                name: name.clone(),
+                search_value: Some(name),
+                description: Some(claude_status.to_string()),
+                actions: vec![Box::new(|tx| {
+                    tx.send(AppEvent::OpenClaudeCodePlanLogin);
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            }
+        }
+        ProviderCredentialOption::PfTerminalPlan => {
+            let name = "Provider: PfTerminal Plan".to_string();
+            SelectionItem {
+                name: name.clone(),
+                search_value: Some(name),
+                description: Some(pfterminal_plan_status.to_string()),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenWallet))],
+                dismiss_on_select: true,
+                ..Default::default()
+            }
+        }
         ProviderCredentialOption::ProviderApiKey {
             provider_id,
             provider_name,
@@ -408,8 +427,10 @@ fn provider_credential_item(
             let provider_id = provider_id.to_string();
             let provider_name = provider_name.to_string();
             let env_key = env_key.to_string();
+            let name = provider_credential_display_name(&provider_name, &env_key);
             SelectionItem {
-                name: provider_credential_display_name(&provider_name, &env_key),
+                name: name.clone(),
+                search_value: Some(name),
                 description: Some(api_key_status(&env_key)),
                 actions: vec![Box::new(move |tx| {
                     tx.send(AppEvent::OpenProviderApiKeyAdd {
@@ -460,6 +481,7 @@ fn provider_credential_display_name(provider_name: &str, env_key: &str) -> Strin
         "AMBIENT_API_KEY" => "API Key",
         "KIMI_API_KEY" => "API Key",
         "ZAI_API_KEY" => "API Key",
+        "DEEPSEEK_API_KEY" => "API Key",
         "OPENROUTER_API_KEY" => "API Key",
         "MODEL_API_KEY" => "API Key",
         "BASETEN_API_KEY" => "API Key",
@@ -635,6 +657,7 @@ mod tests {
                 "Provider: Ambient API Key",
                 "Provider: Kimi Code API Key",
                 "Provider: Z.AI API Key",
+                "Provider: DeepSeek API Key",
                 "Provider: OpenRouter API Key",
                 "Provider: Meta API Key",
                 "Provider: Baseten API Key",
@@ -652,6 +675,13 @@ mod tests {
         );
         assert_eq!(rows[3].description.as_deref(), Some("Not configured"));
         assert_eq!(rows[4].description.as_deref(), Some("Not configured"));
+    }
+
+    #[test]
+    fn every_provider_row_is_searchable_by_its_visible_name() {
+        for row in test_provider_rows() {
+            assert_eq!(row.search_value.as_deref(), Some(row.name.as_str()));
+        }
     }
 
     #[test]
@@ -700,6 +730,15 @@ mod tests {
                 if provider_id == KIMI_CODE_PROVIDER_ID
                     && provider_name == "Kimi Code"
                     && env_key == KIMI_CODE_API_KEY_ENV_VAR
+        ));
+
+        (rows[7].actions[0])(&sender);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::OpenProviderApiKeyAdd { provider_id, provider_name, env_key })
+                if provider_id == DEEPSEEK_PROVIDER_ID
+                    && provider_name == "DeepSeek"
+                    && env_key == DEEPSEEK_API_KEY_ENV_VAR
         ));
     }
 

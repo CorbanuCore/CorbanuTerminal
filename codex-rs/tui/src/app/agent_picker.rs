@@ -124,7 +124,8 @@ impl App {
             }
             let agent_path = crate::app_server_session::source_agent_path(&thread.source);
             let agent_nickname = thread
-                .agent_nickname
+                .name
+                .or(thread.agent_nickname)
                 .or_else(|| previous.and_then(|entry| entry.agent_nickname.clone()));
             let agent_role = thread
                 .agent_role

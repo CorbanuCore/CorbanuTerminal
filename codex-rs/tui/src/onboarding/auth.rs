@@ -87,6 +87,7 @@ pub(crate) enum SignInState {
     ChatGptSuccessMessage,
     ChatGptSuccess,
     ApiKeyEntry(ApiKeyInputState),
+    ApiKeySaving,
     ApiKeyConfigured {
         provider: Option<String>,
     },
@@ -501,7 +502,7 @@ impl AuthModeWidget {
     }
 
     fn render_pick_mode(&self, area: Rect, buf: &mut Buffer) {
-        let mut lines: Vec<Line> = if self.provider_picker_enabled() {
+        let header_lines: Vec<Line> = if self.provider_picker_enabled() {
             vec![
                 Line::from(vec![
                     "  ".into(),
@@ -571,10 +572,12 @@ impl AuthModeWidget {
         };
         let device_code_description = "Sign in from another device with a one-time code";
 
-        for (idx, option) in self.displayed_sign_in_options().into_iter().enumerate() {
+        let displayed_options = self.displayed_sign_in_options();
+        let mut option_lines = Vec::new();
+        for (idx, option) in displayed_options.iter().copied().enumerate() {
             match option {
                 SignInOption::ChatGpt => {
-                    lines.extend(create_mode_item(
+                    option_lines.extend(create_mode_item(
                         idx,
                         option,
                         "Sign in with ChatGPT",
@@ -587,7 +590,7 @@ impl AuthModeWidget {
                     } else {
                         ("Sign in with Device Code", device_code_description)
                     };
-                    lines.extend(create_mode_item(idx, option, text, description));
+                    option_lines.extend(create_mode_item(idx, option, text, description));
                 }
                 SignInOption::ApiKey => {
                     let text = if self.provider_api_key_required() {
@@ -595,7 +598,12 @@ impl AuthModeWidget {
                     } else {
                         "Provide your own API key".to_string()
                     };
-                    lines.extend(create_mode_item(idx, option, &text, "Pay for what you use"));
+                    option_lines.extend(create_mode_item(
+                        idx,
+                        option,
+                        &text,
+                        "Pay for what you use",
+                    ));
                 }
                 SignInOption::ProviderApiKey(provider_index) => {
                     if let Some(provider) = self.api_key_provider_options.get(provider_index) {
@@ -604,34 +612,64 @@ impl AuthModeWidget {
                             crate::onboarding::onboarding_screen::provider_api_key_display_name(
                                 provider,
                             );
-                        lines.extend(create_mode_item(idx, option, &text, &description));
+                        option_lines.extend(create_mode_item(idx, option, &text, &description));
                     }
                 }
             }
-            lines.push("".into());
+            option_lines.push("".into());
         }
 
+        let mut footer_lines = Vec::new();
         if !self.is_api_login_allowed() {
-            lines.push(
+            footer_lines.push(
                 "  API key login is disabled by this workspace. Sign in with ChatGPT to continue."
                     .dim()
                     .into(),
             );
-            lines.push("".into());
+            footer_lines.push("".into());
         }
-        lines.push(Line::from(vec![
-            "  Press ".dim(),
+        footer_lines.push(Line::from(vec![
+            "  Use ↑/↓ to choose · Press ".dim(),
             self.confirm_binding().into(),
             " to continue".dim(),
         ]));
         if let Some(err) = self.error_message() {
-            lines.push("".into());
-            lines.push(err.red().into());
+            footer_lines.push("".into());
+            footer_lines.push(err.red().into());
         }
 
-        Paragraph::new(lines)
+        let header_height = (header_lines.len() as u16).min(area.height);
+        let footer_height = (footer_lines.len() as u16).min(area.height - header_height);
+        let options_height = area.height - header_height - footer_height;
+        let header_area = Rect::new(area.x, area.y, area.width, header_height);
+        let options_area = Rect::new(area.x, area.y + header_height, area.width, options_height);
+        let footer_area = Rect::new(
+            area.x,
+            area.bottom() - footer_height,
+            area.width,
+            footer_height,
+        );
+
+        Paragraph::new(header_lines)
             .wrap(Wrap { trim: false })
-            .render(area, buf);
+            .render(header_area, buf);
+
+        let selected_option_index = displayed_options
+            .iter()
+            .position(|option| *option == self.highlighted_mode)
+            .unwrap_or(0);
+        let selected_end_line = selected_option_index.saturating_mul(3).saturating_add(2);
+        let option_scroll = selected_end_line
+            .saturating_sub(options_height.saturating_sub(1) as usize)
+            .min(u16::MAX as usize) as u16;
+        Paragraph::new(option_lines)
+            .wrap(Wrap { trim: false })
+            .scroll((option_scroll, 0))
+            .render(options_area, buf);
+
+        Paragraph::new(footer_lines)
+            .wrap(Wrap { trim: false })
+            .render(footer_area, buf);
     }
 
     fn render_continue_in_browser(&self, area: Rect, buf: &mut Buffer) {
@@ -772,6 +810,23 @@ impl AuthModeWidget {
         Paragraph::new(lines)
             .wrap(Wrap { trim: false })
             .render(area, buf);
+    }
+
+    fn render_api_key_saving(&self, area: Rect, buf: &mut Buffer) {
+        let provider = if self.provider_api_key_required() {
+            format!("{} API key", self.api_key_provider_label())
+        } else {
+            "API key".to_string()
+        };
+        Paragraph::new(vec![
+            format!("  Saving {provider} securely…").into(),
+            "".into(),
+            "  Keep PFTerminal open while the encrypted vault is updated."
+                .dim()
+                .into(),
+        ])
+        .wrap(Wrap { trim: false })
+        .render(area, buf);
     }
 
     fn render_api_key_entry(&self, area: Rect, buf: &mut Buffer, state: &ApiKeyInputState) {
@@ -975,6 +1030,13 @@ impl AuthModeWidget {
             .api_key_env_var
             .as_ref()
             .map(|_| self.api_key_provider_id.clone());
+        {
+            let mut state = self.sign_in_state.write().unwrap();
+            if matches!(&*state, SignInState::ApiKeySaving) {
+                return;
+            }
+            *state = SignInState::ApiKeySaving;
+        }
         let request_handle = self.app_server_request_handle.clone();
         let sign_in_state = self.sign_in_state.clone();
         let error = self.error.clone();
@@ -1154,6 +1216,7 @@ impl StepStateProvider for AuthModeWidget {
         match &*sign_in_state {
             SignInState::PickMode
             | SignInState::ApiKeyEntry(_)
+            | SignInState::ApiKeySaving
             | SignInState::ChatGptContinueInBrowser(_)
             | SignInState::ChatGptDeviceCode(_)
             | SignInState::ChatGptSuccessMessage => StepState::InProgress,
@@ -1185,6 +1248,9 @@ impl WidgetRef for AuthModeWidget {
             }
             SignInState::ApiKeyEntry(state) => {
                 self.render_api_key_entry(area, buf, state);
+            }
+            SignInState::ApiKeySaving => {
+                self.render_api_key_saving(area, buf);
             }
             SignInState::ApiKeyConfigured { .. } => {
                 self.render_api_key_configured(area, buf);
@@ -1386,6 +1452,74 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn provider_key_picker_scrolls_to_the_highlighted_provider_in_a_short_terminal() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.forced_login_method = Some(ForcedLoginMethod::Api);
+        widget.api_key_provider_options = vec![
+            ApiKeyProviderOption {
+                id: "anthropic".to_string(),
+                name: "Anthropic".to_string(),
+                env_var: "ANTHROPIC_API_KEY".to_string(),
+            },
+            ApiKeyProviderOption {
+                id: "ambient".to_string(),
+                name: "Ambient".to_string(),
+                env_var: "AMBIENT_API_KEY".to_string(),
+            },
+            ApiKeyProviderOption {
+                id: "kimi-code".to_string(),
+                name: "Kimi Code".to_string(),
+                env_var: "KIMI_API_KEY".to_string(),
+            },
+            ApiKeyProviderOption {
+                id: "zai".to_string(),
+                name: "Z.AI".to_string(),
+                env_var: "ZAI_API_KEY".to_string(),
+            },
+            ApiKeyProviderOption {
+                id: "openrouter".to_string(),
+                name: "OpenRouter".to_string(),
+                env_var: "OPENROUTER_API_KEY".to_string(),
+            },
+            ApiKeyProviderOption {
+                id: "meta".to_string(),
+                name: "Meta".to_string(),
+                env_var: "MODEL_API_KEY".to_string(),
+            },
+            ApiKeyProviderOption {
+                id: "baseten".to_string(),
+                name: "Baseten".to_string(),
+                env_var: "BASETEN_API_KEY".to_string(),
+            },
+            ApiKeyProviderOption {
+                id: "vercel".to_string(),
+                name: "Vercel".to_string(),
+                env_var: "AI_GATEWAY_API_KEY".to_string(),
+            },
+            ApiKeyProviderOption {
+                id: "deepseek".to_string(),
+                name: "DeepSeek".to_string(),
+                env_var: "DEEPSEEK_API_KEY".to_string(),
+            },
+        ];
+        widget.highlighted_mode = SignInOption::ProviderApiKey(8);
+
+        let area = Rect::new(0, 0, 80, 14);
+        let mut buf = Buffer::empty(area);
+        widget.render_pick_mode(area, &mut buf);
+        let rendered = buffer_text(&buf, area);
+
+        assert!(
+            rendered.contains("> 10. Provider: DeepSeek API Key"),
+            "highlighted provider must stay visible:\n{rendered}"
+        );
+        assert!(
+            rendered.contains("Use ↑/↓ to choose"),
+            "navigation instructions must remain visible:\n{rendered}"
+        );
+    }
+
+    #[tokio::test]
     async fn provider_key_picker_device_code_selection_starts_login() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
         widget.forced_login_method = Some(ForcedLoginMethod::Api);
@@ -1462,6 +1596,25 @@ mod tests {
             SignInState::PickMode
         ));
         assert_eq!(widget.login_status, LoginStatus::NotAuthenticated);
+    }
+
+    #[tokio::test]
+    async fn provider_api_key_save_is_single_flight() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.forced_login_method = None;
+        widget.api_key_provider_id = "deepseek".to_string();
+        widget.api_key_provider_name = "DeepSeek".to_string();
+        widget.api_key_env_var = Some("DEEPSEEK_API_KEY".to_string());
+        *widget.sign_in_state.write().unwrap() =
+            SignInState::ApiKeyEntry(ApiKeyInputState::default());
+
+        widget.save_api_key("first-key".to_string());
+        widget.save_api_key("second-key".to_string());
+
+        assert!(matches!(
+            &*widget.sign_in_state.read().unwrap(),
+            SignInState::ApiKeySaving
+        ));
     }
 
     #[tokio::test]

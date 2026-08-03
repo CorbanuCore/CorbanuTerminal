@@ -385,7 +385,7 @@ async fn sandbox_ignores_missing_writable_roots_under_bwrap() {
     std::fs::create_dir(&existing_root).expect("create existing root");
 
     let output = run_cmd_result_with_writable_roots(
-        &["bash", "-lc", "printf sandbox-ok"],
+        &["bash", "-c", "printf sandbox-ok"],
         &[existing_root, missing_root],
         LONG_TIMEOUT_MS,
         /*use_legacy_landlock*/ false,

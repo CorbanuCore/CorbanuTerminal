@@ -26,6 +26,9 @@ use std::fmt;
 use std::num::NonZeroU64;
 use std::time::Duration;
 
+const DEFAULT_ANTHROPIC_REQUEST_BODY_MAX_BYTES: usize = 30_000_000;
+const DEFAULT_ANTHROPIC_RETRY_BODY_MAX_BYTES: usize = 15_000_000;
+
 const DEFAULT_STREAM_IDLE_TIMEOUT_MS: u64 = 600_000;
 const DEFAULT_STREAM_ACTIONABLE_TIMEOUT_MS: u64 = 180_000;
 const DEFAULT_STREAM_LONG_FAILURE_RETRY_THRESHOLD_MS: u64 = 60_000;
@@ -117,6 +120,11 @@ const OPENROUTER_ANTHROPIC_PROVIDER_NAME: &str = "OpenRouter Anthropic";
 pub const OPENROUTER_ANTHROPIC_PROVIDER_ID: &str = "openrouter-anthropic";
 pub const OPENROUTER_DEFAULT_MODEL: &str = "z-ai/glm-5.2";
 pub const OPENROUTER_API_KEY_ENV_VAR: &str = "OPENROUTER_API_KEY";
+const DEEPSEEK_PROVIDER_NAME: &str = "DeepSeek";
+pub const DEEPSEEK_PROVIDER_ID: &str = "deepseek";
+pub const DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com";
+pub const DEEPSEEK_DEFAULT_MODEL: &str = "deepseek-v4-flash";
+pub const DEEPSEEK_API_KEY_ENV_VAR: &str = "DEEPSEEK_API_KEY";
 const META_PROVIDER_NAME: &str = "Meta";
 pub const META_PROVIDER_ID: &str = "meta";
 pub const META_BASE_URL: &str = "https://api.meta.ai/v1";
@@ -160,7 +168,7 @@ pub const VERCEL_API_KEY_ENV_VAR: &str = "AI_GATEWAY_API_KEY";
 
 /// Built-in catalog providers eligible for impossible-pair correction. User-defined providers
 /// (e.g. a private Azure deployment) are never second-guessed.
-const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 17] = [
+const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 18] = [
     OPENAI_PROVIDER_ID,
     ANTHROPIC_PROVIDER_ID,
     CLAUDE_PLAN_PROVIDER_ID,
@@ -171,6 +179,7 @@ const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 17] = [
     ZAI_ANTHROPIC_PROVIDER_ID,
     OPENROUTER_PROVIDER_ID,
     OPENROUTER_ANTHROPIC_PROVIDER_ID,
+    DEEPSEEK_PROVIDER_ID,
     META_PROVIDER_ID,
     BASETEN_PROVIDER_ID,
     BASETEN_ANTHROPIC_PROVIDER_ID,
@@ -225,6 +234,9 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     if model == META_DEFAULT_MODEL {
         return Some(META_PROVIDER_ID);
     }
+    if model == DEEPSEEK_DEFAULT_MODEL {
+        return Some(DEEPSEEK_PROVIDER_ID);
+    }
     if matches!(
         model,
         OPENROUTER_DEFAULT_MODEL
@@ -233,6 +245,7 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
             | "google/gemini-3.5-flash"
             | "x-ai/grok-4.5"
             | "deepseek/deepseek-v4-pro"
+            | "deepseek/deepseek-v4-flash-0731"
             | "tencent/hy3:free"
             | "moonshotai/kimi-k3"
     ) {
@@ -267,6 +280,7 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
 /// - the Claude plan models off `claude-plan`;
 /// - bare `glm-…` slugs (Z.AI-direct ids) off either Z.AI dialect;
 /// - the bare `k3` subscription model off Kimi Code;
+/// - the bare DeepSeek Responses model off the direct DeepSeek provider;
 /// - bare `gpt-…` slugs off OpenAI (Bedrock uses `openai.gpt-…` ids).
 ///
 /// Servable-but-unusual pairs (e.g. ambient serving `z-ai/glm-5.2`), unknown models, and
@@ -298,6 +312,9 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     }
     if model == KIMI_CODE_K3_MODEL && provider != KIMI_CODE_PROVIDER_ID {
         return Some(KIMI_CODE_PROVIDER_ID);
+    }
+    if model == DEEPSEEK_DEFAULT_MODEL && provider != DEEPSEEK_PROVIDER_ID {
+        return Some(DEEPSEEK_PROVIDER_ID);
     }
     if model.starts_with("gpt-") && provider != OPENAI_PROVIDER_ID {
         return Some(OPENAI_PROVIDER_ID);
@@ -361,6 +378,10 @@ pub fn resolve_model_for_provider(
             Some(model) if !model.trim().is_empty() => Some(model),
             _ => Some(OPENROUTER_DEFAULT_MODEL.to_string()),
         },
+        DEEPSEEK_PROVIDER_ID => match model {
+            Some(model) if model.trim() == DEEPSEEK_DEFAULT_MODEL => Some(model),
+            _ => Some(DEEPSEEK_DEFAULT_MODEL.to_string()),
+        },
         META_PROVIDER_ID => match model {
             Some(model) if model.trim() == META_DEFAULT_MODEL => Some(model),
             _ => Some(META_DEFAULT_MODEL.to_string()),
@@ -421,6 +442,7 @@ fn provider_api_key_vault_instructions() -> String {
         "  Provider: Ambient API Key     Store AMBIENT_API_KEY in the vault",
         "  Provider: Kimi Code API Key   Store KIMI_API_KEY in the vault",
         "  Provider: Z.AI API Key        Store ZAI_API_KEY in the vault",
+        "  Provider: DeepSeek API Key    Store DEEPSEEK_API_KEY in the vault",
         "  Provider: OpenRouter API Key  Store OPENROUTER_API_KEY in the vault",
         "  Provider: Meta API Key        Store MODEL_API_KEY in the vault",
         "  Provider: Baseten API Key     Store BASETEN_API_KEY in the vault",
@@ -443,7 +465,7 @@ const AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_VALUE: &str = "codex";
 pub const LEGACY_OLLAMA_CHAT_PROVIDER_ID: &str = "ollama-chat";
 pub const OLLAMA_CHAT_PROVIDER_REMOVED_ERROR: &str = "`ollama-chat` is no longer supported.\nHow to fix: replace `ollama-chat` with `ollama` in `model_provider`, `oss_provider`, or `--local-provider`.\nMore info: https://github.com/openai/codex/discussions/7782";
 const OSS_PROVIDER_NAME: &str = "gpt-oss";
-pub const BUILT_IN_MODEL_PROVIDER_NAMES: [&str; 15] = [
+pub const BUILT_IN_MODEL_PROVIDER_NAMES: [&str; 16] = [
     OPENAI_PROVIDER_NAME,
     ANTHROPIC_PROVIDER_NAME,
     CLAUDE_PLAN_PROVIDER_NAME,
@@ -451,6 +473,7 @@ pub const BUILT_IN_MODEL_PROVIDER_NAMES: [&str; 15] = [
     KIMI_CODE_PROVIDER_NAME,
     ZAI_PROVIDER_NAME,
     ZAI_ANTHROPIC_PROVIDER_NAME,
+    DEEPSEEK_PROVIDER_NAME,
     OPENROUTER_PROVIDER_NAME,
     BASETEN_PROVIDER_NAME,
     BASETEN_ANTHROPIC_PROVIDER_NAME,
@@ -515,6 +538,25 @@ impl<'de> Deserialize<'de> for WireApi {
     }
 }
 
+/// Typed request and provider-tool budgets for a provider route.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct ProviderRuntimePolicy {
+    pub request_body_max_bytes: usize,
+    pub retry_request_body_max_bytes: usize,
+    pub web_search_max_uses: Option<u32>,
+}
+
+impl Default for ProviderRuntimePolicy {
+    fn default() -> Self {
+        Self {
+            request_body_max_bytes: DEFAULT_ANTHROPIC_REQUEST_BODY_MAX_BYTES,
+            retry_request_body_max_bytes: DEFAULT_ANTHROPIC_RETRY_BODY_MAX_BYTES,
+            web_search_max_uses: None,
+        }
+    }
+}
+
 /// Serializable representation of a provider definition.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
@@ -570,6 +612,9 @@ pub struct ModelProviderInfo {
     pub stream_long_failure_retry_threshold_ms: Option<u64>,
     /// Maximum retry count for long stream failures. Values above one are clamped to one.
     pub stream_long_failure_max_retries: Option<u64>,
+    /// Typed request and provider-tool budgets.
+    #[serde(default)]
+    pub runtime_policy: ProviderRuntimePolicy,
     /// Maximum time (in milliseconds) to wait for a websocket connection attempt before treating
     /// it as failed.
     pub websocket_connect_timeout_ms: Option<u64>,
@@ -599,6 +644,21 @@ pub struct ModelProviderAwsAuthInfo {
 
 impl ModelProviderInfo {
     pub fn validate(&self) -> std::result::Result<(), String> {
+        if self.runtime_policy.request_body_max_bytes == 0 {
+            return Err("runtime_policy.request_body_max_bytes must be greater than zero".into());
+        }
+        if self.runtime_policy.retry_request_body_max_bytes == 0
+            || self.runtime_policy.retry_request_body_max_bytes
+                > self.runtime_policy.request_body_max_bytes
+        {
+            return Err(
+                "runtime_policy.retry_request_body_max_bytes must be nonzero and no greater than request_body_max_bytes"
+                    .into(),
+            );
+        }
+        if self.runtime_policy.web_search_max_uses == Some(0) {
+            return Err("runtime_policy.web_search_max_uses must be greater than zero".into());
+        }
         if let Some(chat_completions_provider) = &self.chat_completions_provider
             && !chat_completions_provider.is_object()
         {
@@ -803,6 +863,10 @@ impl ModelProviderInfo {
     }
 
     pub fn create_openai_provider(base_url: Option<String>) -> ModelProviderInfo {
+        // An overridden OpenAI-compatible endpoint is only guaranteed to implement the HTTP
+        // Responses API. Retain first-party websocket prewarming for the default endpoint while
+        // falling back conservatively to SSE for custom endpoints.
+        let supports_websockets = base_url.is_none();
         ModelProviderInfo {
             name: OPENAI_PROVIDER_NAME.into(),
             base_url,
@@ -840,9 +904,10 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: true,
-            supports_websockets: true,
+            supports_websockets,
             supports_standalone_web_search: true,
         }
     }
@@ -867,9 +932,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -902,9 +969,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -928,9 +997,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -957,9 +1028,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -983,9 +1056,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1009,9 +1084,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1035,9 +1112,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1061,9 +1140,39 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
+        }
+    }
+
+    pub fn create_deepseek_provider() -> ModelProviderInfo {
+        ModelProviderInfo {
+            name: DEEPSEEK_PROVIDER_NAME.into(),
+            base_url: Some(DEEPSEEK_BASE_URL.into()),
+            env_key: Some(DEEPSEEK_API_KEY_ENV_VAR.into()),
+            env_key_instructions: Some(provider_api_key_vault_instructions()),
+            experimental_bearer_token: None,
+            auth: None,
+            aws: None,
+            wire_api: WireApi::Responses,
+            query_params: None,
+            http_headers: None,
+            env_http_headers: None,
+            chat_completions_provider: None,
+            request_max_retries: None,
+            stream_max_retries: None,
+            stream_idle_timeout_ms: None,
+            stream_actionable_timeout_ms: None,
+            stream_long_failure_retry_threshold_ms: None,
+            stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
+            websocket_connect_timeout_ms: None,
+            requires_openai_auth: false,
+            supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1087,9 +1196,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1113,9 +1224,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1139,9 +1252,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1165,9 +1280,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1191,9 +1308,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1217,9 +1336,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1243,9 +1364,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1280,6 +1403,7 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
@@ -1289,6 +1413,72 @@ impl ModelProviderInfo {
 
     pub fn is_openai(&self) -> bool {
         self.name == OPENAI_PROVIDER_NAME
+    }
+
+    pub fn is_anthropic(&self) -> bool {
+        self.name == ANTHROPIC_PROVIDER_NAME
+    }
+
+    pub fn is_claude_plan(&self) -> bool {
+        self.name == CLAUDE_PLAN_PROVIDER_NAME
+    }
+
+    /// Direct Anthropic API keys are sent as `x-api-key`; other built-in
+    /// provider API keys remain Bearer tokens.
+    pub fn api_key_header_name(&self) -> Option<&'static str> {
+        (self.env_key.as_deref() == Some(ANTHROPIC_API_KEY_ENV_VAR)).then_some("x-api-key")
+    }
+
+    pub fn is_ambient(&self) -> bool {
+        self.name == AMBIENT_PROVIDER_NAME
+    }
+
+    pub fn is_pfterminal_plan(&self) -> bool {
+        self.name == PFTERMINAL_PLAN_PROVIDER_NAME
+    }
+
+    pub fn is_kimi_code(&self) -> bool {
+        self.name == KIMI_CODE_PROVIDER_NAME
+    }
+
+    pub fn chat_stop_semantics(&self) -> ChatStopSemantics {
+        if self.is_kimi_code() {
+            ChatStopSemantics::AmbiguousForActionTurns
+        } else {
+            ChatStopSemantics::ReliableTerminal
+        }
+    }
+
+    pub fn is_zai(&self) -> bool {
+        self.name == ZAI_PROVIDER_NAME
+    }
+
+    pub fn is_openrouter(&self) -> bool {
+        self.name == OPENROUTER_PROVIDER_NAME
+    }
+
+    pub fn is_deepseek(&self) -> bool {
+        self.name == DEEPSEEK_PROVIDER_NAME
+    }
+
+    pub fn is_meta(&self) -> bool {
+        self.name == META_PROVIDER_NAME
+    }
+
+    pub fn is_baseten(&self) -> bool {
+        self.name == BASETEN_PROVIDER_NAME
+    }
+
+    pub fn is_vercel(&self) -> bool {
+        self.name == VERCEL_PROVIDER_NAME
+    }
+
+    /// Detect Vercel AI Gateway by endpoint so renamed custom providers retain
+    /// the gateway's wire behavior without relying on display-name conventions.
+    pub fn is_vercel_gateway(&self) -> bool {
+        self.base_url
+            .as_deref()
+            .is_some_and(is_vercel_gateway_base_url)
     }
 
     pub fn uses_openai_actor_authorization(&self) -> bool {
@@ -1303,6 +1493,10 @@ impl ModelProviderInfo {
 
     pub fn is_amazon_bedrock(&self) -> bool {
         self.name == AMAZON_BEDROCK_PROVIDER_NAME
+    }
+
+    fn retries_transient_rate_limits(&self) -> bool {
+        self.is_zai()
     }
 
     pub fn supports_remote_compaction(&self) -> bool {
@@ -1335,6 +1529,7 @@ pub fn built_in_model_providers(
     let zai_anthropic_provider = P::create_zai_anthropic_provider();
     let openrouter_provider = P::create_openrouter_provider();
     let openrouter_anthropic_provider = P::create_openrouter_anthropic_provider();
+    let deepseek_provider = P::create_deepseek_provider();
     let meta_provider = P::create_meta_provider();
     let baseten_provider = P::create_baseten_provider();
     let baseten_anthropic_provider = P::create_baseten_anthropic_provider();
@@ -1359,6 +1554,7 @@ pub fn built_in_model_providers(
             OPENROUTER_ANTHROPIC_PROVIDER_ID,
             openrouter_anthropic_provider,
         ),
+        (DEEPSEEK_PROVIDER_ID, deepseek_provider),
         (META_PROVIDER_ID, meta_provider),
         (BASETEN_PROVIDER_ID, baseten_provider),
         (BASETEN_ANTHROPIC_PROVIDER_ID, baseten_anthropic_provider),
@@ -1506,6 +1702,7 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: Default::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,

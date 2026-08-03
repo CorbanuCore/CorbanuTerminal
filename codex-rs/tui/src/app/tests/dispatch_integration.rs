@@ -2,7 +2,7 @@ use super::*;
 
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
-use core_test_support::responses::ev_function_call;
+use core_test_support::responses::ev_function_call_with_namespace;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_response_sequence;
 use core_test_support::responses::mount_sse_repeating;
@@ -173,7 +173,22 @@ fn pending_agent_message_text(request: &core_test_support::responses::ResponsesR
         {
             break;
         }
-        if item.get("type").and_then(serde_json::Value::as_str) != Some("agent_message") {
+
+        let item_type = item.get("type").and_then(serde_json::Value::as_str);
+        let is_native_mail = item_type == Some("agent_message");
+        let is_adapted_mail = item_type == Some("message")
+            && item.get("role").and_then(serde_json::Value::as_str) == Some("user")
+            && item
+                .get("content")
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|content| {
+                    content.iter().any(|span| {
+                        span.get("text")
+                            .and_then(serde_json::Value::as_str)
+                            .is_some_and(|text| text.contains("<inter_agent_message "))
+                    })
+                });
+        if !is_native_mail && !is_adapted_mail {
             continue;
         }
         let text = item
@@ -210,6 +225,213 @@ where
         })?
         .join()
         .map_err(|_| color_eyre::eyre::eyre!("dispatch integration thread panicked"))?
+}
+
+#[test]
+fn duplicate_nazgul_creation_is_rejected_before_spawning_a_thread() -> Result<()> {
+    run_dispatch_integration(|| async {
+        let mock = MockServer::start().await;
+        let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 4).await?;
+        fixture.app.ensure_custom_spawn_root(CODEX_MAIN_PANE_ID)?;
+        fixture
+            .app
+            .set_spawn_nazgul_pane_binding(CODEX_MAIN_PANE_ID.to_string());
+
+        let channels_before = fixture.app.thread_event_channels.len();
+        let navigation_before = fixture.app.agent_navigation.ordered_threads().len();
+        let spawn_edges_before = fixture.app.spawn_parent_by_thread.len();
+        fixture
+            .app
+            .handle_event(
+                &mut fixture.tui,
+                &mut fixture.server,
+                AppEvent::CreateSpawnAgent {
+                    role: crate::spawn_orchestration::SpawnRole::Nazgul,
+                    parent_node_id: None,
+                    agent_nickname: Some("Duplicate".to_string()),
+                    model: "dispatch-mock-model".to_string(),
+                    provider: Some("dispatch_mock".to_string()),
+                    effort: None,
+                },
+            )
+            .await?;
+
+        pretty_assertions::assert_eq!(fixture.app.thread_event_channels.len(), channels_before);
+        pretty_assertions::assert_eq!(
+            fixture.app.agent_navigation.ordered_threads().len(),
+            navigation_before
+        );
+        pretty_assertions::assert_eq!(fixture.app.spawn_parent_by_thread.len(), spawn_edges_before);
+        pretty_assertions::assert_eq!(
+            fixture.app.spawn_nazgul_pane_id.as_deref(),
+            Some(CODEX_MAIN_PANE_ID)
+        );
+        fixture.server.shutdown().await?;
+        Ok(())
+    })
+}
+
+#[test]
+fn direct_orc_task_reaches_provider_through_core_mailbox_without_prompt_wrapper() -> Result<()> {
+    run_dispatch_integration(|| async {
+        let mock = MockServer::start().await;
+        let responses = mount_sse_repeating(&mock, sse_completed("orc-direct-response")).await;
+        let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 3).await?;
+        let target = fixture.spawn_target("Snaga").await?;
+        fixture
+            .app
+            .app_event_tx
+            .send(AppEvent::SubmitSpawnAgentTask {
+                thread_id: target,
+                task: "run the direct acceptance command".to_string(),
+            });
+
+        fixture
+            .route_until(std::time::Duration::from_secs(20), |app| {
+                !responses.requests().is_empty()
+                    && app
+                        .agent_navigation
+                        .get(&target)
+                        .is_some_and(|entry| !entry.is_running)
+            })
+            .await?;
+
+        let presented = responses
+            .requests()
+            .iter()
+            .map(pending_agent_message_text)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(presented.contains("run the direct acceptance command"));
+        assert!(!presented.contains("<pfterminal_spawn_orc_task_context>"));
+        fixture.server.shutdown().await?;
+        Ok(())
+    })
+}
+
+#[test]
+fn cold_restored_orc_task_is_readmitted_through_core_mailbox() -> Result<()> {
+    run_dispatch_integration(|| async {
+        let mock = MockServer::start().await;
+        let responses = mount_sse_repeating(&mock, sse_completed("cold-restored-response")).await;
+        let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 3).await?;
+        let target = fixture.spawn_target("Snaga").await?;
+        let root_seed = AppCommand::user_turn(
+            vec![codex_app_server_protocol::UserInput::Text {
+                text: "seed the root rollout before restart".to_string(),
+                text_elements: Vec::new(),
+            }],
+            fixture.app.config.cwd.to_path_buf(),
+            codex_app_server_protocol::AskForApproval::Never,
+            /*active_permission_profile*/ None,
+            fixture.app.config.model.clone().expect("fixture model"),
+            fixture.app.config.model_reasoning_effort.clone(),
+            fixture.app.config.model_reasoning_summary,
+            /*service_tier*/ None,
+            /*final_output_json_schema*/ None,
+            /*collaboration_mode*/ None,
+            fixture.app.config.personality,
+        );
+        fixture
+            .app
+            .submit_thread_op(&mut fixture.server, fixture.root, root_seed)
+            .await?;
+        fixture
+            .route_until(std::time::Duration::from_secs(20), |_app| {
+                !responses.requests().is_empty()
+            })
+            .await?;
+        for _ in 0..10 {
+            fixture.route_once().await?;
+        }
+        let requests_after_root_seed = responses.requests().len();
+        fixture
+            .app
+            .app_event_tx
+            .send(AppEvent::SubmitSpawnAgentTask {
+                thread_id: target,
+                task: "seed the child rollout before restart".to_string(),
+            });
+        fixture
+            .route_until(std::time::Duration::from_secs(20), |app| {
+                responses.requests().len() > requests_after_root_seed
+                    && app
+                        .agent_navigation
+                        .get(&target)
+                        .is_some_and(|entry| !entry.is_running)
+            })
+            .await?;
+        let requests_before_restart = responses.requests().len();
+
+        fixture.server.shutdown().await?;
+        let mut restarted = Box::pin(crate::start_embedded_app_server_for_picker(
+            &fixture.app.config,
+        ))
+        .await?;
+        let root = restarted
+            .resume_thread(
+                fixture.app.config.clone(),
+                fixture.root,
+                crate::app_server_session::ResumeModelSettings::RestoreFromThread,
+                crate::app_server_session::ResumePermissionSettings::RestoreFromThread,
+            )
+            .await?;
+        fixture.app.primary_session_configured = Some(root.session);
+        let restored_target = restarted
+            .resume_thread(
+                fixture.app.config.clone(),
+                target,
+                crate::app_server_session::ResumeModelSettings::RestoreFromThread,
+                crate::app_server_session::ResumePermissionSettings::RestoreFromThread,
+            )
+            .await?;
+        let channel = fixture.app.ensure_thread_channel(target);
+        channel.mark_live();
+        channel
+            .set_session(restored_target.session, restored_target.turns)
+            .await;
+        fixture.server = restarted;
+
+        fixture
+            .app
+            .app_event_tx
+            .send(AppEvent::SubmitSpawnAgentTask {
+                thread_id: target,
+                task: "run the cold-restored acceptance command".to_string(),
+            });
+        fixture
+            .route_until(std::time::Duration::from_secs(20), |app| {
+                responses
+                    .requests()
+                    .into_iter()
+                    .skip(requests_before_restart)
+                    .any(|request| {
+                        pending_agent_message_text(&request)
+                            .contains("run the cold-restored acceptance command")
+                    })
+                    && app
+                        .agent_navigation
+                        .get(&target)
+                        .is_some_and(|entry| !entry.is_running)
+            })
+            .await?;
+
+        let presented = responses
+            .requests()
+            .into_iter()
+            .skip(requests_before_restart)
+            .map(|request| pending_agent_message_text(&request))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(presented.contains("run the cold-restored acceptance command"));
+        assert!(!presented.contains("<pfterminal_spawn_orc_task_context>"));
+        assert!(
+            !fixture.app.spawn_processed_dispatch_origins.is_empty(),
+            "Core mailbox admission must commit dispatch identity"
+        );
+        fixture.server.shutdown().await?;
+        Ok(())
+    })
 }
 
 #[test]
@@ -447,7 +669,12 @@ fn mailbox_delivery_wakes_waiting_target_without_turn_start_fallback() -> Result
             vec![
                 sse(vec![
                     ev_response_created("wait-response"),
-                    ev_function_call("wait-call", "wait_agent", r#"{"timeout_ms":10000}"#),
+                    ev_function_call_with_namespace(
+                        "wait-call",
+                        "collaboration",
+                        "wait_agent",
+                        r#"{"timeout_ms":10000}"#,
+                    ),
                     ev_completed("wait-response"),
                 ]),
                 sse_completed("steered-response"),
@@ -583,14 +810,14 @@ fn low_context_agent_compacts_and_continues_real_dispatch() -> Result<()> {
             .app
             .handle_app_server_event(
                 &fixture.server,
-                codex_app_server_client::AppServerEvent::ServerNotification(
+                codex_app_server_client::AppServerEvent::ServerNotification(Box::new(
                     token_usage_notification_with_total(
                         target,
                         "pressure-turn",
                         99_000,
                         Some(100_000),
                     ),
-                ),
+                )),
             )
             .await;
         assert!(

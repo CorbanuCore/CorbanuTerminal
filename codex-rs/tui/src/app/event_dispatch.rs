@@ -9,15 +9,56 @@ use super::*;
 use crate::app_server_session::ForkGoalContinuation;
 use crate::config_update::format_config_error;
 use crate::external_agent_config_migration::flow::ExternalAgentConfigMigrationFlowOutcome;
+use chrono::Utc;
+use codex_app_server_protocol::ThreadAgentMessageParams;
 #[cfg(target_os = "windows")]
 use codex_config::types::WindowsSandboxModeToml;
 use codex_protocol::protocol::AgentMessageKind;
 use std::collections::HashSet;
 
 const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
-const RESERVED_PANE_DISPLAY_NAMES: &[&str] = &["Codex - Main", "me", "none", "root", "nazgul"];
+const RESERVED_PANE_DISPLAY_NAMES: &[&str] = &[
+    "PFTerminal - Main",
+    "Codex - Main",
+    "me",
+    "none",
+    "root",
+    "nazgul",
+];
 
 impl App {
+    pub(super) async fn handle_external_agent_config_migration_event(
+        &mut self,
+        tui: &mut tui::Tui,
+        app_server: &mut AppServerSession,
+        tui_events: &mut mpsc::UnboundedReceiver<TuiEvent>,
+    ) {
+        match crate::external_agent_config_migration::flow::handle_external_agent_config_migration_prompt(
+            tui,
+            app_server,
+            &self.config,
+            tui_events,
+        )
+        .await
+        {
+            Ok(ExternalAgentConfigMigrationFlowOutcome::Started(lines)) => {
+                self.chat_widget.add_plain_history_lines(lines);
+            }
+            Ok(ExternalAgentConfigMigrationFlowOutcome::NoItems) => {
+                self.chat_widget.add_info_message(
+                    crate::external_agent_config_migration::flow::EXTERNAL_AGENT_CONFIG_MIGRATION_NO_ITEMS_MESSAGE
+                        .to_string(),
+                    /*hint*/ None,
+                );
+            }
+            Ok(ExternalAgentConfigMigrationFlowOutcome::Cancelled) => {}
+            Err(error_message) => {
+                self.chat_widget.add_error_message(error_message);
+            }
+        }
+        tui.frame_requester().schedule_frame();
+    }
+
     pub(super) async fn refresh_gpu_runtime_overlay(&mut self) {
         let Some(state_db) = self.state_db.as_ref() else {
             self.model_catalog.replace_gpu_models(Vec::new());
@@ -125,6 +166,7 @@ impl App {
                         .map(|role| role == "default")
                         .unwrap_or(true)
                 {
+                    insert(&format!("PFTerminal - {nickname}"));
                     insert(&format!("Codex - {nickname}"));
                 }
             }
@@ -165,13 +207,20 @@ impl App {
         if let Some(stripped) = base.strip_prefix("Codex - ") {
             base = self.normalize_pane_display_name(stripped)?;
         }
+        if let Some(stripped) = base.strip_prefix("PFTerminal - ") {
+            base = self.normalize_pane_display_name(stripped)?;
+        }
         let exclude_node_id = exclude_thread_id.map(crate::spawn_orchestration::thread_node_id);
         let occupied = self.occupied_pane_name_keys(exclude_node_id.as_deref());
         let mut candidate = base.clone();
         for suffix in 2..1000 {
             let candidate_key = candidate.to_ascii_lowercase();
-            let display_key = format!("codex - {}", candidate.to_ascii_lowercase());
-            if !occupied.contains(&candidate_key) && !occupied.contains(&display_key) {
+            let pfterminal_display_key = format!("pfterminal - {}", candidate.to_ascii_lowercase());
+            let legacy_display_key = format!("codex - {}", candidate.to_ascii_lowercase());
+            if !occupied.contains(&candidate_key)
+                && !occupied.contains(&pfterminal_display_key)
+                && !occupied.contains(&legacy_display_key)
+            {
                 return Ok(candidate);
             }
             candidate = format!("{base} ({suffix})");
@@ -195,7 +244,7 @@ impl App {
 
         let Some(thread_id) = self.current_displayed_thread_id() else {
             self.chat_widget
-                .add_error_message("No active Codex pane to rename.".to_string());
+                .add_error_message("No active PFTerminal pane to rename.".to_string());
             return;
         };
         self.rename_codex_pane_display_name(app_server, thread_id, name)
@@ -368,7 +417,7 @@ impl App {
         match std::process::Command::new(executable)
             .arg("internal-gpu-controller")
             .env("CODEX_HOME", self.config.codex_home.as_path())
-            .env(codex_state::SQLITE_HOME_ENV, self.config.sqlite_home.as_path())
+            .env(codex_state::SQLITE_HOME_ENV, self.config.sqlite.home())
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -521,29 +570,9 @@ impl App {
                 tui.frame_requester().schedule_frame();
             }
             AppEvent::OpenExternalAgentConfigMigration => {
-                match crate::external_agent_config_migration::flow::handle_external_agent_config_migration_prompt(
-                    tui,
-                    app_server,
-                    &self.config,
-                )
-                .await
-                {
-                    Ok(ExternalAgentConfigMigrationFlowOutcome::Started(lines)) => {
-                        self.chat_widget.add_plain_history_lines(lines);
-                    }
-                    Ok(ExternalAgentConfigMigrationFlowOutcome::NoItems) => {
-                        self.chat_widget.add_info_message(
-                            crate::external_agent_config_migration::flow::EXTERNAL_AGENT_CONFIG_MIGRATION_NO_ITEMS_MESSAGE
-                                .to_string(),
-                            /*hint*/ None,
-                        );
-                    }
-                    Ok(ExternalAgentConfigMigrationFlowOutcome::Cancelled) => {}
-                    Err(error_message) => {
-                        self.chat_widget.add_error_message(error_message);
-                    }
-                }
-                tui.frame_requester().schedule_frame();
+                self.chat_widget.add_error_message(
+                    "Import could not acquire terminal input. Retry /import.".to_string(),
+                );
             }
             AppEvent::ResumeSessionByIdOrName(id_or_name) => {
                 match crate::lookup_session_target_with_app_server(app_server, &id_or_name).await? {
@@ -584,10 +613,14 @@ impl App {
                         .await;
                     let mut fork_config = self.config.clone();
                     fork_config.model = Some(self.chat_widget.current_model().to_string());
-                    fork_config.model_reasoning_effort =
-                        self.chat_widget.current_reasoning_effort();
+                    let fork_reasoning_effort = self.chat_widget.current_reasoning_effort();
+                    fork_config.model_reasoning_effort = fork_reasoning_effort.clone();
                     match app_server.fork_thread(fork_config, thread_id).await {
                         Ok(mut forked) => {
+                            // Ultra is a PFTerminal UI/runtime mode. The app server may project it
+                            // onto the nearest provider-facing effort, but a fork must retain the
+                            // user's selected mode in the attached session.
+                            forked.session.reasoning_effort = fork_reasoning_effort;
                             let name_error = if let Some(name) = name {
                                 match app_server
                                     .thread_set_name(forked.session.thread_id, name.clone())
@@ -952,6 +985,7 @@ impl App {
                 }
                 Err(error) => {
                     self.chat_widget.add_error_message(error);
+                    tui.frame_requester().schedule_frame();
                 }
             },
             AppEvent::OpenAppLink {
@@ -1568,8 +1602,9 @@ impl App {
                     self.chat_widget.maybe_send_next_queued_input();
                 }
             }
-            AppEvent::OpenReasoningPopup { model } => {
-                self.chat_widget.open_reasoning_popup(model);
+            AppEvent::OpenReasoningPopup { model, purpose } => {
+                self.chat_widget
+                    .open_reasoning_popup_for_purpose(model, purpose);
             }
             AppEvent::OpenAdvancedReasoningPopup { model } => {
                 self.chat_widget.open_advanced_reasoning_popup(model);
@@ -1591,6 +1626,7 @@ impl App {
                         app_server.request_handle(),
                         crate::config_update::build_model_selection_edits(
                             model.as_str(),
+                            /*provider*/ None,
                             Some(default_effort),
                         ),
                     )
@@ -1606,10 +1642,6 @@ impl App {
                         /*hint*/ None,
                     );
                 }
-            }
-            AppEvent::OpenPlanReasoningScopePrompt { model, effort } => {
-                self.chat_widget
-                    .open_reasoning_popup_for_purpose(model, purpose);
             }
             AppEvent::OpenPlanReasoningScopePrompt {
                 model,
@@ -2254,6 +2286,12 @@ impl App {
             AppEvent::OpenVaultCredentialAdd => {
                 self.chat_widget.open_vault_credential_add();
             }
+            AppEvent::VaultCredentialAddRequested { label, secret } => {
+                self.chat_widget.add_vault_credential(label, secret);
+            }
+            AppEvent::VaultCredentialAdded { label, result } => {
+                self.chat_widget.on_vault_credential_added(label, result);
+            }
             AppEvent::OpenWallet => {
                 self.chat_widget.open_wallet_menu();
             }
@@ -2283,6 +2321,14 @@ impl App {
                 continuation,
             } => {
                 self.chat_widget.open_wallet_unlock(policy, continuation);
+            }
+            AppEvent::WalletUnlockPreflightFinished {
+                policy,
+                continuation,
+                result,
+            } => {
+                self.chat_widget
+                    .on_wallet_unlock_preflight_finished(policy, continuation, result);
             }
             AppEvent::OpenWalletCustomUnlock {
                 validation_error,
@@ -2364,6 +2410,31 @@ impl App {
             AppEvent::OpenVaultCopySecret { label } => {
                 self.chat_widget.copy_vault_secret_to_clipboard(label);
             }
+            AppEvent::OpenVaultRevealSecret { label } => {
+                self.chat_widget.reveal_vault_secret(label);
+            }
+            AppEvent::VaultRevealSecretFinished { label, result } => {
+                self.chat_widget
+                    .on_vault_reveal_secret_finished(label, result);
+            }
+            AppEvent::OpenVaultReplaceSecret { label } => {
+                self.chat_widget.open_vault_replace_secret(label);
+            }
+            AppEvent::VaultCredentialReplaceRequested { label, secret } => {
+                self.chat_widget.replace_vault_credential(label, secret);
+            }
+            AppEvent::VaultCredentialReplaced { label, result } => {
+                self.chat_widget.on_vault_credential_replaced(label, result);
+            }
+            AppEvent::ConfirmVaultCredentialDelete { label } => {
+                self.chat_widget.confirm_vault_credential_delete(label);
+            }
+            AppEvent::VaultCredentialDeleteRequested { label } => {
+                self.chat_widget.delete_vault_credential(label);
+            }
+            AppEvent::VaultCredentialDeleted { label, result } => {
+                self.chat_widget.on_vault_credential_deleted(label, result);
+            }
             AppEvent::VaultMenuCredentialsReady { result } => {
                 self.chat_widget.on_vault_menu_credentials_ready(result);
             }
@@ -2389,6 +2460,9 @@ impl App {
             }
             AppEvent::OpenTaskNodeLink => {
                 self.chat_widget.open_tasknode_link();
+            }
+            AppEvent::TaskNodeLinkResult { result } => {
+                self.chat_widget.handle_tasknode_link_result(result);
             }
             AppEvent::OpenTaskNodeStatus => {
                 self.chat_widget.open_tasknode_status();
@@ -2563,6 +2637,9 @@ impl App {
             }
             AppEvent::LogoutTaskNode => {
                 self.chat_widget.logout_tasknode();
+            }
+            AppEvent::TaskNodeLogoutResult { result } => {
+                self.chat_widget.handle_tasknode_logout_result(result);
             }
             AppEvent::OpenFullAccessConfirmation {
                 preset,
@@ -3517,11 +3594,18 @@ impl App {
                     );
                     return Ok(AppRunControl::Continue);
                 };
+                if role == crate::spawn_orchestration::SpawnRole::Nazgul
+                    && let Err(err) = self.preflight_new_custom_spawn_root()
+                {
+                    self.chat_widget.add_error_message(err.to_string());
+                    return Ok(AppRunControl::Continue);
+                }
                 let Some(parent_thread_id) =
                     self.backend_parent_thread_for_spawn(role, parent_node_id.as_deref())
                 else {
                     self.chat_widget.add_error_message(
-                        "Cannot spawn a native agent before Codex Main has started.".to_string(),
+                        "Cannot spawn a native agent before PFTerminal Main has started."
+                            .to_string(),
                     );
                     return Ok(AppRunControl::Continue);
                 };
@@ -3546,12 +3630,50 @@ impl App {
                         return Ok(AppRunControl::Continue);
                     }
                 };
+                let (agent_class, prepared_root_crew_id) = if role
+                    == crate::spawn_orchestration::SpawnRole::Nazgul
+                {
+                    let runtime = crate::dispatch_queue::SavedNativeSpawnRuntime {
+                        model: model.clone(),
+                        provider: provider
+                            .clone()
+                            .unwrap_or_else(|| spawn_config.model_provider_id.clone()),
+                        reasoning_effort: effort.clone(),
+                    };
+                    let display_name = agent_nickname
+                        .clone()
+                        .unwrap_or_else(|| role.label().to_string());
+                    match self.prepare_custom_spawn_root(display_name, runtime) {
+                        Ok(agent_class) => {
+                            let crew_id = match &agent_class {
+                                codex_protocol::crew::AgentClass::CrewMember {
+                                    crew_id, ..
+                                } => Some(crew_id.clone()),
+                                codex_protocol::crew::AgentClass::EphemeralTask { .. } => None,
+                            };
+                            (agent_class, crew_id)
+                        }
+                        Err(err) => {
+                            self.chat_widget.add_error_message(err.to_string());
+                            return Ok(AppRunControl::Continue);
+                        }
+                    }
+                } else {
+                    match self.custom_spawn_member_agent_class(role) {
+                        Ok(agent_class) => (agent_class, None),
+                        Err(err) => {
+                            self.chat_widget.add_error_message(err.to_string());
+                            return Ok(AppRunControl::Continue);
+                        }
+                    }
+                };
                 match app_server
-                    .spawn_agent_thread(
+                    .spawn_agent_thread_with_class(
                         &spawn_config,
                         parent_thread_id,
                         agent_type.to_string(),
                         agent_nickname.clone(),
+                        agent_class,
                         model.clone(),
                         provider.clone(),
                         effort.clone(),
@@ -3624,7 +3746,7 @@ impl App {
                         };
                         self.chat_widget.add_info_message(
                             format!(
-                                "Spawned Codex {} pane{}{binding_suffix}.",
+                                "Spawned PFTerminal {} pane{}{binding_suffix}.",
                                 role.label(),
                                 agent_nickname
                                     .as_deref()
@@ -3635,6 +3757,9 @@ impl App {
                         );
                     }
                     Err(err) => {
+                        if let Some(crew_id) = prepared_root_crew_id.as_deref() {
+                            self.abort_prepared_custom_spawn_root(crew_id);
+                        }
                         tracing::error!(
                             error = ?err,
                             error_chain = %format!("{err:#}"),
@@ -3642,7 +3767,7 @@ impl App {
                             "thread/spawnAgent retry limit reached; keeping the TUI alive"
                         );
                         self.chat_widget.add_error_message(format!(
-                            "Failed to spawn Codex {} pane: {err:#}",
+                            "Failed to spawn PFTerminal {} pane: {err:#}",
                             role.label()
                         ));
                     }
@@ -3707,10 +3832,11 @@ impl App {
                 let task = self.spawn_agent_task_for_submission(thread_id, &task);
                 let label = self.thread_label(thread_id);
                 let target_node_id = self.logical_native_node_for_thread(thread_id);
-                let mut pending =
-                    self.pending_dispatch_from_registered_task(&target_node_id, task.clone());
-                let source_node_id = pending
-                    .acks
+                // The TUI does not queue native work. It consumes any edge-adapter acknowledgement
+                // metadata, derives one stable identity, and admits the assignment directly to the
+                // Core mailbox. Core owns ordering, deduplication, wake-up, and turn lifecycle.
+                let acks = self.take_spawn_dispatch_acks_for_task(&target_node_id, task.as_str());
+                let source_node_id = acks
                     .first()
                     .map(|ack| ack.source_node_id.clone())
                     .unwrap_or_else(|| self.spawn_root_node_id());
@@ -3718,25 +3844,25 @@ impl App {
                     .spawn_node_backing_thread_id(&source_node_id)
                     .or(self.primary_thread_id)
                     .unwrap_or(thread_id);
-                let seq = pending
-                    .acks
+                let seq = acks
                     .first()
                     .map(|ack| ack.seq)
                     .unwrap_or_else(|| self.reserve_spawn_dispatch_seq_without_persist());
-                let origin_id = pending
-                    .acks
+                let origin_id = acks
                     .first()
                     .and_then(|ack| ack.origin_id.as_deref())
                     .map(str::to_string)
                     .unwrap_or_else(|| format!("host-seq-{seq:020}"));
-                pending.assign_identity(seq, &source_node_id, &target_node_id, Some(&origin_id));
-                let message_id = pending.dispatch_id.clone();
-                let acks = pending.acks;
+                let message_id = crate::dispatch_queue::native_mailbox_message_id(
+                    &origin_id,
+                    &source_node_id,
+                    &target_node_id,
+                );
                 let params = ThreadAgentMessageParams {
                     source_thread_id: source_thread_id.to_string(),
                     target_thread_id: thread_id.to_string(),
                     message_id: Some(message_id.clone()),
-                    assignment_id: Some(message_id),
+                    assignment_id: Some(message_id.clone()),
                     kind: AgentMessageKind::Assignment,
                     content: task.clone(),
                     trigger_turn: true,
@@ -3748,7 +3874,10 @@ impl App {
                             .extend(acks.iter().map(|ack| ack.seq));
                         self.evict_spawn_processed_dispatch_seq_ids();
                         for ack in &acks {
-                            self.note_assignment_dispatch_delivered(&ack.source_node_id);
+                            self.note_assignment_dispatch_delivered(
+                                &ack.source_node_id,
+                                &ack.target_node_id,
+                            );
                         }
                         self.record_spawn_dispatch_acks(
                             &acks,
@@ -3769,6 +3898,92 @@ impl App {
                             Some(task.chars().take(240).collect()),
                         );
                         self.persist_pane_state();
+                    }
+                    Err(error)
+                        if AppServerSession::agent_message_target_not_found(&error, thread_id) =>
+                    {
+                        match self
+                            .materialize_saved_native_spawn_thread_for_task(app_server, thread_id)
+                            .await
+                        {
+                            Ok(materialized_thread_id) => {
+                                let materialized_source_thread_id = self
+                                    .spawn_node_backing_thread_id(&source_node_id)
+                                    .or(self.primary_thread_id)
+                                    .unwrap_or(materialized_thread_id);
+                                let retry_params = ThreadAgentMessageParams {
+                                    source_thread_id: materialized_source_thread_id.to_string(),
+                                    target_thread_id: materialized_thread_id.to_string(),
+                                    message_id: Some(message_id.clone()),
+                                    assignment_id: Some(message_id),
+                                    kind: AgentMessageKind::Assignment,
+                                    content: task.clone(),
+                                    trigger_turn: true,
+                                };
+                                match app_server.send_agent_message(retry_params).await {
+                                    Ok(_) => {
+                                        self.spawn_processed_dispatch_origins.insert(origin_id);
+                                        self.spawn_processed_dispatch_seq_ids
+                                            .extend(acks.iter().map(|ack| ack.seq));
+                                        self.evict_spawn_processed_dispatch_seq_ids();
+                                        for ack in &acks {
+                                            self.note_assignment_dispatch_delivered(
+                                                &ack.source_node_id,
+                                                &ack.target_node_id,
+                                            );
+                                        }
+                                        self.record_spawn_dispatch_acks(
+                                            &acks,
+                                            "queued",
+                                            "cold-restored agent was materialized and the assignment was durably admitted to its native mailbox",
+                                            false,
+                                        );
+                                        self.spawn_status_by_thread.insert(
+                                            materialized_thread_id,
+                                            codex_app_server_protocol::CollabAgentState {
+                                                status: codex_app_server_protocol::CollabAgentStatus::Running,
+                                                message: None,
+                                            },
+                                        );
+                                        self.agent_navigation
+                                            .set_running(materialized_thread_id, true);
+                                        self.agent_navigation.set_last_task_message(
+                                            materialized_thread_id,
+                                            Some(task.chars().take(240).collect()),
+                                        );
+                                        self.persist_pane_state();
+                                    }
+                                    Err(retry_error) => {
+                                        self.release_spawn_dispatch_origins(&acks);
+                                        self.record_spawn_dispatch_acks(
+                                            &acks,
+                                            "failed",
+                                            format!(
+                                                "native mailbox admission still failed after Core materialized the saved agent: {retry_error:#}"
+                                            ),
+                                            true,
+                                        );
+                                        self.chat_widget.add_error_message(format!(
+                                            "Could not admit task for {label}: {retry_error:#}"
+                                        ));
+                                    }
+                                }
+                            }
+                            Err(materialization_error) => {
+                                self.release_spawn_dispatch_origins(&acks);
+                                self.record_spawn_dispatch_acks(
+                                    &acks,
+                                    "failed",
+                                    format!(
+                                        "native mailbox target was unavailable and Core could not materialize the saved agent: {materialization_error:#}"
+                                    ),
+                                    true,
+                                );
+                                self.chat_widget.add_error_message(format!(
+                                    "Could not admit task for {label}: {materialization_error:#}"
+                                ));
+                            }
+                        }
                     }
                     Err(error) => {
                         self.release_spawn_dispatch_origins(&acks);
@@ -3837,6 +4052,15 @@ impl App {
             }
             AppEvent::OpenSpawnStatus => {
                 self.open_spawn_status();
+            }
+            AppEvent::OpenRemoveSpawnCrewConfirmation => {
+                self.open_remove_spawn_crew_confirmation();
+            }
+            AppEvent::RemoveSpawnCrew => {
+                match self.remove_spawn_crew(tui, app_server).await {
+                    Ok(message) => self.chat_widget.add_info_message(message, /*hint*/ None),
+                    Err(err) => self.chat_widget.add_error_message(err.to_string()),
+                }
             }
             AppEvent::HandleOrchestrateCommand { args } => {
                 self.handle_orchestrate_command(args);
@@ -3946,7 +4170,7 @@ impl App {
                 let Some(parent_thread_id) = self.primary_thread_id.or(self.active_thread_id)
                 else {
                     self.chat_widget.add_error_message(
-                        "Cannot create a Manager before Codex Main has started.".to_string(),
+                        "Cannot create a Manager before PFTerminal Main has started.".to_string(),
                     );
                     return Ok(AppRunControl::Continue);
                 };
@@ -3981,8 +4205,13 @@ impl App {
                 {
                     Ok(started) => {
                         let thread_id = started.session.thread_id;
-                        self.register_codex_user_pane(thread_id, Some(nickname.clone()), started)
-                            .await;
+                        self.register_codex_user_pane(
+                            app_server,
+                            thread_id,
+                            Some(nickname.clone()),
+                            started,
+                        )
+                        .await;
                         let manager_node_id = crate::spawn_orchestration::thread_node_id(thread_id);
                         let args = crate::orchestrate::orchestrate_guided_attach_args(
                             &target,
@@ -4034,14 +4263,14 @@ impl App {
                 effort,
                 display_name,
             } => {
-                let Some(parent_thread_id) = self.primary_thread_id.or(self.active_thread_id)
-                else {
+                if self.primary_thread_id.or(self.active_thread_id).is_none() {
                     self.chat_widget.add_error_message(
-                        "Cannot create a Codex pane before Codex Main has started.".to_string(),
+                        "Cannot create a PFTerminal pane before PFTerminal Main has started."
+                            .to_string(),
                     );
                     return Ok(AppRunControl::Continue);
-                };
-                let spawn_config = match self.native_spawn_agent_config() {
+                }
+                let pane_config = match self.native_spawn_agent_config() {
                     Ok(config) => config,
                     Err(err) => {
                         self.chat_widget.add_error_message(err.to_string());
@@ -4058,22 +4287,24 @@ impl App {
                     }
                 };
                 match app_server
-                    .spawn_agent_thread(
-                        &spawn_config,
-                        parent_thread_id,
-                        "default".to_string(),
-                        Some(nickname.clone()),
+                    .start_user_pane_thread(
+                        &pane_config,
                         model.clone(),
                         provider.clone(),
                         effort.clone(),
-                        /*base_instructions*/ None,
                     )
                     .await
                 {
                     Ok(started) => {
                         let thread_id = started.session.thread_id;
-                        self.register_codex_user_pane(thread_id, Some(nickname.clone()), started)
-                            .await;
+                        self.register_codex_user_pane(
+                            app_server,
+                            thread_id,
+                            Some(nickname.clone()),
+                            started,
+                        )
+                        .await;
+                        self.persist_pane_state();
                         self.save_active_claude_pane_transcript();
                         let _ = self
                             .claude_panes
@@ -4081,13 +4312,13 @@ impl App {
                         self.select_agent_thread_and_discard_side(tui, app_server, thread_id)
                             .await?;
                         self.chat_widget.add_info_message(
-                            format!("Created and switched to Codex pane {nickname}."),
+                            format!("Created and switched to PFTerminal pane {nickname}."),
                             Some(format!("{model}; no task was started.")),
                         );
                     }
                     Err(err) => {
                         self.chat_widget
-                            .add_error_message(format!("Failed to create Codex pane: {err}"));
+                            .add_error_message(format!("Failed to create PFTerminal pane: {err}"));
                     }
                 }
             }
@@ -4658,6 +4889,10 @@ impl App {
                 .add_error_message("A thread must start before it can be archived.".to_string());
             return AppRunControl::Continue;
         };
+        if let Some(reason) = self.terminal_thread_lifecycle_block_reason("archive", thread_id) {
+            self.chat_widget.add_error_message(reason);
+            return AppRunControl::Continue;
+        }
         if self.side_threads.contains_key(&thread_id) {
             self.chat_widget.add_error_message(
                 "'/archive' is unavailable in side conversations. Press Ctrl+C to return to the main thread first."
@@ -4667,7 +4902,12 @@ impl App {
         }
 
         match app_server.thread_archive(thread_id).await {
-            Ok(()) => AppRunControl::Exit(ExitReason::UserRequested),
+            Ok(()) => {
+                if self.forget_terminal_operator_pane(thread_id) {
+                    self.persist_pane_state();
+                }
+                AppRunControl::Exit(ExitReason::UserRequested)
+            }
             Err(err) => {
                 self.chat_widget
                     .add_error_message(format!("Failed to archive current thread: {err}"));
@@ -4680,11 +4920,42 @@ impl App {
         &mut self,
         app_server: &mut AppServerSession,
     ) -> AppRunControl {
+        if let Some(pane_id) = self
+            .claude_panes
+            .active_claude_pane_id()
+            .map(ToString::to_string)
+        {
+            match self
+                .claude_panes
+                .remove_operator_pane(&pane_id, self.config.codex_home.as_ref())
+            {
+                Ok(removed) => {
+                    self.claude_pane_transcript_cells.remove(&pane_id);
+                    self.persist_pane_state();
+                    tracing::info!(
+                        pane_id,
+                        pane_title = %removed.title,
+                        interrupted_running_turn = removed.interrupted_running_turn,
+                        "deleted operator-created Claude pane"
+                    );
+                    return AppRunControl::Exit(ExitReason::UserRequested);
+                }
+                Err(err) => {
+                    self.chat_widget
+                        .add_error_message(format!("Failed to delete Claude pane: {err}"));
+                    return AppRunControl::Continue;
+                }
+            }
+        }
         let Some(thread_id) = self.active_thread_id.or(self.chat_widget.thread_id()) else {
             self.chat_widget
                 .add_error_message("A thread must start before it can be deleted.".to_string());
             return AppRunControl::Continue;
         };
+        if let Some(reason) = self.terminal_thread_lifecycle_block_reason("delete", thread_id) {
+            self.chat_widget.add_error_message(reason);
+            return AppRunControl::Continue;
+        }
         if self.side_threads.contains_key(&thread_id) {
             self.chat_widget.add_error_message(
                 "'/delete' is unavailable in side conversations. Press Ctrl+C to return to the main thread first."
@@ -4694,7 +4965,12 @@ impl App {
         }
 
         match app_server.thread_delete(thread_id).await {
-            Ok(()) => AppRunControl::Exit(ExitReason::UserRequested),
+            Ok(()) => {
+                if self.forget_terminal_operator_pane(thread_id) {
+                    self.persist_pane_state();
+                }
+                AppRunControl::Exit(ExitReason::UserRequested)
+            }
             Err(err) => {
                 self.chat_widget
                     .add_error_message(format!("Failed to delete current thread: {err}"));

@@ -6,6 +6,7 @@ use std::path::Path;
 /// Composes the standard mock Responses provider with test-specific configuration.
 pub struct MockResponsesConfig {
     provider_id: String,
+    use_builtin_provider: bool,
     provider_name: String,
     provider_base_url: String,
     model: String,
@@ -21,6 +22,7 @@ impl MockResponsesConfig {
     pub fn new(server_uri: &str) -> Self {
         Self {
             provider_id: "mock_provider".to_string(),
+            use_builtin_provider: false,
             provider_name: "Mock provider for test".to_string(),
             provider_base_url: format!("{server_uri}/v1"),
             model: "mock-model".to_string(),
@@ -35,6 +37,14 @@ impl MockResponsesConfig {
 
     pub fn with_model_provider(mut self, provider_id: &str) -> Self {
         self.provider_id = provider_id.to_string();
+        self.use_builtin_provider = false;
+        self
+    }
+
+    /// Selects a compiled-in provider without attempting to redefine its reserved config table.
+    pub fn with_builtin_model_provider(mut self, provider_id: &str) -> Self {
+        self.provider_id = provider_id.to_string();
+        self.use_builtin_provider = true;
         self
     }
 
@@ -100,6 +110,7 @@ impl MockResponsesConfig {
     pub fn write(self, codex_home: &Path) -> std::io::Result<()> {
         let Self {
             provider_id,
+            use_builtin_provider,
             provider_name,
             provider_base_url,
             model,
@@ -131,6 +142,27 @@ impl MockResponsesConfig {
             format!("[features]\n{feature_entries}\n\n")
         };
 
+        if use_builtin_provider && !provider_config.is_empty() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "built-in providers cannot accept a custom provider table",
+            ));
+        }
+        let provider_table = if use_builtin_provider {
+            String::new()
+        } else {
+            format!(
+                r#"[model_providers.{provider_id}]
+name = "{provider_name}"
+base_url = "{provider_base_url}"
+wire_api = "responses"
+request_max_retries = 0
+stream_max_retries = 0
+{provider_config}
+"#
+            )
+        };
+
         std::fs::write(
             codex_home.join("config.toml"),
             format!(
@@ -141,13 +173,7 @@ sandbox_mode = "{sandbox_mode}"
 {root_config}
 model_provider = "{provider_id}"
 
-{feature_config}[model_providers.{provider_id}]
-name = "{provider_name}"
-base_url = "{provider_base_url}"
-wire_api = "responses"
-request_max_retries = 0
-stream_max_retries = 0
-{provider_config}
+{feature_config}{provider_table}
 
 {extra_config}
 "#

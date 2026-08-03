@@ -2720,6 +2720,7 @@ mod tests {
                             final_config,
                             thread_id,
                             app_server_session::ResumeModelSettings::RestoreFromThread,
+                            app_server_session::ResumePermissionSettings::RestoreFromThread,
                         )
                         .await?
                 }

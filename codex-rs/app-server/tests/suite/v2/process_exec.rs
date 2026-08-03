@@ -148,7 +148,7 @@ async fn process_spawn_reports_buffered_output_cap_reached() -> Result<()> {
     } else {
         vec![
             "sh".to_string(),
-            "-lc".to_string(),
+            "-c".to_string(),
             "printf abcde; printf 12345 >&2".to_string(),
         ]
     };

@@ -25,11 +25,9 @@
 //!
 //! # Backpressure
 //!
-//! Command submission uses `try_send` and can return `WouldBlock`, while event
-//! fanout may drop notifications under saturation. Server requests are never
-//! silently abandoned: if they cannot be queued they are failed back into
-//! `MessageProcessor` with overload or internal errors so approval flows do
-//! not hang indefinitely.
+//! Command submission uses `try_send` and can return `WouldBlock`. The embedded
+//! event stream is unbounded so notifications and server requests are not
+//! dropped while the UI is briefly busy.
 //!
 //! # Relationship to `codex-app-server-client`
 //!
@@ -101,6 +99,18 @@ const IN_PROCESS_CONNECTION_ID: ConnectionId = ConnectionId(0);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 // Covers both bounded runtime drains plus the analytics client's 25-second best-effort flush.
 const SHUTDOWN_ACK_TIMEOUT: Duration = Duration::from_secs(35);
+
+fn trace_in_process_timing(label: &str, start: Instant) {
+    if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
+        debug!(
+            target: "pfterminal_in_process",
+            label,
+            elapsed_ms = start.elapsed().as_millis(),
+            "pfterminal in-process timing"
+        );
+    }
+}
+
 /// Default bounded channel capacity for in-process runtime queues.
 pub const DEFAULT_IN_PROCESS_CHANNEL_CAPACITY: usize = CHANNEL_CAPACITY;
 
@@ -346,6 +356,8 @@ impl InProcessClientHandle {
 /// the handle, so callers receive a ready-to-use runtime. If initialize fails,
 /// the runtime is shut down and an `InvalidData` error is returned.
 pub async fn start(mut args: InProcessStartArgs) -> IoResult<InProcessClientHandle> {
+    let start_started_at = Instant::now();
+    trace_in_process_timing("start_start", start_started_at);
     if let Ok(Some(err)) = check_execpolicy_for_warnings(&args.config.config_layer_stack).await {
         let (path, range) = crate::exec_policy_warning_location(&err);
         args.config_warnings.push(ConfigWarningNotification {
@@ -665,7 +677,7 @@ async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClie
                             // Send directly to avoid cloning; on failure the
                             // original value is returned inside the error.
                             if let Err(send_error) = event_tx
-                                .try_send(InProcessServerEvent::ServerRequest(Box::new(request)))
+                                .send(InProcessServerEvent::ServerRequest(Box::new(request)))
                             {
                                 let error =
                                     internal_error("in-process server request consumer is closed");
@@ -681,20 +693,11 @@ async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClie
                         }
                         OutgoingMessage::AppServerNotification(envelope) => {
                             let notification = envelope.notification;
-                            if server_notification_requires_delivery(&notification) {
-                                if event_tx
-                                    .send(InProcessServerEvent::ServerNotification(Box::new(
-                                        notification,
-                                    )))
-                                    .await
-                                    .is_err()
-                                {
-                                    break;
-                                }
-                            } else if let Err(send_error) =
-                                event_tx.try_send(InProcessServerEvent::ServerNotification(
-                                    Box::new(notification),
-                                ))
+                            if event_tx
+                                .send(InProcessServerEvent::ServerNotification(Box::new(
+                                    notification,
+                                )))
+                                .is_err()
                             {
                                 break;
                             }
@@ -825,7 +828,11 @@ mod tests {
     where
         F: std::future::Future<Output = ()> + Send + 'static,
     {
-        const TEST_STACK_SIZE_BYTES: usize = 4 * 1024 * 1024;
+        // These integration-style unit tests construct the full app-server stack.
+        // Keep their explicitly-created thread above the workspace's 8 MiB test
+        // floor so additions to config/provider state do not turn into harness-only
+        // stack overflows before the runtime contract is exercised.
+        const TEST_STACK_SIZE_BYTES: usize = 16 * 1024 * 1024;
         let handle = std::thread::Builder::new()
             .name(name.to_string())
             .stack_size(TEST_STACK_SIZE_BYTES)
@@ -867,7 +874,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn in_process_shutdown_waits_for_analytics_flush_budget() {
         let (client_tx, mut client_rx) = mpsc::channel(/*buffer*/ 1);
-        let (_event_tx, event_rx) = mpsc::channel(/*buffer*/ 1);
+        let (_event_tx, event_rx) = mpsc::unbounded_channel();
         let completed = Arc::new(AtomicBool::new(false));
         let runtime_completed = Arc::clone(&completed);
         let runtime_handle = tokio::spawn(async move {

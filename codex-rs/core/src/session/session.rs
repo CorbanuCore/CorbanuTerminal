@@ -273,6 +273,24 @@ impl SessionConfiguration {
         if let Some(collaboration_mode) = updates.collaboration_mode.clone() {
             next_configuration.collaboration_mode = collaboration_mode;
         }
+        if let Some(model_provider_id) = updates.model_provider.clone() {
+            let mut config = (*next_configuration.original_config_do_not_use).clone();
+            let Some(provider) = config.model_providers.get(&model_provider_id).cloned() else {
+                return Err(ConstraintError::InvalidValue {
+                    field_name: "model_provider",
+                    candidate: model_provider_id,
+                    allowed: "a configured model provider id".to_string(),
+                    requirement_source: codex_config::RequirementSource::Unknown,
+                });
+            };
+            config.model_provider_id = model_provider_id;
+            config.model_provider = provider.clone();
+            next_configuration.provider = provider;
+            next_configuration.original_config_do_not_use = Arc::new(config);
+        }
+        if let Some(runtime_model_context_window) = updates.runtime_model_context_window {
+            next_configuration.runtime_model_context_window = runtime_model_context_window;
+        }
         if let Some(summary) = updates.reasoning_summary {
             next_configuration.model_reasoning_summary = Some(summary);
         }
@@ -449,6 +467,8 @@ pub(crate) struct SessionSettingsUpdate {
     pub(crate) active_permission_profile: Option<ActivePermissionProfile>,
     pub(crate) windows_sandbox_level: Option<WindowsSandboxLevel>,
     pub(crate) collaboration_mode: Option<CollaborationMode>,
+    pub(crate) model_provider: Option<String>,
+    pub(crate) runtime_model_context_window: Option<Option<i64>>,
     pub(crate) reasoning_summary: Option<ReasoningSummaryConfig>,
     pub(crate) service_tier: Option<Option<String>>,
     pub(crate) final_output_json_schema: Option<Option<Value>>,
@@ -566,6 +586,15 @@ impl Session {
             }
             InitialHistory::Resumed(resumed_history) => resumed_history.conversation_id,
         };
+        let mut applied_agent_message_ids = HashSet::new();
+        initial_history.scan_rollout_items(|item| {
+            if let RolloutItem::InterAgentCommunication(communication) = item
+                && let Some(message_id) = communication.message_id.as_ref()
+            {
+                applied_agent_message_ids.insert(message_id.clone());
+            }
+            false
+        });
         let resumed_session_id = match &initial_history {
             InitialHistory::Resumed(resumed) => {
                 resumed.history.iter().find_map(|item| match item {
@@ -1167,7 +1196,7 @@ impl Session {
                         &session_configuration.session_source,
                         session_configuration.parent_thread_id,
                     ),
-                ),
+                )),
                 executed_tool_calls,
                 code_mode_service: crate::tools::code_mode::CodeModeService::new(
                     Arc::clone(&code_mode_session_provider),

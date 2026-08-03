@@ -1,7 +1,7 @@
 use anyhow::Result;
 use app_test_support::MockResponsesConfig;
 use app_test_support::TestAppServer;
-use app_test_support::write_models_cache;
+use app_test_support::write_models_cache_for_provider;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::ThreadResumeParams;
 use codex_app_server_protocol::ThreadResumeResponse;
@@ -11,6 +11,7 @@ use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::UserInput;
 use core_test_support::responses;
+use core_test_support::responses::ResponsesRequest;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::time::Duration;
@@ -26,6 +27,19 @@ const NAMESPACE: &str = "collaboration";
 const PARENT_INSTRUCTIONS: &str = "parent-only developer instructions";
 const CHILD_INSTRUCTIONS: &str = "child-only developer instructions";
 const ROLE_INSTRUCTIONS: &str = "configured role developer instructions";
+const TEST_MODEL: &str = "mock_provider/gpt-5.4";
+
+fn request_contains_visible_collaboration_assignment(
+    request: &ResponsesRequest,
+    assignment: &str,
+) -> bool {
+    request
+        .message_input_texts("user")
+        .iter()
+        .any(|text| text.contains(assignment))
+        || (!request.inputs_of_type("agent_message").is_empty()
+            && request.body_contains_text(assignment))
+}
 
 /// V2 fork modes, roles, and unset/blank overrides expose their agreed instruction precedence.
 #[test_case("no history"; "no history")]
@@ -149,7 +163,7 @@ async fn spawned_subagents_apply_configured_developer_instruction_precedence(
             );
     }
     let codex_home = TempDir::new()?;
-    let mut config = MockResponsesConfig::new(&server.uri()).with_model("gpt-5.4");
+    let mut config = MockResponsesConfig::new(&server.uri()).with_model(TEST_MODEL);
     if role_has_instructions {
         config =
             config.with_root_config(&format!("developer_instructions = {ROLE_INSTRUCTIONS:?}"));
@@ -157,14 +171,14 @@ async fn spawned_subagents_apply_configured_developer_instruction_precedence(
     config
         .with_extra_config(&feature_config)
         .write(codex_home.path())?;
-    write_models_cache(codex_home.path())?;
+    write_models_cache_for_provider(codex_home.path(), "mock_provider")?;
     let mut app_server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .build_initialized()
         .await?;
     let ThreadStartResponse { thread, .. } = app_server
         .start_thread(ThreadStartParams {
-            model: Some("gpt-5.4".to_string()),
+            model: Some(TEST_MODEL.to_string()),
             developer_instructions: parent.map(str::to_string),
             ..Default::default()
         })
@@ -184,11 +198,9 @@ async fn spawned_subagents_apply_configured_developer_instruction_precedence(
         .await?;
     let child_request = timeout(READ_TIMEOUT, async {
         loop {
-            if let Some(request) = child_request
-                .requests()
-                .into_iter()
-                .find(|request| !request.inputs_of_type("agent_message").is_empty())
-            {
+            if let Some(request) = child_request.requests().into_iter().find(|request| {
+                request_contains_visible_collaboration_assignment(request, CHILD_PROMPT)
+            }) {
                 break request;
             }
             tokio::task::yield_now().await;
@@ -317,7 +329,7 @@ async fn compacted_full_history_fork_replaces_parent_developer_instructions() ->
 
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
-        .with_model("gpt-5.4")
+        .with_model(TEST_MODEL)
         .with_root_config(&format!(
             "developer_instructions = {PARENT_INSTRUCTIONS:?}\nmodel_context_window = 100\nmodel_auto_compact_token_limit = 90\ncompact_prompt = {COMPACT_PROMPT:?}"
         ))
@@ -325,7 +337,7 @@ async fn compacted_full_history_fork_replaces_parent_developer_instructions() ->
             "[features.multi_agent_v2]\nenabled = true\nsubagent_developer_instructions = {CHILD_INSTRUCTIONS:?}"
         ))
         .write(codex_home.path())?;
-    write_models_cache(codex_home.path())?;
+    write_models_cache_for_provider(codex_home.path(), "mock_provider")?;
 
     let mut app_server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -333,7 +345,7 @@ async fn compacted_full_history_fork_replaces_parent_developer_instructions() ->
         .await?;
     let ThreadStartResponse { thread, .. } = app_server
         .start_thread(ThreadStartParams {
-            model: Some("gpt-5.4".to_string()),
+            model: Some(TEST_MODEL.to_string()),
             ..Default::default()
         })
         .await?;
@@ -379,11 +391,9 @@ async fn compacted_full_history_fork_replaces_parent_developer_instructions() ->
         .await?;
     let child_request = timeout(READ_TIMEOUT, async {
         loop {
-            if let Some(request) = child_request
-                .requests()
-                .into_iter()
-                .find(|request| !request.inputs_of_type("agent_message").is_empty())
-            {
+            if let Some(request) = child_request.requests().into_iter().find(|request| {
+                request_contains_visible_collaboration_assignment(request, CHILD_PROMPT)
+            }) {
                 break request;
             }
             tokio::task::yield_now().await;
@@ -516,11 +526,11 @@ async fn cold_resume_preserves_effective_developer_instructions_for_roleless_wor
     };
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
-        .with_model("gpt-5.4")
+        .with_model(TEST_MODEL)
         .with_root_config(&format!("developer_instructions = {PARENT_INSTRUCTIONS:?}"))
         .with_extra_config(&feature_config)
         .write(codex_home.path())?;
-    write_models_cache(codex_home.path())?;
+    write_models_cache_for_provider(codex_home.path(), "mock_provider")?;
 
     let thread_id = {
         let mut app_server = TestAppServer::builder()
@@ -529,7 +539,7 @@ async fn cold_resume_preserves_effective_developer_instructions_for_roleless_wor
             .await?;
         let ThreadStartResponse { thread, .. } = app_server
             .start_thread(ThreadStartParams {
-                model: Some("gpt-5.4".to_string()),
+                model: Some(TEST_MODEL.to_string()),
                 ..Default::default()
             })
             .await?;
@@ -548,7 +558,9 @@ async fn cold_resume_preserves_effective_developer_instructions_for_roleless_wor
         let initial_child_request = initial_child_request
             .requests()
             .into_iter()
-            .find(|request| !request.inputs_of_type("agent_message").is_empty())
+            .find(|request| {
+                request_contains_visible_collaboration_assignment(request, INITIAL_TASK)
+            })
             .expect("initial worker model request");
         let developer_texts = initial_child_request.message_input_texts("developer");
         assert!(
@@ -650,14 +662,7 @@ async fn cold_resume_preserves_effective_developer_instructions_for_roleless_wor
                 .requests()
                 .into_iter()
                 .find(|request| {
-                    request
-                        .inputs_of_type("agent_message")
-                        .iter()
-                        .any(|message| {
-                            message.get("recipient").and_then(serde_json::Value::as_str)
-                                == Some("/root/worker")
-                        })
-                        && request.body_contains_text(FOLLOWUP_TASK)
+                    request_contains_visible_collaboration_assignment(request, FOLLOWUP_TASK)
                 })
             {
                 break request;

@@ -516,7 +516,10 @@ fn rental_params(operation_id: &str) -> GpuRentalCreateParams {
 
 async fn state_runtime() -> Arc<StateRuntime> {
     let path = std::env::temp_dir().join(format!("gpu-controller-test-{}", uuid::Uuid::new_v4()));
-    StateRuntime::init(path, "test-provider".to_string())
+    let sqlite = codex_state::SqliteConfig::new_for_testing(
+        path.try_into().expect("absolute temporary state path"),
+    );
+    StateRuntime::init(sqlite, "test-provider".to_string())
         .await
         .expect("initialize state")
 }

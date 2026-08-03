@@ -335,6 +335,13 @@ pub struct ToolRegistry {
 
 impl ToolRegistry {
     #[cfg(test)]
+    pub(crate) fn new(
+        tools: std::collections::HashMap<ToolName, Arc<dyn CoreToolRuntime>>,
+    ) -> Self {
+        Self::from_tools(tools.into_values())
+    }
+
+    #[cfg(test)]
     pub(crate) fn from_tools(tools: impl IntoIterator<Item = Arc<dyn CoreToolRuntime>>) -> Self {
         let mut registry = Self {
             tools: IndexMap::new(),
@@ -482,6 +489,15 @@ impl ToolRegistry {
     pub(crate) fn waits_for_runtime_cancellation(&self, name: &ToolName) -> Option<bool> {
         let tool = self.tool(name)?;
         Some(tool.waits_for_runtime_cancellation())
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn dispatch_any(
+        &self,
+        invocation: ToolInvocation,
+    ) -> Result<AnyToolResult, FunctionCallError> {
+        self.dispatch_any_with_terminal_outcome(invocation, None)
+            .await
     }
 
     #[expect(

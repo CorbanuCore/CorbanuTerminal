@@ -41,6 +41,7 @@ fn model_with_shell_type(shell_type: ConfigShellToolType) -> ModelInfo {
         supports_image_detail_original: false,
         context_window: None,
         max_context_window: None,
+        max_output_tokens: None,
         auto_compact_token_limit: None,
         comp_hash: None,
         effective_context_window_percent: 95,

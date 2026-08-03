@@ -87,6 +87,7 @@ impl PendingSpawnDispatch {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn assign_identity(
         &mut self,
         seq: u64,
@@ -100,17 +101,8 @@ impl PendingSpawnDispatch {
                 .unwrap_or_else(|| format!("host-seq-{seq:020}"));
         }
         if self.dispatch_id.is_empty() {
-            // Incoming host sequence numbers are source-local and may be older than the local
-            // allocator. Identity must therefore include the durable origin and pane tuple rather
-            // than treating `seq` as a process-global primary key.
-            let mut digest = Sha256::new();
-            digest.update(self.origin.origin_id.as_bytes());
-            digest.update([0]);
-            digest.update(source_pane_id.as_bytes());
-            digest.update([0]);
-            digest.update(target_pane_id.as_bytes());
-            let digest = format!("{:x}", digest.finalize());
-            self.dispatch_id = format!("dispatch-{}", &digest[..24]);
+            self.dispatch_id =
+                native_mailbox_message_id(&self.origin.origin_id, source_pane_id, target_pane_id);
         }
         if self.source_pane_id.is_empty() {
             self.source_pane_id = source_pane_id.to_string();
@@ -148,6 +140,25 @@ impl PendingSpawnDispatch {
             self.target_pane_id = target_pane_id.to_string();
         }
     }
+}
+
+/// Stable message identity for the one Core mailbox admission used by a native assignment.
+///
+/// Edge adapters may carry source-local sequence numbers, so identity is derived from their
+/// durable origin and logical endpoints instead of from a TUI queue position.
+pub(crate) fn native_mailbox_message_id(
+    origin_id: &str,
+    source_node_id: &str,
+    target_node_id: &str,
+) -> String {
+    let mut digest = Sha256::new();
+    digest.update(origin_id.as_bytes());
+    digest.update([0]);
+    digest.update(source_node_id.as_bytes());
+    digest.update([0]);
+    digest.update(target_node_id.as_bytes());
+    let digest = format!("{:x}", digest.finalize());
+    format!("dispatch-{}", &digest[..24])
 }
 
 impl<'de> Deserialize<'de> for PendingSpawnDispatch {

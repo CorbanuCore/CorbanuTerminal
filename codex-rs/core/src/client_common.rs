@@ -7,6 +7,7 @@ use codex_protocol::models::ResponseItem;
 use codex_tools::ToolSpec;
 use futures::Stream;
 use serde_json::Value;
+use std::collections::HashSet;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
@@ -59,6 +60,42 @@ impl Prompt {
         }
         input
     }
+}
+
+/// Keep only the newest version of each turn-scoped developer-context section.
+///
+/// OpenAI models understand append-only contextual updates and benefit from the stable prompt
+/// prefix. Some compatible providers instead obey an older contradictory section. Their wire
+/// adapters call this before serialization so persisted audit history remains intact while the
+/// model receives one authoritative permissions/model/mode/environment section.
+pub(crate) fn retain_latest_contextual_developer_fragments(items: &mut Vec<ResponseItem>) {
+    let mut seen = HashSet::new();
+    for item in items.iter_mut().rev() {
+        let ResponseItem::Message { role, content, .. } = item else {
+            continue;
+        };
+        if role != "developer" {
+            continue;
+        }
+
+        let mut retained = Vec::with_capacity(content.len());
+        for content_item in std::mem::take(content).into_iter().rev() {
+            let keep = crate::event_mapping::contextual_dev_fragment_key(&content_item)
+                .is_none_or(|key| seen.insert(key));
+            if keep {
+                retained.push(content_item);
+            }
+        }
+        retained.reverse();
+        *content = retained;
+    }
+    items.retain(|item| {
+        !matches!(
+            item,
+            ResponseItem::Message { role, content, .. }
+                if role == "developer" && content.is_empty()
+        )
+    });
 }
 
 fn strip_image_details(items: &mut [ResponseItem]) {

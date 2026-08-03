@@ -76,7 +76,7 @@ pub(super) async fn run_remote_compact_attempt(
     );
     let new_history = sess
         .services
-        .model_client
+        .model_client()
         .compact_conversation_history(
             &prompt,
             &turn_context.model_info,

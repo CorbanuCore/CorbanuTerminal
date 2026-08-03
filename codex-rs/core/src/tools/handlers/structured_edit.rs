@@ -382,15 +382,15 @@ async fn handle_structured_edit(
     }
 
     let Some(turn_environment) =
-        resolve_tool_environment(turn.as_ref(), args.environment_id.as_deref())?.cloned()
+        resolve_tool_environment(&turn.environments, args.environment_id.as_deref())?.cloned()
     else {
         return Err(FunctionCallError::RespondToModel(
             "structured_edit is unavailable in this session".to_string(),
         ));
     };
     let fs = turn_environment.environment.get_filesystem();
-    let sandbox = turn
-        .file_system_sandbox_context(/*additional_permissions*/ None, turn_environment.cwd());
+    let sandbox =
+        turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment);
     let path_uri = turn_environment
         .cwd()
         .join(&args.path)
@@ -512,15 +512,15 @@ async fn handle_structured_write(
     }
 
     let Some(turn_environment) =
-        resolve_tool_environment(turn.as_ref(), args.environment_id.as_deref())?.cloned()
+        resolve_tool_environment(&turn.environments, args.environment_id.as_deref())?.cloned()
     else {
         return Err(FunctionCallError::RespondToModel(
             "structured_write is unavailable in this session".to_string(),
         ));
     };
     let fs = turn_environment.environment.get_filesystem();
-    let sandbox = turn
-        .file_system_sandbox_context(/*additional_permissions*/ None, turn_environment.cwd());
+    let sandbox =
+        turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment);
     let path_uri = turn_environment
         .cwd()
         .join(&args.path)

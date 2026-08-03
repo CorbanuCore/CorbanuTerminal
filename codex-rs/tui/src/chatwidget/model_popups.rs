@@ -27,6 +27,9 @@ use codex_model_provider_info::CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+#[cfg(test)]
+use codex_model_provider_info::DEEPSEEK_DEFAULT_MODEL;
+use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 #[cfg(test)]
 use codex_model_provider_info::META_DEFAULT_MODEL;
@@ -53,6 +56,8 @@ const OPENROUTER_OWL_ALPHA_MODEL: &str = "openrouter/owl-alpha";
 const OPENROUTER_GROK_4_5_MODEL: &str = "x-ai/grok-4.5";
 #[cfg(test)]
 const OPENROUTER_DEEPSEEK_V4_PRO_MODEL: &str = "deepseek/deepseek-v4-pro";
+#[cfg(test)]
+const OPENROUTER_DEEPSEEK_V4_FLASH_0731_MODEL: &str = "deepseek/deepseek-v4-flash-0731";
 #[cfg(test)]
 const OPENROUTER_TENCENT_HY3_FREE_MODEL: &str = "tencent/hy3:free";
 #[cfg(test)]
@@ -87,9 +92,9 @@ impl ModelSelectionPurpose {
     fn provider_subtitle(&self, provider_subtitle: &str) -> String {
         match self {
             Self::Session => provider_subtitle.to_string(),
-            Self::CodexPane { .. } => format!("New Codex pane - {provider_subtitle}"),
+            Self::CodexPane { .. } => format!("New PFTerminal pane - {provider_subtitle}"),
             Self::SpawnAgent { role, .. } => {
-                format!("Codex {} pane - {provider_subtitle}", role.label())
+                format!("PFTerminal {} pane - {provider_subtitle}", role.label())
             }
         }
     }
@@ -102,7 +107,7 @@ struct ModelPickerProviderGroup {
     subtitle: &'static str,
 }
 
-const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 12] = [
+const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 13] = [
     ModelPickerProviderGroup {
         id: "openai",
         label: "OpenAI",
@@ -127,6 +132,11 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 12] = [
         id: "zai",
         label: "Z.AI",
         subtitle: "Z.AI coding plan",
+    },
+    ModelPickerProviderGroup {
+        id: "deepseek",
+        label: "DeepSeek",
+        subtitle: "DeepSeek API key",
     },
     ModelPickerProviderGroup {
         id: "claude-plan",
@@ -259,6 +269,11 @@ impl ChatWidget {
             .map(|preset| {
                 let description = Self::model_description_for_preset(&preset);
                 let model = preset.model.clone();
+                let display_name = Self::model_display_label_for_preset(&preset);
+                let provider = preset
+                    .provider_id
+                    .clone()
+                    .or_else(|| Self::model_provider_for_selection(&model));
                 let requires_advanced_selection =
                     Self::is_advanced_reasoning_effort(&preset.default_reasoning_effort)
                         || preset
@@ -270,6 +285,7 @@ impl ChatWidget {
                     vec![Box::new(move |tx| {
                         tx.send(AppEvent::OpenReasoningPopup {
                             model: preset_for_action.clone(),
+                            purpose: ModelSelectionPurpose::Session,
                         });
                     })]
                 } else {
@@ -280,6 +296,7 @@ impl ChatWidget {
                         );
                     self.model_selection_actions(
                         model.clone(),
+                        provider,
                         Some(preset.default_reasoning_effort.clone()),
                         should_prompt_plan_mode_scope,
                     )
@@ -557,6 +574,7 @@ impl ChatWidget {
                 | CLAUDE_PLAN_PROVIDER_ID
                 | ANTHROPIC_PROVIDER_ID
                 | ZAI_PROVIDER_ID
+                | DEEPSEEK_PROVIDER_ID
                 | BASETEN_PROVIDER_ID
                 | OPENROUTER_PROVIDER_ID
                 | OPENROUTER_ANTHROPIC_PROVIDER_ID
@@ -586,6 +604,7 @@ impl ChatWidget {
             Some(PFTERMINAL_PLAN_PROVIDER_ID) => "pfterminal-plan",
             Some(KIMI_CODE_PROVIDER_ID) => "kimi-code",
             Some(ZAI_PROVIDER_ID) => "zai",
+            Some(DEEPSEEK_PROVIDER_ID) => "deepseek",
             Some(CLAUDE_PLAN_PROVIDER_ID) => "claude-plan",
             Some(ANTHROPIC_PROVIDER_ID) => "anthropic",
             Some(META_PROVIDER_ID) => "meta",
@@ -633,12 +652,18 @@ impl ChatWidget {
                     effort: effort_for_action.clone(),
                 });
             } else {
-                tx.send(AppEvent::UpdateModel(model_for_action.clone()));
-                tx.send(AppEvent::UpdateReasoningEffort(effort_for_action.clone()));
-                tx.send(AppEvent::PersistModelSelection {
+                tx.send(AppEvent::UpdateModelSelection {
                     model: model_for_action.clone(),
-                    effort: effort_for_action.clone(),
+                    provider: provider_for_action.clone(),
                 });
+                tx.send(AppEvent::UpdateReasoningEffort(effort_for_action.clone()));
+                if Self::should_persist_model_provider(provider_for_action.as_deref()) {
+                    tx.send(AppEvent::PersistModelSelection {
+                        model: model_for_action.clone(),
+                        provider: provider_for_action.clone(),
+                        effort: effort_for_action.clone(),
+                    });
+                }
             }
             if let Some(warning) = warning.clone() {
                 tx.send(AppEvent::InsertHistoryCell(Box::new(
@@ -723,6 +748,7 @@ impl ChatWidget {
         let plan_only_actions: Vec<SelectionAction> = vec![Box::new({
             let model = model.clone();
             let effort = effort.clone();
+            let provider = provider.clone();
             let warning = warning.clone();
             move |tx| {
                 tx.send(AppEvent::UpdateModelSelection {
@@ -748,6 +774,7 @@ impl ChatWidget {
             tx.send(AppEvent::PersistPlanModeReasoningEffort(effort.clone()));
             tx.send(AppEvent::PersistModelSelection {
                 model: model.clone(),
+                provider: provider.clone(),
                 effort: effort.clone(),
             });
             if let Some(warning) = warning.clone() {
@@ -788,7 +815,27 @@ impl ChatWidget {
     ///
     /// Max and Ultra require an explicit second step so expensive efforts cannot
     /// be selected accidentally while moving through the normal effort scale.
+    #[cfg(test)]
     pub(crate) fn open_reasoning_popup(&mut self, preset: ModelPreset) {
+        self.open_reasoning_popup_for_purpose(preset, ModelSelectionPurpose::Session);
+    }
+
+    pub(crate) fn open_reasoning_popup_for_purpose(
+        &mut self,
+        preset: ModelPreset,
+        purpose: ModelSelectionPurpose,
+    ) {
+        let spawn_default_effort = match &purpose {
+            ModelSelectionPurpose::SpawnAgent { role, .. } => {
+                Some(spawn_reasoning_effort_for_role(*role, &preset))
+            }
+            ModelSelectionPurpose::Session | ModelSelectionPurpose::CodexPane { .. } => None,
+        };
+        let model_label = Self::model_display_label_for_preset(&preset);
+        let provider = preset
+            .provider_id
+            .clone()
+            .or_else(|| Self::model_provider_for_selection(&preset.model));
         let default_effort = preset.default_reasoning_effort.clone();
         let supported = &preset.supported_reasoning_efforts;
         let in_plan_mode =
@@ -888,8 +935,9 @@ impl ChatWidget {
                     self.effective_reasoning_effort()
                 }
             }
-        } else {
-            default_choice.clone().or_else(|| choices.first().cloned())
+            ModelSelectionPurpose::Session => {
+                default_choice.clone().or_else(|| choices.first().cloned())
+            }
         };
         let selection_choice = highlight_choice.clone().or_else(|| default_choice.clone());
         let initial_selected_idx = choices
@@ -922,15 +970,58 @@ impl ChatWidget {
             };
 
             let choice_effort = Some(effort);
-            let should_prompt_plan_mode_scope = self.should_prompt_plan_mode_reasoning_scope(
-                model_slug.as_str(),
-                choice_effort.clone(),
-            );
-            let actions = self.model_selection_actions(
-                model_slug.clone(),
-                choice_effort,
-                should_prompt_plan_mode_scope,
-            );
+            let should_prompt_plan_mode_scope = matches!(purpose, ModelSelectionPurpose::Session)
+                && self.should_prompt_plan_mode_reasoning_scope(
+                    model_slug.as_str(),
+                    choice_effort.clone(),
+                );
+            let purpose_for_action = purpose.clone();
+            let provider_for_action = provider.clone();
+            let model_for_action = model_slug.clone();
+            let actions: Vec<SelectionAction> =
+                vec![Box::new(move |tx| match &purpose_for_action {
+                    ModelSelectionPurpose::Session => {
+                        if should_prompt_plan_mode_scope {
+                            tx.send(AppEvent::OpenPlanReasoningScopePrompt {
+                                model: model_for_action.clone(),
+                                provider: provider_for_action.clone(),
+                                effort: choice_effort.clone(),
+                            });
+                        } else {
+                            tx.send(AppEvent::UpdateModelSelection {
+                                model: model_for_action.clone(),
+                                provider: provider_for_action.clone(),
+                            });
+                            tx.send(AppEvent::UpdateReasoningEffort(choice_effort.clone()));
+                            if Self::should_persist_model_provider(provider_for_action.as_deref()) {
+                                tx.send(AppEvent::PersistModelSelection {
+                                    model: model_for_action.clone(),
+                                    provider: provider_for_action.clone(),
+                                    effort: choice_effort.clone(),
+                                });
+                            }
+                        }
+                    }
+                    ModelSelectionPurpose::CodexPane { .. } => {
+                        tx.send(AppEvent::OpenCodexPaneNamePrompt {
+                            provider: provider_for_action.clone(),
+                            model: model_for_action.clone(),
+                            effort: choice_effort.clone(),
+                        });
+                    }
+                    ModelSelectionPurpose::SpawnAgent {
+                        role,
+                        parent_node_id,
+                        ..
+                    } => tx.send(AppEvent::CreateSpawnAgent {
+                        role: *role,
+                        parent_node_id: parent_node_id.clone(),
+                        agent_nickname: None,
+                        provider: provider_for_action.clone(),
+                        model: model_for_action.clone(),
+                        effort: choice_effort.clone(),
+                    }),
+                })];
 
             items.push(SelectionItem {
                 name: effort_label,
@@ -992,8 +1083,42 @@ impl ChatWidget {
         });
     }
 
+    fn reasoning_effort_label_for_model(model: &str, effort: &ReasoningEffortConfig) -> String {
+        if Self::uses_glm_reasoning_modes(model) {
+            return match effort {
+                ReasoningEffortConfig::High | ReasoningEffortConfig::XHigh => "Deep".to_string(),
+                ReasoningEffortConfig::Custom(value)
+                    if matches!(
+                        value.as_str(),
+                        "deep" | "max" | "xhigh" | "extra_high" | "extra-high"
+                    ) =>
+                {
+                    "Deep".to_string()
+                }
+                _ => "Standard".to_string(),
+            };
+        }
+
+        Self::reasoning_effort_label(effort)
+    }
+
+    fn uses_glm_reasoning_modes(model: &str) -> bool {
+        matches!(
+            model,
+            AMBIENT_DEFAULT_MODEL
+                | AMBIENT_KIMI_K2_7_CODE_MODEL
+                | ZAI_DEFAULT_MODEL
+                | VERCEL_DEFAULT_MODEL
+                | VERCEL_GLM_5_2_FAST_MODEL
+        )
+    }
+
     /// Open the explicit Max/Ultra effort picker for the given model.
     pub(crate) fn open_advanced_reasoning_popup(&mut self, preset: ModelPreset) {
+        let provider = preset
+            .provider_id
+            .clone()
+            .or_else(|| Self::model_provider_for_selection(&preset.model));
         let mut choices = preset
             .supported_reasoning_efforts
             .iter()
@@ -1030,6 +1155,7 @@ impl ChatWidget {
                 .should_prompt_plan_mode_reasoning_scope(model_slug.as_str(), Some(effort.clone()));
             let actions = self.model_selection_actions(
                 model_slug.clone(),
+                provider.clone(),
                 Some(effort.clone()),
                 should_prompt_plan_mode_scope,
             );
@@ -1143,18 +1269,18 @@ impl ChatWidget {
 mod tests {
     use super::*;
 
-    #[test]
-    fn runtime_gpu_model_selection_is_session_only() {
-        let (raw_tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let tx = crate::app_event_sender::AppEventSender::new(raw_tx);
-        let actions = ChatWidget::model_selection_actions(
+    #[tokio::test]
+    async fn runtime_gpu_model_selection_is_session_only() {
+        let (chat, mut rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+        let actions = chat.model_selection_actions(
             "pinned-model".to_string(),
             Some("gpu-rental-123".to_string()),
             None,
             false,
         );
 
-        actions[0](&tx);
+        actions[0](&chat.app_event_tx);
         let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
 
         assert!(events.iter().any(|event| matches!(
@@ -1172,6 +1298,10 @@ mod tests {
 
     #[test]
     fn model_provider_for_selection_maps_cross_provider_models() {
+        assert_eq!(
+            ChatWidget::model_provider_for_selection(DEEPSEEK_DEFAULT_MODEL).as_deref(),
+            Some(DEEPSEEK_PROVIDER_ID)
+        );
         assert_eq!(
             ChatWidget::model_provider_for_selection(META_DEFAULT_MODEL).as_deref(),
             Some(META_PROVIDER_ID)
@@ -1215,6 +1345,7 @@ mod tests {
         for model in [
             OPENROUTER_GROK_4_5_MODEL,
             OPENROUTER_DEEPSEEK_V4_PRO_MODEL,
+            OPENROUTER_DEEPSEEK_V4_FLASH_0731_MODEL,
             OPENROUTER_TENCENT_HY3_FREE_MODEL,
             OPENROUTER_KIMI_K3_MODEL,
         ] {
@@ -1276,6 +1407,7 @@ mod tests {
         assert_eq!(group_label(OPENAI_PROVIDER_ID), Some("OpenAI"));
         assert_eq!(group_label(AMBIENT_PROVIDER_ID), Some("Ambient"));
         assert_eq!(group_label(ZAI_PROVIDER_ID), Some("Z.AI"));
+        assert_eq!(group_label(DEEPSEEK_PROVIDER_ID), Some("DeepSeek"));
         assert_eq!(group_label(CLAUDE_PLAN_PROVIDER_ID), Some("Claude Plan"));
         assert_eq!(group_label(ANTHROPIC_PROVIDER_ID), Some("Anthropic"));
         assert_eq!(group_label(META_PROVIDER_ID), Some("Meta"));
@@ -1340,6 +1472,10 @@ mod tests {
             true
         )));
         assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
+            DEEPSEEK_DEFAULT_MODEL,
+            true
+        )));
+        assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
             "gpt-5.5", true
         )));
         for model in ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] {
@@ -1379,6 +1515,7 @@ mod tests {
             is_default: false,
             upgrade: None,
             show_in_picker,
+            multi_agent_version: None,
             availability_nux: None,
             supported_in_api: true,
             input_modalities: default_input_modalities(),

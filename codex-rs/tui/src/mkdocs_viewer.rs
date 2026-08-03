@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::fs;
 use std::io;
+use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -12,6 +13,7 @@ const MAX_DISCOVERY_ANCESTORS: usize = 16;
 const MAX_DISCOVERY_DEPTH: usize = 8;
 const MAX_PAGES: usize = 200;
 const MAX_DIR_ENTRIES: usize = 4_000;
+const MANAGED_PACKAGE_ROOT_ENV: &str = "CODEX_MANAGED_PACKAGE_ROOT";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct MkDocsSite {
@@ -39,12 +41,104 @@ impl MkDocsSite {
             ))
         })
     }
+
+    pub(crate) fn page_matches_query(&self, page_index: usize, query: &str) -> bool {
+        let Some(page) = self.pages.get(page_index) else {
+            return false;
+        };
+        let query = query.trim().to_ascii_lowercase();
+        query.is_empty()
+            || page
+                .rel_path
+                .to_string_lossy()
+                .to_ascii_lowercase()
+                .contains(&query)
+            || page.search_text.contains(&query)
+    }
+
+    pub(crate) fn resolve_internal_link(
+        &self,
+        from_page_index: usize,
+        destination: &str,
+    ) -> Result<ResolvedDocLink, MkDocsViewerError> {
+        let destination = destination.trim();
+        if destination.is_empty() {
+            return Err(MkDocsViewerError::new(
+                "Documentation link has no destination.",
+            ));
+        }
+        if is_external_destination(destination) {
+            return Err(MkDocsViewerError::new(format!(
+                "External link `{destination}` must be opened through the terminal/browser policy."
+            )));
+        }
+
+        let (path_part, anchor) = destination
+            .split_once('#')
+            .map_or((destination, None), |(path, anchor)| {
+                (path, (!anchor.is_empty()).then(|| anchor.to_string()))
+            });
+        if path_part.is_empty() {
+            if self.pages.get(from_page_index).is_none() {
+                return Err(MkDocsViewerError::new(format!(
+                    "No MkDocs page at index {from_page_index}."
+                )));
+            }
+            return Ok(ResolvedDocLink {
+                page_index: from_page_index,
+                anchor,
+            });
+        }
+
+        let current_page = self.pages.get(from_page_index).ok_or_else(|| {
+            MkDocsViewerError::new(format!("No MkDocs page at index {from_page_index}."))
+        })?;
+        let site_absolute = path_part.starts_with('/');
+        let raw_path = path_part.trim_start_matches('/');
+        let base = if site_absolute {
+            PathBuf::new()
+        } else {
+            current_page
+                .rel_path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_default()
+        };
+        let requested = normalize_relative_doc_path(&base.join(raw_path)).ok_or_else(|| {
+            MkDocsViewerError::new(format!(
+                "Documentation link `{destination}` escapes the configured docs directory."
+            ))
+        })?;
+        let candidates = link_path_candidates(&requested, path_part.ends_with('/'));
+        let page_index = candidates
+            .iter()
+            .find_map(|candidate| {
+                self.pages
+                    .iter()
+                    .position(|page| paths_equal(&page.rel_path, candidate))
+            })
+            .ok_or_else(|| {
+                MkDocsViewerError::new(format!(
+                    "No MkDocs page matched link `{destination}` from {}.",
+                    current_page.rel_path.display()
+                ))
+            })?;
+
+        Ok(ResolvedDocLink { page_index, anchor })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct MkDocsPage {
     pub(crate) rel_path: PathBuf,
     pub(crate) abs_path: PathBuf,
+    pub(crate) search_text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ResolvedDocLink {
+    pub(crate) page_index: usize,
+    pub(crate) anchor: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,16 +203,28 @@ fn resolve_mkdocs_request(
     cwd: &Path,
     args: Option<&str>,
 ) -> Result<(MkDocsConfig, Option<String>), MkDocsViewerError> {
+    let managed_package_root = std::env::var_os(MANAGED_PACKAGE_ROOT_ENV).map(PathBuf::from);
+    resolve_mkdocs_request_with_package_root(cwd, args, managed_package_root.as_deref())
+}
+
+fn resolve_mkdocs_request_with_package_root(
+    cwd: &Path,
+    args: Option<&str>,
+    managed_package_root: Option<&Path>,
+) -> Result<(MkDocsConfig, Option<String>), MkDocsViewerError> {
     let trimmed = args.map(str::trim).filter(|value| !value.is_empty());
     let Some(args) = trimmed else {
-        let config_path = find_mkdocs_config(cwd).ok_or_else(|| {
-            MkDocsViewerError::new(format!(
-                "No mkdocs.yml found from {} upward.",
-                cwd.display()
-            ))
-        })?;
+        let config_path = find_mkdocs_config(cwd)
+            .or_else(|| managed_package_root.and_then(managed_package_mkdocs_config))
+            .ok_or_else(|| missing_mkdocs_error(cwd, managed_package_root))?;
         return parse_mkdocs_config(&config_path).map(|config| (config, None));
     };
+
+    if matches!(args, "--config" | "--docs-dir") {
+        return Err(MkDocsViewerError::new(format!(
+            "Expected a path after /docs {args}."
+        )));
+    }
 
     if let Some(rest) = args.strip_prefix("--config ") {
         let (path, page_hint) = split_path_arg(rest)?;
@@ -159,13 +265,31 @@ fn resolve_mkdocs_request(
         return Ok((config, Some(page_hint)));
     }
 
-    let config_path = find_mkdocs_config(cwd).ok_or_else(|| {
-        MkDocsViewerError::new(format!(
-            "No mkdocs.yml found from {} upward.",
-            cwd.display()
-        ))
-    })?;
+    let config_path = find_mkdocs_config(cwd)
+        .or_else(|| managed_package_root.and_then(managed_package_mkdocs_config))
+        .ok_or_else(|| missing_mkdocs_error(cwd, managed_package_root))?;
     parse_mkdocs_config(&config_path).map(|config| (config, Some(args.to_string())))
+}
+
+fn managed_package_mkdocs_config(package_root: &Path) -> Option<PathBuf> {
+    MKDOCS_CONFIG_NAMES
+        .iter()
+        .map(|name| package_root.join(name))
+        .find(|path| path.is_file())
+}
+
+fn missing_mkdocs_error(cwd: &Path, managed_package_root: Option<&Path>) -> MkDocsViewerError {
+    match managed_package_root {
+        Some(package_root) => MkDocsViewerError::new(format!(
+            "No mkdocs.yml found from {} upward, and packaged documentation is missing from {}. Reinstall PFTerminal or use `/docs --config <path>`.",
+            cwd.display(),
+            package_root.display()
+        )),
+        None => MkDocsViewerError::new(format!(
+            "No mkdocs.yml found from {} upward. Run from a MkDocs project or use `/docs --config <path>`.",
+            cwd.display()
+        )),
+    }
 }
 
 fn split_path_arg(args: &str) -> Result<(String, Option<String>), MkDocsViewerError> {
@@ -412,9 +536,13 @@ fn discover_pages_inner(
                 .strip_prefix(root)
                 .map(Path::to_path_buf)
                 .unwrap_or_else(|_| path.clone());
+            let search_text = read_limited_to_string(&path, MAX_PAGE_BYTES)
+                .unwrap_or_default()
+                .to_ascii_lowercase();
             pages.push(MkDocsPage {
                 rel_path,
                 abs_path: path,
+                search_text,
             });
         }
     }
@@ -480,6 +608,52 @@ fn paths_equal(left: &Path, right: &Path) -> bool {
 
 fn paths_equal_str(left: &Path, right: &str) -> bool {
     paths_equal(left, Path::new(right))
+}
+
+fn is_external_destination(destination: &str) -> bool {
+    let lower = destination.to_ascii_lowercase();
+    destination.starts_with("//")
+        || lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("mailto:")
+        || lower.starts_with("tel:")
+}
+
+fn normalize_relative_doc_path(path: &Path) -> Option<PathBuf> {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::Normal(segment) => normalized.push(segment),
+            Component::ParentDir => {
+                if !normalized.pop() {
+                    return None;
+                }
+            }
+            Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+    Some(normalized)
+}
+
+fn link_path_candidates(requested: &Path, directory_hint: bool) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    let mut requested = requested.to_path_buf();
+    if requested
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("html"))
+    {
+        requested.set_extension("md");
+    }
+    candidates.push(requested.clone());
+    if requested.extension().is_none() {
+        if !directory_hint {
+            candidates.push(requested.with_extension("md"));
+        }
+        candidates.push(requested.join("index.md"));
+    }
+    candidates
 }
 
 fn read_limited_to_string(path: &Path, max_bytes: u64) -> io::Result<String> {

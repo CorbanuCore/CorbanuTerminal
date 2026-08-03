@@ -50,6 +50,7 @@ use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_no_remote_env;
 use core_test_support::skip_if_remote;
+use core_test_support::skip_if_sandbox;
 use core_test_support::skip_if_target_windows;
 use core_test_support::skip_if_wine_exec;
 use core_test_support::test_codex::TestCodexBuilder;

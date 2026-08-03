@@ -11,6 +11,7 @@ use crate::session_resume::read_session_model;
 use codex_app_server_protocol::TurnInterruptParams;
 use codex_app_server_protocol::TurnInterruptResponse;
 use codex_app_server_protocol::WarningNotification;
+use std::fmt::Write as _;
 
 impl App {
     pub(super) async fn surface_turn_start_failure(
@@ -149,9 +150,12 @@ impl App {
             .or_insert_with(|| ThreadEventChannel::new(THREAD_EVENT_CHANNEL_CAPACITY))
     }
 
-    pub(crate) fn thread_has_loaded_session(&self, thread_id: ThreadId) -> bool {
+    pub(crate) fn thread_has_live_session(&self, thread_id: ThreadId) -> bool {
         self.primary_thread_id == Some(thread_id)
-            || self.thread_event_channels.contains_key(&thread_id)
+            || self
+                .thread_event_channels
+                .get(&thread_id)
+                .is_some_and(|channel| channel.attachment() == ThreadEventAttachment::Live)
     }
 
     pub(crate) async fn loaded_thread_rollout_paths(&self) -> Vec<PathBuf> {
@@ -432,6 +436,8 @@ impl App {
                         .await
                         .map(crate::app_server_approval_conversions::file_update_changes_to_display)
                         .unwrap_or_default(),
+                    response_destination:
+                        crate::approval_events::ApprovalResponseDestination::Thread,
                     },
                 )),
             ),
@@ -587,6 +593,13 @@ impl App {
         app_server: &mut AppServerSession,
         op: AppCommand,
     ) -> Result<()> {
+        // The selected user pane owns input routing. Claude panes are external
+        // runners and do not require a native app-server thread to be active.
+        // Route them before resolving the native thread so a failed or absent
+        // native pane cannot swallow external-pane input.
+        if self.try_submit_active_claude_pane_op(&op) {
+            return Ok(());
+        }
         let Some(thread_id) = self.active_thread_id else {
             self.chat_widget
                 .add_error_message("No active thread is available.".to_string());
@@ -926,11 +939,32 @@ impl App {
                             /*client_user_message_id*/ None,
                         )
                         .await?;
-                    if self.active_thread_id == Some(thread_id)
-                        && self.chat_widget.thread_id() == Some(thread_id)
-                    {
-                        self.chat_widget
-                            .record_safety_buffering_turn(response.turn.id, op);
+                    match response {
+                        crate::app_server_session::TurnStartOutcome::Started {
+                            turn_id,
+                            recovered_failures,
+                        } => {
+                            if !recovered_failures.is_empty() {
+                                self.surface_turn_start_failure(
+                                    thread_id,
+                                    recovered_failures.join("\n"),
+                                    /*will_retry*/ true,
+                                )
+                                .await;
+                            }
+                            if self.active_thread_id == Some(thread_id)
+                                && self.chat_widget.thread_id() == Some(thread_id)
+                            {
+                                self.chat_widget.record_safety_buffering_turn(turn_id, op);
+                            }
+                        }
+                        crate::app_server_session::TurnStartOutcome::CapacityUnavailable {
+                            max_threads,
+                        } => {
+                            self.chat_widget.add_error_message(format!(
+                                "Cannot start turn: all {max_threads} execution slots are in use."
+                            ));
+                        }
                     }
                 }
                 Ok(true)
@@ -1540,7 +1574,12 @@ impl App {
         }
 
         match app_server
-            .resume_thread(self.config.clone(), thread_id, self.resume_model_settings())
+            .resume_thread(
+                self.config.clone(),
+                thread_id,
+                self.resume_model_settings(),
+                self.resume_permission_settings(),
+            )
             .await
         {
             Ok(started) => {
@@ -1766,6 +1805,7 @@ impl App {
         );
         match event {
             ThreadBufferedEvent::Notification(notification) => {
+                self.update_spawn_status_for_thread_notification(notification.as_ref());
                 self.cache_collab_receiver_threads_for_notification(notification.as_ref());
                 self.chat_widget
                     .handle_server_notification(*notification, /*replay_kind*/ None);
@@ -1804,7 +1844,7 @@ impl App {
                     ..
                 } = &notification.item
                     && let Ok(thread_id) = ThreadId::from_string(&notification.thread_id)
-                    && self.is_spawn_orchestration_thread(thread_id)
+                    && self.is_native_spawn_thread(thread_id)
                 {
                     self.spawn_waiting_for_agents_by_thread
                         .insert(thread_id, (notification.turn_id.clone(), id.clone()));
@@ -1870,10 +1910,7 @@ impl App {
                 let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
                     return;
                 };
-                // Loop breaker: a turn we auto-triggered (child-report processing) transitions
-                // pending -> running; any other turn is fresh work and resets the auto chain.
-                let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
-                self.note_spawn_turn_started_for_auto_loop(&node_key);
+                let node_key = self.spawn_orchestration_node_for_thread(thread_id);
                 self.note_whip_target_started(&node_key);
                 (
                     thread_id,
@@ -1887,12 +1924,6 @@ impl App {
                     return;
                 };
                 self.process_native_completed_turn_for_orchestration(thread_id, &notification.turn);
-                // Loop breaker: finalize AFTER the dispatch call above so a dispatch emitted by
-                // this turn is attributed to it before the auto-turn flags clear.
-                if notification.turn.status != TurnStatus::InProgress {
-                    let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
-                    self.note_spawn_turn_completed_for_auto_loop(&node_key);
-                }
                 let status = match notification.turn.status {
                     TurnStatus::Completed => {
                         codex_app_server_protocol::CollabAgentStatus::Completed
@@ -1920,6 +1951,31 @@ impl App {
                 )
             }
             ServerNotification::ItemCompleted(notification) => {
+                match &notification.item {
+                    codex_app_server_protocol::ThreadItem::CollabAgentToolCall {
+                        tool: codex_app_server_protocol::CollabAgentTool::SendInput,
+                        status: codex_app_server_protocol::CollabAgentToolCallStatus::Completed,
+                        sender_thread_id,
+                        receiver_thread_ids,
+                        ..
+                    } => self.note_native_collab_assignment_dispatch(
+                        sender_thread_id,
+                        receiver_thread_ids,
+                    ),
+                    // Multi-Agent v2 represents successful `send_message` and
+                    // `followup_task` admission as a completed Interacted activity rather than
+                    // the v1 SendInput item. Both are valid native assignment dispatches when
+                    // the exact sender/receiver pair owns an armed assignment.
+                    codex_app_server_protocol::ThreadItem::SubAgentActivity {
+                        kind: codex_app_server_protocol::SubAgentActivityKind::Interacted,
+                        agent_thread_id,
+                        ..
+                    } => self.note_native_collab_assignment_dispatch(
+                        &notification.thread_id,
+                        std::slice::from_ref(agent_thread_id),
+                    ),
+                    _ => {}
+                }
                 let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
                     return;
                 };
@@ -1935,14 +1991,9 @@ impl App {
                         Some(codex_protocol::models::MessagePhase::Commentary)
                     )
                 {
-                    let source_node_id = self.spawn_auto_loop_node_for_thread(thread_id);
+                    let source_node_id = self.spawn_orchestration_node_for_thread(thread_id);
                     self.dispatch_orchestrate_blocks_from_text(&source_node_id, text);
-                    self.dispatch_native_spawn_task_blocks_from_item(
-                        thread_id,
-                        &notification.turn_id,
-                        id,
-                        text,
-                    );
+                    let _ = id;
                 }
                 return;
             }
@@ -2017,7 +2068,7 @@ impl App {
                 status,
                 codex_app_server_protocol::CollabAgentStatus::Completed
             );
-            let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
+            let node_key = self.spawn_orchestration_node_for_thread(thread_id);
             if should_process_terminal_side_effects {
                 self.note_whip_target_idle_with_fire_control(
                     &node_key,

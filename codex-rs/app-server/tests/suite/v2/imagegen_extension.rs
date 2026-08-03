@@ -186,7 +186,7 @@ async fn standalone_image_generation_failure_emits_terminal_item() -> Result<()>
     Mock::given(method("POST"))
         .and(path("/api/codex/images/generations"))
         .respond_with(ResponseTemplate::new(500).set_body_string("image backend failed"))
-        .expect(1)
+        .expect(1..)
         .mount(&server)
         .await;
     let response_mock = responses::mount_sse_sequence(
@@ -621,11 +621,12 @@ fn create_config_toml(
     mode: ImagegenTestMode,
 ) -> std::io::Result<()> {
     let mut config = MockResponsesConfig::new(server_uri)
-        .with_model_provider("openai-custom")
-        .with_provider_name("OpenAI")
-        .with_provider_base_url(&format!("{server_uri}/api/codex"))
+        .with_builtin_model_provider("openai")
+        .with_sandbox_mode("danger-full-access")
+        .with_root_config(&format!("openai_base_url = \"{server_uri}/api/codex\""))
         .with_root_config(&format!("chatgpt_base_url = \"{server_uri}\""))
-        .with_provider_config("supports_websockets = false\nrequires_openai_auth = true");
+        .disable_feature(Feature::ResponsesWebsockets)
+        .disable_feature(Feature::ResponsesWebsocketsV2);
     if matches!(mode, ImagegenTestMode::CodeModeOnly) {
         config = config.enable_feature(Feature::CodeModeOnly);
     }

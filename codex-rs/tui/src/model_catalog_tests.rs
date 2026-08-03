@@ -19,6 +19,7 @@ fn preset(model: &str, provider_id: Option<&str>) -> ModelPreset {
         is_default: false,
         upgrade: None,
         show_in_picker: true,
+        multi_agent_version: None,
         availability_nux: None,
         supported_in_api: true,
         input_modalities: vec![InputModality::Text],

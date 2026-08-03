@@ -357,6 +357,16 @@ impl PasteBurst {
         visible_text.chars().count() + buffered_chars >= SINGLE_LINE_SUBMIT_MIN_CHARS
     }
 
+    /// Whether the not-yet-materialized burst begins with the supplied character.
+    ///
+    /// Submission policy occasionally depends on the first character (notably slash commands),
+    /// so callers need this narrow view without exposing or duplicating the burst buffer.
+    pub fn pending_text_starts_with(&self, character: char) -> bool {
+        self.pending_first_char
+            .is_some_and(|(pending, _)| pending == character)
+            || self.buffer.starts_with(character)
+    }
+
     /// Decide if Enter should insert a newline for callers that insert chars immediately.
     pub fn direct_insert_newline_should_insert(&self, now: Instant) -> bool {
         self.newline_should_insert_instead_of_submit(now)

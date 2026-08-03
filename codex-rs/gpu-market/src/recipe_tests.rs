@@ -102,7 +102,7 @@ fn built_in_deepseek_recipe_is_a_validated_runtime_specific_manifest() {
     assert!(recipe.manifest_verified);
     assert_eq!(
         recipe.revision,
-        "deepseek-v4-flash-sglang-v0.5.15-post1-2xh200-r2"
+        "deepseek-v4-flash-0731-sglang-v0.5.15-post1-2xh200-r3"
     );
     assert_eq!(recipe.runtime, "sglang");
     assert_eq!(recipe.serving_runtime_version, "0.5.15.post1");
@@ -131,15 +131,7 @@ fn built_in_deepseek_recipe_is_a_validated_runtime_specific_manifest() {
             && part.contains("--speculative-num-draft-tokens 4")
     }));
 
-    let tp4 = catalog
-        .get("deepseek-flash-4xh200")
-        .expect("qualified TP4 recipe");
-    assert_eq!(tp4.revision, "deepseek-v4-flash-sglang-v0.5.12-4xh200-r1");
-    assert!(
-        tp4.launch_command
-            .iter()
-            .any(|part| part.contains("--disable-cuda-graph"))
-    );
+    assert!(catalog.get("deepseek-flash-4xh200").is_none());
 }
 
 #[test]
@@ -155,7 +147,6 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
         ids,
         [
             "deepseek-flash-2xh200",
-            "deepseek-flash-4xh200",
             "glm-5.2-fp8-8xh200",
             "huihui-deepseek-v4-flash-q4k-2xh200-experimental",
             "huihui-glm-5.2-iq1m-2xh200-experimental"
@@ -173,7 +164,6 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
             .map(|recipe| recipe.stability)
             .collect::<Vec<_>>(),
         [
-            RecipeStability::Qualified,
             RecipeStability::Qualified,
             RecipeStability::Qualified,
             RecipeStability::Experimental,

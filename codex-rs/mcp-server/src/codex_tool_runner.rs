@@ -368,6 +368,7 @@ async fn run_codex_tool_session_inner(
                     | EventMsg::ViewImageToolCall(_)
                     | EventMsg::RawResponseItem(_)
                     | EventMsg::RawResponseCompleted(_)
+                    | EventMsg::ModelResponseCompleted(_)
                     | EventMsg::EnteredReviewMode(_)
                     | EventMsg::ItemStarted(_)
                     | EventMsg::ItemCompleted(_)

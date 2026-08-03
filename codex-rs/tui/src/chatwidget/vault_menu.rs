@@ -5,9 +5,65 @@ use super::*;
 const VAULT_MENU_VIEW_ID: &str = "vault-menu";
 const VAULT_CREDENTIALS_VIEW_ID: &str = "vault-credentials";
 const VAULT_CREDENTIAL_ACTIONS_VIEW_ID: &str = "vault-credential-actions";
-const VAULT_OPERATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 impl ChatWidget {
+    pub(crate) fn add_vault_credential(
+        &mut self,
+        label: String,
+        secret: crate::app_event::VaultSecret,
+    ) {
+        let codex_home = self.config.codex_home.as_path().to_path_buf();
+        let auth_store_mode = self.config.cli_auth_credentials_store_mode;
+        let keyring_backend_kind = self.config.auth_keyring_backend_kind();
+        let tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let task_label = label.clone();
+            let task = tokio::task::spawn_blocking(move || {
+                let secret = secret.into_inner();
+                if let Some(provider_key_id) =
+                    codex_login::provider_api_key_id_from_vault_label(&task_label)
+                {
+                    codex_login::login_with_provider_api_key(
+                        &codex_home,
+                        &provider_key_id,
+                        &secret,
+                        auth_store_mode,
+                        keyring_backend_kind,
+                    )
+                    .map_err(|error| error.to_string())
+                } else {
+                    codex_vault::Vault::new(codex_home)
+                        .add(codex_vault::AddCredential {
+                            label: task_label,
+                            credential_type: codex_vault::CredentialType::ManualSecret,
+                            provider: None,
+                            notes: None,
+                            revocation_notes: None,
+                            secret,
+                        })
+                        .map_err(|error| error.to_string())
+                }
+            });
+            let result = match task.await {
+                Ok(result) => result,
+                Err(error) => Err(format!("Vault add task failed: {error}")),
+            };
+            tx.send(AppEvent::VaultCredentialAdded { label, result });
+        });
+    }
+
+    pub(crate) fn on_vault_credential_added(&mut self, label: String, result: Result<(), String>) {
+        match result {
+            Ok(()) => self.add_info_message(
+                format!("Added vault credential {label:?}."),
+                /*hint*/ None,
+            ),
+            Err(error) => {
+                self.add_error_message(format!("Failed to add vault credential {label:?}: {error}"))
+            }
+        }
+    }
+
     pub(crate) fn open_vault_menu(&mut self) {
         let codex_home = self.config.codex_home.as_path().to_path_buf();
         self.show_selection_view(SelectionViewParams {
@@ -70,13 +126,203 @@ impl ChatWidget {
                     crate::clipboard_copy::copy_to_clipboard(&secret)
                 }
             });
-            let result = match tokio::time::timeout(VAULT_OPERATION_TIMEOUT, task).await {
-                Ok(Ok(result)) => result,
-                Ok(Err(err)) => Err(format!("Vault copy task failed: {err}")),
-                Err(_) => Err("Vault copy timed out.".to_string()),
+            let result = match task.await {
+                Ok(result) => result,
+                Err(err) => Err(format!("Vault copy task failed: {err}")),
             };
             tx.send(AppEvent::VaultCopySecretFinished { label, result });
         });
+    }
+
+    pub(crate) fn reveal_vault_secret(&mut self, label: String) {
+        let codex_home = self.config.codex_home.as_path().to_path_buf();
+        let tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let task = tokio::task::spawn_blocking({
+                let label = label.clone();
+                move || {
+                    codex_vault::Vault::new(codex_home)
+                        .reveal(&label)
+                        .map(crate::app_event::VaultSecret::new)
+                        .map_err(|err| {
+                            format!("Failed to reveal vault credential {label:?}: {err}")
+                        })
+                }
+            });
+            let result = match task.await {
+                Ok(result) => result,
+                Err(err) => Err(format!("Vault reveal task failed: {err}")),
+            };
+            tx.send(AppEvent::VaultRevealSecretFinished { label, result });
+        });
+    }
+
+    pub(crate) fn on_vault_reveal_secret_finished(
+        &mut self,
+        label: String,
+        result: Result<crate::app_event::VaultSecret, String>,
+    ) {
+        match result {
+            Ok(secret) => self.bottom_pane.show_view(Box::new(
+                crate::bottom_pane::vault_secret_reveal::VaultSecretRevealView::new(
+                    label,
+                    secret.into_inner(),
+                ),
+            )),
+            Err(error) => self.add_error_message(error),
+        }
+    }
+
+    pub(crate) fn open_vault_replace_secret(&mut self, label: String) {
+        let tx = self.app_event_tx.clone();
+        let submitted_label = label.clone();
+        let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
+            label.clone(),
+            "Replace vault credential".to_string(),
+            format!("Credential {label:?} — masked replacement"),
+            "New secret value (masked — never stored in chat)".to_string(),
+            Box::new(move |_, secret| {
+                tx.send(AppEvent::VaultCredentialReplaceRequested {
+                    label: submitted_label.clone(),
+                    secret: crate::app_event::VaultSecret::new(secret),
+                });
+            }),
+        );
+        self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn replace_vault_credential(
+        &mut self,
+        label: String,
+        secret: crate::app_event::VaultSecret,
+    ) {
+        let codex_home = self.config.codex_home.as_path().to_path_buf();
+        let auth_store_mode = self.config.cli_auth_credentials_store_mode;
+        let keyring_backend_kind = self.config.auth_keyring_backend_kind();
+        let tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let task_label = label.clone();
+            let task = tokio::task::spawn_blocking(move || {
+                let secret = secret.into_inner();
+                if let Some(provider_key_id) =
+                    codex_login::provider_api_key_id_from_vault_label(&task_label)
+                {
+                    codex_login::login_with_provider_api_key(
+                        &codex_home,
+                        &provider_key_id,
+                        &secret,
+                        auth_store_mode,
+                        keyring_backend_kind,
+                    )
+                    .map_err(|error| error.to_string())
+                } else {
+                    codex_vault::Vault::new(codex_home)
+                        .update(&task_label, Some(secret), None, None, None)
+                        .map(|_| ())
+                        .map_err(|error| error.to_string())
+                }
+            });
+            let result = match task.await {
+                Ok(result) => result,
+                Err(error) => Err(format!("Vault replacement task failed: {error}")),
+            };
+            tx.send(AppEvent::VaultCredentialReplaced { label, result });
+        });
+    }
+
+    pub(crate) fn on_vault_credential_replaced(
+        &mut self,
+        label: String,
+        result: Result<(), String>,
+    ) {
+        match result {
+            Ok(()) => self.add_info_message(
+                format!("Replaced vault credential {label:?}."),
+                /*hint*/ None,
+            ),
+            Err(error) => self.add_error_message(format!(
+                "Failed to replace vault credential {label:?}: {error}"
+            )),
+        }
+    }
+
+    pub(crate) fn confirm_vault_credential_delete(&mut self, label: String) {
+        let delete_label = label.clone();
+        self.show_selection_view(SelectionViewParams {
+            title: Some(format!("Delete vault credential {label:?}?")),
+            subtitle: Some(
+                "This permanently removes the encrypted local credential and cannot be undone."
+                    .to_string(),
+            ),
+            footer_hint: Some(standard_popup_hint_line()),
+            items: vec![
+                SelectionItem {
+                    name: "Cancel".to_string(),
+                    description: Some("Keep the credential".to_string()),
+                    dismiss_on_select: true,
+                    ..Default::default()
+                },
+                SelectionItem {
+                    name: "Delete credential".to_string(),
+                    description: Some("Permanently remove it from this vault".to_string()),
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::VaultCredentialDeleteRequested {
+                            label: delete_label.clone(),
+                        });
+                    })],
+                    dismiss_on_select: true,
+                    ..Default::default()
+                },
+            ],
+            initial_selected_idx: Some(0),
+            allow_number_shortcuts: false,
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn delete_vault_credential(&mut self, label: String) {
+        let codex_home = self.config.codex_home.as_path().to_path_buf();
+        let tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let task = tokio::task::spawn_blocking({
+                let label = label.clone();
+                move || {
+                    if let Some(provider_key_id) =
+                        codex_login::provider_api_key_id_from_vault_label(&label)
+                    {
+                        codex_login::delete_provider_api_key(&codex_home, &provider_key_id)
+                            .map_err(|error| error.to_string())
+                    } else {
+                        codex_vault::Vault::new(codex_home)
+                            .delete(&label)
+                            .map_err(|error| error.to_string())
+                    }
+                }
+            });
+            // A running `spawn_blocking` task cannot be cancelled by dropping a timeout future.
+            // Await its real terminal result so the UI never reports failure while deletion keeps
+            // mutating the vault in the background.
+            let result = match task.await {
+                Ok(result) => result,
+                Err(error) => Err(format!("Vault delete task failed: {error}")),
+            };
+            tx.send(AppEvent::VaultCredentialDeleted { label, result });
+        });
+    }
+
+    pub(crate) fn on_vault_credential_deleted(
+        &mut self,
+        label: String,
+        result: Result<bool, String>,
+    ) {
+        match result {
+            Ok(true) => self.add_info_message(format!("Deleted vault credential {label:?}."), None),
+            Ok(false) => self.add_error_message(format!("No vault credential labeled {label:?}.")),
+            Err(error) => self.add_error_message(format!(
+                "Failed to delete vault credential {label:?}: {error}"
+            )),
+        }
+        self.open_vault_menu();
     }
 
     pub(crate) fn on_vault_copy_secret_finished(
@@ -102,10 +348,9 @@ impl ChatWidget {
             let task = tokio::task::spawn_blocking(move || {
                 sorted_vault_credentials(&codex_home).map_err(|err| err.to_string())
             });
-            let result = match tokio::time::timeout(VAULT_OPERATION_TIMEOUT, task).await {
-                Ok(Ok(result)) => result,
-                Ok(Err(err)) => Err(format!("Vault list task failed: {err}")),
-                Err(_) => Err("Vault status unavailable: operation timed out.".to_string()),
+            let result = match task.await {
+                Ok(result) => result,
+                Err(err) => Err(format!("Vault list task failed: {err}")),
             };
             if menu {
                 tx.send(AppEvent::VaultMenuCredentialsReady { result });
@@ -288,6 +533,7 @@ fn credential_display_name(label: &str, provider: Option<&str>) -> String {
         "AMBIENT_API_KEY" => "Provider: Ambient API Key".to_string(),
         "KIMI_API_KEY" => "Provider: Kimi Code API Key".to_string(),
         "ZAI_API_KEY" => "Provider: Z.AI API Key".to_string(),
+        "DEEPSEEK_API_KEY" => "Provider: DeepSeek API Key".to_string(),
         "OPENROUTER_API_KEY" => "Provider: OpenRouter API Key".to_string(),
         "MODEL_API_KEY" => "Provider: Meta API Key".to_string(),
         "BASETEN_API_KEY" => "Provider: Baseten API Key".to_string(),
@@ -298,6 +544,10 @@ fn credential_display_name(label: &str, provider: Option<&str>) -> String {
 }
 
 fn vault_credential_action_items(codex_home: PathBuf, label: String) -> Vec<SelectionItem> {
+    let reveal_label = label.clone();
+    let copy_label = label.clone();
+    let replace_label = label.clone();
+    let delete_label = label.clone();
     vec![
         vault_history_item(
             "Show metadata",
@@ -306,13 +556,46 @@ fn vault_credential_action_items(codex_home: PathBuf, label: String) -> Vec<Sele
             format!("show {label}"),
         ),
         SelectionItem {
+            name: "Reveal secret".to_string(),
+            description: Some("Show raw secret only in a transient secure view".to_string()),
+            actions: vec![Box::new(move |tx| {
+                tx.send(AppEvent::OpenVaultRevealSecret {
+                    label: reveal_label.clone(),
+                });
+            })],
+            dismiss_on_select: true,
+            ..Default::default()
+        },
+        SelectionItem {
             name: "Copy secret".to_string(),
             description: Some(
                 "Copy raw secret to clipboard; it is not printed to chat".to_string(),
             ),
             actions: vec![Box::new(move |tx| {
                 tx.send(AppEvent::OpenVaultCopySecret {
-                    label: label.clone(),
+                    label: copy_label.clone(),
+                });
+            })],
+            dismiss_on_select: true,
+            ..Default::default()
+        },
+        SelectionItem {
+            name: "Replace secret".to_string(),
+            description: Some("Enter a masked replacement for this credential".to_string()),
+            actions: vec![Box::new(move |tx| {
+                tx.send(AppEvent::OpenVaultReplaceSecret {
+                    label: replace_label.clone(),
+                });
+            })],
+            dismiss_on_select: true,
+            ..Default::default()
+        },
+        SelectionItem {
+            name: "Delete credential".to_string(),
+            description: Some("Open a safe confirmation before permanent removal".to_string()),
+            actions: vec![Box::new(move |tx| {
+                tx.send(AppEvent::ConfirmVaultCredentialDelete {
+                    label: delete_label.clone(),
                 });
             })],
             dismiss_on_select: true,
@@ -428,6 +711,10 @@ mod tests {
             "Provider: Kimi Code API Key"
         );
         assert_eq!(
+            credential_display_name("provider/deepseek_api_key", None),
+            "Provider: DeepSeek API Key"
+        );
+        assert_eq!(
             credential_display_name("provider/openrouter_api_key", None),
             "Provider: OpenRouter API Key"
         );
@@ -456,6 +743,15 @@ mod tests {
             .map(|item| item.name.as_str())
             .collect::<Vec<_>>();
 
-        assert_eq!(names, vec!["Show metadata", "Copy secret"]);
+        assert_eq!(
+            names,
+            vec![
+                "Show metadata",
+                "Reveal secret",
+                "Copy secret",
+                "Replace secret",
+                "Delete credential"
+            ]
+        );
     }
 }

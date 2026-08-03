@@ -3,6 +3,10 @@ use std::io::Result;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
+use pulldown_cmark::Event;
+use pulldown_cmark::Parser;
+use pulldown_cmark::Tag;
+use pulldown_cmark::TagEnd;
 use ratatui::buffer::Buffer;
 use ratatui::buffer::Cell;
 use ratatui::layout::Rect;
@@ -14,7 +18,6 @@ use ratatui::text::Text;
 use ratatui::widgets::Clear;
 use ratatui::widgets::Paragraph;
 use ratatui::widgets::Widget;
-use ratatui::widgets::WidgetRef;
 
 use crate::key_hint::KeyBindingListExt;
 use crate::keymap::ListKeymap;
@@ -31,6 +34,12 @@ pub(crate) struct MkDocsOverlay {
     page_scroll: usize,
     page_source: String,
     page_error: Option<String>,
+    page_links: Vec<DocLink>,
+    link_picker_active: bool,
+    selected_link_index: usize,
+    back_stack: Vec<PageLocation>,
+    forward_stack: Vec<PageLocation>,
+    status_message: Option<String>,
     search_active: bool,
     search_query: String,
     focus: MkDocsFocus,
@@ -44,6 +53,18 @@ pub(crate) struct MkDocsOverlay {
 enum MkDocsFocus {
     Index,
     Page,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DocLink {
+    label: String,
+    destination: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PageLocation {
+    page_index: usize,
+    page_scroll: usize,
 }
 
 #[derive(Clone)]
@@ -69,6 +90,12 @@ impl MkDocsOverlay {
             page_scroll: 0,
             page_source: String::new(),
             page_error: None,
+            page_links: Vec::new(),
+            link_picker_active: false,
+            selected_link_index: 0,
+            back_stack: Vec::new(),
+            forward_stack: Vec::new(),
+            status_message: None,
             search_active: false,
             search_query: String::new(),
             focus: MkDocsFocus::Index,
@@ -106,6 +133,7 @@ impl MkDocsOverlay {
     }
 
     fn handle_key_event(&mut self, tui: &mut tui::Tui, key_event: KeyEvent) {
+        self.status_message = None;
         if self.search_active {
             self.handle_search_key_event(key_event);
             tui.frame_requester()
@@ -115,6 +143,8 @@ impl MkDocsOverlay {
 
         if self.pager_keymap.close.is_pressed(key_event) {
             self.is_done = true;
+        } else if self.link_picker_active {
+            self.handle_link_picker_key_event(tui, key_event);
         } else if key_event.code == KeyCode::Char('/') && key_event.modifiers.is_empty() {
             self.search_active = true;
             self.focus = MkDocsFocus::Index;
@@ -219,6 +249,20 @@ impl MkDocsOverlay {
             || self.list_keymap.move_left.is_pressed(key_event)
         {
             self.focus = MkDocsFocus::Index;
+        } else if (key_event.code == KeyCode::Enter || key_event.code == KeyCode::Char('o'))
+            && key_event.modifiers.is_empty()
+        {
+            if self.page_links.is_empty() {
+                self.status_message = Some("This page has no links.".to_string());
+            } else {
+                self.link_picker_active = true;
+                self.selected_link_index = 0;
+                self.status_message = None;
+            }
+        } else if key_event.code == KeyCode::Char('b') && key_event.modifiers.is_empty() {
+            self.navigate_history(/*back*/ true);
+        } else if key_event.code == KeyCode::Char('f') && key_event.modifiers.is_empty() {
+            self.navigate_history(/*back*/ false);
         } else if self.list_keymap.move_up.is_pressed(key_event) || is_ctrl_y(key_event) {
             self.scroll_page_by(-1);
         } else if self.list_keymap.move_down.is_pressed(key_event) || is_ctrl_e(key_event) {
@@ -258,16 +302,13 @@ impl MkDocsOverlay {
     }
 
     fn refresh_visible_indices(&mut self) {
-        let query = self.search_query.trim().to_ascii_lowercase();
+        let query = self.search_query.trim();
         self.visible_indices = self
             .site
             .pages
             .iter()
             .enumerate()
-            .filter_map(|(index, page)| {
-                let path = page.rel_path.to_string_lossy().to_ascii_lowercase();
-                (query.is_empty() || path.contains(&query)).then_some(index)
-            })
+            .filter_map(|(index, _)| self.site.page_matches_query(index, query).then_some(index))
             .collect();
 
         if !self.visible_indices.contains(&self.selected_index)
@@ -282,16 +323,139 @@ impl MkDocsOverlay {
 
     fn load_selected_page(&mut self) {
         self.render_cache = None;
+        self.link_picker_active = false;
+        self.selected_link_index = 0;
         match self.site.read_page_source(self.selected_index) {
             Ok(source) => {
+                self.page_links = extract_doc_links(&source);
                 self.page_source = source;
                 self.page_error = None;
             }
             Err(err) => {
+                self.page_links.clear();
                 self.page_source.clear();
                 self.page_error = Some(err.to_string());
             }
         }
+    }
+
+    fn handle_link_picker_key_event(&mut self, tui: &tui::Tui, key_event: KeyEvent) {
+        if self.list_keymap.cancel.is_pressed(key_event)
+            || self.list_keymap.move_left.is_pressed(key_event)
+        {
+            self.link_picker_active = false;
+        } else if self.list_keymap.move_up.is_pressed(key_event) {
+            self.selected_link_index = self.selected_link_index.saturating_sub(1);
+        } else if self.list_keymap.move_down.is_pressed(key_event) {
+            self.selected_link_index =
+                (self.selected_link_index + 1).min(self.page_links.len().saturating_sub(1));
+        } else if self.list_keymap.page_up.is_pressed(key_event) {
+            self.selected_link_index = self.selected_link_index.saturating_sub(10);
+        } else if self.list_keymap.page_down.is_pressed(key_event) {
+            self.selected_link_index =
+                (self.selected_link_index + 10).min(self.page_links.len().saturating_sub(1));
+        } else if self.list_keymap.jump_top.is_pressed(key_event) {
+            self.selected_link_index = 0;
+        } else if self.list_keymap.jump_bottom.is_pressed(key_event) {
+            self.selected_link_index = self.page_links.len().saturating_sub(1);
+        } else if self.list_keymap.accept.is_pressed(key_event)
+            || self.list_keymap.move_right.is_pressed(key_event)
+        {
+            self.open_selected_link(tui);
+        }
+    }
+
+    fn open_selected_link(&mut self, tui: &tui::Tui) {
+        let Some(link) = self.page_links.get(self.selected_link_index).cloned() else {
+            self.status_message = Some("No documentation link is selected.".to_string());
+            self.link_picker_active = false;
+            return;
+        };
+        match self
+            .site
+            .resolve_internal_link(self.selected_index, &link.destination)
+        {
+            Ok(target) => {
+                self.back_stack.push(PageLocation {
+                    page_index: self.selected_index,
+                    page_scroll: self.page_scroll,
+                });
+                self.forward_stack.clear();
+                self.selected_index = target.page_index;
+                self.page_scroll = 0;
+                self.load_selected_page();
+                let missing_anchor = target.anchor.as_deref().and_then(|anchor| {
+                    (!self.scroll_to_anchor(anchor, self.page_content_width(tui)))
+                        .then(|| anchor.to_string())
+                });
+                self.focus = MkDocsFocus::Page;
+                self.ensure_selected_visible();
+                self.status_message = Some(match missing_anchor {
+                    Some(anchor) => format!(
+                        "Opened {}, but heading anchor `#{anchor}` was not found.",
+                        self.site.pages[self.selected_index].rel_path.display()
+                    ),
+                    None => format!(
+                        "Opened {}.",
+                        self.site.pages[self.selected_index].rel_path.display()
+                    ),
+                });
+            }
+            Err(err) => {
+                self.status_message = Some(err.to_string());
+                self.link_picker_active = false;
+            }
+        }
+    }
+
+    fn navigate_history(&mut self, back: bool) {
+        let (source, destination) = if back {
+            (&mut self.back_stack, &mut self.forward_stack)
+        } else {
+            (&mut self.forward_stack, &mut self.back_stack)
+        };
+        let Some(location) = source.pop() else {
+            self.status_message = Some(if back {
+                "No previous documentation location.".to_string()
+            } else {
+                "No forward documentation location.".to_string()
+            });
+            return;
+        };
+        destination.push(PageLocation {
+            page_index: self.selected_index,
+            page_scroll: self.page_scroll,
+        });
+        self.selected_index = location.page_index;
+        self.load_selected_page();
+        self.page_scroll = location.page_scroll;
+        self.focus = MkDocsFocus::Page;
+        self.ensure_selected_visible();
+        self.status_message = Some(format!(
+            "Returned to {}.",
+            self.site.pages[self.selected_index].rel_path.display()
+        ));
+    }
+
+    fn scroll_to_anchor(&mut self, anchor: &str, width: u16) -> bool {
+        let Some(source_offset) = heading_source_offset(&self.page_source, anchor) else {
+            return false;
+        };
+        let mut preceding_lines = Vec::new();
+        crate::markdown::append_markdown(
+            &self.page_source[..source_offset],
+            Some(width.max(1) as usize),
+            Some(self.site.project_root.as_path()),
+            &mut preceding_lines,
+        );
+        self.page_scroll = preceding_lines.len().saturating_sub(1);
+        true
+    }
+
+    fn page_content_width(&self, tui: &tui::Tui) -> u16 {
+        let body = self.body_area(tui.terminal.viewport_area);
+        let (_, page_area) = split_body(body);
+        page_area.width
     }
 
     fn page_height(&self, tui: &tui::Tui) -> isize {
@@ -313,7 +477,11 @@ impl MkDocsOverlay {
         let body = self.body_area(area);
         let footer = Rect::new(area.x, body.bottom(), area.width, 1);
         let (list_area, page_area) = split_body(body);
-        self.render_page_index(list_area, buf);
+        if self.link_picker_active {
+            self.render_link_index(list_area, buf);
+        } else {
+            self.render_page_index(list_area, buf);
+        }
         self.render_page(page_area, buf);
         self.render_footer(footer, buf);
     }
@@ -331,7 +499,7 @@ impl MkDocsOverlay {
         let row = Rect::new(area.x, area.y, area.width, 1);
         Span::from("/ ".repeat(area.width as usize / 2))
             .dim()
-            .render_ref(row, buf);
+            .render(row, buf);
         let title = format!(
             "/ {}  {}",
             self.site.overlay_title(),
@@ -339,7 +507,7 @@ impl MkDocsOverlay {
         );
         Span::from(fit_text(&title, row.width))
             .dim()
-            .render_ref(row, buf);
+            .render(row, buf);
     }
 
     fn render_page_index(&mut self, area: Rect, buf: &mut Buffer) {
@@ -363,7 +531,7 @@ impl MkDocsOverlay {
             Style::default().bold()
         };
         Span::styled(fit_text(&title, area.width), title_style)
-            .render_ref(Rect::new(area.x, area.y, area.width, 1), buf);
+            .render(Rect::new(area.x, area.y, area.width, 1), buf);
 
         let rows = area.height.saturating_sub(1) as usize;
         let start_y = area.y.saturating_add(1);
@@ -385,7 +553,56 @@ impl MkDocsOverlay {
             } else {
                 Style::default()
             };
-            Span::styled(fit_text(&text, area.width), style).render_ref(rect, buf);
+            Span::styled(fit_text(&text, area.width), style).render(rect, buf);
+        }
+
+        if area.right() > 0 {
+            let divider_x = area.right() - 1;
+            for y in area.y..area.bottom() {
+                let mut cell = Cell::from('|');
+                cell.set_style(Style::default().dim());
+                buf[(divider_x, y)] = cell;
+            }
+        }
+    }
+
+    fn render_link_index(&self, area: Rect, buf: &mut Buffer) {
+        if area.width == 0 || area.height == 0 {
+            return;
+        }
+        Span::styled(
+            fit_text(&format!("Links ({})", self.page_links.len()), area.width),
+            Style::default().bold().reversed(),
+        )
+        .render(Rect::new(area.x, area.y, area.width, 1), buf);
+
+        let rows = area.height.saturating_sub(1) as usize;
+        let max_start = self.page_links.len().saturating_sub(rows);
+        let start = self
+            .selected_link_index
+            .saturating_sub(rows.saturating_sub(1) / 2)
+            .min(max_start);
+        for row in 0..rows {
+            let y = area.y.saturating_add(1).saturating_add(row as u16);
+            let rect = Rect::new(area.x, y, area.width, 1);
+            let Some((index, link)) = self.page_links.iter().enumerate().nth(start + row) else {
+                clear_row(rect, buf);
+                continue;
+            };
+            let selected = index == self.selected_link_index;
+            let prefix = if selected { "> " } else { "  " };
+            let label = if link.label.is_empty() {
+                link.destination.as_str()
+            } else {
+                link.label.as_str()
+            };
+            let text = format!("{prefix}{label} -> {}", link.destination);
+            let style = if selected {
+                Style::default().reversed()
+            } else {
+                Style::default()
+            };
+            Span::styled(fit_text(&text, area.width), style).render(rect, buf);
         }
 
         if area.right() > 0 {
@@ -404,7 +621,7 @@ impl MkDocsOverlay {
         }
 
         let Some(page) = self.site.pages.get(self.selected_index) else {
-            Paragraph::new("No page selected.").render_ref(area, buf);
+            Paragraph::new("No page selected.").render(area, buf);
             return;
         };
 
@@ -415,15 +632,13 @@ impl MkDocsOverlay {
             Style::default().bold()
         };
         Span::styled(fit_text(&title, area.width), title_style)
-            .render_ref(Rect::new(area.x, area.y, area.width, 1), buf);
+            .render(Rect::new(area.x, area.y, area.width, 1), buf);
 
         let docs_dir = format!("docs: {}", self.site.docs_dir.display());
-        Span::from(fit_text(&docs_dir, area.width))
-            .dim()
-            .render_ref(
-                Rect::new(area.x, area.y.saturating_add(1), area.width, 1),
-                buf,
-            );
+        Span::from(fit_text(&docs_dir, area.width)).dim().render(
+            Rect::new(area.x, area.y.saturating_add(1), area.width, 1),
+            buf,
+        );
 
         let content_area = Rect::new(
             area.x,
@@ -444,7 +659,7 @@ impl MkDocsOverlay {
             .take(content_area.height as usize)
             .cloned()
             .collect::<Vec<_>>();
-        Paragraph::new(Text::from(visible)).render_ref(content_area, buf);
+        Paragraph::new(Text::from(visible)).render(content_area, buf);
 
         let drawn = lines
             .len()
@@ -494,13 +709,17 @@ impl MkDocsOverlay {
         if area.width == 0 {
             return;
         }
-        let status = if self.search_active {
+        let status = if let Some(message) = &self.status_message {
+            format!(" {message} ")
+        } else if self.link_picker_active {
+            "links: up/down/j/k select  Enter/Right open  Esc/Left cancel  q close ".to_string()
+        } else if self.search_active {
             format!(
-                " search: {}  Enter accept  Esc clear/exit search  q close ",
+                " search paths/content: {}  Enter accept  Esc clear/exit search  q close ",
                 self.search_query
             )
         } else if self.focus == MkDocsFocus::Page {
-            "page: up/down/j/k scroll  Ctrl-d/u half  Ctrl-f/b page  Esc/Left index  q close "
+            "page: j/k scroll  Enter/o links  b back  f forward  Esc/Left index  q close "
                 .to_string()
         } else if self.search_query.is_empty() {
             "index: up/down/j/k select  Enter/Right read page  / filter  q/Esc close ".to_string()
@@ -512,10 +731,10 @@ impl MkDocsOverlay {
         };
         Span::from("─".repeat(area.width as usize))
             .dim()
-            .render_ref(area, buf);
+            .render(area, buf);
         Span::from(fit_text(&status, area.width))
             .dim()
-            .render_ref(area, buf);
+            .render(area, buf);
     }
 
     fn ensure_selected_visible(&mut self) {
@@ -593,4 +812,188 @@ fn is_ctrl_e(key_event: KeyEvent) -> bool {
 
 fn is_ctrl_y(key_event: KeyEvent) -> bool {
     key_event.code == KeyCode::Char('y') && key_event.modifiers == KeyModifiers::CONTROL
+}
+
+fn extract_doc_links(source: &str) -> Vec<DocLink> {
+    let mut links = Vec::new();
+    let mut active: Option<DocLink> = None;
+    for event in Parser::new(source) {
+        match event {
+            Event::Start(Tag::Link { dest_url, .. }) => {
+                active = Some(DocLink {
+                    label: String::new(),
+                    destination: dest_url.into_string(),
+                });
+            }
+            Event::Text(text) | Event::Code(text) => {
+                if let Some(link) = active.as_mut() {
+                    link.label.push_str(&text);
+                }
+            }
+            Event::End(TagEnd::Link) => {
+                if let Some(mut link) = active.take() {
+                    link.label = link.label.trim().to_string();
+                    links.push(link);
+                }
+            }
+            _ => {}
+        }
+    }
+    links
+}
+
+fn heading_source_offset(source: &str, anchor: &str) -> Option<usize> {
+    let expected = anchor.trim().trim_start_matches('#').to_ascii_lowercase();
+    let mut active_heading: Option<(usize, String)> = None;
+    for (event, range) in Parser::new(source).into_offset_iter() {
+        match event {
+            Event::Start(Tag::Heading { .. }) => {
+                active_heading = Some((range.start, String::new()));
+            }
+            Event::Text(text) | Event::Code(text) => {
+                if let Some((_, heading)) = active_heading.as_mut() {
+                    heading.push_str(&text);
+                }
+            }
+            Event::End(TagEnd::Heading(_)) => {
+                if let Some((offset, heading)) = active_heading.take()
+                    && heading_matches_anchor(&heading, &expected)
+                {
+                    return Some(offset);
+                }
+            }
+            Event::Html(html) | Event::InlineHtml(html)
+                if html_anchor_id(&html).is_some_and(|id| id.eq_ignore_ascii_case(&expected)) =>
+            {
+                return Some(range.start);
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn heading_matches_anchor(heading: &str, expected: &str) -> bool {
+    let heading = heading.trim();
+    if let Some(start) = heading.rfind("{#")
+        && let Some(explicit) = heading[start + 2..].strip_suffix('}')
+        && explicit.eq_ignore_ascii_case(expected)
+    {
+        return true;
+    }
+    slugify_heading(heading) == expected
+}
+
+fn slugify_heading(heading: &str) -> String {
+    let heading = heading
+        .rfind("{#")
+        .map_or(heading, |explicit_start| &heading[..explicit_start]);
+    let mut slug = String::new();
+    let mut pending_dash = false;
+    for ch in heading.chars() {
+        if ch.is_alphanumeric() {
+            if pending_dash && !slug.is_empty() {
+                slug.push('-');
+            }
+            pending_dash = false;
+            slug.extend(ch.to_lowercase());
+        } else if ch.is_whitespace() || matches!(ch, '-' | '_') {
+            pending_dash = true;
+        }
+    }
+    slug
+}
+
+fn html_anchor_id(html: &str) -> Option<&str> {
+    let lower = html.to_ascii_lowercase();
+    let anchor_start = lower.find("<a")?;
+    let anchor = &html[anchor_start + 2..];
+    let anchor_lower = &lower[anchor_start + 2..];
+    if !anchor_lower
+        .chars()
+        .next()
+        .is_some_and(|ch| ch.is_whitespace() || ch == '>')
+    {
+        return None;
+    }
+    for attribute in ["id", "name"] {
+        let mut offset = 0;
+        while let Some(found) = anchor_lower[offset..].find(attribute) {
+            let start = offset + found;
+            let before_ok = start == 0
+                || anchor_lower[..start]
+                    .chars()
+                    .next_back()
+                    .is_some_and(char::is_whitespace);
+            let after = start + attribute.len();
+            let after_ok = anchor_lower[after..]
+                .chars()
+                .next()
+                .is_some_and(|ch| ch.is_whitespace() || ch == '=');
+            if before_ok && after_ok {
+                let rest = anchor[after..].trim_start();
+                if let Some(rest) = rest.strip_prefix('=') {
+                    let rest = rest.trim_start();
+                    let quote = rest.chars().next()?;
+                    if matches!(quote, '\'' | '"') {
+                        let value = &rest[quote.len_utf8()..];
+                        return value.split_once(quote).map(|(id, _)| id);
+                    }
+                }
+            }
+            offset = after;
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_structured_markdown_links_without_regex_routing() {
+        let links = extract_doc_links(
+            "Read [the **provider** guide](../config.md#provider-choices) and [web](https://example.com).",
+        );
+        assert_eq!(
+            links,
+            vec![
+                DocLink {
+                    label: "the provider guide".to_string(),
+                    destination: "../config.md#provider-choices".to_string(),
+                },
+                DocLink {
+                    label: "web".to_string(),
+                    destination: "https://example.com".to_string(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn resolves_generated_and_explicit_heading_anchors_to_source_offsets() {
+        let source = "# Home\n\nIntro.\n\n## Provider Choices\n\nBody.\n\n## Recovery {#safe-recovery}\n\n<a id=\"telegram\"></a>\n\n## Telegram Connector\n";
+        assert_eq!(
+            heading_source_offset(source, "provider-choices"),
+            source.find("## Provider Choices")
+        );
+        assert_eq!(
+            heading_source_offset(source, "safe-recovery"),
+            source.find("## Recovery")
+        );
+        assert_eq!(
+            heading_source_offset(source, "telegram"),
+            source.find("<a id=\"telegram\"></a>")
+        );
+        assert_eq!(heading_source_offset(source, "missing"), None);
+    }
+
+    #[test]
+    fn parses_html_anchor_id_and_name_attributes_without_accepting_substrings() {
+        assert_eq!(html_anchor_id("<a id=\"telegram\"></a>"), Some("telegram"));
+        assert_eq!(html_anchor_id("<a name='recovery'></a>"), Some("recovery"));
+        assert_eq!(html_anchor_id("<aside data-id=\"wrong\">"), None);
+        assert_eq!(html_anchor_id("<aside id=\"wrong\">"), None);
+    }
 }

@@ -214,7 +214,7 @@ fn set_config_provider_for_test_model(config: &mut Config, model: &str) {
 }
 
 // --- Helpers for tests that need direct construction and event draining ---
-pub(super) async fn make_chatwidget_manual(
+pub(crate) async fn make_chatwidget_manual(
     model_override: Option<&str>,
 ) -> (
     ChatWidget,

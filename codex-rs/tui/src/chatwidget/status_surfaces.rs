@@ -190,8 +190,13 @@ impl ChatWidget {
             }
         }
 
-        let mut line = status_line_from_segments(segments, self.config.tui_status_line_use_colors)
-            .unwrap_or_default();
+        let line = status_line_from_segments(segments, self.config.tui_status_line_use_colors);
+        if line.is_none() && self.gpu_spend_status.is_none() {
+            self.set_status_line(/*status_line*/ None);
+            self.set_status_line_hyperlink(/*url*/ None);
+            return;
+        }
+        let mut line = line.unwrap_or_default();
         if let Some(gpu_spend_status) = self.gpu_spend_status.as_ref() {
             if !line.spans.is_empty() {
                 line.spans.push(" · ".dim());
@@ -774,7 +779,7 @@ impl ChatWidget {
         item: StatusSurfacePreviewItem,
     ) -> Option<String> {
         let status_line_item = match item {
-            StatusSurfacePreviewItem::AppName => return Some("codex".to_string()),
+            StatusSurfacePreviewItem::AppName => return Some("pfterminal".to_string()),
             StatusSurfacePreviewItem::ProjectName => return self.terminal_title_project_name(),
             StatusSurfacePreviewItem::ProjectRoot => StatusLineItem::ProjectRoot,
             StatusSurfacePreviewItem::Status => return Some(self.run_state_status_text()),
@@ -817,7 +822,7 @@ impl ChatWidget {
         now: Instant,
     ) -> Option<String> {
         match item {
-            TerminalTitleItem::AppName => Some("codex".to_string()),
+            TerminalTitleItem::AppName => Some("pfterminal".to_string()),
             TerminalTitleItem::Project => self.terminal_title_project_name(),
             TerminalTitleItem::CurrentDir => Some(Self::truncate_terminal_title_part(
                 format_directory_display(self.status_line_cwd(), /*max_width*/ None),

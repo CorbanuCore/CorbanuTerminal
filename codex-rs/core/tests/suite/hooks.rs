@@ -50,6 +50,7 @@ use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_host_windows;
 use core_test_support::skip_if_no_network;
+use core_test_support::skip_if_sandbox;
 use core_test_support::skip_if_wine_exec;
 use core_test_support::streaming_sse::StreamingSseChunk;
 use core_test_support::streaming_sse::start_streaming_sse_server;
@@ -1448,6 +1449,7 @@ async fn session_end_skips_subagents() -> Result<()> {
             agent_path: None,
             agent_nickname: None,
             agent_role: None,
+            agent_class: None,
         },
     ] {
         let subagent = test

@@ -24,9 +24,14 @@ These providers are compiled into PFTerminal:
 | Provider id  | Display name | Base URL                              | Env key              | Wire API         |
 | ------------ | ------------ | ------------------------------------- | -------------------- | ---------------- |
 | `openai`     | OpenAI       | `https://chatgpt.com/backend-api/codex` | Account login      | Responses        |
+| `anthropic`  | Anthropic    | `https://api.anthropic.com/v1`          | `ANTHROPIC_API_KEY` | Messages        |
+| `claude-plan`| Claude Plan  | Claude Code account route               | Claude Code login  | Messages         |
 | `ambient`    | Ambient      | `https://api.ambient.xyz/v1`          | `AMBIENT_API_KEY`    | Chat Completions |
+| `kimi-code`  | Kimi Code    | `https://api.kimi.com/coding/v1`      | `KIMI_API_KEY`       | Chat Completions |
 | `zai`        | Z.AI         | `https://api.z.ai/api/coding/paas/v4` | `ZAI_API_KEY`        | Chat Completions |
+| `deepseek`   | DeepSeek     | `https://api.deepseek.com`             | `DEEPSEEK_API_KEY`   | Responses        |
 | `openrouter` | OpenRouter   | `https://openrouter.ai/api/v1`        | `OPENROUTER_API_KEY` | Chat Completions |
+| `meta`       | Meta         | `https://api.meta.ai/v1`               | `MODEL_API_KEY`      | Responses        |
 | `baseten`    | Baseten      | `https://inference.baseten.co/v1`     | `BASETEN_API_KEY`    | Chat Completions |
 | `vercel`     | Vercel       | `https://ai-gateway.vercel.sh/v1`     | `AI_GATEWAY_API_KEY` | Responses        |
 
@@ -43,14 +48,21 @@ Ambient:
 
 ```toml
 model_provider = "ambient"
-model = "zai-org/GLM-5.2-FP8"
+model = "z-ai/glm-5.2"
 ```
 
 OpenAI Codex account:
 
 ```toml
 model_provider = "openai"
-model = "gpt-5.5"
+model = "gpt-5.6-luna"
+```
+
+DeepSeek direct:
+
+```toml
+model_provider = "deepseek"
+model = "deepseek-v4-flash"
 ```
 
 Z.AI:
@@ -60,11 +72,11 @@ model_provider = "zai"
 model = "glm-5.2"
 ```
 
-OpenRouter GLM:
+OpenRouter pinned DeepSeek Flash:
 
 ```toml
 model_provider = "openrouter"
-model = "z-ai/glm-5.2"
+model = "deepseek/deepseek-v4-flash-0731"
 ```
 
 OpenRouter MiniMax:
@@ -99,8 +111,9 @@ You can also select a model per run:
 
 ```bash
 pfterminal -m glm-5.2
-pfterminal -m gpt-5.5
-pfterminal -m z-ai/glm-5.2
+pfterminal -m gpt-5.6-luna
+pfterminal -m deepseek-v4-flash
+pfterminal -m deepseek/deepseek-v4-flash-0731
 pfterminal -m zai-org/GLM-5.2
 pfterminal -m zai/glm-5.2
 pfterminal -m zai/glm-5.2-fast
@@ -116,9 +129,13 @@ Provider API keys saved by PFTerminal are stored in the encrypted vault, not in
 Vault labels:
 
 ```text
+provider/anthropic_api_key
 provider/ambient_api_key
+provider/kimi_api_key
 provider/zai_api_key
+provider/deepseek_api_key
 provider/openrouter_api_key
+provider/model_api_key
 provider/baseten_api_key
 provider/ai_gateway_api_key
 ```

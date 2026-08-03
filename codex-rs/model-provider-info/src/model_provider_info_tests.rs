@@ -32,6 +32,7 @@ base_url = "http://localhost:11434/v1"
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: ProviderRuntimePolicy::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
@@ -71,6 +72,7 @@ query_params = { api-version = "2025-04-01-preview" }
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: ProviderRuntimePolicy::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
@@ -114,6 +116,7 @@ supports_standalone_web_search = true
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: ProviderRuntimePolicy::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
@@ -203,6 +206,15 @@ fn openai_provider_uses_codex_compat_version_header() {
 }
 
 #[test]
+fn openai_provider_base_url_override_conservatively_disables_websockets() {
+    let provider = ModelProviderInfo::create_openai_provider(Some(
+        "https://openai-compatible.example/v1".to_string(),
+    ));
+
+    assert!(!provider.supports_websockets);
+}
+
+#[test]
 fn test_personal_access_token_uses_chatgpt_codex_base_url() {
     let api_provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None)
         .to_api_provider(Some(AuthMode::PersonalAccessToken))
@@ -241,6 +253,7 @@ fn test_supports_remote_compaction_for_azure_name() {
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: ProviderRuntimePolicy::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
@@ -271,6 +284,7 @@ fn test_supports_remote_compaction_for_non_openai_non_azure_provider() {
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: ProviderRuntimePolicy::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
@@ -384,6 +398,7 @@ fn test_create_amazon_bedrock_provider() {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: ProviderRuntimePolicy::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
@@ -428,9 +443,11 @@ fn test_create_ambient_provider() {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: ProviderRuntimePolicy::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     );
     assert_eq!(AMBIENT_DEFAULT_MODEL, "z-ai/glm-5.2");
@@ -480,9 +497,11 @@ fn test_create_zai_provider() {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: ProviderRuntimePolicy::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     );
     assert_eq!(ZAI_DEFAULT_MODEL, "glm-5.2");
@@ -511,9 +530,11 @@ fn test_create_anthropic_provider() {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: ProviderRuntimePolicy::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     );
     assert_eq!(ANTHROPIC_DEFAULT_MODEL, "claude-opus-5");
@@ -558,9 +579,11 @@ fn test_create_claude_plan_provider() {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: ProviderRuntimePolicy::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     );
     assert_eq!(CLAUDE_PLAN_MODEL, "claude-opus-5-plan");
@@ -715,6 +738,40 @@ fn test_built_in_model_providers_include_openrouter() {
 }
 
 #[test]
+fn test_built_in_model_providers_include_deepseek_flash_responses() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let deepseek = providers
+        .get(DEEPSEEK_PROVIDER_ID)
+        .expect("DeepSeek provider should be built in");
+
+    assert!(deepseek.is_deepseek());
+    assert_eq!(deepseek.base_url.as_deref(), Some(DEEPSEEK_BASE_URL));
+    assert_eq!(deepseek.env_key.as_deref(), Some(DEEPSEEK_API_KEY_ENV_VAR));
+    assert_eq!(deepseek.wire_api, WireApi::Responses);
+    assert_eq!(deepseek.api_key_header_name(), None);
+    assert!(!deepseek.requires_openai_auth);
+    assert!(!deepseek.supports_websockets);
+    assert_eq!(
+        resolve_model_for_provider(None, DEEPSEEK_PROVIDER_ID).as_deref(),
+        Some(DEEPSEEK_DEFAULT_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(
+            Some(DEEPSEEK_DEFAULT_MODEL.to_string()),
+            DEEPSEEK_PROVIDER_ID,
+        )
+        .as_deref(),
+        Some(DEEPSEEK_DEFAULT_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(Some("deepseek-v4-pro".to_string()), DEEPSEEK_PROVIDER_ID,)
+            .as_deref(),
+        Some(DEEPSEEK_DEFAULT_MODEL),
+        "DeepSeek Responses must stay on Flash until Pro is supported"
+    );
+}
+
+#[test]
 fn test_built_in_model_providers_include_meta() {
     let providers = built_in_model_providers(/*openai_base_url*/ None);
     let meta = providers
@@ -778,6 +835,7 @@ fn openrouter_preserves_nonempty_model_slugs() {
             "google/gemini-3.5-flash",
             "x-ai/grok-4.5",
             "deepseek/deepseek-v4-pro",
+            "deepseek/deepseek-v4-flash-0731",
             "tencent/hy3:free",
             "vendor/future-model",
         ] {
@@ -1237,6 +1295,14 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider(KIMI_CODE_K3_MODEL, KIMI_CODE_PROVIDER_ID),
         None
     );
+    assert_eq!(
+        corrected_catalog_provider(DEEPSEEK_DEFAULT_MODEL, OPENROUTER_PROVIDER_ID),
+        Some(DEEPSEEK_PROVIDER_ID)
+    );
+    assert_eq!(
+        corrected_catalog_provider(DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROVIDER_ID),
+        None
+    );
 
     // Servable cross-provider pairs, unknown models, user-defined providers: untouched.
     assert_eq!(
@@ -1272,6 +1338,7 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (CLAUDE_FABLE_5_MODEL, ANTHROPIC_PROVIDER_ID),
         ("x-ai/grok-4.5", OPENROUTER_PROVIDER_ID),
         ("moonshotai/kimi-k3", OPENROUTER_PROVIDER_ID),
+        (DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROVIDER_ID),
         (META_DEFAULT_MODEL, META_PROVIDER_ID),
         (VERCEL_DEFAULT_MODEL, VERCEL_PROVIDER_ID),
         (VERCEL_GLM_5_2_FAST_MODEL, VERCEL_ANTHROPIC_FAST_PROVIDER_ID),

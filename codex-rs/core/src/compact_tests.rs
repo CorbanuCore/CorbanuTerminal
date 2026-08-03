@@ -288,6 +288,7 @@ fn should_use_remote_compact_task_for_azure_provider() {
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
         websocket_connect_timeout_ms: None,
+        runtime_policy: Default::default(),
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
@@ -558,6 +559,7 @@ async fn process_compacted_history_reinjects_model_switch_message() {
     }];
     let previous_turn_settings = PreviousTurnSettings {
         model: "previous-regular-model".to_string(),
+        model_provider: None,
         comp_hash: None,
         realtime_active: None,
     };

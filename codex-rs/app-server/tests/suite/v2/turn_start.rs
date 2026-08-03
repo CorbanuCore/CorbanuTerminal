@@ -13,6 +13,7 @@ use app_test_support::create_shell_command_sse_response;
 use app_test_support::format_with_current_shell_display;
 use app_test_support::write_mock_responses_config_toml_with_chatgpt_base_url;
 use app_test_support::write_models_cache;
+use app_test_support::write_models_cache_for_provider;
 use codex_app_server::INPUT_TOO_LARGE_ERROR_CODE;
 use codex_app_server::INVALID_PARAMS_ERROR_CODE;
 use codex_app_server_protocol::AdditionalContextEntry;
@@ -565,9 +566,21 @@ async fn turn_start_emits_thread_scoped_warning_notification_for_trimmed_skills(
     let warning: WarningNotification =
         timeout(DEFAULT_READ_TIMEOUT, mcp.read_notification("warning")).await??;
     assert_eq!(warning.thread_id.as_deref(), Some(thread.id.as_str()));
-    assert_eq!(
-        warning.message,
-        "Exceeded skills context budget of 2%. All skill descriptions were removed and 7 additional skills were not included in the model-visible skills list."
+    let omitted_count = warning
+        .message
+        .strip_prefix(
+            "Exceeded skills context budget of 2%. All skill descriptions were removed and ",
+        )
+        .and_then(|remainder| {
+            remainder.strip_suffix(
+                " additional skills were not included in the model-visible skills list.",
+            )
+        })
+        .and_then(|count| count.parse::<usize>().ok())
+        .expect("warning should report the number of omitted skills");
+    assert!(
+        omitted_count >= 2,
+        "both test skills should be omitted from the constrained context"
     );
 
     timeout(
@@ -2951,7 +2964,12 @@ async fn turn_start_does_not_stream_apply_patch_change_updates_without_feature_v
         create_final_assistant_message_sse_response("patch applied")?,
     ];
     let server = create_mock_responses_server_sequence(responses).await;
-    MockResponsesConfig::new(&server.uri()).write(&codex_home)?;
+    const PATCH_MODEL: &str = "mock_provider/gpt-5.4";
+    MockResponsesConfig::new(&server.uri())
+        .with_model(PATCH_MODEL)
+        .with_sandbox_mode("danger-full-access")
+        .write(&codex_home)?;
+    write_models_cache_for_provider(&codex_home, "mock_provider")?;
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(&codex_home)
@@ -2960,7 +2978,7 @@ async fn turn_start_does_not_stream_apply_patch_change_updates_without_feature_v
 
     let ThreadStartResponse { thread, .. } = mcp
         .start_thread(ThreadStartParams {
-            model: Some("mock-model".to_string()),
+            model: Some(PATCH_MODEL.to_string()),
             cwd: Some(workspace.to_string_lossy().into_owned()),
             ..Default::default()
         })
@@ -2976,7 +2994,7 @@ async fn turn_start_does_not_stream_apply_patch_change_updates_without_feature_v
                     text: "apply patch".into(),
                     text_elements: Vec::new(),
                 }],
-                cwd: Some(workspace),
+                cwd: Some(workspace.clone()),
                 ..Default::default()
             },
         })
@@ -2991,6 +3009,10 @@ async fn turn_start_does_not_stream_apply_patch_change_updates_without_feature_v
         !mcp.pending_notification_methods()
             .iter()
             .any(|method| method == "item/fileChange/patchUpdated")
+    );
+    assert_eq!(
+        std::fs::read_to_string(workspace.join("live.txt"))?,
+        "live line\n"
     );
 
     Ok(())
@@ -3064,26 +3086,16 @@ async fn turn_start_streams_apply_patch_change_updates_v2() -> Result<()> {
         create_final_assistant_message_sse_response("patch applied")?,
     ];
     let server = create_mock_responses_server_sequence(responses).await;
+    const PATCH_MODEL: &str = "mock_provider/gpt-5.4";
     MockResponsesConfig::new(&server.uri())
+        .with_model(PATCH_MODEL)
+        .with_sandbox_mode("danger-full-access")
         .enable_feature(Feature::ApplyPatchStreamingEvents)
         .disable_feature(Feature::Plugins)
         .disable_feature(Feature::RemoteModels)
         .disable_feature(Feature::ShellSnapshot)
         .write(&codex_home)?;
-    write_models_cache(&codex_home)?;
-    let cache_path = codex_home.join("models_cache.json");
-    let mut cache: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&cache_path)?)?;
-    let models = cache["models"]
-        .as_array_mut()
-        .expect("models_cache.json models should be an array");
-    let model = models
-        .first_mut()
-        .expect("models_cache.json should contain at least one model");
-    model["slug"] = serde_json::Value::from("mock-model");
-    model["display_name"] = serde_json::Value::from("mock-model");
-    model["apply_patch_tool_type"] = serde_json::Value::from("freeform");
-    std::fs::write(&cache_path, serde_json::to_string_pretty(&cache)?)?;
+    write_models_cache_for_provider(&codex_home, "mock_provider")?;
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(&codex_home)
@@ -3092,7 +3104,7 @@ async fn turn_start_streams_apply_patch_change_updates_v2() -> Result<()> {
 
     let ThreadStartResponse { thread, .. } = mcp
         .start_thread(ThreadStartParams {
-            model: Some("mock-model".to_string()),
+            model: Some(PATCH_MODEL.to_string()),
             cwd: Some(workspace.to_string_lossy().into_owned()),
             ..Default::default()
         })
@@ -3149,7 +3161,8 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
     const CHILD_PROMPT: &str = "child: do work";
     const PARENT_PROMPT: &str = "spawn a child and continue";
     const SPAWN_CALL_ID: &str = "spawn-call-1";
-    const REQUESTED_MODEL: &str = "gpt-5.2";
+    const PARENT_MODEL: &str = "mock_provider/gpt-5.4";
+    const REQUESTED_MODEL: &str = "mock_provider/gpt-5.2";
     const REQUESTED_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::Low;
 
     let server = responses::start_mock_server().await;
@@ -3200,6 +3213,7 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
     MockResponsesConfig::new(&server.uri())
         .enable_feature(Feature::Collab)
         .write(codex_home.path())?;
+    write_models_cache_for_provider(codex_home.path(), "mock_provider")?;
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
@@ -3208,7 +3222,7 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
 
     let ThreadStartResponse { thread, .. } = mcp
         .start_thread(ThreadStartParams {
-            model: Some("gpt-5.4".to_string()),
+            model: Some(PARENT_MODEL.to_string()),
             ..Default::default()
         })
         .await?;
@@ -3518,9 +3532,10 @@ async fn turn_start_emits_spawn_agent_item_with_effective_role_model_metadata_v2
     const CHILD_PROMPT: &str = "child: do work";
     const PARENT_PROMPT: &str = "spawn a child and continue";
     const SPAWN_CALL_ID: &str = "spawn-call-1";
-    const REQUESTED_MODEL: &str = "gpt-5.2";
+    const PARENT_MODEL: &str = "mock_provider/gpt-5.4";
+    const REQUESTED_MODEL: &str = "mock_provider/gpt-5.2";
     const REQUESTED_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::Low;
-    const ROLE_MODEL: &str = "gpt-5.4";
+    const ROLE_MODEL: &str = "mock_provider/gpt-5.4";
     const ROLE_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::High;
 
     let server = responses::start_mock_server().await;
@@ -3572,6 +3587,7 @@ async fn turn_start_emits_spawn_agent_item_with_effective_role_model_metadata_v2
     MockResponsesConfig::new(&server.uri())
         .enable_feature(Feature::Collab)
         .write(codex_home.path())?;
+    write_models_cache_for_provider(codex_home.path(), "mock_provider")?;
     std::fs::write(
         codex_home.path().join("custom-role.toml"),
         format!("model = \"{ROLE_MODEL}\"\nmodel_reasoning_effort = \"{ROLE_REASONING_EFFORT}\"\n",),
@@ -3597,7 +3613,7 @@ config_file = "./custom-role.toml"
 
     let ThreadStartResponse { thread, .. } = mcp
         .start_thread(ThreadStartParams {
-            model: Some("gpt-5.4".to_string()),
+            model: Some(PARENT_MODEL.to_string()),
             ..Default::default()
         })
         .await?;

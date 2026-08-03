@@ -24,6 +24,7 @@ use std::fmt;
 use std::io::Error as IoError;
 use std::io::ErrorKind;
 use std::io::Result as IoResult;
+use std::mem;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -88,6 +89,27 @@ pub mod legacy_core {
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 // Covers the embedded drain, its analytics flush, and final task join.
 const IN_PROCESS_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(45);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+async fn await_in_process_response<T>(
+    response_rx: oneshot::Receiver<T>,
+    operation: &'static str,
+) -> IoResult<T> {
+    timeout(REQUEST_TIMEOUT, response_rx)
+        .await
+        .map_err(|_| {
+            IoError::new(
+                ErrorKind::TimedOut,
+                format!("in-process app-server {operation} timed out after 30 seconds"),
+            )
+        })?
+        .map_err(|_| {
+            IoError::new(
+                ErrorKind::BrokenPipe,
+                format!("in-process app-server {operation} channel is closed"),
+            )
+        })
+}
 
 /// Raw app-server request result for typed in-process requests.
 ///
@@ -204,19 +226,20 @@ fn can_append_delta(existing: &str, incoming: &str) -> bool {
 }
 
 fn is_coalescable_event(event: &InProcessServerEvent) -> bool {
+    let InProcessServerEvent::ServerNotification(notification) = event else {
+        return false;
+    };
     matches!(
-        event,
-        InProcessServerEvent::ServerNotification(
-            ServerNotification::AgentMessageDelta(_)
-                | ServerNotification::PlanDelta(_)
-                | ServerNotification::ReasoningSummaryTextDelta(_)
-                | ServerNotification::ReasoningTextDelta(_)
-                | ServerNotification::CommandExecutionOutputDelta(_)
-                | ServerNotification::FileChangeOutputDelta(_)
-                | ServerNotification::ThreadRealtimeTranscriptDelta(_)
-                | ServerNotification::TurnDiffUpdated(_)
-                | ServerNotification::TurnPlanUpdated(_)
-        )
+        notification.as_ref(),
+        ServerNotification::AgentMessageDelta(_)
+            | ServerNotification::PlanDelta(_)
+            | ServerNotification::ReasoningSummaryTextDelta(_)
+            | ServerNotification::ReasoningTextDelta(_)
+            | ServerNotification::CommandExecutionOutputDelta(_)
+            | ServerNotification::FileChangeOutputDelta(_)
+            | ServerNotification::ThreadRealtimeTranscriptDelta(_)
+            | ServerNotification::TurnDiffUpdated(_)
+            | ServerNotification::TurnPlanUpdated(_)
     )
 }
 
@@ -232,7 +255,7 @@ fn merge_coalescable_event(
         return false;
     };
 
-    match (pending, incoming) {
+    match (pending.as_mut(), incoming.as_ref()) {
         (
             ServerNotification::AgentMessageDelta(pending),
             ServerNotification::AgentMessageDelta(incoming),
@@ -342,36 +365,12 @@ fn forward_in_process_event<F>(
 where
     F: FnMut(ServerRequest),
 {
-    if *skipped_events > 0 {
-        if event_requires_delivery(&event) {
-            // Surface lag before the lossless event, but do not let the lag marker itself cause
-            // us to drop the transcript/completion notification the caller is blocked on.
-            if event_tx
-                .send(InProcessServerEvent::Lagged {
-                    skipped: *skipped_events,
-                })
-                .await
-                .is_err()
-            {
-                return ForwardEventResult::DisableStream;
-            }
-            *skipped_events = 0;
-        } else {
-            match event_tx.try_send(InProcessServerEvent::Lagged {
-                skipped: *skipped_events,
-            }) {
-                Ok(()) => {
-                    *skipped_events = 0;
-                }
-                Err(mpsc::error::TrySendError::Full(_)) => {
-                    *skipped_events = skipped_events.saturating_add(1);
-                    warn!("dropping in-process app-server event because consumer queue is full");
-                    if let InProcessServerEvent::ServerRequest(request) = event {
-                        reject_server_request(*request);
-                    }
-                    return ForwardEventResult::Continue;
-                }
-                Err(mpsc::error::TrySendError::Closed(_)) => {
+    if is_coalescable_event(&event) {
+        let was_full = coalesced_events.is_full();
+        match coalesced_events.try_coalesce(event) {
+            Ok(()) => return ForwardEventResult::Continue,
+            Err(event) if was_full => {
+                if coalesced_events.flush(event_tx) == ForwardEventResult::DisableStream {
                     return ForwardEventResult::DisableStream;
                 }
                 return match coalesced_events.try_coalesce(event) {
@@ -405,10 +404,8 @@ where
 
     match event_tx.send(event) {
         Ok(()) => ForwardEventResult::Continue,
-        Err(mpsc::error::TrySendError::Full(event)) => {
-            *skipped_events = skipped_events.saturating_add(1);
-            warn!("dropping in-process app-server event because consumer queue is full");
-            if let InProcessServerEvent::ServerRequest(request) = event {
+        Err(send_error) => {
+            if let InProcessServerEvent::ServerRequest(request) = send_error.0 {
                 reject_server_request(*request);
             }
             ForwardEventResult::DisableStream
@@ -1490,50 +1487,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn forward_in_process_event_preserves_transcript_notifications_under_backpressure() {
-        let (event_tx, mut event_rx) = mpsc::channel(1);
-        event_tx
-            .send(InProcessServerEvent::ServerNotification(Box::new(
-                command_execution_output_delta_notification("stdout-1"),
-            )))
-            .await
-            .expect("initial event should enqueue");
+    async fn forward_in_process_event_coalesces_deltas_and_flushes_before_completion() {
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+        let mut coalesced_events = PendingCoalescedEvents::default();
 
-        let mut skipped_events = 0usize;
-        let result = forward_in_process_event(
-            &event_tx,
-            &mut skipped_events,
-            InProcessServerEvent::ServerNotification(Box::new(
-                command_execution_output_delta_notification("stdout-2"),
-            )),
-            |_| {},
-        )
-        .await;
-        assert_eq!(result, ForwardEventResult::Continue);
-        assert_eq!(skipped_events, 1);
-
-        let receive_task = tokio::spawn(async move {
-            let mut events = Vec::new();
-            for _ in 0..5 {
-                events.push(
-                    timeout(Duration::from_secs(2), event_rx.recv())
-                        .await
-                        .expect("event should arrive before timeout")
-                        .expect("event stream should stay open"),
-                );
-            }
-            events
-        });
-
-        for notification in [
-            agent_message_delta_notification("hello"),
-            item_completed_notification("hello"),
-            turn_completed_notification(),
-        ] {
+        for chunk in ["he", "llo"] {
             let result = forward_in_process_event(
                 &event_tx,
-                &mut skipped_events,
-                InProcessServerEvent::ServerNotification(Box::new(notification)),
+                &mut coalesced_events,
+                InProcessServerEvent::ServerNotification(Box::new(
+                    agent_message_delta_notification(chunk),
+                )),
                 |_| {},
             );
             assert_eq!(result, ForwardEventResult::Continue);
@@ -1543,27 +1507,16 @@ mod tests {
         let result = forward_in_process_event(
             &event_tx,
             &mut coalesced_events,
-            InProcessServerEvent::ServerNotification(item_completed_notification("hello")),
+            InProcessServerEvent::ServerNotification(Box::new(item_completed_notification(
+                "hello",
+            ))),
             |_| {},
         );
         assert_eq!(result, ForwardEventResult::Continue);
 
         let delta = event_rx.recv().await.expect("delta should flush first");
         assert!(matches!(
-            &events[0],
-            InProcessServerEvent::ServerNotification(notification)
-                if matches!(
-                    notification.as_ref(),
-                    ServerNotification::CommandExecutionOutputDelta(notification)
-                        if notification.delta == "stdout-1"
-                )
-        ));
-        assert!(matches!(
-            &events[1],
-            InProcessServerEvent::Lagged { skipped: 1 }
-        ));
-        assert!(matches!(
-            &events[2],
+            delta,
             InProcessServerEvent::ServerNotification(notification)
                 if matches!(
                     notification.as_ref(),
@@ -1573,7 +1526,7 @@ mod tests {
         ));
         let completed = event_rx.recv().await.expect("completion should follow");
         assert!(matches!(
-            &events[3],
+            completed,
             InProcessServerEvent::ServerNotification(notification)
                 if matches!(
                     notification.as_ref(),
@@ -1585,16 +1538,53 @@ mod tests {
                         )
                 )
         ));
-        assert!(matches!(
-            &events[4],
-            InProcessServerEvent::ServerNotification(notification)
-                if matches!(
-                    notification.as_ref(),
-                    ServerNotification::TurnCompleted(notification)
-                        if notification.turn.status
-                            == codex_app_server_protocol::TurnStatus::Completed
-                )
-        ));
+    }
+
+    #[tokio::test]
+    async fn forward_in_process_event_coalesces_multi_agent_streams_without_blocking() {
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+        let mut coalesced_events = PendingCoalescedEvents::default();
+
+        for item_index in 0..4 {
+            for _ in 0..512 {
+                let mut notification = agent_message_delta_notification("x");
+                notification = match notification {
+                    ServerNotification::AgentMessageDelta(mut notification) => {
+                        notification.item_id = format!("agent-{item_index}");
+                        ServerNotification::AgentMessageDelta(notification)
+                    }
+                    _ => unreachable!("helper returns an agent delta"),
+                };
+                let result = forward_in_process_event(
+                    &event_tx,
+                    &mut coalesced_events,
+                    InProcessServerEvent::ServerNotification(Box::new(notification)),
+                    |_| {},
+                );
+                assert_eq!(result, ForwardEventResult::Continue);
+            }
+        }
+
+        assert!(event_rx.try_recv().is_err());
+        assert_eq!(
+            coalesced_events.flush(&event_tx),
+            ForwardEventResult::Continue
+        );
+
+        let mut received = 0usize;
+        while let Ok(event) = event_rx.try_recv() {
+            assert!(matches!(
+                event,
+                InProcessServerEvent::ServerNotification(notification)
+                    if matches!(
+                        notification.as_ref(),
+                        ServerNotification::AgentMessageDelta(notification)
+                            if notification.delta.len() == 512
+                    )
+            ));
+            received += 1;
+        }
+        assert_eq!(received, 4);
     }
 
     #[tokio::test]
@@ -2306,7 +2296,7 @@ mod tests {
                 )
             ))
         ));
-        assert!(event_requires_delivery(
+        assert!(!event_requires_delivery(
             &InProcessServerEvent::ServerNotification(Box::new(
                 codex_app_server_protocol::ServerNotification::AgentMessageDelta(
                     codex_app_server_protocol::AgentMessageDeltaNotification {
@@ -2478,7 +2468,7 @@ mod tests {
         use std::sync::atomic::Ordering;
 
         let (command_tx, mut command_rx) = mpsc::channel(1);
-        let (_event_tx, event_rx) = mpsc::channel(1);
+        let (_event_tx, event_rx) = mpsc::unbounded_channel();
         let completed = Arc::new(AtomicBool::new(false));
         let worker_completed = Arc::clone(&completed);
         let worker_handle = tokio::spawn(async move {

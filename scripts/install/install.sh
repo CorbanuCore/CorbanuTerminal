@@ -4,7 +4,7 @@ set -eu
 
 RELEASE="${CODEX_RELEASE:-latest}"
 NON_INTERACTIVE="${CODEX_NON_INTERACTIVE:-false}"
-DEFAULT_PREFER_RELEASES_OPENAI_COM="true"
+DEFAULT_PREFER_RELEASES_OPENAI_COM="false"
 PREFER_RELEASES_OPENAI_COM="${CODEX_INSTALLER_USE_RELEASES_OPENAI_COM:-$DEFAULT_PREFER_RELEASES_OPENAI_COM}"
 RELEASES_BASE_URL="https://releases.openai.com/codex"
 RELEASES_CONNECT_TIMEOUT=10
@@ -13,9 +13,9 @@ RELEASES_ASSET_TIMEOUT=300
 release_source="github"
 
 BIN_DIR="${CODEX_INSTALL_DIR:-$HOME/.local/bin}"
-BIN_PATH="$BIN_DIR/codex"
+BIN_PATH="$BIN_DIR/pfterminal"
 CODE_MODE_HOST_BIN_PATH="$BIN_DIR/codex-code-mode-host"
-CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
+CODEX_HOME_DIR="${PFTERMINAL_HOME:-$HOME/.pfterminal}"
 STANDALONE_ROOT="$CODEX_HOME_DIR/packages/standalone"
 RELEASES_DIR="$STANDALONE_ROOT/releases"
 CURRENT_LINK="$STANDALONE_ROOT/current"
@@ -63,7 +63,7 @@ validate_version() {
   fi
 
   if ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-alpha(\.[0-9]+){0,2}|-beta(\.[0-9]+)?)?$'; then
-    echo "Invalid Codex release version: $version. Expected latest or x.y.z[-alpha[.N[.M]]|-beta[.N]]." >&2
+    echo "Invalid PFTerminal release version: $version. Expected latest or x.y.z[-alpha[.N[.M]]|-beta[.N]]." >&2
     return 1
   fi
 }
@@ -349,7 +349,7 @@ resolve_release_from_github() {
   normalized_version="$1"
   if [ "$normalized_version" = "latest" ]; then
     requested_release="latest"
-    metadata_url="https://api.github.com/repos/openai/codex/releases/latest"
+    metadata_url="https://api.github.com/repos/agtico/PfTerminal/releases/latest"
   else
     resolved_version="$normalized_version"
     requested_release="$resolved_version"
@@ -937,12 +937,13 @@ install_package_release() {
   stage_release="$RELEASES_DIR/.staging.$(basename "$release_dir").$$"
 
   mkdir -p "$RELEASES_DIR"
-  rm -f "$CURRENT_LINK/bin/codex" "$CURRENT_LINK/codex"
   rm -rf "$stage_release"
   mkdir -p "$stage_release"
   tar -xzf "$archive_path" -C "$stage_release"
   chmod 0755 \
-    "$stage_release/bin/codex" \
+    "$stage_release/bin/pfterminal" \
+    "$stage_release/bin/pfterminal-debug" \
+    "$stage_release/bin/pfterminal-walletd" \
     "$stage_release/bin/codex-code-mode-host" \
     "$stage_release/codex-path/rg"
   if [ -f "$stage_release/codex-resources/bwrap" ]; then
@@ -996,9 +997,11 @@ release_dir_is_complete() {
   case "$layout" in
     package)
       [ -f "$release_dir/codex-package.json" ] &&
-        [ -x "$release_dir/bin/codex" ] &&
+        [ -x "$release_dir/bin/pfterminal" ] &&
+        [ -x "$release_dir/bin/pfterminal-debug" ] &&
+        [ -x "$release_dir/bin/pfterminal-walletd" ] &&
         [ -x "$release_dir/bin/codex-code-mode-host" ] &&
-        [ -x "$release_dir/codex" ] &&
+        [ -x "$release_dir/pfterminal" ] &&
         [ -x "$release_dir/codex-path/rg" ] ||
         return 1
       ;;
@@ -1018,7 +1021,7 @@ release_dir_is_complete() {
       ;;
   esac
 
-  installed_version="$(version_from_binary "$release_dir/bin/codex" || version_from_binary "$release_dir/codex" || true)"
+  installed_version="$(version_from_binary "$release_dir/bin/pfterminal" || version_from_binary "$release_dir/pfterminal" || true)"
   [ "$installed_version" = "$expected_version" ]
 }
 
@@ -1053,7 +1056,7 @@ write_visible_command_wrapper() {
   rm -f "$tmp_script"
   {
     printf '#!/bin/sh\n'
-    printf 'export CODEX_HOME="${CODEX_HOME:-${PFTERMINAL_HOME:-$HOME/.pfterminal}}"\n'
+    printf 'export CODEX_HOME="${PFTERMINAL_HOME:-$HOME/.pfterminal}"\n'
     printf 'exec %s "$@"\n' "$(shell_quote "$target")"
   } >"$tmp_script"
   chmod 0755 "$tmp_script"
@@ -1070,11 +1073,12 @@ update_visible_command() {
   release_dir="$1"
   mkdir -p "$BIN_DIR"
   tmp_script="$BIN_DIR/.pfterminal.$$"
+  tmp_link="$BIN_DIR/.codex-code-mode-host.$$"
   if ! pfterminal_relative_path="$(release_pfterminal_relative_path "$release_dir")"; then
     exit 1
   fi
 
-  replace_path_with_symlink "$BIN_PATH" "$CURRENT_LINK/$codex_relative_path" "$tmp_link"
+  write_visible_command_wrapper "$CURRENT_LINK/$pfterminal_relative_path" "$tmp_script"
 
   if [ "$os" = "darwin" ] && [ -x "$release_dir/bin/codex-code-mode-host" ]; then
     replace_path_with_symlink \
@@ -1208,7 +1212,7 @@ if ! release_dir_is_complete "$release_dir" "$resolved_version" "$vendor_target"
   fi
 fi
 if ! release_dir_is_complete "$release_dir" "$resolved_version" "$vendor_target" "$install_layout"; then
-  echo "Installed Codex command did not report expected version $resolved_version." >&2
+  echo "Installed PFTerminal command did not report expected version $resolved_version." >&2
   exit 1
 fi
 update_current_link "$release_dir"

@@ -232,6 +232,12 @@ impl StartThreadOptions {
     }
 }
 
+impl From<Config> for StartThreadOptions {
+    fn from(config: Config) -> Self {
+        Self::new(config)
+    }
+}
+
 fn originator_from_service_name(service_name: Option<&str>) -> Option<String> {
     let service_name = service_name?.trim();
     for originator in [
@@ -295,6 +301,10 @@ pub(crate) struct ThreadManagerState {
     session_source: SessionSource,
     installation_id: String,
     analytics_events_client: Option<AnalyticsEventsClient>,
+    /// Process-scoped native manager auto-processing state. This lives on the ThreadManager so
+    /// separately materialized AgentControl handles still enforce one policy per ThreadId.
+    pub(crate) native_auto_loop_state_by_agent:
+        Arc<std::sync::Mutex<HashMap<ThreadId, crate::agent::control::NativeAutoLoopState>>>,
     // Captures submitted ops for testing purpose when test mode is enabled.
     ops_log: Option<SharedCapturedOps>,
 }
@@ -405,6 +415,7 @@ impl ThreadManager {
                 session_source,
                 installation_id,
                 analytics_events_client,
+                native_auto_loop_state_by_agent: Arc::default(),
                 ops_log: should_use_test_thread_manager_behavior()
                     .then(|| Arc::new(std::sync::Mutex::new(Vec::new()))),
             }),
@@ -540,6 +551,7 @@ impl ThreadManager {
                 session_source: SessionSource::Exec,
                 installation_id,
                 analytics_events_client: None,
+                native_auto_loop_state_by_agent: Arc::default(),
                 ops_log: should_use_test_thread_manager_behavior()
                     .then(|| Arc::new(std::sync::Mutex::new(Vec::new()))),
             }),
@@ -771,8 +783,19 @@ impl ThreadManager {
         Ok(subtree_thread_ids)
     }
 
-    pub async fn start_thread(&self, options: StartThreadOptions) -> CodexResult<NewThread> {
-        Box::pin(self.start_thread_inner(options, /*forked_from_thread_id*/ None)).await
+    pub async fn start_thread(
+        &self,
+        options: impl Into<StartThreadOptions>,
+    ) -> CodexResult<NewThread> {
+        Box::pin(self.start_thread_inner(options.into(), /*forked_from_thread_id*/ None)).await
+    }
+
+    #[doc(hidden)]
+    pub async fn start_thread_with_options(
+        &self,
+        options: StartThreadOptions,
+    ) -> CodexResult<NewThread> {
+        self.start_thread(options).await
     }
 
     async fn start_thread_inner(
@@ -787,7 +810,6 @@ impl ThreadManager {
                 &options.config.workspace_roots,
             )
         });
-        let agent_control = self.agent_control_for_config(&options.config);
         let (resumed_session_source, resumed_thread_source) = options
             .initial_history
             .get_resumed_session_sources()
@@ -796,14 +818,17 @@ impl ThreadManager {
         let agent_control = self
             .agent_control_for_session_source(&options.config, &session_source)
             .await;
+        agent_control
+            .prepare_durable_thread_spawn_parent(&session_source, options.config.ephemeral)
+            .await?;
         let thread_source = options.thread_source.or(resumed_thread_source);
-        Box::pin(self.state.spawn_thread_with_source(
+        let new_thread = Box::pin(self.state.spawn_thread_with_source(
             options.config,
             options.initial_history,
             options.history_mode,
             options.allow_provider_model_fallback,
             Arc::clone(&self.state.auth_manager),
-            agent_control,
+            agent_control.clone(),
             session_source,
             /*parent_thread_id*/ None,
             forked_from_thread_id,
@@ -819,7 +844,15 @@ impl ThreadManager {
             options.supports_openai_form_elicitation,
             /*user_shell_override*/ None,
         ))
-        .await
+        .await?;
+        agent_control
+            .persist_durable_thread_spawn(
+                new_thread.thread.as_ref(),
+                new_thread.thread_id,
+                Some(&new_thread.thread.session_source),
+            )
+            .await?;
+        Ok(new_thread)
     }
 
     // TODO(jif) merge with fork_agent
@@ -895,15 +928,23 @@ impl ThreadManager {
         let (session_source, thread_source) = initial_history
             .get_resumed_session_sources()
             .unwrap_or_else(|| (self.state.session_source.clone(), None));
+        // A loaded child must rejoin the parent's existing control plane when it is resumed.
+        // Giving it a fresh registry makes the child invisible to both parent and child path
+        // lookups and lets duplicate work claim the same path. Root resumes still take the
+        // normal manager control plane through the non-subagent branch.
+        let agent_control = self
+            .agent_control_for_session_source(&config, &session_source)
+            .await;
         if let InitialHistory::Resumed(resumed) = &initial_history
-            && initial_history.get_multi_agent_version() == Some(MultiAgentVersion::V2)
+            && (config.multi_agent_version_from_features() == MultiAgentVersion::V2
+                || initial_history.get_multi_agent_version() == Some(MultiAgentVersion::V2))
             && !session_source.is_non_root_agent()
         {
             agent_control
                 .restore_v2_agent_metadata(&config, resumed.conversation_id)
                 .await;
         }
-        Box::pin(self.state.spawn_thread_with_source(
+        let resumed_thread = Box::pin(self.state.spawn_thread_with_source(
             config,
             initial_history,
             /*history_mode*/ None,
@@ -1259,7 +1300,7 @@ impl ThreadManager {
             return self.agent_control_for_config(config);
         };
         match self.get_thread(*parent_thread_id).await {
-            Ok(parent_thread) => parent_thread.codex.session.services.agent_control.clone(),
+            Ok(parent_thread) => parent_thread.session.services.agent_control.clone(),
             Err(_) => self.agent_control_for_config(config),
         }
     }
@@ -1870,7 +1911,7 @@ impl ThreadManagerState {
             parent_thread_id,
             thread_source,
             originator,
-            agent_control,
+            agent_control: agent_control.clone(),
             dynamic_tools,
             metrics_service_name,
             inherited_environments,

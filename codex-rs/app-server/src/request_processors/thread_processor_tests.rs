@@ -692,6 +692,7 @@ mod thread_processor_behavior_tests {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: codex_model_provider_info::ProviderRuntimePolicy::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: true,
@@ -817,6 +818,137 @@ mod thread_processor_behavior_tests {
         metadata.model = model.map(ToString::to_string);
         metadata.reasoning_effort = reasoning_effort;
         Ok(metadata)
+    }
+
+    fn persisted_workspace_permission_history() -> Vec<RolloutItem> {
+        vec![RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(
+            codex_protocol::protocol::ThreadSettingsAppliedEvent {
+                thread_settings: codex_protocol::protocol::ThreadSettingsSnapshot {
+                    model: "gpt-5.4".to_string(),
+                    model_provider_id: "openai".to_string(),
+                    service_tier: None,
+                    approval_policy: codex_protocol::protocol::AskForApproval::Never,
+                    approvals_reviewer: codex_protocol::config_types::ApprovalsReviewer::User,
+                    permission_profile: codex_protocol::models::PermissionProfile::workspace_write(
+                    ),
+                    active_permission_profile: None,
+                    cwd: test_path_buf("/tmp/persisted-workspace").abs(),
+                    reasoning_effort: None,
+                    reasoning_summary: None,
+                    personality: None,
+                    collaboration_mode: CollaborationMode {
+                        mode: ModeKind::Default,
+                        settings: Settings {
+                            model: "gpt-5.4".to_string(),
+                            reasoning_effort: None,
+                            developer_instructions: None,
+                        },
+                    },
+                },
+            },
+        ))]
+    }
+
+    #[test]
+    fn latest_rollout_runtime_overrides_stale_metadata_projection() {
+        let mut history = persisted_workspace_permission_history();
+        let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &mut history[0] else {
+            panic!("thread settings fixture");
+        };
+        event.thread_settings.model = "deepseek-v4-flash".to_string();
+        event.thread_settings.model_provider_id = "deepseek".to_string();
+        event.thread_settings.reasoning_effort = Some(ReasoningEffort::High);
+
+        let runtime = latest_persisted_thread_runtime(&history).expect("durable runtime");
+        let mut request_overrides = Some(HashMap::from([(
+            "model_reasoning_effort".to_string(),
+            serde_json::Value::String("low".to_string()),
+        )]));
+        let mut typesafe_overrides = ConfigOverrides {
+            model: Some("stale-model".to_string()),
+            model_provider: Some("stale-provider".to_string()),
+            ..Default::default()
+        };
+
+        apply_persisted_thread_runtime(&mut request_overrides, &mut typesafe_overrides, &runtime);
+
+        assert_eq!(
+            typesafe_overrides.model.as_deref(),
+            Some("deepseek-v4-flash")
+        );
+        assert_eq!(
+            typesafe_overrides.model_provider.as_deref(),
+            Some("deepseek")
+        );
+        assert_eq!(
+            request_overrides
+                .as_ref()
+                .and_then(|overrides| overrides.get("model_reasoning_effort")),
+            Some(&serde_json::Value::String("high".to_string()))
+        );
+    }
+
+    #[test]
+    fn durable_default_effort_clears_stale_reasoning_override() {
+        let runtime = latest_persisted_thread_runtime(&persisted_workspace_permission_history())
+            .expect("durable runtime");
+        let mut request_overrides = Some(HashMap::from([(
+            "model_reasoning_effort".to_string(),
+            serde_json::Value::String("high".to_string()),
+        )]));
+        let mut typesafe_overrides = ConfigOverrides::default();
+
+        apply_persisted_thread_runtime(&mut request_overrides, &mut typesafe_overrides, &runtime);
+
+        assert!(
+            request_overrides
+                .as_ref()
+                .is_none_or(|overrides| !overrides.contains_key("model_reasoning_effort"))
+        );
+    }
+
+    #[test]
+    fn merge_persisted_permissions_restores_restricted_thread_without_override() {
+        let mut typesafe_overrides = ConfigOverrides::default();
+
+        merge_persisted_permissions(
+            &persisted_workspace_permission_history(),
+            /*request_overrides*/ None,
+            &mut typesafe_overrides,
+        );
+
+        assert_eq!(
+            typesafe_overrides.approval_policy,
+            Some(codex_protocol::protocol::AskForApproval::Never)
+        );
+        assert_eq!(
+            typesafe_overrides.permission_profile,
+            Some(codex_protocol::models::PermissionProfile::workspace_write())
+        );
+    }
+
+    #[test]
+    fn merge_persisted_permissions_preserves_explicit_resume_override() {
+        let mut typesafe_overrides = ConfigOverrides {
+            approval_policy: Some(codex_protocol::protocol::AskForApproval::OnRequest),
+            permission_profile: Some(codex_protocol::models::PermissionProfile::Disabled),
+            ..Default::default()
+        };
+
+        merge_persisted_permissions(
+            &persisted_workspace_permission_history(),
+            /*request_overrides*/ None,
+            &mut typesafe_overrides,
+        );
+
+        assert_eq!(
+            typesafe_overrides.approval_policy,
+            Some(codex_protocol::protocol::AskForApproval::OnRequest)
+        );
+        assert_eq!(
+            typesafe_overrides.permission_profile,
+            Some(codex_protocol::models::PermissionProfile::Disabled)
+        );
     }
 
     #[test]

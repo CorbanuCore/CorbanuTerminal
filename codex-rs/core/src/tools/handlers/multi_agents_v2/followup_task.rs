@@ -32,11 +32,51 @@ impl Handler {
         handle_message_string_tool(
             invocation,
             MessageDeliveryMode::TriggerTurn,
+            CollaborationMessageEncoding::ProviderNative,
             args.target,
             args.message,
         )
         .await
         .map(boxed_tool_output)
+    }
+}
+
+pub(crate) struct PlaintextHandler;
+
+impl ToolExecutor<ToolInvocation> for PlaintextHandler {
+    fn tool_name(&self) -> ToolName {
+        ToolName::plain(PLAINTEXT_FOLLOWUP_TASK_TOOL)
+    }
+
+    fn spec(&self) -> ToolSpec {
+        plaintext_adapter_spec(
+            create_followup_task_tool(),
+            PLAINTEXT_FOLLOWUP_TASK_TOOL,
+            "followup_task",
+        )
+    }
+
+    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+        Box::pin(async move {
+            ensure_manager_tool_allowed(&invocation.turn, PLAINTEXT_FOLLOWUP_TASK_TOOL)?;
+            let arguments = function_arguments(invocation.payload.clone())?;
+            let args: FollowupTaskArgs = parse_arguments(&arguments)?;
+            handle_message_string_tool(
+                invocation,
+                MessageDeliveryMode::TriggerTurn,
+                CollaborationMessageEncoding::PlaintextAdapter,
+                args.target,
+                args.message,
+            )
+            .await
+            .map(boxed_tool_output)
+        })
+    }
+}
+
+impl CoreToolRuntime for PlaintextHandler {
+    fn matches_kind(&self, payload: &ToolPayload) -> bool {
+        matches!(payload, ToolPayload::Function { .. })
     }
 }
 

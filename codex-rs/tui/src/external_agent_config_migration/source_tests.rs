@@ -35,6 +35,33 @@ fn external_agent_config_source_prompt_selects_highlighted_source() {
     );
 }
 
+#[tokio::test]
+async fn runtime_source_prompt_consumes_the_app_event_receiver() {
+    let mut tui = crate::tui::test_support::make_test_tui().expect("test tui");
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
+    event_tx
+        .send(TuiEvent::Key(KeyEvent::new(
+            KeyCode::Down,
+            KeyModifiers::NONE,
+        )))
+        .expect("queue down");
+    event_tx
+        .send(TuiEvent::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+        )))
+        .expect("queue enter");
+
+    let selected = run_external_agent_config_source_prompt(
+        &mut tui,
+        &ExternalAgentConfigMigrationSource::ALL,
+        &mut event_rx,
+    )
+    .await;
+
+    assert_eq!(selected, Some(ExternalAgentConfigMigrationSource::Cur));
+}
+
 #[test]
 fn external_agent_config_source_prompt_can_cancel() {
     let mut screen = new_screen();

@@ -1188,13 +1188,18 @@ async fn responses_websocket_openai_commentary_tool_turn_preserves_incremental_r
 
     let mut provider = websocket_provider(&server);
     provider.name = ModelProviderInfo::create_openai_provider(/*base_url*/ None).name;
-    let harness =
-        websocket_harness_with_provider_options(provider, /*runtime_metrics_enabled*/ false).await;
+    let harness = websocket_harness_with_provider_options(
+        provider,
+        /*runtime_metrics_enabled*/ false,
+        /*concurrent_reasoning_summaries_enabled*/ false,
+        /*enabled_features*/ &[],
+    )
+    .await;
     let mut client_session = harness.client.new_session();
 
     let prompt_one = prompt_with_input(vec![message_item("Fix the defect.")]);
     let mut commentary = assistant_message_item("msg-1", "I will inspect the repository.");
-    commentary.stamp_turn_id_if_missing("turn-1");
+    commentary.set_turn_id_if_missing("turn-1");
     let first_call = function_call_item("call-1");
     let first_output = function_call_output_item("call-1");
     let prompt_two = prompt_with_input(vec![
@@ -2416,7 +2421,8 @@ fn function_call_item(call_id: &str) -> ResponseItem {
         namespace: None,
         arguments: "{}".to_string(),
         call_id: call_id.to_string(),
-        metadata: None,
+        encrypted_function_args: None,
+        internal_chat_message_metadata_passthrough: None,
     }
 }
 
@@ -2425,7 +2431,7 @@ fn function_call_output_item(call_id: &str) -> ResponseItem {
         id: None,
         call_id: call_id.to_string(),
         output: FunctionCallOutputPayload::from_text("ok".to_string()),
-        metadata: None,
+        internal_chat_message_metadata_passthrough: None,
     }
 }
 
@@ -2471,6 +2477,7 @@ fn websocket_provider_with_connect_timeout(
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
         websocket_connect_timeout_ms,
+        runtime_policy: Default::default(),
         requires_openai_auth: false,
         supports_websockets: true,
         supports_standalone_web_search: false,

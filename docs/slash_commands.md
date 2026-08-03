@@ -1,7 +1,9 @@
 # Slash commands
 
-PFTerminal inherits Codex slash commands and adds product-specific vault,
-provider, pane, spawn, and Task Node workflows.
+PFTerminal retains the Codex-derived local command surface and adds
+product-specific wallet, vault, provider, GPU, pane, spawn, Telegram, and Task
+Node workflows. The table below is the release-facing PF inventory, not an
+exhaustive replacement for the in-app command picker.
 
 ## PFTerminal Commands
 
@@ -13,6 +15,12 @@ provider, pane, spawn, and Task Node workflows.
 | `/vault show <label>`    | Inspect one credential's metadata                             |
 | `/vault credential add`  | Add a credential through the masked secure-entry flow         |
 | `/providers`             | Manage provider credentials and OpenAI Codex account login    |
+| `/wallet`                | Open wallet, balance, backup/restore, and plan workflows       |
+| `/wallet status`         | Show wallet lock, identity, balance, and plan state            |
+| `/gpu`                   | Browse qualified/experimental GPU routes with charge review   |
+| `/gpu status`            | Reconcile local rental and endpoint state                      |
+| `/gpu stop <id>`         | Stop serving for a supported rental without implying deletion |
+| `/gpu terminate <id>`    | Terminate the selected provider rental after confirmation     |
 | `/panes`                 | Switch user panes and create Claude Code headless panes       |
 | `/spawn`                 | Open managed Nazgul/Troll/Orc orchestration                   |
 | `/spawn status`          | Show the current spawn hierarchy and worker status            |
@@ -37,6 +45,17 @@ provider, pane, spawn, and Task Node workflows.
 | `/tasknode balance`      | Show read-only Task Node balance                              |
 | `/tasknode rewards`      | Show recent Task Node rewards                                 |
 | `/tasknode logout`       | Log out of the Task Node terminal session                     |
+| `/telegram`              | Open Telegram connector management                            |
+| `/telegram status`       | Show connector identity, authorization, and running state     |
+| `/telegram connect`      | Securely configure bot and allowed-user/chat policy           |
+| `/telegram start`        | Start the configured connector                                |
+| `/telegram stop`         | Stop the configured connector                                 |
+| `/telegram disconnect`   | Remove connector authorization after confirmation             |
+| `/docs [page]`           | Open packaged documentation in the terminal                   |
+| `/goal [objective]`      | Create or inspect a durable long-running goal                 |
+| `/memories`              | Configure durable memory use and generation                   |
+| `/side [prompt]`         | Run an ephemeral side conversation and return                 |
+| `/btw [prompt]`          | Alias for an ephemeral side conversation                      |
 | `/skills`                | Browse bundled, repo, user, and plugin skills                 |
 
 For inherited Codex CLI slash commands, see:

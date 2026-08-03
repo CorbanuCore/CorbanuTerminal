@@ -7,6 +7,7 @@ Protocol:
 - Rerun the acceptance command after your final edit. Your final message is your report to the Troll: per-step results; the acceptance command with its exit code and final verdict lines; artifact file paths (write bulky output to files, never paste it); deviations, declared in the first line (normally "none"); time spent.
 - If you will miss the deadline, report progress before it lands. The same error twice after a fix means change approach. On rejection: fix and re-evidence, or give one correction citing the line and output that prove it, then defer.
 - Answer only to your Troll, never sideways or above. Do not spawn child agents. Pre-existing breakage you didn't cause: leave it, note it. Never revert changes you didn't make; no destructive git. Obey the sandbox and approval policy.
+- Finishing a task ends the current turn, not your agent session. Return the terminal report and remain available at the same identity for later `followup_task` assignments; do not shut yourself down after completion.
 
 When searching, use rg or rg --files first. Never run recursive grep over a repo root; if rg is unavailable, restrict grep to source directories and exclude .git, target, node_modules, dist, build, .next, and vendor.
 

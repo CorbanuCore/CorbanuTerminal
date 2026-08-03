@@ -9,6 +9,7 @@ use codex_config::types::MemoriesConfig;
 use codex_core::Prompt;
 use codex_core::RolloutRecorder;
 use codex_core::config::Config;
+use codex_model_provider::DEFAULT_MEMORY_EXTRACTION_PREFERRED_MODEL;
 use codex_protocol::error::CodexErr;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
@@ -191,10 +192,17 @@ async fn build_request_context(
     config: &Config,
 ) -> StageOneRequestContext {
     let model_name = config.memories.extract_model.clone().unwrap_or_else(|| {
-        context
-            .provider()
-            .memory_extraction_preferred_model()
-            .to_string()
+        let preferred = context.provider().memory_extraction_preferred_model();
+        config.model.as_deref().map_or_else(
+            || preferred.to_string(),
+            |active_model| {
+                context.provider().resolve_background_helper_model(
+                    preferred,
+                    DEFAULT_MEMORY_EXTRACTION_PREFERRED_MODEL,
+                    active_model,
+                )
+            },
+        )
     });
     context
         .stage_one_request_context(config, &model_name, crate::stage_one::REASONING_EFFORT)

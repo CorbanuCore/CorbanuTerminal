@@ -66,6 +66,7 @@ async fn retries_on_early_close() {
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
         websocket_connect_timeout_ms: None,
+        runtime_policy: Default::default(),
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,

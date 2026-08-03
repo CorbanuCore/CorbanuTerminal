@@ -146,7 +146,7 @@ const TMUX_OPTION_NAMES: &[&str] = &[
 const NARROW_TERMINAL_COLUMNS: u16 = 80;
 const NARROW_TERMINAL_ROWS: u16 = 24;
 
-/// Options for building a local Codex diagnostic report.
+/// Options for building a local PFTerminal diagnostic report.
 ///
 /// The command always runs the full bounded diagnostic set. Human output includes
 /// detailed diagnostics by default; --summary keeps the terminal output compact.
@@ -192,6 +192,7 @@ struct DoctorReport {
     schema_version: u32,
     generated_at: String,
     overall_status: CheckStatus,
+    #[serde(rename = "pfterminalVersion")]
     codex_version: String,
     checks: Vec<DoctorCheck>,
 }
@@ -567,6 +568,7 @@ struct JsonDoctorReport {
     schema_version: u32,
     generated_at: String,
     overall_status: CheckStatus,
+    #[serde(rename = "pfterminalVersion")]
     codex_version: String,
     checks: BTreeMap<String, JsonDoctorCheck>,
 }
@@ -810,20 +812,20 @@ fn installation_check(show_details: bool) -> DoctorCheck {
         "CODEX_MANAGED_PACKAGE_ROOT",
     );
 
-    let path_entries = codex_path_entries();
+    let path_entries = pfterminal_path_entries();
     let mut status = CheckStatus::Ok;
     let mut summary = "installation looks consistent".to_string();
     let mut remediation = None;
 
     if path_entries.len() > 1 {
-        details.push(format!("PATH codex entries: {}", path_entries.len()));
+        details.push(format!("PATH pfterminal entries: {}", path_entries.len()));
     }
     if show_details || path_entries.len() > 1 {
         details.extend(
             path_entries
                 .iter()
                 .enumerate()
-                .map(|(index, path)| format!("PATH codex #{}: {path}", index + 1)),
+                .map(|(index, path)| format!("PATH pfterminal #{}: {path}", index + 1)),
         );
     }
 
@@ -854,7 +856,7 @@ fn installation_check(show_details: bool) -> DoctorCheck {
                 status = status.max(CheckStatus::Warning);
                 summary = "npm-managed launch is missing package-root provenance".to_string();
                 remediation = Some(
-                    "Reinstall or update Codex so the JS shim provides CODEX_MANAGED_PACKAGE_ROOT."
+                    "Reinstall or update PFTerminal so the JS shim provides CODEX_MANAGED_PACKAGE_ROOT."
                         .to_string(),
                 );
             }
@@ -1048,11 +1050,11 @@ fn display_list<T: AsRef<str>>(items: &[T]) -> String {
     }
 }
 
-fn codex_path_entries() -> Vec<String> {
+fn pfterminal_path_entries() -> Vec<String> {
     #[cfg(windows)]
-    let result = run_command("where", ["codex"]);
+    let result = run_command("where", ["pfterminal"]);
     #[cfg(not(windows))]
-    let result = run_command("which", ["-a", "codex"]);
+    let result = run_command("which", ["-a", "pfterminal"]);
 
     result
         .unwrap_or_default()
@@ -1084,7 +1086,7 @@ where
 
 fn config_check(config: &Config) -> DoctorCheck {
     let mut details = Vec::new();
-    details.push(format!("CODEX_HOME: {}", config.codex_home.display()));
+    details.push(format!("PFTERMINAL_HOME: {}", config.codex_home.display()));
     details.push(format!("cwd: {}", config.cwd.display()));
     details.push(format!(
         "model: {}",
@@ -2203,7 +2205,7 @@ fn non_empty_trimmed(value: String) -> Option<String> {
 
 async fn state_check(config: &Config) -> DoctorCheck {
     let mut details = Vec::new();
-    path_readiness(&mut details, "CODEX_HOME", &config.codex_home);
+    path_readiness(&mut details, "PFTERMINAL_HOME", &config.codex_home);
     path_readiness(&mut details, "log dir", &config.log_dir);
     path_readiness(&mut details, "sqlite home", config.sqlite_config().home());
     let mut integrity_failures = Vec::new();
@@ -2571,14 +2573,14 @@ fn fallback_state_check() -> DoctorCheck {
             "state.paths",
             "state",
             CheckStatus::Ok,
-            "CODEX_HOME was resolved without config",
+            "PFTERMINAL_HOME was resolved without config",
         )
-        .detail(format!("CODEX_HOME: {}", path.display())),
+        .detail(format!("PFTERMINAL_HOME: {}", path.display())),
         Err(err) => DoctorCheck::new(
             "state.paths",
             "state",
             CheckStatus::Warning,
-            "CODEX_HOME could not be resolved",
+            "PFTERMINAL_HOME could not be resolved",
         )
         .detail(err.to_string()),
     }
@@ -3407,6 +3409,8 @@ mod tests {
         assert!(!redacted.contains("pager-secret"));
         assert!(!redacted.contains("code --wait"));
         assert!(redacted.contains("https://example.com/mcp"));
+        assert_eq!(json["pfterminalVersion"], "0.0.0");
+        assert!(json.get("codexVersion").is_none());
         assert_eq!(json["checks"].is_object(), true);
         assert_eq!(
             json["checks"]["system.environment"]["details"]["VISUAL"],
@@ -3799,7 +3803,7 @@ mod tests {
         let (_temp, config) = kimi_code_config_with_vault_key(/*store_key*/ false).await;
         let check = auth_check(&config);
         assert_eq!(check.status, CheckStatus::Fail);
-        let remediation = check.remediation.clone().unwrap_or_default();
+        let remediation = check.remediation.unwrap_or_default();
         assert!(
             remediation.contains("vault") || remediation.contains("KIMI_API_KEY"),
             "remediation should point at /vault or the env var, got: {remediation}"

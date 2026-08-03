@@ -9,13 +9,18 @@ use codex_api::Provider;
 use codex_api::SharedAuthProvider;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
+use codex_login::validate_provider_auth_command;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
+use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+use codex_model_provider_info::DEEPSEEK_DEFAULT_MODEL;
 use codex_model_provider_info::KIMI_CODE_K3_MODEL;
+use codex_model_provider_info::META_DEFAULT_MODEL;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
+use codex_model_provider_info::WireApi;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 use codex_models_manager::bundled_models_response;
 use codex_models_manager::manager::OpenAiModelsManager;
@@ -141,6 +146,23 @@ pub trait ModelProvider: fmt::Debug + Send + Sync {
         DEFAULT_MEMORY_CONSOLIDATION_PREFERRED_MODEL
     }
 
+    /// Resolve a provider-owned background helper choice without ever sending an OpenAI-only
+    /// default model to an unrelated endpoint.
+    fn resolve_background_helper_model(
+        &self,
+        preferred_model: &str,
+        openai_default_model: &str,
+        active_model: &str,
+    ) -> String {
+        if preferred_model == openai_default_model
+            && !provider_uses_first_party_auth_path(self.info())
+        {
+            active_model.to_string()
+        } else {
+            preferred_model.to_string()
+        }
+    }
+
     /// Returns whether requests made through this provider should include attestation.
     fn supports_attestation(&self) -> bool {
         false
@@ -241,6 +263,52 @@ fn provider_uses_first_party_auth_path(provider: &ModelProviderInfo) -> bool {
         && provider.aws.is_none()
 }
 
+fn configured_provider_helper_model(info: &ModelProviderInfo) -> Option<&'static str> {
+    // Provider identity is a transport contract, not a credential-variable convention. Custom
+    // providers may intentionally reuse a built-in key variable, and must not thereby inherit a
+    // model that only exists on the built-in endpoint.
+    let matches = |expected: ModelProviderInfo| {
+        info.name == expected.name
+            && info.base_url == expected.base_url
+            && info.wire_api == expected.wire_api
+    };
+
+    if matches(ModelProviderInfo::create_ambient_provider())
+        || matches(ModelProviderInfo::create_pfterminal_plan_provider())
+    {
+        Some(AMBIENT_DEFAULT_MODEL)
+    } else if matches(ModelProviderInfo::create_kimi_code_provider()) {
+        Some(KIMI_CODE_K3_MODEL)
+    } else if matches(ModelProviderInfo::create_claude_plan_provider()) {
+        Some(CLAUDE_PLAN_MODEL)
+    } else if matches(ModelProviderInfo::create_anthropic_provider()) {
+        Some(ANTHROPIC_DEFAULT_MODEL)
+    } else if matches(ModelProviderInfo::create_zai_provider())
+        || matches(ModelProviderInfo::create_zai_anthropic_provider())
+    {
+        Some(ZAI_DEFAULT_MODEL)
+    } else if matches(ModelProviderInfo::create_openrouter_provider())
+        || matches(ModelProviderInfo::create_openrouter_anthropic_provider())
+    {
+        Some(OPENROUTER_DEFAULT_MODEL)
+    } else if matches(ModelProviderInfo::create_deepseek_provider()) {
+        Some(DEEPSEEK_DEFAULT_MODEL)
+    } else if matches(ModelProviderInfo::create_meta_provider()) {
+        Some(META_DEFAULT_MODEL)
+    } else if matches(ModelProviderInfo::create_baseten_provider())
+        || matches(ModelProviderInfo::create_baseten_anthropic_provider())
+    {
+        Some(BASETEN_DEFAULT_MODEL)
+    } else if matches(ModelProviderInfo::create_vercel_provider())
+        || matches(ModelProviderInfo::create_vercel_anthropic_provider())
+        || matches(ModelProviderInfo::create_vercel_anthropic_fast_provider())
+    {
+        Some(VERCEL_DEFAULT_MODEL)
+    } else {
+        None
+    }
+}
+
 /// Creates the default runtime model provider for configured provider metadata.
 pub fn create_model_provider(
     provider_info: ModelProviderInfo,
@@ -306,69 +374,35 @@ impl ModelProvider for ConfiguredModelProvider {
                 image_generation: false,
                 web_search: true,
             }
+        } else if self.info.wire_api == WireApi::Anthropic {
+            // Anthropic Messages accepts ordinary function tools but has no
+            // Responses namespace-tool container. Advertising namespace
+            // support here registers collaboration handlers under namespaced
+            // keys, then the Anthropic serializer drops the container and
+            // leaves the model with neither visible nor callable agent tools.
+            ProviderCapabilities {
+                namespace_tools: false,
+                image_generation: false,
+                web_search: true,
+            }
         } else {
             ProviderCapabilities::default()
         }
     }
 
     fn approval_review_preferred_model(&self) -> &'static str {
-        if self.info.is_ambient() {
-            AMBIENT_DEFAULT_MODEL
-        } else if self.info.is_kimi_code() {
-            KIMI_CODE_K3_MODEL
-        } else if self.info.is_claude_plan() {
-            CLAUDE_PLAN_MODEL
-        } else if self.info.is_zai() {
-            ZAI_DEFAULT_MODEL
-        } else if self.info.is_openrouter() {
-            OPENROUTER_DEFAULT_MODEL
-        } else if self.info.is_baseten() {
-            BASETEN_DEFAULT_MODEL
-        } else if self.info.is_vercel() {
-            VERCEL_DEFAULT_MODEL
-        } else {
-            DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL
-        }
+        configured_provider_helper_model(&self.info)
+            .unwrap_or(DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL)
     }
 
     fn memory_extraction_preferred_model(&self) -> &'static str {
-        if self.info.is_ambient() {
-            AMBIENT_DEFAULT_MODEL
-        } else if self.info.is_kimi_code() {
-            KIMI_CODE_K3_MODEL
-        } else if self.info.is_claude_plan() {
-            CLAUDE_PLAN_MODEL
-        } else if self.info.is_zai() {
-            ZAI_DEFAULT_MODEL
-        } else if self.info.is_openrouter() {
-            OPENROUTER_DEFAULT_MODEL
-        } else if self.info.is_baseten() {
-            BASETEN_DEFAULT_MODEL
-        } else if self.info.is_vercel() {
-            VERCEL_DEFAULT_MODEL
-        } else {
-            DEFAULT_MEMORY_EXTRACTION_PREFERRED_MODEL
-        }
+        configured_provider_helper_model(&self.info)
+            .unwrap_or(DEFAULT_MEMORY_EXTRACTION_PREFERRED_MODEL)
     }
 
     fn memory_consolidation_preferred_model(&self) -> &'static str {
-        if self.info.is_ambient() {
-            AMBIENT_DEFAULT_MODEL
-        } else if self.info.is_kimi_code() {
-            KIMI_CODE_K3_MODEL
-        } else if self.info.is_claude_plan() {
-            CLAUDE_PLAN_MODEL
-        } else if self.info.is_zai() {
-            ZAI_DEFAULT_MODEL
-        } else if self.info.is_openrouter() {
-            OPENROUTER_DEFAULT_MODEL
-        } else if self.info.is_baseten() {
-            BASETEN_DEFAULT_MODEL
-        } else if self.info.is_vercel() {
-            VERCEL_DEFAULT_MODEL
-        } else {
-            DEFAULT_MEMORY_CONSOLIDATION_PREFERRED_MODEL
-        }
+        configured_provider_helper_model(&self.info)
+            .unwrap_or(DEFAULT_MEMORY_CONSOLIDATION_PREFERRED_MODEL)
     }
 
     fn auth_manager(&self) -> Option<Arc<AuthManager>> {
@@ -391,6 +425,33 @@ impl ModelProvider for ConfiguredModelProvider {
             }
 
             auth_manager.auth().await
+        })
+    }
+
+    fn api_auth(
+        &self,
+    ) -> ModelProviderFuture<'_, codex_protocol::error::Result<SharedAuthProvider>> {
+        Box::pin(async move {
+            let mut auth = self.auth().await;
+            if auth.is_none()
+                && let Some(command_auth) = self.info.auth.as_ref()
+            {
+                // AuthManager's compatibility API represents provider-command failures as
+                // `None`. Never turn that into an anonymous upstream request: rerun the
+                // command through its validating path so the actionable helper error reaches
+                // the user. A transient first failure may recover here, in which case resolve
+                // once more and use the recovered credential.
+                validate_provider_auth_command(command_auth).await?;
+                auth = self.auth().await;
+                if auth.is_none() {
+                    return Err(std::io::Error::other(format!(
+                        "provider auth command `{}` produced no usable credential",
+                        command_auth.command
+                    ))
+                    .into());
+                }
+            }
+            resolve_provider_auth(auth.as_ref(), self.info())
         })
     }
 
@@ -508,6 +569,8 @@ mod tests {
 
     use codex_http_client::HttpClientFactory;
     use codex_http_client::OutboundProxyPolicy;
+    use codex_login::AuthCredentialsStoreMode;
+    use codex_login::AuthKeyringBackendKind;
     use codex_login::auth::AgentIdentityAuthPolicy;
     use codex_login::auth::BedrockApiKeyAuth;
     use codex_login::login_with_provider_api_key;
@@ -518,6 +581,7 @@ mod tests {
     use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
     use codex_model_provider_info::ModelProviderAwsAuthInfo;
     use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
+    use codex_model_provider_info::ProviderRuntimePolicy;
     use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
     use codex_model_provider_info::WireApi;
     use codex_model_provider_info::create_oss_provider_with_base_url;
@@ -604,6 +668,7 @@ mod tests {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: ProviderRuntimePolicy::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
@@ -723,6 +788,23 @@ mod tests {
         );
     }
 
+    #[test]
+    fn anthropic_wire_providers_disable_responses_only_namespace_tools() {
+        let expected = ProviderCapabilities {
+            namespace_tools: false,
+            image_generation: false,
+            web_search: true,
+        };
+
+        for provider_info in [
+            ModelProviderInfo::create_claude_plan_provider(),
+            ModelProviderInfo::create_anthropic_provider(),
+        ] {
+            let provider = create_model_provider(provider_info, /*auth_manager*/ None);
+            assert_eq!(provider.capabilities(), expected);
+        }
+    }
+
     #[tokio::test]
     async fn claude_plan_provider_uses_static_model_catalog() {
         let provider = create_model_provider(
@@ -732,7 +814,12 @@ mod tests {
 
         let manager =
             provider.models_manager(test_codex_home(), /*config_model_catalog*/ None);
-        let catalog = manager.raw_model_catalog(RefreshStrategy::Online).await;
+        let catalog = manager
+            .raw_model_catalog(
+                RefreshStrategy::Online,
+                HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
+            )
+            .await;
 
         assert!(
             catalog
@@ -766,7 +853,12 @@ mod tests {
 
         let manager =
             provider.models_manager(test_codex_home(), /*config_model_catalog*/ None);
-        let catalog = manager.raw_model_catalog(RefreshStrategy::Online).await;
+        let catalog = manager
+            .raw_model_catalog(
+                RefreshStrategy::Online,
+                HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
+            )
+            .await;
 
         assert!(
             catalog
@@ -937,6 +1029,138 @@ mod tests {
         );
     }
 
+    #[test]
+    fn configured_builtin_providers_keep_helper_models_on_their_own_backends() {
+        let cases = [
+            (
+                ModelProviderInfo::create_ambient_provider(),
+                AMBIENT_DEFAULT_MODEL,
+            ),
+            (
+                ModelProviderInfo::create_pfterminal_plan_provider(),
+                AMBIENT_DEFAULT_MODEL,
+            ),
+            (
+                ModelProviderInfo::create_kimi_code_provider(),
+                KIMI_CODE_K3_MODEL,
+            ),
+            (
+                ModelProviderInfo::create_claude_plan_provider(),
+                CLAUDE_PLAN_MODEL,
+            ),
+            (
+                ModelProviderInfo::create_anthropic_provider(),
+                ANTHROPIC_DEFAULT_MODEL,
+            ),
+            (ModelProviderInfo::create_zai_provider(), ZAI_DEFAULT_MODEL),
+            (
+                ModelProviderInfo::create_zai_anthropic_provider(),
+                ZAI_DEFAULT_MODEL,
+            ),
+            (
+                ModelProviderInfo::create_openrouter_provider(),
+                OPENROUTER_DEFAULT_MODEL,
+            ),
+            (
+                ModelProviderInfo::create_openrouter_anthropic_provider(),
+                OPENROUTER_DEFAULT_MODEL,
+            ),
+            (
+                ModelProviderInfo::create_deepseek_provider(),
+                DEEPSEEK_DEFAULT_MODEL,
+            ),
+            (
+                ModelProviderInfo::create_meta_provider(),
+                META_DEFAULT_MODEL,
+            ),
+            (
+                ModelProviderInfo::create_baseten_provider(),
+                BASETEN_DEFAULT_MODEL,
+            ),
+            (
+                ModelProviderInfo::create_baseten_anthropic_provider(),
+                BASETEN_DEFAULT_MODEL,
+            ),
+            (
+                ModelProviderInfo::create_vercel_provider(),
+                VERCEL_DEFAULT_MODEL,
+            ),
+            (
+                ModelProviderInfo::create_vercel_anthropic_provider(),
+                VERCEL_DEFAULT_MODEL,
+            ),
+            (
+                ModelProviderInfo::create_vercel_anthropic_fast_provider(),
+                VERCEL_DEFAULT_MODEL,
+            ),
+        ];
+
+        for (provider_info, expected_model) in cases {
+            let provider = create_model_provider(provider_info, /*auth_manager*/ None);
+            assert_eq!(provider.approval_review_preferred_model(), expected_model);
+            assert_eq!(provider.memory_extraction_preferred_model(), expected_model);
+            assert_eq!(
+                provider.memory_consolidation_preferred_model(),
+                expected_model
+            );
+        }
+    }
+
+    #[test]
+    fn custom_provider_reusing_builtin_credentials_does_not_inherit_builtin_models() {
+        let provider = create_model_provider(
+            ModelProviderInfo {
+                name: "Private gateway".to_string(),
+                base_url: Some("https://private.example/v1".to_string()),
+                env_key: Some("OPENROUTER_API_KEY".to_string()),
+                ..ModelProviderInfo::default()
+            },
+            /*auth_manager*/ None,
+        );
+
+        assert_eq!(
+            provider.approval_review_preferred_model(),
+            DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL
+        );
+        assert_eq!(
+            provider.memory_extraction_preferred_model(),
+            DEFAULT_MEMORY_EXTRACTION_PREFERRED_MODEL
+        );
+        assert_eq!(
+            provider.memory_consolidation_preferred_model(),
+            DEFAULT_MEMORY_CONSOLIDATION_PREFERRED_MODEL
+        );
+        assert_eq!(
+            provider.resolve_background_helper_model(
+                DEFAULT_MEMORY_EXTRACTION_PREFERRED_MODEL,
+                DEFAULT_MEMORY_EXTRACTION_PREFERRED_MODEL,
+                "private-active-model",
+            ),
+            "private-active-model"
+        );
+    }
+
+    #[test]
+    fn custom_provider_named_openai_still_uses_its_active_helper_model() {
+        let provider = create_model_provider(
+            ModelProviderInfo {
+                name: "OpenAI".to_string(),
+                base_url: Some("https://private.example/v1".to_string()),
+                ..ModelProviderInfo::default()
+            },
+            /*auth_manager*/ None,
+        );
+
+        assert_eq!(
+            provider.resolve_background_helper_model(
+                DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL,
+                DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL,
+                "private-active-model",
+            ),
+            "private-active-model"
+        );
+    }
+
     #[tokio::test]
     async fn configured_provider_runtime_base_url_uses_configured_base_url() {
         let provider = create_model_provider(
@@ -965,6 +1189,31 @@ mod tests {
             .expect("command auth provider should have an auth manager");
 
         assert!(auth_manager.has_external_auth());
+    }
+
+    #[tokio::test]
+    async fn command_auth_failure_cannot_fall_back_to_anonymous_provider_requests() {
+        let mut provider_info = provider_info_with_command_auth();
+        let command_auth = provider_info.auth.as_mut().expect("command auth");
+        command_auth.command = std::env::temp_dir()
+            .join(format!(
+                "missing-provider-auth-helper-{}",
+                std::process::id()
+            ))
+            .to_string_lossy()
+            .into_owned();
+        let expected_command = command_auth.command.clone();
+        let provider = create_model_provider(provider_info, /*auth_manager*/ None);
+
+        let error = match provider.api_auth().await {
+            Ok(_) => panic!("missing command auth must not yield anonymous request auth"),
+            Err(error) => error,
+        };
+
+        assert!(
+            error.to_string().contains(&expected_command),
+            "provider helper failure should identify the failed command: {error}"
+        );
     }
 
     #[test]

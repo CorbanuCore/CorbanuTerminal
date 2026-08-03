@@ -792,6 +792,18 @@ pub struct InternalChatMessageMetadataPassthrough {
     pub executed_tool_calls: Option<Vec<ExecutedToolCall>>,
 }
 
+/// PF-owned correlation metadata kept separate from provider-owned passthrough
+/// metadata so provider request shapes remain unchanged.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, JsonSchema, TS)]
+pub struct ResponseItemMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub turn_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub source_call_id: Option<String>,
+}
+
 impl InternalChatMessageMetadataPassthrough {
     pub(crate) fn set_turn_id_if_missing(metadata: &mut Option<Self>, turn_id: &str) {
         if turn_id.is_empty()

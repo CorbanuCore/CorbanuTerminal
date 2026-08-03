@@ -7,6 +7,7 @@ use std::time::Instant;
 use crate::SkillInjections;
 use crate::StateDbHandle;
 use crate::build_skill_injections;
+use crate::client::ModelClient;
 use crate::client::ModelClientSession;
 use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
@@ -18,6 +19,8 @@ use crate::compact_remote::run_inline_remote_auto_compact_task;
 use crate::compact_remote_v2::run_inline_remote_auto_compact_task as run_inline_remote_auto_compact_task_v2;
 use crate::connectors;
 use crate::context::ContextualUserFragment;
+use crate::context::SubagentTurnBudgetFinalization;
+use crate::context::TurnCompletionContinuation;
 use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::feedback_tags;
 use crate::hook_runtime::inspect_pending_input;
@@ -46,6 +49,10 @@ use crate::session::PreviousTurnSettings;
 use crate::session::TurnInput;
 use crate::session::session::Session;
 use crate::session::step_context::StepContext;
+use crate::session::turn_completion::CompletionAction;
+use crate::session::turn_completion::CompletionProgressState;
+use crate::session::turn_completion::assess_turn_completion;
+use crate::session::turn_completion::objective_from_turn_input;
 use crate::session::turn_context::TurnContext;
 use crate::stream_events_utils::HandleOutputCtx;
 use crate::stream_events_utils::TurnItemContributorPolicy;
@@ -86,6 +93,7 @@ use codex_file_system::FindUpErrorPolicy;
 use codex_file_system::find_nearest_ancestor_with_markers;
 use codex_login::CodexAuth;
 use codex_mcp::ToolInfo;
+use codex_model_provider_info::ChatStopSemantics;
 use codex_protocol::ResponseItemId;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
 use codex_protocol::config_types::ModeKind;
@@ -102,6 +110,7 @@ use codex_protocol::models::MessagePhase;
 use codex_protocol::models::ResponseInputItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::AgentMessageContentDeltaEvent;
+use codex_protocol::protocol::AgentMessageKind;
 use codex_protocol::protocol::AgentReasoningSectionBreakEvent;
 use codex_protocol::protocol::CodexErrorInfo;
 use codex_protocol::protocol::ErrorEvent;
@@ -112,9 +121,18 @@ use codex_protocol::protocol::RawResponseCompletedEvent;
 use codex_protocol::protocol::ReasoningContentDeltaEvent;
 use codex_protocol::protocol::ReasoningRawContentDeltaEvent;
 use codex_protocol::protocol::SafetyBufferingEvent;
+use codex_protocol::protocol::SessionSource;
+use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TurnDiffEvent;
 use codex_protocol::protocol::WarningEvent;
 use codex_protocol::user_input::UserInput;
+use codex_state::ProviderRequestBlock;
+use codex_state::ProviderRequestBlockReason;
+use codex_state::ProviderRequestKey;
+use codex_state::ProviderRequestLease;
+use codex_state::ProviderRequestLeaseDecision;
+use codex_state::ProviderRequestPreflight;
+use codex_state::ProviderRequestResult;
 use codex_tools::DiscoverableTool;
 use codex_tools::ToolName;
 use codex_tools::filter_request_plugin_install_discoverable_tools_for_client;
@@ -142,6 +160,23 @@ use tracing::trace_span;
 use tracing::warn;
 
 const POST_SAMPLING_TOKEN_ESTIMATE_TARGET: &str = "codex_core::post_sampling_token_estimate";
+const PROVIDER_REQUEST_LEASE_TTL_MS: i64 = 10 * 60 * 1000;
+const THIRD_PARTY_PREFLIGHT_WARNING_INPUT_TOKENS: i64 = 32_000;
+const THIRD_PARTY_PREFLIGHT_WARNING_REQUEST_BYTES: i64 = 128 * 1024;
+const THIRD_PARTY_CACHE_HEALTH_MIN_INPUT_TOKENS: i64 = 8_000;
+const THIRD_PARTY_CACHE_HEALTHY_HIT_RATE: f64 = 0.70;
+const MAX_SERVER_SIDE_MODEL_CONTINUATIONS: u64 = 5;
+
+fn trace_turn_timing(label: &str, start: Instant) {
+    if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
+        debug!(
+            target: "pfterminal_turn",
+            label,
+            elapsed_ms = start.elapsed().as_millis(),
+            "pfterminal turn timing"
+        );
+    }
+}
 
 /// Takes initial turn input and runs a loop where, at each sampling request,
 /// the model replies with either:
@@ -167,8 +202,14 @@ pub(crate) async fn run_turn(
 ) -> CodexResult<Option<String>> {
     let turn_started_at = Instant::now();
     trace_turn_timing("run_turn_start", turn_started_at);
-    let mut client_session =
-        prewarmed_client_session.unwrap_or_else(|| sess.services.new_model_client_session());
+    let provider_info = turn_context.provider.info();
+    let mut client_session = prewarmed_client_session
+        .filter(|session| ModelClient::session_matches_provider(session, provider_info))
+        .unwrap_or_else(|| {
+            sess.services
+                .model_client()
+                .new_session_for_provider(provider_info)
+        });
     // TODO(ccunningham): Pre-turn compaction runs before context updates and the
     // new user message are recorded. Estimate pending incoming items (context
     // diffs/full reinjection + user input) and trigger compaction preemptively
@@ -256,6 +297,7 @@ pub(crate) async fn run_turn(
         .await;
     sess.set_previous_turn_settings(Some(PreviousTurnSettings {
         model: turn_context.model_info.slug.clone(),
+        model_provider: Some(turn_context.config.model_provider_id.clone()),
         comp_hash: turn_context.model_info.comp_hash.clone(),
         realtime_active: Some(turn_context.realtime_active),
     }))
@@ -402,6 +444,7 @@ pub(crate) async fn run_turn(
                 window_id.clone(),
                 CodexResponsesRequestKind::Turn,
             );
+            model_request_count = model_request_count.saturating_add(1);
             run_sampling_request(
                 Arc::clone(&sess),
                 Arc::clone(&step_context),
@@ -425,6 +468,25 @@ pub(crate) async fn run_turn(
                     made_tool_progress,
                     provider_stopped,
                 } = sampling_request_output;
+                if let Some(message) = sampling_request_last_agent_message.as_ref() {
+                    last_agent_message = Some(message.clone());
+                }
+                if made_tool_progress {
+                    completion_progress.note_tool_progress();
+                }
+                if server_side_model_continuation {
+                    consecutive_server_side_model_continuations += 1;
+                    if consecutive_server_side_model_continuations
+                        > MAX_SERVER_SIDE_MODEL_CONTINUATIONS
+                    {
+                        return Err(CodexErr::Stream(format!(
+                            "model requested more than {MAX_SERVER_SIDE_MODEL_CONTINUATIONS} \
+                             server-side continuations in one turn"
+                        )));
+                    }
+                } else {
+                    consecutive_server_side_model_continuations = 0;
+                }
                 if model_needs_follow_up {
                     sess.input_queue
                         .accept_mailbox_delivery_for_current_turn(
@@ -542,8 +604,10 @@ pub(crate) async fn run_turn(
                             // Keep the semantic check independent of primary-stream teardown.
                             // Reusing the primary turn session can leave the classifier queued
                             // behind transport cleanup until most or all of its timeout is gone.
-                            let mut assessment_client_session =
-                                sess.services.new_model_client_session();
+                            let mut assessment_client_session = sess
+                                .services
+                                .model_client()
+                                .new_session_for_provider(turn_context.provider.info());
                             let assessment_started_at = Instant::now();
                             match assess_turn_completion(
                                 sess.as_ref(),
@@ -561,7 +625,9 @@ pub(crate) async fn run_turn(
                                     "classifier",
                                     assessment_started_at.elapsed().as_millis(),
                                 ),
-                                Err(CodexErr::TurnAborted) => {
+                                Err(err)
+                                    if matches!(err.details(), CodexErrorDetails::TurnAborted) =>
+                                {
                                     return Err(CodexErr::TurnAborted);
                                 }
                                 Err(err) => {
@@ -716,6 +782,40 @@ pub(crate) async fn run_turn(
     Ok(last_agent_message)
 }
 
+pub(crate) fn turn_inputs_are_terminal_result_only<'a>(
+    input: impl Iterator<Item = &'a TurnInput>,
+) -> bool {
+    let mut saw_terminal_result = false;
+    for item in input {
+        match item {
+            TurnInput::InterAgentCommunication(communication)
+                if communication.kind == Some(AgentMessageKind::TerminalResult) =>
+            {
+                saw_terminal_result = true;
+            }
+            TurnInput::ResponseItem(_) => {}
+            TurnInput::UserInput { .. } | TurnInput::InterAgentCommunication(_) => return false,
+        }
+    }
+    saw_terminal_result
+}
+
+pub(crate) fn turn_inputs_expect_parent_completion<'a>(
+    input: impl Iterator<Item = &'a TurnInput>,
+) -> bool {
+    let mut saw_triggering_collaboration_work = false;
+    for item in input {
+        match item {
+            TurnInput::UserInput { .. } => return false,
+            TurnInput::InterAgentCommunication(communication) if communication.trigger_turn => {
+                saw_triggering_collaboration_work = true;
+            }
+            TurnInput::ResponseItem(_) | TurnInput::InterAgentCommunication(_) => {}
+        }
+    }
+    saw_triggering_collaboration_work
+}
+
 #[instrument(level = "trace", skip_all)]
 async fn turn_diff_display_roots(step_context: &StepContext) -> Vec<(String, PathUri)> {
     let mut display_roots = Vec::new();
@@ -767,6 +867,53 @@ pub(crate) async fn run_hooks_and_record_inputs(
         }
     }
     blocked_input && !accepted_user_input
+}
+fn record_explicit_tool_budgets_from_input(turn_context: &TurnContext, input_item: &TurnInput) {
+    let TurnInput::UserInput { content, .. } = input_item else {
+        return;
+    };
+    if let Some(limit) = explicit_shell_command_budget_from_user_input(content) {
+        turn_context.set_explicit_shell_command_budget(limit);
+    }
+}
+
+fn explicit_shell_command_budget_from_user_input(content: &[UserInput]) -> Option<u64> {
+    content
+        .iter()
+        .filter_map(|input| match input {
+            UserInput::Text { text, .. } => explicit_shell_command_budget_from_text(text),
+            UserInput::Image { .. }
+            | UserInput::LocalImage { .. }
+            | UserInput::Skill { .. }
+            | UserInput::Mention { .. } => None,
+            _ => None,
+        })
+        .min()
+}
+
+fn explicit_shell_command_budget_from_text(text: &str) -> Option<u64> {
+    let lower = text.to_ascii_lowercase();
+    [
+        r"\bat most\s+([0-9]{1,3})\s+(shell\s+)?commands?\b",
+        r"\bno more than\s+([0-9]{1,3})\s+(shell\s+)?commands?\b",
+        r"\bmaximum( of)?\s+([0-9]{1,3})\s+(shell\s+)?commands?\b",
+        r"\bmax\s+([0-9]{1,3})\s+(shell\s+)?commands?\b",
+        r"\buse\s+([0-9]{1,3})\s+or fewer\s+(shell\s+)?commands?\b",
+    ]
+    .into_iter()
+    .filter_map(|pattern| parse_budget_match(pattern, &lower))
+    .filter(|limit| *limit > 0)
+    .min()
+}
+
+fn parse_budget_match(pattern: &str, text: &str) -> Option<u64> {
+    let regex = Regex::new(pattern).ok()?;
+    let captures = regex.captures(text)?;
+    captures
+        .iter()
+        .flatten()
+        .filter_map(|matched| matched.as_str().parse::<u64>().ok())
+        .next()
 }
 
 fn turn_user_input(input: &[TurnInput]) -> Vec<UserInput> {
@@ -1483,6 +1630,7 @@ async fn run_sampling_request(
     input: Vec<ResponseItem>,
     cancellation_token: CancellationToken,
 ) -> CodexResult<(SamplingRequestResult, Vec<ResponseItem>)> {
+    let sampling_started_at = Instant::now();
     let turn_context = Arc::clone(&step_context.turn);
     let router = Arc::clone(&step_context.tool_router);
 
@@ -2316,6 +2464,573 @@ async fn drain_in_flight(
     }
     Ok(())
 }
+async fn acquire_provider_request_lease(
+    sess: &Session,
+    turn_context: &TurnContext,
+    client_session: &ModelClientSession,
+    prompt: &Prompt,
+    responses_metadata: &CodexResponsesMetadata,
+) -> CodexResult<Option<ProviderRequestLease>> {
+    let preflight_started_at = Instant::now();
+    trace_turn_timing("provider_preflight_start", preflight_started_at);
+    let Some(state_db) = sess.state_db() else {
+        return Ok(None);
+    };
+
+    let key = provider_request_key(sess, turn_context);
+    let token_info = sess.token_usage_info().await;
+    trace_turn_timing("provider_preflight_after_token_info", preflight_started_at);
+    let last_token_usage = token_info
+        .as_ref()
+        .map(|info| info.last_token_usage.clone());
+    let last_cached_input_tokens = last_token_usage
+        .as_ref()
+        .map(TokenUsage::cached_input)
+        .unwrap_or(0);
+    let input_tokens = match sess.get_estimated_token_count(turn_context).await {
+        Some(tokens) => tokens,
+        None => token_info
+            .as_ref()
+            .map(|info| info.total_token_usage.input_tokens)
+            .unwrap_or_else(|| rough_prompt_token_estimate(prompt)),
+    };
+    trace_turn_timing(
+        "provider_preflight_after_input_tokens",
+        preflight_started_at,
+    );
+    let request_bytes = client_session
+        .serialized_request_body_bytes(
+            prompt,
+            &turn_context.model_info,
+            turn_context.reasoning_effort.clone(),
+            turn_context.reasoning_summary,
+            turn_context.config.service_tier.clone(),
+            responses_metadata,
+            sess.services.auth_manager.auth_mode(),
+        )
+        .map(|bytes| i64::try_from(bytes).unwrap_or(i64::MAX))
+        .unwrap_or_else(|err| {
+            warn!(
+                turn_id = %turn_context.sub_id,
+                provider = %key.provider_id,
+                model = %key.model,
+                error = %err,
+                "failed to serialize provider request for hammer-reduction preflight"
+            );
+            0
+        });
+    trace_turn_timing(
+        "provider_preflight_after_request_bytes",
+        preflight_started_at,
+    );
+    let preflight = ProviderRequestPreflight {
+        input_tokens,
+        cached_input_tokens: last_cached_input_tokens,
+        request_bytes,
+        thread_id: Some(sess.thread_id.to_string()),
+        turn_id: Some(turn_context.sub_id.clone()),
+    };
+    maybe_emit_provider_request_pressure_warning(
+        sess,
+        turn_context,
+        &key,
+        &preflight,
+        last_token_usage.as_ref(),
+    )
+    .await;
+    trace_turn_timing("provider_preflight_after_warning", preflight_started_at);
+    let now_ms = now_unix_timestamp_ms();
+    if !provider_request_active_lease_needed(turn_context, &preflight, last_token_usage.as_ref()) {
+        if let Some(block) = state_db
+            .check_provider_request_cooldown(&key, &preflight, now_ms)
+            .await
+            .map_err(|err| {
+                CodexErr::Fatal(format!(
+                    "failed to check provider request throttle state: {err:#}"
+                ))
+            })?
+        {
+            warn!(
+                turn_id = %turn_context.sub_id,
+                provider = %key.provider_id,
+                model = %key.model,
+                key_fingerprint = %key.key_fingerprint,
+                reason = ?block.reason,
+                remaining_ms = block.remaining_ms,
+                last_status = ?block.last_status,
+                last_request_bytes = block.last_request_bytes,
+                "provider request blocked by local hammer-reduction state"
+            );
+            return Err(CodexErr::InvalidRequest(format_provider_request_block(
+                &key, &block,
+            )));
+        }
+        trace_turn_timing("provider_preflight_no_lease_needed", preflight_started_at);
+        return Ok(None);
+    }
+    let owner = format!(
+        "pid:{}:thread:{}:turn:{}",
+        std::process::id(),
+        sess.thread_id,
+        turn_context.sub_id
+    );
+    let decision = state_db
+        .try_acquire_provider_request_lease(
+            &key,
+            &preflight,
+            &owner,
+            PROVIDER_REQUEST_LEASE_TTL_MS,
+            now_ms,
+        )
+        .await
+        .map_err(|err| {
+            CodexErr::Fatal(format!(
+                "failed to check provider request throttle state: {err:#}"
+            ))
+        })?;
+
+    match decision {
+        ProviderRequestLeaseDecision::Acquired(lease) => {
+            trace_turn_timing("provider_preflight_acquired_lease", preflight_started_at);
+            info!(
+                turn_id = %turn_context.sub_id,
+                provider = %key.provider_id,
+                model = %key.model,
+                key_fingerprint = %key.key_fingerprint,
+                owner = %lease.owner,
+                input_tokens = preflight.input_tokens,
+                cached_input_tokens = preflight.cached_input_tokens,
+                request_bytes = preflight.request_bytes,
+                lease_until_ms = lease.lease_until_ms,
+                "provider request preflight acquired lease"
+            );
+            Ok(Some(lease))
+        }
+        ProviderRequestLeaseDecision::Blocked(block) => {
+            warn!(
+                turn_id = %turn_context.sub_id,
+                provider = %key.provider_id,
+                model = %key.model,
+                key_fingerprint = %key.key_fingerprint,
+                attempted_owner = %owner,
+                lease_owner = ?block.lease_owner,
+                reason = ?block.reason,
+                remaining_ms = block.remaining_ms,
+                last_status = ?block.last_status,
+                last_request_bytes = block.last_request_bytes,
+                "provider request blocked by local hammer-reduction state"
+            );
+            Err(CodexErr::InvalidRequest(format_provider_request_block(
+                &key, &block,
+            )))
+        }
+    }
+}
+
+async fn maybe_emit_provider_request_pressure_warning(
+    sess: &Session,
+    turn_context: &TurnContext,
+    key: &ProviderRequestKey,
+    preflight: &ProviderRequestPreflight,
+    last_token_usage: Option<&TokenUsage>,
+) {
+    if !provider_uses_request_lease(
+        turn_context.config.model_provider_id.as_str(),
+        turn_context.provider.info().is_openai(),
+    ) {
+        return;
+    }
+    if preflight.input_tokens < THIRD_PARTY_PREFLIGHT_WARNING_INPUT_TOKENS
+        && preflight.request_bytes < THIRD_PARTY_PREFLIGHT_WARNING_REQUEST_BYTES
+    {
+        return;
+    }
+    if third_party_cache_looks_healthy(last_token_usage) {
+        info!(
+            turn_id = %turn_context.sub_id,
+            provider = %key.provider_id,
+            model = %key.model,
+            input_tokens = preflight.input_tokens,
+            last_cached_input_tokens = preflight.cached_input_tokens,
+            request_bytes = preflight.request_bytes,
+            "third-party provider request is large but recent prompt-cache hit is healthy"
+        );
+        return;
+    }
+    if !third_party_cache_miss_is_known(last_token_usage) {
+        info!(
+            turn_id = %turn_context.sub_id,
+            provider = %key.provider_id,
+            model = %key.model,
+            input_tokens = preflight.input_tokens,
+            request_bytes = preflight.request_bytes,
+            "third-party provider request is large; waiting for provider cache telemetry before warning"
+        );
+        return;
+    }
+    if turn_context
+        .provider_cache_pressure_warning_emitted
+        .swap(true, Ordering::Relaxed)
+    {
+        info!(
+            turn_id = %turn_context.sub_id,
+            provider = %key.provider_id,
+            model = %key.model,
+            input_tokens = preflight.input_tokens,
+            cached_input_tokens = preflight.cached_input_tokens,
+            request_bytes = preflight.request_bytes,
+            "suppressing duplicate third-party provider cache pressure warning for turn"
+        );
+        return;
+    }
+    let Some(cache_details) = cache_hit_details(last_token_usage) else {
+        return;
+    };
+    let message = provider_cache_pressure_warning_message(key, preflight, cache_details);
+    sess.send_event(turn_context, EventMsg::Warning(WarningEvent { message }))
+        .await;
+}
+
+fn third_party_cache_looks_healthy(last_token_usage: Option<&TokenUsage>) -> bool {
+    cache_hit_rate(last_token_usage).is_some_and(|rate| rate >= THIRD_PARTY_CACHE_HEALTHY_HIT_RATE)
+}
+
+fn third_party_cache_miss_is_known(last_token_usage: Option<&TokenUsage>) -> bool {
+    cache_hit_rate(last_token_usage).is_some_and(|rate| rate < THIRD_PARTY_CACHE_HEALTHY_HIT_RATE)
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CacheHitDetails {
+    input_tokens: i64,
+    cached_input_tokens: i64,
+    hit_rate: f64,
+}
+
+fn provider_cache_pressure_warning_message(
+    key: &ProviderRequestKey,
+    preflight: &ProviderRequestPreflight,
+    cache_details: CacheHitDetails,
+) -> String {
+    if cache_details.cached_input_tokens <= 0 {
+        return format!(
+            "Provider cache miss: {}/{} is about to send input={} request_bytes={} after the previous large request had cached_input=0/{} (0.0%). This may hit third-party provider limits; compact or start a fresh thread if this was a tiny follow-up.",
+            key.provider_id,
+            key.model,
+            preflight.input_tokens,
+            preflight.request_bytes,
+            cache_details.input_tokens,
+        );
+    }
+
+    format!(
+        "Provider cache low hit rate: {}/{} is about to send input={} request_bytes={} after the previous large request reused cached_input={}/{} ({:.1}%). This may hit third-party provider limits; compact or start a fresh thread if this was a tiny follow-up.",
+        key.provider_id,
+        key.model,
+        preflight.input_tokens,
+        preflight.request_bytes,
+        cache_details.cached_input_tokens,
+        cache_details.input_tokens,
+        cache_details.hit_rate * 100.0,
+    )
+}
+
+fn provider_request_active_lease_needed(
+    turn_context: &TurnContext,
+    preflight: &ProviderRequestPreflight,
+    last_token_usage: Option<&TokenUsage>,
+) -> bool {
+    if !provider_request_lease_applies_to_session(&turn_context.session_source) {
+        return false;
+    }
+    if !provider_uses_request_lease(
+        turn_context.config.model_provider_id.as_str(),
+        turn_context.provider.info().is_openai(),
+    ) {
+        return false;
+    }
+    let large_request = preflight.input_tokens >= THIRD_PARTY_PREFLIGHT_WARNING_INPUT_TOKENS
+        || preflight.request_bytes >= THIRD_PARTY_PREFLIGHT_WARNING_REQUEST_BYTES;
+    large_request && !third_party_cache_looks_healthy(last_token_usage)
+}
+
+/// The cross-process lease exists to stop many autonomous sub-agents from
+/// hammering one metered third-party key. A human-driven session is
+/// control-plane work, not worker execution: it must stay able to reach its
+/// manager while sub-agents saturate that key, so it never waits on the
+/// shared lease. This mirrors the worker/control-plane split that
+/// `AgentControl` already applies to execution capacity, and is neutral to
+/// provider, model, and role name.
+fn provider_request_lease_applies_to_session(session_source: &SessionSource) -> bool {
+    matches!(session_source, SessionSource::SubAgent(_))
+}
+
+fn provider_uses_request_lease(provider_id: &str, is_openai: bool) -> bool {
+    // Runtime GPU providers represent user-owned, explicitly capacity-bounded inference.
+    // The cross-process hammer-reduction lease is for metered third-party APIs and would
+    // otherwise serialize GPU tool turns for ten minutes after a process interruption.
+    !is_openai && !provider_id.starts_with("gpu-")
+}
+
+fn cache_hit_rate(last_token_usage: Option<&TokenUsage>) -> Option<f64> {
+    cache_hit_details(last_token_usage).map(|details| details.hit_rate)
+}
+
+fn cache_hit_details(last_token_usage: Option<&TokenUsage>) -> Option<CacheHitDetails> {
+    let usage = last_token_usage?;
+    let input = usage.input_tokens.max(0);
+    if input < THIRD_PARTY_CACHE_HEALTH_MIN_INPUT_TOKENS {
+        return None;
+    }
+    let cached = usage.cached_input().max(0);
+    Some(CacheHitDetails {
+        input_tokens: input,
+        cached_input_tokens: cached,
+        hit_rate: cached as f64 / input as f64,
+    })
+}
+
+async fn record_provider_request_result_for_lease(
+    sess: &Session,
+    lease: Option<&ProviderRequestLease>,
+    result: ProviderRequestResult,
+) -> bool {
+    let Some(lease) = lease else {
+        return true;
+    };
+    let Some(state_db) = sess.state_db() else {
+        return true;
+    };
+    let result_kind = provider_request_result_kind(&result);
+    let rows_affected = match state_db
+        .record_provider_request_result(lease, result, now_unix_timestamp_ms())
+        .await
+    {
+        Ok(rows_affected) => rows_affected,
+        Err(err) => {
+            warn!(
+                provider = %lease.key.provider_id,
+                model = %lease.key.model,
+                key_fingerprint = %lease.key.key_fingerprint,
+                owner = %lease.owner,
+                result = result_kind,
+                error = %err,
+                "failed to record provider request result"
+            );
+            return false;
+        }
+    };
+    if rows_affected == 0 {
+        warn!(
+            provider = %lease.key.provider_id,
+            model = %lease.key.model,
+            key_fingerprint = %lease.key.key_fingerprint,
+            owner = %lease.owner,
+            result = result_kind,
+            "provider request result did not match active lease owner"
+        );
+    } else {
+        trace!(
+            provider = %lease.key.provider_id,
+            model = %lease.key.model,
+            key_fingerprint = %lease.key.key_fingerprint,
+            owner = %lease.owner,
+            result = result_kind,
+            rows_affected,
+            "recorded provider request result"
+        );
+    }
+    true
+}
+
+struct ProviderRequestLeaseGuard {
+    state_db: Option<StateDbHandle>,
+    runtime_handle: tokio::runtime::Handle,
+    lease: Option<ProviderRequestLease>,
+}
+
+impl ProviderRequestLeaseGuard {
+    fn new(sess: &Session, lease: Option<ProviderRequestLease>) -> Self {
+        Self {
+            state_db: sess.state_db(),
+            runtime_handle: sess.services.runtime_handle.clone(),
+            lease,
+        }
+    }
+
+    async fn record_result(&mut self, sess: &Session, result: ProviderRequestResult) {
+        let Some(lease) = self.lease.clone() else {
+            return;
+        };
+        if record_provider_request_result_for_lease(sess, Some(&lease), result).await {
+            self.lease = None;
+        }
+    }
+}
+
+impl Drop for ProviderRequestLeaseGuard {
+    fn drop(&mut self) {
+        let Some(lease) = self.lease.take() else {
+            return;
+        };
+        let Some(state_db) = self.state_db.clone() else {
+            return;
+        };
+        std::mem::drop(self.runtime_handle.spawn(async move {
+            match state_db
+                .release_provider_request_lease(&lease, now_unix_timestamp_ms())
+                .await
+            {
+                Ok(0) => warn!(
+                    provider = %lease.key.provider_id,
+                    model = %lease.key.model,
+                    key_fingerprint = %lease.key.key_fingerprint,
+                    owner = %lease.owner,
+                    "provider request lease guard drop did not match active lease owner"
+                ),
+                Ok(rows_affected) => trace!(
+                    provider = %lease.key.provider_id,
+                    model = %lease.key.model,
+                    key_fingerprint = %lease.key.key_fingerprint,
+                    owner = %lease.owner,
+                    rows_affected,
+                    "released provider request lease on guard drop"
+                ),
+                Err(err) => warn!(
+                    provider = %lease.key.provider_id,
+                    model = %lease.key.model,
+                    key_fingerprint = %lease.key.key_fingerprint,
+                    owner = %lease.owner,
+                    error = %err,
+                    "failed to release provider request lease on guard drop"
+                ),
+            }
+        }));
+    }
+}
+
+fn provider_request_result_kind(result: &ProviderRequestResult) -> &'static str {
+    match result {
+        ProviderRequestResult::Success { .. } => "success",
+        ProviderRequestResult::Failed { .. } => "failed",
+    }
+}
+
+fn provider_request_result_from_outcome(
+    outcome: &CodexResult<SamplingRequestResult>,
+) -> ProviderRequestResult {
+    match outcome {
+        Ok(result) => {
+            let token_usage = result.token_usage.as_ref();
+            ProviderRequestResult::Success {
+                input_tokens: token_usage.map(|usage| usage.input_tokens),
+                cached_input_tokens: token_usage.map(TokenUsage::cached_input),
+            }
+        }
+        Err(err) => provider_request_result_from_error(err),
+    }
+}
+
+fn provider_request_result_from_error(err: &CodexErr) -> ProviderRequestResult {
+    ProviderRequestResult::Failed {
+        status: err.http_status_code_value(),
+        request_id: provider_request_error_request_id(err),
+        retry_after_ms: provider_request_error_retry_after_ms(err),
+    }
+}
+
+fn provider_request_error_request_id(err: &CodexErr) -> Option<String> {
+    match err.details() {
+        CodexErrorDetails::RetryLimit(err) => err.request_id.clone(),
+        CodexErrorDetails::UnexpectedStatus(err) => err.request_id.clone(),
+        CodexErrorDetails::ResponseStreamFailed(err) => err.request_id.clone(),
+        _ => None,
+    }
+}
+
+fn provider_request_error_retry_after_ms(err: &CodexErr) -> Option<i64> {
+    match err.details() {
+        CodexErrorDetails::RetryLimit(err) => err.retry_after_ms,
+        _ => None,
+    }
+}
+
+fn provider_request_key(sess: &Session, turn_context: &TurnContext) -> ProviderRequestKey {
+    let provider = turn_context.provider.info();
+    let key_fingerprint = if let Some(env_key) = provider.env_key.as_deref() {
+        match std::env::var(env_key)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+        {
+            Some(secret) => format!("env:{env_key}:{}", secret_fingerprint(&secret)),
+            // Do not hit the vault on the hot path just to fingerprint throttle state.
+            // The actual request path still resolves the stored key and will fail
+            // normally if it is missing or invalid.
+            None => format!("stored:{env_key}"),
+        }
+    } else if provider.experimental_bearer_token.is_some() {
+        "config:bearer-token".to_string()
+    } else if provider.auth.is_some() {
+        "config:auth-command".to_string()
+    } else if provider.aws.is_some() {
+        "config:aws".to_string()
+    } else {
+        format!("auth-mode:{:?}", sess.services.auth_manager.auth_mode())
+    };
+
+    ProviderRequestKey {
+        provider_id: turn_context.config.model_provider_id.clone(),
+        model: turn_context.model_info.slug.clone(),
+        key_fingerprint,
+    }
+}
+
+fn secret_fingerprint(secret: &str) -> String {
+    let digest = Sha256::digest(secret.as_bytes());
+    digest
+        .iter()
+        .take(8)
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn rough_prompt_token_estimate(prompt: &Prompt) -> i64 {
+    let input_bytes = serde_json::to_vec(&prompt.input).map_or(0, |bytes| bytes.len());
+    i64::try_from(input_bytes / 4).unwrap_or(i64::MAX)
+}
+
+fn format_provider_request_block(key: &ProviderRequestKey, block: &ProviderRequestBlock) -> String {
+    let reason = match block.reason {
+        ProviderRequestBlockReason::Cooldown => "cooldown",
+        ProviderRequestBlockReason::Lease => "active request lease",
+    };
+    let wait_seconds = (block.remaining_ms.max(0) + 999) / 1000;
+    let status = block
+        .last_status
+        .map(|status| status.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    let request_id = block
+        .last_request_id
+        .as_deref()
+        .map(|id| format!(", request id: {id}"))
+        .unwrap_or_default();
+    let provider_cache = if block.last_provider_input_tokens > 0 {
+        format!(
+            " Last provider usage: input={} cached_input={}.",
+            block.last_provider_input_tokens, block.last_provider_cached_input_tokens
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        "provider request blocked by local {reason} for {}/{} ({}) for about {wait_seconds}s. Last status: {status}{request_id}. Last preflight: input={} cached_input={} request_bytes={}.{provider_cache} Wait, compact, switch provider/model, or start a fresh thread before retrying.",
+        key.provider_id,
+        key.model,
+        key.key_fingerprint,
+        block.last_input_tokens,
+        block.last_cached_input_tokens,
+        block.last_request_bytes
+    )
+}
 
 fn assign_missing_streamed_response_item_id(
     item: &mut ResponseItem,
@@ -2384,8 +3099,8 @@ async fn try_run_sampling_request(
         .features
         .enabled(Feature::ConcurrentReasoningSummaries)
         && turn_context.provider.info().is_openai();
-    let mut stream = client_session
-        .stream(
+    let stream_result = client_session
+        .stream_with_same_turn_attempt(
             prompt,
             &turn_context.model_info,
             &turn_context.session_telemetry,
@@ -2568,6 +3283,16 @@ async fn try_run_sampling_request(
                     last_agent_message = Some(agent_message);
                 }
                 needs_follow_up |= output_result.needs_follow_up;
+                if preempt_for_mailbox_mail
+                    && sess.input_queue.has_trigger_turn_mailbox_items().await
+                {
+                    sess.input_queue
+                        .accept_mailbox_delivery_for_current_turn(
+                            &sess.active_turn,
+                            &turn_context.sub_id,
+                        )
+                        .await;
+                }
             }
             ResponseEvent::OutputItemAdded(mut item) => {
                 assign_missing_streamed_response_item_id(&mut item, /*active_item*/ None);
@@ -2648,6 +3373,7 @@ async fn try_run_sampling_request(
                 }
             }
             ResponseEvent::ServerModel(server_model) => {
+                sess.record_server_model_identity(&turn_context, &server_model);
                 if !turn_context
                     .server_model_warning_emitted
                     .load(Ordering::Relaxed)
@@ -2706,6 +3432,7 @@ async fn try_run_sampling_request(
                 response_id,
                 token_usage,
                 end_turn,
+                finish_reason,
             } => {
                 flush_assistant_text_segments_all(
                     &sess,
@@ -2714,6 +3441,21 @@ async fn try_run_sampling_request(
                     &mut assistant_message_stream_parsers,
                 )
                 .await;
+                if !response_id.is_empty() {
+                    sess.send_event(
+                        &turn_context,
+                        EventMsg::ModelResponseCompleted(ModelResponseCompletedEvent {
+                            turn_id: turn_context.sub_id.clone(),
+                            response_id: response_id.clone(),
+                            model: turn_context.model_info.slug.clone(),
+                            model_provider_id: turn_context.config.model_provider_id.clone(),
+                            finish_reason: finish_reason
+                                .as_ref()
+                                .map(|reason| reason.as_str().to_string()),
+                        }),
+                    )
+                    .await;
+                }
                 sess.send_event(
                     &turn_context,
                     EventMsg::RawResponseCompleted(RawResponseCompletedEvent {
@@ -2747,13 +3489,10 @@ async fn try_run_sampling_request(
                         ));
                     }
                     Some(codex_api::CompletionFinishReason::ProviderError(reason)) => {
-                        break Err(CodexErr::Stream(
-                            format!(
-                                "the model provider ended the completion with retryable finish \
+                        break Err(CodexErr::Stream(format!(
+                            "the model provider ended the completion with retryable finish \
                                  reason `{reason}`"
-                            ),
-                            None,
-                        ));
+                        )));
                     }
                     Some(codex_api::CompletionFinishReason::Unknown(reason)) => {
                         break Err(CodexErr::InvalidRequest(format!(

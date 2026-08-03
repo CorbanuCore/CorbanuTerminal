@@ -46,12 +46,15 @@ fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
 fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
     let mut incompatible = model_preset("incompatible", /*show_in_picker*/ true);
     incompatible.multi_agent_version = Some(MultiAgentVersion::V1);
+    let mut visible = model_preset("visible", /*show_in_picker*/ true);
+    visible.provider_id = Some("example-provider".to_string());
     let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
         available_models: vec![
-            model_preset("visible", /*show_in_picker*/ true),
+            visible,
             model_preset("hidden", /*show_in_picker*/ false),
             incompatible,
         ],
+        inherited_runtime: None,
         agent_type_description: "role help".to_string(),
         expose_agent_type: true,
         hide_agent_type_model_reasoning: false,
@@ -166,7 +169,8 @@ fn spawn_agent_catalog_exposes_parent_runtime_and_frontier_effort_policy() {
         service_tier: None,
     };
 
-    let description = spawn_agent_models_description(&[sol], Some(&inherited_runtime));
+    let description =
+        spawn_agent_models_description(&[sol], MultiAgentVersion::V2, Some(&inherited_runtime));
 
     assert!(
         description.contains(
@@ -290,13 +294,13 @@ fn spawn_agent_tool_caps_reasoning_effort_value_length() {
         description: "Model-defined".to_string(),
     }];
 
-    assert_eq!(
-        spawn_agent_models_description(&[model], MultiAgentVersion::V2),
-        format!(
-            "Available model overrides (optional; inherited parent model is preferred):\n- `visible-model`: visible description Reasoning efforts: {} (default). Service tiers: priority.",
-            "é".repeat(MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION)
-        )
-    );
+    let description = spawn_agent_models_description(&[model], MultiAgentVersion::V2, None);
+    let capped_effort = "é".repeat(MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION);
+
+    assert!(description.contains("Current inherited runtime: unavailable."));
+    assert!(description.contains("Available authorized exact runtime overrides"));
+    assert!(description.contains(&format!("efforts: {capped_effort} (default)")));
+    assert!(!description.contains(&format!("{capped_effort}é")));
 }
 
 #[test]
@@ -329,14 +333,15 @@ fn spawn_agent_tool_keeps_model_controls_when_spawn_metadata_is_hidden() {
     assert!(properties.contains_key("model"));
     assert!(properties.contains_key("reasoning_effort"));
     assert!(!properties.contains_key("service_tier"));
-    assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE));
-    assert!(description.contains("Available model overrides"));
+    assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2));
+    assert!(description.contains("Available authorized exact runtime overrides"));
 }
 
 #[test]
 fn spawn_agent_tool_hides_model_controls_without_override_exposure() {
     let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
         available_models: vec![model_preset("visible", /*show_in_picker*/ true)],
+        inherited_runtime: None,
         agent_type_description: "role help".to_string(),
         expose_agent_type: false,
         hide_agent_type_model_reasoning: true,
@@ -361,7 +366,7 @@ fn spawn_agent_tool_hides_model_controls_without_override_exposure() {
     for property in ["agent_type", "model", "reasoning_effort", "service_tier"] {
         assert!(!properties.contains_key(property));
     }
-    assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE));
+    assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2));
     assert!(!description.contains("Available model overrides"));
 }
 
@@ -562,5 +567,105 @@ fn list_agents_tool_status_schema_includes_interrupted() {
             "shutdown",
             "not_found"
         ])
+    );
+}
+
+#[test]
+fn openai_reserved_collaboration_profile_restores_pinned_argument_contracts() {
+    let spawn = apply_openai_reserved_collaboration_schema(create_spawn_agent_tool_v2(
+        SpawnAgentToolOptions {
+            available_models: vec![model_preset("visible", /*show_in_picker*/ true)],
+            inherited_runtime: None,
+            agent_type_description: "role help".to_string(),
+            expose_agent_type: true,
+            hide_agent_type_model_reasoning: false,
+            expose_spawn_agent_model_overrides: true,
+            multi_agent_version: MultiAgentVersion::V2,
+            usage_hint_text: None,
+        },
+    ));
+    let ToolSpec::Function(spawn) = spawn else {
+        panic!("spawn_agent should be a function tool");
+    };
+    let spawn_properties = spawn
+        .parameters
+        .properties
+        .expect("spawn_agent should use object params");
+    assert_eq!(
+        spawn_properties
+            .get("message")
+            .and_then(|schema| schema.encrypted),
+        Some(true)
+    );
+    assert_eq!(
+        spawn_properties.keys().cloned().collect::<Vec<_>>(),
+        vec![
+            "fork_turns".to_string(),
+            "message".to_string(),
+            "task_name".to_string()
+        ]
+    );
+    assert_eq!(
+        spawn.output_schema.expect("spawn output schema")["required"],
+        json!(["task_name"])
+    );
+
+    for tool in [create_send_message_tool(), create_followup_task_tool()] {
+        let ToolSpec::Function(tool) = apply_openai_reserved_collaboration_schema(tool) else {
+            panic!("message collaboration tool should be a function");
+        };
+        assert_eq!(
+            tool.parameters
+                .properties
+                .as_ref()
+                .and_then(|properties| properties.get("message"))
+                .and_then(|schema| schema.encrypted),
+            Some(true)
+        );
+    }
+
+    let ToolSpec::Function(interrupt) =
+        apply_openai_reserved_collaboration_schema(create_interrupt_agent_tool_v2())
+    else {
+        panic!("interrupt_agent should be a function");
+    };
+    let interrupt_properties = interrupt
+        .parameters
+        .properties
+        .expect("interrupt_agent should use object params");
+    assert_eq!(
+        interrupt_properties.keys().cloned().collect::<Vec<_>>(),
+        vec!["target".to_string()]
+    );
+    assert_eq!(
+        interrupt.parameters.required,
+        Some(vec!["target".to_string()])
+    );
+    assert_eq!(
+        interrupt.output_schema.expect("interrupt output schema")["required"],
+        json!(["previous_status"])
+    );
+}
+
+#[test]
+fn openai_reserved_collaboration_profile_restores_pinned_result_contracts() {
+    let ToolSpec::Function(wait) = apply_openai_reserved_collaboration_schema(
+        create_wait_agent_tool_v2(WaitAgentTimeoutOptions::default()),
+    ) else {
+        panic!("wait_agent should be a function");
+    };
+    assert_eq!(
+        wait.output_schema.expect("wait output schema")["required"],
+        json!(["message", "timed_out"])
+    );
+
+    let ToolSpec::Function(list) =
+        apply_openai_reserved_collaboration_schema(create_list_agents_tool())
+    else {
+        panic!("list_agents should be a function");
+    };
+    assert_eq!(
+        list.output_schema.expect("list output schema")["properties"]["agents"]["items"]["required"],
+        json!(["agent_name", "agent_status"])
     );
 }

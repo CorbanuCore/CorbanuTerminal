@@ -15,6 +15,10 @@ name = "pfterminal"
 path = "src/pfterminal_main.rs"
 
 [[bin]]
+name = "pfterminal-debug"
+path = "src/pfterminal_debug_main.rs"
+
+[[bin]]
 name = "logs_client"
 path = "src/bin/logs_client.rs"
 
@@ -41,6 +45,7 @@ codex-chatgpt = { workspace = true }
 codex-cloud-config = { workspace = true }
 codex-cloud-tasks = { path = "../cloud-tasks" }
 codex-utils-cli = { workspace = true }
+dirs = { workspace = true }
 codex-config = { workspace = true }
 codex-core = { workspace = true }
 codex-core-plugins = { workspace = true }

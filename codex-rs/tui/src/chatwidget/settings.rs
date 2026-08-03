@@ -222,6 +222,14 @@ impl ChatWidget {
         self.has_codex_backend_auth
     }
 
+    pub(crate) fn has_openai_auth(&self) -> bool {
+        self.has_codex_backend_auth
+            || matches!(
+                self.status_account_display,
+                Some(StatusAccountDisplay::ApiKey | StatusAccountDisplay::ChatGpt { .. })
+            )
+    }
+
     pub(crate) fn update_account_state(
         &mut self,
         status_account_display: Option<StatusAccountDisplay>,
@@ -288,9 +296,32 @@ impl ChatWidget {
         model_provider_id: String,
         model_provider: codex_model_provider_info::ModelProviderInfo,
     ) {
+        self.runtime_model_provider_base_url = model_provider.base_url.clone();
         self.config.model_provider_id = model_provider_id;
         self.config.model_provider = model_provider;
         self.refresh_model_dependent_surfaces();
+    }
+
+    /// Projects a thread-scoped provider ID onto the complete provider snapshot used by this
+    /// widget. A retained pane can use a different provider from its parent, so copying only the
+    /// ID leaves `/status`, wire-specific controls, and auth affordances describing the parent.
+    pub(super) fn apply_thread_model_provider(&mut self, model_provider_id: String) {
+        let model_provider = self
+            .config
+            .model_providers
+            .get(&model_provider_id)
+            .cloned()
+            .unwrap_or_else(|| {
+                tracing::warn!(
+                    provider = %model_provider_id,
+                    "thread model provider is not configured in this client"
+                );
+                codex_model_provider_info::ModelProviderInfo {
+                    name: model_provider_id.clone(),
+                    ..Default::default()
+                }
+            });
+        self.set_model_provider(model_provider_id, model_provider);
     }
 
     pub(crate) fn current_model(&self) -> &str {
@@ -516,7 +547,7 @@ impl ChatWidget {
     fn apply_thread_settings(&mut self, mut settings: ThreadSettings) {
         let cwd_changed = self.config.cwd != settings.cwd;
         self.apply_thread_settings_cwd(settings.cwd.clone());
-        self.config.model_provider_id = settings.model_provider.clone();
+        self.apply_thread_model_provider(settings.model_provider.clone());
         self.set_service_tier(settings.service_tier.clone());
         self.set_approval_policy(settings.approval_policy);
         self.set_approvals_reviewer(settings.approvals_reviewer.to_core());

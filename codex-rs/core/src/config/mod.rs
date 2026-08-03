@@ -297,6 +297,10 @@ const LOCAL_DEV_BUILD_VERSION: &str = "0.0.0";
 pub const CONFIG_TOML_FILE: &str = "config.toml";
 const CONFIG_PROFILE_V2_SUFFIX: &str = ".config.toml";
 
+fn is_local_or_debug_build(package_version: &str) -> bool {
+    package_version == LOCAL_DEV_BUILD_VERSION || cfg!(debug_assertions)
+}
+
 fn resolve_sqlite_home_env(resolved_cwd: &Path) -> Option<AbsolutePathBuf> {
     let raw = std::env::var(codex_state::SQLITE_HOME_ENV).ok()?;
     let trimmed = raw.trim();
@@ -894,6 +898,10 @@ pub struct Config {
     /// Default reasoning effort for spawned subagents when the spawn call does not select one.
     pub agent_default_subagent_reasoning_effort: Option<ReasoningEffort>,
 
+    /// Operator-authorized provider IDs for spawned agents.
+    /// `None` means every configured provider is eligible.
+    pub agent_provider_allowlist: Option<Vec<String>>,
+
     /// Whether to record a model-visible message when an agent turn is interrupted.
     pub agent_interrupt_message_enabled: bool,
 
@@ -982,6 +990,10 @@ pub struct Config {
     /// Optional value to use for `reasoning.summary` when making a request
     /// using the Responses API. When unset, the model catalog default is used.
     pub model_reasoning_summary: Option<ReasoningSummary>,
+
+    /// Compatibility override to force-enable reasoning summaries for the
+    /// configured model. `false` does not disable catalogue support.
+    pub model_supports_reasoning_summaries: Option<bool>,
 
     /// Optional full model catalog loaded from `model_catalog_json`.
     /// When set, this replaces the bundled catalog for the current process.
@@ -1300,7 +1312,10 @@ impl MultiAgentV2Config {
             subagent_developer_instructions: None,
             multi_agent_mode_hint_text: None,
             tool_namespace: Some(DEFAULT_MULTI_AGENT_V2_TOOL_NAMESPACE.to_string()),
-            hide_spawn_agent_metadata: true,
+            // PF Terminal's orchestration UI consumes the resolved runtime and nickname to keep
+            // agent panes inspectable. Operators can still opt into the compact task-name-only
+            // response explicitly.
+            hide_spawn_agent_metadata: false,
             expose_spawn_agent_model_overrides: true,
             wait_agent_enabled: true,
             non_code_mode_only: true,
@@ -1614,18 +1629,21 @@ pub async fn load_gpu_runtime_model_providers(
 pub async fn load_gpu_runtime_model_provider_records(
     sqlite_home: &Path,
 ) -> Vec<codex_state::GpuRuntimeProvider> {
-    let runtime = match codex_state::StateRuntime::init(
-        sqlite_home.to_path_buf(),
-        "gpu-runtime-overlay".to_string(),
-    )
-    .await
-    {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            tracing::warn!(%error, "failed to open GPU runtime provider overlay");
-            return Vec::new();
-        }
-    };
+    let sqlite = codex_state::SqliteConfig::from_sqlite_home(
+        AbsolutePathBuf::from_absolute_path(sqlite_home)
+            .expect("resolved sqlite home must be absolute"),
+    );
+    if !sqlite.has_existing_state_db() {
+        return Vec::new();
+    }
+    let runtime =
+        match codex_state::StateRuntime::init(sqlite, "gpu-runtime-overlay".to_string()).await {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                tracing::warn!(%error, "failed to open GPU runtime provider overlay");
+                return Vec::new();
+            }
+        };
 
     match runtime.list_gpu_runtime_providers().await {
         Ok(records) => records,
@@ -1639,6 +1657,16 @@ pub async fn load_gpu_runtime_model_provider_records(
 impl Config {
     pub fn sqlite_config(&self) -> &codex_state::SqliteConfig {
         &self.sqlite
+    }
+
+    pub fn validate_multi_agent_v2_config(&self) -> std::io::Result<()> {
+        if self.multi_agent_v2.max_subagent_model_requests_per_turn < 2 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "features.multi_agent_v2.max_subagent_model_requests_per_turn must be at least 2",
+            ));
+        }
+        Ok(())
     }
 
     pub(crate) fn multi_agent_version_override(&self) -> Option<MultiAgentVersion> {
@@ -1728,6 +1756,7 @@ impl Config {
             base_instructions: self.base_instructions.clone(),
             personality_enabled: self.features.enabled(Feature::Personality),
             personality: self.personality,
+            model_supports_reasoning_summaries: self.model_supports_reasoning_summaries,
             model_catalog: self.model_catalog.clone(),
         }
     }
@@ -3825,7 +3854,10 @@ impl Config {
             .sqlite_home
             .as_ref()
             .map(AbsolutePathBuf::to_path_buf)
-            .or_else(|| resolve_sqlite_home_env(&resolved_cwd))
+            .or_else(|| {
+                resolve_sqlite_home_env(&resolved_cwd)
+                    .map(|path| path.to_path_buf())
+            })
             .unwrap_or_else(|| codex_home.to_path_buf());
 
         let mut built_in_model_providers = built_in_model_providers(openai_base_url);
@@ -3914,6 +3946,12 @@ impl Config {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "features.multi_agent_v2.max_concurrent_threads_per_session must be at least 1",
+            ));
+        }
+        if multi_agent_v2.max_subagent_model_requests_per_turn < 2 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "features.multi_agent_v2.max_subagent_model_requests_per_turn must be at least 2",
             ));
         }
         validate_multi_agent_v2_wait_timeout(
@@ -4386,6 +4424,7 @@ impl Config {
             agent_max_threads,
             agent_default_subagent_model,
             agent_default_subagent_reasoning_effort,
+            agent_provider_allowlist,
             agent_max_depth,
             agent_roles,
             memories: memories_config,
@@ -4431,6 +4470,7 @@ impl Config {
             model_reasoning_effort,
             plan_mode_reasoning_effort: cfg.plan_mode_reasoning_effort,
             model_reasoning_summary: cfg.model_reasoning_summary,
+            model_supports_reasoning_summaries: cfg.model_supports_reasoning_summaries,
             model_catalog,
             model_verbosity: cfg.model_verbosity,
             chatgpt_base_url: cfg
@@ -4889,6 +4929,24 @@ pub fn find_codex_home() -> std::io::Result<AbsolutePathBuf> {
 /// that the directory exists.
 pub fn log_dir(cfg: &Config) -> std::io::Result<PathBuf> {
     Ok(cfg.log_dir.clone())
+}
+
+/// Returns the candidate nickname list that native agent spawning will use for a role.
+pub fn agent_nickname_candidates_for_role(config: &Config, role_name: Option<&str>) -> Vec<String> {
+    crate::agent::role::agent_nickname_candidates(config, role_name)
+}
+
+/// Returns whether an agent role is declared by user config or built-in defaults.
+pub fn agent_role_config_exists(config: &Config, role_name: &str) -> bool {
+    crate::agent::role::resolve_role_config(config, role_name).is_some()
+}
+
+/// Applies the named agent role as a high-precedence config layer.
+pub async fn apply_agent_role_to_config(
+    config: &mut Config,
+    role_name: Option<&str>,
+) -> Result<(), String> {
+    crate::agent::role::apply_role_to_config(config, role_name).await
 }
 
 #[cfg(test)]

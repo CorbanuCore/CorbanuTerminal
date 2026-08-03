@@ -37,10 +37,11 @@ entrypoint. The `codex` variant remains available for upstream compatibility.
 The `version` field in `codex-package.json` is read from
 `[workspace.package].version` in `codex-rs/Cargo.toml`.
 
-The `pfterminal` variant always includes `pfterminal-walletd` beside the main
-entrypoint. Wallet operations start that companion process from the main
-executable's directory, so package validation treats it as required rather
-than as an optional resource.
+The `pfterminal` variant always includes `pfterminal-debug` and
+`pfterminal-walletd` beside the main entrypoint. The debug entrypoint selects
+its isolated state home inside the binary. Wallet operations start the companion
+process from the main executable's directory, so package validation treats both
+artifacts as required rather than optional resources.
 
 ## Source-built artifacts
 

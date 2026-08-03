@@ -144,8 +144,6 @@ async fn get_auth_status_with_api_key() -> Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn personal_access_token_without_email_supports_auth_status_and_account_read() -> Result<()> {
     let codex_home = TempDir::new()?;
-    create_config_toml_custom_provider(codex_home.path(), /*requires_openai_auth*/ true)?;
-
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/v1/user-auth-credential/whoami"))
@@ -160,6 +158,23 @@ async fn personal_access_token_without_email_supports_auth_status_and_account_re
         .expect(1..)
         .mount(&server)
         .await;
+    Mock::given(method("GET"))
+        .and(path("/backend-api/wham/config/bundle"))
+        .and(header("Authorization", "Bearer at-test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .expect(1..)
+        .mount(&server)
+        .await;
+
+    MockResponsesConfig::new("http://127.0.0.1:0")
+        .with_sandbox_mode("danger-full-access")
+        .disable_feature(Feature::ShellSnapshot)
+        .with_provider_config("requires_openai_auth = true")
+        .with_root_config(&format!(
+            "chatgpt_base_url = \"{}/backend-api\"",
+            server.uri()
+        ))
+        .write(codex_home.path())?;
 
     let authapi_base_url = server.uri();
     let mut mcp = TestAppServer::builder()
@@ -340,9 +355,12 @@ async fn get_auth_status_reports_backend_auth_when_api_key_is_also_present() -> 
         AuthCredentialsStoreMode::File,
     )?;
 
-    let mut mcp =
-        TestAppServer::new_with_env(codex_home.path(), &[("OPENAI_API_KEY", Some("sk-env-key"))])
-            .await?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .with_env_overrides(&[("OPENAI_API_KEY", Some("sk-env-key"))])
+        .build()
+        .await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
 
     let request_id = mcp
@@ -574,17 +592,18 @@ async fn get_auth_status_returns_token_after_proactive_refresh_recovery() -> Res
     )?;
 
     drop(mcp);
-    let mut mcp = TestAppServer::new_with_env(
-        codex_home.path(),
-        &[
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .with_env_overrides(&[
             ("OPENAI_API_KEY", None),
             (
                 REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR,
                 Some(refresh_url.as_str()),
             ),
-        ],
-    )
-    .await?;
+        ])
+        .build()
+        .await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
 
     let recovered_request_id = mcp

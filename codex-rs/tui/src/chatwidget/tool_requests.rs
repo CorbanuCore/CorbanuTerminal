@@ -317,6 +317,7 @@ impl ChatWidget {
             reason: ev.reason,
             changes: ev.changes,
             cwd: self.config.cwd.clone(),
+            response_destination: ev.response_destination,
         });
         self.bottom_pane
             .push_approval_request(request, &self.config.features);

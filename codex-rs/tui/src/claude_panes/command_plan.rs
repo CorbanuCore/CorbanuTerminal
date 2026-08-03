@@ -339,9 +339,12 @@ pub(crate) fn prompt_from_user_turn(op: &AppCommand) -> Result<Option<String>> {
             UserInput::Mention { name, path } => {
                 chunks.push(format!("[Mention: {name} at {path}]"));
             }
-            UserInput::Image { .. } | UserInput::LocalImage { .. } => {
+            UserInput::Image { .. }
+            | UserInput::LocalImage { .. }
+            | UserInput::Audio { .. }
+            | UserInput::LocalAudio { .. } => {
                 return Err(anyhow!(
-                    "Claude panes currently accept text, skills, and mentions only; image input is not supported yet."
+                    "Claude panes currently accept text, skills, and mentions only; media input is not supported yet."
                 ));
             }
         }

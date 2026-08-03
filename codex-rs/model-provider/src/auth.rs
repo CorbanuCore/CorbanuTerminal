@@ -216,7 +216,7 @@ pub(crate) fn resolve_provider_auth(
         return auth_provider_from_provider_key_auth(auth, provider);
     }
 
-    if let Some(auth) = api_key_auth_for_provider(provider)? {
+    if let Some(auth) = bearer_auth_for_provider(provider)? {
         return Ok(auth);
     }
 

@@ -12,9 +12,11 @@ use crate::tasks::interrupted_turn_history_marker;
 use assert_matches::assert_matches;
 use codex_extension_api::empty_extension_registry;
 use codex_models_manager::manager::RefreshStrategy;
+use codex_protocol::AgentPath;
 use codex_protocol::ResponseItemId;
 use codex_protocol::capabilities::CapabilityRootLocation;
 use codex_protocol::capabilities::SelectedCapabilityRoot;
+use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ReasoningItemReasoningSummary;
 use codex_protocol::models::ResponseItem;
@@ -199,6 +201,7 @@ fn truncates_before_requested_user_message() {
             }],
             content: None,
             encrypted_content: None,
+            anthropic_content_block: None,
             internal_chat_message_metadata_passthrough: None,
         },
         ResponseItem::FunctionCall {
@@ -647,14 +650,15 @@ async fn resumed_subagent_rejoins_loaded_parent_control_plane() {
     let child = manager
         .start_thread_with_options(StartThreadOptions {
             config: config.clone(),
+            allow_provider_model_fallback: false,
+            history_mode: None,
             initial_history: InitialHistory::New,
             session_source: Some(child_source.clone()),
             thread_source: Some(ThreadSource::Subagent),
             dynamic_tools: Vec::new(),
             metrics_service_name: None,
-            multi_agent_mode: Some(MultiAgentMode::Proactive),
             parent_trace: None,
-            environments: Vec::new(),
+            environments: Some(Vec::new()),
             thread_extension_init: Default::default(),
             supports_openai_form_elicitation: false,
         })
@@ -752,15 +756,14 @@ async fn resumed_subagent_rejoins_loaded_parent_control_plane() {
             vec![UserInput::Text {
                 text: "duplicate work".to_string(),
                 text_elements: Vec::new(),
-            }]
-            .into(),
+            }],
             Some(child_source),
         )
         .await
         .expect_err("a restored live path must not be replaced");
     assert_matches!(
-        duplicate,
-        CodexErr::UnsupportedOperation(message)
+        duplicate.details(),
+        CodexErrorDetails::UnsupportedOperation(message)
             if message.contains("agent path `/root/troll_burzum` already exists")
     );
 }
@@ -805,14 +808,15 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
     let child = manager
         .start_thread_with_options(StartThreadOptions {
             config: config.clone(),
+            allow_provider_model_fallback: false,
+            history_mode: None,
             initial_history: InitialHistory::New,
             session_source: Some(child_source.clone()),
             thread_source: Some(ThreadSource::Subagent),
             dynamic_tools: Vec::new(),
             metrics_service_name: None,
-            multi_agent_mode: Some(MultiAgentMode::Proactive),
             parent_trace: None,
-            environments: Vec::new(),
+            environments: Some(Vec::new()),
             thread_extension_init: Default::default(),
             supports_openai_form_elicitation: false,
         })
@@ -827,7 +831,10 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
         depth: 2,
         agent_path: Some(verifier_path.clone()),
         agent_nickname: Some("Godel".to_string()),
-        agent_role: Some("verification".to_string()),
+        // This fixture exercises persisted runtime restoration, not role lookup. Keep the role
+        // unset so reloading proves the exact stored provider/model without layering an unrelated
+        // role config over it.
+        agent_role: None,
         agent_class: None,
     });
     let mut verifier_config = config.clone();
@@ -841,14 +848,15 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
     let verifier = manager
         .start_thread_with_options(StartThreadOptions {
             config: verifier_config,
+            allow_provider_model_fallback: false,
+            history_mode: None,
             initial_history: InitialHistory::New,
             session_source: Some(verifier_source),
             thread_source: Some(ThreadSource::Subagent),
             dynamic_tools: Vec::new(),
             metrics_service_name: None,
-            multi_agent_mode: Some(MultiAgentMode::Proactive),
             parent_trace: None,
-            environments: Vec::new(),
+            environments: Some(Vec::new()),
             thread_extension_init: Default::default(),
             supports_openai_form_elicitation: false,
         })
@@ -938,13 +946,23 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
     );
     assert_eq!(control.get_status(child_id).await, AgentStatus::Unloaded);
     assert_eq!(control.get_status(verifier_id).await, AgentStatus::Unloaded);
+    let child_err = resumed_manager
+        .get_thread(child_id)
+        .await
+        .err()
+        .expect("unloaded child must not have a live thread");
     assert!(matches!(
-        resumed_manager.get_thread(child_id).await,
-        Err(CodexErr::ThreadNotFound(id)) if id == child_id
+        child_err.details(),
+        CodexErrorDetails::ThreadNotFound(id) if *id == child_id
     ));
+    let verifier_err = resumed_manager
+        .get_thread(verifier_id)
+        .await
+        .err()
+        .expect("unloaded verifier must not have a live thread");
     assert!(matches!(
-        resumed_manager.get_thread(verifier_id).await,
-        Err(CodexErr::ThreadNotFound(id)) if id == verifier_id
+        verifier_err.details(),
+        CodexErrorDetails::ThreadNotFound(id) if *id == verifier_id
     ));
 
     let listed = control
@@ -977,16 +995,106 @@ async fn resumed_root_restores_open_descendants_as_unloaded_with_exact_runtime()
             vec![UserInput::Text {
                 text: "duplicate work".to_string(),
                 text_elements: Vec::new(),
-            }]
-            .into(),
+            }],
             Some(child_source),
         )
         .await
         .expect_err("a restored unloaded path must remain reserved");
     assert_matches!(
-        duplicate,
-        CodexErr::UnsupportedOperation(message)
+        duplicate.details(),
+        CodexErrorDetails::UnsupportedOperation(message)
             if message.contains("agent path `/root/troll_burzum` already exists")
+    );
+}
+
+#[tokio::test]
+async fn durable_thread_spawn_materializes_lazy_parent_child_and_core_graph_edge() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    config
+        .features
+        .enable(Feature::Sqlite)
+        .expect("sqlite should be available in tests");
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("multi-agent v2 should be available in tests");
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    let state_db = init_state_db(&config).await;
+    let state_runtime = state_db
+        .clone()
+        .expect("sqlite state runtime should be available");
+    let manager = ThreadManager::with_models_provider_home_and_state_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        state_db,
+    );
+
+    let root = manager
+        .start_thread(config.clone())
+        .await
+        .expect("start lazy root");
+    assert!(
+        state_runtime
+            .get_thread(root.thread_id)
+            .await
+            .expect("query lazy root")
+            .is_none(),
+        "a root with no turn should begin unmaterialized"
+    );
+
+    let child_path = AgentPath::try_from("/root/troll_burzum").expect("child path");
+    let child = manager
+        .start_thread_with_options(StartThreadOptions {
+            config: config.clone(),
+            allow_provider_model_fallback: false,
+            history_mode: None,
+            initial_history: InitialHistory::New,
+            session_source: Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id: root.thread_id,
+                depth: 1,
+                agent_path: Some(child_path),
+                agent_nickname: Some("Burzum".to_string()),
+                agent_role: Some("troll".to_string()),
+                agent_class: Some(codex_protocol::crew::AgentClass::CrewMember {
+                    crew_id: "cold-root-crew".to_string(),
+                    logical_member_id: "troll-1".to_string(),
+                    human_addressable: true,
+                }),
+            })),
+            thread_source: Some(ThreadSource::Subagent),
+            dynamic_tools: Vec::new(),
+            metrics_service_name: None,
+            parent_trace: None,
+            environments: Some(Vec::new()),
+            thread_extension_init: Default::default(),
+            supports_openai_form_elicitation: false,
+        })
+        .await
+        .expect("spawn durable child beneath lazy root");
+
+    let stored_root = state_runtime
+        .get_thread(root.thread_id)
+        .await
+        .expect("query materialized root")
+        .expect("durable spawn must materialize its parent");
+    let stored_child = state_runtime
+        .get_thread(child.thread_id)
+        .await
+        .expect("query materialized child")
+        .expect("durable spawn must materialize its child");
+    assert!(stored_root.rollout_path.exists());
+    assert!(stored_child.rollout_path.exists());
+    assert_eq!(
+        state_runtime
+            .list_thread_spawn_children(root.thread_id)
+            .await
+            .expect("list Core graph children"),
+        vec![child.thread_id]
     );
 }
 

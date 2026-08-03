@@ -1300,6 +1300,7 @@ async fn approval_modal_patch_snapshot() -> anyhow::Result<()> {
         changes,
         reason: Some("The model wants to apply changes".into()),
         grant_root: Some(PathBuf::from("/tmp")),
+        response_destination: ApprovalResponseDestination::Thread,
     };
     handle_apply_patch_approval_request(&mut chat, "sub-approve-patch", ev);
 
@@ -1425,6 +1426,7 @@ async fn apply_patch_events_emit_history_cells() {
         changes,
         reason: None,
         grant_root: None,
+        response_destination: ApprovalResponseDestination::Thread,
     };
     handle_apply_patch_approval_request(&mut chat, "s1", ev);
     assert!(
@@ -1491,6 +1493,7 @@ async fn apply_patch_manual_approval_adjusts_header() {
             changes: proposed_changes,
             reason: None,
             grant_root: None,
+            response_destination: ApprovalResponseDestination::Thread,
         },
     );
     drain_insert_history(&mut rx);
@@ -1533,6 +1536,7 @@ async fn apply_patch_manual_flow_snapshot() {
             changes: proposed_changes,
             reason: Some("Manual review required".into()),
             grant_root: None,
+            response_destination: ApprovalResponseDestination::Thread,
         },
     );
     let history_before_apply = drain_insert_history(&mut rx);
@@ -1576,6 +1580,7 @@ async fn apply_patch_approval_sends_op_with_call_id() {
         changes,
         reason: None,
         grant_root: None,
+        response_destination: ApprovalResponseDestination::Thread,
     };
     handle_apply_patch_approval_request(&mut chat, "sub-123", ev);
 
@@ -1603,6 +1608,47 @@ async fn apply_patch_approval_sends_op_with_call_id() {
 }
 
 #[tokio::test]
+async fn local_apply_patch_approval_resolves_without_thread_op() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let changes = HashMap::from([(
+        PathBuf::from("preview.rs"),
+        FileChange::Add {
+            content: "preview\n".into(),
+        },
+    )]);
+    handle_apply_patch_approval_request(
+        &mut chat,
+        "local-preview",
+        ApplyPatchApprovalRequestEvent {
+            call_id: "local-preview".into(),
+            turn_id: "local-turn".into(),
+            changes,
+            reason: None,
+            grant_root: None,
+            response_destination: ApprovalResponseDestination::Local,
+        },
+    );
+
+    chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    let mut rendered_resolution = false;
+    while let Ok(event) = rx.try_recv() {
+        match event {
+            AppEvent::InsertHistoryCell(cell) => {
+                let rendered = lines_to_single_string(&cell.display_lines(80));
+                rendered_resolution |= rendered.contains("Local approval resolved: cancelled.");
+            }
+            AppEvent::SubmitThreadOp {
+                op: Op::PatchApproval { .. },
+                ..
+            } => panic!("local approval must not be submitted to a thread"),
+            _ => {}
+        }
+    }
+    assert!(rendered_resolution, "expected an explicit local resolution");
+}
+
+#[tokio::test]
 async fn apply_patch_full_flow_integration_like() {
     let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
 
@@ -1621,6 +1667,7 @@ async fn apply_patch_full_flow_integration_like() {
             changes,
             reason: None,
             grant_root: None,
+            response_destination: ApprovalResponseDestination::Thread,
         },
     );
 
@@ -1696,6 +1743,7 @@ async fn apply_patch_untrusted_shows_approval_modal() -> anyhow::Result<()> {
             changes,
             reason: None,
             grant_root: None,
+            response_destination: ApprovalResponseDestination::Thread,
         },
     );
 
@@ -1751,6 +1799,7 @@ async fn apply_patch_request_omits_diff_summary_from_modal() -> anyhow::Result<(
             changes,
             reason: None,
             grant_root: None,
+            response_destination: ApprovalResponseDestination::Thread,
         },
     );
 

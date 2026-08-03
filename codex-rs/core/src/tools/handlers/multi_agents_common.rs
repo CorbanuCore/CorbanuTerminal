@@ -32,7 +32,7 @@ use serde_json::Value as JsonValue;
 pub(crate) const MIN_WAIT_TIMEOUT_MS: i64 = DEFAULT_MULTI_AGENT_V2_MIN_WAIT_TIMEOUT_MS;
 pub(crate) const DEFAULT_WAIT_TIMEOUT_MS: i64 = 30_000;
 pub(crate) const MAX_WAIT_TIMEOUT_MS: i64 = HARD_MAX_MULTI_AGENT_V2_TIMEOUT_MS;
-pub(crate) const MAX_SPAWN_AGENT_MODEL_OVERRIDES: usize = 5;
+pub(crate) const MAX_SPAWN_AGENT_MODEL_OVERRIDES: usize = 32;
 
 pub(crate) fn model_supports_multi_agent_backend(
     model: &ModelPreset,
@@ -288,53 +288,47 @@ turn; report the refusal and obtain the user's explicit consent before trying a 
     )))
 }
 
-/// Catalogue lifecycle policy for newly spawned work.
+/// Validate a fully resolved child runtime without inventing an operator policy.
 ///
-/// This runs on the fully resolved child config so inherited runtimes, role overrides,
-/// model-only switches, and explicit provider/model pairs all cross the same boundary.
+/// Catalogue visibility and lifecycle metadata control picker presentation and automatic
+/// recommendations. They must not become a hidden spawn blocklist: an exact runtime configured by
+/// the operator remains usable even when it is hidden, custom, or represented by another
+/// provider's catalogue row. Only an explicit `agents.provider_allowlist` is spend authorization.
 pub(crate) async fn ensure_spawn_runtime_eligible(
     session: &Session,
     config: &Config,
 ) -> Result<(), FunctionCallError> {
     let model = config.model.as_deref().ok_or_else(|| {
         FunctionCallError::RespondToModel(
-            "spawn_agent could not resolve the child model for catalogue policy".to_string(),
+            "spawn_agent could not resolve the child model".to_string(),
         )
     })?;
+    if !config
+        .model_providers
+        .contains_key(&config.model_provider_id)
+    {
+        return Err(FunctionCallError::RespondToModel(format!(
+            "Runtime provider `{}` is not configured for spawned agents.",
+            config.model_provider_id
+        )));
+    }
     let model_info = session
         .services
         .models_manager
         .get_model_info(model, &config.to_models_manager_config())
         .await;
-    // GPU rental routes are dynamic runtime records, not static vendor catalogue rows. Their
-    // reserved provider id is created only from a ready state-db rental record, and local billing
-    // means no additional per-token spend. Keep this dynamic trust source separate from the
-    // bundled provider/model catalogue instead of inventing one row per rental.
-    if config.model_provider_id.starts_with("gpu-")
-        && config
-            .model_providers
-            .contains_key(&config.model_provider_id)
+    if model_info
+        .orchestration
+        .as_ref()
+        .is_some_and(|metadata| metadata.provider_id() == config.model_provider_id)
+        && let Some(reasoning_effort) = config.model_reasoning_effort.as_ref()
+        && !model_info.supported_reasoning_levels.is_empty()
     {
-        return Ok(());
-    }
-    let metadata = model_info.orchestration.as_ref().ok_or_else(|| {
-        FunctionCallError::RespondToModel(format!(
-            "Runtime `{}` / `{model}` has no orchestration metadata in the active model catalogue and cannot receive spawned work.",
-            config.model_provider_id
-        ))
-    })?;
-    if metadata.provider_id() != config.model_provider_id {
-        return Err(FunctionCallError::RespondToModel(format!(
-            "Runtime `{}` / `{model}` does not match its model catalogue provider `{}` and cannot receive spawned work. In MultiAgentV2, pass the exact catalogue `model_provider` together with `model`; legacy V1 cannot express a cross-provider override.",
-            config.model_provider_id,
-            metadata.provider_id()
-        )));
-    }
-    if let Some(reason) = metadata.disabled_reason() {
-        return Err(FunctionCallError::RespondToModel(format!(
-            "Runtime `{}` / `{model}` is disabled for spawned agents by model catalogue policy: {reason}.",
-            config.model_provider_id
-        )));
+        validate_spawn_agent_reasoning_effort(
+            model,
+            &model_info.supported_reasoning_levels,
+            reasoning_effort,
+        )?;
     }
     Ok(())
 }
@@ -566,8 +560,6 @@ pub(crate) async fn apply_spawn_agent_role(
     config: &mut Config,
     role_name: Option<&str>,
 ) -> Result<(), FunctionCallError> {
-    let previous_model = config.model.clone();
-    let previous_reasoning_effort = config.model_reasoning_effort.clone();
     if session.multi_agent_version() == Some(MultiAgentVersion::V2) {
         apply_role_to_config_for_multi_agent_v2(config, role_name)
             .await
@@ -577,34 +569,7 @@ pub(crate) async fn apply_spawn_agent_role(
             .await
             .map_err(FunctionCallError::RespondToModel)?;
     }
-    if config.model == previous_model && config.model_reasoning_effort == previous_reasoning_effort
-    {
-        return Ok(());
-    }
-
-    let Some(reasoning_effort) = config.model_reasoning_effort.clone() else {
-        return Ok(());
-    };
-    let model = config.model.clone().ok_or_else(|| {
-        FunctionCallError::RespondToModel(
-            "spawn_agent could not resolve the child model for reasoning effort validation"
-                .to_string(),
-        )
-    })?;
-    let model_info = session
-        .services
-        .models_manager
-        .get_model_info(&model, &config.to_models_manager_config())
-        .await;
-    if model_info.used_fallback_model_metadata {
-        return Ok(());
-    }
-
-    validate_spawn_agent_reasoning_effort(
-        &model,
-        &model_info.supported_reasoning_levels,
-        &reasoning_effort,
-    )
+    Ok(())
 }
 
 fn find_spawn_agent_model_name(

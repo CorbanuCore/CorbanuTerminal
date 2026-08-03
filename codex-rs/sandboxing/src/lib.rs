@@ -10,6 +10,8 @@ mod spawn;
 mod violation;
 mod windows;
 
+pub use bwrap::APPARMOR_BWRAP_USERNS_PROFILE;
+pub use bwrap::find_apparmor_bwrap_launcher;
 #[cfg(target_os = "linux")]
 pub use bwrap::find_system_bwrap_in_path;
 #[cfg(target_os = "linux")]

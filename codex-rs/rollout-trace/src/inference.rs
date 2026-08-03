@@ -506,6 +506,7 @@ mod tests {
             }]),
             encrypted_content: Some("encoded".to_string()),
             internal_chat_message_metadata_passthrough: None,
+            anthropic_content_block: None,
         };
 
         let normal = serde_json::to_value(&item).expect("response item serializes");

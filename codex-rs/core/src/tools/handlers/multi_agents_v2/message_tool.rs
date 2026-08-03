@@ -4,9 +4,9 @@
 //! resulting `InterAgentCommunication` should wake the target immediately.
 
 use super::*;
-use crate::agent_communication::AgentCommunicationContext;
-use crate::agent_communication::AgentCommunicationKind;
 use crate::tools::context::FunctionToolOutput;
+use codex_protocol::protocol::InterAgentCommunication;
+use codex_protocol::protocol::MAX_AGENT_MESSAGE_BYTES;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MessageDeliveryMode {
@@ -19,6 +19,13 @@ impl MessageDeliveryMode {
         match self {
             Self::QueueOnly => false,
             Self::TriggerTurn => true,
+        }
+    }
+
+    fn apply(self, communication: InterAgentCommunication) -> InterAgentCommunication {
+        InterAgentCommunication {
+            trigger_turn: self.trigger_turn(),
+            ..communication
         }
     }
 }
@@ -39,6 +46,17 @@ pub(crate) struct FollowupTaskArgs {
     pub(crate) message: String,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub(crate) struct MessageToolResult {
+    pub(crate) message_id: String,
+    pub(crate) target_thread_id: String,
+    pub(crate) agent_path: String,
+    pub(crate) agent_nickname: Option<String>,
+    pub(crate) agent_role: Option<String>,
+    pub(crate) delivery: String,
+    pub(crate) triggered_turn: bool,
+}
+
 pub(super) fn message_content(message: String) -> Result<String, FunctionCallError> {
     if message.trim().is_empty() {
         return Err(FunctionCallError::RespondToModel(
@@ -55,9 +73,10 @@ pub(super) fn message_content(message: String) -> Result<String, FunctionCallErr
 }
 
 /// Handles the shared MultiAgentV2 message flow for both `send_message` and `followup_task`.
-pub(crate) async fn handle_message_string_tool(
+pub(super) async fn handle_message_string_tool(
     invocation: ToolInvocation,
     mode: MessageDeliveryMode,
+    encoding: CollaborationMessageEncoding,
     target: String,
     message: String,
 ) -> Result<FunctionToolOutput, FunctionCallError> {
@@ -95,11 +114,52 @@ pub(crate) async fn handle_message_string_tool(
         .session_source
         .get_agent_path()
         .unwrap_or_else(AgentPath::root);
-    let mut communication = communication_from_model_tool_message(
+    // Persisted agents are represented in the control plane before their runtime is loaded.
+    // Reopen that runtime first so mailbox admission can use its state database. Live agents
+    // take the fast path in `ensure_v2_agent_loaded`.
+    let resume_config = build_agent_resume_config(turn.as_ref())?;
+    session
+        .services
+        .agent_control
+        .ensure_v2_agent_loaded(resume_config, receiver_thread_id)
+        .await
+        .map_err(|err| collab_agent_error(receiver_thread_id, err))?;
+    let receiver_provider_id = session
+        .services
+        .agent_control
+        .get_agent_config_snapshot(receiver_thread_id)
+        .await
+        .map(|snapshot| snapshot.model_provider_id)
+        .ok_or_else(|| {
+            FunctionCallError::RespondToModel(format!(
+                "target agent `{receiver_agent_path}` has no loaded provider configuration"
+            ))
+        })?;
+    let (native_tool_name, plaintext_tool_name) = match mode {
+        MessageDeliveryMode::QueueOnly => ("send_message", PLAINTEXT_SEND_MESSAGE_TOOL),
+        MessageDeliveryMode::TriggerTurn => ("followup_task", PLAINTEXT_FOLLOWUP_TASK_TOOL),
+    };
+    ensure_message_encoding_matches_target(
+        &turn.config.model_provider_id,
+        &source,
+        &receiver_provider_id,
+        encoding,
+        native_tool_name,
+        plaintext_tool_name,
+    )?;
+    let source = match encoding {
+        CollaborationMessageEncoding::ProviderNative => source,
+        CollaborationMessageEncoding::PlaintextAdapter => {
+            crate::tools::context::ToolCallSource::DirectPlaintextMessage
+        }
+    };
+    let mut communication = communication_from_tool_message(
         author,
         receiver_agent_path.clone(),
         message,
+        &source,
         &turn.config.model_provider_id,
+        mode.trigger_turn(),
     );
     communication.kind = Some(match mode {
         MessageDeliveryMode::QueueOnly => codex_protocol::protocol::AgentMessageKind::Informational,
@@ -108,7 +168,7 @@ pub(crate) async fn handle_message_string_tool(
     let message_id = communication.ensure_message_identity().to_string();
     communication
         .metadata
-        .get_or_insert_with(ResponseItemMetadata::default)
+        .get_or_insert_with(codex_protocol::models::ResponseItemMetadata::default)
         .source_call_id = Some(call_id.clone());
     let communication = mode.apply(communication);
     session
@@ -117,45 +177,28 @@ pub(crate) async fn handle_message_string_tool(
         .admit_inter_agent_communication(receiver_thread_id, &communication)
         .await
         .map_err(|err| collab_agent_error(receiver_thread_id, err))?;
-    let resume_config = build_agent_resume_config(turn.as_ref())?;
-    session
-        .services
-        .agent_control
-        .ensure_v2_agent_loaded(resume_config, receiver_thread_id)
-        .await
-        .map_err(|err| collab_agent_error(receiver_thread_id, err))?;
-    let author = turn
-        .session_source
-        .get_agent_path()
-        .unwrap_or_else(AgentPath::root);
-    let communication = communication_from_tool_message(
-        author,
-        receiver_agent_path.clone(),
-        message,
-        &source,
-        mode.trigger_turn(),
-    );
-    let kind = match mode {
-        MessageDeliveryMode::QueueOnly => AgentCommunicationKind::Message,
-        MessageDeliveryMode::TriggerTurn => AgentCommunicationKind::Followup,
-    };
-    let context = AgentCommunicationContext::new(kind, session.thread_id);
-    let parent_turn_id =
-        matches!(mode, MessageDeliveryMode::TriggerTurn).then(|| turn.sub_id.clone());
     let result = session
         .services
         .agent_control
-        .send_inter_agent_communication(receiver_thread_id, communication, context, parent_turn_id)
+        .send_persisted_inter_agent_communication(
+            receiver_thread_id,
+            communication,
+            matches!(mode, MessageDeliveryMode::TriggerTurn).then(|| turn.sub_id.clone()),
+        )
         .await
         .map_err(|err| collab_agent_error(receiver_thread_id, err));
     result?;
+    session
+        .services
+        .agent_control
+        .note_native_agent_dispatch(session.thread_id);
     emit_sub_agent_activity(
         &session,
         &turn,
         SubAgentActivityItem {
             id: call_id,
             agent_thread_id: receiver_thread_id,
-            agent_path: receiver_agent_path,
+            agent_path: receiver_agent_path.clone(),
             kind: SubAgentActivityKind::Interacted,
         },
     )
@@ -170,7 +213,8 @@ pub(crate) async fn handle_message_string_tool(
         delivery: match mode {
             MessageDeliveryMode::QueueOnly => "queued",
             MessageDeliveryMode::TriggerTurn => "followup_task_sent",
-        },
+        }
+        .to_string(),
         triggered_turn: mode == MessageDeliveryMode::TriggerTurn,
     };
     Ok(FunctionToolOutput::from_text(

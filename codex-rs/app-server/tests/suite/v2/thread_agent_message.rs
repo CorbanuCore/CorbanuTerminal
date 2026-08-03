@@ -31,7 +31,11 @@ async fn thread_agent_message_uses_native_mailbox_and_deduplicates_stable_id() -
     let codex_home = TempDir::new()?;
     create_config_toml(codex_home.path(), &server.uri())?;
 
-    let mut app = TestAppServer::new(codex_home.path()).await?;
+    let mut app = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .build()
+        .await?;
     timeout(DEFAULT_TIMEOUT, app.initialize()).await??;
 
     let root_request = app
@@ -74,6 +78,32 @@ async fn thread_agent_message_uses_native_mailbox_and_deduplicates_stable_id() -
     .await??;
     let ThreadSpawnAgentResponse { thread: child, .. } =
         to_response::<ThreadSpawnAgentResponse>(child_response)?;
+
+    let cold_terminal_request = app
+        .send_raw_request(
+            "thread/sendAgentMessage",
+            Some(serde_json::to_value(ThreadAgentMessageParams {
+                source_thread_id: root.id.clone(),
+                target_thread_id: child.id.clone(),
+                message_id: Some("cold-terminal-result-1".to_string()),
+                assignment_id: Some("cold-terminal-result-1".to_string()),
+                kind: AgentMessageKind::TerminalResult,
+                content: "A child completed while this manager was cold.".to_string(),
+                trigger_turn: true,
+            })?),
+        )
+        .await?;
+    let cold_terminal_response: JSONRPCResponse = timeout(
+        DEFAULT_TIMEOUT,
+        app.read_stream_until_response_message(RequestId::Integer(cold_terminal_request)),
+    )
+    .await??;
+    let cold_terminal_receipt = to_response::<ThreadAgentMessageResponse>(cold_terminal_response)?;
+    assert!(
+        !cold_terminal_receipt.trigger_turn,
+        "a cold manager must retain the terminal result without starting an unattended paid turn"
+    );
+    assert_eq!(response_mock.requests().len(), 0);
 
     let params = ThreadAgentMessageParams {
         source_thread_id: root.id.clone(),
@@ -133,6 +163,46 @@ async fn thread_agent_message_uses_native_mailbox_and_deduplicates_stable_id() -
         1,
         "a duplicate stable message id must not start another provider turn"
     );
+
+    let followup_response_mock = responses::mount_sse_once(
+        &server,
+        responses::sse(vec![
+            responses::ev_response_created("resp-followup"),
+            responses::ev_assistant_message("msg-followup", "follow-up accepted"),
+            responses::ev_completed("resp-followup"),
+        ]),
+    )
+    .await;
+    let followup_request = app
+        .send_raw_request(
+            "thread/sendAgentMessage",
+            Some(serde_json::to_value(ThreadAgentMessageParams {
+                source_thread_id: root.id.clone(),
+                target_thread_id: child.id.clone(),
+                message_id: Some("message-stable-2".to_string()),
+                assignment_id: Some("assignment-stable-2".to_string()),
+                kind: AgentMessageKind::FollowUp,
+                content: "Run a second task on the same completed crew member.".to_string(),
+                trigger_turn: true,
+            })?),
+        )
+        .await?;
+    let followup_response: JSONRPCResponse = timeout(
+        DEFAULT_TIMEOUT,
+        app.read_stream_until_response_message(RequestId::Integer(followup_request)),
+    )
+    .await??;
+    let followup_receipt = to_response::<ThreadAgentMessageResponse>(followup_response)?;
+    assert_eq!(followup_receipt.message_id, "message-stable-2");
+    assert_eq!(followup_receipt.target_thread_id, child.id);
+    timeout(
+        DEFAULT_TIMEOUT,
+        app.read_stream_until_notification_message("turn/completed"),
+    )
+    .await??;
+    assert_eq!(followup_response_mock.requests().len(), 1);
+    let followup_json = serde_json::to_string(&followup_response_mock.requests()[0].input())?;
+    assert!(followup_json.contains("Run a second task on the same completed crew member."));
 
     let reverse_response_mock = responses::mount_sse_once(
         &server,

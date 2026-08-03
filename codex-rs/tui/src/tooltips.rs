@@ -101,38 +101,22 @@ pub(crate) mod announcement {
     use chrono::NaiveDate;
     #[cfg(test)]
     use chrono::Utc;
-    use codex_http_client::ClientRouteClass;
     use codex_http_client::HttpClientFactory;
-    use codex_http_client::RouteAwareClientPool;
     use codex_protocol::account::PlanType;
     #[cfg(test)]
     use regex_lite::Regex;
     #[cfg(test)]
     use serde::Deserialize;
-    use std::sync::OnceLock;
-    use std::time::Duration;
 
     #[cfg(test)]
     const CURRENT_OS: TargetOs = TargetOs::current();
 
     /// Prewarm the cache of the announcement tip.
-    pub(crate) fn prewarm(http_client_factory: HttpClientFactory) {
-        if ANNOUNCEMENT_TIP.get().is_some() {
-            return;
-        }
-        tokio::spawn(async move {
-            let announcement_tip = fetch_announcement_tip_text(http_client_factory).await;
-            let _ = ANNOUNCEMENT_TIP.set(announcement_tip);
-        });
-    }
+    pub(crate) fn prewarm(_http_client_factory: HttpClientFactory) {}
 
     /// Fetch the announcement tip, return None if the prewarm is not done yet.
-    pub(crate) fn fetch_announcement_tip(plan: Option<PlanType>) -> Option<String> {
-        ANNOUNCEMENT_TIP
-            .get()
-            .cloned()
-            .flatten()
-            .and_then(|raw| parse_announcement_tip_toml(&raw, plan))
+    pub(crate) fn fetch_announcement_tip(_plan: Option<PlanType>) -> Option<String> {
+        None
     }
 
     #[cfg(test)]
@@ -190,17 +174,7 @@ pub(crate) mod announcement {
         }
     }
 
-    async fn fetch_announcement_tip_text(http_client_factory: HttpClientFactory) -> Option<String> {
-        let client = RouteAwareClientPool::new(http_client_factory, ClientRouteClass::Other);
-        let response = client
-            .get(ANNOUNCEMENT_TIP_URL)
-            .timeout(Duration::from_millis(2000))
-            .send()
-            .await
-            .ok()?;
-        response.error_for_status().ok()?.text().await.ok()
-    }
-
+    #[cfg(test)]
     pub(crate) fn parse_announcement_tip_toml(
         text: &str,
         plan: Option<PlanType>,

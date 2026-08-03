@@ -81,7 +81,6 @@ impl Default for RecipeCatalog {
         Self {
             recipes: vec![
                 deepseek_flash_recipe(2),
-                deepseek_flash_recipe(4),
                 glm_5_2_recipe(),
                 crate::gguf_recipes::huihui_deepseek_v4_flash_recipe(),
                 crate::gguf_recipes::huihui_glm_5_2_recipe(),
@@ -277,7 +276,7 @@ fn deepseek_flash_recipe(gpu_count: u16) -> GpuRecipe {
         maximum_concurrent_requests,
     ) = match gpu_count {
         2 => (
-            "deepseek-v4-flash-sglang-v0.5.15-post1-2xh200-r2",
+            "deepseek-v4-flash-0731-sglang-v0.5.15-post1-2xh200-r3",
             "lmsysorg/sglang@sha256:00c53fe4c31bf22d7b37537f28bbdfd924c02de13cdfb4bff7378c9c34d75ab2",
             "0.5.15.post1",
             concat!(
@@ -320,9 +319,9 @@ fn deepseek_flash_recipe(gpu_count: u16) -> GpuRecipe {
         "nvidia-smi topo -m | awk '$1 == \"GPU0\" { for (i=2; i<=NF; i++) if ($i ~ /^NV[0-9]+$/) ok=1 } END { exit !ok }'; ",
         "printf 'PFTERMINAL_RUNTIME_GATE=nvlink-ok\\n'; ",
         "{RUNTIME_ENVIRONMENT} exec python3 -m sglang.launch_server ",
-        "--model-path deepseek-ai/DeepSeek-V4-Flash ",
-        "--revision 60d8d70770c6776ff598c94bb586a859a38244f1 ",
-        "--served-model-name deepseek-ai/DeepSeek-V4-Flash ",
+        "--model-path deepseek-ai/DeepSeek-V4-Flash-0731 ",
+        "--revision 7872f01b1d1fe23eabc4c98b48bffcef5a386062 ",
+        "--served-model-name deepseek-ai/DeepSeek-V4-Flash-0731 ",
         "--host 0.0.0.0 --port 8000 --tp {GPU_COUNT} --enable-p2p-check ",
         "{RUNTIME_FLAGS} ",
         "--watchdog-timeout 1200 --trust-remote-code --moe-runner-backend marlin ",
@@ -335,10 +334,10 @@ fn deepseek_flash_recipe(gpu_count: u16) -> GpuRecipe {
     GpuRecipe {
         id: format!("deepseek-flash-{gpu_count}xh200"),
         revision: recipe_revision.to_string(),
-        model_id: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
-        served_model_id: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
+        model_id: "deepseek-ai/DeepSeek-V4-Flash-0731".to_string(),
+        served_model_id: "deepseek-ai/DeepSeek-V4-Flash-0731".to_string(),
         wire_api: "chat".to_string(),
-        model_revision: "60d8d70770c6776ff598c94bb586a859a38244f1".to_string(),
+        model_revision: "7872f01b1d1fe23eabc4c98b48bffcef5a386062".to_string(),
         image: image.to_string(),
         runtime: "sglang".to_string(),
         serving_runtime_version: serving_runtime_version.to_string(),
@@ -359,8 +358,8 @@ fn deepseek_flash_recipe(gpu_count: u16) -> GpuRecipe {
         tensor_parallel_size: gpu_count,
         maximum_context_tokens,
         maximum_concurrent_requests,
-        expected_download_bytes: 158_100_000_000,
-        model_weight_bytes: 158_069_433_298,
+        expected_download_bytes: 166_898_661_074,
+        model_weight_bytes: 166_886_535_336,
         kv_cache_reserve_bytes: 48_000_000_000,
         workspace_reserve_bytes: 48_000_000_000,
         launch_command: vec!["bash".to_string(), "-lc".to_string(), launch],

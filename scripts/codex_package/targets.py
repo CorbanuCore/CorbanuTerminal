@@ -50,6 +50,7 @@ class PackageVariant:
 class PackageInputs:
     entrypoint_bin: Path
     code_mode_host_bin: Path
+    extra_bins: dict[str, Path]
     rg_bin: Path
     zsh_bin: Path | None
     bwrap_bin: Path | None
@@ -63,6 +64,10 @@ PACKAGE_VARIANTS: dict[str, PackageVariant] = {
         cargo_bin="pfterminal",
         executable_stem="pfterminal",
         extra_binaries=(
+            PackageExtraBinary(
+                cargo_bin="pfterminal-debug",
+                executable_stem="pfterminal-debug",
+            ),
             PackageExtraBinary(
                 cargo_bin="pfterminal-walletd",
                 executable_stem="pfterminal-walletd",

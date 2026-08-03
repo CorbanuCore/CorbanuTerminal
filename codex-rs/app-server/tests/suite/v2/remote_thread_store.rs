@@ -14,6 +14,7 @@
 //! in unnoticed.
 
 use std::collections::BTreeSet;
+use std::future::Future;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -67,8 +68,34 @@ use uuid::Uuid;
 
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
-#[tokio::test]
-async fn thread_section_list_without_sqlite_returns_method_not_found() -> Result<()> {
+fn run_current_thread_test_with_stack<F>(name: &str, future: F) -> Result<()>
+where
+    F: Future<Output = Result<()>> + Send + 'static,
+{
+    const TEST_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
+    let handle = std::thread::Builder::new()
+        .name(name.to_string())
+        .stack_size(TEST_STACK_SIZE_BYTES)
+        .spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
+            runtime.block_on(future)
+        })?;
+    handle
+        .join()
+        .map_err(|_| anyhow::anyhow!("{name} test thread panicked"))?
+}
+
+#[test]
+fn thread_section_list_without_sqlite_returns_method_not_found() -> Result<()> {
+    run_current_thread_test_with_stack(
+        "thread-section-list-without-sqlite",
+        thread_section_list_without_sqlite_returns_method_not_found_impl(),
+    )
+}
+
+async fn thread_section_list_without_sqlite_returns_method_not_found_impl() -> Result<()> {
     let codex_home = TempDir::new()?;
     let store_id = Uuid::new_v4().to_string();
     create_config_toml_with_thread_store(codex_home.path(), "http://127.0.0.1:1", &store_id)?;
@@ -144,9 +171,16 @@ async fn thread_start_rejects_paginated_history_without_list_support() -> Result
     Ok(())
 }
 
-#[tokio::test]
-async fn thread_delete_with_non_local_thread_store_does_not_create_local_persistence() -> Result<()>
-{
+#[test]
+fn thread_delete_with_non_local_thread_store_does_not_create_local_persistence() -> Result<()> {
+    run_current_thread_test_with_stack(
+        "thread-delete-non-local-store",
+        thread_delete_with_non_local_thread_store_does_not_create_local_persistence_impl(),
+    )
+}
+
+async fn thread_delete_with_non_local_thread_store_does_not_create_local_persistence_impl()
+-> Result<()> {
     let server = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     let store_id = Uuid::new_v4().to_string();
@@ -282,8 +316,15 @@ async fn thread_delete_with_non_local_thread_store_does_not_create_local_persist
     Ok(())
 }
 
-#[tokio::test]
-async fn cold_thread_resume_reuses_non_local_history_probe() -> Result<()> {
+#[test]
+fn cold_thread_resume_reuses_non_local_history_probe() -> Result<()> {
+    run_current_thread_test_with_stack(
+        "cold-thread-resume-non-local-history",
+        cold_thread_resume_reuses_non_local_history_probe_impl(),
+    )
+}
+
+async fn cold_thread_resume_reuses_non_local_history_probe_impl() -> Result<()> {
     let server = create_mock_responses_server_repeating_assistant("Done").await;
     let codex_home = TempDir::new()?;
     let store_id = Uuid::new_v4().to_string();

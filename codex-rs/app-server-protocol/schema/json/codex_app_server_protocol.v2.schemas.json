@@ -8728,6 +8728,30 @@
         },
         {
           "properties": {
+            "apiKey": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "providerApiKey"
+              ],
+              "title": "ProviderApiKeyv2::LoginAccountParamsType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "apiKey",
+            "provider",
+            "type"
+          ],
+          "title": "ProviderApiKeyv2::LoginAccountParams",
+          "type": "object"
+        },
+        {
+          "properties": {
             "appBrand": {
               "anyOf": [
                 {
@@ -13055,9 +13079,10 @@
         },
         {
           "properties": {
-            "anthropic_content_block": true,
+            "anthropic_content_block": {
+              "description": "Provider-native reasoning block that must be replayed byte-for-byte when continuing an Anthropic Messages conversation."
+            },
             "content": {
-              "default": null,
               "items": {
                 "$ref": "#/definitions/ReasoningItemContent"
               },

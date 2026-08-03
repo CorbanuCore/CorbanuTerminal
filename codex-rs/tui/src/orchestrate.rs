@@ -1073,7 +1073,7 @@ impl App {
         if items.is_empty() {
             items.push(SelectionItem {
                 name: "No Worker panes available".to_string(),
-                description: Some("Create a Codex or Claude pane first.".to_string()),
+                description: Some("Create a PFTerminal or Claude pane first.".to_string()),
                 is_disabled: true,
                 ..Default::default()
             });
@@ -1098,7 +1098,7 @@ impl App {
         let mut items = vec![SelectionItem {
             name: "Create Manager pane".to_string(),
             description: Some(format!(
-                "Create a Codex pane using {} and start in Drafting.",
+                "Create a PFTerminal pane using {} and start in Drafting.",
                 self.native_spawn_default_model()
             )),
             is_default: true,
@@ -1182,7 +1182,7 @@ impl App {
         if items.is_empty() {
             items.push(SelectionItem {
                 name: "No Worker panes available".to_string(),
-                description: Some("Create a Codex or Claude pane first.".to_string()),
+                description: Some("Create a PFTerminal or Claude pane first.".to_string()),
                 is_disabled: true,
                 ..Default::default()
             });
@@ -1354,7 +1354,7 @@ impl App {
         items.push(SelectionItem {
             name: "Create Manager pane".to_string(),
             description: Some(format!(
-                "Create a Codex pane using {}.",
+                "Create a PFTerminal pane using {}.",
                 self.native_spawn_default_model()
             )),
             is_default: true,
@@ -1755,7 +1755,7 @@ impl App {
             } else {
                 "idle"
             };
-            let mut description = format!("Codex; {status}; {thread_id}");
+            let mut description = format!("PFTerminal; {status}; {thread_id}");
             if let Some(task) = entry.last_task_message.as_deref() {
                 description.push_str(&format!(
                     "; task: {}",
@@ -2003,6 +2003,41 @@ impl App {
         }
     }
 
+    pub(crate) fn note_native_collab_assignment_dispatch(
+        &mut self,
+        sender_thread_id: &str,
+        receiver_thread_ids: &[String],
+    ) {
+        let Ok(sender_thread_id) = ThreadId::from_string(sender_thread_id) else {
+            return;
+        };
+        let holder_node_id = self.spawn_orchestration_node_for_thread(sender_thread_id);
+        for receiver_thread_id in receiver_thread_ids {
+            let Ok(receiver_thread_id) = ThreadId::from_string(receiver_thread_id) else {
+                continue;
+            };
+            let target_node_id = self.spawn_orchestration_node_for_thread(receiver_thread_id);
+            let matches_active_assignment = self.orchestrate_whips.values().any(|whip| {
+                whip.is_assignment()
+                    && whip.state == WhipState::Armed
+                    && whip.holder.as_deref() == Some(holder_node_id.as_str())
+                    && whip.target == target_node_id
+                    && !matches!(
+                        whip.kind,
+                        WhipKind::Assignment {
+                            phase: AssignmentPhase::Done,
+                            ..
+                        }
+                    )
+            });
+            if !matches_active_assignment {
+                continue;
+            }
+            self.note_whip_holder_dispatched(&holder_node_id, &target_node_id);
+            self.note_assignment_dispatch_delivered(&holder_node_id, &target_node_id);
+        }
+    }
+
     pub(crate) fn is_assignment_holder(&self, node_id: &str) -> bool {
         let node_id = normalize_orchestrate_node_id(node_id);
         self.orchestrate_whips.values().any(|whip| {
@@ -2092,9 +2127,27 @@ impl App {
         self.persist_pane_state();
     }
 
-    pub(crate) fn note_assignment_dispatch_delivered(&mut self, holder_node_id: &str) {
+    pub(crate) fn note_assignment_dispatch_delivered(
+        &mut self,
+        holder_node_id: &str,
+        target_node_id: &str,
+    ) {
         let holder_node_id = normalize_orchestrate_node_id(holder_node_id);
-        let Some((id, _)) = self.assignment_dispatch_target_for_holder(&holder_node_id) else {
+        let target_node_id = normalize_orchestrate_node_id(target_node_id);
+        let Some(id) = self.orchestrate_whips.values().find_map(|whip| {
+            (whip.is_assignment()
+                && whip.state == WhipState::Armed
+                && whip.holder.as_deref() == Some(holder_node_id.as_str())
+                && whip.target == target_node_id
+                && !matches!(
+                    whip.kind,
+                    WhipKind::Assignment {
+                        phase: AssignmentPhase::Done,
+                        ..
+                    }
+                ))
+            .then(|| whip.id.clone())
+        }) else {
             return;
         };
         if let Some(whip) = self.orchestrate_whips.get_mut(&id) {
@@ -2475,7 +2528,8 @@ impl App {
             })
         {
             return Err(
-                "Codex Main cannot be an assignment Manager; create a Manager pane.".to_string(),
+                "PFTerminal Main cannot be an assignment Manager; create a Manager pane."
+                    .to_string(),
             );
         }
         if resolved_mode == WhipMode::Review && holder_node_id.is_none() {
@@ -2775,6 +2829,13 @@ impl App {
             let is_assignment_completion = is_assignment
                 && (matches!(trigger, FireTrigger::Completion)
                     || (matches!(trigger, FireTrigger::Tick) && has_pending_completion));
+            if is_assignment_completion
+                && self.assignment_result_is_delivered_by_native_parent(&whip)
+            {
+                return Err(format!(
+                    "Assignment {id} result is delivered directly to its native Manager."
+                ));
+            }
             if (!is_assignment || is_assignment_completion)
                 && whip.last_idle_generation_fired == Some(idle_generation)
             {
@@ -2870,6 +2931,20 @@ impl App {
             target_idle_generation: idle_generation,
             destination_label,
         })
+    }
+
+    fn assignment_result_is_delivered_by_native_parent(&self, whip: &Whip) -> bool {
+        let Some(holder_node_id) = whip.holder.as_deref() else {
+            return false;
+        };
+        let Some(worker_thread_id) = node_id_thread(&whip.target) else {
+            return false;
+        };
+        node_id_thread(holder_node_id).is_some()
+            && self
+                .logical_parent_node_for_thread(worker_thread_id)
+                .as_deref()
+                == Some(holder_node_id)
     }
 
     fn execute_whip_fire(&mut self, plan: FirePlan, trigger: FireTrigger) {
@@ -3402,7 +3477,7 @@ impl App {
                 return self
                     .primary_thread_id
                     .map(FireDestination::Native)
-                    .ok_or_else(|| "Codex Main is not loaded.".to_string());
+                    .ok_or_else(|| "PFTerminal Main is not loaded.".to_string());
             }
             if self
                 .claude_panes
@@ -3424,7 +3499,7 @@ impl App {
         self.active_thread_id
             .or(self.primary_thread_id)
             .map(thread_node_id)
-            .ok_or_else(|| "No current Codex pane is available as whip holder.".to_string())
+            .ok_or_else(|| "No current PFTerminal pane is available as whip holder.".to_string())
     }
 
     fn target_node_is_idle(&self, node_id: &str) -> bool {
@@ -3539,10 +3614,7 @@ pub(crate) fn assignment_mandate_task(
         .filter(|text| !text.is_empty())
         .map(|text| format!("\n\nWorker's latest completed output:\n{text}"))
         .unwrap_or_else(|| "\n\nWorker's latest completed output: unavailable.".to_string());
-    let dispatch_protocol = format!(
-        "Dispatch only by emitting this host message protocol block as assistant text:\n```pfterminal-send-task\n{{\"target\":\"{}\",\"task\":\"<next concrete task>\"}}\n```\nThe durable Worker target is `{}`. This is not a shell command, executable, tool call, or Task Node workflow. Do not run command -v, which, terminal commands, or tool discovery for dispatch.",
-        whip.target, whip.target,
-    );
+    let dispatch_protocol = assignment_dispatch_protocol(whip, "<next concrete task>");
     format!(
         "Assignment {} mandate. Worker {worker_label} stopped at {}. Audit its latest result and act.\n\n{dispatch_protocol}\n\nReport ASSIGNMENT_BLOCKED: <reason> only for a genuinely user-owned decision, or emit WHIP_DONE only when complete. When you emit either marker, place it alone on its own line. Spec source: {source}.{spec}{worker_result}",
         whip.id,
@@ -3585,13 +3657,27 @@ fn assignment_birth_brief(
             "Draft mode: ask the user for the assignment requirements. When they are concrete, send the first task to Worker {worker_label}."
         )
     };
-    let dispatch_protocol = format!(
-        "To send work, write this fenced assistant-text block; it is not a shell command or tool:\n```pfterminal-send-task\n{{\"target\":\"{}\",\"task\":\"<concrete task>\"}}\n```",
-        whip.target,
-    );
+    let dispatch_protocol = assignment_dispatch_protocol(whip, "<concrete task>");
     format!(
         "You are Manager {manager_label} for Worker {worker_label}. This assignment lasts until {duration} after execution starts.\n\n{dispatch_protocol}\n\n{kickoff} After each Worker result, audit it and send the next task until the assignment is complete. Keep progress concise. User messages take priority. Use WHIP_DONE alone only when complete, or ASSIGNMENT_BLOCKED: <reason> alone only for a decision only the user can make. If the Worker is idle, you will be prompted again after {} minutes.{inline}",
         whip.cooldown_s / 60,
+    )
+}
+
+fn assignment_dispatch_protocol(whip: &Whip, task_placeholder: &str) -> String {
+    let native_worker = whip
+        .holder
+        .as_deref()
+        .and_then(node_id_thread)
+        .and_then(|_| node_id_thread(&whip.target));
+    if let Some(worker_thread_id) = native_worker {
+        return format!(
+            "Dispatch only with the native `followup_task` collaboration tool. Set its target to the durable Worker thread ID `{worker_thread_id}` and its message to `{task_placeholder}`. This is not a shell command or tool-discovery request. Do not emit a `pfterminal-send-task` block, spawn another agent, or replace the Worker."
+        );
+    }
+    format!(
+        "To send work across this external-pane boundary, write this fenced assistant-text block; it is not a shell command or tool:\n```pfterminal-send-task\n{{\"target\":\"{}\",\"task\":\"{task_placeholder}\"}}\n```",
+        whip.target,
     )
 }
 
@@ -3896,10 +3982,46 @@ mod tests {
     #[test]
     fn drafting_brief_defines_native_dispatch_protocol_and_exact_target() {
         let now = Utc::now();
+        let manager_thread_id =
+            ThreadId::from_string("00000000-0000-0000-0000-000000000601").expect("manager id");
+        let worker_thread_id =
+            ThreadId::from_string("00000000-0000-0000-0000-000000000602").expect("worker id");
         let mut whip = Whip::new(
             "whip-1".to_string(),
-            Some("thread:manager".to_string()),
-            "thread:worker-123".to_string(),
+            Some(thread_node_id(manager_thread_id)),
+            thread_node_id(worker_thread_id),
+            DRAFT_WITH_MANAGER_SPEC.to_string(),
+            ResolvedAttachOptions::default(),
+            now,
+        );
+        whip.kind = WhipKind::Assignment {
+            phase: AssignmentPhase::Drafting,
+            execution_started_utc: None,
+            last_user_turn_utc: Some(now),
+            failure_backoff_level: 0,
+            execution_duration_s: Some(28_800),
+        };
+
+        let brief = assignment_birth_brief(&whip, "Manager", "Worker", None, None);
+
+        assert!(brief.contains("native `followup_task` collaboration tool"));
+        assert!(brief.contains(&worker_thread_id.to_string()));
+        assert!(brief.contains("Do not emit a `pfterminal-send-task` block"));
+        assert!(brief.contains("not a shell command or tool-discovery request"));
+        assert!(brief.contains("Draft mode: ask the user for the assignment requirements"));
+        assert!(
+            brief.len() < 1_500,
+            "birth brief should stay concise for provider reliability"
+        );
+    }
+
+    #[test]
+    fn external_assignment_brief_retains_host_dispatch_adapter() {
+        let now = Utc::now();
+        let mut whip = Whip::new(
+            "whip-1".to_string(),
+            Some("pane:manager".to_string()),
+            "thread:worker".to_string(),
             DRAFT_WITH_MANAGER_SPEC.to_string(),
             ResolvedAttachOptions::default(),
             now,
@@ -3915,13 +4037,8 @@ mod tests {
         let brief = assignment_birth_brief(&whip, "Manager", "Worker", None, None);
 
         assert!(brief.contains("```pfterminal-send-task"));
-        assert!(brief.contains("\"target\":\"thread:worker-123\""));
-        assert!(brief.contains("not a shell command or tool"));
-        assert!(brief.contains("Draft mode: ask the user for the assignment requirements"));
-        assert!(
-            brief.len() < 1_500,
-            "birth brief should stay concise for provider reliability"
-        );
+        assert!(brief.contains("\"target\":\"thread:worker\""));
+        assert!(!brief.contains("native `followup_task` collaboration tool"));
     }
 
     #[test]

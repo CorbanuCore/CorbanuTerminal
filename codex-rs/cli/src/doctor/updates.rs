@@ -1,4 +1,4 @@
-//! Diagnoses whether Codex update paths target the running installation.
+//! Diagnoses whether PFTerminal update paths target the running installation.
 //!
 //! Update diagnostics combine cached version metadata, install-channel hints,
 //! and bounded latest-version probes. For npm-managed launches, this module also
@@ -74,7 +74,7 @@ pub(super) fn updates_check(config: &Config) -> DoctorCheck {
                 status = status.max(CheckStatus::Warning);
                 summary = "npm update target could not be proven".to_string();
                 remediation = Some(
-                    "Reinstall or update Codex so the JS shim provides CODEX_MANAGED_PACKAGE_ROOT."
+                    "Reinstall or update PFTerminal so the JS shim provides CODEX_MANAGED_PACKAGE_ROOT."
                         .to_string(),
                 );
             }
@@ -132,9 +132,9 @@ fn push_cached_version_details(details: &mut Vec<String>, version_file: &Path) {
 
 fn update_action_label(context: &InstallContext) -> &'static str {
     match &context.method {
-        InstallMethod::Npm => "npm install -g @openai/codex",
-        InstallMethod::Bun => "bun install -g @openai/codex",
-        InstallMethod::Pnpm => "pnpm add -g @openai/codex",
+        InstallMethod::Npm => "npm install -g @agticorp/pfterminal",
+        InstallMethod::Bun => "bun install -g @agticorp/pfterminal",
+        InstallMethod::Pnpm => "pnpm add -g @agticorp/pfterminal",
         InstallMethod::Brew => "brew upgrade --cask codex",
         InstallMethod::Standalone { .. } => "standalone installer",
         InstallMethod::Other => "manual or unknown",
@@ -233,7 +233,7 @@ mod tests {
                 method: InstallMethod::Pnpm,
                 package_layout: None,
             }),
-            "pnpm add -g @openai/codex"
+            "pnpm add -g @agticorp/pfterminal"
         );
         assert_eq!(
             update_action_label(&InstallContext {

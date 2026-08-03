@@ -20,6 +20,7 @@ use rmcp::model::RequestId;
 use tokio::sync::oneshot;
 
 use crate::agent::control::AgentExecutionGuard;
+use crate::agent::control::NativeAutoTurnGuard;
 use crate::mcp_tool_call::McpToolApprovalMetadata;
 use crate::session::TurnInputQueue;
 use crate::session::turn_context::TurnContext;
@@ -80,6 +81,9 @@ pub(crate) struct RunningTask {
     pub(crate) turn_context: Arc<TurnContext>,
     pub(crate) turn_extension_data: Arc<ExtensionData>,
     pub(crate) _agent_execution_guard: Option<AgentExecutionGuard>,
+    /// Covers the complete admitted task, including mailbox input moved out of InputQueue before
+    /// the model loop starts.
+    pub(crate) _native_auto_turn_guard: NativeAutoTurnGuard,
     // Timer recorded when the task drops to capture the full turn duration.
     pub(crate) _timer: Option<codex_otel::Timer>,
 }

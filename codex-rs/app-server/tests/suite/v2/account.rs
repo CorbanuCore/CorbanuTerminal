@@ -1301,7 +1301,9 @@ async fn logout_managed_bedrock_restores_default_account() -> Result<()> {
         read_account(&mut mcp).await?,
         GetAccountResponse {
             account: None,
-            requires_openai_auth: true,
+            // Removing the temporary Bedrock override restores PFTerminal's
+            // Ambient default, which does not require OpenAI authentication.
+            requires_openai_auth: false,
         }
     );
     Ok(())
@@ -1838,17 +1840,18 @@ async fn login_account_openai_provider_device_code_works_when_api_login_is_force
             .plan_type("pro")
             .chatgpt_account_id(WORKSPACE_ID_DEVICE),
     )?;
-    mock_device_code_oauth_token(&mock_server, &id_token).await;
+    mock_oauth_token(&mock_server, &id_token).await;
 
     let issuer = mock_server.uri();
-    let mut mcp = TestAppServer::new_with_env(
-        codex_home.path(),
-        &[
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .with_env_overrides(&[
             ("OPENAI_API_KEY", None),
             (LOGIN_ISSUER_ENV_VAR, Some(issuer.as_str())),
-        ],
-    )
-    .await?;
+        ])
+        .build()
+        .await?;
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
 
     let request_id = mcp
@@ -2573,6 +2576,7 @@ region = "us-west-2"
             auth_method: None,
             auth_token: None,
             requires_openai_auth: Some(false),
+            has_codex_backend_auth: Some(false),
         }
     );
 

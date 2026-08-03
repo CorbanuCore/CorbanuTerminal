@@ -26,6 +26,7 @@ use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::Settings;
+use codex_protocol::crew::AgentClass;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::items::TurnItem;
 use codex_protocol::items::UserMessageItem;
@@ -69,10 +70,12 @@ async fn test_config_with_cli_overrides(
     mut cli_overrides: Vec<(String, TomlValue)>,
 ) -> (TempDir, Config) {
     let home = TempDir::new().expect("create temp dir");
-    cli_overrides.push((
-        "model".to_string(),
-        TomlValue::String("gpt-5.5".to_string()),
-    ));
+    if !cli_overrides.iter().any(|(key, _)| key == "model") {
+        cli_overrides.push((
+            "model".to_string(),
+            TomlValue::String("gpt-5.5".to_string()),
+        ));
+    }
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(home.path().to_path_buf())
         .cli_overrides(cli_overrides)
@@ -196,6 +199,7 @@ impl AgentControlHarness {
                     agent_path: None,
                     agent_nickname: None,
                     agent_role: None,
+                    agent_class: None,
                 })),
                 options,
             )
@@ -273,10 +277,16 @@ fn crew_spawn_source(
 
 #[tokio::test]
 async fn crew_child_terminal_result_uses_one_triggering_native_mailbox_message() {
-    let (home, config) = test_config_with_cli_overrides(vec![(
-        "features.multi_agent_v2".to_string(),
-        TomlValue::Boolean(true),
-    )])
+    let (home, config) = test_config_with_cli_overrides(vec![
+        (
+            "features.multi_agent_v2".to_string(),
+            TomlValue::Boolean(true),
+        ),
+        (
+            "model".to_string(),
+            TomlValue::String("gpt-5.6-terra".to_string()),
+        ),
+    ])
     .await;
     let harness = AgentControlHarness::new_with_config(home, config).await;
     let (root_thread_id, _) = harness.start_thread().await;
@@ -285,19 +295,27 @@ async fn crew_child_terminal_result_uses_one_triggering_native_mailbox_message()
         .manager
         .start_thread_with_options(StartThreadOptions {
             config: harness.config.clone(),
+            allow_provider_model_fallback: false,
+            history_mode: None,
             initial_history: InitialHistory::New,
             session_source: Some(parent_source),
             thread_source: Some(ThreadSource::Subagent),
             dynamic_tools: Vec::new(),
             metrics_service_name: None,
-            multi_agent_mode: Some(MultiAgentMode::Proactive),
             parent_trace: None,
-            environments: Vec::new(),
+            environments: Some(Vec::new()),
             thread_extension_init: ExtensionDataInit::default(),
             supports_openai_form_elicitation: false,
         })
         .await
         .expect("crew manager should start");
+    // A newly loaded or cold-resumed manager is quarantined until it receives fresh work. This
+    // initial assignment-equivalent turn activates automatic terminal-result processing.
+    drop(
+        harness
+            .control
+            .begin_native_agent_turn(parent.thread_id, /*terminal_result_only*/ false),
+    );
     assert!(
         harness
             .control
@@ -309,6 +327,8 @@ async fn crew_child_terminal_result_uses_one_triggering_native_mailbox_message()
         .manager
         .start_thread_with_options(StartThreadOptions {
             config: harness.config.clone(),
+            allow_provider_model_fallback: false,
+            history_mode: None,
             initial_history: InitialHistory::New,
             session_source: Some(crew_spawn_source(
                 parent.thread_id,
@@ -320,18 +340,31 @@ async fn crew_child_terminal_result_uses_one_triggering_native_mailbox_message()
             thread_source: Some(ThreadSource::Subagent),
             dynamic_tools: Vec::new(),
             metrics_service_name: None,
-            multi_agent_mode: Some(MultiAgentMode::Proactive),
             parent_trace: None,
-            environments: Vec::new(),
+            environments: Some(Vec::new()),
             thread_extension_init: ExtensionDataInit::default(),
             supports_openai_form_elicitation: false,
         })
         .await
         .expect("crew worker should start");
+    // This fixture starts the parent and child directly through ThreadManager rather than through
+    // AgentControl::spawn_agent, so activate the child fixture's control handle explicitly. Real
+    // spawned trees share this handle by construction.
+    drop(
+        child
+            .thread
+            .codex
+            .session
+            .services
+            .agent_control
+            .begin_native_agent_turn(parent.thread_id, /*terminal_result_only*/ false),
+    );
     let turn = child.thread.codex.session.new_default_turn().await;
     let completed = EventMsg::TurnComplete(TurnCompleteEvent {
         turn_id: turn.sub_id.clone(),
+        started_at: None,
         last_agent_message: Some("crew result".to_string()),
+        error: None,
         completed_at: None,
         duration_ms: None,
         time_to_first_token_ms: None,
@@ -381,6 +414,148 @@ async fn crew_child_terminal_result_uses_one_triggering_native_mailbox_message()
     })
     .await
     .expect("one triggering terminal result should reach the crew manager");
+
+    timeout(Duration::from_secs(5), async {
+        loop {
+            if matches!(
+                harness.control.get_status(child.thread_id).await,
+                AgentStatus::Completed(_)
+            ) {
+                break;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("crew worker should become completed without being shut down");
+
+    let followup = InterAgentCommunication::new(
+        AgentPath::try_from("/root/manager").expect("manager path"),
+        AgentPath::try_from("/root/manager/worker").expect("worker path"),
+        Vec::new(),
+        "second assignment on the same persistent worker".to_string(),
+        /*trigger_turn*/ true,
+    )
+    .with_kind(AgentMessageKind::FollowUp)
+    .with_assignment_id("persistent-worker-second-assignment");
+    harness
+        .control
+        .send_inter_agent_communication(
+            child.thread_id,
+            followup.clone(),
+            AgentCommunicationContext::new(AgentCommunicationKind::Followup, parent.thread_id),
+            None,
+        )
+        .await
+        .expect("completed crew worker should accept a follow-up on the same thread");
+
+    assert!(
+        harness
+            .manager
+            .captured_ops()
+            .iter()
+            .any(|(thread_id, op)| {
+                *thread_id == child.thread_id
+                    && matches!(
+                        op,
+                        Op::InterAgentCommunication { communication } if communication == &followup
+                    )
+            })
+    );
+    assert!(
+        !harness
+            .manager
+            .captured_ops()
+            .iter()
+            .any(|(thread_id, op)| *thread_id == child.thread_id && matches!(op, Op::Shutdown)),
+        "turn completion must not shut down a persistent crew member"
+    );
+}
+
+#[test]
+fn native_terminal_result_loop_breaker_caps_dispatch_chains_and_recovers() {
+    let control = AgentControl::default();
+    let manager_id = ThreadId::new();
+
+    assert!(
+        !control.native_terminal_result_auto_trigger_allowed(manager_id),
+        "cold native managers must not auto-run before fresh work"
+    );
+
+    // A real assignment/operator turn activates the manager.
+    drop(control.begin_native_agent_turn(manager_id, /*terminal_result_only*/ false));
+    assert!(control.native_terminal_result_auto_trigger_allowed(manager_id));
+
+    for _ in 0..codex_protocol::crew::CREW_AUTO_DISPATCH_CHAIN_LIMIT {
+        let turn = control.begin_native_agent_turn(manager_id, /*terminal_result_only*/ true);
+        control.note_native_agent_dispatch(manager_id);
+        // Multiple child messages in one manager turn count as one chain link.
+        control.note_native_agent_dispatch(manager_id);
+        drop(turn);
+    }
+    assert!(
+        !control.native_terminal_result_auto_trigger_allowed(manager_id),
+        "the next terminal result must queue without starting another paid turn"
+    );
+
+    // Fresh work explicitly resumes the same manager without replacing its identity.
+    drop(control.begin_native_agent_turn(manager_id, /*terminal_result_only*/ false));
+    assert!(control.native_terminal_result_auto_trigger_allowed(manager_id));
+
+    // An automatic acknowledgement that creates no follow-up work terminates the chain.
+    let dispatched_turn =
+        control.begin_native_agent_turn(manager_id, /*terminal_result_only*/ true);
+    control.note_native_agent_dispatch(manager_id);
+    drop(dispatched_turn);
+    let acknowledgement =
+        control.begin_native_agent_turn(manager_id, /*terminal_result_only*/ true);
+    drop(acknowledgement);
+    assert!(control.native_terminal_result_auto_trigger_allowed(manager_id));
+    let states = control.native_auto_loop_states();
+    assert_eq!(states[&manager_id].chain, 0);
+}
+
+#[tokio::test]
+async fn separately_materialized_controls_share_native_loop_policy() {
+    let harness = AgentControlHarness::new().await;
+    let manager_id = ThreadId::new();
+    let manager_turn_control = harness.manager.agent_control();
+    let child_completion_control = harness.manager.agent_control();
+
+    drop(
+        manager_turn_control
+            .begin_native_agent_turn(manager_id, /*terminal_result_only*/ false),
+    );
+    for _ in 0..codex_protocol::crew::CREW_AUTO_DISPATCH_CHAIN_LIMIT {
+        let turn = manager_turn_control
+            .begin_native_agent_turn(manager_id, /*terminal_result_only*/ true);
+        manager_turn_control.note_native_agent_dispatch(manager_id);
+        drop(turn);
+    }
+
+    assert!(
+        !child_completion_control.native_terminal_result_auto_trigger_allowed(manager_id),
+        "a separately materialized control must not bypass the manager loop breaker"
+    );
+}
+
+#[test]
+fn native_operator_steering_breaks_an_active_auto_dispatch_chain() {
+    let control = AgentControl::default();
+    let manager_id = ThreadId::new();
+    drop(control.begin_native_agent_turn(manager_id, /*terminal_result_only*/ false));
+
+    let auto_turn = control.begin_native_agent_turn(manager_id, /*terminal_result_only*/ true);
+    control.note_native_operator_input(manager_id);
+    control.note_native_agent_dispatch(manager_id);
+    drop(auto_turn);
+
+    let states = control.native_auto_loop_states();
+    let state = &states[&manager_id];
+    assert_eq!(state.chain, 0);
+    assert!(!state.auto_turn_running);
+    drop(states);
+    assert!(control.native_terminal_result_auto_trigger_allowed(manager_id));
 }
 
 #[tokio::test]
@@ -480,9 +655,11 @@ async fn spawn_agent_internal_treats_roles_as_profiles_and_enforces_structural_d
             },
         )
         .await;
+    let err = forged_depth.expect_err("forged depth must be rejected");
     assert_matches!(
-        forged_depth,
-        Err(CodexErr::InvalidRequest(message)) if message.contains("does not follow parent depth")
+        err.details(),
+        CodexErrorDetails::InvalidRequest(message)
+            if message.contains("does not follow parent depth")
     );
 }
 
@@ -913,13 +1090,23 @@ async fn durable_agent_mailbox_deduplicates_and_completes_after_rollout_flush() 
 
     harness
         .control
-        .send_inter_agent_communication(thread_id, communication.clone())
+        .send_inter_agent_communication(
+            thread_id,
+            communication.clone(),
+            AgentCommunicationContext::new(AgentCommunicationKind::Message, thread_id),
+            None,
+        )
         .await
         .expect("first mailbox submission");
     let captured_after_first = harness.manager.captured_ops().len();
     harness
         .control
-        .send_inter_agent_communication(thread_id, communication.clone())
+        .send_inter_agent_communication(
+            thread_id,
+            communication.clone(),
+            AgentCommunicationContext::new(AgentCommunicationKind::Message, thread_id),
+            None,
+        )
         .await
         .expect("duplicate mailbox submission");
     assert_eq!(harness.manager.captured_ops().len(), captured_after_first);
@@ -1205,6 +1392,11 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
         .send_inter_agent_communication(
             spawned_agent.thread_id,
             applied_submitted_communication.clone(),
+            AgentCommunicationContext::new(
+                AgentCommunicationKind::Message,
+                spawned_agent.thread_id,
+            ),
+            None,
         )
         .await
         .expect("submit applied-crash message");
@@ -2034,6 +2226,7 @@ async fn spawn_agent_can_fork_parent_thread_history_with_sanitized_items() {
                     summary: Vec::new(),
                     content: None,
                     encrypted_content: None,
+                    anthropic_content_block: None,
                     internal_chat_message_metadata_passthrough: None,
                 },
                 trigger_message.to_response_input_item().into(),
@@ -2493,6 +2686,7 @@ async fn spawn_agent_full_fork_restores_instructions_after_compaction_discards_p
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             SpawnAgentOptions {
                 fork_parent_spawn_call_id: Some(parent_spawn_call_id),
@@ -2637,6 +2831,7 @@ async fn spawn_agent_full_fork_legacy_compaction_rebuilds_child_instructions_onc
                     agent_path: None,
                     agent_nickname: None,
                     agent_role: None,
+                    agent_class: None,
                 })),
                 SpawnAgentOptions {
                     fork_parent_spawn_call_id: Some(parent_spawn_call_id.to_string()),
@@ -3718,6 +3913,7 @@ async fn spawn_thread_subagents_persist_parent_originator_across_new_and_truncat
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3742,6 +3938,7 @@ async fn spawn_thread_subagents_persist_parent_originator_across_new_and_truncat
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
             SpawnAgentOptions {
                 fork_parent_spawn_call_id: Some("spawn-call-last-n".to_string()),
@@ -3955,7 +4152,7 @@ async fn resume_thread_subagent_restores_stored_metadata() {
         agent_path: resumed_agent_path,
         agent_nickname: resumed_nickname,
         agent_role: resumed_role,
-        agent_class: resumed_agent_class,
+        agent_class: _resumed_agent_class,
     }) = resumed_snapshot.session_source
     else {
         panic!("expected thread-spawn sub-agent source");
@@ -4050,6 +4247,19 @@ async fn resume_agent_from_paginated_rollout_loads_model_context() {
         .shutdown_live_agent(child_thread_id)
         .await
         .expect("child shutdown should succeed");
+    let state_db = child_thread
+        .state_db()
+        .expect("sqlite state db should be available");
+    let mut child_metadata = state_db
+        .get_thread(child_thread_id)
+        .await
+        .expect("child metadata query should succeed")
+        .expect("child metadata should exist");
+    child_metadata.model = None;
+    state_db
+        .upsert_thread(&child_metadata)
+        .await
+        .expect("missing indexed model should persist");
 
     let resumed_thread_id = harness
         .control

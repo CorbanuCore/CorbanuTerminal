@@ -19,6 +19,8 @@ use codex_app_server_protocol::ThreadAgentMessageParams;
 use codex_app_server_protocol::ThreadStatus;
 use codex_features::Feature;
 use codex_protocol::ThreadId;
+use codex_protocol::crew::AgentClass;
+use codex_protocol::crew::CREW_AUTO_DISPATCH_CHAIN_LIMIT;
 use codex_protocol::crew::RuntimeRequest;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort;
@@ -26,7 +28,6 @@ use codex_protocol::protocol::AgentMessageKind;
 use codex_protocol::protocol::SessionSource as CoreSessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::ThreadSource as CoreThreadSource;
-use codex_state::DirectionalThreadSpawnEdgeStatus;
 use color_eyre::eyre::Result;
 use color_eyre::eyre::eyre;
 use sha2::Digest;
@@ -52,16 +53,11 @@ pub(crate) use crate::external_plan_agent_adapter::extract_spawn_task_dispatches
 const SPAWN_PARENT_REPORT_LIMIT: usize = 12;
 const SPAWN_PROCESSED_DISPATCH_SEQ_RETAIN: usize = 256;
 const SPAWN_REPORT_RESULT_MAX_CHARS: usize = 12_000;
-/// Loop breaker: maximum consecutive auto-triggered child-report processing turns that may each
-/// dispatch follow-up work before auto-processing pauses for that parent node. Without a ceiling,
-/// report -> auto processing turn -> dispatch -> report cycles never terminate on their own. The
-/// chain resets when an auto turn acknowledges without dispatching or when the node receives a
-/// turn it did not auto-trigger (operator input or a task dispatched to it).
-pub(crate) const SPAWN_AUTO_DISPATCH_CHAIN_LIMIT: u32 = 3;
 const SPAWN_RESUME_AUTO_PROCESSING_PAUSED_MESSAGE: &str =
     "Session resumed: child report delivered; auto-processing is paused until you send input.";
 
-/// Per-parent-node loop-breaker state for auto child-report processing turns.
+/// Per-external-pane loop-breaker state for auto child-report processing turns. Native crew
+/// managers are governed by the Core agent controller instead.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SpawnAutoLoopState {
     /// Consecutive auto-triggered processing turns that each dispatched follow-up work.
@@ -203,6 +199,8 @@ impl App {
                 search_value: Some("spawn status status hierarchy".to_string()),
                 ..Default::default()
             },
+            section_item("Lifecycle"),
+            self.remove_spawn_crew_item(),
         ];
 
         self.chat_widget.show_selection_view(SelectionViewParams {
@@ -216,13 +214,90 @@ impl App {
         });
     }
 
+    fn remove_spawn_crew_item(&self) -> SelectionItem {
+        let disabled_reason = if self.spawn_legacy_read_only {
+            Some(
+                "The restored legacy hierarchy has no verified CrewSpec ownership and cannot be removed automatically."
+                    .to_string(),
+            )
+        } else if self.spawn_crew.is_none() {
+            Some("No managed crew exists.".to_string())
+        } else {
+            None
+        };
+        let disabled = disabled_reason.is_some();
+        SelectionItem {
+            name: "Remove managed crew".to_string(),
+            description: Some(
+                "Permanently stop and remove the complete CrewSpec-owned hierarchy. Bound user roots are preserved."
+                    .to_string(),
+            ),
+            is_disabled: disabled,
+            disabled_reason,
+            actions: if disabled {
+                Vec::new()
+            } else {
+                vec![Box::new(|tx| {
+                    tx.send(AppEvent::OpenRemoveSpawnCrewConfirmation);
+                })]
+            },
+            dismiss_on_select: true,
+            search_value: Some("remove delete stop managed crew lifecycle".to_string()),
+            ..Default::default()
+        }
+    }
+
+    pub(crate) fn open_remove_spawn_crew_confirmation(&mut self) {
+        let Some(crew) = self.spawn_crew.as_ref() else {
+            self.chat_widget
+                .add_error_message("No managed crew exists.".to_string());
+            return;
+        };
+        if self.spawn_legacy_read_only {
+            self.chat_widget.add_error_message(
+                "The restored legacy hierarchy has no verified CrewSpec ownership and cannot be removed automatically."
+                    .to_string(),
+            );
+            return;
+        }
+        let member_count = crew.member_node_by_id.len();
+        self.chat_widget.show_selection_view(SelectionViewParams {
+            title: Some("Remove the complete managed crew?".to_string()),
+            subtitle: Some(format!(
+                "Cannot be undone. {member_count} CrewSpec-owned member(s) and their descendants will be stopped and permanently removed. Bound user roots are preserved."
+            )),
+            footer_hint: Some(standard_popup_hint_line()),
+            items: vec![
+                SelectionItem {
+                    name: "No, keep the crew".to_string(),
+                    description: Some("Return without changing the hierarchy".to_string()),
+                    dismiss_on_select: true,
+                    ..Default::default()
+                },
+                SelectionItem {
+                    name: "Yes, remove the complete crew".to_string(),
+                    description: Some(
+                        "Permanently remove all CrewSpec-owned panes and state".to_string(),
+                    ),
+                    actions: vec![Box::new(|tx| {
+                        tx.send(AppEvent::RemoveSpawnCrew);
+                    })],
+                    dismiss_on_select: true,
+                    ..Default::default()
+                },
+            ],
+            allow_number_shortcuts: false,
+            ..Default::default()
+        });
+    }
+
     pub(crate) fn open_spawn_nazgul_pane_picker(&mut self) {
         let mut items = Vec::new();
         items.push(section_item("Existing User Panes"));
         items.push(self.nazgul_pane_item(
             CODEX_MAIN_PANE_ID.to_string(),
-            "Codex - Main".to_string(),
-            "Current PFTerminal/Codex session".to_string(),
+            "PFTerminal - Main".to_string(),
+            "Current PFTerminal session".to_string(),
         ));
         for pane in self.claude_panes.panes() {
             items.push(self.nazgul_pane_item(
@@ -237,7 +312,7 @@ impl App {
         // primary Codex Main thread plus any additional Codex threads without a Troll/Orc role.
         let codex_panes = self.nazgul_codex_pane_picker_items();
         if !codex_panes.is_empty() {
-            items.push(section_item("Codex Agent Panes"));
+            items.push(section_item("PFTerminal Agent Panes"));
             items.extend(codex_panes);
         }
 
@@ -281,9 +356,9 @@ impl App {
                 is_primary,
             );
             let description = if is_primary {
-                "Primary Codex Main thread".to_string()
+                "Primary PFTerminal Main thread".to_string()
             } else {
-                "Codex agent pane".to_string()
+                "PFTerminal agent pane".to_string()
             };
             items.push(self.nazgul_pane_item(node_id, name, description));
         }
@@ -379,10 +454,7 @@ impl App {
                 ),
             );
         }
-        let role = self
-            .agent_navigation
-            .get(&thread_id)
-            .and_then(|entry| entry.agent_role.as_deref())?;
+        let role = self.spawn_role_for_thread(thread_id)?;
         let label = format_agent_picker_item_name(
             self.agent_navigation
                 .get(&thread_id)
@@ -403,7 +475,10 @@ impl App {
     }
 
     pub(crate) fn native_agent_thread_has_loaded_session(&self, thread_id: ThreadId) -> bool {
-        self.thread_has_loaded_session(thread_id)
+        // A replay-only channel can render a restored transcript but cannot receive a turn from
+        // the embedded app server. Treat only a live attachment as runnable; otherwise restore
+        // must call thread/resume (or materialize a replacement) before the UI enables dispatch.
+        self.thread_has_live_session(thread_id)
     }
 
     pub(crate) fn unloaded_agent_thread_reason(&self, thread_id: ThreadId) -> Option<String> {
@@ -508,7 +583,7 @@ impl App {
         app_server: &mut AppServerSession,
         requested_thread_id: ThreadId,
     ) -> Result<ThreadId> {
-        if self.thread_has_loaded_session(requested_thread_id) {
+        if self.native_agent_thread_has_loaded_session(requested_thread_id) {
             return Ok(requested_thread_id);
         }
 
@@ -516,7 +591,7 @@ impl App {
         let mut current_thread_id = requested_thread_id;
         let mut seen = HashSet::new();
         loop {
-            if self.thread_has_loaded_session(current_thread_id) {
+            if self.native_agent_thread_has_loaded_session(current_thread_id) {
                 break;
             }
             if !seen.insert(current_thread_id) {
@@ -544,7 +619,7 @@ impl App {
 
         let mut materialized_thread_id = requested_thread_id;
         for old_thread_id in chain.into_iter().rev() {
-            if self.thread_has_loaded_session(old_thread_id) {
+            if self.native_agent_thread_has_loaded_session(old_thread_id) {
                 continue;
             }
             let (role, nickname) =
@@ -590,12 +665,21 @@ impl App {
             self.ensure_native_spawn_provider_ready(Some(&runtime.provider))
                 .await?;
             let spawn_config = self.native_spawn_agent_config()?;
+            let agent_class = self
+                .native_spawn_agent_class_for_node(&old_node_id)
+                .ok_or_else(|| {
+                    eyre!(
+                        "Cannot materialize {}: its durable Core crew identity is missing.",
+                        self.thread_label(old_thread_id)
+                    )
+                })?;
             let started = app_server
-                .spawn_agent_thread(
+                .spawn_agent_thread_with_class(
                     &spawn_config,
                     parent_thread_id,
                     agent_type.to_string(),
                     nickname.clone(),
+                    agent_class,
                     runtime.model,
                     Some(runtime.provider),
                     runtime.reasoning_effort,
@@ -622,13 +706,29 @@ impl App {
         Ok(materialized_thread_id)
     }
 
+    fn native_spawn_agent_class_for_node(&self, node_id: &str) -> Option<AgentClass> {
+        let crew = self.spawn_crew.as_ref()?;
+        let logical_member_id =
+            crew.member_node_by_id
+                .iter()
+                .find_map(|(member_id, member_node_id)| {
+                    (member_node_id == node_id).then(|| member_id.clone())
+                })?;
+        Some(AgentClass::CrewMember {
+            crew_id: crew.spec.crew_id.clone(),
+            logical_member_id,
+            human_addressable: true,
+        })
+    }
+
     fn saved_native_spawn_materialization_metadata(
         &self,
         thread_id: ThreadId,
     ) -> Result<(SpawnRole, Option<String>)> {
         let entry = self.agent_navigation.get(&thread_id);
-        let role_name = entry
-            .and_then(|entry| entry.agent_role.as_deref())
+        let role_name = self
+            .crew_role_for_node(&self.logical_native_node_for_thread(thread_id))
+            .or_else(|| entry.and_then(|entry| entry.agent_role.as_deref()))
             .or_else(|| {
                 let logical_thread_id =
                     node_id_thread(&self.logical_native_node_for_thread(thread_id))
@@ -884,25 +984,9 @@ impl App {
         let mut context = String::new();
         let _ = writeln!(context, "<pfterminal_spawn_context>");
         let _ = writeln!(context, "You are the PFTerminal Troll pane: {label}.");
-        let _ = writeln!(context, "Behavior:");
         let _ = writeln!(
             context,
-            "You are an engineering manager / VP-of-engineering style supervisor. You report to the Nazgul, the effective CTO. Orcs are IC executors who report to you."
-        );
-        let _ = writeln!(context, "Mandate:");
-        let _ = writeln!(
-            context,
-            "Prefer delegation, review, coordination, and enforcement over implementation. Work against spec docs, ensure shipped work is documented, and send bugs found in review back to the responsible Orc."
-        );
-        let _ = writeln!(context, "Personality:");
-        let _ = writeln!(
-            context,
-            "Be blunt, adversarial, and demanding about weak work; reject shortcuts and force rework when evidence is not good enough."
-        );
-        let _ = writeln!(context, "Final Report Standards:");
-        let _ = writeln!(
-            context,
-            "Report Orcs used, what each did, evidence, issues forced back for rework, and remaining risk."
+            "Your persistent Troll doctrine and personality come from the built-in troll role; this application context contains only live identity, routing, and lifecycle state."
         );
         write_native_spawn_dispatch_contract(&mut context);
         write_native_spawn_parent_report_contract(&mut context);
@@ -918,13 +1002,19 @@ impl App {
                     orc_thread_id,
                     orc_entry,
                     Some(ORC_ROLE),
+                    /*include_legacy_report_projection*/ false,
                 );
             }
             for pane in claude_orcs {
-                self.write_spawn_context_claude_pane(&mut context, "- ", pane, SpawnRole::Orc);
+                self.write_spawn_context_claude_pane(
+                    &mut context,
+                    "- ",
+                    pane,
+                    SpawnRole::Orc,
+                    /*include_legacy_report_projection*/ false,
+                );
             }
         }
-        self.write_spawn_parent_reports(&mut context, &troll_node_id);
         let _ = writeln!(context, "</pfterminal_spawn_context>");
         context
     }
@@ -935,11 +1025,7 @@ impl App {
         let _ = writeln!(context, "You are the PFTerminal Orc pane: {label}.");
         let _ = writeln!(
             context,
-            "You are an IC executor. Chain of command: Orc -> Troll engineering manager -> Nazgul CTO -> Sauron/the human CEO."
-        );
-        let _ = writeln!(
-            context,
-            "Do exactly what your Troll tells you. Do not expand scope. Execute directly and provide evidence."
+            "Your persistent Orc doctrine and personality come from the built-in orc role; this application context contains only live identity and reporting-line state."
         );
         if let Some(parent_node_id) = self.logical_parent_node_for_thread(thread_id)
             && let Some(parent_title) = self.spawn_node_title(&parent_node_id)
@@ -1017,9 +1103,9 @@ impl App {
             footer_hint: Some(standard_popup_hint_line()),
             items: vec![
                 SelectionItem {
-                    name: "Harness: Codex".to_string(),
+                    name: "Harness: PFTerminal".to_string(),
                     description: Some(
-                        "Native PFTerminal/Codex agent pane; choose model and reasoning next."
+                        "Native PFTerminal agent pane; choose model and reasoning next."
                             .to_string(),
                     ),
                     actions: vec![Box::new({
@@ -1150,84 +1236,13 @@ impl App {
 
     pub(crate) fn spawn_agent_task_for_submission(
         &self,
-        thread_id: ThreadId,
+        _thread_id: ThreadId,
         task: &str,
     ) -> String {
-        let Some(entry) = self.agent_navigation.get(&thread_id) else {
-            return task.to_string();
-        };
-        if entry.agent_role.as_deref() != Some(TROLL_ROLE) {
-            return task.to_string();
-        }
-
-        let mut context = String::new();
-        let troll_name = format_agent_picker_item_name(
-            entry.agent_nickname.as_deref(),
-            entry.agent_role.as_deref().or(Some(TROLL_ROLE)),
-            false,
-        );
-        let _ = writeln!(context, "<pfterminal_spawn_troll_task_context>");
-        let _ = writeln!(
-            context,
-            "You are receiving this task through /spawn as {troll_name}."
-        );
-        write_native_spawn_parent_report_contract(&mut context);
-        let troll_node_id = self.logical_native_node_for_thread(thread_id);
-        let (orcs, claude_orcs) = self.spawn_orc_children_for_node(&troll_node_id);
-        let has_orcs = !orcs.is_empty() || !claude_orcs.is_empty();
-        if !has_orcs {
-            let _ = writeln!(context, "No existing Orc panes are assigned to you yet.");
-            let _ = writeln!(
-                context,
-                "If this task requires execution, create or request Orc panes before claiming completion."
-            );
-        } else {
-            let _ = writeln!(context, "Existing Orc panes assigned to you:");
-        }
-        for (orc_thread_id, orc_entry) in orcs {
-            self.write_spawn_context_agent(
-                &mut context,
-                "- ",
-                orc_thread_id,
-                orc_entry,
-                Some(ORC_ROLE),
-            );
-            if let Some(path) = orc_entry.agent_path.as_deref() {
-                let _ = writeln!(context, "  canonical_task_name={path}");
-            }
-        }
-        for pane in claude_orcs {
-            self.write_spawn_context_claude_pane(&mut context, "- ", pane, SpawnRole::Orc);
-        }
-        self.write_spawn_parent_reports(&mut context, &troll_node_id);
-        if has_orcs {
-            let _ = writeln!(
-                context,
-                "Use these existing Orc panes first. Do not call spawn_agent for work that can be assigned to the listed Orc panes."
-            );
-            let _ = writeln!(
-                context,
-                "Assign work with followup_task for an idle/completed target or send_message for a \
-                 running target. Address the exact canonical_task_name shown above."
-            );
-            let _ = writeln!(
-                context,
-                "Each turn, read this roster before acting. An Orc with status=idle or status=completed has finished; if has_new_report=true, review the delivered report before doing anything else."
-            );
-            let _ = writeln!(
-                context,
-                "Never call a listed Orc silent or unresponsive until you have checked its roster status and report marker. Never execute a listed Orc's assigned task yourself; re-dispatch a narrowed task or escalate instead."
-            );
-            let _ = writeln!(
-                context,
-                "Only call spawn_agent if the listed Orc panes are insufficient, and state the reason before doing so."
-            );
-        }
-        let _ = writeln!(context, "</pfterminal_spawn_troll_task_context>");
-        let _ = writeln!(context);
-        let _ = writeln!(context, "Task from Sauron/Nazgul:");
-        let _ = write!(context, "{task}");
-        context
+        // Role doctrine, live hierarchy, and transport mechanics already enter the model through
+        // the Core role configuration and per-turn application context. The mailbox payload must
+        // remain the user's assignment, not a second synthetic prompt owned by the TUI.
+        task.trim().to_string()
     }
 
     pub(crate) fn open_spawn_claude_pane_task_prompt(&mut self, pane_id: String) {
@@ -1540,28 +1555,41 @@ impl App {
         }
         let mut assistant_text = String::new();
         for item in &turn.items {
-            if let codex_app_server_protocol::ThreadItem::AgentMessage {
-                id, text, phase, ..
-            } = item
-            {
-                // Core represents injected inter-agent instructions as commentary AgentMessages.
-                // They are model input rendered for context, not assistant-authored host commands.
-                if matches!(
-                    phase,
-                    Some(codex_protocol::models::MessagePhase::Commentary)
-                ) {
-                    continue;
+            match item {
+                codex_app_server_protocol::ThreadItem::AgentMessage {
+                    id, text, phase, ..
+                } => {
+                    // Core represents injected inter-agent instructions as commentary AgentMessages.
+                    // They are model input rendered for context, not assistant-authored host commands.
+                    if matches!(
+                        phase,
+                        Some(codex_protocol::models::MessagePhase::Commentary)
+                    ) {
+                        continue;
+                    }
+                    if !assistant_text.is_empty() {
+                        assistant_text.push('\n');
+                    }
+                    assistant_text.push_str(text);
+                    let _ = id;
                 }
-                if !assistant_text.is_empty() {
-                    assistant_text.push('\n');
-                }
-                assistant_text.push_str(text);
-                self.dispatch_native_spawn_task_blocks_from_item(
-                    source_thread_id,
-                    &turn.id,
-                    id,
-                    text,
-                );
+                codex_app_server_protocol::ThreadItem::CollabAgentToolCall {
+                    tool: codex_app_server_protocol::CollabAgentTool::SendInput,
+                    status: codex_app_server_protocol::CollabAgentToolCallStatus::Completed,
+                    sender_thread_id,
+                    receiver_thread_ids,
+                    ..
+                } => self
+                    .note_native_collab_assignment_dispatch(sender_thread_id, receiver_thread_ids),
+                codex_app_server_protocol::ThreadItem::SubAgentActivity {
+                    kind: codex_app_server_protocol::SubAgentActivityKind::Interacted,
+                    agent_thread_id,
+                    ..
+                } => self.note_native_collab_assignment_dispatch(
+                    &source_thread_id.to_string(),
+                    std::slice::from_ref(agent_thread_id),
+                ),
+                _ => {}
             }
         }
         let source_node_id = if self.is_codex_main_bound_spawn_root_thread(source_thread_id) {
@@ -1570,45 +1598,23 @@ impl App {
             thread_node_id(source_thread_id)
         };
         self.dispatch_orchestrate_blocks_from_text(&source_node_id, &assistant_text);
-    }
 
-    pub(crate) fn dispatch_native_spawn_task_blocks_from_item(
-        &mut self,
-        source_thread_id: ThreadId,
-        turn_id: &str,
-        item_id: &str,
-        assistant_text: &str,
-    ) -> bool {
-        let physical_source_node_id = thread_node_id(source_thread_id);
-        if !self.is_spawn_orchestration_thread(source_thread_id)
-            && !self.is_assignment_holder(&physical_source_node_id)
+        // Core owns native-to-native mailbox delivery. The TUI still needs a durable projection
+        // of the terminal result so `/spawn`, parent context, and restored pane state agree with
+        // what was delivered. External Claude parents do not participate in the core mailbox, so
+        // retain the edge notification for that boundary only.
+        if self.is_spawn_orchestration_thread(source_thread_id)
+            && let Some(parent_node_id) = self.logical_parent_node_for_thread(source_thread_id)
         {
-            return false;
-        }
-        let (_visible, dispatches) = extract_spawn_task_dispatches(assistant_text);
-        if dispatches.is_empty() {
-            return false;
-        }
-        let source_node_id = self.spawn_auto_loop_node_for_thread(source_thread_id);
-        // ItemCompleted and TurnCompleted both carry this stable item identity. Include it in the
-        // origin key so ingress can dispatch immediately while terminal replay remains idempotent,
-        // including turns that contain more than one assistant-message item.
-        let item_turn_id = format!("{turn_id}:{item_id}");
-        self.dispatch_spawn_task_blocks_from_model_turn(
-            &source_node_id,
-            &source_node_id,
-            &item_turn_id,
-            dispatches,
-        );
-        true
-    }
-
-    /// Canonical loop-breaker state key for a native spawn thread.
-    pub(crate) fn spawn_auto_loop_node_for_thread(&self, thread_id: ThreadId) -> String {
-        if self.is_codex_main_bound_spawn_root_thread(thread_id) {
-            self.spawn_root_node_id()
-        } else {
-            self.logical_native_node_for_thread(thread_id)
+            let child_title = self
+                .spawn_node_title(&source_node_id)
+                .unwrap_or_else(|| source_node_id.clone());
+            let (seq, as_of) = self.reserve_spawn_report_seq(&source_node_id);
+            let result = (!assistant_text.trim().is_empty()).then_some(assistant_text.trim());
+            let report = spawn_child_report(&child_title, "completed", result, seq, &as_of);
+            let notify =
+                node_id_pane(&parent_node_id).is_some_and(|pane_id| pane_id != CODEX_MAIN_PANE_ID);
+            self.record_spawn_parent_report_with_notify(parent_node_id, report, notify);
         }
     }
 
@@ -1623,7 +1629,7 @@ impl App {
             .spawn_auto_loop_state_by_node
             .entry(node_key.to_string())
             .or_default();
-        if state.chain >= SPAWN_AUTO_DISPATCH_CHAIN_LIMIT {
+        if state.chain >= CREW_AUTO_DISPATCH_CHAIN_LIMIT {
             return false;
         }
         state.pending_auto_turn = true;
@@ -1669,6 +1675,12 @@ impl App {
 
     fn note_spawn_dispatch_for_auto_loop(&mut self, source_node_or_pane_id: &str) {
         let key = spawn_auto_loop_key(source_node_or_pane_id);
+        let Some(pane_id) = node_id_pane(&key) else {
+            return;
+        };
+        if pane_id == CODEX_MAIN_PANE_ID {
+            return;
+        }
         let Some(state) = self.spawn_auto_loop_state_by_node.get_mut(&key) else {
             return;
         };
@@ -1690,7 +1702,7 @@ impl App {
         self.chat_widget.add_info_message(
             format!(
                 "Auto child-report processing paused for {title}: \
-                 {SPAWN_AUTO_DISPATCH_CHAIN_LIMIT} consecutive auto turns dispatched follow-up \
+                 {CREW_AUTO_DISPATCH_CHAIN_LIMIT} consecutive auto turns dispatched follow-up \
                  work. {report_count} report(s) delivered without auto-processing; send the pane \
                  a new task to resume."
             ),
@@ -1873,13 +1885,12 @@ impl App {
             .unwrap_or_else(|| thread_node_id(thread_id))
     }
 
-    pub(crate) fn pending_dispatch_from_registered_task(
-        &mut self,
-        target_node_id: &str,
-        task: String,
-    ) -> PendingSpawnDispatch {
-        let acks = self.take_spawn_dispatch_acks_for_task(target_node_id, &task);
-        PendingSpawnDispatch::new(task, acks)
+    pub(crate) fn spawn_orchestration_node_for_thread(&self, thread_id: ThreadId) -> String {
+        if self.is_codex_main_bound_spawn_root_thread(thread_id) {
+            self.spawn_root_node_id()
+        } else {
+            self.logical_native_node_for_thread(thread_id)
+        }
     }
 
     pub(crate) fn register_spawn_dispatch_acks_for_task(
@@ -1926,7 +1937,7 @@ impl App {
                     .insert(origin_id.to_string());
             }
             self.spawn_processed_dispatch_seq_ids.insert(ack.seq);
-            self.note_assignment_dispatch_delivered(&ack.source_node_id);
+            self.note_assignment_dispatch_delivered(&ack.source_node_id, &ack.target_node_id);
         }
         self.evict_spawn_processed_dispatch_seq_ids();
         self.record_spawn_dispatch_acks(&acks, "delivered", "target turn started", false);
@@ -2135,7 +2146,7 @@ impl App {
         role: SpawnRole,
         parent_node_id: Option<&str>,
     ) -> Option<ThreadId> {
-        if role == SpawnRole::Orc
+        if matches!(role, SpawnRole::Troll | SpawnRole::Orc)
             && let Some(parent_node_id) = parent_node_id
         {
             if let Some(parent_thread_id) = node_id_thread(parent_node_id) {
@@ -2143,7 +2154,12 @@ impl App {
             }
             if let Some(parent_pane_id) = node_id_pane(parent_node_id)
                 && self.claude_panes.panes().iter().any(|pane| {
-                    pane.id == parent_pane_id && pane.spawn_role == Some(SpawnRole::Troll)
+                    pane.id == parent_pane_id
+                        && matches!(
+                            (role, pane.spawn_role),
+                            (SpawnRole::Troll, Some(SpawnRole::Nazgul))
+                                | (SpawnRole::Orc, Some(SpawnRole::Troll))
+                        )
                 })
             {
                 return self.primary_thread_id;
@@ -2237,7 +2253,13 @@ impl App {
     }
 
     pub(crate) fn native_spawn_agent_config(&self) -> Result<crate::legacy_core::config::Config> {
-        let mut spawn_config = self.config.clone();
+        // A thread's effective runtime settings can differ from the app-level config loaded at
+        // startup (for example `--yolo`, `/permissions`, or settings restored while switching
+        // panes). Spawning from `self.config` silently reverts those live settings and can turn a
+        // danger-full-access / never-approve parent into a workspace-write / on-request child.
+        // Derive the child from the active thread just like side-thread forks do; model/provider
+        // selection below can still override the runtime route without changing permissions.
+        let mut spawn_config = self.chat_widget.config_ref().clone();
         spawn_config.service_tier = self.chat_widget.configured_service_tier();
         spawn_config
             .features
@@ -2280,7 +2302,7 @@ impl App {
                 .await
                 .map_err(|err| {
                     eyre!(
-                        "Cannot run native Codex worker on {provider_name}; provider authentication is unavailable: {err}"
+                        "Cannot run native PFTerminal worker on {provider_name}; provider authentication is unavailable: {err}"
                     )
                 })?;
         }
@@ -2329,7 +2351,7 @@ impl App {
             .map(|provider| provider_display_name(provider_id, provider.name.as_str()))
             .unwrap_or_else(|| provider_id.to_string());
         Err(eyre!(
-            "Cannot run a native Codex worker on {provider_name}: provider `{provider_id}` is not in `agents.provider_allowlist` ({}). Add it to that setting to authorize spend on this provider.",
+            "Cannot run a native PFTerminal worker on {provider_name}: provider `{provider_id}` is not in `agents.provider_allowlist` ({}). Add it to that setting to authorize spend on this provider.",
             allowlist.join(", ")
         ))
     }
@@ -2346,9 +2368,9 @@ impl App {
         }?;
         let provider_name = provider_display_name(provider_id, provider.name.as_str());
 
-        if provider.requires_openai_auth && !self.chat_widget.has_codex_backend_auth() {
+        if provider.requires_openai_auth && !self.chat_widget.has_openai_auth() {
             return Some(format!(
-                "Cannot run native Codex worker on {provider_name}; OpenAI Codex auth is not configured. Choose a non-OpenAI provider/model or add the OpenAI Codex account in /providers."
+                "Cannot run native PFTerminal worker on {provider_name}; OpenAI authentication is not configured. Run `pfterminal login --with-api-key`, add the OpenAI Codex account in /providers, or choose a non-OpenAI provider/model."
             ));
         }
 
@@ -2356,7 +2378,7 @@ impl App {
             && !self.provider_key_is_available(env_key)
         {
             return Some(format!(
-                "Cannot run native Codex worker on {provider_name}; missing `{env_key}`. Add it in /providers or choose a different model."
+                "Cannot run native PFTerminal worker on {provider_name}; missing `{env_key}`. Add it in /providers or choose a different model."
             ));
         }
 
@@ -2566,24 +2588,9 @@ impl App {
                 error = %err,
                 "failed to persist spawn thread metadata"
             );
-            return;
         }
-        if let Some(parent_thread_id) = parent_thread_id
-            && let Err(err) = state_db
-                .upsert_thread_spawn_edge(
-                    parent_thread_id,
-                    thread_id,
-                    DirectionalThreadSpawnEdgeStatus::Open,
-                )
-                .await
-        {
-            tracing::warn!(
-                parent_thread_id = %parent_thread_id,
-                child_thread_id = %thread_id,
-                error = %err,
-                "failed to persist spawn thread edge"
-            );
-        }
+        // Core's native agent graph owns parent/child durability. This PF metadata projection may
+        // enrich the child row for presentation, but it must not create or repair graph edges.
     }
 
     pub(crate) async fn persist_claude_spawn_pane_state(
@@ -2983,7 +2990,7 @@ impl App {
         app_server: &mut AppServerSession,
         thread_id: ThreadId,
     ) -> bool {
-        if self.thread_has_loaded_session(thread_id) {
+        if self.native_agent_thread_has_loaded_session(thread_id) {
             return true;
         }
         let logical_node_id = self.logical_native_node_for_thread(thread_id);
@@ -2991,10 +2998,20 @@ impl App {
             .spawn_native_runtime_by_node
             .get(&logical_node_id)
             .cloned();
-        let (resume_config, model_override) =
+        let (resume_config, model_override, permission_settings) =
             self.native_spawn_resume_request(saved_runtime.as_ref());
+        let model_settings = if model_override.is_some() {
+            crate::app_server_session::ResumeModelSettings::OverrideFromCurrentConfig
+        } else {
+            crate::app_server_session::ResumeModelSettings::RestoreFromThread
+        };
         match app_server
-            .resume_thread(resume_config, thread_id, model_override)
+            .resume_thread(
+                resume_config,
+                thread_id,
+                model_settings,
+                permission_settings,
+            )
             .await
         {
             Ok(started) => {
@@ -3038,6 +3055,7 @@ impl App {
                 self.spawn_native_runtime_by_node
                     .insert(logical_node_id, restored_runtime);
                 let channel = self.ensure_thread_channel(thread_id);
+                channel.mark_live();
                 channel.set_session(started.session, started.turns).await;
                 self.agent_navigation.set_model(thread_id, Some(model));
                 true
@@ -3060,17 +3078,33 @@ impl App {
     pub(crate) fn native_spawn_resume_request(
         &self,
         saved_runtime: Option<&crate::dispatch_queue::SavedNativeSpawnRuntime>,
-    ) -> (codex_core::config::Config, Option<ResumeModelOverride>) {
+    ) -> (
+        codex_core::config::Config,
+        Option<ResumeModelOverride>,
+        crate::app_server_session::ResumePermissionSettings,
+    ) {
         let mut resume_config = self.config.clone();
         let model_override = saved_runtime.map(|runtime| {
             resume_config.model = Some(runtime.model.clone());
             resume_config.model_reasoning_effort = runtime.reasoning_effort.clone();
+            if let Some(provider) = resume_config
+                .model_providers
+                .get(&runtime.provider)
+                .cloned()
+            {
+                resume_config.model_provider_id = runtime.provider.clone();
+                resume_config.model_provider = provider;
+            }
             ResumeModelOverride {
                 model: Some(runtime.model.clone()),
                 model_provider: Some(runtime.provider.clone()),
             }
         });
-        (resume_config, model_override)
+        (
+            resume_config,
+            model_override,
+            self.resume_permission_settings(),
+        )
     }
 
     async fn recover_native_spawn_edges_from_saved_context(
@@ -3284,10 +3318,22 @@ impl App {
 
     pub(crate) async fn register_codex_user_pane(
         &mut self,
+        app_server: &mut AppServerSession,
         thread_id: ThreadId,
         agent_nickname: Option<String>,
-        started: crate::app_server_session::AppServerStartedThread,
+        mut started: crate::app_server_session::AppServerStartedThread,
     ) {
+        if let Some(nickname) = agent_nickname.as_ref() {
+            match app_server
+                .thread_set_name(thread_id, nickname.clone())
+                .await
+            {
+                Ok(()) => started.session.thread_name = Some(nickname.clone()),
+                Err(err) => self.chat_widget.add_error_message(format!(
+                    "Created PFTerminal pane {nickname}, but could not persist its name: {err}"
+                )),
+            }
+        }
         let session_model = started.session.model.clone();
         let session_model_provider = started.session.model_provider_id.clone();
         let session_reasoning_effort = started.session.reasoning_effort.clone();
@@ -3316,6 +3362,20 @@ impl App {
     }
 
     pub(crate) fn spawn_tree_items(&self, show_task_actions: bool) -> Vec<SelectionItem> {
+        let trolls = self.spawn_troll_threads();
+        let claude_trolls = self.claude_spawn_panes(SpawnRole::Troll);
+        let (orphan_orcs, claude_orcs) = self.unassigned_orc_nodes();
+        let has_managed_hierarchy = self.spawn_crew.is_some()
+            || self.spawn_legacy_read_only
+            || self.spawn_nazgul_pane_id.is_some()
+            || !trolls.is_empty()
+            || !claude_trolls.is_empty()
+            || !orphan_orcs.is_empty()
+            || !claude_orcs.is_empty();
+        if !has_managed_hierarchy {
+            return vec![disabled_item("No managed crew")];
+        }
+
         let mut items = Vec::new();
         items.push(section_item("Nazgul"));
         let bound_target = self.spawn_nazgul_bound_target().to_string();
@@ -3326,6 +3386,8 @@ impl App {
         } else {
             self.claude_panes.active_user_pane_id() == bound_target
         };
+        let search_value = format!("Nazgul {nazgul_title} {bound_target}");
+        let description = self.nazgul_bound_target_description(&bound_target);
         let actions = if let Some(thread_id) = self.spawn_node_backing_thread_id(&bound_target) {
             vec![
                 Box::new(move |tx: &crate::app_event_sender::AppEventSender| {
@@ -3346,17 +3408,14 @@ impl App {
         };
         items.push(SelectionItem {
             name: format!("Nazgul: {nazgul_title}"),
-            description: Some(
-                "Root role binding; this is the same user pane listed above.".to_string(),
-            ),
+            description: Some(description),
             is_current,
             actions,
             dismiss_on_select: true,
+            search_value: Some(search_value),
             ..Default::default()
         });
 
-        let trolls = self.spawn_troll_threads();
-        let claude_trolls = self.claude_spawn_panes(SpawnRole::Troll);
         items.push(section_item("Trolls"));
         if trolls.is_empty() && claude_trolls.is_empty() {
             items.push(disabled_item("No Trolls spawned yet"));
@@ -3408,7 +3467,6 @@ impl App {
             }
         }
 
-        let (orphan_orcs, claude_orcs) = self.unassigned_orc_nodes();
         if !orphan_orcs.is_empty() || !claude_orcs.is_empty() {
             items.push(section_item("Unassigned Orcs"));
             for (thread_id, entry) in orphan_orcs {
@@ -3426,6 +3484,39 @@ impl App {
         }
 
         items
+    }
+
+    /// Describe a bound Nazgul through the same live-state projection used by every other
+    /// managed crew row. The Nazgul is also a user-addressable pane, but that duplicate identity
+    /// must not hide whether its native or external worker is running, completed, or unavailable.
+    fn nazgul_bound_target_description(&self, bound_target: &str) -> String {
+        let status = if let Some(thread_id) = self.spawn_node_backing_thread_id(bound_target) {
+            self.agent_navigation
+                .get(&thread_id)
+                .and_then(|entry| {
+                    self.spawn_agent_item(thread_id, entry, 0, Some(NAZGUL_ROLE_NAME))
+                        .description
+                })
+                .unwrap_or_else(|| {
+                    if self.primary_thread_id == Some(thread_id)
+                        && self.active_thread_id == Some(thread_id)
+                        && self.chat_widget.visible_task_running()
+                    {
+                        "running".to_string()
+                    } else {
+                        "idle".to_string()
+                    }
+                })
+        } else {
+            self.claude_panes
+                .panes()
+                .iter()
+                .find(|pane| pane.id == bound_target)
+                .and_then(|pane| self.claude_spawn_pane_item(pane, 0).description)
+                .unwrap_or_else(|| "status unavailable".to_string())
+        };
+
+        format!("Root role binding; {status}; same user pane listed above.")
     }
 
     fn spawn_role_item(&self, role: SpawnRole) -> SelectionItem {
@@ -3467,7 +3558,7 @@ impl App {
             SelectionItem {
                 name: "Create Nazgul pane".to_string(),
                 description: Some(
-                    "Spawn a new Codex-native pane loaded with the built-in Nazgul role config and bind it as the root."
+                    "Spawn a new PFTerminal-native pane loaded with the built-in Nazgul role config and bind it as the root."
                         .to_string(),
                 ),
                 actions: vec![Box::new(|tx| {
@@ -3483,7 +3574,7 @@ impl App {
             SelectionItem {
                 name: "Bind existing pane".to_string(),
                 description: Some(
-                    "Bind an existing user pane (Codex Main, a Codex agent pane, or a Claude pane) as the Nazgul root."
+                    "Bind an existing user pane (PFTerminal Main, a PFTerminal agent pane, or a Claude pane) as the Nazgul root."
                         .to_string(),
                 ),
                 actions: vec![Box::new(|tx| {
@@ -3513,7 +3604,8 @@ impl App {
 
     pub(crate) fn is_spawn_orchestration_thread(&self, thread_id: ThreadId) -> bool {
         let node_id = self.logical_native_node_for_thread(thread_id);
-        self.spawn_node_is_persistent_crew_member(&node_id)
+        self.is_codex_main_bound_spawn_root_thread(thread_id)
+            || self.spawn_node_is_persistent_crew_member(&node_id)
             || self.is_orchestration_participant(&node_id)
             || (self.spawn_legacy_read_only
                 && (self.spawn_status_by_thread.contains_key(&thread_id)
@@ -3523,6 +3615,15 @@ impl App {
                         .values()
                         .any(|parent| *parent == thread_id)
                     || self.nazgul_bound_thread_id() == Some(thread_id)))
+    }
+
+    pub(crate) fn is_native_spawn_thread(&self, thread_id: ThreadId) -> bool {
+        self.is_codex_main_bound_spawn_root_thread(thread_id)
+            || self.spawn_parent_by_thread.contains_key(&thread_id)
+            || self
+                .spawn_native_endpoint_by_node
+                .values()
+                .any(|endpoint| *endpoint == thread_id)
     }
 
     pub(crate) fn is_managed_spawn_crew_thread(&self, thread_id: ThreadId) -> bool {
@@ -3561,6 +3662,35 @@ impl App {
         false
     }
 
+    /// Resolve a persistent member's product role from `CrewSpec`, the durable PF authority.
+    ///
+    /// App-server liveness projections can legitimately omit `agent_role`; that omission must not
+    /// make a restored Troll or Orc disappear from `/spawn` and `/panes`. Navigation metadata is
+    /// still accepted by callers as a legacy fallback for pre-CrewSpec read-only layouts.
+    fn crew_role_for_node(&self, node_id: &str) -> Option<&str> {
+        let crew = self.spawn_crew.as_ref()?;
+        let logical_member_id =
+            crew.member_node_by_id
+                .iter()
+                .find_map(|(member_id, member_node_id)| {
+                    (member_node_id == node_id).then_some(member_id.as_str())
+                })?;
+        crew.spec
+            .members
+            .iter()
+            .find(|member| member.logical_member_id == logical_member_id)
+            .map(|member| member.role_profile.as_str())
+    }
+
+    fn spawn_role_for_thread(&self, thread_id: ThreadId) -> Option<&str> {
+        self.crew_role_for_node(&self.logical_native_node_for_thread(thread_id))
+            .or_else(|| {
+                self.agent_navigation
+                    .get(&thread_id)
+                    .and_then(|entry| entry.agent_role.as_deref())
+            })
+    }
+
     fn is_codex_main_bound_spawn_root_thread(&self, thread_id: ThreadId) -> bool {
         self.primary_thread_id == Some(thread_id)
             && self.spawn_nazgul_pane_id.as_deref() == Some(CODEX_MAIN_PANE_ID)
@@ -3589,7 +3719,7 @@ impl App {
 
     pub(crate) fn user_pane_title(&self, pane_id: &str) -> String {
         if pane_id == CODEX_MAIN_PANE_ID {
-            return "Codex - Main".to_string();
+            return "PFTerminal - Main".to_string();
         }
         self.claude_panes
             .panes()
@@ -3655,7 +3785,7 @@ impl App {
             let node_id = self.logical_native_node_for_thread(thread_id);
             items.push(SelectionItem {
                 name: format!("Troll: {name}"),
-                description: Some(format!("Native Codex pane; {thread_id}")),
+                description: Some(format!("Native PFTerminal pane; {thread_id}")),
                 actions: vec![Box::new(move |tx| {
                     tx.send(AppEvent::OpenSpawnHarnessPicker {
                         role: SpawnRole::Orc,
@@ -3702,7 +3832,11 @@ impl App {
                     &self.logical_native_node_for_thread(*thread_id),
                 )
             })
-            .filter(|(_, entry)| entry.agent_role.as_deref() == Some(role))
+            .filter(|(thread_id, entry)| {
+                self.crew_role_for_node(&self.logical_native_node_for_thread(*thread_id))
+                    .or(entry.agent_role.as_deref())
+                    == Some(role)
+            })
             .collect()
     }
 
@@ -3719,7 +3853,11 @@ impl App {
                 )
             })
             .filter(|(thread_id, entry)| {
-                if entry.agent_role.as_deref() == Some(TROLL_ROLE) {
+                if self
+                    .crew_role_for_node(&self.logical_native_node_for_thread(*thread_id))
+                    .or(entry.agent_role.as_deref())
+                    == Some(TROLL_ROLE)
+                {
                     return true;
                 }
                 entry.agent_role.is_none()
@@ -3808,6 +3946,9 @@ impl App {
     }
 
     fn node_is_troll(&self, node_id: &str) -> bool {
+        if self.crew_role_for_node(node_id) == Some(TROLL_ROLE) {
+            return true;
+        }
         if let Some(thread_id) = self
             .spawn_native_endpoint_by_node
             .get(node_id)
@@ -3886,7 +4027,7 @@ impl App {
                     .primary_thread_id
                     .map(SpawnTaskTarget::Native)
                     .ok_or_else(|| {
-                        "Cannot dispatch to Nazgul; Codex Main is not loaded.".to_string()
+                        "Cannot dispatch to Nazgul; PFTerminal Main is not loaded.".to_string()
                     });
             }
             if let Some(bound_thread_id) = self.nazgul_bound_thread_id() {
@@ -4284,10 +4425,17 @@ impl App {
                     orc_thread_id,
                     orc_entry,
                     Some(ORC_ROLE),
+                    /*include_legacy_report_projection*/ true,
                 );
             }
             for pane in claude_orcs {
-                self.write_spawn_context_claude_pane(&mut context, "- ", pane, SpawnRole::Orc);
+                self.write_spawn_context_claude_pane(
+                    &mut context,
+                    "- ",
+                    pane,
+                    SpawnRole::Orc,
+                    /*include_legacy_report_projection*/ true,
+                );
             }
         }
         self.write_spawn_parent_reports(&mut context, &troll_node_id);
@@ -4324,7 +4472,7 @@ impl App {
     fn render_nazgul_spawn_context(&self, bound_pane_id: &str, native_transport: bool) -> String {
         self.render_nazgul_spawn_context_with_title(
             self.user_pane_title(bound_pane_id),
-            /*include_role_prompt*/ true,
+            /*include_role_prompt*/ !native_transport,
             native_transport,
         )
     }
@@ -4440,6 +4588,7 @@ impl App {
                     troll_thread_id,
                     troll_entry,
                     Some(TROLL_ROLE),
+                    /*include_legacy_report_projection*/ !native_transport,
                 );
                 let troll_node_id = thread_node_id(troll_thread_id);
                 let (orcs, claude_orcs) = self.spawn_orc_children_for_node(&troll_node_id);
@@ -4453,6 +4602,7 @@ impl App {
                             orc_thread_id,
                             orc_entry,
                             Some(ORC_ROLE),
+                            /*include_legacy_report_projection*/ !native_transport,
                         );
                     }
                     for pane in claude_orcs {
@@ -4461,13 +4611,20 @@ impl App {
                             "  - ",
                             pane,
                             SpawnRole::Orc,
+                            /*include_legacy_report_projection*/ !native_transport,
                         );
                     }
                 }
             }
             for pane in claude_trolls {
                 let troll_node_id = pane_node_id(&pane.id);
-                self.write_spawn_context_claude_pane(&mut context, "- ", pane, SpawnRole::Troll);
+                self.write_spawn_context_claude_pane(
+                    &mut context,
+                    "- ",
+                    pane,
+                    SpawnRole::Troll,
+                    /*include_legacy_report_projection*/ !native_transport,
+                );
                 let (orcs, claude_orcs) = self.spawn_orc_children_for_node(&troll_node_id);
                 if orcs.is_empty() && claude_orcs.is_empty() {
                     let _ = writeln!(context, "  Orcs under this Troll: none spawned yet.");
@@ -4479,6 +4636,7 @@ impl App {
                             orc_thread_id,
                             orc_entry,
                             Some(ORC_ROLE),
+                            /*include_legacy_report_projection*/ !native_transport,
                         );
                     }
                     for pane in claude_orcs {
@@ -4487,6 +4645,7 @@ impl App {
                             "  - ",
                             pane,
                             SpawnRole::Orc,
+                            /*include_legacy_report_projection*/ !native_transport,
                         );
                     }
                 }
@@ -4502,13 +4661,22 @@ impl App {
                     orc_thread_id,
                     orc_entry,
                     Some(ORC_ROLE),
+                    /*include_legacy_report_projection*/ !native_transport,
                 );
             }
             for pane in claude_orcs {
-                self.write_spawn_context_claude_pane(&mut context, "- ", pane, SpawnRole::Orc);
+                self.write_spawn_context_claude_pane(
+                    &mut context,
+                    "- ",
+                    pane,
+                    SpawnRole::Orc,
+                    /*include_legacy_report_projection*/ !native_transport,
+                );
             }
         }
-        self.write_spawn_parent_reports(&mut context, &self.spawn_root_node_id());
+        if !native_transport {
+            self.write_spawn_parent_reports(&mut context, &self.spawn_root_node_id());
+        }
 
         let _ = writeln!(
             context,
@@ -4525,6 +4693,7 @@ impl App {
         thread_id: ThreadId,
         entry: &crate::multi_agents::AgentPickerThreadEntry,
         fallback_role: Option<&str>,
+        include_legacy_report_projection: bool,
     ) {
         let name = format_agent_picker_item_name(
             entry.agent_nickname.as_deref(),
@@ -4533,12 +4702,32 @@ impl App {
         );
         let status = spawn_entry_status(self, thread_id, entry);
         let node_id = self.logical_native_node_for_thread(thread_id);
-        let has_new_report = self.child_has_new_report(&node_id, &name);
         let sequence = self.spawn_node_sequence_suffix(&node_id);
-        let _ = writeln!(
-            context,
-            "{prefix}{name}; status={status}; has_new_report={has_new_report}; thread={thread_id}{sequence}"
-        );
+        let report_projection = if include_legacy_report_projection {
+            {
+                format!(
+                    "; has_new_report={}",
+                    self.child_has_new_report(&node_id, &name)
+                )
+            }
+        } else {
+            Default::default()
+        };
+        if let Some(agent_path) = entry
+            .agent_path
+            .as_deref()
+            .filter(|agent_path| !agent_path.trim().is_empty())
+        {
+            let _ = writeln!(
+                context,
+                "{prefix}{name}; status={status}{report_projection}; thread={thread_id}; canonical_task_name={agent_path}{sequence}"
+            );
+        } else {
+            let _ = writeln!(
+                context,
+                "{prefix}{name}; status={status}{report_projection}; thread={thread_id}{sequence}"
+            );
+        }
         if let Some(task) = entry
             .last_task_message
             .as_deref()
@@ -4550,10 +4739,11 @@ impl App {
                 compact_spawn_context_value(task)
             );
         }
-        if let Some(result) = entry
-            .last_result_message
-            .as_deref()
-            .filter(|result| !result.trim().is_empty())
+        if include_legacy_report_projection
+            && let Some(result) = entry
+                .last_result_message
+                .as_deref()
+                .filter(|result| !result.trim().is_empty())
         {
             let _ = writeln!(
                 context,
@@ -4583,22 +4773,32 @@ impl App {
         prefix: &str,
         pane: &crate::claude_panes::ClaudePane,
         role: SpawnRole,
+        include_legacy_report_projection: bool,
     ) {
         let status = match pane.status {
             crate::claude_panes::ClaudePaneStatus::Idle => "idle",
             crate::claude_panes::ClaudePaneStatus::Running => "running",
         };
         let node_id = pane_node_id(&pane.id);
-        let has_new_report = self.child_has_new_report(&node_id, &pane.title);
+        let report_projection = if include_legacy_report_projection {
+            {
+                format!(
+                    "; has_new_report={}",
+                    self.child_has_new_report(&node_id, &pane.title)
+                )
+            }
+        } else {
+            Default::default()
+        };
         let sequence = self.spawn_node_sequence_suffix(&node_id);
         if let Some(thread_id) = pane.spawn_thread_id {
             let _ = writeln!(
                 context,
-                "{prefix}{}; role={}; harness=Claude Code; status={}; has_new_report={}; thread={}; pane={}{}",
+                "{prefix}{}; role={}; harness=Claude Code; status={}{}; thread={}; pane={}{}",
                 pane.title,
                 role.label(),
                 status,
-                has_new_report,
+                report_projection,
                 thread_id,
                 pane.id,
                 sequence
@@ -4606,11 +4806,11 @@ impl App {
         } else {
             let _ = writeln!(
                 context,
-                "{prefix}{}; role={}; harness=Claude Code; status={}; has_new_report={}; pane={}{}",
+                "{prefix}{}; role={}; harness=Claude Code; status={}{}; pane={}{}",
                 pane.title,
                 role.label(),
                 status,
-                has_new_report,
+                report_projection,
                 pane.id,
                 sequence
             );
@@ -4622,7 +4822,9 @@ impl App {
                 compact_spawn_context_value(task)
             );
         }
-        if let Some(result) = pane.latest_result_message.as_deref() {
+        if include_legacy_report_projection
+            && let Some(result) = pane.latest_result_message.as_deref()
+        {
             let _ = writeln!(
                 context,
                 "{prefix}  latest_result={}",
@@ -4691,13 +4893,13 @@ fn write_native_spawn_dispatch_contract(context: &mut String) {
     let _ = writeln!(
         context,
         "Each turn, read this injected roster before declaring a child stalled: status=idle or \
-         status=completed means that child is finished and ready for review; has_new_report=true \
-         means its report is available in the Recent child reports section."
+         status=completed means that child is finished. Core delivers its terminal result as a \
+         native message for review."
     );
     let _ = writeln!(
         context,
         "Never report a child pane as silent or unresponsive until you have checked its roster \
-         status and report marker. Managers delegate and review; they do not execute a listed \
+         status and native result message. Managers delegate and review; they do not execute a listed \
          child's assigned task themselves."
     );
 }
@@ -5083,8 +5285,8 @@ pub(crate) fn corrected_native_spawn_provider(model: &str, provider: &str) -> Op
     codex_model_provider_info::corrected_catalog_provider(model, provider).map(str::to_string)
 }
 
-/// Normalizes the mixed identifiers used on dispatch paths (node ids like `thread:...`/`pane:...`
-/// from native turns, raw pane ids from Claude pane turns) to one loop-breaker state key.
+/// Normalizes external-pane identifiers used on dispatch paths (node ids like `pane:...` or raw
+/// pane ids) to one loop-breaker state key.
 fn spawn_auto_loop_key(source_node_or_pane_id: &str) -> String {
     if source_node_or_pane_id.starts_with("thread:") || source_node_or_pane_id.starts_with("pane:")
     {
@@ -6116,6 +6318,7 @@ Done."#;
             is_default: false,
             upgrade: None,
             show_in_picker: true,
+            multi_agent_version: None,
             availability_nux: None,
             supported_in_api: true,
             input_modalities: codex_protocol::openai_models::default_input_modalities(),

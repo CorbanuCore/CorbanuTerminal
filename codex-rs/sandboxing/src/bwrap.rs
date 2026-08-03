@@ -13,17 +13,18 @@ use std::time::Duration;
 use std::time::Instant;
 
 const SYSTEM_BWRAP_PROGRAM: &str = "bwrap";
+pub const APPARMOR_BWRAP_USERNS_PROFILE: &str = "rootlesskit";
 const MISSING_BWRAP_WARNING: &str = concat!(
-    "Codex could not find bubblewrap on PATH. ",
+    "PFTerminal could not find bubblewrap on PATH. ",
     "Install bubblewrap with your OS package manager. ",
     "See the sandbox prerequisites: ",
     "https://developers.openai.com/codex/concepts/sandboxing#prerequisites. ",
-    "Codex will use the bundled bubblewrap in the meantime.",
+    "PFTerminal will use the bundled bubblewrap in the meantime.",
 );
 const USER_NAMESPACE_WARNING: &str =
-    "Codex's Linux sandbox uses bubblewrap and needs access to create user namespaces.";
+    "PFTerminal's Linux sandbox uses bubblewrap and needs access to create user namespaces.";
 pub(crate) const WSL1_BWRAP_WARNING: &str = concat!(
-    "Codex's Linux sandbox uses bubblewrap, which is not supported on WSL1 ",
+    "PFTerminal's Linux sandbox uses bubblewrap, which is not supported on WSL1 ",
     "because WSL1 cannot create the required user namespaces. ",
     "Use WSL2 for sandboxed shell commands."
 );
@@ -64,7 +65,9 @@ fn system_bwrap_warning_for_path(system_bwrap_path: Option<&Path>) -> Option<Str
         return Some(MISSING_BWRAP_WARNING.to_string());
     };
 
-    if !system_bwrap_has_user_namespace_access(system_bwrap_path, SYSTEM_BWRAP_PROBE_TIMEOUT) {
+    if !system_bwrap_has_user_namespace_access(system_bwrap_path, SYSTEM_BWRAP_PROBE_TIMEOUT)
+        && find_apparmor_bwrap_launcher(system_bwrap_path).is_none()
+    {
         return Some(USER_NAMESPACE_WARNING.to_string());
     }
 
@@ -72,19 +75,51 @@ fn system_bwrap_warning_for_path(system_bwrap_path: Option<&Path>) -> Option<Str
 }
 
 fn system_bwrap_has_user_namespace_access(system_bwrap_path: &Path, timeout: Duration) -> bool {
-    let mut child = match Command::new(system_bwrap_path)
-        .args([
-            "--unshare-user",
-            "--unshare-net",
-            "--ro-bind",
-            "/",
-            "/",
-            "/bin/true",
-        ])
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-    {
+    let mut command = Command::new(system_bwrap_path);
+    command.args(bwrap_user_namespace_probe_args());
+    command_has_user_namespace_access(&mut command, timeout)
+}
+
+/// Ubuntu's AppArmor user-namespace restriction can reject an otherwise valid unprivileged
+/// bubblewrap invocation. Ubuntu ships a narrowly named, unconfined `rootlesskit` profile whose
+/// purpose is to authorize user namespaces. When that profile is loaded, execute bubblewrap
+/// through `aa-exec` instead of failing every Workspace/Read-only command and asking the user to
+/// escape the sandbox.
+///
+/// The returned launcher is accepted only after it successfully runs the same user+network
+/// namespace probe as direct bubblewrap. Callers must still pass the absolute bubblewrap path
+/// after `aa-exec --`; this function does not authorize a PATH-resolved replacement binary.
+pub fn find_apparmor_bwrap_launcher(system_bwrap_path: &Path) -> Option<PathBuf> {
+    if system_bwrap_has_user_namespace_access(system_bwrap_path, SYSTEM_BWRAP_PROBE_TIMEOUT) {
+        return None;
+    }
+
+    let launcher = ["/usr/bin/aa-exec", "/usr/sbin/aa-exec"]
+        .into_iter()
+        .map(PathBuf::from)
+        .find(|candidate| candidate.is_file())?;
+    let mut command = Command::new(&launcher);
+    command
+        .args(["-p", APPARMOR_BWRAP_USERNS_PROFILE, "--"])
+        .arg(system_bwrap_path)
+        .args(bwrap_user_namespace_probe_args());
+    command_has_user_namespace_access(&mut command, SYSTEM_BWRAP_PROBE_TIMEOUT).then_some(launcher)
+}
+
+fn bwrap_user_namespace_probe_args() -> [&'static str; 7] {
+    [
+        "--unshare-user",
+        "--unshare-net",
+        "--ro-bind",
+        "/",
+        "/",
+        "--",
+        "/bin/true",
+    ]
+}
+
+fn command_has_user_namespace_access(command: &mut Command, timeout: Duration) -> bool {
+    let mut child = match command.stdout(Stdio::null()).stderr(Stdio::piped()).spawn() {
         Ok(child) => child,
         Err(_) => return true,
     };

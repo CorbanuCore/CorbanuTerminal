@@ -14,6 +14,7 @@ use anyhow::Result;
 use anyhow::anyhow;
 use serde::Deserialize;
 use serde::Serialize;
+use serde_json::Value;
 use sha2::Digest;
 use sha2::Sha256;
 use tokio::sync::Mutex;
@@ -45,16 +46,34 @@ pub(crate) const PANE_LAYOUT_VERSION: u32 = 2;
 const PANE_LAYOUTS_DIR: &str = "pane-layouts";
 const PANE_LAYOUT_PREVIOUS_SUFFIX: &str = "previous";
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 struct PersistedPaneLayout {
     format_version: u32,
     checksum: String,
     layout: PaneLayoutState,
 }
+
+/// Read the persisted layout as raw JSON before applying serde defaults.
+///
+/// The checksum protects the exact schema generation that wrote the file. Deserializing directly
+/// into `PaneLayoutState` before verification would add newly introduced `#[serde(default)]`
+/// fields and change the checksum of an otherwise valid layout from an older candidate.
+#[derive(Debug, Deserialize)]
+struct PersistedPaneLayoutEnvelope {
+    format_version: u32,
+    checksum: String,
+    layout: Value,
+}
 #[derive(Debug)]
 pub(crate) struct ClaudePaneRegistry {
     active_user_pane_id: String,
     pub(crate) panes: Vec<ClaudePane>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RemovedClaudePane {
+    pub(crate) title: String,
+    pub(crate) interrupted_running_turn: bool,
 }
 
 impl ClaudePaneRegistry {
@@ -139,6 +158,100 @@ impl ClaudePaneRegistry {
         pane.title = title;
         persist_claude_pane_metadata(pane)?;
         Ok(())
+    }
+
+    /// Permanently remove an operator-created Claude pane and its local artifacts.
+    ///
+    /// Managed `/spawn` Claude workers have separate graph/layout ownership and are rejected here.
+    /// A running operator pane is cancelled before its artifact directory is removed; application
+    /// exit then drops the runner task and its `kill_on_drop` child as a second cleanup boundary.
+    pub(crate) fn remove_operator_pane(
+        &mut self,
+        pane_id: &str,
+        codex_home: &Path,
+    ) -> Result<RemovedClaudePane> {
+        let index = self
+            .panes
+            .iter()
+            .position(|pane| pane.id == pane_id)
+            .ok_or_else(|| anyhow!("Claude pane `{pane_id}` does not exist"))?;
+        let pane = &self.panes[index];
+        if pane.spawn_role.is_some() {
+            return Err(anyhow!(
+                "managed /spawn Claude pane `{}` must be removed through the whole-crew lifecycle",
+                pane.title
+            ));
+        }
+
+        self.remove_pane_at_index(index, pane_id, codex_home)
+    }
+
+    /// Permanently remove one Claude member as part of an already-authorized whole-crew action.
+    /// Individual managed-pane deletion remains rejected by [`Self::remove_operator_pane`].
+    pub(crate) fn remove_managed_crew_pane(
+        &mut self,
+        pane_id: &str,
+        codex_home: &Path,
+    ) -> Result<RemovedClaudePane> {
+        let index = self
+            .panes
+            .iter()
+            .position(|pane| pane.id == pane_id)
+            .ok_or_else(|| anyhow!("Claude pane `{pane_id}` does not exist"))?;
+        if self.panes[index].spawn_role.is_none() {
+            return Err(anyhow!(
+                "operator-created Claude pane `{}` is not owned by the managed crew",
+                self.panes[index].title
+            ));
+        }
+        self.remove_pane_at_index(index, pane_id, codex_home)
+    }
+
+    fn remove_pane_at_index(
+        &mut self,
+        index: usize,
+        pane_id: &str,
+        codex_home: &Path,
+    ) -> Result<RemovedClaudePane> {
+        let pane = &self.panes[index];
+
+        let expected_artifact_dir = codex_home.join("panes").join(pane_id);
+        if pane.artifact_dir != expected_artifact_dir {
+            return Err(anyhow!(
+                "refusing to remove Claude pane `{}` because its artifact path `{}` is outside the expected pane directory `{}`",
+                pane.title,
+                pane.artifact_dir.display(),
+                expected_artifact_dir.display()
+            ));
+        }
+
+        let interrupted_running_turn = pane.status == ClaudePaneStatus::Running;
+        if interrupted_running_turn {
+            let cancel_token = pane.cancel_token.as_ref().ok_or_else(|| {
+                anyhow!(
+                    "Claude pane `{}` is running without a cancellation handle; no data was removed",
+                    pane.title
+                )
+            })?;
+            cancel_token.cancel();
+        }
+        if expected_artifact_dir.exists() {
+            fs::remove_dir_all(&expected_artifact_dir).with_context(|| {
+                format!(
+                    "failed to remove Claude pane artifacts `{}`",
+                    expected_artifact_dir.display()
+                )
+            })?;
+        }
+
+        let removed = self.panes.remove(index);
+        if self.active_user_pane_id == pane_id {
+            self.active_user_pane_id = CODEX_MAIN_PANE_ID.to_string();
+        }
+        Ok(RemovedClaudePane {
+            title: removed.title,
+            interrupted_running_turn,
+        })
     }
 
     pub(crate) fn live_status_for_pane(&self, pane_id: &str) -> Option<ClaudePaneLiveStatus> {
@@ -428,13 +541,15 @@ pub(crate) fn load_pane_layout(
     let thread_scoped_path = thread_scoped_pane_layout_path(codex_home, thread_id);
     let thread_scoped_layout = read_pane_layout(&thread_scoped_path)
         .filter(|layout| layout.codex_thread_id.as_deref() == Some(thread_id));
-    let loaded = if thread_scoped_layout
+    let loaded = if let Some(layout) =
+        find_related_pane_layout(codex_home, thread_id, thread_scoped_layout.as_ref())
+    {
+        Some(layout)
+    } else if thread_scoped_layout
         .as_ref()
         .is_some_and(pane_layout_has_panes)
     {
         thread_scoped_layout
-    } else if let Some(layout) = find_related_pane_layout(codex_home, thread_id) {
-        Some(layout)
     } else {
         let legacy_path = codex_home.join("panes").join(PANE_LAYOUT_FILE);
         let legacy_layout = read_pane_layout(&legacy_path)
@@ -449,10 +564,17 @@ pub(crate) fn load_pane_layout(
     Some(migrated)
 }
 
-fn find_related_pane_layout(codex_home: &Path, thread_id: &str) -> Option<PaneLayoutState> {
+fn find_related_pane_layout(
+    codex_home: &Path,
+    thread_id: &str,
+    anchor_layout: Option<&PaneLayoutState>,
+) -> Option<PaneLayoutState> {
     let layout_dir = codex_home.join("panes").join(PANE_LAYOUTS_DIR);
-    let mut best: Option<(u128, PaneLayoutState)> = None;
+    let mut best: Option<((usize, usize, u128), PaneLayoutState)> = None;
     let thread_node_id = format!("thread:{thread_id}");
+    let anchor_crew_id = anchor_layout
+        .and_then(|layout| layout.spawn_crew.as_ref())
+        .map(|crew| crew.spec.crew_id.as_str());
     for entry in fs::read_dir(layout_dir).ok()?.flatten() {
         let path = entry.path();
         if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
@@ -461,7 +583,14 @@ fn find_related_pane_layout(codex_home: &Path, thread_id: &str) -> Option<PaneLa
         let Some(layout) = read_pane_layout(&path) else {
             continue;
         };
-        if !pane_layout_has_panes(&layout) || !pane_layout_mentions_thread(&layout, &thread_node_id)
+        let shares_crew_identity = anchor_crew_id.is_some_and(|anchor_crew_id| {
+            layout
+                .spawn_crew
+                .as_ref()
+                .is_some_and(|crew| crew.spec.crew_id == anchor_crew_id)
+        });
+        if !pane_layout_has_panes(&layout)
+            || (!shares_crew_identity && !pane_layout_mentions_thread(&layout, &thread_node_id))
         {
             continue;
         }
@@ -472,24 +601,40 @@ fn find_related_pane_layout(codex_home: &Path, thread_id: &str) -> Option<PaneLa
             .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
             .map(|duration| duration.as_millis())
             .unwrap_or(0);
+        let member_count = layout
+            .spawn_crew
+            .as_ref()
+            .map_or(0, |crew| crew.spec.members.len());
+        let materialized_node_count = layout
+            .spawn_crew
+            .as_ref()
+            .map_or(0, |crew| crew.member_node_by_id.len())
+            .max(layout.spawn_parent_by_node.len())
+            .max(layout.spawn_native_runtime_by_node.len());
+        let score = (member_count, materialized_node_count, modified_ms);
         if best
             .as_ref()
-            .is_none_or(|(best_modified_ms, _)| modified_ms > *best_modified_ms)
+            .is_none_or(|(best_score, _)| score > *best_score)
         {
-            best = Some((modified_ms, layout));
+            best = Some((score, layout));
         }
     }
     best.map(|(_, layout)| layout)
 }
 
 fn pane_layout_has_panes(layout: &PaneLayoutState) -> bool {
-    layout.spawn_nazgul_pane_id.is_some()
+    !layout.codex_user_pane_ids.is_empty()
+        || layout.spawn_nazgul_pane_id.is_some()
         || !layout.claude_pane_ids.is_empty()
         || !layout.spawn_parent_by_node.is_empty()
 }
 
 fn pane_layout_mentions_thread(layout: &PaneLayoutState, thread_node_id: &str) -> bool {
-    layout.spawn_nazgul_pane_id.as_deref() == Some(thread_node_id)
+    layout
+        .codex_user_pane_ids
+        .iter()
+        .any(|thread_id| format!("thread:{thread_id}") == thread_node_id)
+        || layout.spawn_nazgul_pane_id.as_deref() == Some(thread_node_id)
         || layout
             .spawn_parent_by_node
             .iter()
@@ -555,7 +700,7 @@ pub(crate) fn persist_pane_layout(codex_home: &Path, layout: &PaneLayoutState) -
 fn read_pane_layout_generation(path: &Path) -> Result<PaneLayoutState> {
     let contents = fs::read(path)
         .with_context(|| format!("failed to read pane layout `{}`", path.display()))?;
-    if let Ok(persisted) = serde_json::from_slice::<PersistedPaneLayout>(&contents) {
+    if let Ok(persisted) = serde_json::from_slice::<PersistedPaneLayoutEnvelope>(&contents) {
         if persisted.format_version != PANE_LAYOUT_VERSION {
             return Err(anyhow!(
                 "unsupported pane layout version {} at `{}`",
@@ -563,14 +708,15 @@ fn read_pane_layout_generation(path: &Path) -> Result<PaneLayoutState> {
                 path.display()
             ));
         }
-        let actual_checksum = pane_layout_checksum(&persisted.layout)?;
+        let actual_checksum = pane_layout_value_checksum(&persisted.layout)?;
         if actual_checksum != persisted.checksum {
             return Err(anyhow!(
                 "pane layout checksum mismatch at `{}`",
                 path.display()
             ));
         }
-        return Ok(persisted.layout);
+        return serde_json::from_value::<PaneLayoutState>(persisted.layout)
+            .with_context(|| format!("failed to decode pane layout `{}`", path.display()));
     }
     let layout = serde_json::from_slice::<PaneLayoutState>(&contents)
         .with_context(|| format!("failed to decode pane layout `{}`", path.display()))?;
@@ -587,6 +733,12 @@ fn read_pane_layout_generation(path: &Path) -> Result<PaneLayoutState> {
 fn pane_layout_checksum(layout: &PaneLayoutState) -> Result<String> {
     let bytes =
         serde_json::to_vec(layout).context("failed to encode pane layout checksum input")?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
+fn pane_layout_value_checksum(layout: &Value) -> Result<String> {
+    let bytes =
+        serde_json::to_vec(layout).context("failed to encode raw pane layout checksum input")?;
     Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 
@@ -718,7 +870,16 @@ fn atomic_replace_with_previous(path: &Path, contents: &[u8]) -> Result<()> {
 
     let previous_path = previous_pane_layout_path(path);
     if path.exists() {
-        if read_pane_layout_generation(path).is_ok() {
+        let current_is_verified = read_pane_layout_generation(path).is_ok();
+        let previous_is_verified = read_pane_layout_generation(&previous_path).is_ok();
+        if !current_is_verified && !previous_is_verified {
+            let _ = fs::remove_file(&temp_path);
+            return Err(anyhow!(
+                "refusing to overwrite pane layout `{}` because neither its current nor previous generation is verifiable",
+                path.display()
+            ));
+        }
+        if current_is_verified {
             if previous_path.exists() {
                 fs::remove_file(&previous_path).with_context(|| {
                     format!(

@@ -27,14 +27,11 @@ pub(crate) fn guard_same_request_idle_retry(
     if is_sse_idle_timeout(err) {
         *same_request_idle_failures = (*same_request_idle_failures).saturating_add(1);
         if *same_request_idle_failures >= MAX_SAME_REQUEST_IDLE_FAILURES {
-            return Err(CodexErr::Stream(
-                format!(
-                    "stream idle timeout repeated {} times for the same \
+            return Err(CodexErr::Stream(format!(
+                "stream idle timeout repeated {} times for the same \
                      request; aborting instead of restarting it again",
-                    *same_request_idle_failures,
-                ),
-                None,
-            ));
+                *same_request_idle_failures,
+            )));
         }
     } else {
         *same_request_idle_failures = 0;
@@ -45,8 +42,9 @@ pub(crate) fn guard_same_request_idle_retry(
 
 fn is_sse_idle_timeout(err: &CodexErr) -> bool {
     matches!(
-        err,
-        CodexErr::Stream(message, _) if message.contains(SSE_IDLE_TIMEOUT_MESSAGE)
+        err.details(),
+        codex_protocol::error::CodexErrorDetails::Stream(message)
+            if message.contains(SSE_IDLE_TIMEOUT_MESSAGE)
     )
 }
 
@@ -120,7 +118,7 @@ pub(crate) async fn handle_retryable_response_stream_error(
         // transient reconnect messages. In debug builds, keep full visibility for diagnosis.
         let report_error = retry_count > 1
             || cfg!(debug_assertions)
-            || !sess.services.responses_websocket_enabled();
+            || !sess.services.model_client().responses_websocket_enabled();
         if report_error {
             // Surface retry information to any UI/front-end so the user understands what is
             // happening instead of staring at a seemingly frozen screen.

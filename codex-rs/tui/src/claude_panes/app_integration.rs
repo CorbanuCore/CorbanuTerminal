@@ -38,7 +38,58 @@ use super::registry::persist_pane_layout;
 use super::turn_types::ClaudePaneTurnOutput;
 use super::turn_types::ClaudePaneTurnProgress;
 impl App {
+    fn is_operator_owned_codex_user_pane(
+        &self,
+        thread_id: ThreadId,
+        entry: &crate::multi_agents::AgentPickerThreadEntry,
+    ) -> bool {
+        let is_bound_nazgul = self
+            .spawn_nazgul_pane_id
+            .as_deref()
+            .and_then(crate::spawn_orchestration::node_id_thread)
+            == Some(thread_id);
+        Some(thread_id) != self.primary_thread_id
+            && (!self.is_managed_spawn_crew_thread(thread_id) || is_bound_nazgul)
+            && !self.agent_navigation.is_parent_owned(thread_id)
+            && entry
+                .agent_role
+                .as_deref()
+                .is_none_or(|role| role == "default")
+    }
+
+    /// Reject native thread lifecycle commands when the visible pane is owned by another
+    /// lifecycle authority. Falling back from an external Claude pane to the last native thread
+    /// can otherwise archive/delete Main, while deleting one managed `/spawn` member directly
+    /// leaves the durable crew projection pointing at a removed subtree.
+    pub(crate) fn terminal_thread_lifecycle_block_reason(
+        &self,
+        command: &str,
+        thread_id: ThreadId,
+    ) -> Option<String> {
+        if let Some(title) = self.claude_panes.active_claude_pane_title() {
+            return Some(format!(
+                "'/{command}' cannot target Claude pane `{title}`. Select Main or an operator-created PFTerminal pane first; Claude pane removal needs its own pane lifecycle action."
+            ));
+        }
+        if Some(thread_id) != self.primary_thread_id && self.is_managed_spawn_crew_thread(thread_id)
+        {
+            return Some(format!(
+                "'/{command}' cannot remove one managed /spawn member independently. Switch to Main; the crew must be removed through its managed lifecycle so the native graph and pane layout stay consistent."
+            ));
+        }
+        if Some(thread_id) != self.primary_thread_id
+            && self.agent_navigation.is_parent_owned(thread_id)
+        {
+            return Some(format!(
+                "'/{command}' cannot target a parent-controlled task worker. Switch to Main or an operator-created PFTerminal pane first."
+            ));
+        }
+        None
+    }
+
     pub(crate) async fn open_pane_picker(&mut self, app_server: &mut AppServerSession) {
+        self.restore_codex_user_panes_from_saved_state(app_server)
+            .await;
         self.backfill_loaded_subagent_threads(app_server).await;
         self.restore_native_spawn_panes_from_saved_state(app_server)
             .await;
@@ -67,6 +118,29 @@ impl App {
         items
     }
 
+    /// Removes a successfully archived/deleted operator pane from the owning Main layout.
+    ///
+    /// The app-server owns the rollout lifecycle, while the TUI layout owns the operator-pane
+    /// membership projection. A successful terminal lifecycle request must update both; otherwise
+    /// the next Main restart tries to resume an intentionally archived thread and renders a ghost
+    /// disabled row. Managed crew and parent-controlled workers have separate lifecycle authority
+    /// and are deliberately not handled here.
+    pub(crate) fn forget_terminal_operator_pane(&mut self, thread_id: ThreadId) -> bool {
+        let is_operator_pane = self
+            .agent_navigation
+            .get(&thread_id)
+            .is_some_and(|entry| self.is_operator_owned_codex_user_pane(thread_id, entry));
+        if !is_operator_pane {
+            return false;
+        }
+
+        self.agent_navigation.remove(thread_id);
+        if self.active_thread_id == Some(thread_id) {
+            self.active_thread_id = self.primary_thread_id;
+        }
+        true
+    }
+
     pub(crate) async fn restore_pane_layout_for_thread(
         &mut self,
         app_server: &mut AppServerSession,
@@ -75,6 +149,19 @@ impl App {
         let thread_id_string = thread_id.to_string();
         let restored_pane_layout =
             load_pane_layout(self.config.codex_home.as_ref(), Some(&thread_id_string));
+
+        if let Some(layout) = restored_pane_layout.as_ref() {
+            for thread_id in layout
+                .codex_user_pane_ids
+                .iter()
+                .filter_map(|thread_id| ThreadId::from_string(thread_id).ok())
+            {
+                self.upsert_agent_picker_thread(
+                    thread_id, /*agent_nickname*/ None, /*agent_role*/ None,
+                    /*is_closed*/ false,
+                );
+            }
+        }
 
         self.spawn_parent_by_node = restored_pane_layout
             .as_ref()
@@ -100,9 +187,141 @@ impl App {
             .is_some_and(|layout| layout.spawn_nazgul_rebind_required);
         self.claude_pane_transcript_cells.clear();
         self.seed_restored_claude_pane_transcripts();
+        self.restore_codex_user_panes_from_saved_state(app_server)
+            .await;
         self.restore_native_spawn_panes_from_saved_state(app_server)
             .await;
         self.show_restored_active_claude_pane();
+    }
+
+    /// Reattach operator-owned native panes recorded in the owning Main layout.
+    ///
+    /// `/panes` uses independent `thread/start` sessions so direct input remains enabled. They are
+    /// intentionally absent from the Core spawn hierarchy, which means generic descendant
+    /// backfill cannot rediscover them after the in-process app server exits. The layout is the
+    /// membership authority; each listed thread is resumed through the normal app-server boundary
+    /// and keeps its original rollout, model runtime, name, and input ownership.
+    pub(crate) async fn restore_codex_user_panes_from_saved_state(
+        &mut self,
+        app_server: &mut AppServerSession,
+    ) {
+        let thread_ids = self.restorable_operator_owned_codex_user_pane_ids();
+
+        for thread_id in thread_ids {
+            if self.primary_thread_id == Some(thread_id) || self.thread_has_live_session(thread_id)
+            {
+                continue;
+            }
+
+            let existing_nickname = self
+                .agent_navigation
+                .get(&thread_id)
+                .and_then(|entry| entry.agent_nickname.clone());
+            let persisted_nickname = match self.state_db.as_ref() {
+                Some(state_db) => state_db
+                    .get_thread(thread_id)
+                    .await
+                    .ok()
+                    .flatten()
+                    .and_then(|metadata| metadata.agent_nickname)
+                    .or(existing_nickname.clone()),
+                None => existing_nickname.clone(),
+            };
+            let discovered_nickname = match app_server
+                .thread_read(thread_id, /*include_turns*/ false)
+                .await
+            {
+                Ok(thread) => thread
+                    .name
+                    .or(thread.agent_nickname)
+                    .or(persisted_nickname.clone()),
+                Err(err) => {
+                    tracing::warn!(
+                        %thread_id,
+                        error = %err,
+                        "persisted operator-owned pane was not readable before resume"
+                    );
+                    persisted_nickname.clone()
+                }
+            };
+
+            match app_server
+                .resume_thread(
+                    self.config.clone(),
+                    thread_id,
+                    crate::app_server_session::ResumeModelSettings::RestoreFromThread,
+                    crate::app_server_session::ResumePermissionSettings::RestoreFromThread,
+                )
+                .await
+            {
+                Ok(started) if !started.blocks_direct_input => {
+                    let nickname = started.session.thread_name.clone().or(discovered_nickname);
+                    let model = started.session.model.clone();
+                    let channel = self.ensure_thread_channel(thread_id);
+                    channel.mark_live();
+                    channel.set_session(started.session, started.turns).await;
+                    self.upsert_agent_picker_thread(
+                        thread_id, nickname, /*agent_role*/ None, /*is_closed*/ false,
+                    );
+                    self.agent_navigation.set_model(thread_id, Some(model));
+                }
+                Ok(_) => {
+                    tracing::error!(
+                        %thread_id,
+                        "persisted operator-owned pane resumed as parent-controlled"
+                    );
+                    self.upsert_agent_picker_thread(
+                        thread_id,
+                        discovered_nickname,
+                        /*agent_role*/ None,
+                        /*is_closed*/ true,
+                    );
+                    self.chat_widget.add_error_message(format!(
+                        "PFTerminal pane {thread_id} restored with direct input disabled; refusing to present it as usable."
+                    ));
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        %thread_id,
+                        error = %err,
+                        "failed to resume persisted operator-owned pane"
+                    );
+                    self.upsert_agent_picker_thread(
+                        thread_id,
+                        discovered_nickname,
+                        /*agent_role*/ None,
+                        /*is_closed*/ true,
+                    );
+                    self.chat_widget.add_error_message(format!(
+                        "Failed to resume PFTerminal pane {thread_id}: {err}"
+                    ));
+                }
+            }
+        }
+        self.persist_pane_state();
+    }
+
+    /// Returns only persisted operator panes that still need an automatic attach attempt.
+    ///
+    /// A failed restore is marked closed and remains visible as a disabled row. Retrying it every
+    /// time `/panes` opens both repeats an expensive failing app-server request and can keep the
+    /// healthy picker behind the same error. A later liveness refresh may explicitly reopen the
+    /// entry, while user-driven recovery can operate through the session/resume surfaces.
+    pub(crate) fn restorable_operator_owned_codex_user_pane_ids(&self) -> Vec<ThreadId> {
+        let mut thread_ids = self
+            .agent_navigation
+            .ordered_threads()
+            .into_iter()
+            .filter(|(thread_id, entry)| {
+                !entry.is_closed
+                    && self.is_operator_owned_codex_user_pane(*thread_id, entry)
+                    && self.primary_thread_id != Some(*thread_id)
+                    && !self.thread_has_live_session(*thread_id)
+            })
+            .map(|(thread_id, _)| thread_id)
+            .collect::<Vec<_>>();
+        thread_ids.sort_by_key(ToString::to_string);
+        thread_ids
     }
 
     fn valid_restored_nazgul_binding(&self, pane_id: &str) -> bool {
@@ -194,7 +413,7 @@ impl App {
         let tx = self.app_event_tx.clone();
         let initial_name = self.next_codex_pane_nickname();
         let view = CustomPromptView::new(
-            "Name Codex pane".to_string(),
+            "Name PFTerminal pane".to_string(),
             "Pane display name".to_string(),
             initial_name,
             Some(format!("Model: {model}")),
@@ -224,7 +443,7 @@ impl App {
                 }
             });
         let view = CustomPromptView::new(
-            "Rename Codex pane".to_string(),
+            "Rename PFTerminal pane".to_string(),
             "Pane display name".to_string(),
             initial_name,
             None,
@@ -317,6 +536,19 @@ impl App {
         let layout = PaneLayoutState {
             version: PANE_LAYOUT_VERSION,
             codex_thread_id: Some(codex_thread_id),
+            codex_user_pane_ids: {
+                let mut thread_ids = self
+                    .agent_navigation
+                    .ordered_threads()
+                    .into_iter()
+                    .filter(|(thread_id, entry)| {
+                        self.is_operator_owned_codex_user_pane(*thread_id, entry)
+                    })
+                    .map(|(thread_id, _)| thread_id.to_string())
+                    .collect::<Vec<_>>();
+                thread_ids.sort();
+                thread_ids
+            },
             active_user_pane_id: Some(self.claude_panes.active_user_pane_id().to_string()),
             spawn_nazgul_pane_id: self.spawn_nazgul_pane_id.clone(),
             spawn_nazgul_rebind_required: self.spawn_nazgul_rebind_required,
@@ -602,7 +834,7 @@ impl App {
         else {
             return false;
         };
-        if matches!(op, AppCommand::Interrupt { .. }) {
+        if matches!(op, AppCommand::Interrupt) {
             if !self.claude_panes.claude_pane_is_running(&pane_id) {
                 self.chat_widget.complete_external_pane_turn(
                     /*last_agent_message*/ None, /*duration_ms*/ None,
@@ -907,14 +1139,19 @@ impl App {
 
     fn user_pane_items(&self) -> Vec<SelectionItem> {
         let mut items = Vec::new();
-        let is_current = self.claude_panes.active_user_pane_id() == CODEX_MAIN_PANE_ID;
+        // The external-pane registry uses `codex-main` for every native Core
+        // thread.  The active Core thread is therefore the authority for which
+        // native row is current; treating `codex-main` alone as Main made both
+        // Main and a selected operator pane appear current at the same time.
+        let is_current = self.claude_panes.active_user_pane_id() == CODEX_MAIN_PANE_ID
+            && self.active_thread_id == self.primary_thread_id;
         let main_name = self
             .primary_thread_id
             .and_then(|thread_id| self.agent_navigation.get(&thread_id))
             .and_then(|entry| entry.agent_nickname.as_deref())
             .filter(|nickname| !nickname.trim().is_empty())
-            .map(|nickname| format!("Codex - {nickname}"))
-            .unwrap_or_else(|| "Codex - Main".to_string());
+            .map(|nickname| format!("PFTerminal - {nickname}"))
+            .unwrap_or_else(|| "PFTerminal - Main".to_string());
         let main_rename_shortcuts = self
             .primary_thread_id
             .map(|thread_id| vec![rename_codex_pane_shortcut(thread_id)])
@@ -988,24 +1225,16 @@ impl App {
         self.agent_navigation
             .ordered_threads()
             .into_iter()
-            .filter(|(thread_id, _)| Some(*thread_id) != self.primary_thread_id)
-            .filter(|(thread_id, _)| !self.is_managed_spawn_crew_thread(*thread_id))
-            .filter(|(_, entry)| {
-                entry
-                    .agent_role
-                    .as_deref()
-                    .map(|role| role == "default")
-                    .unwrap_or(true)
-            })
+            .filter(|(thread_id, entry)| self.is_operator_owned_codex_user_pane(*thread_id, entry))
             .map(|(thread_id, entry)| {
                 let name = entry
                     .agent_nickname
                     .as_deref()
                     .filter(|nickname| !nickname.trim().is_empty())
-                    .map(|nickname| format!("Codex - {nickname}"))
-                    .unwrap_or_else(|| format!("Codex - {}", short_thread_id(thread_id)));
+                    .map(|nickname| format!("PFTerminal - {nickname}"))
+                    .unwrap_or_else(|| format!("PFTerminal - {}", short_thread_id(thread_id)));
                 let description = self.codex_pane_description(thread_id, entry);
-                SelectionItem {
+                let mut item = SelectionItem {
                     name: name.clone(),
                     name_prefix_spans: crate::multi_agents::agent_picker_status_dot_spans(
                         entry.is_closed,
@@ -1020,25 +1249,33 @@ impl App {
                     selected_shortcuts: vec![rename_codex_pane_shortcut(thread_id)],
                     search_value: Some(format!("{name} {thread_id}")),
                     ..Default::default()
+                };
+                if let Some(reason) = self.unloaded_agent_thread_reason(thread_id) {
+                    item.actions.clear();
+                    item.is_disabled = true;
+                    item.disabled_reason = Some(reason);
+                    item.dismiss_on_select = false;
                 }
+                item
             })
             .collect()
     }
 
     fn codex_main_pane_description(&self) -> String {
-        let mut description = format!("{}; {}", self.chat_widget.current_model(), {
-            let Some(thread_id) = self.primary_thread_id else {
-                return format!("{}; loading", self.chat_widget.current_model());
-            };
-            native_thread_status_label(self.agent_navigation.get(&thread_id))
-        });
-        if let Some(thread_id) = self.primary_thread_id {
-            append_context_left(
-                &mut description,
-                self.spawn_context_left_by_thread.get(&thread_id),
-            );
-            description.push_str(&self.whip_status_suffix_for_target(&thread_node_id(thread_id)));
-        }
+        let Some(thread_id) = self.primary_thread_id else {
+            return "model unavailable; loading".to_string();
+        };
+        let entry = self.agent_navigation.get(&thread_id);
+        let model = self
+            .primary_session_model(thread_id)
+            .or_else(|| entry.and_then(|entry| entry.model.as_deref()))
+            .unwrap_or("model unavailable");
+        let mut description = format!("{model}; {}", native_thread_status_label(entry));
+        append_context_left(
+            &mut description,
+            self.spawn_context_left_by_thread.get(&thread_id),
+        );
+        description.push_str(&self.whip_status_suffix_for_target(&thread_node_id(thread_id)));
         description
     }
 
@@ -1084,16 +1321,16 @@ impl App {
                     .unwrap_or(true)
             })
             .count();
-        format!("Codex {}", count + 1)
+        format!("PFTerminal {}", count + 1)
     }
 }
 
 pub(crate) fn new_pane_items() -> Vec<SelectionItem> {
     vec![
         SelectionItem {
-            name: "+ Codex Pane".to_string(),
+            name: "+ PFTerminal Pane".to_string(),
             description: Some(
-                "Create a persistent native Codex pane; choose model next.".to_string(),
+                "Create a persistent native PFTerminal pane; choose model next.".to_string(),
             ),
             actions: vec![Box::new(|tx| {
                 tx.send(AppEvent::OpenCodexPaneModelPicker);

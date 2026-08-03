@@ -5,6 +5,11 @@ use std::process::Stdio;
 use std::time::Duration;
 use std::time::Instant;
 
+#[cfg(unix)]
+use std::collections::BTreeSet;
+#[cfg(target_os = "linux")]
+use std::collections::HashSet;
+
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
@@ -407,17 +412,7 @@ impl ClaudeSecretRedactor {
 pub(crate) async fn stop_claude_child(child: &mut Child) -> Result<()> {
     #[cfg(unix)]
     if let Some(pid) = child.id() {
-        // Claude may have an active tool subprocess. The pane starts Claude in its own process
-        // group, so kill the group first, then reap the direct child below.
-        let kill_result = unsafe { libc::kill(-(pid as libc::pid_t), libc::SIGKILL) };
-        if kill_result == -1 {
-            let err = std::io::Error::last_os_error();
-            if err.raw_os_error() != Some(libc::ESRCH) {
-                return Err(anyhow!(
-                    "failed to send SIGKILL to Claude process group {pid}: {err}"
-                ));
-            }
-        }
+        kill_claude_process_tree(pid as libc::pid_t)?;
     }
 
     if let Err(err) = child.start_kill()
@@ -435,6 +430,88 @@ pub(crate) async fn stop_claude_child(child: &mut Child) -> Result<()> {
             "Claude process did not exit after SIGKILL within cleanup timeout"
         )),
     }
+}
+
+#[cfg(unix)]
+fn kill_claude_process_tree(root_pid: libc::pid_t) -> Result<()> {
+    // Claude launches some tool commands in their own session/process group. Killing only the
+    // Claude process group therefore leaves those detached tools alive after the pane reports an
+    // interrupt. Snapshot the Linux descendant tree before killing the root, and terminate every
+    // discovered process group plus each concrete descendant as a race-resistant fallback.
+    #[cfg(target_os = "linux")]
+    let descendants = linux_descendant_pids(root_pid);
+    #[cfg(not(target_os = "linux"))]
+    let descendants: Vec<libc::pid_t> = Vec::new();
+
+    let current_process_group = unsafe { libc::getpgrp() };
+    let mut process_groups = BTreeSet::new();
+    for pid in std::iter::once(root_pid).chain(descendants.iter().copied()) {
+        let process_group = unsafe { libc::getpgid(pid) };
+        if process_group > 0 {
+            if process_group == current_process_group {
+                return Err(anyhow!(
+                    "refusing to kill Claude process tree {root_pid}: descendant {pid} shares PFTerminal process group {current_process_group}"
+                ));
+            }
+            process_groups.insert(process_group);
+        } else {
+            let err = std::io::Error::last_os_error();
+            if err.raw_os_error() != Some(libc::ESRCH) {
+                return Err(anyhow!(
+                    "failed to inspect process group for Claude descendant {pid}: {err}"
+                ));
+            }
+        }
+    }
+
+    for process_group in process_groups {
+        send_sigkill(
+            -process_group,
+            &format!("Claude descendant process group {process_group}"),
+        )?;
+    }
+    for pid in descendants.into_iter().rev() {
+        send_sigkill(pid, &format!("Claude descendant process {pid}"))?;
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn send_sigkill(target: libc::pid_t, label: &str) -> Result<()> {
+    let kill_result = unsafe { libc::kill(target, libc::SIGKILL) };
+    if kill_result == -1 {
+        let err = std::io::Error::last_os_error();
+        if err.raw_os_error() != Some(libc::ESRCH) {
+            return Err(anyhow!("failed to send SIGKILL to {label}: {err}"));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn linux_descendant_pids(root_pid: libc::pid_t) -> Vec<libc::pid_t> {
+    let mut descendants = Vec::new();
+    let mut pending = vec![root_pid];
+    let mut seen = HashSet::from([root_pid]);
+
+    while let Some(parent_pid) = pending.pop() {
+        let children_path = format!("/proc/{parent_pid}/task/{parent_pid}/children");
+        let Ok(children) = std::fs::read_to_string(children_path) else {
+            continue;
+        };
+        for child_pid in children
+            .split_whitespace()
+            .filter_map(|value| value.parse::<libc::pid_t>().ok())
+            .filter(|pid| *pid > 0)
+        {
+            if seen.insert(child_pid) {
+                descendants.push(child_pid);
+                pending.push(child_pid);
+            }
+        }
+    }
+
+    descendants
 }
 
 fn turn_output_from_parsed(

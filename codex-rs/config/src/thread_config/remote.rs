@@ -194,6 +194,7 @@ fn model_provider_from_proto(
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: Default::default(),
         websocket_connect_timeout_ms: provider.websocket_connect_timeout_ms,
         requires_openai_auth: provider.requires_openai_auth,
         supports_websockets: provider.supports_websockets,
@@ -226,6 +227,7 @@ fn model_provider_to_proto(
         stream_actionable_timeout_ms: _,
         stream_long_failure_retry_threshold_ms: _,
         stream_long_failure_max_retries: _,
+        runtime_policy: _,
         websocket_connect_timeout_ms,
         requires_openai_auth,
         supports_websockets,
@@ -574,6 +576,7 @@ mod tests {
             supports_websockets: true,
             supports_standalone_web_search: true,
             aws: None,
+            runtime_policy: Default::default(),
         }
     }
 

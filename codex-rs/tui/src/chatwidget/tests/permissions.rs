@@ -802,6 +802,7 @@ async fn permissions_selection_history_snapshot_after_mode_switch() {
             })
             .expect("expected full access confirmation event");
     chat.open_full_access_confirmation(preset, return_to_permissions, profile_selection);
+    chat.handle_key_event(KeyEvent::from(KeyCode::Up));
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
 
     let cells = drain_insert_history(&mut rx);
@@ -1199,6 +1200,7 @@ async fn permissions_full_access_history_cell_emitted_only_after_confirmation() 
         "expected full access confirmation popup, got: {popup}"
     );
 
+    chat.handle_key_event(KeyEvent::from(KeyCode::Up));
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
     let cells_after_confirmation = drain_insert_history(&mut rx);
     let total_history_cells = cells_before_confirmation.len() + cells_after_confirmation.len();

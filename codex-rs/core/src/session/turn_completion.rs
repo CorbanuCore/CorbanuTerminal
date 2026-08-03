@@ -234,13 +234,10 @@ pub(super) async fn assess_turn_completion(
     tokio::time::timeout(ASSESSMENT_TIMEOUT, assessment)
         .await
         .map_err(|_| {
-            CodexErr::Stream(
-                format!(
-                    "completion assessment timed out after {} ms",
-                    ASSESSMENT_TIMEOUT.as_millis()
-                ),
-                None,
-            )
+            CodexErr::Stream(format!(
+                "completion assessment timed out after {} ms",
+                ASSESSMENT_TIMEOUT.as_millis()
+            ))
         })?
 }
 
@@ -278,7 +275,6 @@ async fn assess_turn_completion_inner(
             Ok(None) => {
                 return Err(CodexErr::Stream(
                     "completion assessment stream closed before response.completed".into(),
-                    None,
                 ));
             }
             Err(_) => return Err(CodexErr::TurnAborted),
@@ -301,13 +297,10 @@ async fn assess_turn_completion_inner(
                 if let Some(codex_api::CompletionFinishReason::ProviderError(reason)) =
                     finish_reason.as_ref()
                 {
-                    return Err(CodexErr::Stream(
-                        format!(
-                            "the model provider ended completion assessment with retryable finish \
+                    return Err(CodexErr::Stream(format!(
+                        "the model provider ended completion assessment with retryable finish \
                              reason `{reason}`"
-                        ),
-                        None,
-                    ));
+                    )));
                 }
                 if !matches!(
                     finish_reason,
@@ -349,7 +342,7 @@ fn assessment_prompt(objective: &str, assistant_response: &str) -> Prompt {
                 ),
             }],
             phase: None,
-            metadata: None,
+            internal_chat_message_metadata_passthrough: None,
         }],
         base_instructions: BaseInstructions {
             text: ASSESSMENT_INSTRUCTIONS.to_string(),

@@ -48,12 +48,17 @@ use crate::tools::handlers::multi_agents_common::MIN_WAIT_TIMEOUT_MS;
 use crate::tools::handlers::multi_agents_spec::SpawnAgentRuntime;
 use crate::tools::handlers::multi_agents_spec::SpawnAgentToolOptions;
 use crate::tools::handlers::multi_agents_spec::WaitAgentTimeoutOptions;
+use crate::tools::handlers::multi_agents_spec::apply_openai_reserved_collaboration_schema;
 use crate::tools::handlers::multi_agents_v2::FollowupTaskHandler as FollowupTaskHandlerV2;
 use crate::tools::handlers::multi_agents_v2::InterruptAgentHandler;
 use crate::tools::handlers::multi_agents_v2::ListAgentsHandler as ListAgentsHandlerV2;
+use crate::tools::handlers::multi_agents_v2::PlaintextFollowupTaskHandler;
+use crate::tools::handlers::multi_agents_v2::PlaintextSendMessageHandler;
+use crate::tools::handlers::multi_agents_v2::PlaintextSpawnAgentHandler;
 use crate::tools::handlers::multi_agents_v2::SendMessageHandler as SendMessageHandlerV2;
 use crate::tools::handlers::multi_agents_v2::SpawnAgentHandler as SpawnAgentHandlerV2;
 use crate::tools::handlers::multi_agents_v2::WaitAgentHandler as WaitAgentHandlerV2;
+use crate::tools::handlers::native_structured_edit_protocol_enabled;
 use crate::tools::handlers::tool_search_spec::ToolSearchSourceListing;
 use crate::tools::handlers::view_image_spec::ViewImageToolOptions;
 use crate::tools::hosted_spec::WebSearchToolOptions;
@@ -67,6 +72,7 @@ use codex_extension_api::ExtensionData;
 use codex_features::Feature;
 use codex_login::AuthManager;
 use codex_protocol::account::PlanType;
+use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::dynamic_tools::DynamicToolNamespaceTool;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
@@ -338,7 +344,7 @@ fn spec_for_model_request(
     spec: ToolSpec,
 ) -> ToolSpec {
     let tool_mode = effective_tool_mode(turn_context);
-    if matches!(tool_mode, ToolMode::CodeMode | ToolMode::CodeModeOnly)
+    let spec = if matches!(tool_mode, ToolMode::CodeMode | ToolMode::CodeModeOnly)
         && exposure.is_available_in_code_mode()
         && !is_excluded_from_code_mode(turn_context, tool_name)
         && codex_code_mode::is_code_mode_nested_tool(spec.name())
@@ -349,6 +355,23 @@ fn spec_for_model_request(
             .is_some_and(|winner| winner == tool_name)
     {
         codex_tools::augment_tool_spec_for_code_mode(spec)
+    } else {
+        spec
+    };
+
+    if multi_agent_v2_enabled(turn_context)
+        && turn_context.provider.info().is_openai()
+        && matches!(
+            tool_name.name.as_str(),
+            "spawn_agent"
+                | "send_message"
+                | "followup_task"
+                | "wait_agent"
+                | "interrupt_agent"
+                | "list_agents"
+        )
+    {
+        apply_openai_reserved_collaboration_schema(spec)
     } else {
         spec
     }
@@ -832,14 +855,15 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
 
     if features.enabled(Feature::CurrentTimeReminder) {
         registry.add(CurrentTimeHandler);
-        if turn_context
+    }
+    if features.enabled(Feature::SleepTool)
+        || turn_context
             .config
             .current_time_reminder
             .as_ref()
             .is_some_and(|config| config.sleep_tool)
-        {
-            registry.add(SleepHandler);
-        }
+    {
+        registry.add(SleepHandler);
     }
 
     if tool_suggest_enabled(turn_context)
@@ -861,7 +885,14 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
     if environment_mode.has_environment() && edit_tools_allowed_by_permission_profile(turn_context)
     {
         let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
-        registry.add(ApplyPatchHandler::new(include_environment_id));
+        if native_structured_edit_protocol_enabled(turn_context) {
+            registry.add(StructuredEditHandler::new(include_environment_id));
+            registry.add(StructuredWriteHandler::new(include_environment_id));
+        } else if turn_context.model_info.apply_patch_tool_type.is_some() {
+            registry.add(ApplyPatchHandler::new(include_environment_id));
+            registry.add(StructuredEditHandler::new(include_environment_id));
+            registry.add(StructuredWriteHandler::new(include_environment_id));
+        }
     }
 
     if turn_context
@@ -916,20 +947,28 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 agent_type_description(turn_context, context.default_agent_type_description);
             let hide_spawn_agent_metadata =
                 turn_context.config.multi_agent_v2.hide_spawn_agent_metadata;
+            let spawn_options = SpawnAgentToolOptions {
+                available_models: spawn_agent_available_models(
+                    turn_context,
+                    /*supports_cross_provider_overrides*/ true,
+                ),
+                inherited_runtime: spawn_agent_inherited_runtime(turn_context),
+                agent_type_description,
+                // PF Terminal ships hierarchy roles (Nazgul, Troll, and Orc). They are
+                // real runtime profiles, not optional user configuration, so the native
+                // agent framework must always let a caller select them.
+                expose_agent_type: true,
+                hide_agent_type_model_reasoning: hide_spawn_agent_metadata,
+                expose_spawn_agent_model_overrides: turn_context
+                    .config
+                    .multi_agent_v2
+                    .expose_spawn_agent_model_overrides,
+                multi_agent_version: turn_context.multi_agent_version,
+                usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
+            };
             registry.register_trusted(override_tool_exposure(
                 multi_agent_v2_handler(
-                    SpawnAgentHandlerV2::new(SpawnAgentToolOptions {
-                        available_models: turn_context.available_models.clone(),
-                        agent_type_description,
-                        expose_agent_type: !turn_context.config.agent_roles.is_empty(),
-                        hide_agent_type_model_reasoning: hide_spawn_agent_metadata,
-                        expose_spawn_agent_model_overrides: turn_context
-                            .config
-                            .multi_agent_v2
-                            .expose_spawn_agent_model_overrides,
-                        multi_agent_version: turn_context.multi_agent_version,
-                        usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
-                    }),
+                    SpawnAgentHandlerV2::new(spawn_options.clone()),
                     tool_namespace,
                 ),
                 exposure,
@@ -959,6 +998,24 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 multi_agent_v2_handler(ListAgentsHandlerV2, tool_namespace),
                 exposure,
             ));
+            if turn_context.provider.info().is_openai() {
+                // OpenAI's reserved collaboration schema encrypts assignment fields. That is
+                // correct for OpenAI recipients but opaque to external providers. These aliases
+                // retry the same Core operation with an ordinary plaintext function argument;
+                // the native handlers fail closed before admission when an adapter is required.
+                registry.register_trusted(override_tool_exposure(
+                    Arc::new(PlaintextSpawnAgentHandler::new(spawn_options)),
+                    exposure,
+                ));
+                registry.register_trusted(override_tool_exposure(
+                    Arc::new(PlaintextSendMessageHandler),
+                    exposure,
+                ));
+                registry.register_trusted(override_tool_exposure(
+                    Arc::new(PlaintextFollowupTaskHandler),
+                    exposure,
+                ));
+            }
         } else {
             let agent_type_description =
                 agent_type_description(turn_context, context.default_agent_type_description);
@@ -967,23 +1024,45 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
             } else {
                 ToolExposure::Direct
             };
-            registry.add_with_exposure(
-                SpawnAgentHandler::new(SpawnAgentToolOptions {
-                    available_models: turn_context.available_models.clone(),
-                    agent_type_description,
-                    expose_agent_type: !turn_context.config.agent_roles.is_empty(),
-                    hide_agent_type_model_reasoning: false,
-                    expose_spawn_agent_model_overrides: true,
-                    multi_agent_version: turn_context.multi_agent_version,
-                    usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
-                }),
-                exposure,
-            );
+            let spawn_options = SpawnAgentToolOptions {
+                available_models: spawn_agent_available_models(
+                    turn_context,
+                    /*supports_cross_provider_overrides*/ false,
+                ),
+                inherited_runtime: spawn_agent_inherited_runtime(turn_context),
+                agent_type_description,
+                // Built-in PF hierarchy roles remain selectable even when the operator has not
+                // created any custom role files.
+                expose_agent_type: true,
+                hide_agent_type_model_reasoning: false,
+                expose_spawn_agent_model_overrides: true,
+                multi_agent_version: turn_context.multi_agent_version,
+                usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
+            };
+            registry.add_with_exposure(SpawnAgentHandler::new(spawn_options.clone()), exposure);
             registry.add_with_exposure(SendInputHandler, exposure);
             registry.add_with_exposure(ResumeAgentHandler, exposure);
             registry
                 .add_with_exposure(WaitAgentHandler::new(context.wait_agent_timeouts), exposure);
             registry.add_with_exposure(CloseAgentHandler, exposure);
+            if v1_plain_function_subagents_enabled(turn_context) {
+                registry.register_trusted(multi_agent_v1_plain_function_handler(
+                    SpawnAgentHandler::new(spawn_options),
+                    "spawn_agent_v1",
+                ));
+                registry.register_trusted(multi_agent_v1_plain_function_handler(
+                    SendInputHandler,
+                    "send_input_v1",
+                ));
+                registry.register_trusted(multi_agent_v1_plain_function_handler(
+                    WaitAgentHandler::new(context.wait_agent_timeouts),
+                    "wait_agent_v1",
+                ));
+                registry.register_trusted(multi_agent_v1_plain_function_handler(
+                    CloseAgentHandler,
+                    "close_agent_v1",
+                ));
+            }
         }
     }
 }
@@ -1107,10 +1186,11 @@ fn spawn_agent_available_models(
         return Vec::new();
     }
     let mut models = turn_context.available_models.clone();
-    if let Some(api_key) = turn_context.auth_manager.as_ref().and_then(|auth| {
-        auth.auth_mode()
-            .map(|mode| mode == codex_app_server_protocol::AuthMode::ApiKey)
-    }) {
+    if let Some(api_key) = turn_context
+        .auth_manager
+        .as_ref()
+        .and_then(|auth| auth.auth_mode().map(|mode| mode == AuthMode::ApiKey))
+    {
         for model in &mut models {
             if let Some(metadata) = model.orchestration.as_mut() {
                 metadata.resolve_billing_auth_mode(api_key);

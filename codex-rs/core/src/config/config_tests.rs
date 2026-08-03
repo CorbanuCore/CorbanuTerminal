@@ -72,38 +72,9 @@ use codex_exec_server::LOCAL_FS;
 use codex_features::Feature;
 use codex_features::FeaturesToml;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
-use codex_model_provider_info::AMBIENT_GLM_5_2_CONTEXT_WINDOW;
-use codex_model_provider_info::AMBIENT_KIMI_K2_7_CODE_MODEL;
-use codex_model_provider_info::AMBIENT_LEGACY_GLM_5_2_FP8_MODEL;
-use codex_model_provider_info::AMBIENT_PROVIDER_ID;
-use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
-use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
-use codex_model_provider_info::BASETEN_PROVIDER_ID;
-use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
-use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
-use codex_model_provider_info::KIMI_CODE_K3_MODEL;
-use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
-use codex_model_provider_info::META_DEFAULT_MODEL;
-use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
-use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
-use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
-use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
-use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
-use codex_model_provider_info::VERCEL_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
-use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
-use codex_model_provider_info::VERCEL_PROVIDER_ID;
 use codex_model_provider_info::WireApi;
-use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::ZAI_DEFAULT_MODEL;
-use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_models_manager::bundled_models_response;
 use codex_network_proxy::NetworkMode;
 use codex_protocol::config_types::ModelProviderAuthInfo;
@@ -11098,13 +11069,11 @@ max_subagent_model_requests_per_turn = 1
 "#,
     )?;
 
-    let config = ConfigBuilder::without_managed_config_for_tests()
+    let error = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
         .fallback_cwd(Some(codex_home.path().to_path_buf()))
         .build()
-        .await?;
-    let error = config
-        .validate_multi_agent_v2_config()
+        .await
         .expect_err("a one-request cap cannot provide a finalization request");
     assert_eq!(
         error.to_string(),
@@ -12226,6 +12195,26 @@ fn sqlite_home_env_conflict_reports_an_override() -> std::io::Result<()> {
         &mut warnings,
     );
     assert!(warnings.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn absent_gpu_runtime_overlay_does_not_create_state_db() -> std::io::Result<()> {
+    let sqlite_home = TempDir::new()?;
+
+    assert!(
+        load_gpu_runtime_model_provider_records(sqlite_home.path())
+            .await
+            .is_empty()
+    );
+    assert!(
+        !sqlite_home
+            .path()
+            .join("pfterminal_state_5.sqlite")
+            .exists()
+    );
+    assert!(!sqlite_home.path().join("state_5.sqlite").exists());
 
     Ok(())
 }

@@ -83,6 +83,16 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--extra-bin",
+        action="append",
+        default=[],
+        metavar="NAME=PATH",
+        help=(
+            "Optional prebuilt extra executable declared by the selected package "
+            "variant. May be repeated."
+        ),
+    )
+    parser.add_argument(
         "--code-mode-host-bin",
         type=Path,
         help=(
@@ -183,11 +193,13 @@ def main() -> int:
             "prebuilt Windows codex-windows-sandbox-setup.exe executable",
             "--codex-windows-sandbox-setup-bin",
         ),
+        extra_bins=extra_bins,
     )
     version = read_workspace_version()
     inputs = PackageInputs(
         entrypoint_bin=source_outputs.entrypoint_bin,
         code_mode_host_bin=source_outputs.code_mode_host_bin,
+        extra_bins=source_outputs.extra_bins,
         rg_bin=resolve_rg_bin(spec, args.rg_bin),
         zsh_bin=resolve_zsh_bin(spec, args.zsh_manifest, zsh_bin=args.zsh_bin),
         bwrap_bin=source_outputs.bwrap_bin,

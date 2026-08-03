@@ -48,6 +48,15 @@ def parse_token_usage(text: str) -> dict[str, int] | None:
     }
 
 
+def effective_home(binary: Path, env: dict[str, str]) -> Path:
+    """Resolve the state home using the same entrypoint contract as PFTerminal."""
+    if binary.name == "pfterminal-debug":
+        return Path(env.get("PFTERMINAL_DEBUG_HOME", Path.home() / ".pfterminal-debug"))
+    if binary.name == "pfterminal":
+        return Path(env.get("PFTERMINAL_HOME", Path.home() / ".pfterminal"))
+    return Path(env.get("CODEX_HOME", Path.home() / ".codex"))
+
+
 def matching_rollout(
     session_root: Path,
     existing: set[Path],
@@ -84,21 +93,64 @@ def matching_rollout(
     return None
 
 
+def rollout_for_session(session_root: Path, session_id: str) -> Path | None:
+    if not session_root.exists():
+        return None
+    for path in session_root.rglob("*.jsonl"):
+        try:
+            first_line = path.open(errors="replace").readline()
+            record = json.loads(first_line)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if (
+            record.get("type") == "session_meta"
+            and record.get("payload", {}).get("id") == session_id
+        ):
+            return path
+    return None
+
+
 def persisted_completed_turns(rollout: Path | None) -> int:
     if rollout is None:
         return 0
-    completed = 0
+    provider_responses: set[str] = set()
+    terminal_turns: set[str] = set()
+    try:
+        for line in rollout.read_text(errors="replace").splitlines():
+            record = json.loads(line)
+            if record.get("type") != "event_msg":
+                continue
+            payload = record.get("payload", {})
+            turn_id = payload.get("turn_id")
+            if not isinstance(turn_id, str):
+                continue
+            if payload.get("type") == "model_response_completed":
+                provider_responses.add(turn_id)
+            elif payload.get("type") == "task_complete":
+                terminal_turns.add(turn_id)
+    except (OSError, json.JSONDecodeError):
+        return 0
+    # A local validation failure can still emit task_complete. Count only turns
+    # that also crossed the provider-response boundary so the benchmark cannot
+    # report a missing-metadata or authentication failure as success.
+    return len(provider_responses & terminal_turns)
+
+
+def persisted_function_calls(rollout: Path | None) -> int:
+    if rollout is None:
+        return 0
+    calls = 0
     try:
         for line in rollout.read_text(errors="replace").splitlines():
             record = json.loads(line)
             if (
-                record.get("type") == "event_msg"
-                and record.get("payload", {}).get("type") == "task_complete"
+                record.get("type") == "response_item"
+                and record.get("payload", {}).get("type") == "function_call"
             ):
-                completed += 1
+                calls += 1
     except (OSError, json.JSONDecodeError):
-        return completed
-    return completed
+        return 0
+    return calls
 
 
 def provider_key_from_vault(binary: Path, vault_label: str) -> str:
@@ -150,8 +202,17 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
         }[dump_api]
         env[dump_env_var] = args.dump_request
 
-    session_root = Path(env.get("CODEX_HOME", Path.home() / ".pfterminal")) / "sessions"
+    session_root = effective_home(binary, env) / "sessions"
     existing_rollouts = set(session_root.rglob("*.jsonl")) if session_root.exists() else set()
+    rollout_path = (
+        rollout_for_session(session_root, args.resume_session)
+        if args.resume_session
+        else None
+    )
+    if args.resume_session and rollout_path is None:
+        raise RuntimeError(f"resume session {args.resume_session} has no persisted rollout")
+    baseline_completed_turns = persisted_completed_turns(rollout_path)
+    baseline_function_calls = persisted_function_calls(rollout_path)
 
     cmd = [
         str(binary),
@@ -161,8 +222,11 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
         f'model_provider="{args.provider}"',
         "-m",
         args.model,
-        args.turn1,
     ]
+    if args.resume_session:
+        cmd.extend(["resume", args.resume_session, args.turn1])
+    else:
+        cmd.append(args.turn1)
 
     master_fd, slave_fd = pty.openpty()
     started_at = time.monotonic()
@@ -185,7 +249,6 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
     first_completion_at: float | None = None
     deadline = started_at + args.timeout
     completed_turns = 0
-    rollout_path: Path | None = None
     benchmark_complete = False
 
     try:
@@ -203,9 +266,13 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
                     args.provider,
                     args.turn1,
                 )
+            persisted_new_turns = max(
+                0,
+                persisted_completed_turns(rollout_path) - baseline_completed_turns,
+            )
             completed_turns = max(
                 len(stream_done),
-                persisted_completed_turns(rollout_path),
+                persisted_new_turns,
             )
             if first_completion_at is None and completed_turns >= 1:
                 first_completion_at = time.monotonic()
@@ -259,10 +326,17 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
             pass
 
     clean = strip_ansi(raw_output)
+    function_calls = max(
+        0,
+        persisted_function_calls(rollout_path) - baseline_function_calls,
+    )
+    requirements_met = not args.require_tool_call or function_calls > 0
     return {
         "provider": args.provider,
         "model": args.model,
+        "resume_session": args.resume_session,
         "turns_completed": completed_turns,
+        "function_calls": function_calls,
         "rendered_ok_count": clean.count("• OK"),
         "second_prompt_submitted": second_enter_sent,
         "exit_code": proc.returncode,
@@ -276,7 +350,8 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, object]:
             None,
         ),
         "rollout_path": str(rollout_path) if rollout_path is not None else None,
-        "success": second_enter_sent and completed_turns >= 2,
+        "session_root": str(session_root),
+        "success": second_enter_sent and completed_turns >= 2 and requirements_met,
     }
 
 
@@ -288,7 +363,16 @@ def main() -> int:
     parser.add_argument("--key-env", default="AI_GATEWAY_API_KEY")
     parser.add_argument("--vault-label", default="provider/ai_gateway_api_key")
     parser.add_argument("--timeout", type=float, default=90.0)
+    parser.add_argument(
+        "--resume-session",
+        help="Resume this exact persisted session instead of creating a new one.",
+    )
     parser.add_argument("--dump-request")
+    parser.add_argument(
+        "--require-tool-call",
+        action="store_true",
+        help="Fail unless the persisted session contains at least one model function call.",
+    )
     parser.add_argument(
         "--dump-request-api",
         choices=["auto", "anthropic", "chat", "responses"],

@@ -247,6 +247,9 @@ fn exec_stderr_env_filter() -> EnvFilter {
 }
 
 pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result<()> {
+    let run_main_started_at = std::time::Instant::now();
+    trace_exec_timing("run_main_start", run_main_started_at);
+
     if let Err(err) = set_default_originator("codex_exec".to_string()) {
         tracing::warn!(?err, "Failed to set codex exec originator override {err:?}");
     }
@@ -467,6 +470,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         build_config,
     )
     .await?;
+    trace_exec_timing("after_build_exec_config", run_main_started_at);
     let resume_approvals_reviewer_override = cli_kv_overrides
         .iter()
         .any(|(key, _)| key == "approvals_reviewer")

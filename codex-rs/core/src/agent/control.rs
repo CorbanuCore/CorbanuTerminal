@@ -20,12 +20,14 @@ use crate::thread_rollout_truncation::truncate_rollout_to_last_n_fork_turns;
 use codex_protocol::AgentPath;
 use codex_protocol::SessionId;
 use codex_protocol::ThreadId;
+use codex_protocol::crew::CREW_AUTO_DISPATCH_CHAIN_LIMIT;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::MessagePhase;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::protocol::AgentMessageKind;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::InitialHistory;
 use codex_protocol::protocol::InterAgentCommunication;
@@ -46,6 +48,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::Weak;
 use tokio::sync::watch;
 use tracing::warn;
@@ -54,6 +57,9 @@ pub(crate) use self::execution::AgentExecutionGuard;
 use self::execution::AgentExecutionLimiter;
 use self::residency::V2Residency;
 
+const LAST_TASK_MESSAGE_MAX_CHARS: usize = 240;
+const LAST_RESULT_MESSAGE_MAX_CHARS: usize = 500;
+const ROOT_LAST_TASK_MESSAGE: &str = "Main thread";
 mod execution;
 mod legacy;
 mod mailbox;
@@ -88,6 +94,29 @@ pub(crate) struct ListedAgent {
     pub(crate) agent_nickname: Option<String>,
     pub(crate) agent_role: Option<String>,
     pub(crate) agent_status: AgentStatus,
+    pub(crate) last_task_message: Option<String>,
+    pub(crate) last_result_message: Option<String>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct NativeAutoLoopState {
+    operator_input_seen: bool,
+    chain: u32,
+    auto_turn_running: bool,
+    auto_turn_dispatched: bool,
+}
+
+/// Turn-scoped guard that finalizes native loop-breaker state on every exit path, including
+/// interruption and provider/tool failure.
+pub(crate) struct NativeAutoTurnGuard {
+    control: AgentControl,
+    agent_id: ThreadId,
+}
+
+impl Drop for NativeAutoTurnGuard {
+    fn drop(&mut self) {
+        self.control.complete_native_agent_turn(self.agent_id);
+    }
 }
 
 /// Control-plane handle for multi-agent operations.
@@ -110,6 +139,9 @@ pub(crate) struct AgentControl {
     agent_execution_limiter: Arc<AgentExecutionLimiter>,
     /// Session-scoped state shared by the root thread and every cloned sub-agent control handle.
     rollout_budget: Arc<RolloutBudget>,
+    /// Native terminal-result auto-processing policy, shared across the whole agent tree. This is
+    /// lifecycle policy over Core turns, not a second mailbox or task queue.
+    native_auto_loop_state_by_agent: Arc<Mutex<HashMap<ThreadId, NativeAutoLoopState>>>,
 }
 
 impl AgentControl {
@@ -118,8 +150,17 @@ impl AgentControl {
         manager: Weak<ThreadManagerState>,
         rollout_budget: Option<RolloutBudgetConfig>,
     ) -> Self {
+        // Every control handle created by one ThreadManager must observe one lifecycle policy.
+        // App-server `/spawn` can legitimately materialize a new control handle while loading a
+        // persisted parent/child edge; sourcing the state from the manager prevents those handles
+        // from becoming independent loop-breaker islands.
+        let native_auto_loop_state_by_agent = manager
+            .upgrade()
+            .map(|state| Arc::clone(&state.native_auto_loop_state_by_agent))
+            .unwrap_or_default();
         let control = Self {
             manager,
+            native_auto_loop_state_by_agent,
             ..Default::default()
         };
         if let Some(rollout_budget) = rollout_budget {
@@ -140,6 +181,96 @@ impl AgentControl {
 
     pub(crate) fn rollout_budget(&self) -> &RolloutBudget {
         self.rollout_budget.as_ref()
+    }
+
+    fn native_auto_loop_states(
+        &self,
+    ) -> std::sync::MutexGuard<'_, HashMap<ThreadId, NativeAutoLoopState>> {
+        self.native_auto_loop_state_by_agent
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Starts lifecycle accounting for one native agent turn.
+    ///
+    /// A turn containing only terminal-result mailbox input is automatic. Any user assignment,
+    /// follow-up, or other non-terminal task is fresh work and resets a previously paused chain.
+    pub(crate) fn begin_native_agent_turn(
+        &self,
+        agent_id: ThreadId,
+        terminal_result_only: bool,
+    ) -> NativeAutoTurnGuard {
+        let mut states = self.native_auto_loop_states();
+        let state = states.entry(agent_id).or_default();
+        if terminal_result_only {
+            state.auto_turn_running = state.operator_input_seen;
+            state.auto_turn_dispatched = false;
+        } else {
+            state.operator_input_seen = true;
+            state.chain = 0;
+            state.auto_turn_running = false;
+            state.auto_turn_dispatched = false;
+        }
+        drop(states);
+        NativeAutoTurnGuard {
+            control: self.clone(),
+            agent_id,
+        }
+    }
+
+    /// Explicit human steering resets a native auto-processing chain even when it joins an
+    /// already-running terminal-result turn.
+    pub(crate) fn note_native_operator_input(&self, agent_id: ThreadId) {
+        let mut states = self.native_auto_loop_states();
+        let state = states.entry(agent_id).or_default();
+        state.operator_input_seen = true;
+        state.chain = 0;
+        state.auto_turn_running = false;
+        state.auto_turn_dispatched = false;
+    }
+
+    /// Records the first successful outbound collaboration action from an automatic manager turn.
+    /// Multiple sends in the same turn count as one link in the chain.
+    pub(crate) fn note_native_agent_dispatch(&self, agent_id: ThreadId) {
+        let mut states = self.native_auto_loop_states();
+        let state = states.entry(agent_id).or_default();
+        if state.auto_turn_running && !state.auto_turn_dispatched {
+            state.auto_turn_dispatched = true;
+            state.chain = state.chain.saturating_add(1);
+        }
+    }
+
+    fn complete_native_agent_turn(&self, agent_id: ThreadId) {
+        let mut states = self.native_auto_loop_states();
+        let state = states.entry(agent_id).or_default();
+        if state.auto_turn_running && !state.auto_turn_dispatched {
+            // Acknowledging a child result without creating more work terminates the chain.
+            state.chain = 0;
+        }
+        state.auto_turn_running = false;
+        state.auto_turn_dispatched = false;
+    }
+
+    fn native_terminal_result_auto_trigger_allowed(&self, agent_id: ThreadId) -> bool {
+        let states = self.native_auto_loop_states();
+        states.get(&agent_id).is_some_and(|state| {
+            state.operator_input_seen && state.chain < CREW_AUTO_DISPATCH_CHAIN_LIMIT
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn native_auto_loop_state_for_test(
+        &self,
+        agent_id: ThreadId,
+    ) -> Option<(bool, u32, bool, bool)> {
+        self.native_auto_loop_states().get(&agent_id).map(|state| {
+            (
+                state.operator_input_seen,
+                state.chain,
+                state.auto_turn_running,
+                state.auto_turn_dispatched,
+            )
+        })
     }
 
     /// Send rich user input items to an existing agent thread.
@@ -194,19 +325,27 @@ impl AgentControl {
     async fn send_inter_agent_communication_after_capacity_check(
         &self,
         agent_id: ThreadId,
-        state: &Arc<ThreadManagerState>,
+        _state: &Arc<ThreadManagerState>,
         communication: InterAgentCommunication,
         context: AgentCommunicationContext,
         parent_turn_id: Option<String>,
     ) -> CodexResult<String> {
-        self.submit_inter_agent_communication(
-            agent_id,
-            state,
-            communication,
-            context,
-            parent_turn_id,
-        )
-        .await
+        let communication_for_log =
+            crate::agent_communication::logging_enabled().then(|| communication.clone());
+        let result = self
+            .send_persisted_inter_agent_communication(agent_id, communication, parent_turn_id)
+            .await;
+        if let (Some(communication), Ok(communication_id)) =
+            (communication_for_log, result.as_ref())
+        {
+            crate::agent_communication::emit_agent_communication_send(
+                communication_id,
+                &context,
+                &communication,
+                agent_id,
+            );
+        }
+        result
     }
 
     async fn submit_inter_agent_communication(
@@ -334,10 +473,11 @@ impl AgentControl {
         let Ok(thread) = state.get_thread(agent_id).await else {
             return false;
         };
-        matches!(
+        let is_persistent_crew_member = matches!(
             thread.session_source.get_agent_class(),
             Some(codex_protocol::crew::AgentClass::CrewMember { .. })
-        )
+        );
+        is_persistent_crew_member && self.native_terminal_result_auto_trigger_allowed(agent_id)
     }
 
     pub(crate) fn record_agent_result_status(
@@ -408,13 +548,13 @@ impl AgentControl {
         root_thread_id: ThreadId,
     ) -> CodexResult<()> {
         let state = self.upgrade()?;
-        let Some(state_db) = state.state_db() else {
+        let Some(agent_graph_store) = state.agent_graph_store() else {
             return Ok(());
         };
-        let descendant_ids = match state_db
-            .list_thread_spawn_descendants_with_status(
+        let descendant_ids = match agent_graph_store
+            .list_thread_spawn_descendants(
                 root_thread_id,
-                DirectionalThreadSpawnEdgeStatus::Open,
+                Some(codex_agent_graph_store::ThreadSpawnEdgeStatus::Open),
             )
             .await
         {
@@ -607,6 +747,8 @@ impl AgentControl {
                 agent_nickname: None,
                 agent_role: None,
                 agent_status: root_thread.agent_status().await,
+                last_task_message: Some(ROOT_LAST_TASK_MESSAGE.to_string()),
+                last_result_message: None,
             });
         }
 
@@ -626,9 +768,21 @@ impl AgentControl {
                 .as_ref()
                 .map(ToString::to_string)
                 .unwrap_or_else(|| thread_id.to_string());
+            let agent_status = match state.get_thread(thread_id).await {
+                Ok(thread) => thread.agent_status().await,
+                Err(_) => AgentStatus::Unloaded,
+            };
+            let last_result_message = metadata
+                .last_result_message
+                .clone()
+                .or_else(|| result_message_from_status(&agent_status));
             agents.push(ListedAgent {
                 agent_name,
-                agent_status: thread.agent_status().await,
+                agent_nickname: metadata.agent_nickname.clone(),
+                agent_role: metadata.agent_role.clone(),
+                agent_status,
+                last_task_message: metadata.last_task_message.clone(),
+                last_result_message,
             });
         }
 
@@ -707,7 +861,8 @@ impl AgentControl {
                     Vec::new(),
                     message,
                     /*trigger_turn*/ false,
-                );
+                )
+                .with_kind(AgentMessageKind::TerminalResult);
                 let context =
                     AgentCommunicationContext::new(AgentCommunicationKind::Result, child_thread_id);
                 let _ = control
@@ -741,7 +896,7 @@ impl AgentControl {
         if let Some(agent_path) = agent_path.as_ref() {
             reservation.reserve_agent_path(agent_path)?;
         }
-        let candidate_names = spawn::agent_nickname_candidates(config, agent_role.as_deref());
+        let candidate_names = agent_nickname_candidates(config, agent_role.as_deref());
         let candidate_name_refs: Vec<&str> = candidate_names.iter().map(String::as_str).collect();
         let agent_nickname = Some(reservation.reserve_agent_nickname_with_preference(
             &candidate_name_refs,
@@ -752,6 +907,7 @@ impl AgentControl {
             agent_path,
             agent_nickname,
             agent_role,
+            ..Default::default()
         })
     }
 
@@ -783,6 +939,7 @@ impl AgentControl {
             agent_path: agent_metadata.agent_path.clone(),
             agent_nickname: agent_metadata.agent_nickname.clone(),
             agent_role: agent_metadata.agent_role.clone(),
+            agent_class,
         });
         Ok((session_source, agent_metadata))
     }
@@ -892,35 +1049,103 @@ impl AgentControl {
         Ok(children_by_parent)
     }
 
+    /// Establishes the durable parent side of a native spawn before a child can be created.
+    ///
+    /// A lazily started human root has no resumable rollout until its first material write. A
+    /// durable child must never be committed below that transient root: the graph edge would
+    /// survive while the parent needed to reconstruct and address it would not.
+    pub(crate) async fn prepare_durable_thread_spawn_parent(
+        &self,
+        session_source: &SessionSource,
+        child_is_ephemeral: bool,
+    ) -> CodexResult<()> {
+        if child_is_ephemeral {
+            return Ok(());
+        }
+        let Some(parent_thread_id) = session_source.parent_thread_id() else {
+            return Ok(());
+        };
+        let state = self.upgrade()?;
+        let parent_thread = state.get_thread(parent_thread_id).await?;
+        parent_thread
+            .session
+            .try_ensure_rollout_materialized()
+            .await
+            .map_err(|err| {
+                CodexErr::Fatal(format!(
+                    "failed to materialize native agent parent {parent_thread_id}: {err}"
+                ))
+            })?;
+        parent_thread.flush_rollout().await.map_err(|err| {
+            CodexErr::Fatal(format!(
+                "failed to flush native agent parent {parent_thread_id}: {err}"
+            ))
+        })
+    }
+
+    /// Persists the child before publishing its durable Core graph edge.
+    pub(crate) async fn persist_durable_thread_spawn(
+        &self,
+        child_thread: &crate::CodexThread,
+        child_thread_id: ThreadId,
+        session_source: Option<&SessionSource>,
+    ) -> CodexResult<()> {
+        if child_thread.config_snapshot().await.ephemeral {
+            return Ok(());
+        }
+        if session_source
+            .and_then(SessionSource::parent_thread_id)
+            .is_none()
+        {
+            return Ok(());
+        }
+        child_thread
+            .session
+            .try_ensure_rollout_materialized()
+            .await
+            .map_err(|err| {
+                CodexErr::Fatal(format!(
+                    "failed to materialize native agent child {child_thread_id}: {err}"
+                ))
+            })?;
+        child_thread.flush_rollout().await.map_err(|err| {
+            CodexErr::Fatal(format!(
+                "failed to flush native agent child {child_thread_id}: {err}"
+            ))
+        })?;
+        self.persist_thread_spawn_edge_for_source(child_thread, child_thread_id, session_source)
+            .await
+    }
+
     async fn persist_thread_spawn_edge_for_source(
         &self,
         child_thread: &crate::CodexThread,
         child_thread_id: ThreadId,
         session_source: Option<&SessionSource>,
-    ) {
+    ) -> CodexResult<()> {
         let Some(parent_thread_id) = session_source.and_then(SessionSource::parent_thread_id)
         else {
-            return;
+            return Ok(());
         };
         if child_thread.config_snapshot().await.ephemeral {
-            return;
+            return Ok(());
         }
-        let Ok(state) = self.upgrade() else {
-            return;
-        };
+        let state = self.upgrade()?;
         let Some(agent_graph_store) = state.agent_graph_store() else {
-            return;
+            return Ok(());
         };
-        if let Err(err) = agent_graph_store
+        agent_graph_store
             .upsert_thread_spawn_edge(
                 parent_thread_id,
                 child_thread_id,
                 codex_agent_graph_store::ThreadSpawnEdgeStatus::Open,
             )
             .await
-        {
-            warn!("failed to persist thread-spawn edge: {err}");
-        }
+            .map_err(|err| {
+                CodexErr::Fatal(format!(
+                    "failed to persist native agent edge {parent_thread_id} -> {child_thread_id}: {err}"
+                ))
+            })
     }
 
     async fn live_thread_spawn_descendants(
@@ -991,6 +1216,55 @@ fn thread_spawn_depth(session_source: &SessionSource) -> Option<i32> {
     match session_source {
         SessionSource::SubAgent(SubAgentSource::ThreadSpawn { depth, .. }) => Some(*depth),
         _ => None,
+    }
+}
+
+fn last_task_message_from_communication(communication: &InterAgentCommunication) -> Option<String> {
+    if communication.encrypted_content.is_some() {
+        return None;
+    }
+    non_empty_bounded_message(communication.content.clone(), LAST_TASK_MESSAGE_MAX_CHARS)
+}
+
+fn result_message_from_status(status: &AgentStatus) -> Option<String> {
+    match status {
+        AgentStatus::Completed(Some(message)) => {
+            non_empty_bounded_message(message.clone(), LAST_RESULT_MESSAGE_MAX_CHARS)
+        }
+        AgentStatus::Completed(None) => None,
+        AgentStatus::Errored(error) => non_empty_bounded_message(
+            format!("Agent errored: {error}"),
+            LAST_RESULT_MESSAGE_MAX_CHARS,
+        ),
+        AgentStatus::Shutdown => Some("Agent shut down.".to_string()),
+        AgentStatus::NotFound => Some("Agent was not found.".to_string()),
+        AgentStatus::PendingInit
+        | AgentStatus::Unloaded
+        | AgentStatus::Running
+        | AgentStatus::Interrupted => None,
+    }
+}
+
+fn nickname_from_picker_label(agent_reference: &str) -> Option<&str> {
+    let agent_reference = agent_reference.trim();
+    let (nickname, role_suffix) = agent_reference.rsplit_once(" [")?;
+    if nickname.trim().is_empty() || !role_suffix.ends_with(']') {
+        return None;
+    }
+    Some(nickname.trim())
+}
+
+fn non_empty_bounded_message(message: String, max_chars: usize) -> Option<String> {
+    let message = message.trim();
+    if message.is_empty() {
+        return None;
+    }
+    let mut chars = message.chars();
+    let preview = chars.by_ref().take(max_chars).collect::<String>();
+    if chars.next().is_some() {
+        Some(format!("{preview}..."))
+    } else {
+        Some(preview)
     }
 }
 #[cfg(test)]

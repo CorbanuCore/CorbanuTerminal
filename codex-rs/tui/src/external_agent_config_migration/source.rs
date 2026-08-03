@@ -18,7 +18,6 @@ use ratatui::text::Line;
 use ratatui::text::Span;
 use ratatui::widgets::Clear;
 use ratatui::widgets::WidgetRef;
-use tokio_stream::StreamExt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ExternalAgentConfigMigrationSource {
@@ -47,17 +46,15 @@ impl ExternalAgentConfigMigrationSource {
 pub(crate) async fn run_external_agent_config_source_prompt(
     tui: &mut Tui,
     sources: &[ExternalAgentConfigMigrationSource],
+    events: &mut tokio::sync::mpsc::UnboundedReceiver<TuiEvent>,
 ) -> Option<ExternalAgentConfigMigrationSource> {
     let mut screen = ExternalAgentConfigSourceScreen::new(tui.frame_requester(), sources);
     let _ = tui.draw(u16::MAX, |frame| {
         frame.render_widget_ref(&screen, frame.area());
     });
 
-    let events = tui.event_stream();
-    tokio::pin!(events);
-
     while !screen.is_done() {
-        if let Some(event) = events.next().await {
+        if let Some(event) = events.recv().await {
             match event {
                 TuiEvent::Key(key_event) => screen.handle_key(key_event),
                 TuiEvent::Paste(_) => {}

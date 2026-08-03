@@ -11,6 +11,8 @@ use crate::bundled_bwrap;
 use crate::bundled_bwrap::BundledBwrapLauncher;
 use crate::exec_util::argv_to_cstrings;
 use crate::exec_util::make_files_inheritable;
+use codex_sandboxing::APPARMOR_BWRAP_USERNS_PROFILE;
+use codex_sandboxing::find_apparmor_bwrap_launcher;
 use codex_sandboxing::find_system_bwrap_in_path;
 use codex_utils_absolute_path::AbsolutePathBuf;
 
@@ -24,6 +26,7 @@ enum BubblewrapLauncher {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SystemBwrapLauncher {
     program: AbsolutePathBuf,
+    apparmor_launcher: Option<AbsolutePathBuf>,
     supports_argv0: bool,
 }
 
@@ -35,9 +38,7 @@ struct SystemBwrapCapabilities {
 
 pub(crate) fn exec_bwrap(argv: Vec<String>, preserved_files: Vec<File>) -> ! {
     match preferred_bwrap_launcher() {
-        BubblewrapLauncher::System(launcher) => {
-            exec_system_bwrap(&launcher.program, argv, preserved_files)
-        }
+        BubblewrapLauncher::System(launcher) => exec_system_bwrap(&launcher, argv, preserved_files),
         BubblewrapLauncher::Bundled(launcher) => launcher.exec(argv, preserved_files),
         BubblewrapLauncher::Unavailable => {
             panic!(
@@ -93,6 +94,10 @@ fn system_bwrap_launcher_for_path_with_probe(
         ),
     };
     Some(SystemBwrapLauncher {
+        apparmor_launcher: find_apparmor_bwrap_launcher(system_bwrap_path.as_path()).map(|path| {
+            AbsolutePathBuf::from_absolute_path(path)
+                .unwrap_or_else(|err| panic!("failed to normalize AppArmor launcher path: {err}"))
+        }),
         program: system_bwrap_path,
         supports_argv0,
     })
@@ -124,17 +129,40 @@ fn system_bwrap_capabilities(system_bwrap_path: &Path) -> Option<SystemBwrapCapa
 }
 
 fn exec_system_bwrap(
-    program: &AbsolutePathBuf,
+    launcher: &SystemBwrapLauncher,
     argv: Vec<String>,
     preserved_files: Vec<File>,
 ) -> ! {
     // System bwrap runs across an exec boundary, so preserved fds must survive exec.
     make_files_inheritable(&preserved_files);
 
-    let program_path = program.as_path().display().to_string();
-    let program = CString::new(program.as_path().as_os_str().as_bytes())
+    let program_path = launcher.program.as_path().display().to_string();
+    let program = CString::new(launcher.program.as_path().as_os_str().as_bytes())
         .unwrap_or_else(|err| panic!("invalid system bubblewrap path: {err}"));
-    let cstrings = argv_to_cstrings(&argv);
+    let (exec_program, exec_name, exec_argv) =
+        if let Some(apparmor_launcher) = launcher.apparmor_launcher.as_ref() {
+            let aa_exec = CString::new(apparmor_launcher.as_path().as_os_str().as_bytes())
+                .unwrap_or_else(|err| panic!("invalid AppArmor launcher path: {err}"));
+            let mut wrapped_argv = vec![
+                "aa-exec".to_string(),
+                "-p".to_string(),
+                APPARMOR_BWRAP_USERNS_PROFILE.to_string(),
+                "--".to_string(),
+                program_path.clone(),
+            ];
+            wrapped_argv.extend(argv.into_iter().skip(1));
+            (
+                aa_exec,
+                format!(
+                    "AppArmor launcher {} for system bubblewrap {program_path}",
+                    apparmor_launcher.as_path().display()
+                ),
+                wrapped_argv,
+            )
+        } else {
+            (program, format!("system bubblewrap {program_path}"), argv)
+        };
+    let cstrings = argv_to_cstrings(&exec_argv);
     let mut argv_ptrs: Vec<*const c_char> = cstrings
         .iter()
         .map(CString::as_c_str)
@@ -145,10 +173,10 @@ fn exec_system_bwrap(
     // SAFETY: `program` and every entry in `argv_ptrs` are valid C strings for
     // the duration of the call. On success `execv` does not return.
     unsafe {
-        libc::execv(program.as_ptr(), argv_ptrs.as_ptr());
+        libc::execv(exec_program.as_ptr(), argv_ptrs.as_ptr());
     }
     let err = std::io::Error::last_os_error();
-    panic!("failed to exec system bubblewrap {program_path}: {err}");
+    panic!("failed to exec {exec_name}: {err}");
 }
 
 #[cfg(test)]
@@ -171,6 +199,7 @@ mod tests {
                 })
             }),
             Some(SystemBwrapLauncher {
+                apparmor_launcher: None,
                 program: expected,
                 supports_argv0: true,
             })
@@ -190,6 +219,7 @@ mod tests {
                 })
             }),
             Some(SystemBwrapLauncher {
+                apparmor_launcher: None,
                 program: AbsolutePathBuf::from_absolute_path(fake_bwrap_path).expect("absolute"),
                 supports_argv0: false,
             })

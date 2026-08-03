@@ -233,6 +233,12 @@ impl ChatWidget {
         self.request_redraw();
     }
 
+    pub(crate) fn show_custom_prompt_view(&mut self, view: CustomPromptView) {
+        self.bottom_pane.show_view(Box::new(view));
+        self.refresh_plan_mode_nudge();
+        self.request_redraw();
+    }
+
     pub(crate) fn selected_index_for_present_view(&self, view_id: &'static str) -> Option<usize> {
         self.bottom_pane.selected_index_for_present_view(view_id)
     }
@@ -343,35 +349,13 @@ impl ChatWidget {
     /// composer, so they never enter agent context, prompt history, or the transcript. Only a
     /// non-secret confirmation (or error) is surfaced to history.
     pub(crate) fn open_vault_credential_add(&mut self) {
-        let codex_home = self.config.codex_home.as_path().to_path_buf();
         let tx = self.app_event_tx.clone();
         let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new(Box::new(
             move |label: String, secret: String| {
-                let vault = codex_vault::Vault::new(codex_home.clone());
-                match vault.add(codex_vault::AddCredential {
-                    label: label.clone(),
-                    credential_type: codex_vault::CredentialType::ManualSecret,
-                    provider: None,
-                    notes: None,
-                    revocation_notes: None,
-                    secret,
-                }) {
-                    Ok(()) => {
-                        tx.send(AppEvent::InsertHistoryCell(Box::new(
-                            history_cell::new_info_event(
-                                format!("Added vault credential {label:?}."),
-                                /*hint*/ None,
-                            ),
-                        )));
-                    }
-                    Err(err) => {
-                        tx.send(AppEvent::InsertHistoryCell(Box::new(
-                            history_cell::new_error_event(format!(
-                                "Failed to add vault credential {label:?}: {err}"
-                            )),
-                        )));
-                    }
-                }
+                tx.send(AppEvent::VaultCredentialAddRequested {
+                    label,
+                    secret: crate::app_event::VaultSecret::new(secret),
+                });
             },
         ));
         self.bottom_pane.show_view(Box::new(view));
