@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Release = $env:CODEX_RELEASE
+    [string]$Release
 )
 
 Set-StrictMode -Version Latest
@@ -8,12 +8,25 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
 if ([string]::IsNullOrWhiteSpace($Release)) {
-    $Release = "latest"
+    $Release = if (-not [string]::IsNullOrWhiteSpace($env:PFTERMINAL_RELEASE)) {
+        $env:PFTERMINAL_RELEASE
+    } elseif (-not [string]::IsNullOrWhiteSpace($env:CODEX_RELEASE)) {
+        $env:CODEX_RELEASE
+    } else {
+        "latest"
+    }
 }
 
-$NonInteractive = $env:CODEX_NON_INTERACTIVE -match "^(?i:1|true|yes)$"
-$DefaultPreferReleasesOpenAICom = $true
-$PreferReleasesOpenAICom = if ([string]::IsNullOrWhiteSpace($env:CODEX_INSTALLER_USE_RELEASES_OPENAI_COM)) {
+$NonInteractiveValue = if (-not [string]::IsNullOrWhiteSpace($env:PFTERMINAL_NON_INTERACTIVE)) {
+    $env:PFTERMINAL_NON_INTERACTIVE
+} else {
+    $env:CODEX_NON_INTERACTIVE
+}
+$NonInteractive = $NonInteractiveValue -match "^(?i:1|true|yes)$"
+$DefaultPreferReleasesOpenAICom = $false
+$PreferReleasesOpenAICom = if (-not [string]::IsNullOrWhiteSpace($env:PFTERMINAL_INSTALLER_USE_RELEASES_OPENAI_COM)) {
+    $env:PFTERMINAL_INSTALLER_USE_RELEASES_OPENAI_COM -match "^(?i:1|true|yes)$"
+} elseif ([string]::IsNullOrWhiteSpace($env:CODEX_INSTALLER_USE_RELEASES_OPENAI_COM)) {
     $DefaultPreferReleasesOpenAICom
 } else {
     $env:CODEX_INSTALLER_USE_RELEASES_OPENAI_COM -match "^(?i:1|true|yes)$"
@@ -160,7 +173,7 @@ function Assert-ValidReleaseVersion {
     )
 
     if ($Version -cne "latest" -and $Version -cnotmatch "^[0-9]+\.[0-9]+\.[0-9]+(?:-alpha(?:\.[0-9]+){0,2}|-beta(?:\.[0-9]+)?)?$") {
-        throw "Invalid Codex release version: $Version. Expected latest or x.y.z[-alpha[.N[.M]]|-beta[.N]]."
+        throw "Invalid PFTerminal release version: $Version. Expected latest or x.y.z[-alpha[.N[.M]]|-beta[.N]]."
     }
 }
 
@@ -243,17 +256,17 @@ function Resolve-ReleaseAssetSelection {
 
     $version = $ResolvedRelease.Version
     $releaseMetadata = $ResolvedRelease.Metadata
-    $packageAsset = "codex-package-$Target.tar.gz"
-    $checksumAsset = "codex-package_SHA256SUMS"
+    $packageAsset = Get-WindowsPackageAssetName -Target $Target
+    $checksumAsset = "pfterminal-package_SHA256SUMS"
     $packageUrl = $null
     $packageFallbackUrl = $null
     $checksumUrl = $null
     $checksumFallbackUrl = $null
     if ($ResolvedRelease.Source -eq "ReleasesOpenAICom") {
         $packageUrl = "$ReleasesBaseUri/releases/$version/$packageAsset"
-        $packageFallbackUrl = "https://github.com/openai/codex/releases/download/rust-v$version/$packageAsset"
+        $packageFallbackUrl = "https://github.com/agtico/PfTerminal/releases/download/rust-v$version/$packageAsset"
         $checksumUrl = "$ReleasesBaseUri/releases/$version/$checksumAsset"
-        $checksumFallbackUrl = "https://github.com/openai/codex/releases/download/rust-v$version/$checksumAsset"
+        $checksumFallbackUrl = "https://github.com/agtico/PfTerminal/releases/download/rust-v$version/$checksumAsset"
     }
 
     $packageMetadata = Find-ReleaseAssetMetadata -AssetName $packageAsset -ReleaseMetadata $releaseMetadata -Url $packageUrl -FallbackUrl $packageFallbackUrl
@@ -261,6 +274,21 @@ function Resolve-ReleaseAssetSelection {
     if ($null -ne $packageMetadata -and $null -ne $checksumMetadata) {
         return [PSCustomObject]@{
             PackageAsset = $packageAsset
+            ChecksumAsset = $checksumAsset
+            PackageMetadata = $packageMetadata
+            ChecksumMetadata = $checksumMetadata
+            InstallLayout = "Package"
+        }
+    }
+
+    $packageAsset = "codex-package-$Target.tar.gz"
+    $checksumAsset = "codex-package_SHA256SUMS"
+    $packageMetadata = Find-ReleaseAssetMetadata -AssetName $packageAsset -ReleaseMetadata $releaseMetadata
+    $checksumMetadata = Find-ReleaseAssetMetadata -AssetName $checksumAsset -ReleaseMetadata $releaseMetadata
+    if ($null -ne $packageMetadata -and $null -ne $checksumMetadata) {
+        return [PSCustomObject]@{
+            PackageAsset = $packageAsset
+            ChecksumAsset = $checksumAsset
             PackageMetadata = $packageMetadata
             ChecksumMetadata = $checksumMetadata
             InstallLayout = "Package"
@@ -272,15 +300,16 @@ function Resolve-ReleaseAssetSelection {
     $packageFallbackUrl = $null
     if ($ResolvedRelease.Source -eq "ReleasesOpenAICom") {
         $packageUrl = "$ReleasesBaseUri/releases/$version/$packageAsset"
-        $packageFallbackUrl = "https://github.com/openai/codex/releases/download/rust-v$version/$packageAsset"
+        $packageFallbackUrl = "https://github.com/agtico/PfTerminal/releases/download/rust-v$version/$packageAsset"
     }
     $packageMetadata = Find-ReleaseAssetMetadata -AssetName $packageAsset -ReleaseMetadata $releaseMetadata -Url $packageUrl -FallbackUrl $packageFallbackUrl
     if ($null -eq $packageMetadata) {
-        throw "Could not find Codex package or platform npm release assets for Codex $version."
+        throw "Could not find PFTerminal package or platform npm release assets for PFTerminal $version."
     }
 
     return [PSCustomObject]@{
         PackageAsset = $packageAsset
+        ChecksumAsset = $checksumAsset
         PackageMetadata = $packageMetadata
         ChecksumMetadata = $null
         InstallLayout = "LegacyPlatformNpm"
@@ -413,7 +442,7 @@ function Resolve-VersionFromReleaseMetadata {
     )
 
     if (-not $ReleaseMetadata.tag_name) {
-        throw "Failed to resolve the latest Codex release version."
+        throw "Failed to resolve the latest PFTerminal release version."
     }
 
     $resolvedVersion = Normalize-Version -RawVersion $ReleaseMetadata.tag_name
@@ -428,17 +457,17 @@ function Resolve-ReleaseFromGitHub {
 
     if ($NormalizedVersion -eq "latest") {
         $requestedRelease = "latest"
-        $metadataUri = "https://api.github.com/repos/openai/codex/releases/latest"
+        $metadataUri = "https://api.github.com/repos/agtico/PfTerminal/releases/latest"
     } else {
         $resolvedVersion = $NormalizedVersion
         $requestedRelease = $resolvedVersion
-        $metadataUri = "https://api.github.com/repos/openai/codex/releases/tags/rust-v$resolvedVersion"
+        $metadataUri = "https://api.github.com/repos/agtico/PfTerminal/releases/tags/rust-v$resolvedVersion"
     }
 
     try {
         $releaseMetadata = Invoke-RestMethod -Uri $metadataUri
     } catch {
-        throw "Could not fetch GitHub release metadata for Codex $requestedRelease. GitHub API may be unavailable or rate limited. $($_.Exception.Message)"
+        throw "Could not fetch GitHub release metadata for PFTerminal $requestedRelease. GitHub API may be unavailable or rate limited. $($_.Exception.Message)"
     }
 
     if ($NormalizedVersion -eq "latest") {
@@ -467,7 +496,7 @@ function Resolve-ReleaseFromReleases {
         $releaseMetadata = [string]$metadataResponse.Content | ConvertFrom-Json -ErrorAction Stop
         $resolvedVersion = Resolve-VersionFromReleaseMetadata -ReleaseMetadata $releaseMetadata
         if ($NormalizedVersion -ne "latest" -and $resolvedVersion -cne $NormalizedVersion) {
-            throw "Release metadata version did not match requested Codex version $NormalizedVersion."
+            throw "Release metadata version did not match requested PFTerminal version $NormalizedVersion."
         }
         $resolvedRelease = [PSCustomObject]@{
             Version = $resolvedVersion
@@ -798,7 +827,7 @@ function Test-PackageContentsAreComplete {
 
     $expectedFiles = @(
         "codex-package.json",
-        "bin\codex.exe",
+        "bin\pfterminal.exe",
         "bin\codex-code-mode-host.exe",
         "codex-path\rg.exe",
         "codex-resources\codex-command-runner.exe",
@@ -850,13 +879,13 @@ function Test-ReleaseIsComplete {
             if (-not (Test-PackageContentsAreComplete -PackageDir $ReleaseDir)) {
                 return $false
             }
-            $codexPath = Join-Path $ReleaseDir "bin\codex.exe"
+            $codexPath = Join-Path $ReleaseDir "bin\pfterminal.exe"
         }
         "LegacyPlatformNpm" {
             if (-not (Test-LegacyPlatformNpmContentsAreComplete -PackageDir $ReleaseDir)) {
                 return $false
             }
-            $codexPath = Join-Path $ReleaseDir "codex.exe"
+            $codexPath = Join-Path $ReleaseDir "pfterminal.exe"
         }
         default {
             throw "Unknown PFTerminal installer layout: $Layout"
@@ -994,10 +1023,12 @@ switch ($architecture) {
     }
 }
 
-$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) {
-    Join-Path $env:USERPROFILE ".codex"
-} else {
+$codexHome = if (-not [string]::IsNullOrWhiteSpace($env:PFTERMINAL_HOME)) {
+    $env:PFTERMINAL_HOME
+} elseif (-not [string]::IsNullOrWhiteSpace($env:CODEX_HOME)) {
     $env:CODEX_HOME
+} else {
+    Join-Path $env:USERPROFILE ".pfterminal"
 }
 $standaloneRoot = Join-Path $codexHome "packages\standalone"
 $releasesDir = Join-Path $standaloneRoot "releases"
@@ -1005,10 +1036,12 @@ $currentDir = Join-Path $standaloneRoot "current"
 $lockPath = Join-Path $standaloneRoot "install.lock"
 
 $defaultVisibleBinDir = Join-Path $env:LOCALAPPDATA "Programs\PFTerminal\bin"
-if ([string]::IsNullOrWhiteSpace($env:CODEX_INSTALL_DIR)) {
-    $visibleBinDir = $defaultVisibleBinDir
-} else {
+if (-not [string]::IsNullOrWhiteSpace($env:PFTERMINAL_INSTALL_DIR)) {
+    $visibleBinDir = $env:PFTERMINAL_INSTALL_DIR
+} elseif (-not [string]::IsNullOrWhiteSpace($env:CODEX_INSTALL_DIR)) {
     $visibleBinDir = $env:CODEX_INSTALL_DIR
+} else {
+    $visibleBinDir = $defaultVisibleBinDir
 }
 
 $currentVersion = Get-CurrentInstalledVersion -StandaloneCurrentDir $currentDir
@@ -1031,9 +1064,9 @@ Write-Step "Resolved version: $resolvedVersion"
 $conflictingInstall = Get-ConflictingInstall -VisibleBinDir $visibleBinDir
 $oldStandaloneBackup = $null
 
-$checksumAsset = "codex-package_SHA256SUMS"
 $assetSelection = Resolve-ReleaseAssetSelection -ResolvedRelease $resolvedRelease -Target $target -NpmTag $npmTag
 $packageAsset = $assetSelection.PackageAsset
+$checksumAsset = $assetSelection.ChecksumAsset
 $packageMetadata = $assetSelection.PackageMetadata
 $checksumMetadata = $assetSelection.ChecksumMetadata
 $installLayout = $assetSelection.InstallLayout
@@ -1103,7 +1136,7 @@ try {
         }
 
         if (-not (Test-ReleaseIsComplete -ReleaseDir $releaseDir -ExpectedVersion $resolvedVersion -ExpectedTarget $target -Layout $installLayout)) {
-            throw "Installed Codex command did not report expected version $resolvedVersion."
+            throw "Installed PFTerminal command did not report expected version $resolvedVersion."
         }
 
         New-Item -ItemType Directory -Force -Path $standaloneRoot | Out-Null
