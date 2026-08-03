@@ -2,20 +2,20 @@
 
 set -eu
 
-RELEASE="${CODEX_RELEASE:-latest}"
-NON_INTERACTIVE="${CODEX_NON_INTERACTIVE:-false}"
+RELEASE="${PFTERMINAL_RELEASE:-${CODEX_RELEASE:-latest}}"
+NON_INTERACTIVE="${PFTERMINAL_NON_INTERACTIVE:-${CODEX_NON_INTERACTIVE:-false}}"
 DEFAULT_PREFER_RELEASES_OPENAI_COM="false"
-PREFER_RELEASES_OPENAI_COM="${CODEX_INSTALLER_USE_RELEASES_OPENAI_COM:-$DEFAULT_PREFER_RELEASES_OPENAI_COM}"
+PREFER_RELEASES_OPENAI_COM="${PFTERMINAL_INSTALLER_USE_RELEASES_OPENAI_COM:-${CODEX_INSTALLER_USE_RELEASES_OPENAI_COM:-$DEFAULT_PREFER_RELEASES_OPENAI_COM}}"
 RELEASES_BASE_URL="https://releases.openai.com/codex"
 RELEASES_CONNECT_TIMEOUT=10
 RELEASES_METADATA_TIMEOUT=30
 RELEASES_ASSET_TIMEOUT=300
 release_source="github"
 
-BIN_DIR="${CODEX_INSTALL_DIR:-$HOME/.local/bin}"
+BIN_DIR="${PFTERMINAL_INSTALL_DIR:-${CODEX_INSTALL_DIR:-$HOME/.local/bin}}"
 BIN_PATH="$BIN_DIR/pfterminal"
 CODE_MODE_HOST_BIN_PATH="$BIN_DIR/codex-code-mode-host"
-CODEX_HOME_DIR="${PFTERMINAL_HOME:-$HOME/.pfterminal}"
+CODEX_HOME_DIR="${PFTERMINAL_HOME:-${CODEX_HOME:-$HOME/.pfterminal}}"
 STANDALONE_ROOT="$CODEX_HOME_DIR/packages/standalone"
 RELEASES_DIR="$STANDALONE_ROOT/releases"
 CURRENT_LINK="$STANDALONE_ROOT/current"
@@ -84,10 +84,12 @@ parse_args() {
 Usage: install.sh [--release VERSION]
 
 Environment:
-  CODEX_RELEASE          Version to install; overridden by --release.
-  CODEX_NON_INTERACTIVE  Set to 1, true, or yes to skip prompts.
-  CODEX_INSTALLER_USE_RELEASES_OPENAI_COM
-                         Set to 0, false, or no to use GitHub Releases.
+  PFTERMINAL_RELEASE          Version to install; overridden by --release.
+  PFTERMINAL_NON_INTERACTIVE  Set to 1, true, or yes to skip prompts.
+  PFTERMINAL_INSTALL_DIR      Directory for the pfterminal launcher.
+  PFTERMINAL_HOME             PFTerminal state directory; defaults to ~/.pfterminal.
+
+  Legacy CODEX_* installer variables are still honored as fallbacks.
 EOF
         exit 0
         ;;
@@ -327,7 +329,7 @@ parse_downloaded_release_metadata() {
   requested_release="$1"
   source_name="$2"
   if ! release_metadata="$(printf '%s\n' "$release_json" | parse_release_metadata)"; then
-    echo "Could not parse $source_name release metadata for Codex $requested_release." >&2
+    echo "Could not parse $source_name release metadata for PFTerminal $requested_release." >&2
     return 1
   fi
 }
@@ -339,7 +341,7 @@ resolve_metadata_version() {
     *) metadata_version="" ;;
   esac
   if [ -z "$metadata_version" ]; then
-    echo "Failed to resolve the latest Codex release version." >&2
+    echo "Failed to resolve the latest PFTerminal release version." >&2
     return 1
   fi
   validate_version "$metadata_version"
@@ -357,7 +359,7 @@ resolve_release_from_github() {
   fi
 
   if ! release_json="$(download_text "$metadata_url")"; then
-    echo "Could not fetch GitHub release metadata for Codex $requested_release. GitHub API may be unavailable or rate limited." >&2
+    echo "Could not fetch GitHub release metadata for PFTerminal $requested_release. GitHub API may be unavailable or rate limited." >&2
     exit 1
   fi
 
@@ -393,7 +395,7 @@ resolve_release_from_releases() {
     return 1
   fi
   if [ "$normalized_version" != "latest" ] && [ "$metadata_version" != "$normalized_version" ]; then
-    echo "Release metadata version did not match requested Codex version $normalized_version." >&2
+    echo "Release metadata version did not match requested PFTerminal version $normalized_version." >&2
     return 1
   fi
   resolved_version="$metadata_version"
@@ -461,8 +463,8 @@ release_asset_digest() {
 }
 
 select_release_assets() {
-  package_asset="codex-package-$vendor_target.tar.gz"
-  checksum_asset="codex-package_SHA256SUMS"
+  package_asset="pfterminal-package-$vendor_target.tar.gz"
+  checksum_asset="pfterminal-package_SHA256SUMS"
   download_fallback_url=""
   checksum_fallback_url=""
 
@@ -470,11 +472,17 @@ select_release_assets() {
     release_asset_exists "$checksum_asset"; then
     install_layout="package"
     asset="$package_asset"
+  elif release_asset_exists "codex-package-$vendor_target.tar.gz" &&
+    release_asset_exists "codex-package_SHA256SUMS"; then
+    install_layout="package"
+    package_asset="codex-package-$vendor_target.tar.gz"
+    checksum_asset="codex-package_SHA256SUMS"
+    asset="$package_asset"
   elif release_asset_exists "codex-npm-$npm_tag-$resolved_version.tgz"; then
     install_layout="legacy-platform-npm"
     asset="codex-npm-$npm_tag-$resolved_version.tgz"
   else
-    echo "Could not find Codex package or platform npm release assets for Codex $resolved_version." >&2
+    echo "Could not find PFTerminal package or platform npm release assets for PFTerminal $resolved_version." >&2
     return 1
   fi
 
@@ -511,7 +519,7 @@ package_archive_digest() {
   ' "$manifest_path" 2>/dev/null || true)"
 
   if [ -z "$digest" ]; then
-    echo "Could not find SHA-256 digest for $asset in codex-package_SHA256SUMS." >&2
+    echo "Could not find SHA-256 digest for $asset in $checksum_asset." >&2
     return 1
   fi
 
@@ -1194,7 +1202,7 @@ if ! release_dir_is_complete "$release_dir" "$resolved_version" "$vendor_target"
   archive_path="$tmp_dir/$asset"
   checksum_path="$tmp_dir/$checksum_asset"
 
-  step "Downloading Codex CLI"
+  step "Downloading PFTerminal CLI"
   if [ "$install_layout" = "package" ]; then
     checksum_digest="$(release_asset_digest "$checksum_asset")"
     download_file_with_fallback "$checksum_url" "$checksum_fallback_url" "$checksum_path" "$checksum_digest" "$checksum_asset" "$asset"

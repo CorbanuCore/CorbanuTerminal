@@ -37,6 +37,13 @@ foreach ($functionName in $functionNames) {
     Invoke-Expression $definition.Extent.Text
 }
 
+if ($source -notmatch '\$packageAsset\s*=\s*Get-WindowsPackageAssetName\s+-Target\s+\$target') {
+    throw "Windows installer entrypoint must select the published PFTerminal ZIP asset."
+}
+if ($source -notmatch '\$checksumAsset\s*=\s*"pfterminal-package_SHA256SUMS"') {
+    throw "Windows installer entrypoint must select the published PFTerminal checksum manifest."
+}
+
 # Windows executables cannot be deleted while a running process holds them.
 # Updating must therefore leave the old versioned release untouched and only
 # retarget the installer-owned `current` junction to the new release.
