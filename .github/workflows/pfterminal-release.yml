@@ -107,7 +107,9 @@ jobs:
             --target "$TARGET" \
             --release \
             --bin pfterminal \
-            --bin pfterminal-walletd
+            --bin pfterminal-debug \
+            --bin pfterminal-walletd \
+            --bin codex-code-mode-host
 
       - name: Build standalone package archive
         shell: bash
@@ -118,7 +120,9 @@ jobs:
             --target "$TARGET" \
             --variant pfterminal \
             --entrypoint-bin "codex-rs/target/${TARGET}/release/pfterminal" \
+            --extra-bin "pfterminal-debug=codex-rs/target/${TARGET}/release/pfterminal-debug" \
             --extra-bin "pfterminal-walletd=codex-rs/target/${TARGET}/release/pfterminal-walletd" \
+            --code-mode-host-bin "codex-rs/target/${TARGET}/release/codex-code-mode-host" \
             --cargo-profile release \
             --package-dir "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
             --archive-output "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz" \
@@ -310,7 +314,10 @@ jobs:
             --target "$TARGET" \
             --release \
             --bin pfterminal \
-            --bin pfterminal-walletd
+            --bin pfterminal-debug \
+            --bin pfterminal-walletd \
+            --bin codex-code-mode-host \
+            --bin bwrap
 
       - name: Build standalone package archive
         shell: bash
@@ -321,7 +328,10 @@ jobs:
             --target "$TARGET" \
             --variant pfterminal \
             --entrypoint-bin "codex-rs/target/${TARGET}/release/pfterminal" \
+            --extra-bin "pfterminal-debug=codex-rs/target/${TARGET}/release/pfterminal-debug" \
             --extra-bin "pfterminal-walletd=codex-rs/target/${TARGET}/release/pfterminal-walletd" \
+            --code-mode-host-bin "codex-rs/target/${TARGET}/release/codex-code-mode-host" \
+            --bwrap-bin "codex-rs/target/${TARGET}/release/bwrap" \
             --cargo-profile release \
             --package-dir "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
             --archive-output "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz" \
@@ -375,11 +385,11 @@ jobs:
     needs: validate
     name: Build Windows package - ${{ matrix.target }}
     runs-on: windows-latest
-    # A cold release build has exceeded 90 minutes on GitHub-hosted Windows
-    # runners before the archive smoke test can start. Match the macOS package
+    # A cold release build of every packaged binary plus archive qualification
+    # can exceed 150 minutes on GitHub-hosted Windows runners. Match the macOS
     # budget so qualification fails on an actual build/smoke error, not an
     # undersized runner clock.
-    timeout-minutes: 150
+    timeout-minutes: 240
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
@@ -435,7 +445,9 @@ jobs:
             --target "$TARGET" \
             --release \
             --bin pfterminal \
+            --bin pfterminal-debug \
             --bin pfterminal-walletd \
+            --bin codex-code-mode-host \
             --bin codex-command-runner \
             --bin codex-windows-sandbox-setup
 
@@ -448,7 +460,9 @@ jobs:
             --target "$TARGET" \
             --variant pfterminal \
             --entrypoint-bin "codex-rs/target/${TARGET}/release/pfterminal.exe" \
+            --extra-bin "pfterminal-debug=codex-rs/target/${TARGET}/release/pfterminal-debug.exe" \
             --extra-bin "pfterminal-walletd=codex-rs/target/${TARGET}/release/pfterminal-walletd.exe" \
+            --code-mode-host-bin "codex-rs/target/${TARGET}/release/codex-code-mode-host.exe" \
             --codex-command-runner-bin "codex-rs/target/${TARGET}/release/codex-command-runner.exe" \
             --codex-windows-sandbox-setup-bin "codex-rs/target/${TARGET}/release/codex-windows-sandbox-setup.exe" \
             --cargo-profile release \

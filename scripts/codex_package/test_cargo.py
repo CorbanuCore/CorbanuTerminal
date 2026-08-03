@@ -16,6 +16,21 @@ from codex_package.targets import TARGET_SPECS
 
 
 class SourceBinariesForTargetTest(unittest.TestCase):
+    def test_release_workflow_prebuilds_every_package_binary(self) -> None:
+        workflow = (
+            Path(__file__).resolve().parents[2]
+            / ".github"
+            / "workflows"
+            / "pfterminal-release.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertEqual(workflow.count("--bin pfterminal-debug \\"), 3)
+        self.assertEqual(workflow.count("--bin codex-code-mode-host"), 3)
+        self.assertEqual(workflow.count('--extra-bin "pfterminal-debug='), 3)
+        self.assertEqual(workflow.count("--code-mode-host-bin "), 3)
+        self.assertEqual(workflow.count("--bin bwrap"), 1)
+        self.assertEqual(workflow.count("--bwrap-bin "), 1)
+
     def test_cli_accepts_repeated_prebuilt_extra_binaries(self) -> None:
         with patch.object(
             sys,
