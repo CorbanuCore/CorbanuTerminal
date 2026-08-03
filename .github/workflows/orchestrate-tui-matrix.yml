@@ -36,7 +36,7 @@ jobs:
         with:
           workspaces: codex-rs
       - name: Install pinned just
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.2
         with:
           tool: just@1.55.1
       - name: Install TUI harness dependencies
