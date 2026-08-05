@@ -12,15 +12,22 @@
 //!   2. sets `CODEX_PATH` authoritatively,
 //!   3. hands off to `codex-acp`,
 //!   4. preserves stdin/stdout/stderr, signals, and the adapter's exit code,
-//!   5. writes every diagnostic to stderr.
+//!   5. writes every *runtime* diagnostic to stderr.
 //!
 //! Point 5 is not a style preference. Once the handoff happens, stdout carries
 //! ACP protocol frames exclusively — a single stray line on stdout corrupts the
-//! stream and the client will fail to parse it.
+//! stream and the client will fail to parse it. The sole exception is the
+//! `--version` / `--help` output below, which goes to stdout because that is
+//! what every other CLI does and because redirecting `--version` to stderr
+//! breaks ordinary shell usage. Those flags are only ever passed by a human or
+//! an install probe; ACP never sends them, and such an invocation exits before
+//! any protocol traffic exists.
 //!
 //! Point 4 is why the Unix path uses `exec()` rather than spawn-and-wait: the
 //! adapter *becomes* this process, so Ctrl-C, SIGTERM and exit codes need no
-//! forwarding logic that could get them subtly wrong.
+//! forwarding logic that could get them subtly wrong. Windows has no `exec`, so
+//! it spawns and then exits with the adapter's raw code via `process::exit` —
+//! not `ExitCode`, which is a `u8` and would fold 256 to 0 and 3010 to 194.
 //!
 //! Why a distinct command rather than telling users to run
 //! `CODEX_PATH=pfterminal codex-acp`: ACP hosts key runtime identity off the
@@ -93,7 +100,7 @@ fn main() -> std::process::ExitCode {
 
 /// Replace this process with the adapter, preserving stdio, signals and status.
 #[cfg(unix)]
-fn exec(mut command: Command, adapter: &Path) -> std::process::ExitCode {
+fn exec(mut command: Command, adapter: &Path) -> ! {
     use std::os::unix::process::CommandExt;
     // `exec` only returns on failure.
     let err = command.exec();
@@ -101,29 +108,25 @@ fn exec(mut command: Command, adapter: &Path) -> std::process::ExitCode {
         "pfterminal-acp: failed to execute {}: {err}",
         adapter.display()
     );
-    std::process::ExitCode::from(126)
+    std::process::exit(126)
 }
 
-/// Windows has no `exec`; spawn and propagate the adapter's exit code.
+/// Windows has no `exec`; spawn and exit with the adapter's own code.
+///
+/// `process::exit` takes an `i32`, so the adapter's status survives intact.
+/// Returning `ExitCode` here would silently truncate to a `u8`: 256 would
+/// arrive as success, 3010 (the common "reboot required" code) as 194, and
+/// NTSTATUS-style negatives as arbitrary low bytes.
 #[cfg(not(unix))]
-fn exec(mut command: Command, adapter: &Path) -> std::process::ExitCode {
+fn exec(mut command: Command, adapter: &Path) -> ! {
     match command.status() {
-        Ok(status) => match status.code() {
-            // Truncate to u8 as ExitCode requires; anything non-zero must stay
-            // non-zero so a failure is never reported as success.
-            Some(0) => std::process::ExitCode::SUCCESS,
-            Some(code) => {
-                let narrowed = (code & 0xFF) as u8;
-                std::process::ExitCode::from(if narrowed == 0 { 1 } else { narrowed })
-            }
-            None => std::process::ExitCode::FAILURE,
-        },
+        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
         Err(err) => {
             eprintln!(
                 "pfterminal-acp: failed to execute {}: {err}",
                 adapter.display()
             );
-            std::process::ExitCode::from(126)
+            std::process::exit(126)
         }
     }
 }
@@ -137,21 +140,21 @@ fn exec(mut command: Command, adapter: &Path) -> std::process::ExitCode {
 fn resolve_pfterminal() -> Result<PathBuf, String> {
     if let Some(explicit) = env::var_os(PFTERMINAL_PATH_ENV) {
         let path = PathBuf::from(explicit);
-        if path.is_file() {
-            return Ok(path);
+        if is_executable(&path) {
+            return Ok(absolute(path));
         }
         return Err(format!(
-            "{PFTERMINAL_PATH_ENV} is set to {} but that is not a file",
+            "{PFTERMINAL_PATH_ENV} is set to {} but that is not an executable file",
             path.display()
         ));
     }
 
     if let Some(sibling) = sibling_executable(PFTERMINAL_BIN) {
-        return Ok(sibling);
+        return Ok(absolute(sibling));
     }
 
     if let Some(found) = find_on_path(PFTERMINAL_BIN) {
-        return Ok(found);
+        return Ok(absolute(found));
     }
 
     Err(format!(
@@ -163,11 +166,11 @@ fn resolve_pfterminal() -> Result<PathBuf, String> {
 fn resolve_adapter() -> Result<PathBuf, String> {
     if let Some(explicit) = env::var_os(CODEX_ACP_PATH_ENV) {
         let path = PathBuf::from(explicit);
-        if path.is_file() {
+        if is_executable(&path) {
             return Ok(path);
         }
         return Err(format!(
-            "{CODEX_ACP_PATH_ENV} is set to {} but that is not a file",
+            "{CODEX_ACP_PATH_ENV} is set to {} but that is not an executable file",
             path.display()
         ));
     }
@@ -179,23 +182,70 @@ fn resolve_adapter() -> Result<PathBuf, String> {
 fn sibling_executable(name: &str) -> Option<PathBuf> {
     let exe = env::current_exe().ok()?;
     let dir = exe.parent()?;
-    let candidate = dir.join(exe_name(name));
-    candidate.is_file().then_some(candidate)
+    executable_names(name)
+        .into_iter()
+        .map(|n| dir.join(n))
+        .find(|candidate| is_executable(candidate))
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {
-    let target = exe_name(name);
-    env::split_paths(&env::var_os("PATH")?)
-        .map(|dir| dir.join(&target))
-        .find(|candidate| candidate.is_file())
+    let names = executable_names(name);
+    env::split_paths(&env::var_os("PATH")?).find_map(|dir| {
+        names
+            .iter()
+            .map(|n| dir.join(n))
+            .find(|candidate| is_executable(candidate))
+    })
 }
 
-fn exe_name(name: &str) -> String {
-    if cfg!(windows) {
-        format!("{name}.exe")
-    } else {
-        name.to_string()
+/// Filenames to try for a logical command name, in resolution order.
+///
+/// On Windows this matters more than it looks: `npm install -g` does not
+/// produce a `.exe`, it drops a `codex-acp.cmd` shim next to a
+/// `codex-acp` shell script. Probing only `.exe` finds neither, so the
+/// documented install instructions would leave the adapter undiscoverable.
+/// `PATHEXT` is honoured because that is what the shell itself uses.
+fn executable_names(name: &str) -> Vec<String> {
+    if !cfg!(windows) {
+        return vec![name.to_string()];
     }
+    let pathext = env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+    let mut names: Vec<String> = pathext
+        .split(';')
+        .filter(|ext| !ext.trim().is_empty())
+        .map(|ext| format!("{name}{}", ext.trim().to_ascii_lowercase()))
+        .collect();
+    // Extension-less last: a bare file is only useful if something else on the
+    // system knows how to run it.
+    names.push(name.to_string());
+    names
+}
+
+/// Is this a file we can actually execute?
+///
+/// `is_file()` alone is not enough: a non-executable file of the right name
+/// earlier on `PATH` would win the search and then fail at spawn with 126,
+/// even when a real executable sits further along.
+#[cfg(unix)]
+fn is_executable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path)
+        .map(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_executable(path: &Path) -> bool {
+    path.is_file()
+}
+
+/// Make a resolved path absolute so `CODEX_PATH` survives a cwd change.
+///
+/// A relative `PATH` entry or a relative `PFTERMINAL_PATH` would otherwise be
+/// re-resolved against whatever directory the adapter happens to be in, which
+/// is the opposite of authoritative.
+fn absolute(path: PathBuf) -> PathBuf {
+    path.canonicalize().unwrap_or(path)
 }
 
 fn print_version() {
@@ -219,8 +269,10 @@ USAGE:
     pfterminal-acp [ADAPTER_ARGS...]
 
 This is a launcher, not an ACP implementation. It resolves the PFTerminal
-executable, sets CODEX_PATH, and hands off to the codex-acp adapter. All
-arguments are forwarded to the adapter unchanged.
+executable, sets CODEX_PATH, and hands off to the codex-acp adapter.
+
+Arguments are forwarded to the adapter unchanged, except that a leading
+--version/-V or --help/-h is handled here and never reaches it.
 
 It is normally started by an ACP client (such as Buzz) rather than by hand;
 stdin and stdout carry the protocol.
@@ -238,26 +290,48 @@ REQUIREMENTS:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+    use std::sync::MutexGuard;
+
+    /// Cargo runs tests in parallel threads, so mutating process environment
+    /// is a data race unless serialised. Every test that touches env takes
+    /// this first.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn env_guard() -> MutexGuard<'static, ()> {
+        ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     #[test]
-    fn exe_name_is_platform_appropriate() {
-        let name = exe_name("pfterminal");
+    fn executable_names_cover_npm_shims_on_windows() {
+        let names = executable_names("codex-acp");
         if cfg!(windows) {
-            assert_eq!(name, "pfterminal.exe");
+            // The documented install is `npm install -g`, which produces a
+            // .cmd shim rather than an .exe. Probing only .exe would leave the
+            // adapter undiscoverable on a correctly-installed machine.
+            assert!(
+                names.iter().any(|n| n == "codex-acp.cmd"),
+                "npm .cmd shim must be probed: {names:?}"
+            );
+            assert_eq!(names.last().map(String::as_str), Some("codex-acp"));
         } else {
-            assert_eq!(name, "pfterminal");
+            assert_eq!(names, vec!["codex-acp".to_string()]);
         }
     }
 
     #[test]
-    fn explicit_path_must_be_a_file_not_a_directory() {
+    fn explicit_path_must_be_executable_not_a_directory() {
         // A directory on PFTERMINAL_PATH is a misconfiguration that must fail
         // loudly; silently falling through to PATH would launch a different
         // agent than the operator pinned.
+        let _guard = env_guard();
         let dir = std::env::temp_dir();
-        // SAFETY: single-threaded test process.
+        // SAFETY: serialised by ENV_LOCK for the duration of this test.
         unsafe { env::set_var(PFTERMINAL_PATH_ENV, &dir) };
         let result = resolve_pfterminal();
+        // SAFETY: serialised by ENV_LOCK for the duration of this test.
         unsafe { env::remove_var(PFTERMINAL_PATH_ENV) };
         assert!(
             result.is_err(),
@@ -265,12 +339,50 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
-    fn missing_adapter_reports_install_instructions() {
-        // SAFETY: single-threaded test process.
+    fn non_executable_file_is_rejected() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _guard = env_guard();
+        let dir = std::env::temp_dir().join("pfterminal-acp-nonexec-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("pfterminal");
+        std::fs::write(&file, b"#!/bin/sh\n").unwrap();
+        // Readable but not executable: the case `is_file()` alone accepted,
+        // which would win the PATH search and then fail at spawn.
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(!is_executable(&file));
+
+        // SAFETY: serialised by ENV_LOCK for the duration of this test.
+        unsafe { env::set_var(PFTERMINAL_PATH_ENV, &file) };
+        let result = resolve_pfterminal();
+        // SAFETY: serialised by ENV_LOCK for the duration of this test.
+        unsafe { env::remove_var(PFTERMINAL_PATH_ENV) };
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let err = result.unwrap_err();
+        assert!(err.contains("not an executable file"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn missing_adapter_path_is_reported() {
+        let _guard = env_guard();
+        // SAFETY: serialised by ENV_LOCK for the duration of this test.
         unsafe { env::set_var(CODEX_ACP_PATH_ENV, "/nonexistent/codex-acp-xyz") };
         let err = resolve_adapter().unwrap_err();
+        // SAFETY: serialised by ENV_LOCK for the duration of this test.
         unsafe { env::remove_var(CODEX_ACP_PATH_ENV) };
-        assert!(err.contains("not a file"), "unexpected error: {err}");
+        assert!(err.contains("not an executable file"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn absolute_makes_paths_cwd_independent() {
+        let cwd = std::env::current_dir().unwrap();
+        assert!(absolute(cwd).is_absolute());
+        // A path that cannot be canonicalised is returned unchanged rather
+        // than discarded.
+        let missing = PathBuf::from("/nonexistent/pfterminal-xyz");
+        assert_eq!(absolute(missing.clone()), missing);
     }
 }
