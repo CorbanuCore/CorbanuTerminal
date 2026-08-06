@@ -61,6 +61,19 @@ pub use schema_fixtures::write_schema_fixtures;
 #[cfg(test)]
 pub use schema_fixtures::write_schema_fixtures_with_options;
 
+/// Tail of the `thread/read` error returned when a thread exists in memory but
+/// has no rollout yet, i.e. before its first user message.
+///
+/// This text is part of the wire contract: clients recover from this state by
+/// matching it, because the error carries no structured `data`. Producer and
+/// consumers share this constant so a reworded message cannot silently turn a
+/// recoverable state into a hard failure. `app-server` formats it into the raw
+/// `JSONRPCErrorError.message`; note that client-side `Display` implementations
+/// prepend the failing method, so consumers must match on a substring rather
+/// than a prefix.
+pub const THREAD_UNMATERIALIZED_INCLUDE_TURNS_MESSAGE: &str =
+    "is not materialized yet; includeTurns is unavailable before first user message";
+
 #[cfg(not(test))]
 pub(crate) use codex_app_server_protocol_noop_macros::JsonSchema;
 #[cfg(not(test))]
