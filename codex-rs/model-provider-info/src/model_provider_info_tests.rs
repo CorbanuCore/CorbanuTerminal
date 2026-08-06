@@ -1257,6 +1257,31 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider(KIMI_CODE_K3_MODEL, OPENROUTER_PROVIDER_ID),
         Some(KIMI_CODE_PROVIDER_ID)
     );
+    // Field incident: a bare `claude-*` slug selected while `openai` was active
+    // kept `openai` and failed on every turn.
+    assert_eq!(
+        corrected_catalog_provider(ANTHROPIC_DEFAULT_MODEL, OPENAI_PROVIDER_ID),
+        Some(ANTHROPIC_PROVIDER_ID)
+    );
+    assert_eq!(
+        corrected_catalog_provider("claude-opus-4-8", OPENAI_PROVIDER_ID),
+        Some(ANTHROPIC_PROVIDER_ID)
+    );
+    assert_eq!(
+        corrected_catalog_provider("claude-haiku-4-5", OPENROUTER_PROVIDER_ID),
+        Some(ANTHROPIC_PROVIDER_ID)
+    );
+    // An `-anthropic` provider is an Anthropic-format gateway, not an Anthropic
+    // model route: it would silently swap the requested Claude model for its own
+    // default. See `resolve_model_for_provider`.
+    assert_eq!(
+        corrected_catalog_provider(ANTHROPIC_DEFAULT_MODEL, ZAI_ANTHROPIC_PROVIDER_ID),
+        Some(ANTHROPIC_PROVIDER_ID)
+    );
+    assert_eq!(
+        corrected_catalog_provider(ANTHROPIC_DEFAULT_MODEL, VERCEL_ANTHROPIC_PROVIDER_ID),
+        Some(ANTHROPIC_PROVIDER_ID)
+    );
 
     // Consistent pairs and legitimate family variants: untouched.
     assert_eq!(
@@ -1304,7 +1329,25 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         None
     );
 
+    // Anthropic-compatible routes for a bare `claude-*` slug: all legitimate.
+    for provider in CLAUDE_CAPABLE_PROVIDERS {
+        assert_eq!(
+            corrected_catalog_provider(ANTHROPIC_DEFAULT_MODEL, provider),
+            None,
+            "{provider} can serve {ANTHROPIC_DEFAULT_MODEL}"
+        );
+    }
+    // A `-plan` slug is the exception: only the plan provider serves it.
+    assert_eq!(
+        corrected_catalog_provider(CLAUDE_PLAN_MODEL, ANTHROPIC_PROVIDER_ID),
+        Some(CLAUDE_PLAN_PROVIDER_ID)
+    );
+
     // Servable cross-provider pairs, unknown models, user-defined providers: untouched.
+    assert_eq!(
+        corrected_catalog_provider(ANTHROPIC_DEFAULT_MODEL, "my-azure-provider"),
+        None
+    );
     assert_eq!(
         corrected_catalog_provider(AMBIENT_DEFAULT_MODEL, AMBIENT_PROVIDER_ID),
         None

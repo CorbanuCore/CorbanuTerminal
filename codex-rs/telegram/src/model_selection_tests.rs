@@ -183,6 +183,21 @@ fn provider_correction_matches_alias_families() {
     assert!(gpt.changed);
 }
 
+/// A bare `claude-*` slug used to inherit the active provider. On the default
+/// `openai` provider that produced a switch `/model` reported as successful --
+/// and which had a credential, so no guard fired -- while every turn afterwards
+/// failed at OpenAI with an unknown model.
+#[test]
+fn a_bare_claude_slug_does_not_stay_on_a_provider_that_cannot_serve_it() {
+    let opus = provider_for_model("claude-opus-4-8", OPENAI_PROVIDER_ID);
+    assert_eq!(opus.provider, "anthropic");
+    assert!(opus.changed);
+
+    let plan = provider_for_model("claude-opus-4-8", CLAUDE_PLAN_PROVIDER_ID);
+    assert_eq!(plan.provider, CLAUDE_PLAN_PROVIDER_ID);
+    assert!(!plan.changed);
+}
+
 /// The regression the original suite missed: it only ever asserted the four families
 /// `corrected_catalog_provider` repairs, so the inherit branch — every other model —
 /// was never exercised. `ambient/large` on a `zai` session stays on `zai`.
