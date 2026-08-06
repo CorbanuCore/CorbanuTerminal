@@ -115,8 +115,14 @@ jobs:
       # `timeout-minutes` is exactly the case that most needs its downloaded
       # external repositories preserved, and skipping the save there means the
       # next run starts cold and times out again.
+      #
+      # `always()` also reaches the case where `Prepare Bazel CI` itself failed
+      # and left its outputs empty, so require a key before attempting a save
+      # that could only warn `Key is not specified.`
       - name: Save bazel repository cache
-        if: always() && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
+        if: >-
+          always() && steps.prepare_bazel.outputs.repository-cache-key != ''
+          && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
@@ -226,8 +232,14 @@ jobs:
       # `timeout-minutes` is exactly the case that most needs its downloaded
       # external repositories preserved, and skipping the save there means the
       # next run starts cold and times out again.
+      #
+      # `always()` also reaches the case where `Prepare Bazel CI` itself failed
+      # and left its outputs empty, so require a key before attempting a save
+      # that could only warn `Key is not specified.`
       - name: Save bazel repository cache
-        if: always() && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
+        if: >-
+          always() && steps.prepare_bazel.outputs.repository-cache-key != ''
+          && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -342,8 +354,14 @@ jobs:
       # `timeout-minutes` is exactly the case that most needs its downloaded
       # external repositories preserved, and skipping the save there means the
       # next run starts cold and times out again.
+      #
+      # `always()` also reaches the case where `Prepare Bazel CI` itself failed
+      # and left its outputs empty, so require a key before attempting a save
+      # that could only warn `Key is not specified.`
       - name: Save bazel repository cache
-        if: always() && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
+        if: >-
+          always() && steps.prepare_bazel.outputs.repository-cache-key != ''
+          && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
