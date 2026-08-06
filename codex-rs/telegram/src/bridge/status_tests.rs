@@ -1,5 +1,21 @@
+use codex_app_server_protocol::ThreadTokenUsage;
+use codex_app_server_protocol::TokenUsageBreakdown;
+
 use super::RuntimeState;
 use super::runtime_state;
+use super::thousands;
+use super::token_usage_text;
+
+fn breakdown(total: i64, input: i64, output: i64) -> TokenUsageBreakdown {
+    TokenUsageBreakdown {
+        total_tokens: total,
+        input_tokens: input,
+        cached_input_tokens: 0,
+        cache_write_input_tokens: 0,
+        output_tokens: output,
+        reasoning_output_tokens: 0,
+    }
+}
 
 #[test]
 fn status_priority_preserves_actionable_state() {
@@ -27,4 +43,64 @@ fn every_status_has_a_concrete_next_action() {
     ] {
         assert!(!state.next_action().is_empty());
     }
+}
+
+#[test]
+fn thousands_groups_every_magnitude() {
+    assert_eq!(thousands(0), "0");
+    assert_eq!(thousands(999), "999");
+    assert_eq!(thousands(1_000), "1,000");
+    assert_eq!(thousands(178_010), "178,010");
+    assert_eq!(thousands(683_203_904), "683,203,904");
+}
+
+/// The reported thread outgrew every signal the chat surfaced: it ran for two
+/// weeks on a single thread and its cost was invisible because `/status` showed
+/// state and model only. Both numbers must appear, and the cumulative one is the
+/// point -- window occupancy alone stays flat while the bill does not.
+#[test]
+fn status_reports_window_occupancy_and_the_unbounded_thread_total() {
+    let usage = ThreadTokenUsage {
+        total: breakdown(684_885_374, 683_203_904, 1_681_470),
+        last: breakdown(178_010, 177_000, 1_010),
+        model_context_window: Some(353_400),
+    };
+
+    let text = token_usage_text(&usage);
+
+    assert!(
+        text.contains("Context: 178,010 of 353,400 tokens (50%)"),
+        "{text}"
+    );
+    assert!(
+        text.contains("Thread total: 684,885,374 tokens (683,203,904 in, 1,681,470 out)"),
+        "{text}"
+    );
+    assert!(text.contains("/new"), "{text}");
+}
+
+#[test]
+fn status_omits_the_percentage_when_the_window_is_unknown() {
+    let usage = ThreadTokenUsage {
+        total: breakdown(1_500, 1_200, 300),
+        last: breakdown(1_500, 1_200, 300),
+        model_context_window: None,
+    };
+
+    let text = token_usage_text(&usage);
+
+    assert!(text.contains("Context: 1,500 tokens"), "{text}");
+    assert!(!text.contains('%'), "{text}");
+}
+
+/// A window reported smaller than current usage must not render above 100%.
+#[test]
+fn status_clamps_an_overfull_window() {
+    let usage = ThreadTokenUsage {
+        total: breakdown(400_000, 399_000, 1_000),
+        last: breakdown(400_000, 399_000, 1_000),
+        model_context_window: Some(353_400),
+    };
+
+    assert!(token_usage_text(&usage).contains("(100%)"));
 }

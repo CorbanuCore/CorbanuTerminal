@@ -123,6 +123,17 @@ impl BridgeRuntime {
                 self.broadcast(&format!("Deprecated: {}", notification.summary))
                     .await
             }
+            ServerNotification::ThreadTokenUsageUpdated(notification) => {
+                if let Some(conversation) = self
+                    .sessions
+                    .conversation_for_thread(&notification.thread_id)
+                    .await
+                {
+                    self.last_token_usage
+                        .insert(conversation, notification.token_usage);
+                }
+                Ok(())
+            }
             ServerNotification::ThreadStarted(_)
             | ServerNotification::ThreadStatusChanged(_)
             | ServerNotification::ThreadArchived(_)
@@ -136,7 +147,6 @@ impl BridgeRuntime {
             | ServerNotification::EnvironmentConnected(_)
             | ServerNotification::EnvironmentDisconnected(_)
             | ServerNotification::ThreadSettingsUpdated(_)
-            | ServerNotification::ThreadTokenUsageUpdated(_)
             | ServerNotification::HookStarted(_)
             | ServerNotification::HookCompleted(_)
             | ServerNotification::TurnDiffUpdated(_)

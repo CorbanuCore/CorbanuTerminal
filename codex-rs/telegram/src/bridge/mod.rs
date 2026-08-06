@@ -16,6 +16,7 @@ use codex_app_server_protocol::ThreadResumeResponse;
 use codex_app_server_protocol::ThreadSource;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
+use codex_app_server_protocol::ThreadTokenUsage;
 use codex_app_server_protocol::ThreadUnsubscribeParams;
 use codex_app_server_protocol::ThreadUnsubscribeResponse;
 use codex_app_server_protocol::TurnInterruptParams;
@@ -193,6 +194,7 @@ impl BridgeHandle {
             pending_inputs: HashMap::new(),
             last_successful_contact_at: HashMap::new(),
             last_errors: HashMap::new(),
+            last_token_usage: HashMap::new(),
         };
         let task = tokio::spawn(async move {
             runtime.run(command_rx).await;
@@ -434,6 +436,11 @@ struct BridgeRuntime {
     pending_inputs: HashMap<ConversationKey, VecDeque<QueuedUserInput>>,
     last_successful_contact_at: HashMap<ConversationKey, u64>,
     last_errors: HashMap<ConversationKey, String>,
+    // A Telegram chat has no natural session boundary: every message resumes the
+    // same thread until someone runs `/new`. The server already reports usage per
+    // turn, so keep the latest report to give `/status` the running cost of a
+    // thread that would otherwise grow unobserved.
+    last_token_usage: HashMap<ConversationKey, ThreadTokenUsage>,
 }
 
 impl BridgeRuntime {
