@@ -14,6 +14,13 @@ path = "src/main.rs"
 name = "pfterminal"
 path = "src/pfterminal_main.rs"
 
+# Stable ACP entry point. A thin launcher that points the codex-acp adapter at
+# PFTerminal; see src/pfterminal_acp_main.rs for why it is a separate command
+# rather than documentation telling users to set CODEX_PATH themselves.
+[[bin]]
+name = "pfterminal-acp"
+path = "src/pfterminal_acp_main.rs"
+
 [[bin]]
 name = "pfterminal-debug"
 path = "src/pfterminal_debug_main.rs"
