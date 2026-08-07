@@ -23,6 +23,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Test release worktree guard
+        run: bash scripts/dev/test_check_worktree.sh
+
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
 
       - name: Install Linux package prerequisites
