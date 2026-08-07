@@ -1,0 +1,13 @@
+---
+source: tui/src/history_cell/tests.rs
+assertion_line: 640
+expression: rendered
+---
+╭─────────────────────────────────────╮
+│ >_ PFTerminal (v0.1.15)             │
+│                                     │
+│ model:     gpt-5   /model to change │
+│ directory: /tmp/project             │
+╰─────────────────────────────────────╯
+
+  Tip: Model just became available

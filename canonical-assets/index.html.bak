@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canonical — For every asset</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:clamp(16px,1.05vw,20px);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{font-family:"Inter","SF Pro Text",system-ui,-apple-system,sans-serif;background:#0a0a0d;color:#e8e6e3;overflow-x:hidden;line-height:1.5}
+a{color:inherit;text-decoration:none}
+:root{--bg:#0a0a0d;--surface:#121216;--surface-raised:#1a1a22;--border:#2a2a35;--text:#e8e6e3;--text-muted:#88869e;--accent:#d4a74a;--accent-glow:rgba(212,167,74,.25);--radius:10px;--radius-sm:6px;--font-mono:"SF Mono","Fira Code","Cascadia Code",monospace;--font-display:"Instrument Serif","Georgia",serif}
+body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.015) 1px,transparent 1px);background-size:3rem 3rem;pointer-events:none;z-index:0}
+.display{font-family:var(--font-display);font-weight:400;letter-spacing:-.015em}
+.label{font-size:.7rem;font-weight:500;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)}
+.container{max-width:1200px;margin:0 auto;padding:0 2rem;position:relative;z-index:1}
+nav{display:flex;align-items:center;justify-content:space-between;padding:1.25rem 2rem;position:fixed;top:0;left:0;right:0;z-index:100;background:linear-gradient(180deg,rgba(10,10,13,.95) 60%,transparent);backdrop-filter:blur(12px)}
+nav .logo{font-size:1.1rem;font-weight:600;letter-spacing:-.02em;display:flex;align-items:center;gap:.6rem}
+nav .logo svg{width:1.4rem;height:1.4rem}
+nav .nav-links{display:flex;align-items:center;gap:2rem;font-size:.85rem;color:var(--text-muted)}
+nav .nav-links a:hover{color:var(--text)}
+nav .btn-nav{background:var(--accent);color:var(--bg);padding:.5rem 1.2rem;border-radius:var(--radius-sm);font-size:.8rem;font-weight:600}
+.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:8rem 0 4rem;position:relative}
+.hero::after{content:"";position:absolute;top:30%;left:50%;translate:-50% 0;width:80vmax;height:80vmax;background:radial-gradient(circle,var(--accent-glow) 0%,transparent 70%);opacity:.3;pointer-events:none;z-index:0}
+.hero .container{position:relative;z-index:1}
+.hero .badge{display:inline-flex;align-items:center;gap:.5rem;background:var(--surface-raised);border:1px solid var(--border);padding:.4rem 1rem;border-radius:100px;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:1.5rem;color:var(--text-muted)}
+.hero .badge span{color:var(--accent)}
+.hero h1{font-size:clamp(2.8rem,7vw,5.2rem);line-height:1.05;max-width:14ch;margin-bottom:.6em}
+.hero h1 em{font-style:normal;background:linear-gradient(135deg,var(--accent),#f0d080);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{font-size:1.15rem;color:var(--text-muted);max-width:48ch;margin-bottom:2.2rem;line-height:1.65}
+.hero-actions{display:flex;gap:1rem;flex-wrap:wrap}
+.hero-actions .btn-primary{background:var(--accent);color:var(--bg);padding:.85rem 2.2rem;border-radius:var(--radius-sm);font-weight:600;font-size:.95rem;transition:box-shadow .3s,translate .2s}
+.hero-actions .btn-primary:hover{box-shadow:0 0 2rem var(--accent-glow);translate:0 -1px}
+.hero-actions .btn-secondary{background:var(--surface-raised);color:var(--text);padding:.85rem 2.2rem;border-radius:var(--radius-sm);font-weight:500;font-size:.95rem;border:1px solid var(--border);transition:border-color .3s,translate .2s}
+.hero-actions .btn-secondary:hover{border-color:var(--text-muted);translate:0 -1px}
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;border-radius:var(--radius);overflow:hidden;background:var(--border);margin:4rem 0 0}
+.stats-bar > div{background:var(--surface);padding:1.5rem;text-align:center}
+.stats-bar .stat-num{font-size:1.8rem;font-weight:600;font-family:var(--font-mono);color:var(--accent);line-height:1.2}
+.stats-bar .stat-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-top:.4rem}
+.section-title{text-align:center;margin-bottom:3.5rem}
+.section-title h2{font-size:clamp(1.8rem,4vw,2.8rem);margin-bottom:.5rem}
+.section-title p{color:var(--text-muted);max-width:48ch;margin:0 auto;font-size:.95rem}
+.asset-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;border-radius:var(--radius);overflow:hidden;background:var(--border);margin-bottom:6rem}
+@media(max-width:768px){.asset-grid{grid-template-columns:1fr}}
+.asset-card{background:var(--surface);transition:background .3s;cursor:default;position:relative;padding:0}
+.asset-card .card-canvas{width:100%;display:block}
+.asset-card .card-overlay{position:absolute;left:1.5rem;right:1.5rem;bottom:1.2rem;display:flex;flex-direction:column;pointer-events:none;z-index:2}
+.asset-card .card-overlay h3{font-size:1rem;font-weight:600;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.7);margin-bottom:.15rem}
+.asset-card .card-overlay p{font-size:.72rem;color:rgba(255,255,255,.6);line-height:1.4;max-width:85%;text-shadow:0 1px 6px rgba(0,0,0,.6)}
+.asset-card .card-overlay .card-meta{font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-top:.35rem;display:flex;align-items:center;gap:.4rem}
+.asset-card .card-overlay .card-meta .count{font-weight:600}
+.asset-card:hover{background:var(--surface-raised)}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:2rem;margin-bottom:6rem}
+@media(max-width:768px){.steps{grid-template-columns:1fr}}
+.step{padding:2rem;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border)}
+.step .step-num{font-family:var(--font-mono);font-size:.7rem;color:var(--accent);margin-bottom:.8rem}
+.step h3{font-size:1rem;margin-bottom:.5rem}
+.step p{font-size:.85rem;color:var(--text-muted);line-height:1.6}
+.featured-profiles{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;border-radius:var(--radius);overflow:hidden;background:var(--border);margin-bottom:6rem}
+@media(max-width:768px){.featured-profiles{grid-template-columns:1fr}}
+.profile-preview{background:var(--surface);padding:2rem;transition:background .3s}
+.profile-preview:hover{background:var(--surface-raised)}
+.profile-preview .profile-header{display:flex;align-items:center;gap:.8rem;margin-bottom:.8rem}
+.profile-preview .profile-header .avatar{width:2.4rem;height:2.4rem;border-radius:var(--radius-sm);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:1.1rem}
+.profile-preview .profile-header .name{font-weight:600;font-size:.9rem}
+.profile-preview .profile-header .id{font-family:var(--font-mono);font-size:.65rem;color:var(--text-muted)}
+.profile-preview .profile-stats{display:flex;gap:1.5rem;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)}
+.profile-preview .profile-stats div{font-size:.7rem;color:var(--text-muted)}
+.profile-preview .profile-stats div strong{display:block;font-family:var(--font-mono);color:var(--text);font-size:.85rem;margin-bottom:.15rem}
+.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:6rem}
+@media(max-width:900px){.pricing-grid{grid-template-columns:1fr}}
+.plan{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:2.5rem 2rem;display:flex;flex-direction:column;transition:border-color .3s,translate .2s}
+.plan:hover{border-color:var(--text-muted);translate:0 -2px}
+.plan.featured{border-color:var(--accent);position:relative}
+.plan.featured::before{content:"Most popular";position:absolute;top:-.7rem;left:50%;translate:-50% 0;background:var(--accent);color:var(--bg);font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:.2rem 1rem;border-radius:100px}
+.plan .plan-name{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:.3rem}
+.plan .plan-price{font-size:2.4rem;font-weight:600;margin-bottom:.3rem}
+.plan .plan-price span{font-size:1rem;font-weight:400;color:var(--text-muted)}
+.plan .plan-desc{font-size:.8rem;color:var(--text-muted);margin-bottom:1.5rem}
+.plan ul{list-style:none;padding:0;margin-bottom:2rem;flex:1}
+.plan ul li{font-size:.82rem;padding:.4rem 0;display:flex;align-items:center;gap:.6rem;color:var(--text)}
+.plan ul li::before{content:"✓";color:var(--accent);font-weight:600}
+.plan .btn-plan{display:block;text-align:center;padding:.75rem;border-radius:var(--radius-sm);font-weight:600;font-size:.85rem;border:1px solid var(--border);transition:background .3s,border-color .3s}
+.plan .btn-plan:hover{background:var(--surface-raised);border-color:var(--text-muted)}
+.plan.featured .btn-plan{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.plan.featured .btn-plan:hover{box-shadow:0 0 1.5rem var(--accent-glow)}
+.cta-banner{background:linear-gradient(135deg,var(--surface-raised),var(--surface));border:1px solid var(--border);border-radius:var(--radius);padding:4rem 3rem;text-align:center;margin-bottom:6rem}
+.cta-banner h2{font-size:clamp(1.6rem,3vw,2.4rem);margin-bottom:.8rem}
+.cta-banner p{color:var(--text-muted);max-width:48ch;margin:0 auto 2rem;font-size:.95rem}
+.cta-banner .btn-cta{display:inline-block;background:var(--accent);color:var(--bg);padding:.9rem 2.8rem;border-radius:var(--radius-sm);font-weight:600;font-size:1rem;transition:box-shadow .3s,translate .2s}
+.cta-banner .btn-cta:hover{box-shadow:0 0 2.5rem var(--accent-glow);translate:0 -1px}
+footer{padding:3rem 2rem 2rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:.75rem;color:var(--text-muted);flex-wrap:wrap;gap:1rem}
+footer .footer-links{display:flex;gap:1.5rem}
+footer .footer-links a:hover{color:var(--text)}
+.fade-in{opacity:0;translate:0 20px;transition:opacity .7s ease,translate .7s ease}
+.fade-in.visible{opacity:1;translate:0 0}
+</style>
+</head>
+<body>
+<nav><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a15 15 0 0 1 0 18"/><path d="M3 12h18"/></svg>Canonical</div><div class="nav-links"><a href="#">Assets</a><a href="#">How it works</a><a href="#">Pricing</a><a href="#">API</a><a href="#" class="btn-nav">Get started</a></div></nav>
+<section class="hero"><div class="container"><div class="badge"><span>&#9670;</span> Now in public beta &mdash; 2,400+ asset classes indexed</div><h1 class="display">The canonical profile <br><em>for every asset</em></h1><p>One verified, structured, publicly-referenceable page for every real-world and digital asset.</p><div class="hero-actions"><a href="#" class="btn-primary">Claim your assets</a><a href="#" class="btn-secondary">View live demo &rarr;</a></div><div class="stats-bar"><div><div class="stat-num">24M+</div><div class="stat-label">Profiles indexed</div></div><div><div class="stat-num">194</div><div class="stat-label">Countries</div></div><div><div class="stat-num">2.1B</div><div class="stat-label">Data points</div></div><div><div class="stat-num">99.97%</div><div class="stat-label">Uptime</div></div></div></div></section>
+<div class="container">
+<div class="section-title fade-in"><p class="label">Browse by category</p><h2 class="display">Four asset classes, one profile</h2><p>Each category maintains a unique schema &mdash; ownership chain, valuation history, compliance status, and linked documents.</p></div>
+<div class="asset-grid fade-in" id="assetGrid">
+<div class="asset-card" data-art="realestate" style="background:#0d0d12"><canvas class="card-canvas" id="c0"></canvas><div class="card-overlay"><h3>Real Estate</h3><p>Parcel-level title, zoning, tax history, flood risk, and transaction records.</p><div class="card-meta"><span class="count">8.2M</span> profiles</div></div></div>
+<div class="asset-card" data-art="vehicles" style="background:#0d0d12"><canvas class="card-canvas" id="c1"></canvas><div class="card-overlay"><h3>Vehicles</h3><p>VIN-resolved ownership, accident history, lien status, and recall data.</p><div class="card-meta"><span class="count">4.7M</span> profiles</div></div></div>
+<div class="asset-card" data-art="art" style="background:#0d0d12"><canvas class="card-canvas" id="c2"></canvas><div class="card-overlay"><h3>Art &amp; Collectibles</h3><p>Provenance chain, auction records, authenticity reports, and exhibition history.</p><div class="card-meta"><span class="count">1.3M</span> profiles</div></div></div>
+<div class="asset-card" data-art="digital" style="background:#0d0d12"><canvas class="card-canvas" id="c3"></canvas><div class="card-overlay"><h3>Digital Assets</h3><p>Token-gated identity, on-chain activity, creator metadata, and marketplace depth.</p><div class="card-meta"><span class="count">6.8M</span> profiles</div></div></div>
+</div>
+<div class="section-title fade-in"><p class="label">The process</p><h2 class="display">How Canonical works</h2><p>A three-step pipeline turns disparate records into a single, trusted profile.</p></div>
+<div class="steps fade-in"><div class="step"><div class="step-num">01</div><h3>Ingest</h3><p>We pull from 1,400+ verified sources &mdash; government registries, exchanges, certification bodies, and direct uploads &mdash; into a unified schema.</p></div><div class="step"><div class="step-num">02</div><h3>Verify</h3><p>Cross-reference against blockchain anchors, multi-source reconciliation, and anomaly detection to flag inconsistencies.</p></div><div class="step"><div class="step-num">03</div><h3>Publish</h3><p>A permanent, versioned profile at a canonical URL &mdash; accessible via web, API, embed, or export to any downstream system.</p></div></div>
+<div class="section-title fade-in"><p class="label">Featured profiles</p><h2 class="display">Real profiles, live data</h2><p>Every profile is a living document &mdash; updated as new verifiable events occur.</p></div>
+<div class="featured-profiles fade-in">
+<div class="profile-preview"><div class="profile-header"><div class="avatar">&#x1F3DB;</div><div><div class="name">30 Hudson Yards</div><div class="id">CAN:RE:US-NY-10001-0047</div></div></div><p style="font-size:.8rem;color:var(--text-muted);line-height:1.5">Class A office tower, 2.6M sq ft. Last valued at $4.2B. 14 verified ownership transfers since 2019.</p><div class="profile-stats"><div><strong>$4.2B</strong> Last valuation</div><div><strong>14</strong> Ownership events</div><div><strong>3</strong> Active liens</div></div></div>
+<div class="profile-preview"><div class="profile-header"><div class="avatar">&#x1F3A8;</div><div><div class="name">Comedian (2019)</div><div class="id">CAN:AR:MAURIZIO-CATTELAN-004</div></div></div><p style="font-size:.8rem;color:var(--text-muted);line-height:1.5">Maurizio Cattelan&rsquo;s banana taped to wall. 7 authenticated exhibitions, 4 ownership changes, last sale $6.2M.</p><div class="profile-stats"><div><strong>$6.2M</strong> Last sale</div><div><strong>7</strong> Exhibitions</div><div><strong>4</strong> Owners</div></div></div>
+<div class="profile-preview"><div class="profile-header"><div class="avatar">&#x1F517;</div><div><div class="name">CryptoPunk #5822</div><div class="id">CAN:DA:ETH:0xb47e&hellip;822</div></div></div><p style="font-size:.8rem;color:var(--text-muted);line-height:1.5">Rare Alien Punk. Last sold for 8,000 ETH (~$23.7M). 3 ownership transfers tracked across 5 marketplaces.</p><div class="profile-stats"><div><strong>8,000 ETH</strong> Last sale</div><div><strong>3</strong> Transfers</div><div><strong>5</strong> Marketplaces</div></div></div>
+<div class="profile-preview"><div class="profile-header"><div class="avatar">&#x2708;</div><div><div class="name">Gulfstream G700 (N700GS)</div><div class="id">CAN:VE:US-FAA-N700GS</div></div></div><p style="font-size:.8rem;color:var(--text-muted);line-height:1.5">2024 model, tail N700GS. Airframe hours: 342. Lien-free. Last valuation $78M.</p><div class="profile-stats"><div><strong>$78M</strong> Valuation</div><div><strong>342</strong> Airframe hours</div><div><strong>&check;</strong> Lien status</div></div></div>
+</div>
+<div class="section-title fade-in"><p class="label">Pricing</p><h2 class="display">Plans for every scale</h2><p>From individual collectors to enterprise asset registries.</p></div>
+<div class="pricing-grid fade-in">
+<div class="plan"><div class="plan-name">Starter</div><div class="plan-price">$29<span>/mo</span></div><div class="plan-desc">For individuals and small portfolios.</div><ul><li>Up to 100 asset profiles</li><li>Monthly verification updates</li><li>Public profile pages</li><li>Basic API access</li><li>Email support</li></ul><a href="#" class="btn-plan">Get started</a></div>
+<div class="plan featured"><div class="plan-name">Professional</div><div class="plan-price">$149<span>/mo</span></div><div class="plan-desc">For funds, galleries, and dealers.</div><ul><li>Up to 10,000 asset profiles</li><li>Real-time verification pipeline</li><li>Custom schemas &amp; embeddings</li><li>Full API + webhook integrations</li><li>Priority support + SLA</li></ul><a href="#" class="btn-plan">Get started</a></div>
+<div class="plan"><div class="plan-name">Enterprise</div><div class="plan-price">Custom</div><div class="plan-desc">For registries, governments, and institutions.</div><ul><li>Unlimited asset profiles</li><li>Dedicated verification nodes</li><li>White-label profiles</li><li>On-premise deployment option</li><li>Dedicated account team</li></ul><a href="#" class="btn-plan">Contact us</a></div>
+</div>
+<div class="cta-banner fade-in"><h2 class="display">Start building the definitive <br>record of what you own.</h2><p>Join 4,200+ institutions, collectors, and registries who publish their asset profiles on Canonical.</p><a href="#" class="btn-cta">Claim your first profile</a></div>
+</div>
+<footer class="container"><div>&copy; 2026 Canonical. All rights reserved.</div><div class="footer-links"><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Status</a><a href="#">Docs</a></div></footer>
+<script>
+// Fade-in
+(function(){const e=document.querySelectorAll('.fade-in');e.forEach(el=>{new IntersectionObserver(n=>{n.forEach(t=>{t.isIntersecting&&(t.target.classList.add('visible'),this.unobserve(t.target))})},{threshold:.1}).observe(el)})})();
+
+// ========== GL Art Engine ==========
+const artFns = {};
+
+// ---- shared GL context per canvas ----
+const CANVAS_W = 640, CANVAS_H = 360;
+
+// ---- VERTEX SHADER ----
+const VS = `
+attribute vec2 aPos;
+varying vec2 vUv;
+void main(){
+ vUv = aPos*0.5+0.5;
+ gl_Position = vec4(aPos,0.0,1.0);
+}`;
+
+// ---- Real Estate Fragment ----
+artFns.realestate = `#version 100
+precision highp float;
+uniform float uT, uH;
+varying vec2 vUv;
+#define gold1 vec3(.835,.655,.29)
+#define gold2 vec3(.94,.82,.5)
+vec3 palette(float t){return gold1+mix(gold1,gold2,sin(t*3.14)*.5+.5)-gold1*.3;}
+
+void main(){
+ vec2 uv=vUv;float t=uT;
+ // sky gradient
+ vec3 col=mix(vec3(.03,.03,.045),vec3(.06,.05,.08),uv.y);
+
+ // isometric grid
+ vec2 g=uv*vec2(8,12)-vec2(4,6);
+ float gx=g.x*.866-g.y*.5;
+ float gy=g.x*.5+g.y*.866;
+ vec2 gi=floor(vec2(gx,gy));
+ vec2 gf=fract(vec2(gx,gy));
+ float grid=1.-step(.02,min(gf.x,1.-gf.x))*step(.02,min(gf.y,1.-gf.y));
+ grid*=smoothstep(0.,.4,gf.y);
+ col=mix(col,gold1*.08,grid*.4);
+
+ // building
+ vec2 bUV=(uv-vec2(.5,.38))/vec2(.32,.35);
+ if(bUV.x>0.&&bUV.x<1.&&bUV.y>0.&&bUV.y<1.){
+  float bp=1.+sin(t*1.2)*.002*uH;
+  bUV=(bUV-.5)*bp+.5;
+  vec2 bf=fract(bUV*vec2(5,7));
+  float bw=step(.04,bf.x)*step(.04,1.-bf.x)*step(.04,bf.y)*step(.04,1.-bf.y);
+
+  vec3 bCol=mix(vec3(.12,.1,.08),vec3(.18,.14,.12),bUV.y);
+  float ref=.06*sin(bUV.x*50.+t*2.)*.5+.5;
+  ref+=.04*sin(bUV.x*30.+bUV.y*20.+t);
+  bCol+=gold1*.15*ref*uH;
+
+  // highlight sweep
+  float sw=abs(fract(bUV.y*3.-t*.15)-.5)*2.;
+  bCol+=gold1*.08*(1.-sw)*uH;
+
+  col=mix(col,bCol,bw*smoothstep(.15,.0,bUV.y)*smoothstep(.9,1.,bUV.y));
+ }
+
+ // underground stratigraphy
+ if(uv.y>.6){
+  float sY=(uv.y-.6)/.4;
+  float band=sin(sY*60.+t*.05)*.5+.5;
+  vec3 sCol=mix(vec3(.08,.07,.1),vec3(.14,.1,.08),band);
+  // utility pipes
+  float pipe=step(abs(sin(sY*30.+t*.03)-.5),.02);
+  sCol=mix(sCol,gold1*.04,pipe*uH);
+  col=mix(col,sCol,.9);
+ }
+
+ // ownership particles in orbit
+ for(int i=0;i<30;i++){
+  float fi=float(i);
+  float ang=t*(.15+.1*uH)+fi*.21;
+  float rad=.30+.12*sin(fi*.7+t*.2);
+  float px=.5+cos(ang)*rad;
+  float py=.38+sin(ang)*rad*.4;
+  float d=length(uv-vec2(px,py));
+  float a=.15+.2*(.5+.5*sin(t*.3+fi));
+  col=mix(col,gold2,a*smoothstep(.012,0.,d)*(.8+.2*uH));
+ }
+
+ // depth fog
+ col=mix(col,vec3(.02,.02,.03),smoothstep(.0,.3,abs(uv.y-.4)-.15));
+
+ // vignette
+ float vig=1.-.5*distance(uv,vec2(.5));
+ col*=vig;
+
+ // hover glow
+ col=mix(col,gold1,.02*uH*(.5+.5*sin(t*.3)));
+
+ gl_FragColor=vec4(clamp(col,0.,1.),1.);
+}`;
+
+// ---- Vehicles Fragment ----
+artFns.vehicles = `#version 100
+precision highp float;
+uniform float uT, uH;
+varying vec2 vUv;
+#define gold1 vec3(.835,.655,.29)
+#define gold2 vec3(.94,.82,.5)
+
+float gear(vec2 uv, float r, float t, float speed){
+ float ang=atan(uv.y,uv.x)+t*speed;
+ float teeth=abs(sin(ang*8.));
+ float body=length(uv);
+ return 1.-smoothstep(r*.85,r,body)*teeth;
+}
+
+void main(){
+ vec2 uv=vUv;float t=uT;
+ vec3 col=vec3(.02,.02,.025);
+
+ // engine block
+ vec2 eUV=(uv-vec2(.5,.55))/vec2(.38,.4);
+ float block=distance(eUV*vec2(.7,1.),vec2(0));
+ block=smoothstep(.45,.35,block);
+ block*=1.-smoothstep(.6,.8,abs(eUV.y));
+ col=mix(col,vec3(.08,.07,.06),block);
+
+ // pistons
+ float rpm=1.+.8*uH;
+ for(int i=0;i<4;i++){
+  float fi=float(i);
+  float phase=fi*1.57+t*.35*rpm;
+  float px=-.25+fi*.16;
+  float py=.15*sin(phase);
+  vec2 pUV=vec2((uv.x-.5-px)/.025,(uv.y-.55-py)/.04);
+  float p=1.-smoothstep(1.,.8,length(pUV));
+  vec3 pCol=mix(vec3(.15,.13,.1),vec3(.2,.18,.15),.5+.5*sin(phase));
+  pCol+=gold1*.06*uH;
+  col=mix(col,pCol,p*.8);
+  // connecting rod
+  float rod=smoothstep(.004,.0,abs((uv.y-.55)-.15*sin(phase)-(uv.x-.5-px)*.3*cos(phase)));
+  col=mix(col,gold1*.04,rod*block);
+ }
+
+ // gear train
+ vec2 g1=uv-vec2(.22,.75);
+ col=mix(col,gold1*.06,gear(g1,.06,t,1.*rpm)*block);
+ vec2 g2=uv-vec2(.28,.82);
+ col=mix(col,gold1*.04,gear(g2,.04,t,-.6*rpm)*block);
+ vec2 g3=uv-vec2(.76,.68);
+ col=mix(col,gold1*.05,gear(g3,.05,t,.4*rpm)*block);
+
+ // energy particles
+ for(int i=0;i<35;i++){
+  float fi=float(i);
+  float prog=fract(t*.04*rpm+fi*.029);
+  float x=.15+prog*.7+.04*sin(prog*6.28*3.+t*.5+fi);
+  float y=.7-prog*.4+.03*sin(prog*6.28*2.+t*.3+fi);
+  float d=length(uv-vec2(x,y));
+  float alpha=.15*(1.-prog)*(.5+.5*uH);
+  vec3 eCol=mix(vec3(1.,.7,.2),vec3(.3,.6,1.),prog);
+  col=mix(col,eCol,alpha*smoothstep(.008,0.,d));
+ }
+
+ // heat haze on hover
+ col=mix(col,vec3(1.,.5,.2)*.02*uH,smoothstep(.08,0.,distance(uv,vec2(.5,.55))));
+
+ // vignette
+ col*=1.-.4*distance(uv,vec2(.5));
+ // hover glow
+ col=mix(col,gold1,.015*uH*(.5+.5*sin(t*.2)));
+ gl_FragColor=vec4(clamp(col,0.,1.),1.);
+}`;
+
+// ---- Art Fragment ----
+artFns.art = `#version 100
+precision highp float;
+uniform float uT, uH;
+varying vec2 vUv;
+#define gold1 vec3(.835,.655,.29)
+#define gold2 vec3(.94,.82,.5)
+
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+vec2 hash2(vec2 p){
+ float h=hash(p);
+ return vec2(h,hash(p+100.));
+}
+
+void main(){
+ vec2 uv=vUv;float t=uT;
+ vec3 col=vec3(0.);
+
+ // nebula
+ vec2 nc=uv-.5;
+ float nd=length(nc);
+ float neb=exp(-nd*3.);
+ col=mix(col,vec3(.2,.1,.3)*.15,neb);
+ neb=exp(-nd*8.);
+ col=mix(col,vec3(.4,.15,.5)*.1,neb);
+
+ // stars
+ for(int i=0;i<150;i++){
+  float fi=float(i);
+  vec2 s=hash2(vec2(fi));
+  float sa=.03+.15*sin(t*.02+fi);
+  float d=length(uv-s);
+  col=mix(col,vec3(1.)*.6,sa*step(.995,1.-d*400.));
+ }
+
+ // constellation nodes
+ vec2 nodes[8];
+ nodes[0]=vec2(.15,.25);nodes[1]=vec2(.4,.15);nodes[2]=vec2(.7,.2);nodes[3]=vec2(.85,.45);
+ nodes[4]=vec2(.5,.5);nodes[5]=vec2(.3,.6);nodes[6]=vec2(.6,.7);nodes[7]=vec2(.8,.3);
+
+ // provenance arcs - unrolled loop using if/else
+ for(int i=0;i<9;i++){
+  vec2 n1,n2;
+  float fi=float(i);
+  if(i==0){n1=nodes[0];n2=nodes[4];}
+  else if(i==1){n1=nodes[1];n2=nodes[4];}
+  else if(i==2){n1=nodes[4];n2=nodes[5];}
+  else if(i==3){n1=nodes[4];n2=nodes[7];}
+  else if(i==4){n1=nodes[2];n2=nodes[7];}
+  else if(i==5){n1=nodes[3];n2=nodes[7];}
+  else if(i==6){n1=nodes[5];n2=nodes[6];}
+  else if(i==7){n1=nodes[1];n2=nodes[2];}
+  else {n1=nodes[0];n2=nodes[5];}
+  vec2 cp=(n1+n2)*.5+vec2(.04*sin(t*.1+fi),-.03*cos(t*.08+fi));
+  float prog=fract(t*.08*(.7+.3*uH)+fi*.11);
+  for(int j=0;j<40;j++){
+   float p=float(j)/40.;
+   if(p>prog)break;
+   float q=1.-p;
+   vec2 pos=q*q*n1+2.*q*p*cp+p*p*n2;
+   float d=length(uv-pos);
+   float a=.03+.04*uH*(1.-p)*sin(t*.2+fi);
+   col=mix(col,gold1,a*smoothstep(.004,0.,d));
+  }
+ }
+
+ // node circles
+ for(int i=0;i<8;i++){
+  vec2 n=nodes[i];
+  float pulse=.5+.5*sin(t*.5+float(i)*.9);
+  float d=length(uv-n);
+  float r=.025+.015*pulse;
+  col=mix(col,gold1,vec3(.03+.06*uH*pulse)*smoothstep(r,0.,d));
+  col=mix(col,gold2,(.01+.02*uH)*smoothstep(r+6./360.,r,uv));
+ }
+
+ // auction ring
+ float rp=fract(t*.06*uH);
+ int ni=int(mod(t*.06,8.));
+ vec2 n=nodes[ni];
+ float ri=distance(uv,n);
+ float rr=rp*.15;
+ col=mix(col,gold2,.03*(1.-rp)*smoothstep(.004,0.,abs(ri-rr)));
+
+ // vignette
+ col*=1.-.3*nd;
+
+ // nebula sweep (rotating)
+ float sa=.5+.5*sin(t*.02+atan(nc.y,nc.x)*4.);
+ col+=vec3(.15,.05,.2)*.02*sa*neb;
+
+ // hover glow
+ col=mix(col,gold1,.02*uH);
+ gl_FragColor=vec4(clamp(col,0.,1.),1.);
+}`;
+
+// ---- Digital Fragment ----
+artFns.digital = `#version 100
+precision highp float;
+uniform float uT, uH;
+varying vec2 vUv;
+#define gold1 vec3(.835,.655,.29)
+#define gold2 vec3(.94,.82,.5)
+
+void main(){
+ vec2 uv=vUv;float t=uT*1.2;
+ vec3 col=vec3(.02,.02,.025);
+
+ // block grid
+ vec2 bg=fract(uv*vec2(8,6)*2.-vec2(.5));
+ float w=1.-step(.03,bg.x)*step(.03,1.-bg.x)*step(.03,bg.y)*step(.03,1.-bg.y);
+ float flash=pow(sin(floor(uv.x*16.)*.3+floor(uv.y*12.)*1.7-t*.15*uH)*.5+.5,3.);
+ col=mix(col,gold1*.03,w*flash*.3*uH);
+ col=mix(col,vec3(.12,.1,.08),w*(.05+.03*flash));
+
+ // wallets - need const indices for array init
+ vec2 wallets[12];
+ wallets[0]=vec2(.06,.12+.55*sin(0.*.5+1.2)+.2*cos(0.*.7+3.));
+ wallets[1]=vec2(.06+1.*.082,.12+.55*sin(1.*.5+1.2)+.2*cos(1.*.7+3.));
+ wallets[2]=vec2(.06+2.*.082,.12+.55*sin(2.*.5+1.2)+.2*cos(2.*.7+3.));
+ wallets[3]=vec2(.06+3.*.082,.12+.55*sin(3.*.5+1.2)+.2*cos(3.*.7+3.));
+ wallets[4]=vec2(.06+4.*.082,.12+.55*sin(4.*.5+1.2)+.2*cos(4.*.7+3.));
+ wallets[5]=vec2(.06+5.*.082,.12+.55*sin(5.*.5+1.2)+.2*cos(5.*.7+3.));
+ wallets[6]=vec2(.06+6.*.082,.12+.55*sin(6.*.5+1.2)+.2*cos(6.*.7+3.));
+ wallets[7]=vec2(.06+7.*.082,.12+.55*sin(7.*.5+1.2)+.2*cos(7.*.7+3.));
+ wallets[8]=vec2(.06+8.*.082,.12+.55*sin(8.*.5+1.2)+.2*cos(8.*.7+3.));
+ wallets[9]=vec2(.06+9.*.082,.12+.55*sin(9.*.5+1.2)+.2*cos(9.*.7+3.));
+ wallets[10]=vec2(.06+10.*.082,.12+.55*sin(10.*.5+1.2)+.2*cos(10.*.7+3.));
+ wallets[11]=vec2(.06+11.*.082,.12+.55*sin(11.*.5+1.2)+.2*cos(11.*.7+3.));
+
+ // node rings
+ for(int i=0;i<12;i++){
+  vec2 w=wallets[i];
+  float pulse=.5+.5*sin(t*.3+float(i)*.7);
+  float d=length(uv-w);
+  float r=.035+.015*pulse;
+  col=mix(col,vec3(.12,.1,.08),smoothstep(r,0.,d));
+  col=mix(col,gold1,vec3(.02+.03*uH*pulse)*smoothstep(r,0.,d));
+  col=mix(col,gold2,(.01+.015*uH)*smoothstep(r+5./360.,r,uv));
+ }
+
+ // transaction arcs - unrolled connections
+ for(int k=0;k<10;k++){
+  vec2 n1,n2;
+  float fk=float(k);
+  if(k==0){n1=wallets[0];n2=wallets[2];}
+  else if(k==1){n1=wallets[1];n2=wallets[3];}
+  else if(k==2){n1=wallets[2];n2=wallets[5];}
+  else if(k==3){n1=wallets[3];n2=wallets[6];}
+  else if(k==4){n1=wallets[4];n2=wallets[7];}
+  else if(k==5){n1=wallets[5];n2=wallets[8];}
+  else if(k==6){n1=wallets[0];n2=wallets[9];}
+  else if(k==7){n1=wallets[9];n2=wallets[10];}
+  else if(k==8){n1=wallets[10];n2=wallets[4];}
+  else {n1=wallets[6];n2=wallets[11];}
+  vec2 cp=(n1+n2)*.5+vec2(.03*sin(t*.15+fk),-.02*cos(t*.12+fk));
+  float prog=fract(t*.06*uH+fk*.08);
+  // arc trail
+  for(int j=0;j<30;j++){
+   float p=float(j)/30.;
+   if(p>prog)break;
+   float q=1.-p;
+   vec2 pos=q*q*n1+2.*q*p*cp+p*p*n2;
+   float d=length(uv-pos);
+   col=mix(col,gold1,vec3((.01+.015*uH)*smoothstep(.003,0.,d)));
+  }
+  // data packet
+  float q=prog;
+  vec2 pos=(1.-q)*(1.-q)*n1+2.*(1.-q)*q*cp+q*q*n2;
+  float b=1.-smoothstep(.006,0.,max(abs(uv.x-pos.x),abs(uv.y-pos.y)));
+  col=mix(col,gold2,.25*uH*b);
+ }
+
+ // mempool
+ vec2 mUV=(uv-vec2(.05,.85))/vec2(.9,.12);
+ if(mUV.x>0.&&mUV.x<1.&&mUV.y>0.&&mUV.y<1.){
+  col=mix(col,vec3(.06,.05,.07),.5);
+  for(int i=0;i<14;i++){
+   float fi=float(i);
+   float bh=.02+.05*(.5+.5*sin(t*.15*uH+fi*.9));
+   float dx=abs(mUV.x-(fi+.5)/14.);
+   float dy=abs(mUV.y-bh);
+   col=mix(col,gold1*vec3(.04+.04*uH),smoothstep(.01,0.,max(dx*.07,bh*.8))*step(mUV.y,bh));
+  }
+ }
+
+ // validator pulse
+ float vp=fract(t*.025);
+ float vd=distance(uv,vec2(.5,.35));
+ col=mix(col,gold2,.02*(1.-vp)*smoothstep(.003,0.,abs(vd-vp*.3)));
+
+ // vignette
+ col*=1.-.5*distance(uv,vec2(.5));
+ // hover glow
+ col=mix(col,gold1,.015*uH);
+ gl_FragColor=vec4(clamp(col,0.,1.),1.);
+}`;
+
+// ---- Init GL canvases ----
+const artNames = ['realestate','vehicles','art','digital'];
+const canvases = [];
+
+const glCanvas = (id, fragSrc) => {
+  const canvas = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = CANVAS_W * dpr;
+  canvas.height = CANVAS_H * dpr;
+  canvas.style.width = (CANVAS_W/dpr) + 'px';
+  canvas.style.height = (CANVAS_H/dpr) + 'px';
+
+  const gl = canvas.getContext('webgl', { alpha: false, antialias: true, premultipliedAlpha: false, preserveDrawingBuffer: false });
+  if (!gl) return null;
+
+  const vs = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(vs, VS); gl.compileShader(vs);
+  const fs = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(fs, fragSrc); gl.compileShader(fs);
+  const prog = gl.createProgram();
+  gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    console.error('GL link error:', gl.getProgramInfoLog(prog));
+    return null;
+  }
+
+  const verts = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+  const aPos = gl.getAttribLocation(prog, 'aPos');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+  const uT = gl.getUniformLocation(prog, 'uT');
+  const uH = gl.getUniformLocation(prog, 'uH');
+
+  gl.useProgram(prog);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+
+  let hv = 0;
+  const card = canvas.closest('.asset-card');
+  if (card) {
+    card.addEventListener('mouseenter', () => hv = 1);
+    card.addEventListener('mouseleave', () => hv = 0);
+  }
+
+  return { gl, prog, uT, uH, canvas, get hv() { return hv; } };
+};
+
+artNames.forEach((name, i) => {
+  const c = glCanvas('c'+i, artFns[name]);
+  if (c) canvases.push(c);
+});
+
+let running = true;
+function animate(time) {
+  if (!running) return;
+  const t = time / 1000;
+  for (const c of canvases) {
+    const hv = Math.min(1, c.hv);
+    const gl = c.gl;
+    gl.uniform1f(c.uT, t);
+    gl.uniform1f(c.uH, hv * 0.6 + 0.4);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+  requestAnimationFrame(animate);
+}
+if (canvases.length) requestAnimationFrame(animate);
+document.addEventListener('visibilitychange', () => { running = !document.hidden; if (running) requestAnimationFrame(animate); });
+</script>
+</body>
+</html>

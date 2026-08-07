@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canonical — For every asset</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:clamp(15px,1vw,19px);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;scroll-behavior:smooth}
+body{font-family:system-ui,-apple-system,'Inter',sans-serif;background:#08080c;color:#d4d0cc;overflow-x:hidden;line-height:1.65;font-size:clamp(15px,1vw,18px)}
+:root{--bg:#08080c;--surface:#0f0f16;--surface-raised:#1a1a28;--border:#22222e;--text:#ddd9d4;--text-muted:#8a88b4;--gold:#d4a74a;--gold-dim:#b8923a;--gold-glow:rgba(212,167,74,.2);--radius:10px;--radius-sm:6px;--ff-display:system-ui,-apple-system,sans-serif;--shadow-card:0 8px 32px rgba(0,0,0,.5);--ease-out:cubic-bezier(0.22,1,0.36,1)}
+
+body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,.01) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.01) 1px,transparent 1px);background-size:3rem 3rem;pointer-events:none;z-index:0}
+
+.display{font-weight:300;letter-spacing:-.025em;font-family:var(--ff-display)}
+.label{font-size:.6rem;font-weight:500;text-transform:uppercase;letter-spacing:.12em;color:var(--text-muted)}
+.container{max-width:1160px;margin:0 auto;padding:0 2rem;position:relative;z-index:1}
+
+nav{display:flex;align-items:center;justify-content:space-between;padding:.85rem 2rem;position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(8,8,12,.8);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,.035)}
+nav .logo{font-size:1.05rem;font-weight:500;letter-spacing:-.02em;display:flex;align-items:center;gap:.5rem;color:#fff}
+nav .logo svg{width:1.25rem;height:1.25rem}
+nav .nav-links{display:flex;align-items:center;gap:1.5rem;font-size:.8rem;color:var(--text-muted)}
+nav .nav-links a{transition:color .2s} nav .nav-links a:hover{color:#fff}
+nav .btn-nav{background:var(--gold);color:#08080c;padding:.4rem 1.1rem;border-radius:var(--radius-sm);font-size:.75rem;font-weight:600;transition:box-shadow .3s,translate .2s;letter-spacing:.02em}
+nav .btn-nav:hover{box-shadow:0 0 1.2rem var(--gold-glow);translate:0 -1px}
+
+.hero{min-height:100vh;display:flex;flex-direction:column;padding:6rem 0 2rem;position:relative;align-items:center;justify-content:center} .hero::after{content:"";position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:.2}
+.hero .bg-glow{position:absolute;top:20%;left:50%;translate:-50% 0;width:80vmax;height:80vmax;background:radial-gradient(circle,var(--gold-glow) 0%,transparent 70%);opacity:.35;pointer-events:none;z-index:0}
+.hero .hero-canvas-wrap{position:absolute;inset:0;overflow:hidden;z-index:0;opacity:.6} .hero .hero-canvas-wrap canvas{width:100%;height:100%;object-fit:cover} .hero .hero-canvas-wrap canvas{width:100%;height:100%;object-fit:cover}
+.hero .hero-canvas-wrap canvas{width:100%;height:100%;display:block}
+.hero .container{z-index:1;display:flex;flex-direction:column;align-items:center}
+.hero .badge{display:inline-flex;align-items:center;gap:.4rem;background:var(--surface-raised);border:1px solid rgba(212,167,74,.15);padding:.35rem 1rem;border-radius:100px;font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:1.4rem;color:var(--text-muted)}
+.hero .badge span{color:var(--gold)}
+.hero h1{font-size:clamp(2.8rem,7vw,5.5rem);line-height:1.02;max-width:14ch;margin-bottom:.4em;color:#fff;text-align:center;margin-left:auto;margin-right:auto}
+.hero h1 em{font-style:normal;background:linear-gradient(135deg,var(--gold),#e8c864);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 0 20px rgba(212,167,74,.15))}
+.hero .sub{font-size:1.15rem;color:var(--text-muted);max-width:52ch;margin-bottom:2.2rem;line-height:1.7;text-align:center;margin-left:auto;margin-right:auto;text-shadow:0 2px 20px rgba(0,0,0,.5)}
+.hero-actions{display:flex;gap:.8rem;flex-wrap:wrap;margin-bottom:.5rem;justify-content:center}
+.hero-actions .btn-primary{background:var(--gold);color:#08080c;padding:.85rem 2rem;border-radius:var(--radius-sm);font-weight:600;font-size:.95rem;transition:box-shadow .3s,translate .2s;border:none;cursor:pointer}
+.hero-actions .btn-primary:hover{box-shadow:0 0 1.5rem var(--gold-glow);translate:0 -1px}
+.hero-actions .btn-secondary{background:var(--surface-raised);color:var(--text);padding:.75rem 1.8rem;border-radius:var(--radius-sm);font-weight:500;font-size:.9rem;border:1px solid var(--border);transition:border-color .3s,translate .2s;cursor:pointer}
+.hero-actions .btn-secondary:hover{border-color:var(--text-muted);translate:0 -1px}
+
+.scroll-indicator{position:absolute;bottom:2rem;left:50%;translate:-50% 0;display:flex;flex-direction:column;align-items:center;gap:.35rem;color:var(--text-muted);font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;opacity:.5;animation:scrollBob 2.5s var(--ease-out) infinite}
+@keyframes scrollBob{0%,100%{translate:-50% 0}50%{translate:-50% .35rem}} @media(max-width:500px){.hero h1{font-size:clamp(2rem,10vw,3rem)}.hero .sub{font-size:.95rem}.pricing-grid .plan{padding:1.2rem}.asset-card canvas{height:160px}.featured-info{padding:1.2rem}}
+
+.asset-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1.2rem;margin:5rem 0 0}
+@media(max-width:700px){.asset-grid{grid-template-columns:1fr}}
+.asset-card{background:var(--surface);position:relative;overflow:hidden;border-radius:var(--radius);border:1px solid rgba(212,167,74,.08);transition:translate .4s var(--ease-out),box-shadow .4s var(--ease-out),background .3s;translate:0 0;box-shadow:var(--shadow-card)}
+.asset-card:hover{background:var(--surface-raised);translate:0 -4px;border-color:rgba(212,167,74,.2);box-shadow:0 0 30px var(--gold-glow),0 16px 48px rgba(0,0,0,.6)} .asset-card::after{content:"";position:absolute;inset:0;background:linear-gradient(135deg,transparent 30%,rgba(212,167,74,.04) 50%,transparent 70%);opacity:0;transition:opacity .4s;pointer-events:none;z-index:2} .asset-card:hover::after{opacity:1}
+.asset-card canvas{display:block;width:100%;height:200px;max-width:100%;object-fit:cover;image-rendering:auto;transition:transform .6s var(--ease-out)}
+.asset-card:hover canvas{transform:scale(1.02)}
+.asset-card .card-header{padding:.9rem 1rem .4rem}
+.asset-card .card-header h3{font-size:.95rem;font-weight:500;color:#fff;letter-spacing:-.01em}
+.asset-card .card-header p{font-size:.75rem;color:var(--text-muted);margin-top:.15rem}
+.asset-card .card-footer{padding:.55rem 1rem .75rem;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border)}
+.asset-card .card-footer .label{font-size:.6rem}
+.asset-card .card-footer .count{font-size:.85rem;font-weight:500;color:var(--gold);font-family:system-ui}
+
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;border-radius:var(--radius);overflow:hidden;margin:5rem 0;border:1px solid var(--border);background:var(--surface);box-shadow:0 0 12px rgba(212,167,74,.06),var(--shadow-card)}
+@media(max-width:600px){.stats-row{grid-template-columns:repeat(2,1fr)}}
+.stats-row .stat{padding:1.5rem 1.2rem;text-align:center;transition:background .3s}
+.stats-row .stat:hover{background:var(--surface-raised)}
+.stats-row .stat .num{font-size:2rem;font-weight:500;color:#e8c864;text-shadow:0 0 20px rgba(212,167,74,.3);letter-spacing:-.02em;display:block;line-height:1.15}
+.stats-row .stat .num-label{font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);display:block;margin-top:.25rem}
+
+.featured{display:grid;grid-template-columns:1.1fr .9fr;gap:0;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);background:var(--surface);margin:5rem 0;box-shadow:0 0 12px rgba(212,167,74,.08),var(--shadow-card)}
+@media(max-width:700px){.featured{grid-template-columns:1fr}}
+.featured-visual{min-height:350px;position:relative;overflow:hidden;background:linear-gradient(135deg,#0f0f16 0%,#14101e 100%);border-right:1px solid var(--border)}
+.featured-visual canvas{position:absolute;inset:0;width:100%;height:100%}
+.featured-info{padding:2rem 2rem;display:flex;flex-direction:column;justify-content:center;gap:.4rem}
+.featured-info h2{font-size:1.4rem;letter-spacing:-.015em;color:#fff;font-weight:500}
+.featured-info .featured-desc{font-size:.85rem;color:var(--text-muted);line-height:1.7;max-width:38ch}
+.featured-info .featured-meta{display:flex;align-items:center;gap:1.2rem;margin-top:.2rem}
+.featured-info .featured-meta span{font-size:.75rem;color:var(--text)}
+.featured-info .featured-meta span strong{color:var(--gold);font-weight:500}
+.featured-info .tags{display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.15rem}
+.featured-info .tags span{background:var(--surface-raised);border:1px solid var(--border);padding:.2rem .55rem;border-radius:100px;font-size:.6rem;letter-spacing:.05em;color:var(--text-muted)}
+
+.pricing{margin:5rem 0;text-align:center}
+.pricing h2{font-size:1.6rem;margin-bottom:.3rem;color:#fff;letter-spacing:-.015em;text-align:center}
+.pricing .p-sub{color:var(--text-muted);margin-bottom:2.5rem;text-align:center;font-size:.9rem}
+.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem}
+@media(max-width:700px){.pricing-grid{grid-template-columns:1fr;max-width:400px;margin:0 auto}}
+.pricing-grid .plan{background:var(--surface);padding:1.8rem;text-align:left;border-radius:var(--radius);border:1px solid var(--border);transition:translate .4s var(--ease-out),box-shadow .4s var(--ease-out),background .3s;translate:0 0;box-shadow:var(--shadow-card);display:flex;flex-direction:column}
+.pricing-grid .plan:hover{background:var(--surface-raised);translate:0 -4px;box-shadow:0 16px 48px rgba(0,0,0,.6)}
+.pricing-grid .plan.popular{border-color:var(--gold);position:relative;box-shadow:0 0 20px var(--gold-glow),var(--shadow-card)}
+.pricing-grid .plan.popular::before{content:"Most Popular";position:absolute;top:.5rem;right:.5rem;background:var(--gold);color:#08080c;padding:.2rem .6rem;border-radius:100px;font-size:.55rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.pricing-grid .plan .plan-name{font-size:.65rem;font-weight:500;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin-bottom:.35rem}
+.pricing-grid .plan .plan-price{font-size:1.5rem;font-weight:500;color:#fff;letter-spacing:-.02em;margin-bottom:.15rem}
+.pricing-grid .plan .plan-price .period{font-size:.7rem;color:var(--text-muted);font-weight:400}
+.pricing-grid .plan .plan-desc{font-size:.8rem;color:var(--text-muted);line-height:1.6;margin-bottom:1.2rem;flex:1}
+.pricing-grid .plan .plan-cta{background:var(--surface-raised);border:1px solid var(--border);color:var(--text);padding:.55rem 0;border-radius:var(--radius-sm);font-size:.8rem;font-weight:500;text-align:center;display:block;width:100%;transition:background .3s,border-color .3s,box-shadow .3s;cursor:pointer}
+.pricing-grid .plan .plan-cta:hover{background:var(--border);border-color:var(--text-muted)}
+.pricing-grid .plan.popular .plan-cta{background:var(--gold);color:#08080c;border-color:var(--gold);font-weight:600}
+.pricing-grid .plan.popular .plan-cta:hover{box-shadow:0 0 1.2rem var(--gold-glow)}
+
+footer{margin-top:3rem;padding:3rem 0 2.5rem;border-top:1px solid var(--border);position:relative} footer::before{content:"";position:absolute;top:-1px;left:20%;right:20%;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:.3}
+footer .footer-inner{display:grid;grid-template-columns:2fr 1fr 1fr;gap:2rem;max-width:1160px;margin:0 auto;padding:0 2rem;text-align:left}
+@media(max-width:600px){footer .footer-inner{grid-template-columns:1fr;text-align:center}}
+footer .footer-brand .logo{font-size:.95rem;font-weight:500;color:#fff;letter-spacing:-.02em;display:flex;align-items:center;gap:.4rem;margin-bottom:.5rem}
+footer .footer-brand p{font-size:.75rem;color:var(--text-muted);line-height:1.6;max-width:32ch}
+footer .footer-col h4{font-size:.65rem;font-weight:500;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin-bottom:.75rem}
+footer .footer-col a{display:block;font-size:.75rem;color:var(--text);padding:.2rem 0;text-decoration:none;transition:color .2s}
+footer .footer-col a:hover{color:var(--gold)}
+footer .footer-bottom{border-top:1px solid var(--border);margin-top:2rem;padding-top:1.2rem;text-align:center;font-size:.7rem;color:var(--text-muted)}
+
+section{padding:4rem 0;position:relative} section::after{content:"";position:absolute;bottom:0;left:50%;translate:-50% 0;width:30%;height:1px;background:linear-gradient(90deg,transparent,rgba(212,167,74,.12),transparent);pointer-events:none}
+section h2.section-title{font-size:1.6rem;font-weight:400;letter-spacing:-.015em;color:#fff;margin-bottom:.6rem;text-align:center} section h2.section-title::after{content:"";display:block;width:60px;height:1.5px;background:linear-gradient(90deg,var(--gold),transparent);margin:.35rem auto 0;opacity:.5} section h2.section-title span{color:var(--gold)}
+section .section-sub{font-size:.85rem;color:var(--text-muted);text-align:center;margin-bottom:2.5rem}
+
+.reveal{opacity:0;translate:0 30px;transition:opacity .7s var(--ease-out),translate .7s var(--ease-out)} .reveal.visible{opacity:1;translate:0 0}
+.reveal.visible{opacity:1;translate:0 0}
+.reveal-delay-1{transition-delay:.1s}
+.reveal-delay-2{transition-delay:.2s}
+.reveal-delay-3{transition-delay:.3s}
+</style>
+</head>
+<body>
+
+<nav><div class="logo">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M8 12l2 2 4-4"/></svg>
+Canonical
+</div>
+<div class="nav-links">
+<a href="#profiles">Profiles</a>
+<a href="#pricing">Pricing</a>
+<a href="#">Docs</a>
+<button class="btn-nav">Sign in</button>
+</div>
+</nav>
+
+<div class="hero">
+<div class="bg-glow"></div>
+<div class="hero-canvas-wrap"><canvas id="heroCanvas"></canvas></div>
+<div class="container">
+<div class="badge"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="6" r="3"/></svg> <span>Beta</span> — Canonical Asset Registry</div>
+<h1 class="display">A canonical profile page<br>for <em>every asset on earth</em></h1>
+<p class="sub">One source of truth for every physical and digital asset. Verified, archived, and universally accessible.</p>
+<div class="hero-actions">
+<button class="btn-primary">Explore profiles</button>
+<button class="btn-secondary">View demo</button>
+</div>
+</div>
+<div class="scroll-indicator"><svg width="16" height="24" viewBox="0 0 16 24" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="1" width="14" height="22" rx="7"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>Scroll</div>
+</div>
+
+<section id="profiles">
+<div class="container">
+<div class="badge" style="margin-bottom:.8rem">Asset Categories</div>
+<div class="asset-grid reveal visible">
+<div class="asset-card" style="--card-hue:210">
+<div class="card-header"><h3>Real Estate</h3><p>Properties, land, developments</p></div>
+<canvas id="c0" width="640" height="360"></canvas>
+<div class="card-footer">
+<span class="label">Total Profiles</span>
+<span class="count">12.4M</span>
+</div>
+</div>
+<div class="asset-card" style="--card-hue:0">
+<div class="card-header"><h3>Vehicles</h3><p>Cars, aircraft, vessels</p></div>
+<canvas id="c1" width="640" height="360"></canvas>
+<div class="card-footer">
+<span class="label">Total Profiles</span>
+<span class="count">8.7M</span>
+</div>
+</div>
+<div class="asset-card" style="--card-hue:280">
+<div class="card-header"><h3>Art & Collectibles</h3><p>Paintings, sculptures, editions</p></div>
+<canvas id="c2" width="640" height="360"></canvas>
+<div class="card-footer">
+<span class="label">Total Profiles</span>
+<span class="count">3.2M</span>
+</div>
+</div>
+<div class="asset-card" style="--card-hue:170">
+<div class="card-header"><h3>Digital Assets</h3><p>Domains, tokens, licenses</p></div>
+<canvas id="c3" width="640" height="360"></canvas>
+<div class="card-footer">
+<span class="label">Total Profiles</span>
+<span class="count">5.9M</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<section id="stats">
+<div class="container">
+<h2 class="section-title">By the <span>numbers</span></h2>
+<p class="section-sub">The canonical index grows every day</p>
+<div class="stats-row reveal">
+<div class="stat"><span class="num" data-count="34000000">34M</span><span class="num-label">Assets Tracked</span></div>
+<div class="stat"><span class="num" data-count="98000000">98M</span><span class="num-label">Verifications</span></div>
+<div class="stat"><span class="num" data-count="142">142</span><span class="num-label">Countries</span></div>
+<div class="stat"><span class="num" data-count="99.97">99.97</span><span class="num-label">Uptime</span></div>
+</div>
+</div>
+</section>
+
+<section id="featured">
+<div class="container">
+<h2 class="section-title">Featured <span>profile</span></h2>
+<p class="section-sub">Every asset is unique — here's a preview</p>
+<div class="featured reveal">
+<div class="featured-visual"><canvas id="featuredCanvas" width="480" height="360"></canvas></div>
+<div class="featured-info reveal reveal-delay-2">
+<div class="badge" style="margin-bottom:.25rem">Real Estate</div>
+<h2 class="display">Beachfront Estate, Malibu</h2>
+<p class="featured-desc">A verified 4.2-acre parcel with 360-degree coastal views. Linked to deed, survey, and satellite imagery — a single source of truth.</p>
+<div class="featured-meta"><span>Last verified <strong>12h ago</strong></span><span>Source integrity <strong>98.4%</strong></span></div>
+<div class="tags">
+<span>Deed</span><span>Survey</span><span>Satellite</span><span>Zoning</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<section id="pricing">
+<div class="container">
+<h2 class="display">Simple, transparent pricing</h2>
+<p class="p-sub">One profile, one source of truth, for every asset.</p>
+<div class="pricing-grid reveal">
+<div class="plan">
+<div class="plan-name">Starter</div>
+<div class="plan-price">Free <span class="period"></span></div>
+<p class="plan-desc">Up to 100 asset profiles. Basic verification. Standard support.</p>
+<button class="plan-cta">Get started</button>
+</div>
+<div class="plan popular">
+<div class="plan-name">Professional</div>
+<div class="plan-price">$29 <span class="period">/ month</span></div>
+<p class="plan-desc">Unlimited profiles. Advanced verification. API access. Priority support.</p>
+<button class="plan-cta">Start trial</button>
+</div>
+<div class="plan">
+<div class="plan-name">Enterprise</div>
+<div class="plan-price">$199 <span class="period">/ month</span></div>
+<p class="plan-desc">White-label profiles. Custom integrations. Dedicated account team. SLA.</p>
+<button class="plan-cta">Contact sales</button>
+</div>
+</div>
+</div>
+</section>
+
+ooter><div class="footer-inner">
+<div class="footer-brand">
+<div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M8 12l2 2 4-4"/></svg> Canonical</div>
+<p>A canonical profile page for every asset on earth. Archival by design.</p>
+</div>
+<div class="footer-col">
+<h4>Product</h4>
+<a href="#">Profiles</a><a href="#">API</a><a href="#">Pricing</a><a href="#">Integrations</a>
+</div>
+<div class="footer-col">
+<h4>Company</h4>
+<a href="#">About</a><a href="#">Blog</a><a href="#">Careers</a><a href="#">Contact</a>
+</div>
+</div>
+<div class="footer-bottom">Canonical &copy; 2026 &mdash; for every asset on earth</div>
+</footer>
+
+<script>
+const VS = `
+attribute vec2 aPos;
+void main(){gl_Position=vec4(aPos,0.,1.);}
+`;
+
+// GLSL helpers
+const hashFn = `
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+`;
+
+// Real estate — blue/gold architectural, glass tower, city skyline, orbit ring
+const fragRealEstate = `#version 100
+precision highp float;
+uniform float uT,uH;
+varying vec2 vUv;
+${hashFn}
+void main(){
+ vec2 uv=vUv*1.02-.01;float t=uT*.6;
+ vec3 sky=mix(vec3(.06,.12,.28),vec3(.2,.4,.7),smoothstep(0.,1.,uv.y));
+ vec3 col=sky;
+ // sun glow
+ float sd=length(uv-vec2(.35,.75));
+ col+=vec3(.25,.12,.04)*.12/smoothstep(.15,.4,sd);
+ // city skyline silhouette
+ for(int i=0;i<20;i++){
+  float fi=float(i);
+  float sx=fi/20.,sw=.025+.035*hash(vec2(fi,0.)),sh=.12+.3*hash(vec2(fi,1.));
+  float bl=step(abs(uv.x-sx),sw)*step(uv.y-2.*sw,sh*.38)*step(2.*sw,uv.y);
+  col=mix(col,vec3(.015,.018,.025),bl*.55);
+  vec2 wg=fract(uv*60.);float wl=step(.55,wg.x)*step(.65,wg.y);
+  col=mix(col,vec3(.35,.55,.7),bl*wl*.12*uH);
+ }
+ // glass tower
+ float tx=1.-abs(uv.x-.5)*4.5;float ty=smoothstep(.0,.05,uv.y)*smoothstep(.12,.0,uv.y-.75);
+ float tb=tx*ty;
+ col=mix(col,vec3(.3,.55,.75),tb*.75);
+ vec2 tf=fract(uv*vec2(14,28));float tw=step(.45,tf.x)*step(.5,tf.y);
+ col=mix(col,vec3(.6,.9,1.),tb*tw*.25);
+ // gold accent line
+ float go=abs(uv.x-.5);
+ col=mix(col,vec3(.6,.45,.15),.06*smoothstep(.002,0.,abs(go-.28))*smoothstep(.1,.0,abs(uv.y-.32)));
+ // strata lines
+ float str=uv.y<.12?step(sin(uv.x*60.+uv.y*20.+t*.08),0.):0.;
+ col=mix(col,vec3(.1,.08,.04),str*.1);
+ // orbit ring
+ float od=length(uv-vec2(.5,.4));float oa=od-.28;
+ col=mix(col,vec3(.25,.5,.7),.06*smoothstep(.012,0.,abs(oa)));
+ float orp=fract(t*.04+uH*.03);
+ vec2 op=vec2(.5,.4)+.28*vec2(cos(orp*6.283),sin(orp*6.283));
+ float opd=length(uv-op);
+ col=mix(col,vec3(.6,1.,1.),.2*smoothstep(.02,0.,opd));
+ // particles
+ for(int i=0;i<30;i++){
+  float fi=float(i);
+  float pa=fi*2.399+uH*.15+t*.03;
+  vec2 pp=vec2(.5,.4)+.22*vec2(cos(pa),sin(pa));
+  col=mix(col,vec3(.2,.4,.6),.04*smoothstep(.003,0.,length(uv-pp)));
+ }
+ col*=1.-.4*distance(uv,vec2(.5,.4));
+ col=mix(col,vec3(.12,.1,.08),.01*uH);
+ gl_FragColor=vec4(clamp(col*3.0,0.,1.),1.);
+}
+`;
+
+// Vehicles — engine bay, pistons, crank shaft, heat glow, sparks
+const fragVehicles = `#version 100
+precision highp float;
+uniform float uT,uH;
+varying vec2 vUv;
+${hashFn}
+void main(){
+ vec2 uv=vUv;float t=uT*.5;
+ vec3 col=mix(vec3(.08,.06,.05),vec3(.2,.14,.08),uv.y);
+ // engine block outline
+ float bl=step(abs(uv.x-.5),.4)*step(abs(uv.y-.5),.32);
+ // cylinder walls
+ for(int i=0;i<4;i++){
+  float fi=float(i);
+  float cx=-.3+.6*(fi+.5)/4.+.5;
+  float cw=smoothstep(.055,.045,abs(uv.x-cx))*smoothstep(.25,.2,abs(uv.y-.5));
+  col=mix(col,vec3(.2,.12,.06),cw*.35);
+  float cl=smoothstep(.005,.0,abs(abs(uv.x-cx)-.055))*smoothstep(.25,.0,abs(uv.y-.5));
+  col=mix(col,vec3(.35,.2,.1),cl*.5);
+ }
+ // exhaust manifold
+ float mnf=smoothstep(.01,.0,abs(uv.y-.68))*smoothstep(.35,.3,abs(uv.x-.5));
+ col=mix(col,vec3(.12,.08,.04),mnf*.5);
+ for(int i=0;i<4;i++){
+  float fi=float(i);
+  float mx=-.3+.6*(fi+.5)/4.+.5;
+  float mt=smoothstep(.008,.0,abs(uv.x-mx))*smoothstep(.05,.02,abs(uv.y-.7));
+  col=mix(col,vec3(.2,.12,.06),mt*.4);
+ }
+ col=mix(col,vec3(.15,.1,.07),bl*.6);
+ // pistons — reciprocating
+ for(int i=0;i<4;i++){
+  float fi=float(i);
+  float px=-.3+.6*(fi+.5)/4.+.5;
+  float py=.45+.18*sin(t*1.8+fi*1.57+uH*.5);
+  float pd=length(uv-vec2(px,py));
+  col=mix(col,vec3(.6,.35,.18),.6*smoothstep(.1,0.,pd));
+  float pwh=smoothstep(.04,0.,abs(uv.x-px))*smoothstep(.04,0.,abs(uv.y-py));
+  // connecting rods
+ for(int i=0;i<4;i++){
+  float fi=float(i);
+  float px=-.3+.6*(fi+.5)/4.+.5;
+  float py=.45+.18*sin(t*1.8+fi*1.57+uH*.5);
+  for(int j=0;j<20;j++){
+   float p=float(j)/20.;
+   vec2 rodPos=mix(vec2(px,py),vec2(px,.35),p);
+   float rod=smoothstep(.003,0.,length(uv-rodPos));
+   col=mix(col,vec3(.35,.22,.12),rod*.2);
+  }
+ }
+ }
+ // crank shaft
+ float cd=distance(uv,vec2(.5,.35));
+ float cg=smoothstep(.12,.1,cd);
+ col=mix(col,vec3(.2,.15,.1),cg*.4);
+ float ct=smoothstep(.005,0.,abs(fract((atan(uv.y-.35,uv.x-.5)+t*.6)/(.023))-.5));
+ col=mix(col,vec3(.35,.22,.12),ct*cg*.2);
+ // heat glow
+ col+=vec3(.55,.25,.05)*.12/smoothstep(.0,.35,uv.y);
+ // sparks
+ for(int i=0;i<40;i++){
+  float fi=float(i);
+  vec2 sp=vec2(.1+.8*hash(vec2(fi,0.)),.1+.85*fract(fi*.549+t*.045*(.5+hash(vec2(fi,2.))*.3)));
+  col=mix(col,vec3(.8,.4,0.),.06*smoothstep(.01,0.,length(uv-sp)));
+ }
+ col*=1.-.35*distance(uv,vec2(.5,.4));
+ col=mix(col,vec3(.15,.06,.02),.015*uH);
+ gl_FragColor=vec4(clamp(col*3.0,0.,1.),1.);
+}
+`;
+
+// Art — gallery with framed paintings, spotlight sweep, auction paddles
+
+const fragArt = `#version 100
+precision highp float;
+uniform float uT,uH;
+varying vec2 vUv;
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+void main(){
+ vec2 uv=vUv*1.02-.01;float t=uT*.3;
+ // gallery wall — warm brown
+ vec3 col=mix(vec3(.1,.06,.04),vec3(.16,.1,.06),uv.y);
+ // wall texture
+ vec2 wf=fract(uv*vec2(6,4));float wh=step(.9,hash(floor(uv*vec2(6,4))));
+ col=mix(col,vec3(.08,.05,.03),wh*.06);
+ // gold frame outer
+ float fo=smoothstep(.36,.4,abs(uv.x-.5))+smoothstep(.31,.35,abs(uv.y-.5));
+ col=mix(col,vec3(.5,.38,.2),clamp(fo,0.,1.)*.55);
+ // gold frame inner highlight
+ float fi=smoothstep(.35,.37,abs(uv.x-.5))+smoothstep(.3,.32,abs(uv.y-.5));
+ col=mix(col,vec3(.7,.55,.3),clamp(fi,0.,1.)*.4);
+ float mask=1.-clamp(fi,0.,1.);
+ // painting inside — impressionist with vivid strokes
+ vec2 auv=(uv-vec2(.5))*3.2;
+ float ap=sin(auv.x*4.+t*.05)*.5+cos(auv.y*3.5+t*.04)*.5+sin(length(auv+vec2(.1,.2))*5.+t*.03);
+ // rich palette with blues, golds, greens
+ vec3 paint=mix(vec3(.55,.3,.1),vec3(.6,.4,.2),smoothstep(-.5,.5,ap));
+ paint=mix(paint,vec3(.2,.3,.4),.15*(.5+.5*sin(auv.x*2.+auv.y*3.))); // blue patch
+ paint=mix(paint,vec3(.3,.45,.2),.1*(.5+.5*cos(auv.y*4.+t*.02))); // green patch
+ paint=mix(paint,vec3(.7,.5,.25),smoothstep(-.5,.0,sin(auv.y*5.+t*.02)));
+ // brushstroke texture
+ float bs=sin(uv.x*40.+uv.y*30.+t*.02)*.5+.5;
+ paint=mix(paint,paint*1.2,bs*.15);
+ col=mix(col,paint,mask*.9);
+ // painting dark corners
+ col=mix(col,vec3(.15,.1,.05),mask*.15*(1.-smoothstep(.0,.3,length(uv-vec2(.5)))));
+ // spotlight gradient
+ float spt=smoothstep(.35,.0,abs(uv.x-.5-.05*sin(t*.04)));
+ col+=vec3(.15,.1,.04)*spt*.15*mask;
+ // auction paddle silhouettes
+ for(int i=0;i<5;i++){
+  float fi=float(i);
+  float px=.08+.2*fi;
+  float py=.08+.04*sin(t*.8+fi*1.5);
+  float pl=smoothstep(.006,0.,abs(uv.x-px))*smoothstep(.1,0.,abs(uv.y-py));
+  col=mix(col,vec3(.18,.1,.04),pl*.7);
+  float ph=smoothstep(.025,0.,abs(uv.x-px))*smoothstep(.01,0.,abs(uv.y-(py+.12)));
+  col=mix(col,vec3(.3,.2,.08),ph*.6);
+ }
+ // floor line
+ float fl=smoothstep(.005,0.,abs(uv.y-.02));
+ col=mix(col,vec3(.2,.12,.06),fl*.5);
+ col*=1.-.45*distance(uv,vec2(.5));
+ gl_FragColor=vec4(clamp(col*2.5,0.,1.),1.);
+}
+`;
+
+// Digital — blockchain lattice, validators, transaction arcs, data pulses
+const fragDigital = `#version 100
+precision highp float;
+uniform float uT,uH;
+varying vec2 vUv;
+${hashFn}
+void main(){
+ vec2 uv=vUv;float t=uT*.8;
+ vec3 bg=mix(vec3(.04,.08,.15),vec3(.08,.15,.25),uv.y);
+ vec3 col=bg;
+ // grid
+ vec2 gv=fract(uv*vec2(12,8));float gr=smoothstep(.03,.0,gv.x)+smoothstep(.03,.0,1.-gv.x)+smoothstep(.03,.0,gv.y)+smoothstep(.03,.0,1.-gv.y);
+ col=mix(col,vec3(.15,.28,.42),clamp(gr,.0,1.)*.55);
+ float gp=pow(sin(floor(uv.x*12.)*1.2+floor(uv.y*8.)*2.3-t*.25*uH)*.5+.5,4.);
+ col=mix(col,vec3(.18,.35,.5),clamp(gr,.0,1.)*gp*.2*uH);
+ // wallet nodes — manual if-chain
+ vec2 n0=vec2(.07,.15),n1=vec2(.15,.45),n2=vec2(.2,.78),n3=vec2(.34,.3),n4=vec2(.4,.6),n5=vec2(.48,.88);
+ vec2 n6=vec2(.6,.18),n7=vec2(.66,.48),n8=vec2(.74,.78),n9=vec2(.84,.28),nA=vec2(.9,.58),nB=vec2(.96,.85);
+ for(int i=0;i<12;i++){
+  vec2 n;
+  if(i==0)n=n0;if(i==1)n=n1;if(i==2)n=n2;if(i==3)n=n3;if(i==4)n=n4;if(i==5)n=n5;
+  if(i==6)n=n6;if(i==7)n=n7;if(i==8)n=n8;if(i==9)n=n9;if(i==10)n=nA;if(i==11)n=nB;
+  float pu=.5+.5*sin(t*.3+float(i)*1.1);
+  float nd=length(uv-n);
+  float nr=.04+.02*pu;
+  col=mix(col,vec3(.12,.28,.45),smoothstep(nr*1.5,0.,nd));
+  col=mix(col,vec3(.2,.7,1.),(.08+.2*uH*pu)*smoothstep(nr,0.,nd));
+  col=mix(col,vec3(.4,.9,1.),(.05+.1*uH)*smoothstep(nr*1.2,nr,nd));
+ }
+ // transaction arcs (bezier)
+ // static network lines
+ for(int k=0;k<8;k++){
+  vec2 n1,n2;
+  if(k==0){n1=n0;n2=n3;}if(k==1){n1=n1;n2=n4;}if(k==2){n1=n2;n2=n7;}if(k==3){n1=n3;n2=n8;}
+  if(k==4){n1=n4;n2=n9;}if(k==5){n1=n5;n2=nA;}if(k==6){n1=n6;n2=nB;}if(k==7){n1=n7;n2=n0;}
+  vec2 dir=n2-n1;float dst=length(dir);vec2 nd=dir/dst;
+  float proj=dot(uv-n1,nd);
+  float dist2=length((uv-n1)-proj*nd);
+  float seg=smoothstep(.004,0.,dist2)*step(0.,proj)*step(proj,dst);
+  col=mix(col,vec3(.08,.2,.3),seg*.15*uH);
+ }
+ for(int k=0;k<12;k++){
+  vec2 na,nb;
+  if(k==0){na=n0;nb=n2;}if(k==1){na=n1;nb=n3;}if(k==2){na=n2;nb=n5;}if(k==3){na=n3;nb=n6;}
+  if(k==4){na=n4;nb=n7;}if(k==5){na=n5;nb=n8;}if(k==6){na=n0;nb=n9;}if(k==7){na=n9;nb=nA;}
+  if(k==8){na=nA;nb=n4;}if(k==9){na=n6;nb=nB;}if(k==10){na=nB;nb=n2;}if(k==11){na=n3;nb=n1;}
+  vec2 cp=(na+nb)*.5+vec2(.04*sin(t*.15+float(k)*.5),-.025*cos(t*.12+float(k)*.5));
+  float pr=fract(t*.045*uH+float(k)*.06);
+  for(int j=0;j<20;j++){
+   float p=float(j)/20.;
+   if(p>pr)break;
+   float q=1.-p;
+   vec2 pos=q*q*na+2.*q*p*cp+p*p*nb;
+    // arc glow
+  col=mix(col,vec3(.1,.4,.6),smoothstep(.06,0.,length(uv-pos))*.04*uH);
+  col=mix(col,vec3(.3,.9,1.),smoothstep(.025,0.,length(uv-pos))*.08*uH);
+  }
+  float pq=pr;
+  vec2 ppos=(1.-pq)*(1.-pq)*na+2.*(1.-pq)*pq*cp+pq*pq*nb;
+  float pb=smoothstep(.02,0.,max(abs(uv.x-ppos.x),abs(uv.y-ppos.y)));
+  col=mix(col,vec3(.2,.6,.8),.3*uH*smoothstep(.03,0.,max(abs(uv.x-ppos.x),abs(uv.y-ppos.y))));
+  col=mix(col,vec3(.5,1.,1.),.8*uH*pb);
+ }
+ // validator ring
+ float vp=fract(t*.02+uH*.02);
+ float vd=distance(uv,vec2(.5,.35));
+ col=mix(col,vec3(.4,1.,1.),.2*(1.-vp)*smoothstep(.006,0.,abs(vd-vp*.22)));
+ col=mix(col,vec3(.12,.4,.6),.06*smoothstep(.008,0.,abs(vd-.28)));
+ // data particles
+ for(int i=0;i<15;i++){
+  float fi=float(i);
+  vec2 dp=vec2(.05+.9*fract(fi*.523+t*.03*uH),.05+.9*fract(fi*.671+t*.035*(.4+hash(vec2(fi,4.))*.3)));
+  col=mix(col,vec3(.3,.9,1.),.06*smoothstep(.012,0.,length(uv-dp)));
+ }
+ col*=1.-.45*distance(uv,vec2(.5));
+ col=mix(col,vec3(.1,.3,.4),.015*uH);
+ gl_FragColor=vec4(clamp(col*3.0,0.,1.),1.);
+}
+`;
+
+// Hero background — slow gold/warm nebula
+const fragHero = `#version 100
+precision highp float;
+uniform float uT;
+varying vec2 vUv;
+${hashFn}
+void main(){
+ vec2 uv=vUv;float t=uT*.3;
+ vec3 col=mix(vec3(.04,.04,.06),vec3(.1,.07,.12),uv.y);
+ for(int i=0;i<10;i++){
+  float fi=float(i);
+  vec2 cp=vec2(.2+.6*hash(vec2(fi,.3)),.2+.6*hash(vec2(fi,.7)));
+  float d=length(uv-cp);
+  col+=vec3(.15,.1,.03)*.05/(d+.04)*(.5+.5*sin(t+fi*2.));
+ }
+ float gs=smoothstep(.2,.0,abs(uv.x-.3-.4*sin(t*.05)));
+ col+=vec3(.15,.08,.03)*gs*.15;
+ for(int i=0;i<30;i++){
+  float fi=float(i);
+  vec2 sp=vec2(fract(fi*.371+t*.002*hash(vec2(fi,5.))),fract(fi*.743+t*.0015*hash(vec2(fi,9.))));
+  col+=vec3(.3,.2,.05)*hash(vec2(fi,2.))*.008*smoothstep(.003,0.,length(uv-sp));
+ }
+ gl_FragColor=vec4(clamp(col*1.8,0.,1.),1.);
+}
+`;
+
+
+// Featured — coastal estate wireframe with topo lines
+const fragFeatured = `#version 100
+precision highp float;
+uniform float uT;
+varying vec2 vUv;
+${hashFn}
+void main(){
+ vec2 uv=vUv;float t=uT*.5;
+ vec3 col=mix(vec3(.04,.08,.15),vec3(.1,.18,.25),uv.y);
+ // ocean gradient
+ float ot=smoothstep(.6,.7,uv.y);
+ col=mix(col,vec3(.02,.06,.12),ot*.6);
+ // shoreline curve
+ float sl=abs(uv.y-.55-.05*sin(uv.x*3.+t*.03));
+ col=mix(col,vec3(.15,.22,.1),.2*smoothstep(.03,.0,sl));
+ // topo lines
+ float tp=sin(uv.x*20.+uv.y*15.+t*.02)+sin(uv.y*25.-uv.x*10.+t*.025);
+ col+=vec3(.06,.08,.03)*.06*smoothstep(.005,.0,abs(tp));
+ // property boundary glow
+ float pb=abs(uv.x-.5)+abs(uv.y-.5)-.45;
+ col=mix(col,vec3(.2,.15,.06),.08*smoothstep(.007,.0,abs(pb)));
+ // measurement markers
+ for(int i=0;i<12;i++){
+  float fi=float(i);
+  vec2 mp=vec2(.05+.85*fi/12.,.57+.02*sin(fi*1.3+t*.04));
+  col=mix(col,vec3(.2,.15,.05),.04*smoothstep(.005,0.,length(uv-mp)));
+  vec2 ml=vec2(.05+.85*fi/12.,.54);
+  col=mix(col,vec3(.1,.08,.02),.03*smoothstep(.003,0.,length(uv-ml)));
+ }
+ // satellite grid overlay
+ vec2 sg=fract(uv*vec2(8,6));
+ float sgl=smoothstep(.02,.0,sg.x)+smoothstep(.02,.0,1.-sg.x)+smoothstep(.02,.0,sg.y)+smoothstep(.02,.0,1.-sg.y);
+ col=mix(col,vec3(.08,.15,.25),clamp(sgl,0.,1.)*.15);
+ col*=1.-.3*distance(uv,vec2(.5,.5));
+ // building silhouette
+ float bld=step(abs(uv.x-.5),.15)*step(abs(uv.y-.45),.12);
+ col=mix(col,vec3(.18,.22,.15),bld*.6);
+ vec2 bf=fract(uv*vec2(20,30));float bw=step(.4,bf.x)*step(.5,bf.y);
+ col=mix(col,vec3(.3,.5,.4),bld*bw*.2);
+ // second building
+ float bld2=step(abs(uv.x-.72),.08)*step(abs(uv.y-.42),.1);
+ col=mix(col,vec3(.12,.15,.1),bld2*.4);
+ vec2 bf2=fract(uv*vec2(16,24));float bw2=step(.3,bf2.x)*step(.4,bf2.y);
+ col=mix(col,vec3(.2,.35,.25),bld2*bw2*.12);
+ gl_FragColor=vec4(clamp(col*3.5,0.,1.),1.);
+}
+`;
+
+// Init GL
+const CANVAS_W=640,CANVAS_H=360;
+const shaders=[fragRealEstate,fragVehicles,fragArt,fragDigital,fragHero];
+
+function initGL(id,fsSrc){
+ const c=document.getElementById(id);
+ if(!c)return null;
+ const dpr=window.devicePixelRatio||1;
+ c.width=CANVAS_W*dpr;c.height=CANVAS_H*dpr;
+ const gl=c.getContext('webgl',{alpha:false});
+ if(!gl)return null;
+ const vs=gl.createShader(gl.VERTEX_SHADER);gl.shaderSource(vs,VS);gl.compileShader(vs);
+ const fs=gl.createShader(gl.FRAGMENT_SHADER);gl.shaderSource(fs,fsSrc);gl.compileShader(fs);
+ const prog=gl.createProgram();gl.attachShader(prog,vs);gl.attachShader(prog,fs);gl.linkProgram(prog);
+ if(!gl.getProgramParameter(prog,gl.LINK_STATUS)){console.error('GL error:',gl.getProgramInfoLog(prog));return null}
+ const verts=new Float32Array([-1,-1,1,-1,-1,1,1,1]);
+ const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+ gl.bufferData(gl.ARRAY_BUFFER,verts,gl.STATIC_DRAW);
+ const aPos=gl.getAttribLocation(prog,'aPos');
+ gl.enableVertexAttribArray(aPos);
+ gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,0,0);
+ const uT=gl.getUniformLocation(prog,'uT');
+ const uH=gl.getUniformLocation(prog,'uH');
+ gl.useProgram(prog);
+ gl.viewport(0,0,c.width,c.height);
+ let hv=0,hvTarget=0;
+ const card=c.closest('.asset-card');
+ if(card){
+  card.addEventListener('mouseenter',()=>{hvTarget=1});
+  card.addEventListener('mouseleave',()=>{hvTarget=0});
+ }
+ return{gl,prog,uT,uH,canvas:c,get hv(){return hv},set hv(v){hv=v},get hvTarget(){return hvTarget},set hvTarget(v){hvTarget=v}}
+}
+
+const canvases=[];
+for(let i=0;i<4;i++){const id='c'+i;const g=initGL(id,shaders[i]);if(g)canvases.push(g)}
+const heroG=initGL('heroCanvas',shaders[4]);
+if(heroG)canvases.push(heroG);
+const featG=initGL('featuredCanvas',fragFeatured);
+if(featG)canvases.push(featG);
+
+let running=true;
+function animate(time){
+ if(!running)return;
+ const t=time/1000;
+ for(const c of canvases){
+  const gl=c.gl;
+  if(c.hv!==undefined){
+   let h=c.hv||0;let ht=c.hvTarget||0;
+   h+=(ht-h)*.08;
+   c.hv=h;
+  }
+  const hv=c.canvas&&c.canvas.id==='heroCanvas'?0:Math.min(1,c.hv||0);
+  gl.uniform1f(c.uT,t);
+  gl.uniform1f(c.uH,hv*.6+.4);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+ }
+ requestAnimationFrame(animate)
+}
+if(canvases.length)requestAnimationFrame(animate);
+document.addEventListener('visibilitychange',()=>{running=!document.hidden;if(running)requestAnimationFrame(animate)});
+
+// Stat count-up
+function animateCounters(){
+  document.querySelectorAll('.num').forEach(el=>{
+    const raw=el.getAttribute('data-count')||el.textContent.replace(/[^0-9.]/g,'');
+    const target=parseFloat(raw);
+    if(!target)return;
+    const isFloat=target!==Math.floor(target);
+    const dur=2000;const start=performance.now();
+    function update(now){
+      const p=Math.min(1,(now-start)/dur);
+      const val=target*Math.pow(p,0.6);
+      el.textContent=isFloat?val.toFixed(2):Math.round(val).toLocaleString();
+      if(p<1)requestAnimationFrame(update);
+    }
+    requestAnimationFrame(update);
+  });
+}
+const statObserver=new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){animateCounters();statObserver.unobserve(e.target)}
+  })
+},{threshold:.3});
+document.querySelector('.stats-row')&&statObserver.observe(document.querySelector('.stats-row'));
+
+// Scroll reveal
+const observer=new IntersectionObserver((entries)=>{entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible')})},{threshold:.1});
+document.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
+</script>
+</body>
+</html>

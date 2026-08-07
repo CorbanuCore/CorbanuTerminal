@@ -1,0 +1,20 @@
+---
+source: tui/src/status/tests.rs
+assertion_line: 788
+expression: sanitized
+---
+/status
+
+╭──────────────────────────────────────────────────╮
+│  >_ PFTerminal (v0.1.15)                         │
+│                                                  │
+│  Model:            gpt-5.1-codex-max             │
+│  Model provider:   Ambient                       │
+│  Directory: [[workspace]]                        │
+│  Permissions:      Workspace (Approve for me)    │
+│  Agents.md:        <none>                        │
+│                                                  │
+│  Token usage:      0 total  (0 input + 0 output) │
+│  Context window:   100% left (0 used / 272K)     │
+│  Limits:           data not available yet        │
+╰──────────────────────────────────────────────────╯

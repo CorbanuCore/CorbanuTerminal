@@ -1,0 +1,13 @@
+---
+source: tui/src/history_cell/tests.rs
+assertion_line: 1096
+expression: rendered
+---
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ✨ Update available! 0.1.15 -> 9.9.9                                                                       │
+│ Run sh -c 'curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install.sh |           │
+│ PFTERMINAL_NON_INTERACTIVE=1 sh' to update.                                                                │
+│                                                                                                            │
+│ See full release notes:                                                                                    │
+│ https://github.com/agtico/PfTerminal/releases/latest                                                       │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
