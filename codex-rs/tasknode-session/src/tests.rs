@@ -183,3 +183,46 @@ fn state_summary_never_contains_secrets() {
     assert!(!summary.contains("poll-secret"));
     assert!(summary.contains("req-1"));
 }
+
+/// The field scenario from 2026-08-07: a daily-TTL-expired active session must
+/// not be treated as usable, and must not block completing a pending link.
+#[test]
+fn expired_active_session_is_detected() {
+    let mut session = active("tok-expired");
+    session.expires_at = Some("2026-08-07T13:07:07.100Z".to_string());
+    let after = chrono::DateTime::parse_from_rfc3339("2026-08-07T17:00:00Z")
+        .expect("parse")
+        .with_timezone(&chrono::Utc);
+    let before = chrono::DateTime::parse_from_rfc3339("2026-08-07T10:00:00Z")
+        .expect("parse")
+        .with_timezone(&chrono::Utc);
+    assert!(session.is_expired_at(after));
+    assert!(!session.is_expired_at(before));
+}
+
+/// Missing or malformed expiry metadata must never lock a user out.
+#[test]
+fn absent_or_invalid_expiry_counts_as_fresh() {
+    let now = chrono::Utc::now();
+    let mut session = active("tok");
+    session.expires_at = None;
+    assert!(!session.is_expired_at(now));
+    session.expires_at = Some("not-a-date".to_string());
+    assert!(!session.is_expired_at(now));
+}
+
+#[test]
+fn state_summary_reports_expiry() {
+    let (_dir, vault) = test_vault();
+    let mut session = active("tok");
+    session.expires_at = Some("2000-01-01T00:00:00Z".to_string());
+    promote_active(&vault, &session).expect("seed");
+    let summary = state_summary(&load(&vault).expect("load"));
+    assert_eq!(
+        summary
+            .get("activeSession")
+            .and_then(|active| active.get("expired"))
+            .and_then(serde_json::Value::as_bool),
+        Some(true)
+    );
+}

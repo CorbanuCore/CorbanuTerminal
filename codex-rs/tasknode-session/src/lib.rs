@@ -213,6 +213,7 @@ pub fn state_summary(state: &LocalState) -> serde_json::Value {
             "accountId": active.account_id,
             "githubUsername": active.github_username,
             "expiresAt": active.expires_at,
+            "expired": active.is_expired(),
         })),
         "pendingLink": state.pending.as_ref().map(|pending| serde_json::json!({
             "origin": pending.origin,
@@ -250,6 +251,22 @@ pub struct TerminalSessionIssued {
 }
 
 impl ActiveSession {
+    /// Whether the server-provided expiry has passed at `now`.
+    ///
+    /// A missing or unparseable expiry counts as "not expired": the server is
+    /// the authority, and guessing a session dead when the metadata is absent
+    /// would lock users out of a working session.
+    pub fn is_expired_at(&self, now: chrono::DateTime<chrono::Utc>) -> bool {
+        self.expires_at
+            .as_deref()
+            .and_then(|raw| chrono::DateTime::parse_from_rfc3339(raw).ok())
+            .is_some_and(|expires_at| expires_at <= now)
+    }
+
+    pub fn is_expired(&self) -> bool {
+        self.is_expired_at(chrono::Utc::now())
+    }
+
     pub fn from_issued(origin: String, issued: TerminalSessionIssued) -> Self {
         Self {
             origin,
