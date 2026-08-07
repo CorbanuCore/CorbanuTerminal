@@ -396,6 +396,33 @@ async fn thread_settings_updated_updates_visible_state_without_transcript() {
 }
 
 #[tokio::test]
+async fn thread_settings_updated_repairs_kimi_model_on_anthropic_transport() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.3-codex")).await;
+    let thread_id = ThreadId::new();
+    chat.handle_thread_session(configured_thread_session(thread_id));
+    let _ = drain_insert_history(&mut rx);
+
+    let mut notification =
+        thread_settings_for_test(codex_model_provider_info::KIMI_CODE_K3_MODEL, thread_id);
+    notification.thread_settings.model_provider =
+        codex_model_provider_info::ANTHROPIC_PROVIDER_ID.to_string();
+    chat.handle_server_notification(
+        ServerNotification::ThreadSettingsUpdated(notification),
+        /*replay_kind*/ None,
+    );
+
+    assert_eq!(
+        chat.config_ref().model_provider_id,
+        codex_model_provider_info::KIMI_CODE_PROVIDER_ID
+    );
+    assert!(chat.config_ref().model_provider.is_kimi_code());
+    assert_eq!(
+        chat.current_model(),
+        codex_model_provider_info::KIMI_CODE_K3_MODEL
+    );
+}
+
+#[tokio::test]
 async fn retained_thread_and_settings_project_complete_pane_local_provider() {
     use codex_model_provider_info::ANTHROPIC_BASE_URL;
     use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;

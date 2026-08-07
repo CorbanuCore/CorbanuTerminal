@@ -3905,6 +3905,7 @@ impl Config {
             })?
             .clone();
 
+        let requested_model_for_pair_validation = model.clone().or_else(|| cfg.model.clone());
         let model_without_explicit_provider = !model_provider_was_explicit && cfg.model.is_some();
         let model = match model {
             Some(model_override) => Some(model_override),
@@ -3916,11 +3917,15 @@ impl Config {
         // model (stale thread metadata, dropped spawn override, config default recorded next to
         // a role-derived model) would 400/404 at the remote with "Unknown model". Correct the
         // unambiguous cases; see corrected_catalog_provider for what qualifies.
-        let corrected_provider = (!model_provider_was_explicit)
-            .then_some(model.as_deref())
-            .flatten()
+        // Explicit provenance does not make an impossible catalog pair valid. Persisted config,
+        // resume metadata, and CLI overrides can all become stale independently; allowing a
+        // known `k3` + Anthropic-style pair through simply sends Kimi's model id to
+        // `/v1/messages` and fails remotely. `corrected_catalog_provider` only changes
+        // unambiguous built-in families and deliberately leaves custom providers alone.
+        let corrected_provider = requested_model_for_pair_validation
+            .as_deref()
             .and_then(|value| corrected_catalog_provider(value, &model_provider_id));
-        let (model_provider_id, model_provider) = match corrected_provider
+        let (model_provider_id, model_provider, model) = match corrected_provider
             .and_then(|corrected| {
                 model_providers
                     .get(corrected)
@@ -3928,14 +3933,20 @@ impl Config {
             }) {
             Some((corrected, info)) => {
                 tracing::warn!(
-                    model = model.as_deref().unwrap_or_default(),
+                    model = requested_model_for_pair_validation
+                        .as_deref()
+                        .unwrap_or_default(),
                     stored_provider = %model_provider_id,
                     corrected_provider = corrected,
                     "correcting impossible model/provider pair during config derivation"
                 );
-                (corrected.to_string(), info)
+                let corrected_model = resolve_model_for_provider(
+                    requested_model_for_pair_validation,
+                    corrected,
+                );
+                (corrected.to_string(), info, corrected_model)
             }
-            None => (model_provider_id, model_provider),
+            None => (model_provider_id, model_provider, model),
         };
         let shell_environment_policy = cfg.shell_environment_policy.into();
         let allow_login_shell = cfg.allow_login_shell.unwrap_or(true);

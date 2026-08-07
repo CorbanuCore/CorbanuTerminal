@@ -48,6 +48,9 @@ use codex_model_provider_info::AMBIENT_API_KEY_ENV_VAR;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::AMBIENT_GLM_5_2_CONTEXT_WINDOW;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
+use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
+use codex_model_provider_info::KIMI_CODE_K3_MODEL;
+use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
@@ -4811,6 +4814,50 @@ async fn session_update_settings_model_provider_rebuilds_model_client() {
     assert!(
         session.services.model_client().provider_info().is_zai(),
         "provider update should rebuild the runtime model client"
+    );
+}
+
+#[tokio::test]
+async fn session_update_settings_repairs_kimi_model_on_anthropic_transport() {
+    let (session, _rx_event) = make_session_with_config_and_rx(|config| {
+        let provider = config
+            .model_providers
+            .get(ANTHROPIC_PROVIDER_ID)
+            .expect("Anthropic provider should be configured")
+            .clone();
+        config.model_provider_id = ANTHROPIC_PROVIDER_ID.to_string();
+        config.model_provider = provider;
+    })
+    .await
+    .expect("session should initialize");
+
+    let collaboration_mode = session.collaboration_mode().await.with_updates(
+        Some(KIMI_CODE_K3_MODEL.to_string()),
+        /*effort*/ None,
+        /*developer_instructions*/ None,
+    );
+    session
+        .update_settings(SessionSettingsUpdate {
+            collaboration_mode: Some(collaboration_mode),
+            ..Default::default()
+        })
+        .await
+        .expect("impossible pair should be repaired");
+
+    let snapshot = session
+        .state
+        .lock()
+        .await
+        .session_configuration
+        .thread_config_snapshot();
+    assert_eq!(snapshot.model_provider_id, KIMI_CODE_PROVIDER_ID);
+    assert_eq!(snapshot.model, KIMI_CODE_K3_MODEL);
+    assert!(
+        session
+            .services
+            .model_client()
+            .provider_info()
+            .is_kimi_code()
     );
 }
 
