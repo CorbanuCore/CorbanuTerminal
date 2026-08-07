@@ -87,6 +87,7 @@ codex-telegram = { workspace = true }
 codex-tui = { workspace = true }
 codex-utils-absolute-path = { workspace = true }
 codex-utils-path = { workspace = true }
+codex-tasknode-session = { workspace = true }
 codex-vault = { workspace = true }
 crossterm = { workspace = true }
 http = { workspace = true }
