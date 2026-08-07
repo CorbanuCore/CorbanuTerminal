@@ -38,6 +38,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Validate release worktree
+        run: bash scripts/dev/check_worktree.sh
+
       - name: Validate version
         id: version
         shell: bash
