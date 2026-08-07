@@ -27,6 +27,34 @@ red status noise without testing the code.
 These disabled jobs were not real failing tests. They failed before checkout
 because GitHub could not assign a runner.
 
+The Bazel and argument-comment-lint workflows had kept self-hosted Windows and
+`macos-15-xlarge` jobs defined after that decision was written down, so they
+still dispatched and still went red on every PR. Those job definitions are now
+removed, which is what makes the statement above true rather than aspirational:
+
+- `bazel.yml`: `test-windows-shard`, its `test-windows` gatherer, and
+  `test-windows-native-main`.
+- `rust-ci.yml`: the macOS and Windows entries of
+  `argument_comment_lint_prebuilt`.
+
+## Linux Bazel Timeouts
+
+The Linux Bazel jobs run with `timeout-minutes: 120` rather than the 30 minutes
+used elsewhere. PRs from forks do not receive the `bazel` environment secrets,
+so `BUILDBUDDY_API_KEY` is empty and `run-bazel-ci.sh` falls back to a local
+build. That path compiles the whole toolchain, including V8 and ICU, which
+enter transitively under `//codex-rs/...`, on a hosted 4-core runner. At 30
+minutes those jobs were cancelled around 72% of actions with 2 of 365 tests
+executed, so they never reported a real result on a community PR.
+
+The cancellation was self-sustaining: the `Save bazel repository cache` step
+was gated on `!cancelled()`, so a job killed by its own timeout never wrote the
+cache it had just populated, and the next run started cold and timed out the
+same way. That step now runs on `always()`.
+
+Runs that do have RBE finish well inside the 120-minute cap and are unaffected
+by it.
+
 ## Restoration Requirements
 
 Before re-enabling platform checks:

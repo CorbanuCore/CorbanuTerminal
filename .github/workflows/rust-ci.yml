@@ -177,18 +177,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # The macOS (`macos-15-xlarge`) and Windows (self-hosted
+          # `<repo>-windows-x64`) legs were removed: neither runner is
+          # available to this repository, so both failed before checkout with
+          # no executed steps. docs/ci.md already declares those platforms
+          # "Disabled Until Runners Exist" -- see it for the restoration
+          # requirements before adding them back.
           - name: Linux
             runner: ubuntu-24.04
             timeout_minutes: 30
-          - name: macOS
-            runner: macos-15-xlarge
-            timeout_minutes: 30
-          - name: Windows
-            runner: windows-x64
-            timeout_minutes: 30
-            runs_on:
-              group: ${{ github.event.repository.name }}-runners
-              labels: ${{ github.event.repository.name }}-windows-x64
     steps:
       - name: Check whether argument comment lint should run
         id: argument_comment_lint_gate
