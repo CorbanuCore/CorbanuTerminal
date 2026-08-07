@@ -49,7 +49,7 @@ impl ChatWidget {
         let counts = self.tasknode_menu_counts.clone();
         let should_refresh_counts = state
             .as_ref()
-            .is_ok_and(|state| state.active.is_some());
+            .is_ok_and(|state| state.active.as_ref().is_some_and(|a| !a.is_expired()));
         self.show_or_replace_tasknode_selection(TASKNODE_MENU_VIEW_ID, || {
             tasknode_menu_params(state, counts.as_ref(), None)
         });
@@ -991,7 +991,8 @@ impl ChatWidget {
 
     fn has_linked_tasknode_session(&self) -> bool {
         let codex_home = self.config.codex_home.as_path().to_path_buf();
-        load_tasknode_local_state(&codex_home).is_ok_and(|state| state.active.is_some())
+        load_tasknode_local_state(&codex_home)
+            .is_ok_and(|state| state.active.as_ref().is_some_and(|a| !a.is_expired()))
     }
 
     fn refresh_active_tasknode_menu(&mut self, refresh_error: Option<String>) {
@@ -1151,34 +1152,50 @@ fn tasknode_menu_params(
         "GitHub-linked tasks, rewards, and account status.".dim(),
     ));
     header.push(Line::from(format!("Origin: {}", tasknode_origin()).dim()));
-    let linked = state.as_ref().is_ok_and(|state| state.active.is_some());
+    let linked = state
+        .as_ref()
+        .is_ok_and(|state| state.active.as_ref().is_some_and(|a| !a.is_expired()));
     if let Ok(local) = &state {
-        if let Some(active) = &local.active {
-            let username = active.github_username.as_deref().unwrap_or("");
-            header.push(Line::from(
-                format!(
-                    "Linked{}",
-                    if username.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" as {username}")
-                    }
-                )
-                .cyan(),
-            ));
-            if local.pending.is_some() {
+        match &local.active {
+            Some(active) if !active.is_expired() => {
+                let username = active.github_username.as_deref().unwrap_or("");
                 header.push(Line::from(
-                    "Relink pending; the current session stays usable until the new one is proven."
-                        .dim(),
+                    format!(
+                        "Linked{}",
+                        if username.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" as {username}")
+                        }
+                    )
+                    .cyan(),
+                ));
+                if local.pending.is_some() {
+                    header.push(Line::from(
+                        "Relink pending; the current session stays usable until the new one is proven."
+                            .dim(),
+                    ));
+                }
+                if counts.is_none() && refresh_error.is_none() {
+                    header.push(Line::from("Counts refreshing...".dim()));
+                }
+            }
+            Some(_) if local.pending.is_some() => {
+                header.push(Line::from(
+                    "Session expired; finish GitHub auth in the browser, then run Status.".cyan(),
                 ));
             }
-            if counts.is_none() && refresh_error.is_none() {
-                header.push(Line::from("Counts refreshing...".dim()));
+            Some(_) => {
+                header.push(Line::from(
+                    "Session expired; run Link to re-authenticate.".cyan(),
+                ));
             }
-        } else if local.pending.is_some() {
-            header.push(Line::from(
-                "Link pending; run Status after browser auth.".cyan(),
-            ));
+            None if local.pending.is_some() => {
+                header.push(Line::from(
+                    "Link pending; run Status after browser auth.".cyan(),
+                ));
+            }
+            None => {}
         }
     }
     if let Some(err) = refresh_error {
@@ -1207,8 +1224,14 @@ fn tasknode_menu_items(
     counts: Option<&TaskNodeMenuCountsCache>,
 ) -> Vec<SelectionItem> {
     let local = state.as_ref().ok();
-    let linked = local.is_some_and(|state| state.active.is_some());
-    let pending = local.is_some_and(|state| state.pending.is_some());
+    let linked = local.is_some_and(|state| state.active.as_ref().is_some_and(|a| !a.is_expired()));
+    let pending = local.is_some_and(|state| {
+        state.pending.is_some()
+            || state
+                .active
+                .as_ref()
+                .is_some_and(codex_tasknode_session::ActiveSession::is_expired)
+    });
     let mut items = Vec::new();
     if linked || pending {
         items.push(SelectionItem {
@@ -2577,11 +2600,20 @@ fn ensure_tasknode_session(
     codex_home: &Path,
 ) -> Result<codex_tasknode_session::ActiveSession, TaskNodeLocalError> {
     let state = load_tasknode_local_state(codex_home)?;
-    if let Some(active) = state.active {
-        return Ok(active);
-    }
+    // Only a *fresh* active session wins outright. An expired one must not
+    // shadow a completable link attempt: sending its dead token would just
+    // bounce off the server with an unhelpful 401.
+    let expired_active = match state.active {
+        Some(active) if !active.is_expired() => return Ok(active),
+        other => other,
+    };
     let Some(pending) = state.pending else {
-        return Err(TaskNodeLocalError::NoSession);
+        return match expired_active {
+            Some(_) => Err(TaskNodeLocalError::Client(
+                "Task Node session expired. Run /tasknode link to re-authenticate.".to_string(),
+            )),
+            None => Err(TaskNodeLocalError::NoSession),
+        };
     };
     match TaskNodeClient::new_without_token()
         .poll_session(&pending.request_id, &pending.poll_token)
@@ -3013,6 +3045,11 @@ fn parse_tasknode_response<T: DeserializeOwned>(
             .unwrap_or(text);
         if status == 404 || status == 409 {
             return Err(TaskNodeClientError::Gone(message));
+        }
+        if status == 401 {
+            return Err(TaskNodeClientError::Http(format!(
+                "{message} (session expired or revoked — run /tasknode link)"
+            )));
         }
         return Err(TaskNodeClientError::Http(message));
     }

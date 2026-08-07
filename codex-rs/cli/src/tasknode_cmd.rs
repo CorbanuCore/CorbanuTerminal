@@ -932,7 +932,7 @@ async fn run_link_poll(
 ) -> anyhow::Result<i32> {
     let state = load_tasknode_state(codex_home)?;
     let Some(pending) = state.pending else {
-        if state.active.is_some() {
+        if state.active.as_ref().is_some_and(|a| !a.is_expired()) {
             print_json(&json!({
                 "ok": true,
                 "state": "linked",
@@ -1177,8 +1177,19 @@ fn require_active_session(
     codex_home: &std::path::Path,
 ) -> anyhow::Result<codex_tasknode_session::ActiveSession> {
     let state = load_tasknode_state(codex_home)?;
-    if let Some(active) = state.active {
-        return Ok(active);
+    let expired_active = match state.active {
+        Some(active) if !active.is_expired() => return Ok(active),
+        other => other,
+    };
+    if expired_active.is_some() {
+        match state.pending {
+            Some(_) => anyhow::bail!(
+                "Task Node session expired and a link attempt is pending. Finish GitHub auth, then run `pfterminal tasknode link poll`."
+            ),
+            None => anyhow::bail!(
+                "Task Node session expired. Run `pfterminal tasknode link` to re-authenticate."
+            ),
+        }
     }
     match state.pending {
         Some(pending) if !pending.verification_url.trim().is_empty() => anyhow::bail!(
