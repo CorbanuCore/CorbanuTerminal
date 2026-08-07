@@ -4,6 +4,7 @@ use super::turn_processor::can_accept_direct_input;
 use super::*;
 use crate::error_code::method_not_found;
 use codex_app_server_protocol::SelectedCapabilityRoot;
+use codex_app_server_protocol::THREAD_UNMATERIALIZED_INCLUDE_TURNS_MESSAGE;
 use codex_app_server_protocol::ThreadSection;
 use codex_app_server_protocol::ThreadSectionListParams;
 use codex_app_server_protocol::ThreadSectionListResponse;
@@ -5455,13 +5456,13 @@ fn thread_read_history_load_error(
             if message.starts_with("failed to resolve rollout path `") =>
         {
             ThreadReadViewError::InvalidRequest(format!(
-                "thread {thread_id} is not materialized yet; includeTurns is unavailable before first user message"
+                "thread {thread_id} {THREAD_UNMATERIALIZED_INCLUDE_TURNS_MESSAGE}"
             ))
         }
         ThreadStoreError::ThreadNotFound {
             thread_id: missing_thread_id,
         } if missing_thread_id == thread_id => ThreadReadViewError::InvalidRequest(format!(
-            "thread {thread_id} is not materialized yet; includeTurns is unavailable before first user message"
+            "thread {thread_id} {THREAD_UNMATERIALIZED_INCLUDE_TURNS_MESSAGE}"
         )),
         ThreadStoreError::InvalidRequest { message } => {
             ThreadReadViewError::InvalidRequest(message)

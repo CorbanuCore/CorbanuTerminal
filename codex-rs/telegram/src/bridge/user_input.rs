@@ -5,6 +5,7 @@ use anyhow::Context;
 use codex_app_server_client::TypedRequestError;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::JSONRPCErrorError;
+use codex_app_server_protocol::THREAD_UNMATERIALIZED_INCLUDE_TURNS_MESSAGE;
 use codex_app_server_protocol::ThreadItem;
 use codex_app_server_protocol::ThreadReadParams;
 use codex_app_server_protocol::ThreadReadResponse;
@@ -305,14 +306,17 @@ impl BridgeRuntime {
     }
 }
 
+/// `error` is the raw [`JSONRPCErrorError`] the app server sent, not the
+/// formatted [`TypedRequestError`]. The `<method> failed:` prefix seen in logs
+/// and status output is added by that type's `Display`, so matching it here
+/// never succeeded and every first message after `/new` fell through to the
+/// generic error branch and blocked the conversation.
 fn thread_read_unavailable_before_first_message(method: &str, error: &JSONRPCErrorError) -> bool {
     method == "thread/read"
         && error.code == -32600
-        && error.message.starts_with("thread/read failed:")
-        && error.message.contains("thread")
-        && error.message.contains("not materialized yet")
-        && error.message.contains("includeTurns")
-        && error.message.contains("before first user message")
+        && error
+            .message
+            .contains(THREAD_UNMATERIALIZED_INCLUDE_TURNS_MESSAGE)
 }
 
 fn turn_items_contain_client_message<'a>(
