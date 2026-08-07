@@ -3,6 +3,10 @@ set -euo pipefail
 
 script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 guard="$script_dir/check_worktree.sh"
+# Exercise repository state deterministically even when this test itself runs
+# under GitHub Actions, where source-branch variables describe the outer repo.
+unset PF_RELEASE_BRANCH GITHUB_HEAD_REF GITHUB_REF_NAME
+
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
