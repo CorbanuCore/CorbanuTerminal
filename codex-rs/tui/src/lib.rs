@@ -22,7 +22,6 @@ use app::App;
 pub use app::AppExitInfo;
 pub use app::ExitReason;
 use app_server_session::AppServerSession;
-use app_server_session::ResumeModelOverride;
 use app_server_session::ThreadParamsMode;
 use codex_app_server_client::AppServerClient;
 use codex_app_server_client::DEFAULT_IN_PROCESS_CHANNEL_CAPACITY;
@@ -55,7 +54,6 @@ use codex_login::enforce_login_restrictions;
 use codex_protocol::ThreadId;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::AltScreenMode;
-use codex_protocol::config_types::ForcedLoginMethod;
 use codex_protocol::config_types::SandboxMode;
 #[cfg(target_os = "windows")]
 use codex_protocol::config_types::WindowsSandboxLevel;
@@ -103,16 +101,12 @@ mod ascii_animation;
 mod bottom_pane;
 mod branch_summary;
 mod chatwidget;
-pub mod claude_panes;
 mod cli;
 mod clipboard_copy;
 mod clipboard_paste;
 mod collaboration_modes;
 mod color;
 mod config_update;
-mod crew_presets;
-mod crew_state;
-mod custom_spawn_crew;
 pub(crate) mod custom_terminal;
 mod pets;
 pub use custom_terminal::Terminal;
@@ -121,12 +115,10 @@ mod cwd_prompt;
 mod debug_config;
 mod diff_model;
 mod diff_render;
-mod dispatch_queue;
 mod exec_cell;
 mod exec_command;
 mod external_agent_config_migration;
 mod external_editor;
-mod external_plan_agent_adapter;
 mod file_search;
 mod frames;
 mod get_git_diff;
@@ -152,17 +144,16 @@ mod markdown_render;
 mod markdown_stream;
 mod markdown_text_merge;
 mod mention_codec;
-mod mkdocs_overlay;
-mod mkdocs_viewer;
 mod model_catalog;
 mod model_migration;
+mod mkdocs_overlay;
+mod mkdocs_viewer;
 mod motion;
 mod multi_agents;
 mod notifications;
 #[cfg(any(not(debug_assertions), test))]
 mod npm_registry;
 pub(crate) mod onboarding;
-mod orchestrate;
 mod oss_selection;
 mod pager_overlay;
 mod permission_compat;
@@ -179,8 +170,6 @@ mod session_state;
 mod shimmer;
 mod skills_helpers;
 mod slash_command;
-mod spawn_crew;
-pub(crate) mod spawn_orchestration;
 mod startup_error;
 mod startup_hooks_review;
 mod status;
@@ -614,40 +603,6 @@ fn session_target_from_app_server_thread(
             None
         }
     }
-}
-
-fn local_session_target_has_rollout(target: &resume_picker::SessionTarget) -> bool {
-    target.path.as_deref().is_some_and(|path| {
-        std::fs::metadata(path).is_ok_and(|metadata| metadata.is_file() && metadata.len() > 0)
-    })
-}
-
-fn explicit_resume_selection(
-    codex_home: &Path,
-    id_str: &str,
-    target: Option<resume_picker::SessionTarget>,
-    uses_remote_workspace: bool,
-) -> Option<resume_picker::SessionSelection> {
-    if let Some(target) = target
-        && (uses_remote_workspace || local_session_target_has_rollout(&target))
-    {
-        return Some(resume_picker::SessionSelection::Resume(target));
-    }
-
-    crate::claude_panes::load_pane_layout(codex_home, Some(id_str)).map(|_| {
-        resume_picker::SessionSelection::ResumePanesOnly {
-            codex_thread_id: id_str.to_string(),
-        }
-    })
-}
-
-fn explicit_fork_selection(
-    target: Option<resume_picker::SessionTarget>,
-    uses_remote_workspace: bool,
-) -> Option<resume_picker::SessionSelection> {
-    target
-        .filter(|target| uses_remote_workspace || local_session_target_has_rollout(target))
-        .map(resume_picker::SessionSelection::Fork)
 }
 
 pub(crate) fn resume_source_kinds(include_non_interactive: bool) -> Vec<ThreadSourceKind> {
@@ -1362,13 +1317,7 @@ pub async fn run_main(
         environment_manager,
     )
     .await
-    .map_err(report_as_io_error)
-}
-
-fn report_as_io_error(err: color_eyre::Report) -> std::io::Error {
-    // Debug formatting is intentional: Display contains only the outer eyre
-    // context and was the reason the P0's underlying turn/start cause was lost.
-    std::io::Error::other(format!("{err:?}"))
+    .map_err(|err| std::io::Error::other(err.to_string()))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1480,7 +1429,7 @@ async fn run_ratatui_app(
         !uses_remote_workspace && should_show_trust_screen(&initial_config);
     #[cfg(target_os = "windows")]
     let mut trust_decision_was_made = false;
-    let login_status = if provider_requires_login(&initial_config) {
+    let login_status = if initial_config.model_provider.requires_openai_auth {
         let Some(app_server) = app_server.as_mut() else {
             unreachable!("app server should exist when auth is required");
         };
@@ -1528,22 +1477,6 @@ async fn run_ratatui_app(
         {
             trust_decision_was_made = onboarding_result.directory_trust_persisted;
         }
-        if let Some(provider) = onboarding_result.configured_provider_api_key.as_deref() {
-            let Some(app_server_session) = app_server.as_ref() else {
-                unreachable!("app server should exist when onboarding stores a provider key");
-            };
-            config_update::write_config_batch(
-                app_server_session.request_handle(),
-                config_update::build_onboarding_provider_selection_edits(
-                    initial_config.model.as_deref(),
-                    provider,
-                ),
-            )
-            .await
-            .wrap_err_with(|| {
-                format!("failed to persist onboarding provider selection for `{provider}`")
-            })?;
-        }
         // If this onboarding run included the login step, always refresh the cloud config bundle
         // and rebuild config. This avoids missing newly available cloud-managed policy due to login
         // status detection edge cases.
@@ -1590,7 +1523,7 @@ async fn run_ratatui_app(
             resume_hint: None,
             update_action: None,
             exit_reason: ExitReason::Fatal(format!(
-                "No saved session found with ID {id_str}. Run `pfterminal {action}` without an ID to choose from existing sessions."
+                "No saved session found with ID {id_str}. Run `codex {action}` without an ID to choose from existing sessions."
             )),
         })
     };
@@ -1601,9 +1534,8 @@ async fn run_ratatui_app(
             let Some(startup_app_server) = app_server.as_mut() else {
                 unreachable!("app server should be initialized for --fork <id>");
             };
-            let target = lookup_session_target_with_app_server(startup_app_server, id_str).await?;
-            match explicit_fork_selection(target, uses_remote_workspace) {
-                Some(selection) => selection,
+            match lookup_session_target_with_app_server(startup_app_server, id_str).await? {
+                Some(target_session) => resume_picker::SessionSelection::Fork(target_session),
                 None => {
                     shutdown_app_server_if_present(app_server.take()).await;
                     return missing_session_exit(id_str, "fork");
@@ -1659,14 +1591,8 @@ async fn run_ratatui_app(
         let Some(startup_app_server) = app_server.as_mut() else {
             unreachable!("app server should be initialized for --resume <id>");
         };
-        let target = lookup_session_target_with_app_server(startup_app_server, id_str).await?;
-        match explicit_resume_selection(
-            config.codex_home.as_ref(),
-            id_str,
-            target,
-            uses_remote_workspace,
-        ) {
-            Some(selection) => selection,
+        match lookup_session_target_with_app_server(startup_app_server, id_str).await? {
+            Some(target_session) => resume_picker::SessionSelection::Resume(target_session),
             None => {
                 shutdown_app_server_if_present(app_server.take()).await;
                 return missing_session_exit(id_str, "resume");
@@ -1815,9 +1741,6 @@ async fn run_ratatui_app(
     #[cfg(not(target_os = "windows"))]
     let should_prompt_windows_sandbox_nux_at_startup = false;
 
-    let startup_resume_model_override =
-        resume_model_override_from_launch(&cli, &config, &cli_kv_overrides);
-
     let Cli {
         prompt,
         shared,
@@ -1899,7 +1822,6 @@ async fn run_ratatui_app(
         prompt,
         images,
         session_selection,
-        startup_resume_model_override,
         feedback,
         should_show_trust_screen, // Proxy to: is it a first run in this directory?
         should_prompt_windows_sandbox_nux_at_startup,
@@ -1991,7 +1913,7 @@ async fn get_login_status(
     app_server: &mut AppServerSession,
     config: &Config,
 ) -> color_eyre::Result<LoginStatus> {
-    if !provider_requires_login(config) {
+    if !config.model_provider.requires_openai_auth {
         return Ok(LoginStatus::NotAuthenticated);
     }
 
@@ -2107,104 +2029,18 @@ fn should_show_onboarding(
 }
 
 fn should_show_login_screen(login_status: LoginStatus, config: &Config) -> bool {
-    // Only show the login screen for providers that require OpenAI auth or an
-    // explicit provider API key. For OSS/other providers, skip login entirely.
-    if !provider_requires_login(config) {
+    // Only show the login screen for providers that actually require OpenAI auth
+    // (OpenAI or equivalents). For OSS/other providers, skip login entirely.
+    if !config.model_provider.requires_openai_auth {
         return false;
     }
 
-    if login_status != LoginStatus::NotAuthenticated {
-        return false;
-    }
-
-    if matches!(config.forced_login_method, Some(ForcedLoginMethod::Chatgpt)) {
-        return true;
-    }
-
-    // PfTerminal Plan credentials are provisioned and recovered inside the TUI through
-    // `/wallet`. Sending a disconnected Plan user through the external-provider onboarding
-    // picker makes that recovery path unreachable and falsely suggests that every other
-    // stored account was removed. Keep the terminal available so the wallet can be restored
-    // or its already-paid plan access can be recovered without another provider login.
-    if config.model_provider_id == codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID {
-        return false;
-    }
-
-    !has_linked_provider_credentials(config)
-}
-
-fn provider_requires_login(config: &Config) -> bool {
-    config.model_provider.requires_openai_auth || config.model_provider.env_key.is_some()
-}
-
-fn resume_model_override_from_launch(
-    cli: &Cli,
-    config: &Config,
-    cli_kv_overrides: &[(String, codex_config::TomlValue)],
-) -> Option<ResumeModelOverride> {
-    let has_model_config_override = cli_kv_overrides
-        .iter()
-        .any(|(key, _)| is_model_affecting_resume_config_key(key));
-    if cli.model.is_none()
-        && !cli.oss
-        && cli.oss_provider.is_none()
-        && cli.config_profile_v2.is_none()
-        && !has_model_config_override
-    {
-        return None;
-    }
-
-    Some(ResumeModelOverride {
-        model: config.model.clone(),
-        model_provider: Some(config.model_provider_id.clone()),
-    })
-}
-
-fn is_model_affecting_resume_config_key(key: &str) -> bool {
-    matches!(
-        key,
-        "model"
-            | "model_provider"
-            | "model_reasoning_effort"
-            | "model_reasoning_summary"
-            | "model_verbosity"
-    )
-}
-
-fn has_linked_provider_credentials(config: &Config) -> bool {
-    config
-        .model_provider
-        .env_key
-        .as_deref()
-        .is_some_and(|env_key| provider_credential_is_linked(config, env_key))
-}
-
-fn provider_credential_is_linked(config: &Config, env_key: &str) -> bool {
-    match codex_login::auth::provider_api_key_from_auth_storage(
-        &config.codex_home,
-        env_key,
-        config.cli_auth_credentials_store_mode,
-        config.auth_keyring_backend_kind(),
-    ) {
-        Ok(Some(key)) => !key.trim().is_empty(),
-        Ok(None) => false,
-        Err(err) => {
-            warn!(
-                provider_key_id = env_key,
-                error = %err,
-                "failed to check stored provider credential while deciding onboarding"
-            );
-            false
-        }
-    }
+    login_status == LoginStatus::NotAuthenticated
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::claude_panes::PANE_LAYOUT_VERSION;
-    use crate::claude_panes::PaneLayoutState;
-    use crate::claude_panes::persist_pane_layout;
     use crate::legacy_core::config::ConfigBuilder;
     use crate::legacy_core::config::ConfigOverrides;
     use codex_app_server_protocol::AskForApproval;
@@ -2223,216 +2059,6 @@ mod tests {
             .codex_home(temp_dir.path().to_path_buf())
             .build()
             .await
-    }
-
-    #[test]
-    fn explicit_resume_uses_panes_only_for_placeholder_metadata() {
-        let codex_home = TempDir::new().unwrap();
-        let thread_id = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174020").unwrap();
-        let thread_id_text = thread_id.to_string();
-        let placeholder_path = codex_home
-            .path()
-            .join("sessions/spawn-placeholders")
-            .join(format!("rollout-{thread_id}.jsonl"));
-        let target = resume_picker::SessionTarget {
-            path: Some(placeholder_path),
-            thread_id,
-        };
-        persist_pane_layout(
-            codex_home.path(),
-            &PaneLayoutState {
-                version: PANE_LAYOUT_VERSION,
-                codex_thread_id: Some(thread_id_text.clone()),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-
-        let selection = explicit_resume_selection(
-            codex_home.path(),
-            &thread_id_text,
-            Some(target.clone()),
-            /*uses_remote_workspace*/ false,
-        );
-        assert!(matches!(
-            selection,
-            Some(resume_picker::SessionSelection::ResumePanesOnly { codex_thread_id })
-                if codex_thread_id == thread_id_text
-        ));
-        assert!(explicit_fork_selection(Some(target), false).is_none());
-    }
-
-    #[test]
-    fn explicit_resume_requires_a_nonempty_local_rollout() {
-        let codex_home = TempDir::new().unwrap();
-        let thread_id = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174021").unwrap();
-        let thread_id_text = thread_id.to_string();
-        let rollout_path = codex_home.path().join("rollout.jsonl");
-        std::fs::write(&rollout_path, "{\"type\":\"session_meta\"}\n").unwrap();
-        let target = resume_picker::SessionTarget {
-            path: Some(rollout_path),
-            thread_id,
-        };
-
-        assert!(matches!(
-            explicit_resume_selection(
-                codex_home.path(),
-                &thread_id_text,
-                Some(target.clone()),
-                false,
-            ),
-            Some(resume_picker::SessionSelection::Resume(_))
-        ));
-        assert!(matches!(
-            explicit_fork_selection(Some(target), false),
-            Some(resume_picker::SessionSelection::Fork(_))
-        ));
-    }
-
-    #[test]
-    fn explicit_remote_resume_does_not_require_a_local_rollout() {
-        let codex_home = TempDir::new().unwrap();
-        let thread_id = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174022").unwrap();
-        let target = resume_picker::SessionTarget {
-            path: None,
-            thread_id,
-        };
-
-        assert!(matches!(
-            explicit_resume_selection(
-                codex_home.path(),
-                &thread_id.to_string(),
-                Some(target.clone()),
-                true,
-            ),
-            Some(resume_picker::SessionSelection::Resume(_))
-        ));
-        assert!(matches!(
-            explicit_fork_selection(Some(target), true),
-            Some(resume_picker::SessionSelection::Fork(_))
-        ));
-    }
-
-    #[tokio::test]
-    async fn stored_active_provider_key_suppresses_startup_login_screen() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = build_config(&temp_dir).await.unwrap();
-        assert!(provider_requires_login(&config));
-        assert!(should_show_login_screen(
-            LoginStatus::NotAuthenticated,
-            &config
-        ));
-
-        std::fs::write(
-            temp_dir.path().join("provider_auth.json"),
-            r#"{"api_keys":{"AMBIENT_API_KEY":"ambient-test-key"}}"#,
-        )
-        .unwrap();
-
-        assert!(!should_show_login_screen(
-            LoginStatus::NotAuthenticated,
-            &config
-        ));
-    }
-
-    #[tokio::test]
-    async fn stored_non_active_provider_key_does_not_suppress_startup_login_screen() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = build_config(&temp_dir).await.unwrap();
-        assert_eq!(
-            config.model_provider_id,
-            codex_model_provider_info::AMBIENT_PROVIDER_ID
-        );
-        std::fs::write(
-            temp_dir.path().join("provider_auth.json"),
-            r#"{"api_keys":{"OPENROUTER_API_KEY":"openrouter-test-key"}}"#,
-        )
-        .unwrap();
-
-        assert!(should_show_login_screen(
-            LoginStatus::NotAuthenticated,
-            &config
-        ));
-    }
-
-    #[tokio::test]
-    async fn disconnected_pfterminal_plan_skips_external_provider_onboarding() {
-        let temp_dir = TempDir::new().unwrap();
-        std::fs::write(
-            temp_dir.path().join("config.toml"),
-            r#"model_provider = "pfterminal-plan""#,
-        )
-        .unwrap();
-        let config = build_config(&temp_dir).await.unwrap();
-        assert_eq!(
-            config.model_provider_id,
-            codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID
-        );
-        assert!(provider_requires_login(&config));
-
-        assert!(!should_show_login_screen(
-            LoginStatus::NotAuthenticated,
-            &config
-        ));
-    }
-
-    #[tokio::test]
-    async fn forced_chatgpt_login_still_precedes_pfterminal_plan_recovery() {
-        let temp_dir = TempDir::new().unwrap();
-        std::fs::write(
-            temp_dir.path().join("config.toml"),
-            r#"model_provider = "pfterminal-plan""#,
-        )
-        .unwrap();
-        let mut config = build_config(&temp_dir).await.unwrap();
-        config.forced_login_method = Some(ForcedLoginMethod::Chatgpt);
-
-        assert!(should_show_login_screen(
-            LoginStatus::NotAuthenticated,
-            &config
-        ));
-    }
-
-    #[tokio::test]
-    async fn persisted_non_ambient_provider_key_suppresses_startup_login_screen() {
-        let temp_dir = TempDir::new().unwrap();
-        std::fs::write(
-            temp_dir.path().join("config.toml"),
-            r#"model_provider = "openrouter""#,
-        )
-        .unwrap();
-        std::fs::write(
-            temp_dir.path().join("provider_auth.json"),
-            r#"{"api_keys":{"OPENROUTER_API_KEY":"openrouter-test-key"}}"#,
-        )
-        .unwrap();
-        let config = build_config(&temp_dir).await.unwrap();
-        assert_eq!(
-            config.model_provider_id,
-            codex_model_provider_info::OPENROUTER_PROVIDER_ID
-        );
-
-        assert!(!should_show_login_screen(
-            LoginStatus::NotAuthenticated,
-            &config
-        ));
-    }
-
-    #[tokio::test]
-    async fn forced_chatgpt_login_still_shows_login_screen() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut config = build_config(&temp_dir).await.unwrap();
-        config.forced_login_method = Some(ForcedLoginMethod::Chatgpt);
-        std::fs::write(
-            temp_dir.path().join("provider_auth.json"),
-            r#"{"api_keys":{"ZAI_API_KEY":"zai-test-key"}}"#,
-        )
-        .unwrap();
-
-        assert!(should_show_login_screen(
-            LoginStatus::NotAuthenticated,
-            &config
-        ));
     }
 
     fn write_session_rollout(
@@ -3788,13 +3414,4 @@ trust_level = "untrusted"
         );
         Ok(())
     }
-}
-#[test]
-fn fatal_tui_error_preserves_full_cause_chain() {
-    let report =
-        color_eyre::eyre::eyre!("low-level injected cause").wrap_err("turn/start failed in TUI");
-    let rendered = report_as_io_error(report).to_string();
-
-    assert!(rendered.contains("turn/start failed in TUI"));
-    assert!(rendered.contains("low-level injected cause"));
 }

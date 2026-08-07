@@ -31,7 +31,10 @@ async fn thread_agent_message_uses_native_mailbox_and_deduplicates_stable_id() -
     let codex_home = TempDir::new()?;
     create_config_toml(codex_home.path(), &server.uri())?;
 
-    let mut app = TestAppServer::new(codex_home.path()).await?;
+    let mut app = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .build()
+        .await?;
     timeout(DEFAULT_TIMEOUT, app.initialize()).await??;
 
     let root_request = app

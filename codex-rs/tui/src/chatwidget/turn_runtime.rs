@@ -102,33 +102,6 @@ impl ChatWidget {
         self.request_redraw();
     }
 
-    pub(crate) fn begin_external_pane_turn(&mut self) {
-        self.on_task_started();
-    }
-
-    pub(crate) fn update_external_pane_live_status(
-        &mut self,
-        header: String,
-        details: Option<String>,
-    ) {
-        self.bottom_pane.ensure_status_indicator();
-        self.set_status(
-            header,
-            details,
-            StatusDetailsCapitalization::Preserve,
-            /*details_max_lines*/ 8,
-        );
-    }
-
-    pub(crate) fn suspend_external_pane_turn_display(&mut self) {
-        self.status_state.pending_status_indicator_restore = false;
-        self.input_queue.user_turn_pending_start = false;
-        self.turn_lifecycle.finish();
-        self.update_task_running_state();
-        self.bottom_pane.hide_status_indicator();
-        self.request_redraw();
-    }
-
     pub(super) fn on_task_complete(
         &mut self,
         last_agent_message: Option<String>,
@@ -209,9 +182,6 @@ impl ChatWidget {
         self.turn_lifecycle.finish();
         self.clear_safety_buffering();
         self.update_task_running_state();
-        if tps_sample_recorded {
-            self.refresh_status_surfaces();
-        }
         self.running_commands.clear();
         self.suppressed_exec_calls.clear();
         self.last_unified_wait = None;
@@ -356,7 +326,6 @@ impl ChatWidget {
         self.input_queue.user_turn_pending_start = false;
         self.clear_guardian_review_status();
         self.turn_lifecycle.finish();
-        self.tps_estimator.cancel_active();
         self.update_task_running_state();
         self.running_commands.clear();
         self.suppressed_exec_calls.clear();
@@ -373,41 +342,12 @@ impl ChatWidget {
         self.maybe_show_pending_rate_limit_prompt();
     }
 
-    pub(crate) fn append_external_pane_response(&mut self, markdown: String) {
-        if markdown.trim().is_empty() {
-            return;
-        }
-        self.add_to_history(history_cell::AgentMarkdownCell::new(
-            markdown,
-            self.config.cwd.as_path(),
-        ));
-    }
-
-    pub(crate) fn stream_external_pane_response_delta(&mut self, delta: String) {
-        if delta.trim().is_empty() {
-            return;
-        }
-        self.on_agent_message_delta(delta);
-    }
-
-    pub(crate) fn complete_external_pane_turn(
-        &mut self,
-        last_agent_message: Option<String>,
-        duration_ms: Option<i64>,
-    ) {
-        self.on_task_complete(last_agent_message, duration_ms, /*from_replay*/ false);
-    }
-
-    pub(crate) fn fail_external_pane_turn(&mut self, message: String) {
-        self.on_error(message);
-    }
-
     pub(super) fn on_server_overloaded_error(&mut self, message: String) {
         self.input_queue.submit_pending_steers_after_interrupt = false;
         self.finalize_turn();
 
         let message = if message.trim().is_empty() {
-            "PFTerminal is currently experiencing high load.".to_string()
+            "Codex is currently experiencing high load.".to_string()
         } else {
             message
         };
@@ -471,7 +411,7 @@ impl ChatWidget {
         match rate_limit_reached_type {
             Some(RateLimitReachedType::WorkspaceOwnerCreditsDepleted) => {
                 self.on_error(
-                    "You're out of credits. Your workspace is out of credits. Add credits to continue using PFTerminal."
+                    "You're out of credits. Your workspace is out of credits. Add credits to continue using Codex."
                         .to_string(),
                 );
             }

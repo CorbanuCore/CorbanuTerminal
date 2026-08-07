@@ -7,7 +7,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
-use std::time::Instant;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
@@ -109,10 +108,7 @@ use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::SandboxEnforcement;
 use codex_protocol::models::format_allow_prefixes;
-use codex_protocol::openai_models::ModelBilling;
-use codex_protocol::openai_models::ModelCapabilityTier;
 use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::NetworkSandboxPolicy;
@@ -228,7 +224,6 @@ pub(crate) mod step_context;
 pub(crate) mod time_reminder;
 mod token_budget;
 pub(crate) mod turn;
-mod turn_completion;
 pub(crate) mod turn_context;
 mod world_state;
 use self::code_mode_warning::unsupported_code_mode_warning;
@@ -305,6 +300,7 @@ impl SteerInputError {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PreviousTurnSettings {
     pub(crate) model: String,
+    pub(crate) model_provider: Option<String>,
     pub(crate) comp_hash: Option<String>,
     pub(crate) realtime_active: Option<bool>,
 }
@@ -370,9 +366,6 @@ use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ExecApprovalRequestEvent;
 use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::ModelRerouteEvent;
-use codex_protocol::protocol::ModelRerouteReason;
-use codex_protocol::protocol::ModelResponseCompletedEvent;
 use codex_protocol::protocol::ModelVerification;
 use codex_protocol::protocol::ModelVerificationEvent;
 use codex_protocol::protocol::NetworkApprovalContext;
@@ -496,8 +489,6 @@ pub(crate) fn resolve_multi_agent_version(
 
 pub(crate) const INITIAL_SUBMIT_ID: &str = "";
 pub(crate) const SUBMISSION_CHANNEL_CAPACITY: usize = 512;
-const CYBER_VERIFY_URL: &str = "https://chatgpt.com/cyber";
-const CYBER_SAFETY_URL: &str = "https://developers.openai.com/codex/concepts/cyber-safety";
 
 impl Session {
     /// Spawn and initialize a new session.
@@ -566,6 +557,9 @@ impl Session {
             git_enrichment_policy,
             windows_sandbox_proxy_settings_mode,
         } = args;
+        if let Some(runtime_selection) = conversation_history.get_resumed_runtime_selection() {
+            config.runtime_selection = Some(runtime_selection);
+        }
         let (tx_sub, rx_sub) = async_channel::bounded(SUBMISSION_CHANNEL_CAPACITY);
         let (tx_event, rx_event) = async_channel::unbounded();
 
@@ -649,10 +643,7 @@ impl Session {
         // 2. conversation history => session_meta.base_instructions
         // 3. base_instructions for current model
         let model_info = models_manager
-            .get_model_info(
-                model.as_str(),
-                &config.to_models_manager_config_for_model(Some(model.as_str())),
-            )
+            .get_model_info(model.as_str(), &config.to_models_manager_config())
             .await;
         if config.config_lock_export_dir.is_some()
             && config.config_lock_save_fields_resolved_from_model_catalog
@@ -700,7 +691,6 @@ impl Session {
             collaboration_mode,
             model_reasoning_summary: config.model_reasoning_summary,
             service_tier,
-            runtime_model_context_window: None,
             developer_instructions: config.developer_instructions.clone(),
             personality: config.personality,
             base_instructions,
@@ -720,6 +710,7 @@ impl Session {
             app_server_client_name: None,
             app_server_client_version: None,
             session_source,
+            runtime_selection: config.runtime_selection,
             history_mode,
             forked_from_thread_id,
             parent_thread_id,
@@ -741,7 +732,6 @@ impl Session {
             auth_manager.clone(),
             models_manager.clone(),
             exec_policy,
-            tx_sub.clone(),
             tx_event.clone(),
             agent_status_tx.clone(),
             conversation_history,
@@ -989,17 +979,6 @@ fn push_prompt_fragment(
 }
 
 impl Session {
-    fn trace_session_timing(label: &str, start: Instant) {
-        if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
-            debug!(
-                target: "pfterminal_session",
-                label,
-                elapsed_ms = start.elapsed().as_millis(),
-                "pfterminal session timing"
-            );
-        }
-    }
-
     pub(crate) async fn app_server_client_metadata(&self) -> AppServerClientMetadata {
         let state = self.state.lock().await;
         AppServerClientMetadata {
@@ -1329,44 +1308,24 @@ impl Session {
                 ),
             )
         };
-        Self::trace_session_timing(
-            "record_initial_history_after_subagent_check",
-            initial_history_started_at,
-        );
         let has_prior_user_turns = initial_history_has_prior_user_turns(&conversation_history);
         {
             let mut state = self.state.lock().await;
             state.set_next_turn_is_first(!has_prior_user_turns);
         }
-        Self::trace_session_timing(
-            "record_initial_history_after_first_turn_state",
-            initial_history_started_at,
-        );
         match conversation_history {
             InitialHistory::New | InitialHistory::Cleared => {
                 // Defer initial context insertion until the first real turn starts so
                 // turn/start overrides can be merged before we write model-visible context.
                 self.set_previous_turn_settings(/*previous_turn_settings*/ None)
                     .await;
-                Self::trace_session_timing(
-                    "record_initial_history_new_done",
-                    initial_history_started_at,
-                );
             }
             InitialHistory::Resumed(resumed_history) => {
                 let turn_context = self.new_default_turn().await;
                 let rollout_items = resumed_history.history;
-                Self::trace_session_timing(
-                    "record_initial_history_resumed_after_default_turn",
-                    initial_history_started_at,
-                );
                 let previous_turn_settings = self
                     .apply_rollout_reconstruction(&turn_context, &rollout_items)
                     .await;
-                Self::trace_session_timing(
-                    "record_initial_history_resumed_after_reconstruction",
-                    initial_history_started_at,
-                );
 
                 // If resuming, warn when the last recorded model differs from the current one.
                 let curr: &str = turn_context.model_info.slug.as_str();
@@ -1388,46 +1347,24 @@ impl Session {
                     .await;
                 }
 
-                if let Some(event) =
-                    Self::last_model_response_completed_from_rollout(&rollout_items)
-                    && event.model == turn_context.model_info.slug.as_str()
-                    && event.model_provider_id == turn_context.config.model_provider_id.as_str()
-                {
-                    self.services
-                        .model_client()
-                        .seed_server_response_id(event.response_id);
-                }
-
                 // Seed usage info from the recorded rollout so UIs can show token counts
                 // immediately on resume/fork.
                 if let Some(info) = Self::last_token_info_from_rollout(&rollout_items) {
                     let mut state = self.state.lock().await;
                     state.set_token_info(Some(info));
                 }
-                Self::trace_session_timing(
-                    "record_initial_history_resumed_after_token_seed",
-                    initial_history_started_at,
-                );
 
                 // Defer seeding the session's initial context until the first turn starts so
                 // turn/start overrides can be merged before we write to the rollout.
                 if !is_subagent {
                     let _ = self.flush_rollout().await;
                 }
-                Self::trace_session_timing(
-                    "record_initial_history_resumed_done",
-                    initial_history_started_at,
-                );
             }
             InitialHistory::Forked(mut rollout_items) => {
                 let turn_context = self.new_default_turn().await;
                 Self::assign_missing_rollout_response_item_ids(&mut rollout_items);
                 self.apply_rollout_reconstruction(&turn_context, &rollout_items)
                     .await;
-                Self::trace_session_timing(
-                    "record_initial_history_forked_after_reconstruction",
-                    initial_history_started_at,
-                );
 
                 // Seed usage info from the recorded rollout so UIs can show token counts
                 // immediately on resume/fork.
@@ -1469,10 +1406,6 @@ impl Session {
                 if !is_subagent {
                     let _ = self.flush_rollout().await;
                 }
-                Self::trace_session_timing(
-                    "record_initial_history_forked_done",
-                    initial_history_started_at,
-                );
             }
         }
     }
@@ -1566,19 +1499,6 @@ impl Session {
         })
     }
 
-    fn last_model_response_completed_from_rollout(
-        rollout_items: &[RolloutItem],
-    ) -> Option<ModelResponseCompletedEvent> {
-        rollout_items.iter().rev().find_map(|item| match item {
-            RolloutItem::EventMsg(EventMsg::ModelResponseCompleted(ev))
-                if !ev.response_id.is_empty() =>
-            {
-                Some(ev.clone())
-            }
-            _ => None,
-        })
-    }
-
     async fn previous_turn_settings(&self) -> Option<PreviousTurnSettings> {
         let state = self.state.lock().await;
         state.previous_turn_settings()
@@ -1595,9 +1515,8 @@ impl Session {
 
     pub(crate) async fn update_settings(
         &self,
-        mut updates: SessionSettingsUpdate,
+        updates: SessionSettingsUpdate,
     ) -> ConstraintResult<()> {
-        self.ensure_runtime_model_provider(&mut updates).await;
         let notify_config_contributors = !self.services.extensions.config_contributors().is_empty();
         let (previous_config, new_config, permission_profile_changed, mcp_inputs_changed) = {
             let mut state = self.state.lock().await;
@@ -1635,13 +1554,6 @@ impl Session {
             )
         };
         self.emit_config_changed_contributors(previous_config.as_ref(), new_config.as_ref());
-        if let Some(configuration) = model_client_configuration {
-            self.services
-                .replace_model_client(self.build_model_client_for_configuration(&configuration));
-        }
-        if let Some(startup_prewarm) = stale_startup_prewarm {
-            startup_prewarm.abort().await;
-        }
         if permission_profile_changed {
             self.refresh_managed_network_proxy_for_current_permission_profile()
                 .await;
@@ -1652,106 +1564,14 @@ impl Session {
         Ok(())
     }
 
-    async fn ensure_runtime_model_provider(&self, updates: &mut SessionSettingsUpdate) {
-        let model_provider_id = match updates.model_provider.clone() {
-            Some(model_provider_id) => model_provider_id,
-            None => {
-                let current_model_provider_id = {
-                    let state = self.state.lock().await;
-                    state
-                        .session_configuration
-                        .original_config_do_not_use
-                        .model_provider_id
-                        .clone()
-                };
-                if !current_model_provider_id.starts_with("gpu-") {
-                    return;
-                }
-                updates.model_provider = Some(current_model_provider_id.clone());
-                current_model_provider_id
-            }
-        };
-        if !model_provider_id.starts_with("gpu-") {
-            updates.runtime_model_context_window = Some(None);
-            return;
-        }
-        {
-            let runtime_overlay_source = {
-                let state = self.state.lock().await;
-                (
-                    state
-                        .session_configuration
-                        .original_config_do_not_use
-                        .sqlite_home
-                        .clone(),
-                    state
-                        .session_configuration
-                        .original_config_do_not_use
-                        .codex_home
-                        .clone(),
-                )
-            };
-            let (sqlite_home, codex_home) = runtime_overlay_source;
-            let records =
-                crate::config::load_gpu_runtime_model_provider_records(&sqlite_home).await;
-            updates.runtime_model_context_window = Some(
-                records
-                    .iter()
-                    .find(|record| record.provider_id == model_provider_id)
-                    .and_then(|record| record.maximum_context_tokens),
-            );
-            let runtime_providers = records
-                .into_iter()
-                .filter_map(|record| crate::config::gpu_runtime_model_provider(record, &codex_home))
-                .collect::<HashMap<_, _>>();
-            if runtime_providers.contains_key(&model_provider_id) {
-                let mut state = self.state.lock().await;
-                let mut config = (*state.session_configuration.original_config_do_not_use).clone();
-                // Runtime endpoints are controller-owned process-local transports. Replacing an
-                // existing entry is required after controller or SSH-forward recovery; presence
-                // alone does not mean the cached base URL is still current.
-                config.model_providers.extend(runtime_providers);
-                state.session_configuration.original_config_do_not_use = Arc::new(config);
-            }
-        }
-    }
-
-    fn build_model_client_for_configuration(
-        &self,
-        configuration: &SessionConfiguration,
-    ) -> ModelClient {
-        let config = configuration.original_config_do_not_use.as_ref();
-        ModelClient::new(
-            Some(Arc::clone(&self.services.auth_manager)),
-            self.thread_id,
-            configuration.provider.clone(),
-            configuration.session_source.clone(),
-            config.model_verbosity,
-            config.features.enabled(Feature::EnableRequestCompression),
-            config.features.enabled(Feature::RuntimeMetrics),
-            Self::build_model_client_beta_features_header(config),
-            /*item_ids_enabled*/
-            config.features.enabled(Feature::ItemIds) || configuration.provider.is_meta(),
-            self.services.attestation_provider.clone(),
-        )
-        .with_prompt_cache_key_override(
-            crate::guardian::prompt_cache_key_override_for_review_session(
-                &configuration.session_source,
-                configuration.parent_thread_id,
-            ),
-        )
-    }
-
     pub(crate) async fn preview_settings(
         &self,
         updates: &SessionSettingsUpdate,
     ) -> ConstraintResult<ThreadConfigSnapshot> {
-        let mut updates = updates.clone();
-        self.ensure_runtime_model_provider(&mut updates).await;
         let state = self.state.lock().await;
         state
             .session_configuration
-            .apply(&updates)
+            .apply(updates)
             .map(|configuration| configuration.thread_config_snapshot())
     }
 
@@ -2133,11 +1953,6 @@ impl Session {
             .rollout_thread_trace
             .is_enabled()
             .then(|| message.clone());
-        let trigger_turn = self
-            .services
-            .agent_control
-            .auto_processes_terminal_results(parent_thread_id)
-            .await;
         let communication = InterAgentCommunication::new(
             child_agent_path.clone(),
             parent_agent_path,
@@ -3342,79 +3157,27 @@ impl Session {
         ])
         .await;
         self.send_raw_response_items(turn_context, items).await;
-        // Plaintext inter-agent controls are operator-visible transcript content. Raw response
-        // notifications preserve provider compatibility, but app-server clients render the
-        // item lifecycle; emit it here just as we do for ordinary recorded response items.
-        if let Some(item) = parse_turn_item(&response_item) {
-            self.emit_turn_item_started(turn_context, &item).await;
-            self.emit_turn_item_completed(turn_context, item).await;
-        }
     }
 
-    pub(crate) async fn has_applied_agent_message_id(&self, message_id: &str) -> bool {
-        self.applied_agent_message_ids
-            .lock()
-            .await
-            .contains(message_id)
-    }
-
-    async fn track_agent_message_for_turn(&self, sub_id: &str, message_id: String) -> bool {
-        let Some(turn_state) = self
-            .input_queue
-            .turn_state_for_sub_id(&self.active_turn, sub_id)
-            .await
-        else {
-            return false;
-        };
-        turn_state.lock().await.track_mailbox_message(message_id);
-        true
-    }
-
-    async fn maybe_warn_on_server_model_mismatch(
+    fn record_server_model_identity(
         self: &Arc<Self>,
         turn_context: &Arc<TurnContext>,
-        server_model: String,
-    ) -> bool {
+        server_model: &str,
+    ) {
         let requested_model = turn_context.model_info.slug.clone();
         let server_model_normalized = server_model.to_ascii_lowercase();
         let requested_model_normalized = requested_model.to_ascii_lowercase();
         if server_model_normalized == requested_model_normalized {
             info!("server reported model {server_model} (matches requested model)");
-            return false;
+            return;
         }
 
-        warn!("server reported model {server_model} while requested model was {requested_model}");
-
-        if !turn_context.config.model_provider.is_openai() {
-            info!(
-                provider = %turn_context.config.model_provider_id,
-                "skipping model reroute warning for non-OpenAI provider"
-            );
-            return false;
-        }
-
-        let warning_message = format!(
-            "Your account was flagged for potentially high-risk cyber activity and this request was routed to gpt-5.2 as a fallback. To regain access to gpt-5.3-codex, apply for trusted access: {CYBER_VERIFY_URL} or learn more: {CYBER_SAFETY_URL}"
+        info!(
+            model_provider = %turn_context.config.model_provider_id,
+            requested_model,
+            reported_model = server_model,
+            "provider reported a different model identity; recording it without inferring a reroute reason"
         );
-
-        self.send_event(
-            turn_context,
-            EventMsg::ModelReroute(ModelRerouteEvent {
-                from_model: requested_model.clone(),
-                to_model: server_model.clone(),
-                reason: ModelRerouteReason::HighRiskCyberActivity,
-            }),
-        )
-        .await;
-
-        self.send_event(
-            turn_context,
-            EventMsg::Warning(WarningEvent {
-                message: warning_message.clone(),
-            }),
-        )
-        .await;
-        true
     }
 
     pub(crate) async fn emit_model_verification(
@@ -4274,66 +4037,6 @@ impl Session {
             )
             .await;
         Ok(active_turn_id.clone())
-    }
-
-    #[expect(
-        clippy::await_holding_invalid_type,
-        reason = "active turn checks and turn state updates must remain atomic"
-    )]
-    pub(crate) async fn defer_user_input_until_active_turn_finished(
-        &self,
-        input: Vec<UserInput>,
-        additional_context: BTreeMap<String, AdditionalContextEntry>,
-        client_user_message_id: Option<String>,
-    ) -> Result<String, SteerInputError> {
-        let mut active = self.active_turn.lock().await;
-        let Some(active_turn) = active.as_mut() else {
-            return Err(SteerInputError::NoActiveTurn(input));
-        };
-
-        let Some(active_task) = active_turn.task.as_ref() else {
-            return Err(SteerInputError::NoActiveTurn(input));
-        };
-
-        if input.is_empty() {
-            return Err(SteerInputError::EmptyInput);
-        }
-
-        let additional_context_input = {
-            let mut state = self.state.lock().await;
-            state.additional_context.merge(additional_context)
-        };
-
-        let mut pending_input = additional_context_input
-            .into_iter()
-            .map(ResponseItem::from)
-            .map(TurnInput::ResponseItem)
-            .collect::<Vec<_>>();
-        pending_input.push(TurnInput::UserInput {
-            content: input,
-            client_id: client_user_message_id,
-        });
-        self.input_queue
-            .extend_pending_input_for_turn_state(active_turn.turn_state.as_ref(), pending_input)
-            .await;
-        Ok(active_task.turn_context.sub_id.clone())
-    }
-
-    pub(crate) async fn submit_internal_follow_up(
-        &self,
-        op: Op,
-        client_user_message_id: Option<String>,
-    ) -> CodexResult<()> {
-        let sub = Submission {
-            id: Uuid::now_v7().to_string(),
-            op,
-            client_user_message_id,
-            trace: current_span_w3c_trace_context(),
-        };
-        self.tx_sub
-            .send(sub)
-            .await
-            .map_err(|_| CodexErr::InternalAgentDied)
     }
 
     pub(crate) async fn record_memory_citation_for_turn(&self, sub_id: &str) {

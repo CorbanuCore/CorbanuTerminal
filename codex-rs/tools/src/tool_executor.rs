@@ -49,7 +49,7 @@ impl ToolExposure {
     /// Returns whether this tool can participate in code mode.
     pub fn is_available_in_code_mode(self) -> bool {
         match self {
-            Self::Direct | Self::Deferred => true,
+            Self::Direct | Self::Deferred | Self::CodeModeOnly => true,
             Self::DirectModelOnly | Self::Hidden => false,
         }
     }

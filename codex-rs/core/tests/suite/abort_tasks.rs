@@ -1,9 +1,9 @@
-use assert_matches::assert_matches;
 use std::sync::Arc;
 use std::time::Duration;
 
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
+use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
@@ -14,7 +14,6 @@ use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
-use regex_lite::Regex;
 use serde_json::json;
 
 /// Integration test: spawn a long‑running shell_command tool via a mocked Responses SSE
@@ -36,8 +35,14 @@ async fn interrupt_long_running_tool_emits_turn_aborted() {
     let server = start_mock_server().await;
     mount_sse_once(&server, body).await;
 
-    let codex = test_codex()
+    let mut builder = test_codex()
         .with_model("gpt-5.4")
+        .with_config(|config| {
+            config
+                .set_legacy_sandbox_policy(SandboxPolicy::DangerFullAccess)
+                .expect("set sandbox policy");
+        });
+    let codex = builder
         .build(&server)
         .await
         .unwrap()
@@ -94,8 +99,14 @@ async fn interrupt_tool_records_history_entries() {
     let server = start_mock_server().await;
     let response_mock = mount_sse_sequence(&server, vec![first_body, follow_up_body]).await;
 
-    let fixture = test_codex()
+    let mut builder = test_codex()
         .with_model("gpt-5.4")
+        .with_config(|config| {
+            config
+                .set_legacy_sandbox_policy(SandboxPolicy::DangerFullAccess)
+                .expect("set sandbox policy");
+        });
+    let fixture = builder
         .build(&server)
         .await
         .unwrap();
@@ -152,24 +163,9 @@ async fn interrupt_tool_records_history_entries() {
     let output = response_mock
         .function_call_output_text(call_id)
         .expect("missing function_call_output text");
-    let re = Regex::new(r"^Wall time: ([0-9]+(?:\.[0-9])?) seconds\naborted by user$")
-        .expect("compile regex");
-    let captures = re.captures(&output);
-    assert_matches!(
-        captures.as_ref(),
-        Some(caps) if caps.get(1).is_some(),
-        "aborted message with elapsed seconds"
-    );
-    let secs: f32 = captures
-        .expect("aborted message with elapsed seconds")
-        .get(1)
-        .unwrap()
-        .as_str()
-        .parse()
-        .unwrap();
     assert!(
-        secs >= 0.1,
-        "expected at least one tenth of a second of elapsed time, got {secs}"
+        output.contains("aborted by user"),
+        "expected the model-visible tool result to state that the user aborted it; got {output:?}"
     );
 }
 

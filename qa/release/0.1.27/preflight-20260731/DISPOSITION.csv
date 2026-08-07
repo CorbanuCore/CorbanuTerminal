@@ -1,0 +1,681 @@
+status,path,area,disposition,review_state,rationale
+ M,.gitattributes,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,.github/workflows/pfterminal-release.yml,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,CHANGELOG.md,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+??,FORK_POLICY.md,release_documentation,retain,pending,"Release policy, incident evidence, or execution specification."
+ M,GPU-RENTAL-QUALIFICATION-20260716.md,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,MODULE.bazel.lock,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,README.md,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,codex-rs/Cargo.lock,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/Cargo.toml,Cargo.toml,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/analytics/src/analytics_client_tests.rs,analytics,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/analytics/src/client_tests.rs,analytics,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server-client/README.md,app-server-client,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server-client/src/lib.rs,app-server-client,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server-client/src/remote.rs,app-server-client,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server-protocol/schema/json/ClientRequest.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/ServerNotification.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/codex_app_server_protocol.schemas.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/codex_app_server_protocol.v2.schemas.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/v2/LoginAccountParams.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/v2/RawResponseItemCompletedNotification.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/v2/ThreadForkResponse.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/v2/ThreadListResponse.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/v2/ThreadMetadataUpdateResponse.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/v2/ThreadReadResponse.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/v2/ThreadResumeParams.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/v2/ThreadResumeResponse.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/v2/ThreadRollbackResponse.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/v2/ThreadStartResponse.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/v2/ThreadStartedNotification.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/json/v2/ThreadUnarchiveResponse.json,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/precomputed/app-server-exports-experimental.json.zst,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/precomputed/app-server-exports-stable.json.zst,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/typescript/ResponseItem.ts,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+??,codex-rs/app-server-protocol/schema/typescript/RuntimeSelectionSource.ts,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/typescript/index.ts,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/typescript/v2/CodexErrorInfo.ts,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/typescript/v2/LoginAccountParams.ts,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/typescript/v2/Thread.ts,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/typescript/v2/ThreadItem.ts,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+??,codex-rs/app-server-protocol/schema/typescript/v2/ThreadRuntimeRoute.ts,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/schema/typescript/v2/index.ts,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/app-server-protocol/src/protocol/common.rs,app-server-protocol,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server-protocol/src/protocol/v2/item.rs,app-server-protocol,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server-protocol/src/protocol/v2/tests.rs,app-server-protocol,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server-protocol/src/protocol/v2/thread.rs,app-server-protocol,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server-protocol/src/protocol/v2/thread_data.rs,app-server-protocol,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/README.md,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/src/external_agent_migration/session_importer.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/src/in_process.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/src/message_processor.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/src/message_processor_tracing_tests.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/src/models.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/src/request_processors.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/src/request_processors/account_processor.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/src/request_processors/feedback_processor.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/src/request_processors/thread_enrichment.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/src/request_processors/thread_processor.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/src/request_processors/thread_processor_tests.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/src/request_processors/thread_resume_redaction.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/src/request_processors/thread_summary.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/src/request_processors/turn_processor.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/common/config.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/common/config_tests.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/common/models_cache.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/common/rollout.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/common/test_app_server.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/auth.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/conversation_summary.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/account.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/compaction.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/imagegen_extension.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/model_list.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/model_provider_capabilities_read.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/multi_agent_v2_developer_instructions.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/process_exec.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/rate_limit_reset_credits.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/remote_thread_store.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/safety_check_downgrade.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/thread_agent_message.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/thread_list.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/thread_read.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/thread_resume.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/thread_settings_update.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/thread_unarchive.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/turn_start.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/app-server/tests/suite/v2/web_search.rs,app-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/apply-patch/src/lib.rs,apply-patch,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/cli/Cargo.toml,cli,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/cli/src/bin/logs_client.rs,cli,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/cli/src/claude_oauth.rs,cli,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/cli/src/doctor.rs,cli,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/cli/src/doctor/snapshots/pfterminal__doctor__output__tests__doctor_human_report_environment_rows.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/cli/src/doctor/updates.rs,cli,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/cli/src/login.rs,cli,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/cli/src/main.rs,cli,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/cli/src/tasknode_cmd.rs,cli,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/codex-api/src/api_bridge_tests.rs,codex-api,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/codex-api/src/common.rs,codex-api,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/codex-api/src/endpoint/anthropic_messages.rs,codex-api,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/codex-api/src/endpoint/chat_completions.rs,codex-api,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/codex-api/src/endpoint/models.rs,codex-api,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/codex-api/src/endpoint/responses_websocket.rs,codex-api,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/codex-api/src/sse/responses.rs,codex-api,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/codex-api/tests/models_integration.rs,codex-api,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/config/src/thread_config.rs,config,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/config/src/thread_config/remote.rs,config,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/config/src/types.rs,config,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/core/Cargo.toml,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/config.schema.json,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/gpt-5.1-codex-max_prompt.md,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/gpt-5.2-codex_prompt.md,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/gpt_5_1_prompt.md,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/gpt_5_2_prompt.md,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/gpt_5_codex_prompt.md,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/prompt_with_apply_patch_instructions.md,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ D,codex-rs/core/src/agent/builtins/nazgul.toml,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ D,codex-rs/core/src/agent/builtins/nazgul_base.md,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ D,codex-rs/core/src/agent/builtins/orc.toml,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ D,codex-rs/core/src/agent/builtins/orc_base.md,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ D,codex-rs/core/src/agent/builtins/standard_base.md,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ D,codex-rs/core/src/agent/builtins/troll.toml,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ D,codex-rs/core/src/agent/builtins/troll_base.md,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ M,codex-rs/core/src/agent/control.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/agent/control/execution.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/agent/control/execution_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ D,codex-rs/core/src/agent/control/mailbox.rs,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ M,codex-rs/core/src/agent/control/spawn.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/agent/control_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/agent/registry.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/agent/registry_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/agent/role.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/agent/role_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/agent/status.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/anthropic_payload.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/anthropic_payload_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+MM,codex-rs/core/src/client.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/client_common_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/client_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/codex_thread.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/compact.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/compact_remote_request.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/compact_remote_v2.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/compact_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/config/agent_roles.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/config/config_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/config/mod.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/context/mod.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ D,codex-rs/core/src/context/subagent_turn_budget_finalization.rs,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ D,codex-rs/core/src/context/turn_completion_continuation.rs,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ M,codex-rs/core/src/context_manager/history_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/context_manager/normalize.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/event_mapping.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/event_mapping_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/exec_env_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/guardian/tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/image_preparation_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/mcp_tool_call_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/realtime_conversation.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/responses_retry.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/session/config_lock.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/session/handlers.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/session/input_queue.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/session/mod.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/session/review.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/session/rollout_reconstruction.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/session/rollout_reconstruction_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/session/session.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/session/tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/session/tests/guardian_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/session/turn.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ D,codex-rs/core/src/session/turn_completion.rs,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ D,codex-rs/core/src/session/turn_completion_tests.rs,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ M,codex-rs/core/src/session/turn_context.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ D,codex-rs/core/src/session/turn_context_tests.rs,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ M,codex-rs/core/src/session_prefix.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/session_prefix_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/session_startup_prewarm.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/shell_snapshot.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/shell_snapshot_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/state/service.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/state/turn.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/stream_events_utils.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/stream_events_utils_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tasks/mod.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/thread_manager.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/thread_manager_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/thread_rollout_truncation_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/apply_patch.lark,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/apply_patch.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/apply_patch_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/mcp.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/mod.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/multi_agents/resume_agent.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/multi_agents/spawn.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/multi_agents_common.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/multi_agents_spec.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/multi_agents_spec_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/multi_agents_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/multi_agents_v2.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/multi_agents_v2/followup_task.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/multi_agents_v2/interrupt_agent.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/multi_agents_v2/list_agents.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/multi_agents_v2/message_tool.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/multi_agents_v2/wait.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/shell.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/shell/shell_command.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/handlers/shell_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ D,codex-rs/core/src/tools/handlers/structured_edit.rs,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ M,codex-rs/core/src/tools/handlers/unified_exec/exec_command.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/orchestrator.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/parallel.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/registry.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/registry_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/router.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/router_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/spec_plan.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/spec_plan_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/tools/tool_dispatch_trace_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/unified_exec/async_watcher.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/unified_exec/async_watcher_tests.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/unified_exec/process.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/src/unified_exec/process_manager.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/templates/model_instructions/gpt-5.2-codex_instructions_template.md,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/common/lib.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/common/responses.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/common/test_codex.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/responses_headers.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/abort_tasks.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/agent_execution.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/agents_md.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ D,codex-rs/core/tests/suite/anthropic_payload_limit.rs,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ M,codex-rs/core/tests/suite/apply_patch_cli.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/approvals.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/auto_review.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ D,codex-rs/core/tests/suite/chat_provider_turn_lifecycle.rs,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ M,codex-rs/core/tests/suite/cli_stream.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/client.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/client_websockets.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/code_mode.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/compact.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/hooks.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/mod.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/model_switching.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/models_cache_ttl.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/multi_agent_mode.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/multi_agent_resume.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/pending_input.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/personality.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/prompt_cache_key.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/prompt_caching.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/remote_models.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/resume.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/resume_warning.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/rmcp_client.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/rollout_budget.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/safety_check_downgrade.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/search_tool.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/snapshots/all__suite__compact_remote__remote_manual_compact_api_auth_prompt_cache_key_request_diff.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/core/tests/suite/snapshots/all__suite__compact_remote__remote_manual_compact_chatgpt_auth_service_tier_prompt_cache_key_request_diff.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/core/tests/suite/snapshots/all__suite__compact_remote__remote_manual_compact_restates_realtime_start_shapes.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/core/tests/suite/snapshots/all__suite__compact_remote__remote_manual_compact_with_history_shapes.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/core/tests/suite/snapshots/all__suite__compact_remote__remote_mid_turn_compaction_multi_summary_reinjects_above_last_summary_shapes.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/core/tests/suite/snapshots/all__suite__compact_remote__remote_pre_turn_compaction_context_window_exceeded_shapes.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/core/tests/suite/snapshots/all__suite__compact_remote__remote_pre_turn_compaction_failure_shapes.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/core/tests/suite/snapshots/all__suite__compact_remote__remote_pre_turn_compaction_including_incoming_shapes.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/core/tests/suite/snapshots/all__suite__compact_remote__remote_pre_turn_compaction_restates_realtime_start_shapes.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/core/tests/suite/snapshots/all__suite__compact_remote__remote_pre_turn_compaction_strips_incoming_model_switch_shapes.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/core/tests/suite/snapshots/all__suite__pending_input__pending_input_queued_mail_after_commentary.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/core/tests/suite/snapshots/all__suite__pending_input__pending_input_queued_mail_after_reasoning.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/core/tests/suite/spawn_agent_description.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/sqlite_state.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/stream_error_allows_next_turn.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/stream_no_completed.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/subagent_notifications.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/tool_harness.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/tools.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/core/tests/suite/unified_exec.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ D,codex-rs/core/tests/suite/vercel_server_state.rs,upstream_runtime_convergence,verify_upstream_replacement,pending,Deleted PF runtime code is acceptable only when pinned upstream owns the behavior.
+ M,codex-rs/core/tests/suite/view_image.rs,core_convergence,semantic_review_required,pending,Confirm upstream ownership or document the PF provider/orchestration boundary.
+ M,codex-rs/exec/src/cli.rs,exec,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/exec/src/event_processor_with_human_output.rs,exec,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/exec/src/event_processor_with_jsonl_output.rs,exec,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/exec/src/event_processor_with_jsonl_output_tests.rs,exec,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/exec/src/exec_events.rs,exec,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/exec/src/lib.rs,exec,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/exec/src/lib_tests.rs,exec,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/exec/tests/suite/completion_backfill_tests.rs,exec,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/gpu-market/src/controller.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/controller_create.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/controller_termination.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/controller_tests.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/gguf_recipes.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/market_tests.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/provider.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/readiness.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/readiness_tests.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/recipe.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/recipe_tests.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/runpod.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/runpod_tests.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/vast.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/vast_ssh.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/gpu-market/src/vast_tests.rs,gpu_rental,retain_and_qualify,pending,GPU rental and the sole DeepSeek 0731 recipe are required PF product scope.
+ M,codex-rs/http-client/src/request.rs,http-client,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/http-client/src/transport.rs,http-client,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/http-client/src/transport_tests.rs,http-client,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/login/src/auth/auth_tests.rs,login,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/login/src/auth/external_bearer.rs,login,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/login/src/auth/manager.rs,login,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/login/src/auth/provider_key_vault.rs,login,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/login/src/auth_env_telemetry.rs,login,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/login/src/device_code_auth.rs,login,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/login/src/lib.rs,login,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/mcp-server/src/codex_tool_runner.rs,mcp-server,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/model-provider-info/src/lib.rs,model-provider-info,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/model-provider-info/src/model_provider_info_tests.rs,model-provider-info,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/model-provider/src/auth.rs,model-provider,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/model-provider/src/provider.rs,model-provider,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/models-manager/models.json,models-manager,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/models-manager/prompt.md,models-manager,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/models-manager/src/manager.rs,models-manager,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/models-manager/src/manager_tests.rs,models-manager,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/models-manager/src/model_info.rs,models-manager,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/models-manager/src/model_info_tests.rs,models-manager,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/protocol/src/crew_tests.rs,protocol,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/protocol/src/error.rs,protocol,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/protocol/src/error_tests.rs,protocol,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/protocol/src/legacy_events.rs,protocol,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/protocol/src/models.rs,protocol,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/protocol/src/openai_models.rs,protocol,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/protocol/src/protocol.rs,protocol,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/rollout-trace/src/inference.rs,rollout-trace,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/rollout-trace/src/protocol_event.rs,rollout-trace,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/rollout/src/compression_tests.rs,rollout,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/rollout/src/metadata_tests.rs,rollout,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/rollout/src/policy.rs,rollout,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/rollout/src/recorder.rs,rollout,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/rollout/src/recorder_tests.rs,rollout,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/rollout/src/session_index_tests.rs,rollout,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/rollout/src/state_db_tests.rs,rollout,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/rollout/src/tests.rs,rollout,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/secrets/src/local.rs,secrets,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/state/src/extract.rs,state,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/state/src/migrations_tests.rs,state,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/state/src/model/mod.rs,state,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/state/src/runtime.rs,state,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/state/src/runtime/agent_mailbox_tests.rs,state,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/state/src/runtime/gpu_rentals.rs,state,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/state/src/runtime/gpu_rentals_tests.rs,state,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/state/src/runtime/gpu_runtime_providers_tests.rs,state,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/state/src/runtime/provider_requests.rs,state,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/state/src/runtime/threads.rs,state,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/state/src/sqlite.rs,state,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/telegram/src/approvals_tests.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/auth_tests.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/bot.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/bridge/commands.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/bridge/commands_tests.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/bridge/mod.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/bridge/notifications.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/bridge/status_tests.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/bridge/user_input_tests.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/conversation.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/conversation_tests.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/dedup_tests.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/error_tests.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/lib.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/media.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/model_selection_tests.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/outbound.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/sandbox_preflight_tests.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/telegram/src/session_tests.rs,telegram,retain_and_qualify,pending,Telegram control and sandbox propagation are required PF product scope.
+ M,codex-rs/thread-manager-sample/src/main.rs,thread-manager-sample,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/thread-store/src/in_memory.rs,thread-store,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/thread-store/src/local/create_thread.rs,thread-store,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/thread-store/src/local/mod.rs,thread-store,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/thread-store/src/local/model_context_tests.rs,thread-store,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/thread-store/src/local/thread_history_materialization_tests.rs,thread-store,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/thread-store/src/types.rs,thread-store,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/tools/src/tool_config_tests.rs,tools,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/tools/src/tool_executor.rs,tools,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/tools/src/tool_search.rs,tools,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/tools/src/tool_search_tests.rs,tools,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/tui/Cargo.toml,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/agent_navigation.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/agent_picker.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/app_server_events.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/config_persistence.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/event_dispatch.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+??,codex-rs/tui/src/app/gpu_rentals.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/loaded_threads.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/resize_reflow.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/session_lifecycle.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/side.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/snapshots/codex_tui__app__thread_goal_actions__tests__thread_goal_ephemeral_error_message_renders_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/app/startup_prompts.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/test_support.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/tests.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+??,codex-rs/tui/src/app/tests/.session_lifecycle_requests.rs.pending-snap,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ D,codex-rs/tui/src/app/tests/dispatch_integration.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ M,codex-rs/tui/src/app/tests/model_catalog.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/tests/session_lifecycle_requests.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/tests/session_summary.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/tests/snapshots/codex_tui__app__tests__model_catalog__model_migration_prompt_shows_for_hidden_model.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/app/thread_events.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/thread_routing.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/thread_session_state.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app/thread_settings.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app_event.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app_event_sender.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/app_server_session.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/bottom_pane/approval_overlay.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/bottom_pane/chat_composer.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/bottom_pane/chat_composer/history_search.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/bottom_pane/chat_composer/slash_input.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/bottom_pane/custom_prompt_view_tests.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/bottom_pane/list_selection_view.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/bottom_pane/mod.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/bottom_pane/paste_burst.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/bottom_pane/slash_commands.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__approval_overlay__tests__approval_overlay_additional_permissions_prompt.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__approval_overlay__tests__approval_overlay_cross_thread_prompt.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__approval_overlay__tests__network_exec_prompt.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__empty.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_collapse_empty_full.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_collapse_empty_mode_cycle_with_context.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_collapse_empty_mode_cycle_without_context.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_collapse_empty_mode_only.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_collapse_plan_empty_full.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_collapse_plan_empty_mode_cycle_with_context.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_collapse_plan_empty_mode_cycle_without_context.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_collapse_plan_empty_mode_only.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_mode_ctrl_c_interrupt.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_mode_ctrl_c_quit.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_mode_ctrl_c_then_esc_hint.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_mode_esc_hint_backtrack.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_mode_esc_hint_from_overlay.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_mode_overlay_then_external_esc_hint.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_mode_shell_command_escape_exits_empty_mode.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_mode_shortcut_overlay.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_mode_shortcut_overlay_queue_submissions.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__tests__queued_messages_visible_when_status_hidden_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__tests__status_and_composer_fill_height_without_bottom_padding.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__tests__status_and_queued_messages_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__tests__status_hidden_when_height_too_small_height_1.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__tests__status_only_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__tests__status_with_details_and_queued_messages_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/bottom_pane/status_line_setup.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/bottom_pane/status_line_style.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/bottom_pane/status_surface_preview.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/bottom_pane/wallet_recovery.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/claude_code_login_tests.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/command_lifecycle.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/constructor.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/exec_state.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/gpu_menu.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/gpu_menu_tests.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/interaction.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/model_popups.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+??,codex-rs/tui/src/chatwidget/native_orchestration.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/plugin_catalog.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/rate_limits.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/settings.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/settings_popups.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/slash_dispatch.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__gpu_menu__tests__gpu_authorization_uses_one_labeled_input_and_retries_in_place_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__gpu_menu__tests__gpu_menu_excludes_nonbillable_history_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__app_server_collab_wait_items_render_history.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__app_server_guardian_review_denied_renders_denied_request.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__app_server_guardian_review_timed_out_renders_timed_out_request.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__app_server_mcp_startup_failure_renders_warning_history.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__approval_modal_exec.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__approval_modal_exec_multiline_prefix_no_execpolicy.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__approval_modal_exec_no_reason.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__approval_modal_patch.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__chatwidget_tall.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__compact_queues_user_messages_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__esc_interrupt_goal_paused_footer.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__esc_interrupt_goal_paused_footer@windows.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__exec_approval_modal_exec.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ D,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__gpt_5_6_model_selection_popup.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_approved_exec_renders_approved_request.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_approved_request_permissions_renders_request_summary.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_denied_exec_renders_warning_and_denied_request.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_parallel_reviews_render_aggregate_status.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_timed_out_exec_renders_warning_and_timed_out_request.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ D,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__kimi_code_reasoning_popup.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__mcp_startup_header_booting.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__model_picker_filters_hidden_models.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__model_selection_popup.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ D,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__model_selection_popup_kimi_code_provider.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ D,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__model_selection_popup_openai_provider.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ D,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__model_selection_popup_openrouter_provider.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__pending_token_activity_refresh_renders_above_composer_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__personality_selection_popup.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__plugins_popup_marketplace_remove_confirmation.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__preamble_keeps_working_status.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__renamed_thread_footer_title.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__replayed_interrupted_reconnect_footer_row.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__review_queues_user_messages_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__signed_out_usage_command_reports_chatgpt_login_requirement.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__slash_rename_prefilled_prompt.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__slash_side_requests_forked_side_question_while_task_running.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ D,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__spawn_effort_selection_popup.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ D,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__spawn_model_selection_popup.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_fast_mode_footer.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_goal_active_token_budget_footer.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_goal_complete_elapsed_footer.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_model_with_reasoning_context_remaining_footer.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_model_with_reasoning_fast_footer.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_line_model_with_reasoning_plan_mode_footer.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_widget_active.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_widget_and_approval_modal.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__unified_exec_begin_restores_working_status.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__unified_exec_wait_status_renders_command_in_single_details_row.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__update_popup.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__windows_sandbox_required_fallback_prompt.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__workspace_owner_limit_state_messages.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__wallet_menu__tests__wallet_removal_confirmation_copy_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__wallet_menu__tests__wallet_upgrade_flow_copy_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/status_controls.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/status_surfaces.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/streaming.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/tasknode_menu.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/telegram_setup.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/telegram_setup/api.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/telegram_setup/service.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/telegram_setup/service_tests.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/tests/exec_flow.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/tests/helpers.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/tests/plan_mode.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/tests/popups_and_settings.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/tests/review_mode.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/tests/slash_commands.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/tests/snapshots/codex_tui__chatwidget__tests__approval_requests__exec_approval_modal_exec.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/chatwidget/tests/status_and_layout.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ D,codex-rs/tui/src/chatwidget/tps.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ M,codex-rs/tui/src/chatwidget/turn_runtime.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/usage.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/vault_menu.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/wallet_account_actions.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/wallet_menu.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/wallet_receipt.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/wallet_render_tests.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/wallet_unlock.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/wallet_unlock_tests.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/wallet_usage.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/chatwidget/windows_sandbox_prompts.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ D,codex-rs/tui/src/claude_panes/app_integration.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/bridge.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/bridge_translate.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/command_plan.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/execution.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/mod.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/output_parse.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/pane.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/persistence.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/progress.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/progress_summarize.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/provider.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/registry.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/smoke.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/smoke_workflows.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/tests.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/claude_panes/turn_types.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ M,codex-rs/tui/src/cli.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/config_update.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/config_update_tests.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ D,codex-rs/tui/src/crew_presets.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/crew_presets_tests.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/crew_state.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/crew_state_tests.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/custom_spawn_crew.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/dispatch_queue.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/dispatch_queue_tests.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ M,codex-rs/tui/src/external_agent_config_migration/mod.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ D,codex-rs/tui/src/external_plan_agent_adapter.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ M,codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__pnpm_update_available_history_cell_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__session_header_clamps_to_narrow_width.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__session_header_halfwidth_directory.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__session_header_halfwidth_sound_marks.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__session_header_indicates_yolo_mode.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__session_info_availability_nux_tooltip_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_windows_update_available_history_cell_snapshot.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/history_cell/tests.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/ide_context/ipc.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/keymap.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/keymap_setup.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/lib.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ D,codex-rs/tui/src/mkdocs_overlay.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/mkdocs_viewer.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/mkdocs_viewer_tests.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ M,codex-rs/tui/src/model_catalog.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ D,codex-rs/tui/src/model_catalog_tests.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ M,codex-rs/tui/src/model_migration.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/multi_agents.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/npm_registry.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/onboarding/auth.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/onboarding/auth/headless_chatgpt_login.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/onboarding/onboarding_screen.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/onboarding/welcome.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ D,codex-rs/tui/src/orchestrate.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ M,codex-rs/tui/src/pager_overlay.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/pets/image_protocol.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/resume_picker.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/slash_command.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/snapshots/codex_tui__app__tests__clear_ui_after_long_transcript_fresh_header_only.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/snapshots/codex_tui__app__tests__clear_ui_header_fast_status_fast_capable_models.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ D,codex-rs/tui/src/snapshots/codex_tui__app__tests__orchestrate_fast_manager_picker.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ D,codex-rs/tui/src/snapshots/codex_tui__app__tests__orchestrate_fast_worker_picker.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/snapshots/codex_tui__app__tests__path_backed_agent_picker.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/snapshots/codex_tui__model_migration__tests__model_migration_prompt.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/snapshots/codex_tui__model_migration__tests__model_migration_prompt_gpt5_codex.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/snapshots/codex_tui__model_migration__tests__model_migration_prompt_gpt5_codex_mini.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/snapshots/codex_tui__model_migration__tests__model_migration_prompt_gpt5_family.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/snapshots/codex_tui__multi_agents__tests__collab_agent_transcript.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ D,codex-rs/tui/src/snapshots/codex_tui__multi_agents__tests__named_sub_agent_activity.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/snapshots/codex_tui__update_prompt__tests__update_prompt_modal.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ D,codex-rs/tui/src/spawn_crew.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ D,codex-rs/tui/src/spawn_orchestration.rs,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ M,codex-rs/tui/src/status/card.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_cached_limits_hide_credits_without_flag.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_includes_credits_and_limits.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_includes_enterprise_monthly_credit_limit.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_includes_forked_from.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_includes_monthly_limit.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_includes_reasoning_details.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_shows_active_user_defined_profile.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_shows_auto_review_permissions.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_shows_chatgpt_plan_without_email.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_shows_missing_limits_message.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_shows_refreshing_limits_notice.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_shows_stale_limits_message.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_shows_unavailable_limits_message.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_treats_refreshing_empty_limits_as_unavailable.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_truncates_halfwidth_kana_in_narrow_terminal.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_truncates_in_narrow_terminal.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_uses_default_reasoning_when_config_empty.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_uses_generic_limit_labels_for_unsupported_windows.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_wraps_enterprise_monthly_credit_details_in_narrow_terminal.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/status/snapshots/codex_tui__status__tests__transcript_overlay_status_rate_limit_refresh.snap,generated_artifact,regenerate_and_review,pending,Generated output must match the frozen semantic source and have no pending drift.
+ M,codex-rs/tui/src/thread_transcript.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/tooltips.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/tui.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/update_action.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/src/updates.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ D,codex-rs/tui/tests/spawn_report_delivery_scope.md,released_tui_surface,verify_or_restore_product_surface,pending,Deleted TUI code requires explicit proof of an upstream replacement or a restored PF surface.
+ M,codex-rs/tui/tests/suite/focus_palette.rs,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/tui/tooltips.txt,tui_convergence,semantic_review_required,pending,Confirm upstream terminal behavior and every retained PF command/surface.
+ M,codex-rs/utils/home-dir/src/lib.rs,utils,semantic_review_required,pending,Changed crate must receive a release disposition and targeted qualification.
+ M,codex-rs/vault/src/tests.rs,vault,retain_and_qualify,pending,Encrypted provider credentials are required PF product scope.
+ M,codex-rs/wallet/src/envelope.rs,wallet,retain_and_qualify,pending,The released wallet and plan-purchase workflow must remain available.
+??,docs/current-sprint/PFTERMINAL-0.1.27-COMPREHENSIVE-RELEASE-SPEC-20260731.md,release_documentation,retain,pending,"Release policy, incident evidence, or execution specification."
+??,docs/current-sprint/pfterminal-post-convergence-release-readiness-spec-20260731.md,release_documentation,retain,pending,"Release policy, incident evidence, or execution specification."
+ M,docs/current-sprint/upstream-codex-convergence-plan-20260730.md,release_documentation,retain,pending,"Release policy, incident evidence, or execution specification."
+ M,docs/gpu-market-implementation-report-20260714.md,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,docs/install.md,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,justfile,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+??,qa/release/0.1.27/preflight-20260731/DELETION_AUDIT.md,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+??,qa/release/0.1.27/preflight-20260731/DISPOSITION.csv,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+??,qa/release/0.1.27/preflight-20260731/SECRET_SCAN.json,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+??,qa/release/0.1.27/preflight-20260731/SOURCE.json,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+??,qa/release/0.1.27/preflight-20260731/TESTS.md,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+??,qa/release/0.1.27/tests/codex-tui-pre-fix.meta,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,scripts/codex_package/cargo.py,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,scripts/codex_package/cli.py,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,scripts/codex_package/layout.py,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,scripts/codex_package/targets.py,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,scripts/codex_package/test_cargo.py,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,scripts/codex_package/test_layout.py,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,scripts/install/install.ps1,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,scripts/install/install.sh,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,scripts/install/install_architecture.tests.ps1,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+ M,scripts/install/test_install_sh.py,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+??,scripts/release/build_pfterminal_release_inventory.py,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.
+??,scripts/release/scan_release_secrets.py,repository,semantic_review_required,pending,Repository-level change must be reconciled before release freeze.

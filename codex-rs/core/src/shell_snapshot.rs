@@ -44,12 +44,6 @@ const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(10);
 const SNAPSHOT_RETENTION: Duration = Duration::from_secs(60 * 60 * 24 * 3); // 3 days retention.
 const SNAPSHOT_DIR: &str = "shell_snapshots";
 const EXCLUDED_EXPORT_VARS: &[&str] = &["PWD", "OLDPWD"];
-// Shell snapshots are replayable files under the session home. Never persist
-// conventional credential-bearing environment variables into them. This is a
-// name-based protocol safeguard; runtime auth should still prefer the vault so
-// provider secrets do not enter the process environment in the first place.
-const SECRET_EXPORT_NAME_REGEX: &str = ".*(_API_KEY|_TOKEN|_SECRET|_PASSWORD|_PASSWD|_PRIVATE_KEY|_CREDENTIAL|_CREDENTIALS)|.*_SECRET_.*|API_KEY|TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE_KEY|CREDENTIAL|CREDENTIALS";
-const SECRET_EXPORT_SHELL_PATTERNS: &str = "*_API_KEY|*_TOKEN|*_SECRET|*_PASSWORD|*_PASSWD|*_PRIVATE_KEY|*_CREDENTIAL|*_CREDENTIALS|*_SECRET_*|API_KEY|TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE_KEY|CREDENTIAL|CREDENTIALS";
 
 impl ShellSnapshot {
     pub(crate) fn new(
@@ -236,7 +230,7 @@ async fn capture_snapshot(shell: &Shell, cwd: &AbsolutePathBuf) -> Result<String
         ShellType::Zsh => run_shell_script(shell, &zsh_snapshot_script(), cwd).await,
         ShellType::Bash => run_shell_script(shell, &bash_snapshot_script(), cwd).await,
         ShellType::Sh => run_shell_script(shell, &sh_snapshot_script(), cwd).await,
-        ShellType::PowerShell => run_shell_script(shell, &powershell_snapshot_script(), cwd).await,
+        ShellType::PowerShell => run_shell_script(shell, powershell_snapshot_script(), cwd).await,
         ShellType::Cmd => bail!("Shell snapshotting is not yet supported for {shell_type:?}"),
     }
 }
@@ -318,17 +312,7 @@ async fn run_script_with_timeout(
 }
 
 fn excluded_exports_regex() -> String {
-    format!(
-        "{}|{SECRET_EXPORT_NAME_REGEX}",
-        EXCLUDED_EXPORT_VARS.join("|")
-    )
-}
-
-fn excluded_exports_shell_patterns() -> String {
-    format!(
-        "{}|{SECRET_EXPORT_SHELL_PATTERNS}",
-        EXCLUDED_EXPORT_VARS.join("|")
-    )
+    EXCLUDED_EXPORT_VARS.join("|")
 }
 
 fn zsh_snapshot_script() -> String {
@@ -366,7 +350,7 @@ export_lines=$(export -p | awk '
     sub(/ [A-Za-z_][A-Za-z0-9_]*=.*/, "", name)
   }
   sub(/=.*/, "", name)
-  if (toupper(name) ~ /^(EXCLUDED_EXPORTS)$/) {
+  if (name ~ /^(EXCLUDED_EXPORTS)$/) {
     next
   }
   if (name ~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
@@ -406,8 +390,7 @@ alias -p
 echo ''
 export_lines=$(
   while IFS= read -r name; do
-    upper_name=${name^^}
-    if [[ "$upper_name" =~ ^(EXCLUDED_EXPORTS)$ ]]; then
+    if [[ "$name" =~ ^(EXCLUDED_EXPORTS)$ ]]; then
       continue
     fi
     if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
@@ -427,7 +410,6 @@ fi
 
 fn sh_snapshot_script() -> String {
     let excluded = excluded_exports_regex();
-    let excluded_shell_patterns = excluded_exports_shell_patterns();
     let script = r##"if [ -n "$ENV" ] && [ -r "$ENV" ]; then
   . "$ENV"
 fi
@@ -467,7 +449,7 @@ if export -p >/dev/null 2>&1; then
   name=line
   sub(/^(export|declare -x|typeset -x) /, "", name)
   sub(/=.*/, "", name)
-  if (toupper(name) ~ /^(EXCLUDED_EXPORTS)$/) {
+  if (name ~ /^(EXCLUDED_EXPORTS)$/) {
     next
   }
   if (name ~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
@@ -483,22 +465,18 @@ else
   export_count=$(env | sort | awk -F= '$1 ~ /^[A-Za-z_][A-Za-z0-9_]*$/ { count++ } END { print count }')
   echo "# exports $export_count"
   env | sort | while IFS='=' read -r key value; do
-    upper_key=$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')
-    case "$upper_key" in
-      ""|[0-9]*|*[!A-Za-z0-9_]*|EXCLUDED_SHELL_PATTERNS) continue ;;
+    case "$key" in
+      ""|[0-9]*|*[!A-Za-z0-9_]*|EXCLUDED_EXPORTS) continue ;;
     esac
     escaped=$(printf "%s" "$value" | sed "s/'/'\"'\"'/g")
     printf "export %s='%s'\n" "$key" "$escaped"
   done
 fi
 "##;
-    script
-        .replace("EXCLUDED_EXPORTS", &excluded)
-        .replace("EXCLUDED_SHELL_PATTERNS", &excluded_shell_patterns)
+    script.replace("EXCLUDED_EXPORTS", &excluded)
 }
 
-fn powershell_snapshot_script() -> String {
-    let excluded = excluded_exports_regex();
+fn powershell_snapshot_script() -> &'static str {
     r##"$ErrorActionPreference = 'Stop'
 Write-Output '# Snapshot file'
 Write-Output '# Unset all aliases to avoid conflicts with functions'
@@ -514,14 +492,13 @@ $aliases | ForEach-Object {
     "Set-Alias -Name {0} -Value {1}" -f $_.Name, $_.Definition
 }
 Write-Output ''
-$envVars = Get-ChildItem Env: | Where-Object { $_.Name -notmatch '^(EXCLUDED_EXPORTS)$' }
+$envVars = Get-ChildItem Env:
 Write-Output ("# exports " + $envVars.Count)
 $envVars | ForEach-Object {
     $escaped = $_.Value -replace "'", "''"
     "`$env:{0}='{1}'" -f $_.Name, $escaped
 }
 "##
-    .replace("EXCLUDED_EXPORTS", &excluded)
 }
 
 /// Removes shell snapshots that either lack a matching session rollout file or

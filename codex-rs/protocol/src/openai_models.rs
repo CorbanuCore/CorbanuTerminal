@@ -226,11 +226,34 @@ pub enum ChatReasoningProtocol {
     PreservedRequired,
 }
 
+/// Scalar `reasoning_effort` dialect for an OpenAI-compatible Chat Completions model.
+///
+/// Providers choose the transport, while the exact model catalogue chooses this dialect. This
+/// prevents runtime behavior from being inferred from a model display name or slug fragment.
+#[derive(
+    Debug, Default, Clone, Copy, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq, Display,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum ChatReasoningEffortProtocol {
+    /// Omit the scalar field. The provider may use another typed reasoning representation.
+    #[default]
+    ProviderDefault,
+    /// Accept `none`, `high`, or `max`; use `high` when no effort is configured.
+    NoneHighMaxDefaultHigh,
+    /// Require `low`, `high`, or `max`; reject disabled reasoning and default to `max`.
+    LowHighMaxRequiredDefaultMax,
+    /// Accept `high` or `max`; omit the field for disabled reasoning and default to `high`.
+    HighMaxDefaultHigh,
+}
+
 /// Chat Completions protocol capabilities that cannot be inferred from the provider alone.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq)]
 pub struct ChatCompletionsCapabilities {
     #[serde(default)]
     pub reasoning_protocol: ChatReasoningProtocol,
+    #[serde(default)]
+    pub reasoning_effort_protocol: ChatReasoningEffortProtocol,
 }
 
 /// Billing data for an exact provider/model route.
@@ -589,6 +612,11 @@ pub struct ModelInfo {
     /// Maximum context window allowed for config overrides.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_context_window: Option<i64>,
+    /// Maximum output tokens accepted by this exact model route.
+    ///
+    /// Provider adapters must consume this value instead of imposing a global harness cap.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<i64>,
     /// Token threshold for automatic compaction. When omitted, core derives it
     /// from `context_window` (90%). When provided, core clamps it to 90% of the
     /// context window when available.
@@ -927,6 +955,7 @@ mod tests {
             supports_image_detail_original: false,
             context_window: None,
             max_context_window: None,
+            max_output_tokens: None,
             auto_compact_token_limit: None,
             comp_hash: None,
             effective_context_window_percent: 95,

@@ -61,7 +61,7 @@ fn telegram_disconnect_removes_only_telegram_configuration() {
     )
     .expect("seed config");
 
-    write_telegram_config(home.path(), None).expect("remove Telegram config");
+    write_telegram_config(home.path(), /*connection*/ None).expect("remove Telegram config");
 
     let config = read_config(home.path()).expect("read config");
     assert_eq!(config["model"].as_str(), Some("k3"));

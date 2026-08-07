@@ -256,6 +256,7 @@ fn reference_context_item() -> TurnContextItem {
         network: None,
         file_system_sandbox_policy: None,
         model: "gpt-test".to_string(),
+        model_provider: None,
         comp_hash: None,
         personality: None,
         collaboration_mode: None,
@@ -287,6 +288,7 @@ fn reasoning_msg(text: &str) -> ResponseItem {
             text: text.to_string(),
         }]),
         encrypted_content: None,
+        anthropic_content_block: None,
         internal_chat_message_metadata_passthrough: None,
     }
 }
@@ -299,6 +301,7 @@ fn reasoning_with_encrypted_content(len: usize) -> ResponseItem {
         }],
         content: None,
         encrypted_content: Some("a".repeat(len)),
+        anthropic_content_block: None,
         internal_chat_message_metadata_passthrough: None,
     }
 }
@@ -346,6 +349,7 @@ fn filters_non_api_messages() {
                     text: "thinking...".to_string(),
                 }]),
                 encrypted_content: None,
+                anthropic_content_block: None,
                 internal_chat_message_metadata_passthrough: None,
             },
             ResponseItem::Message {
@@ -1806,7 +1810,8 @@ fn normalize_adds_missing_output_for_local_shell_call_with_id_panics_in_debug() 
 
 #[cfg(debug_assertions)]
 #[test]
-fn normalize_removes_orphan_function_call_output_in_debug() {
+#[should_panic]
+fn normalize_removes_orphan_function_call_output_panics_in_debug() {
     let items = vec![ResponseItem::FunctionCallOutput {
         id: None,
         call_id: "orphan-1".to_string(),
@@ -1815,12 +1820,12 @@ fn normalize_removes_orphan_function_call_output_in_debug() {
     }];
     let mut h = create_history_with_items(items);
     h.normalize_history(&default_input_modalities());
-    assert_eq!(h.raw_items(), vec![]);
 }
 
 #[cfg(debug_assertions)]
 #[test]
-fn normalize_removes_orphan_custom_tool_call_output_in_debug() {
+#[should_panic]
+fn normalize_removes_orphan_custom_tool_call_output_panics_in_debug() {
     let items = vec![ResponseItem::CustomToolCallOutput {
         id: None,
         call_id: "orphan-2".to_string(),
@@ -1830,7 +1835,6 @@ fn normalize_removes_orphan_custom_tool_call_output_in_debug() {
     }];
     let mut h = create_history_with_items(items);
     h.normalize_history(&default_input_modalities());
-    assert_eq!(h.raw_items(), vec![]);
 }
 
 #[cfg(not(debug_assertions))]
@@ -1853,7 +1857,8 @@ fn normalize_removes_orphan_client_tool_search_output() {
 
 #[cfg(debug_assertions)]
 #[test]
-fn normalize_removes_orphan_client_tool_search_output_in_debug() {
+#[should_panic]
+fn normalize_removes_orphan_client_tool_search_output_panics_in_debug() {
     let items = vec![ResponseItem::ToolSearchOutput {
         id: None,
         call_id: Some("orphan-search".to_string()),
@@ -1864,7 +1869,6 @@ fn normalize_removes_orphan_client_tool_search_output_in_debug() {
     }];
     let mut h = create_history_with_items(items);
     h.normalize_history(&default_input_modalities());
-    assert_eq!(h.raw_items(), vec![]);
 }
 
 #[test]

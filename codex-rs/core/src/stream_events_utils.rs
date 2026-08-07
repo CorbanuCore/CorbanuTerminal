@@ -359,19 +359,9 @@ pub(crate) async fn handle_output_item_done(
             output.last_agent_message = finalized_facts.and_then(|facts| facts.last_agent_message);
         }
         // The tool request should be answered directly (or was denied); push that response into the transcript.
-        Err(
-            FunctionCallError::RespondToModel(message)
-            | FunctionCallError::MalformedToolCall { message, .. },
-        ) => {
-            // Pair the error output with the originating call id so chat-completions
-            // providers accept the follow-up request's tool message.
-            let call_id = match &item {
-                ResponseItem::FunctionCall { call_id, .. }
-                | ResponseItem::CustomToolCall { call_id, .. } => call_id.clone(),
-                _ => String::new(),
-            };
+        Err(FunctionCallError::RespondToModel(message)) => {
             let response = ResponseInputItem::FunctionCallOutput {
-                call_id,
+                call_id: String::new(),
                 output: FunctionCallOutputPayload {
                     body: FunctionCallOutputBody::Text(message),
                     ..Default::default()
@@ -388,6 +378,26 @@ pub(crate) async fn handle_output_item_done(
                     .await;
             }
 
+            output.needs_follow_up = true;
+        }
+        Err(FunctionCallError::MalformedToolCall { message, .. }) => {
+            let response = ResponseInputItem::FunctionCallOutput {
+                call_id: String::new(),
+                output: FunctionCallOutputPayload {
+                    body: FunctionCallOutputBody::Text(message),
+                    ..Default::default()
+                },
+            };
+            record_completed_response_item(ctx.sess.as_ref(), ctx.turn_context.as_ref(), &item)
+                .await;
+            if let Some(response_item) = response_input_to_response_item(&response) {
+                ctx.sess
+                    .record_conversation_items(
+                        &ctx.turn_context,
+                        std::slice::from_ref(&response_item),
+                    )
+                    .await;
+            }
             output.needs_follow_up = true;
         }
         // A fatal error occurred; surface it back into history.

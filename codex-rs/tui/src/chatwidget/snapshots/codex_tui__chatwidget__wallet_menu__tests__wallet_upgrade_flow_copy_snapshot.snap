@@ -1,6 +1,5 @@
 ---
 source: tui/src/chatwidget/wallet_menu.rs
-assertion_line: 1181
 expression: rendered
 ---
 Locked wallet: Upgrade PfTerminal Plan — Unlock for 5 minutes, then choose a higher tier

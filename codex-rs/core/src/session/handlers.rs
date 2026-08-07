@@ -46,59 +46,17 @@ use codex_protocol::protocol::TurnAbortReason;
 use codex_protocol::protocol::WarningEvent;
 use codex_protocol::request_permissions::RequestPermissionsResponse;
 use codex_protocol::request_user_input::RequestUserInputResponse;
-use codex_protocol::user_input::UserInput;
 
 use crate::context_manager::is_user_turn_boundary;
 use codex_protocol::dynamic_tools::DynamicToolResponse;
 use codex_protocol::mcp::RequestId as ProtocolRequestId;
-use codex_protocol::protocol::AdditionalContextEntry;
 use codex_rmcp_client::ElicitationAction;
 use codex_rmcp_client::ElicitationResponse;
 use serde_json::Value;
-use std::collections::BTreeMap;
-use std::collections::HashMap;
 use std::sync::Arc;
-#[cfg(test)]
-use std::sync::Mutex;
-#[cfg(test)]
-use std::sync::OnceLock;
 use tracing::debug;
 use tracing::info;
 use tracing::warn;
-
-#[cfg(test)]
-struct ActiveTurnNotSteerableDeferHook {
-    reached: tokio::sync::oneshot::Sender<()>,
-    release: tokio::sync::oneshot::Receiver<()>,
-}
-
-#[cfg(test)]
-static ACTIVE_TURN_NOT_STEERABLE_DEFER_HOOK: OnceLock<
-    Mutex<Option<ActiveTurnNotSteerableDeferHook>>,
-> = OnceLock::new();
-
-#[cfg(test)]
-pub(crate) fn set_active_turn_not_steerable_defer_hook_for_test(
-    reached: tokio::sync::oneshot::Sender<()>,
-    release: tokio::sync::oneshot::Receiver<()>,
-) {
-    let hook = ACTIVE_TURN_NOT_STEERABLE_DEFER_HOOK.get_or_init(|| Mutex::new(None));
-    *hook.lock().expect("defer hook lock") =
-        Some(ActiveTurnNotSteerableDeferHook { reached, release });
-}
-
-#[cfg(test)]
-async fn active_turn_not_steerable_defer_hook_for_test() {
-    let hook = ACTIVE_TURN_NOT_STEERABLE_DEFER_HOOK
-        .get_or_init(|| Mutex::new(None))
-        .lock()
-        .expect("defer hook lock")
-        .take();
-    if let Some(hook) = hook {
-        let _ = hook.reached.send(());
-        let _ = hook.release.await;
-    }
-}
 
 pub async fn interrupt(sess: &Arc<Session>) {
     sess.interrupt_task().await;
@@ -199,6 +157,7 @@ async fn thread_settings_update(
         permission_profile,
         active_permission_profile,
         windows_sandbox_level,
+        model_provider,
         collaboration_mode: Some(collaboration_mode),
         reasoning_summary: summary,
         service_tier,
@@ -293,6 +252,12 @@ pub(super) async fn user_input_or_turn_inner(
                     client_id: client_user_message_id,
                 });
             }
+            sess.spawn_task(
+                Arc::clone(&current_context),
+                task_input,
+                crate::tasks::RegularTask::new(),
+            )
+            .await;
         }
         Err(err) => {
             sess.send_event_raw(Event {
@@ -302,48 +267,6 @@ pub(super) async fn user_input_or_turn_inner(
             .await;
         }
     }
-}
-
-async fn spawn_regular_turn_for_no_active_input(
-    sess: &Arc<Session>,
-    current_context: &Arc<crate::session::turn_context::TurnContext>,
-    items: Vec<UserInput>,
-    additional_context: BTreeMap<String, AdditionalContextEntry>,
-    client_user_message_id: Option<String>,
-    responsesapi_client_metadata: Option<HashMap<String, String>>,
-    record_user_prompt: bool,
-) {
-    if let Some(responsesapi_client_metadata) = responsesapi_client_metadata {
-        current_context
-            .turn_metadata_state
-            .set_responsesapi_client_metadata(responsesapi_client_metadata);
-    }
-    if record_user_prompt {
-        current_context.session_telemetry.user_prompt(&items);
-    }
-    sess.refresh_mcp_servers_if_requested(current_context, Some(sess.mcp_elicitation_reviewer()))
-        .await;
-    let additional_context_input = {
-        let mut state = sess.state.lock().await;
-        state.additional_context.merge(additional_context)
-    };
-    let mut task_input = additional_context_input
-        .into_iter()
-        .map(ResponseItem::from)
-        .map(TurnInput::ResponseItem)
-        .collect::<Vec<_>>();
-    if !items.is_empty() {
-        task_input.push(TurnInput::UserInput {
-            content: items,
-            client_id: client_user_message_id,
-        });
-    }
-    sess.spawn_task(
-        Arc::clone(current_context),
-        task_input,
-        crate::tasks::RegularTask::new(),
-    )
-    .await;
 }
 
 /// Queues an inter-agent message, then lets the shared pending-work scheduler
@@ -853,11 +776,6 @@ pub(super) async fn submission_loop(
                         sub.parent_turn_id,
                     )
                     .await;
-                    false
-                }
-                Op::WakePendingWork => {
-                    sess.maybe_start_turn_for_pending_work_with_sub_id(sub.id.clone())
-                        .await;
                     false
                 }
                 Op::ExecApproval {

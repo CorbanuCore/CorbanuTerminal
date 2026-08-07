@@ -80,23 +80,18 @@ async fn ignores_unrelated_turn_completion_before_backfilling_primary_turn() -> 
     .await;
 
     let test = test_codex_exec();
-    let mock_provider = format!(
-        "model_providers.mock_provider={{name=\"Mock provider for test\",base_url=\"{}/v1\",wire_api=\"responses\",supports_websockets=false}}",
-        server.uri()
-    );
+    // This test exercises app-server completion ownership, not custom-provider catalogue policy.
+    // Redirect the canonical OpenAI provider so spawned work keeps an exact eligible
+    // provider/model pair while every request still lands on the local mock server.
     let output = test
-        .cmd()
+        .cmd_with_server(&server)
         .env(
             "RUST_LOG",
             "codex_app_server::message_processor=trace,codex_app_server::outgoing_message=trace",
         )
         .arg("--skip-git-repo-check")
         .arg("--json")
-        .arg("-c")
-        .arg(mock_provider)
         .args([
-            "-c",
-            "model_provider=\"mock_provider\"",
             "-c",
             "features.multi_agent=true",
             "-c",
@@ -114,6 +109,21 @@ async fn ignores_unrelated_turn_completion_before_backfilling_primary_turn() -> 
         "primary completion was not processed: {stdout}"
     );
     let stderr = String::from_utf8(output.stderr)?;
+    let request_shapes = server
+        .received_requests()
+        .await
+        .unwrap_or_default()
+        .iter()
+        .map(|request| {
+            format!(
+                "parent_prompt={} child_prompt={} spawn_call={} wait_call={}",
+                body_contains(request, PARENT_PROMPT),
+                body_contains(request, CHILD_PROMPT),
+                body_contains(request, SPAWN_CALL_ID),
+                body_contains(request, WAIT_CALL_ID),
+            )
+        })
+        .collect::<Vec<_>>();
     let lines = stderr.lines().collect::<Vec<_>>();
     let turn_completions = lines
         .iter()
@@ -126,7 +136,7 @@ async fn ignores_unrelated_turn_completion_before_backfilling_primary_turn() -> 
     assert_eq!(
         turn_completions.len(),
         2,
-        "expected the child completion before the primary completion: {stderr}"
+        "expected the child completion before the primary completion; requests={request_shapes:?}; stdout={stdout}: {stderr}"
     );
 
     let [child_completion, primary_completion] = turn_completions.as_slice() else {

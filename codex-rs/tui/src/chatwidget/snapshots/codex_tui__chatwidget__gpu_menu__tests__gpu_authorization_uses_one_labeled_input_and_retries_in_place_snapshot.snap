@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/gpu_menu_tests.rs
+assertion_line: 39
 expression: rendered
 ---
 ▌ GPU limits · 1 of 3 · Maximum hourly price

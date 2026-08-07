@@ -2,11 +2,10 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::time::Instant;
 
 use crate::SkillInjections;
-use crate::StateDbHandle;
 use crate::build_skill_injections;
+use crate::client::ModelClient;
 use crate::client::ModelClientSession;
 use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
@@ -39,8 +38,6 @@ use crate::plugins::build_plugin_injections;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::responses_metadata::CodexResponsesRequestKind;
 use crate::responses_retry::ResponsesStreamRequest;
-use crate::responses_retry::ensure_gpu_runtime_provider_active;
-use crate::responses_retry::guard_same_request_idle_retry;
 use crate::responses_retry::handle_retryable_response_stream_error;
 use crate::session::PreviousTurnSettings;
 use crate::session::TurnInput;
@@ -66,7 +63,6 @@ use crate::tools::router::ToolSuggestPresentation;
 use crate::tools::spec_plan::build_tool_router;
 use crate::tools::spec_plan::tool_suggest_enabled;
 use crate::turn_diff_tracker::TurnDiffTracker;
-use crate::turn_timing::now_unix_timestamp_ms;
 use crate::turn_timing::record_turn_ttft_metric;
 use crate::util::error_or_panic;
 use codex_analytics::AppInvocation;
@@ -127,12 +123,8 @@ use codex_utils_stream_parser::strip_citations;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesOrdered;
-use regex_lite::Regex;
-use sha2::Digest;
-use sha2::Sha256;
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
-use tracing::debug;
 use tracing::error;
 use tracing::field;
 use tracing::info;
@@ -165,10 +157,14 @@ pub(crate) async fn run_turn(
     prewarmed_client_session: Option<ModelClientSession>,
     cancellation_token: CancellationToken,
 ) -> CodexResult<Option<String>> {
-    let turn_started_at = Instant::now();
-    trace_turn_timing("run_turn_start", turn_started_at);
-    let mut client_session =
-        prewarmed_client_session.unwrap_or_else(|| sess.services.new_model_client_session());
+    let provider_info = turn_context.provider.info();
+    let mut client_session = prewarmed_client_session
+        .filter(|session| ModelClient::session_matches_provider(session, provider_info))
+        .unwrap_or_else(|| {
+            sess.services
+                .model_client
+                .new_session_for_provider(provider_info)
+        });
     // TODO(ccunningham): Pre-turn compaction runs before context updates and the
     // new user message are recorded. Estimate pending incoming items (context
     // diffs/full reinjection + user input) and trigger compaction preemptively
@@ -191,7 +187,6 @@ pub(crate) async fn run_turn(
         error!("Failed to run pre-sampling compact");
         return Ok(None);
     }
-    trace_turn_timing("after_pre_sampling_compact", turn_started_at);
 
     let user_input = turn_user_input(&input);
     let (required_servers, mentioned_plugins) =
@@ -240,22 +235,20 @@ pub(crate) async fn run_turn(
     else {
         return Ok(None);
     };
-    trace_turn_timing("after_build_skills_and_plugins", turn_started_at);
 
     if run_pending_session_start_hooks(&sess, &turn_context).await {
         return Ok(None);
     }
-    trace_turn_timing("after_session_start_hooks", turn_started_at);
     let mut can_drain_pending_input = input.is_empty();
     if run_hooks_and_record_inputs(&sess, &turn_context, &input).await {
         return Ok(None);
     }
-    trace_turn_timing("after_input_hooks", turn_started_at);
 
     sess.merge_connector_selection(explicitly_enabled_connectors.clone())
         .await;
     sess.set_previous_turn_settings(Some(PreviousTurnSettings {
         model: turn_context.model_info.slug.clone(),
+        model_provider: Some(turn_context.config.model_provider_id.clone()),
         comp_hash: turn_context.model_info.comp_hash.clone(),
         realtime_active: Some(turn_context.realtime_active),
     }))
@@ -264,24 +257,11 @@ pub(crate) async fn run_turn(
         sess.record_conversation_items(&turn_context, std::slice::from_ref(&response_item))
             .await;
     }
-    trace_turn_timing("after_injection_items", turn_started_at);
 
     track_turn_resolved_config_analytics(&sess, &turn_context, &input).await;
-    trace_turn_timing("after_config_analytics", turn_started_at);
 
     let mut last_agent_message: Option<String> = None;
     let mut stop_hook_active = false;
-    let mut consecutive_server_side_model_continuations = 0_u64;
-    let completion_objective = objective_from_turn_input(&input);
-    let mut completion_progress = CompletionProgressState::default();
-    let mut pending_completion_continuation = false;
-    let subagent_model_request_limit = turn_context.session_source.is_non_root_agent().then_some(
-        turn_context
-            .config
-            .multi_agent_v2
-            .max_subagent_model_requests_per_turn,
-    );
-    let mut model_request_count = 0_usize;
     // Although from the perspective of codex.rs, TurnDiffTracker has the lifecycle of a Task which contains
     // many turns, from the perspective of the user, it is a single turn.
     let turn_diff_tracker = Arc::new(tokio::sync::Mutex::new(
@@ -297,23 +277,6 @@ pub(crate) async fn run_turn(
 
     let mut next_step_context = Some(first_step_context);
     loop {
-        if subagent_model_request_limit.is_some_and(|limit| model_request_count >= limit) {
-            let limit = subagent_model_request_limit.unwrap_or_default();
-            let message = format!(
-                "Sub-agent turn stopped after the configured limit of {limit} model requests. \
-                 Review the last reported progress and send a focused follow-up task if more work \
-                 is required."
-            );
-            sess.send_event(
-                &turn_context,
-                EventMsg::Warning(WarningEvent {
-                    message: message.clone(),
-                }),
-            )
-            .await;
-            last_agent_message.get_or_insert(message);
-            break;
-        }
         // Note that pending_input would be something like a message the user
         // submitted through the UI while the model was running. Though the UI
         // may support this, the model might not.
@@ -375,31 +338,17 @@ pub(crate) async fn run_turn(
                 .await?;
 
             // Construct the input that we will send to the model.
-            let mut sampling_request_input: Vec<ResponseItem> = async {
+            let sampling_request_input: Vec<ResponseItem> = async {
                 sess.clone_history()
                     .await
                     .for_prompt(&turn_context.model_info.input_modalities)
             }
             .instrument(trace_span!("run_turn.prepare_sampling_request_input"))
             .await;
-            if std::mem::take(&mut pending_completion_continuation) {
-                sampling_request_input
-                    .push(ContextualUserFragment::into(TurnCompletionContinuation));
-            }
-            if subagent_model_request_limit
-                .is_some_and(|limit| model_request_count.saturating_add(1) == limit)
-            {
-                sampling_request_input.push(ContextualUserFragment::into(
-                    SubagentTurnBudgetFinalization {
-                        max_model_requests: subagent_model_request_limit.unwrap_or_default(),
-                    },
-                ));
-            }
-            trace_turn_timing("after_prepare_sampling_request_input", turn_started_at);
 
             let responses_metadata = turn_context.turn_metadata_state.to_responses_metadata(
                 sess.installation_id.clone(),
-                window_id.clone(),
+                window_id,
                 CodexResponsesRequestKind::Turn,
             );
             run_sampling_request(
@@ -420,10 +369,6 @@ pub(crate) async fn run_turn(
                 let SamplingRequestResult {
                     needs_follow_up: model_needs_follow_up,
                     last_agent_message: sampling_request_last_agent_message,
-                    token_usage: _,
-                    server_side_model_continuation,
-                    made_tool_progress,
-                    provider_stopped,
                 } = sampling_request_output;
                 if model_needs_follow_up {
                     sess.input_queue
@@ -523,110 +468,8 @@ pub(crate) async fn run_turn(
                     continue;
                 }
 
-                if !needs_follow_up
-                    && provider_stopped
-                    && turn_context.provider.info().chat_stop_semantics()
-                        == ChatStopSemantics::AmbiguousForActionTurns
-                {
-                    let assistant_response = sampling_request_last_agent_message
-                        .as_deref()
-                        .filter(|response| !response.trim().is_empty());
-                    let (action, decision_source, classifier_latency_ms) =
-                        if let Some(assistant_response) = assistant_response {
-                            let assessment_metadata =
-                                turn_context.turn_metadata_state.to_responses_metadata(
-                                    sess.installation_id.clone(),
-                                    window_id.clone(),
-                                    CodexResponsesRequestKind::Turn,
-                                );
-                            // Keep the semantic check independent of primary-stream teardown.
-                            // Reusing the primary turn session can leave the classifier queued
-                            // behind transport cleanup until most or all of its timeout is gone.
-                            let mut assessment_client_session =
-                                sess.services.new_model_client_session();
-                            let assessment_started_at = Instant::now();
-                            match assess_turn_completion(
-                                sess.as_ref(),
-                                turn_context.as_ref(),
-                                &mut assessment_client_session,
-                                &assessment_metadata,
-                                &completion_objective,
-                                assistant_response,
-                                &cancellation_token,
-                            )
-                            .await
-                            {
-                                Ok(assessment) => (
-                                    completion_progress.decide(assessment, assistant_response),
-                                    "classifier",
-                                    assessment_started_at.elapsed().as_millis(),
-                                ),
-                                Err(CodexErr::TurnAborted) => {
-                                    return Err(CodexErr::TurnAborted);
-                                }
-                                Err(err) => {
-                                    warn!(
-                                        turn_id = %turn_context.sub_id,
-                                        error = %err,
-                                        "turn completion assessment failed"
-                                    );
-                                    (
-                                        completion_progress
-                                            .fallback_after_failed_assessment(assistant_response),
-                                        "fallback",
-                                        assessment_started_at.elapsed().as_millis(),
-                                    )
-                                }
-                            }
-                        } else {
-                            (completion_progress.decide_empty_stop(), "deterministic", 0)
-                        };
-                    info!(
-                        turn_id = %turn_context.sub_id,
-                        provider_id = %turn_context.config.model_provider_id,
-                        finish_reason = "stop",
-                        completion_decision = ?action,
-                        decision_source,
-                        classifier_latency_ms,
-                        semantic_continuation_count =
-                            completion_progress.continuation_count(),
-                        consecutive_no_progress_count =
-                            completion_progress.consecutive_no_progress_count(),
-                        completion_reason = completion_progress.decision_reason(),
-                        progress_reset_reason = completion_progress.progress_reset_reason(),
-                        "resolved ambiguous provider stop"
-                    );
-                    match action {
-                        CompletionAction::Accept => {}
-                        CompletionAction::Continue => {
-                            pending_completion_continuation = true;
-                            continue;
-                        }
-                        CompletionAction::AcceptWithWarning => {
-                            sess.send_event(
-                                &turn_context,
-                                EventMsg::Warning(WarningEvent {
-                                    message: "PfTerminal could not verify whether this action was complete; review the result before relying on it.".to_string(),
-                                }),
-                            )
-                            .await;
-                        }
-                        CompletionAction::StopStalled => {
-                            sess.send_event(
-                                &turn_context,
-                                EventMsg::Warning(WarningEvent {
-                                    message: "PfTerminal stopped automatic continuation because the model repeatedly ended without measurable progress. Review the result or continue manually.".to_string(),
-                                }),
-                            )
-                            .await;
-                        }
-                    }
-                }
-
                 if !needs_follow_up {
-                    if sampling_request_last_agent_message.is_some() {
-                        last_agent_message = sampling_request_last_agent_message;
-                    }
+                    last_agent_message = sampling_request_last_agent_message;
                     let stop_outcome = run_turn_stop_hooks(
                         &sess,
                         &turn_context,
@@ -756,7 +599,6 @@ pub(crate) async fn run_hooks_and_record_inputs(
             if matches!(input_item, TurnInput::UserInput { content, .. } if !content.is_empty()) {
                 accepted_user_input = true;
             }
-            record_explicit_tool_budgets_from_input(turn_context, input_item);
             record_pending_input(
                 sess,
                 turn_context,
@@ -1230,6 +1072,10 @@ async fn maybe_run_previous_model_inline_compact(
         turn_context.model_info.comp_hash.as_deref(),
     );
     let previous_model = previous_turn_settings.model;
+    let provider_changed = previous_turn_settings
+        .model_provider
+        .as_deref()
+        .is_some_and(|provider| provider != turn_context.config.model_provider_id);
     let previous_model_turn_context = Arc::new(
         turn_context
             .with_model(previous_model.clone(), &sess.services.models_manager)
@@ -1237,16 +1083,28 @@ async fn maybe_run_previous_model_inline_compact(
     );
 
     if should_compact_for_comp_hash_change {
-        let step_context = sess
-            .capture_step_context(Arc::clone(&previous_model_turn_context), cancellation_token)
-            .await?;
-        let fallback_step_context = capture_current_model_fallback_step_context(
-            sess,
-            turn_context,
-            previous_model.as_str(),
-            cancellation_token,
-        )
-        .await?;
+        let (step_context, fallback_step_context) = if provider_changed {
+            (
+                sess.capture_step_context(Arc::clone(turn_context), cancellation_token)
+                    .await?,
+                None,
+            )
+        } else {
+            (
+                sess.capture_step_context(
+                    Arc::clone(&previous_model_turn_context),
+                    cancellation_token,
+                )
+                .await?,
+                capture_current_model_fallback_step_context(
+                    sess,
+                    turn_context,
+                    previous_model.as_str(),
+                    cancellation_token,
+                )
+                .await?,
+            )
+        };
         run_auto_compact(
             sess,
             step_context,
@@ -1285,16 +1143,28 @@ async fn maybe_run_previous_model_inline_compact(
         && previous_model_turn_context.model_info.slug != turn_context.model_info.slug
         && old_context_window > new_context_window;
     if should_run {
-        let step_context = sess
-            .capture_step_context(Arc::clone(&previous_model_turn_context), cancellation_token)
-            .await?;
-        let fallback_step_context = capture_current_model_fallback_step_context(
-            sess,
-            turn_context,
-            previous_model.as_str(),
-            cancellation_token,
-        )
-        .await?;
+        let (step_context, fallback_step_context) = if provider_changed {
+            (
+                sess.capture_step_context(Arc::clone(turn_context), cancellation_token)
+                    .await?,
+                None,
+            )
+        } else {
+            (
+                sess.capture_step_context(
+                    Arc::clone(&previous_model_turn_context),
+                    cancellation_token,
+                )
+                .await?,
+                capture_current_model_fallback_step_context(
+                    sess,
+                    turn_context,
+                    previous_model.as_str(),
+                    cancellation_token,
+                )
+                .await?,
+            )
+        };
         run_auto_compact(
             sess,
             step_context,
@@ -1487,7 +1357,6 @@ async fn run_sampling_request(
     let router = Arc::clone(&step_context.tool_router);
 
     let base_instructions = sess.get_base_instructions().await;
-    trace_turn_timing("after_get_base_instructions", sampling_started_at);
 
     let tool_runtime = ToolCallRuntime::new(
         Arc::clone(&router),
@@ -1503,7 +1372,6 @@ async fn run_sampling_request(
     );
     let max_retries = turn_context.provider.info().stream_max_retries();
     let mut retries = 0;
-    let mut same_request_idle_failures = 0;
     let mut initial_input = Some(input);
     let mut original_input = None;
     let mut executed_tool_calls_by_output = HashMap::new();
@@ -1528,11 +1396,7 @@ async fn run_sampling_request(
             turn_context.as_ref(),
             base_instructions.clone(),
         );
-        trace_turn_timing("after_build_prompt", sampling_started_at);
-        let same_turn_attempt_index = retries + 1;
-        ensure_gpu_runtime_provider_active(&sess, &turn_context).await?;
-        let attempt_started_at = Instant::now();
-        let attempt_result = try_run_sampling_request(
+        let err = match try_run_sampling_request(
             tool_runtime.clone(),
             Arc::clone(&sess),
             Arc::clone(&turn_context),
@@ -1541,12 +1405,10 @@ async fn run_sampling_request(
             responses_metadata,
             Arc::clone(&turn_diff_tracker),
             &prompt,
-            same_turn_attempt_index,
             cancellation_token.child_token(),
         )
-        .await;
-        let attempt_elapsed = attempt_started_at.elapsed();
-        let err = match attempt_result {
+        .await
+        {
             Ok(output) => {
                 return Ok((output, original_input.unwrap_or(prompt.input)));
             }
@@ -1573,7 +1435,6 @@ async fn run_sampling_request(
         if !err.is_retryable() {
             return Err(err);
         }
-        guard_same_request_idle_retry(&err, &mut same_request_idle_failures)?;
 
         handle_retryable_response_stream_error(
             &mut retries,
@@ -1583,7 +1444,6 @@ async fn run_sampling_request(
             &sess,
             &turn_context,
             ResponsesStreamRequest::Sampling,
-            attempt_elapsed,
         )
         .await?;
         turn_context.turn_timing_state.record_sampling_retry();
@@ -1747,10 +1607,6 @@ pub(crate) async fn built_tools(
 struct SamplingRequestResult {
     needs_follow_up: bool,
     last_agent_message: Option<String>,
-    token_usage: Option<TokenUsage>,
-    server_side_model_continuation: bool,
-    made_tool_progress: bool,
-    provider_stopped: bool,
 }
 
 /// Ephemeral per-response state for streaming a single proposed plan.
@@ -2349,11 +2205,8 @@ async fn try_run_sampling_request(
     responses_metadata: &CodexResponsesMetadata,
     turn_diff_tracker: SharedTurnDiffTracker,
     prompt: &Prompt,
-    same_turn_attempt_index: u64,
     cancellation_token: CancellationToken,
 ) -> CodexResult<SamplingRequestResult> {
-    let try_started_at = Instant::now();
-    trace_turn_timing("try_run_sampling_request_start", try_started_at);
     feedback_tags!(
         model = turn_context.model_info.slug.clone(),
         approval_policy = turn_context.approval_policy.value(),
@@ -2367,17 +2220,6 @@ async fn try_run_sampling_request(
         turn_context.model_info.slug.as_str(),
         turn_context.provider.info().name.as_str(),
     );
-    let provider_request_lease = acquire_provider_request_lease(
-        sess.as_ref(),
-        turn_context.as_ref(),
-        client_session,
-        prompt,
-        responses_metadata,
-    )
-    .await?;
-    trace_turn_timing("after_provider_request_lease", try_started_at);
-    let mut provider_request_lease_guard =
-        ProviderRequestLeaseGuard::new(sess.as_ref(), provider_request_lease);
     let sampling_timing_guard = turn_context.turn_timing_state.begin_sampling();
     let uses_sequential_cutoff_reasoning_summaries = turn_context
         .config
@@ -2394,27 +2236,10 @@ async fn try_run_sampling_request(
             turn_context.config.service_tier.clone(),
             responses_metadata,
             &inference_trace,
-            same_turn_attempt_index,
         )
         .instrument(trace_span!("stream_request"))
         .or_cancel(&cancellation_token)
-        .await;
-    let mut stream = match stream_result {
-        Ok(Ok(stream)) => stream,
-        Ok(Err(err)) => {
-            provider_request_lease_guard
-                .record_result(sess.as_ref(), provider_request_result_from_error(&err))
-                .await;
-            return Err(err);
-        }
-        Err(err) => {
-            let err = CodexErr::from(err);
-            provider_request_lease_guard
-                .record_result(sess.as_ref(), provider_request_result_from_error(&err))
-                .await;
-            return Err(err);
-        }
-    };
+        .await??;
     let mut in_flight: FuturesOrdered<BoxFuture<'static, CodexResult<ResponseInputItem>>> =
         FuturesOrdered::new();
     let mut needs_follow_up = false;
@@ -2426,7 +2251,7 @@ async fn try_run_sampling_request(
     )> = None;
     let mut should_emit_turn_diff = false;
     let mut should_emit_token_count = false;
-    let mut saw_client_tool_call = false;
+    let mut reported_model: Option<String> = None;
     let reasoning_effort = turn_context.effective_reasoning_effort_for_tracing();
     let plan_mode = turn_context.mode == ModeKind::Plan;
     let mut assistant_message_stream_parsers = AssistantMessageStreamParsers::new(plan_mode);
@@ -2561,13 +2386,19 @@ async fn try_run_sampling_request(
                         Err(err) => break Err(err),
                     };
                 if let Some(tool_future) = output_result.tool_future {
-                    saw_client_tool_call = true;
                     in_flight.push_back(tool_future);
                 }
                 if let Some(agent_message) = output_result.last_agent_message {
                     last_agent_message = Some(agent_message);
                 }
                 needs_follow_up |= output_result.needs_follow_up;
+                // todo: remove before stabilizing multi-agent v2
+                if preempt_for_mailbox_mail && sess.input_queue.has_pending_mailbox_items().await {
+                    break Ok(SamplingRequestResult {
+                        needs_follow_up: true,
+                        last_agent_message,
+                    });
+                }
             }
             ResponseEvent::OutputItemAdded(mut item) => {
                 assign_missing_streamed_response_item_id(&mut item, /*active_item*/ None);
@@ -2648,17 +2479,8 @@ async fn try_run_sampling_request(
                 }
             }
             ResponseEvent::ServerModel(server_model) => {
-                if !turn_context
-                    .server_model_warning_emitted
-                    .load(Ordering::Relaxed)
-                    && sess
-                        .maybe_warn_on_server_model_mismatch(&turn_context, server_model)
-                        .await
-                {
-                    turn_context
-                        .server_model_warning_emitted
-                        .store(true, Ordering::Relaxed);
-                }
+                sess.record_server_model_identity(&turn_context, &server_model);
+                reported_model = Some(server_model);
             }
             ResponseEvent::ModelVerifications(verifications) => {
                 if !turn_context
@@ -2706,12 +2528,28 @@ async fn try_run_sampling_request(
                 response_id,
                 token_usage,
                 end_turn,
+                finish_reason,
             } => {
                 flush_assistant_text_segments_all(
                     &sess,
                     &turn_context,
                     plan_mode_state.as_mut(),
                     &mut assistant_message_stream_parsers,
+                )
+                .await;
+                sess.send_event(
+                    &turn_context,
+                    EventMsg::ModelResponseCompleted(ModelResponseCompletedEvent {
+                        turn_id: turn_context.sub_id.clone(),
+                        response_id: response_id.clone(),
+                        model: reported_model
+                            .clone()
+                            .unwrap_or_else(|| turn_context.model_info.slug.clone()),
+                        model_provider_id: turn_context.config.model_provider_id.clone(),
+                        finish_reason: finish_reason
+                            .as_ref()
+                            .map(|reason| reason.as_str().to_string()),
+                    }),
                 )
                 .await;
                 sess.send_event(
@@ -2730,55 +2568,12 @@ async fn try_run_sampling_request(
                 if let Err(err) = budget_result {
                     break Err(err);
                 }
-                match finish_reason.as_ref() {
-                    Some(codex_api::CompletionFinishReason::Length) => {
-                        break Err(CodexErr::InvalidRequest(
-                            "the model provider stopped generation at its output or context \
-                             limit; the response may contain an incomplete tool call and the turn \
-                             was stopped without executing further model work"
-                                .to_string(),
-                        ));
-                    }
-                    Some(codex_api::CompletionFinishReason::ContentFilter) => {
-                        break Err(CodexErr::InvalidRequest(
-                            "the model provider stopped generation because content was filtered; \
-                             the turn was not completed"
-                                .to_string(),
-                        ));
-                    }
-                    Some(codex_api::CompletionFinishReason::ProviderError(reason)) => {
-                        break Err(CodexErr::Stream(
-                            format!(
-                                "the model provider ended the completion with retryable finish \
-                                 reason `{reason}`"
-                            ),
-                            None,
-                        ));
-                    }
-                    Some(codex_api::CompletionFinishReason::Unknown(reason)) => {
-                        break Err(CodexErr::InvalidRequest(format!(
-                            "the model provider returned an unknown completion finish reason \
-                             `{reason}`; the turn was not marked complete"
-                        )));
-                    }
-                    _ => {}
-                }
                 if let Some(false) = end_turn {
                     needs_follow_up = true;
                 }
-                let server_side_model_continuation = matches!(end_turn, Some(false))
-                    && !saw_client_tool_call
-                    && in_flight.is_empty();
-                let provider_stopped =
-                    matches!(finish_reason, Some(codex_api::CompletionFinishReason::Stop));
-                let completed_token_usage = token_usage.clone();
                 break Ok(SamplingRequestResult {
                     needs_follow_up,
                     last_agent_message,
-                    token_usage: completed_token_usage,
-                    server_side_model_continuation,
-                    made_tool_progress: saw_client_tool_call,
-                    provider_stopped,
                 });
             }
             ResponseEvent::OutputTextDelta(delta) => {
@@ -2939,13 +2734,6 @@ async fn try_run_sampling_request(
         &mut assistant_message_stream_parsers,
     )
     .await;
-
-    provider_request_lease_guard
-        .record_result(
-            sess.as_ref(),
-            provider_request_result_from_outcome(&outcome),
-        )
-        .await;
 
     let tool_blocking_timing_guard = if in_flight.is_empty() {
         None

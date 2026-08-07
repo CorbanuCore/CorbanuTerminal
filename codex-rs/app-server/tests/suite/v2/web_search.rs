@@ -108,13 +108,12 @@ async fn assert_standalone_web_search_round_trips_output(
     let config = MockResponsesConfig::new(&server.uri())
         .with_root_config(&format!("chatgpt_base_url = \"{}\"", server.uri()))
         .enable_feature(Feature::StandaloneWebSearch)
+        .disable_feature(Feature::EnableRequestCompression)
         .with_provider_config("supports_websockets = false");
     let config = match provider {
         WebSearchProvider::ChatGpt => config
-            .with_model_provider("openai-custom")
-            .with_provider_name("OpenAI")
-            .with_provider_base_url(&format!("{}/api/codex", server.uri()))
-            .with_provider_config("requires_openai_auth = true"),
+            .with_builtin_openai_provider()
+            .with_provider_base_url(&format!("{}/api/codex", server.uri())),
         WebSearchProvider::CustomResponses => config
             .with_model_provider("custom-responses")
             .with_provider_name("Custom Responses")

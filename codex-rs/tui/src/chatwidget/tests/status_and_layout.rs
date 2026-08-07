@@ -178,23 +178,6 @@ async fn status_line_git_summary_items_render_values() {
 }
 
 #[tokio::test]
-async fn gpu_spend_indicator_is_visible_when_status_line_has_no_configured_items() {
-    let (mut chat, _rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
-    chat.config.tui_status_line = Some(Vec::new());
-    chat.refresh_status_line();
-    assert_eq!(status_line_text(&chat), None);
-
-    chat.set_gpu_spend_status(Some(
-        "GPU SPEND 2 active · $1.25 est · ≤$4.00/hr".to_string(),
-    ));
-
-    assert_eq!(
-        status_line_text(&chat),
-        Some("GPU SPEND 2 active · $1.25 est · ≤$4.00/hr".to_string())
-    );
-}
-
-#[tokio::test]
 async fn raw_output_status_line_value_only_shows_when_enabled() {
     let (mut chat, _rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
 
@@ -1550,13 +1533,13 @@ async fn rate_limit_switch_prompt_shows_once_per_session() {
     chat.maybe_show_pending_rate_limit_prompt();
     assert!(matches!(
         chat.rate_limit_switch_prompt,
-        RateLimitSwitchPromptState::Idle
+        RateLimitSwitchPromptState::Shown
     ));
 
     chat.on_rate_limit_snapshot(Some(snapshot(/*percent*/ 95.0)));
     assert!(matches!(
         chat.rate_limit_switch_prompt,
-        RateLimitSwitchPromptState::Idle
+        RateLimitSwitchPromptState::Shown
     ));
 }
 
@@ -1611,7 +1594,7 @@ async fn rate_limit_switch_prompt_respects_hidden_notice() {
 }
 
 #[tokio::test]
-async fn rate_limit_switch_prompt_does_not_defer_without_visible_nudge_model() {
+async fn rate_limit_switch_prompt_defers_until_task_complete() {
     let (mut chat, _, _) = make_chatwidget_manual(Some("gpt-5")).await;
     chat.has_chatgpt_account = true;
 
@@ -1619,19 +1602,19 @@ async fn rate_limit_switch_prompt_does_not_defer_without_visible_nudge_model() {
     chat.on_rate_limit_snapshot(Some(snapshot(/*percent*/ 90.0)));
     assert!(matches!(
         chat.rate_limit_switch_prompt,
-        RateLimitSwitchPromptState::Idle
+        RateLimitSwitchPromptState::Pending
     ));
 
     chat.bottom_pane.set_task_running(/*running*/ false);
     chat.maybe_show_pending_rate_limit_prompt();
     assert!(matches!(
         chat.rate_limit_switch_prompt,
-        RateLimitSwitchPromptState::Idle
+        RateLimitSwitchPromptState::Shown
     ));
 }
 
 #[tokio::test]
-async fn rate_limit_switch_prompt_does_not_open_hidden_nudge_popup() {
+async fn rate_limit_switch_prompt_popup_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5")).await;
     chat.has_chatgpt_account = true;
 
@@ -1639,10 +1622,7 @@ async fn rate_limit_switch_prompt_does_not_open_hidden_nudge_popup() {
     chat.maybe_show_pending_rate_limit_prompt();
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
-    assert!(
-        !popup.contains("Approaching rate limits"),
-        "hidden GPT nudge should not open a rate limit popup:\n{popup}"
-    );
+    assert_chatwidget_snapshot!("rate_limit_switch_prompt_popup", popup);
 }
 
 #[tokio::test]
@@ -1766,7 +1746,7 @@ async fn workspace_owner_limit_states_render_state_specific_messages() {
         (
             RateLimitReachedType::WorkspaceOwnerCreditsDepleted,
             RateLimitErrorKind::Generic,
-            "You're out of credits. Your workspace is out of credits. Add credits to continue using PFTerminal.",
+            "You're out of credits. Your workspace is out of credits. Add credits to continue using Codex.",
         ),
         (
             RateLimitReachedType::WorkspaceOwnerUsageLimitReached,
@@ -2029,20 +2009,6 @@ async fn ctrl_c_interrupt_pauses_active_goal_turn() {
 
     next_interrupt_op(&mut op_rx);
     assert_goal_paused_event(&mut rx, thread_id);
-}
-
-#[tokio::test]
-async fn ctrl_c_interrupts_agent_turn_even_if_bottom_pane_running_state_is_stale() {
-    let (mut chat, _rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    handle_turn_started(&mut chat, "turn-1");
-    chat.bottom_pane.set_task_running(/*running*/ false);
-
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
-
-    match op_rx.try_recv() {
-        Ok(Op::Interrupt { .. }) => {}
-        other => panic!("expected Op::Interrupt, got {other:?}"),
-    }
 }
 
 #[tokio::test]
@@ -2736,128 +2702,6 @@ async fn status_line_invalid_items_warn_once() {
 }
 
 #[tokio::test]
-async fn default_status_line_includes_product_brand() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    assert_eq!(
-        chat.configured_status_line_items(),
-        vec![
-            "model-with-reasoning".to_string(),
-            "current-dir".to_string(),
-            "brand".to_string(),
-            "tps".to_string(),
-        ]
-    );
-
-    chat.refresh_status_line();
-
-    let status_line = status_line_text(&chat).expect("default status line should render");
-    assert!(status_line.contains("Post Fiat Terminal"));
-    assert!(status_line.ends_with("TPS: -- tok/s"));
-}
-
-#[tokio::test]
-async fn status_line_tps_updates_during_active_streaming() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    chat.refresh_status_line();
-    chat.tps_estimator.start_turn(
-        std::time::Instant::now() - std::time::Duration::from_secs(1),
-        None,
-    );
-    chat.on_agent_message_delta("12345678901234567890".to_string());
-
-    let status_line = status_line_text(&chat).expect("status line should render");
-    assert!(status_line.contains("Post Fiat Terminal"));
-    assert!(
-        status_line.contains("TPS: ~"),
-        "stream-estimated active TPS should be marked approximate: {status_line}"
-    );
-    assert_eq!(status_line.matches("TPS:").count(), 1);
-}
-
-#[tokio::test]
-async fn status_line_tps_updates_from_completed_turn_average() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    chat.on_task_started();
-    chat.set_token_info(Some(TokenUsageInfo {
-        total_token_usage: TokenUsage {
-            output_tokens: 30,
-            reasoning_output_tokens: 10,
-            total_tokens: 40,
-            ..TokenUsage::default()
-        },
-        last_token_usage: TokenUsage {
-            output_tokens: 30,
-            reasoning_output_tokens: 10,
-            total_tokens: 40,
-            ..TokenUsage::default()
-        },
-        model_context_window: Some(128_000),
-    }));
-    chat.on_task_complete(
-        /*last_agent_message*/ None,
-        Some(2_000),
-        /*from_replay*/ false,
-    );
-
-    let status_line = status_line_text(&chat).expect("status line should render after TPS sample");
-    assert!(status_line.contains("Post Fiat Terminal"));
-    assert!(status_line.ends_with("TPS: 20.0 tok/s"));
-}
-
-#[tokio::test]
-async fn status_line_tps_uses_streamed_text_when_usage_is_missing() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    chat.on_task_started();
-    chat.on_agent_message_delta("12345678901234567890".to_string());
-    chat.on_task_complete(
-        /*last_agent_message*/ None,
-        Some(1_000),
-        /*from_replay*/ false,
-    );
-
-    let status_line =
-        status_line_text(&chat).expect("status line should render after fallback TPS sample");
-    assert!(status_line.contains("Post Fiat Terminal"));
-    assert!(status_line.ends_with("TPS: ~5.0 tok/s"));
-}
-
-#[tokio::test]
-async fn status_line_tps_updates_when_usage_arrives_after_completion() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    chat.on_task_started();
-    chat.on_task_complete(
-        /*last_agent_message*/ None,
-        Some(2_000),
-        /*from_replay*/ false,
-    );
-    chat.set_token_info(Some(TokenUsageInfo {
-        total_token_usage: TokenUsage {
-            output_tokens: 30,
-            reasoning_output_tokens: 10,
-            total_tokens: 40,
-            ..TokenUsage::default()
-        },
-        last_token_usage: TokenUsage {
-            output_tokens: 30,
-            reasoning_output_tokens: 10,
-            total_tokens: 40,
-            ..TokenUsage::default()
-        },
-        model_context_window: Some(128_000),
-    }));
-
-    let status_line =
-        status_line_text(&chat).expect("status line should render after late usage update");
-    assert!(status_line.contains("Post Fiat Terminal"));
-    assert!(status_line.ends_with("TPS: 20.0 tok/s"));
-}
-
-#[tokio::test]
 async fn status_line_context_used_renders_labeled_percent() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.thread_id = Some(ThreadId::new());
@@ -3217,7 +3061,7 @@ async fn completed_turn_clears_visible_running_hook() {
 
 #[tokio::test]
 async fn status_line_fast_mode_renders_on_and_off() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.config.tui_status_line = Some(vec!["fast-mode".to_string()]);
 
     chat.refresh_status_line();
@@ -3281,33 +3125,6 @@ async fn status_line_model_with_reasoning_includes_fast_for_fast_capable_models(
     assert_eq!(
         status_line_text(&chat),
         Some(format!("gpt-5.2 xhigh · Context 0% used · {test_cwd}"))
-    );
-}
-
-#[tokio::test]
-async fn status_line_model_uses_active_external_pane_model() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
-    chat.config.tui_status_line = Some(vec![
-        "model-with-reasoning".to_string(),
-        "reasoning".to_string(),
-    ]);
-    chat.set_reasoning_effort(Some(ReasoningEffortConfig::XHigh));
-    chat.refresh_status_line();
-
-    assert_eq!(
-        status_line_text(&chat),
-        Some("GPT-5.5 xhigh · xhigh".to_string())
-    );
-
-    chat.set_active_external_model_display(Some("GLM 5.2 Z.AI".to_string()));
-
-    assert_eq!(status_line_text(&chat), Some("GLM 5.2 Z.AI".to_string()));
-
-    chat.set_active_external_model_display(None);
-
-    assert_eq!(
-        status_line_text(&chat),
-        Some("GPT-5.5 xhigh · xhigh".to_string())
     );
 }
 

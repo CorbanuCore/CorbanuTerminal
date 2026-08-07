@@ -189,6 +189,7 @@ fn save_config_resolved_fields(
     agents.default_subagent_model = config.agent_default_subagent_model.clone();
     agents.default_subagent_reasoning_effort =
         config.agent_default_subagent_reasoning_effort.clone();
+    agents.provider_allowlist = config.agent_provider_allowlist.clone();
     agents.interrupt_message = Some(config.agent_interrupt_message_enabled);
 
     lock_config

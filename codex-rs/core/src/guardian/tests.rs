@@ -31,7 +31,6 @@ use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_models_manager::manager::StaticModelsManager;
-use codex_models_manager::test_support::construct_model_info_offline_for_tests;
 use codex_network_proxy::NetworkProxyConfig;
 use codex_protocol::ThreadId;
 use codex_protocol::approvals::NetworkApprovalProtocol;
@@ -91,7 +90,6 @@ fn fixed_guardian_parent_session_id() -> ThreadId {
 const GUARDIAN_MEMORY_CONTEXT_PROBE: &str = "guardian memory context probe";
 const GUARDIAN_SKILL_NAME: &str = "guardian-context-probe";
 const GUARDIAN_SKILL_BODY_PROBE: &str = "guardian skill body probe";
-const GUARDIAN_TEST_MODEL: &str = "gpt-5.5";
 
 // The memories extension depends on codex-core, so this probe verifies the nested Guardian config
 // at request assembly without introducing a circular test dependency.
@@ -226,24 +224,6 @@ async fn guardian_test_session_and_turn(
     guardian_test_session_and_turn_with_base_url(server.uri().as_str()).await
 }
 
-fn configure_guardian_mock_provider(config: &mut Config, base_url: &str) {
-    config.model = Some(GUARDIAN_TEST_MODEL.to_string());
-    config.model_provider_id = OPENAI_PROVIDER_ID.to_string();
-    let mut provider = ModelProviderInfo::create_openai_provider(Some(format!("{base_url}/v1")));
-    provider.supports_websockets = false;
-    config.model_provider = provider;
-}
-
-fn apply_guardian_mock_turn_config(turn: &mut TurnContext, config: Arc<Config>) {
-    turn.config = Arc::clone(&config);
-    turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
-    turn.model_info = construct_model_info_offline_for_tests(
-        GUARDIAN_TEST_MODEL,
-        &config.to_models_manager_config(),
-    );
-    turn.collaboration_mode.settings.model = GUARDIAN_TEST_MODEL.to_string();
-}
-
 async fn guardian_test_session_turn_and_rx(
     server: &wiremock::MockServer,
 ) -> (
@@ -257,7 +237,7 @@ async fn guardian_test_session_turn_and_rx(
         .expect("session should be uniquely owned")
         .thread_id = fixed_guardian_parent_session_id();
     let mut config = (*turn.config).clone();
-    configure_guardian_mock_provider(&mut config, server.uri().as_str());
+    config.model_provider.base_url = Some(format!("{}/v1", server.uri()));
     let config = Arc::new(config);
     let models_manager = test_support::models_manager_with_provider(
         config.codex_home.to_path_buf(),
@@ -293,7 +273,7 @@ async fn guardian_test_session_and_turn_with_base_url(
     let (mut session, mut turn) = crate::session::tests::make_session_and_context().await;
     session.thread_id = fixed_guardian_parent_session_id();
     let mut config = (*turn.config).clone();
-    configure_guardian_mock_provider(&mut config, base_url);
+    config.model_provider.base_url = Some(format!("{base_url}/v1"));
     let config = Arc::new(config);
     let models_manager = test_support::models_manager_with_provider(
         config.codex_home.to_path_buf(),
@@ -1683,7 +1663,7 @@ async fn guardian_review_request_layout_matches_model_visible_request_snapshot()
     let temp_cwd = TempDir::new()?;
     let mut config = (*turn.config).clone();
     config.cwd = temp_cwd.abs();
-    configure_guardian_mock_provider(&mut config, server.uri().as_str());
+    config.model_provider.base_url = Some(format!("{}/v1", server.uri()));
     config.memories.use_memories = true;
     config
         .features
@@ -1715,7 +1695,8 @@ async fn guardian_review_request_layout_matches_model_visible_request_snapshot()
         ),
     )?;
     session.services.skills_service.clear_cache();
-    apply_guardian_mock_turn_config(&mut turn, Arc::clone(&config));
+    turn.config = Arc::clone(&config);
+    turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
     let session = Arc::new(session);
     let turn = Arc::new(turn);
     seed_guardian_parent_history(&session, &turn).await;
@@ -2333,7 +2314,7 @@ async fn guardian_review_surfaces_responses_api_errors_in_rejection_reason() -> 
     let (mut session, mut turn, rx) =
         crate::session::tests::make_session_and_context_with_rx().await;
     let mut config = (*turn.config).clone();
-    configure_guardian_mock_provider(&mut config, server.uri().as_str());
+    config.model_provider.base_url = Some(format!("{}/v1", server.uri()));
     let config = Arc::new(config);
     let models_manager = test_support::models_manager_with_provider(
         config.codex_home.to_path_buf(),
@@ -2457,7 +2438,7 @@ async fn guardian_review_retries_transient_session_failure_then_approves() -> an
     .await;
 
     let GuardianReviewOutcome::Completed(assessment) = outcome else {
-        panic!("expected guardian assessment, got {outcome:?} with metadata {metadata:?}");
+        panic!("expected guardian assessment");
     };
     assert_eq!(assessment.outcome, GuardianAssessmentOutcome::Allow);
     assert_eq!(assessment.rationale, "retry succeeded");

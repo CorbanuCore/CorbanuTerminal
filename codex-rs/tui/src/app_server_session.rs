@@ -34,8 +34,6 @@ use codex_app_server_protocol::ExternalAgentConfigMigrationItem;
 use codex_app_server_protocol::GetAccountParams;
 use codex_app_server_protocol::GetAccountRateLimitsResponse;
 use codex_app_server_protocol::GetAccountResponse;
-use codex_app_server_protocol::GetAuthStatusParams;
-use codex_app_server_protocol::GetAuthStatusResponse;
 use codex_app_server_protocol::JSONRPCErrorError;
 use codex_app_server_protocol::LogoutAccountResponse;
 use codex_app_server_protocol::MemoryResetResponse;
@@ -53,8 +51,6 @@ use codex_app_server_protocol::SessionSource;
 use codex_app_server_protocol::SkillsListParams;
 use codex_app_server_protocol::SkillsListResponse;
 use codex_app_server_protocol::Thread;
-use codex_app_server_protocol::ThreadAgentMessageParams;
-use codex_app_server_protocol::ThreadAgentMessageResponse;
 use codex_app_server_protocol::ThreadApproveGuardianDeniedActionParams;
 use codex_app_server_protocol::ThreadApproveGuardianDeniedActionResponse;
 use codex_app_server_protocol::ThreadArchiveParams;
@@ -97,8 +93,6 @@ use codex_app_server_protocol::ThreadSettingsUpdateResponse;
 use codex_app_server_protocol::ThreadShellCommandParams;
 use codex_app_server_protocol::ThreadShellCommandResponse;
 use codex_app_server_protocol::ThreadSource;
-use codex_app_server_protocol::ThreadSpawnAgentParams;
-use codex_app_server_protocol::ThreadSpawnAgentResponse;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
 use codex_app_server_protocol::ThreadStartSource;
@@ -114,14 +108,10 @@ use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::TurnSteerParams;
 use codex_app_server_protocol::TurnSteerResponse;
 use codex_app_server_protocol::UserInput;
-use codex_login::AuthDotJson;
-use codex_login::load_auth_dot_json;
 use codex_otel::TelemetryAuthMode;
 use codex_protocol::ThreadId;
 use codex_protocol::approvals::GuardianAssessmentEvent;
-use codex_protocol::config_types::MultiAgentMode;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
-use codex_protocol::crew::AgentClass;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::ResponseItem;
@@ -148,58 +138,6 @@ const JSONRPC_INVALID_REQUEST: i64 = -32600;
 const JSONRPC_METHOD_NOT_FOUND: i64 = -32601;
 pub(crate) const EXTERNAL_AGENT_CONFIG_IMPORT_IN_PROGRESS_MESSAGE: &str = "A previous external agent import is still running. Wait for it to finish before importing again.";
 const THREAD_SETTINGS_UPDATE_METHOD: &str = "thread/settings/update";
-const PER_THREAD_REQUEST_ATTEMPTS: usize = 3;
-const PER_THREAD_REQUEST_BACKOFF: [Duration; 2] =
-    [Duration::from_millis(100), Duration::from_millis(250)];
-const TURN_START_FAULT_ENV: &str = "PFTERMINAL_INJECT_TURN_START_FAILURES";
-const SPAWN_AGENT_FAULT_ENV: &str = "PFTERMINAL_INJECT_SPAWN_AGENT_FAILURES";
-
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum TurnStartOutcome {
-    Started {
-        turn_id: String,
-        recovered_failures: Vec<String>,
-    },
-    CapacityUnavailable {
-        max_threads: usize,
-    },
-}
-
-fn injected_failure_count(name: &str) -> usize {
-    std::env::var(name)
-        .ok()
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(0)
-}
-
-fn record_turn_start_failure(thread_id: ThreadId, attempt: usize, error: &color_eyre::Report) {
-    tracing::error!(
-        %thread_id,
-        attempt,
-        max_attempts = PER_THREAD_REQUEST_ATTEMPTS,
-        error = ?error,
-        error_chain = %format!("{error:#}"),
-        "per-thread turn/start failed; retrying without terminating the TUI"
-    );
-}
-
-fn retry_is_known_not_to_have_committed(error: &color_eyre::Report) -> bool {
-    matches!(
-        error.downcast_ref::<TypedRequestError>(),
-        Some(TypedRequestError::Server { .. })
-    )
-}
-
-pub(crate) fn turn_start_execution_capacity(error: &color_eyre::Report) -> Option<usize> {
-    let error = error.downcast_ref::<TypedRequestError>()?;
-    let TypedRequestError::Server { source, .. } = error else {
-        return None;
-    };
-    let data = source.data.as_ref()?;
-    (data.get("turn_start_error")?.as_str()? == "execution_capacity")
-        .then(|| data.get("max_threads")?.as_u64()?.try_into().ok())
-        .flatten()
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ForkGoalContinuation {
@@ -223,53 +161,6 @@ fn is_thread_settings_update_unsupported(source: &JSONRPCErrorError) -> bool {
             && source.message.contains(THREAD_SETTINGS_UPDATE_METHOD))
 }
 
-fn stored_auth_has_codex_backend_auth(config: &Config) -> bool {
-    if stored_auth_at_path_has_codex_backend_auth(config, config.codex_home.as_path()) {
-        return true;
-    }
-    pfterminal_legacy_codex_home(config.codex_home.as_path())
-        .as_deref()
-        .is_some_and(|path| stored_auth_at_path_has_codex_backend_auth(config, path))
-}
-
-fn stored_auth_at_path_has_codex_backend_auth(
-    config: &Config,
-    codex_home: &std::path::Path,
-) -> bool {
-    match load_auth_dot_json(
-        codex_home,
-        config.cli_auth_credentials_store_mode,
-        config.auth_keyring_backend_kind(),
-    ) {
-        Ok(Some(auth)) => auth_dot_json_has_codex_backend_auth(&auth),
-        Ok(None) => false,
-        Err(err) => {
-            tracing::warn!("failed to inspect stored auth during TUI bootstrap: {err}");
-            false
-        }
-    }
-}
-
-fn pfterminal_legacy_codex_home(codex_home: &std::path::Path) -> Option<PathBuf> {
-    if codex_home.file_name()? != ".pfterminal" {
-        return None;
-    }
-    Some(codex_home.parent()?.join(".codex"))
-}
-
-fn auth_dot_json_has_codex_backend_auth(auth: &AuthDotJson) -> bool {
-    if let Some(mode) = auth.auth_mode {
-        return mode.uses_codex_backend();
-    }
-    if auth.personal_access_token.is_some() || auth.agent_identity.is_some() {
-        return true;
-    }
-    if auth.openai_api_key.is_some() || auth.bedrock_api_key.is_some() {
-        return false;
-    }
-    auth.tokens.is_some()
-}
-
 /// Data collected during the TUI bootstrap phase that the main event loop
 /// needs to configure the UI, telemetry, and initial rate-limit prefetch.
 ///
@@ -286,7 +177,6 @@ pub(crate) struct AppServerBootstrap {
     /// with `has_chatgpt_account` to decide if a startup rate-limit prefetch
     /// should be fired.
     pub(crate) requires_openai_auth: bool,
-    pub(crate) has_codex_backend_auth: bool,
     pub(crate) default_model: String,
     pub(crate) feedback_audience: FeedbackAudience,
     pub(crate) has_chatgpt_account: bool,
@@ -303,8 +193,6 @@ pub(crate) struct AppServerSession {
     available_models: Vec<ModelPreset>,
     managed_new_thread_defaults: Option<NewThreadModelDefaults>,
     external_agent_config_import_completion_pending: AtomicBool,
-    injected_turn_start_failures: usize,
-    injected_spawn_agent_failures: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -329,12 +217,6 @@ impl ThreadParamsMode {
             Self::Remote => None,
         }
     }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct ResumeModelOverride {
-    pub(crate) model: Option<String>,
-    pub(crate) model_provider: Option<String>,
 }
 
 #[derive(Debug)]
@@ -383,8 +265,6 @@ impl AppServerSession {
             available_models: Vec::new(),
             managed_new_thread_defaults: None,
             external_agent_config_import_completion_pending: AtomicBool::new(false),
-            injected_turn_start_failures: injected_failure_count(TURN_START_FAULT_ENV),
-            injected_spawn_agent_failures: injected_failure_count(SPAWN_AGENT_FAULT_ENV),
         }
     }
 
@@ -488,7 +368,7 @@ impl AppServerSession {
             status_account_display,
             plan_type,
             feedback_audience,
-            account_has_chatgpt_account,
+            has_chatgpt_account,
         ) = match account.account {
             Some(Account::ApiKey {}) => (
                 None,
@@ -524,31 +404,13 @@ impl AppServerSession {
             }
             None => (None, None, None, None, FeedbackAudience::External, false),
         };
-        let auth_status_mode = auth_status.as_ref().and_then(|status| status.auth_method);
-        let account_has_codex_backend_auth = matches!(auth_mode, Some(TelemetryAuthMode::Chatgpt));
-        let server_has_codex_backend_auth = auth_status
-            .as_ref()
-            .and_then(|status| status.has_codex_backend_auth)
-            .or_else(|| auth_status_mode.map(AuthMode::uses_codex_backend))
-            .unwrap_or(account_has_codex_backend_auth);
-        let has_codex_backend_auth =
-            server_has_codex_backend_auth || stored_auth_has_codex_backend_auth(config);
-        let has_chatgpt_account = auth_status_mode
-            .map(AuthMode::has_chatgpt_account)
-            .unwrap_or(account_has_chatgpt_account);
-        let auth_mode = auth_status_mode.map(TelemetryAuthMode::from).or(auth_mode);
-        let requires_openai_auth = auth_status
-            .as_ref()
-            .and_then(|status| status.requires_openai_auth)
-            .unwrap_or(account.requires_openai_auth);
         Ok(AppServerBootstrap {
             duration: started_at.elapsed(),
             account_email,
             auth_mode,
             status_account_display,
             plan_type,
-            requires_openai_auth,
-            has_codex_backend_auth,
+            requires_openai_auth: account.requires_openai_auth,
             default_model,
             feedback_audience,
             has_chatgpt_account,
@@ -575,22 +437,6 @@ impl AppServerSession {
             })
             .await
             .map_err(|err| bootstrap_request_error("account/read failed during TUI bootstrap", err))
-    }
-
-    pub(crate) async fn read_auth_status(&mut self) -> Result<GetAuthStatusResponse> {
-        let request_id = self.next_request_id();
-        self.client
-            .request_typed(ClientRequest::GetAuthStatus {
-                request_id,
-                params: GetAuthStatusParams {
-                    include_token: Some(false),
-                    refresh_token: Some(false),
-                },
-            })
-            .await
-            .map_err(|err| {
-                bootstrap_request_error("account-auth/read failed during TUI bootstrap", err)
-            })
     }
 
     pub(crate) async fn external_agent_config_detect(
@@ -684,122 +530,6 @@ impl AppServerSession {
                 bootstrap_request_error("thread/start failed during TUI bootstrap", err)
             })?;
         started_thread_from_start_response(response, config, self.thread_params_mode()).await
-    }
-
-    pub(crate) async fn spawn_agent_thread(
-        &mut self,
-        config: &Config,
-        parent_thread_id: ThreadId,
-        agent_role: String,
-        agent_nickname: Option<String>,
-        model: String,
-        model_provider: Option<String>,
-        reasoning_effort: Option<codex_protocol::openai_models::ReasoningEffort>,
-        base_instructions: Option<String>,
-    ) -> Result<AppServerStartedThread> {
-        let logical_member_id = agent_nickname.clone().unwrap_or_else(|| agent_role.clone());
-        self.spawn_agent_thread_with_class(
-            config,
-            parent_thread_id,
-            agent_role,
-            agent_nickname,
-            AgentClass::CrewMember {
-                crew_id: format!("tui-spawn:{parent_thread_id}"),
-                logical_member_id,
-                human_addressable: true,
-            },
-            model,
-            model_provider,
-            reasoning_effort,
-            base_instructions,
-        )
-        .await
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) async fn spawn_agent_thread_with_class(
-        &mut self,
-        config: &Config,
-        parent_thread_id: ThreadId,
-        agent_role: String,
-        agent_nickname: Option<String>,
-        agent_class: AgentClass,
-        model: String,
-        model_provider: Option<String>,
-        reasoning_effort: Option<codex_protocol::openai_models::ReasoningEffort>,
-        base_instructions: Option<String>,
-    ) -> Result<AppServerStartedThread> {
-        let mut session_config = self.session_config_with_effective_service_tier(config);
-        session_config.model = Some(model);
-        session_config.model_reasoning_effort = reasoning_effort;
-        let mut thread = thread_start_params_from_config(
-            &session_config,
-            self.thread_params_mode(),
-            self.remote_cwd_override.as_deref(),
-            /*session_start_source*/ None,
-        );
-        thread.model_provider = model_provider.or(thread.model_provider);
-        thread.thread_source = Some(ThreadSource::Subagent);
-        thread.multi_agent_mode = Some(MultiAgentMode::Proactive);
-        if let Some(base_instructions) = base_instructions {
-            thread.base_instructions = Some(base_instructions);
-        }
-        let mut attempt = 1;
-        let response = loop {
-            let request_id = self.next_request_id();
-            let injected = self.injected_spawn_agent_failures > 0;
-            let result: Result<ThreadSpawnAgentResponse> = if injected {
-                self.injected_spawn_agent_failures -= 1;
-                Err(color_eyre::eyre::eyre!(
-                    "injected thread/spawnAgent fault for qualification"
-                ))
-            } else {
-                self.client
-                    .request_typed(ClientRequest::ThreadSpawnAgent {
-                        request_id,
-                        params: ThreadSpawnAgentParams {
-                            parent_thread_id: parent_thread_id.to_string(),
-                            agent_role: agent_role.clone(),
-                            agent_nickname: agent_nickname.clone(),
-                            agent_class: Some(agent_class.clone()),
-                            thread: thread.clone(),
-                        },
-                    })
-                    .await
-                    .wrap_err("thread/spawnAgent failed while creating native agent pane")
-            };
-            match result {
-                Ok(started) => break started,
-                Err(error) => {
-                    tracing::error!(
-                        %parent_thread_id,
-                        attempt,
-                        error = ?error,
-                        error_chain = %format!("{error:#}"),
-                        "per-thread request failed; thread/spawnAgent remains pane-local"
-                    );
-                    if attempt >= PER_THREAD_REQUEST_ATTEMPTS
-                        || (!injected && !retry_is_known_not_to_have_committed(&error))
-                    {
-                        return Err(error);
-                    }
-                    tokio::time::sleep(PER_THREAD_REQUEST_BACKOFF[attempt - 1]).await;
-                    attempt += 1;
-                }
-            }
-        };
-        started_thread_from_spawn_agent_response(response, config, self.thread_params_mode()).await
-    }
-
-    pub(crate) async fn send_agent_message(
-        &mut self,
-        params: ThreadAgentMessageParams,
-    ) -> Result<ThreadAgentMessageResponse> {
-        let request_id = self.next_request_id();
-        self.client
-            .request_typed(ClientRequest::ThreadAgentMessage { request_id, params })
-            .await
-            .wrap_err("thread/sendAgentMessage failed")
     }
 
     pub(crate) async fn resume_thread(
@@ -1161,74 +891,6 @@ impl AppServerSession {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn spawn_turn_start(
-        &mut self,
-        thread_id: ThreadId,
-        items: Vec<UserInput>,
-        cwd: PathBuf,
-        approval_policy: AskForApproval,
-        approvals_reviewer: codex_protocol::config_types::ApprovalsReviewer,
-        permissions_override: TurnPermissionsOverride,
-        workspace_roots: &[AbsolutePathBuf],
-        model: String,
-        effort: Option<codex_protocol::openai_models::ReasoningEffort>,
-        summary: Option<codex_protocol::config_types::ReasoningSummary>,
-        service_tier: Option<Option<String>>,
-        collaboration_mode: Option<codex_protocol::config_types::CollaborationMode>,
-        personality: Option<codex_protocol::config_types::Personality>,
-        output_schema: Option<serde_json::Value>,
-        additional_context: Option<
-            HashMap<String, codex_app_server_protocol::AdditionalContextEntry>,
-        >,
-        client_user_message_id: Option<String>,
-    ) -> tokio::task::JoinHandle<Result<TurnStartOutcome>> {
-        let (sandbox_policy, permissions) =
-            turn_permissions_overrides(permissions_override, cwd.as_path());
-        let client_user_message_id =
-            client_user_message_id.unwrap_or_else(|| Uuid::now_v7().to_string());
-        let request_handle = self.request_handle();
-        let injected_failures = self
-            .injected_turn_start_failures
-            .min(PER_THREAD_REQUEST_ATTEMPTS);
-        self.injected_turn_start_failures -= injected_failures;
-        let mut requests = Vec::with_capacity(PER_THREAD_REQUEST_ATTEMPTS);
-        for _ in 0..PER_THREAD_REQUEST_ATTEMPTS {
-            let request_id = self.next_request_id();
-            requests.push(ClientRequest::TurnStart {
-                request_id,
-                params: TurnStartParams {
-                    thread_id: thread_id.to_string(),
-                    client_user_message_id: Some(client_user_message_id.clone()),
-                    input: items.clone(),
-                    responsesapi_client_metadata: None,
-                    additional_context: additional_context.clone(),
-                    environments: None,
-                    cwd: Some(cwd.clone()),
-                    runtime_workspace_roots: Some(workspace_roots.to_vec()),
-                    approval_policy: Some(approval_policy),
-                    approvals_reviewer: Some(approvals_reviewer.into()),
-                    sandbox_policy: sandbox_policy.clone(),
-                    permissions: permissions.clone(),
-                    model: Some(model.clone()),
-                    service_tier: service_tier.clone(),
-                    effort: effort.clone(),
-                    summary,
-                    personality,
-                    output_schema: output_schema.clone(),
-                    collaboration_mode: collaboration_mode.clone(),
-                    multi_agent_mode: None,
-                },
-            });
-        }
-        tokio::spawn(run_turn_start_requests(
-            request_handle,
-            thread_id,
-            requests,
-            injected_failures,
-        ))
-    }
-
-    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn turn_start(
         &mut self,
         thread_id: ThreadId,
@@ -1245,31 +907,38 @@ impl AppServerSession {
         collaboration_mode: Option<codex_protocol::config_types::CollaborationMode>,
         personality: Option<codex_protocol::config_types::Personality>,
         output_schema: Option<serde_json::Value>,
-        additional_context: Option<
-            HashMap<String, codex_app_server_protocol::AdditionalContextEntry>,
-        >,
-        client_user_message_id: Option<String>,
-    ) -> Result<TurnStartOutcome> {
-        self.spawn_turn_start(
-            thread_id,
-            items,
-            cwd,
-            approval_policy,
-            approvals_reviewer,
-            permissions_override,
-            workspace_roots,
-            model,
-            effort,
-            summary,
-            service_tier,
-            collaboration_mode,
-            personality,
-            output_schema,
-            additional_context,
-            client_user_message_id,
-        )
-        .await
-        .map_err(|error| color_eyre::eyre::eyre!("turn/start worker panicked: {error}"))?
+    ) -> Result<TurnStartResponse> {
+        let request_id = self.next_request_id();
+        let (sandbox_policy, permissions) =
+            turn_permissions_overrides(permissions_override, cwd.as_path());
+        self.client
+            .request_typed(ClientRequest::TurnStart {
+                request_id,
+                params: TurnStartParams {
+                    thread_id: thread_id.to_string(),
+                    client_user_message_id: None,
+                    input: items,
+                    responsesapi_client_metadata: None,
+                    additional_context: None,
+                    environments: None,
+                    cwd: Some(cwd),
+                    runtime_workspace_roots: Some(workspace_roots.to_vec()),
+                    approval_policy: Some(approval_policy),
+                    approvals_reviewer: Some(approvals_reviewer.into()),
+                    sandbox_policy,
+                    permissions,
+                    model: Some(model),
+                    service_tier,
+                    effort,
+                    summary,
+                    personality,
+                    output_schema,
+                    collaboration_mode,
+                    multi_agent_mode: None,
+                },
+            })
+            .await
+            .wrap_err("turn/start failed in TUI")
     }
 
     pub(crate) async fn turn_interrupt(
@@ -1303,7 +972,6 @@ impl AppServerSession {
         thread_id: ThreadId,
         turn_id: String,
         items: Vec<UserInput>,
-        client_user_message_id: Option<String>,
     ) -> std::result::Result<TurnSteerResponse, TypedRequestError> {
         let request_id = self.next_request_id();
         self.client
@@ -1311,7 +979,7 @@ impl AppServerSession {
                 request_id,
                 params: TurnSteerParams {
                     thread_id: thread_id.to_string(),
-                    client_user_message_id,
+                    client_user_message_id: None,
                     input: items,
                     responsesapi_client_metadata: None,
                     additional_context: None,
@@ -1609,51 +1277,6 @@ impl AppServerSession {
     }
 }
 
-async fn run_turn_start_requests(
-    request_handle: AppServerRequestHandle,
-    thread_id: ThreadId,
-    requests: Vec<ClientRequest>,
-    injected_failures: usize,
-) -> Result<TurnStartOutcome> {
-    let mut recovered_failures = Vec::new();
-    for (index, request) in requests.into_iter().enumerate() {
-        let attempt = index + 1;
-        let injected = index < injected_failures;
-        let result: Result<TurnStartResponse> = if injected {
-            Err(color_eyre::eyre::eyre!(
-                "injected turn/start fault for qualification"
-            ))
-        } else {
-            request_handle
-                .request_typed(request)
-                .await
-                .wrap_err("turn/start failed in TUI")
-        };
-        match result {
-            Ok(response) => {
-                return Ok(TurnStartOutcome::Started {
-                    turn_id: response.turn.id,
-                    recovered_failures,
-                });
-            }
-            Err(error) => {
-                if let Some(max_threads) = turn_start_execution_capacity(&error) {
-                    return Ok(TurnStartOutcome::CapacityUnavailable { max_threads });
-                }
-                record_turn_start_failure(thread_id, attempt, &error);
-                if attempt == PER_THREAD_REQUEST_ATTEMPTS
-                    || (!injected && !retry_is_known_not_to_have_committed(&error))
-                {
-                    return Err(error);
-                }
-                recovered_failures.push(format!("attempt {attempt}: {error:#}"));
-                tokio::time::sleep(PER_THREAD_REQUEST_BACKOFF[index]).await;
-            }
-        }
-    }
-    unreachable!("bounded turn/start request list always returns")
-}
-
 pub(crate) async fn start_thread_with_request_handle(
     request_handle: AppServerRequestHandle,
     config: Config,
@@ -1694,6 +1317,10 @@ pub(crate) fn status_account_display_from_auth_mode(
 }
 
 fn model_preset_from_api_model(model: ApiModel) -> ModelPreset {
+    let orchestration = model.orchestration;
+    let provider_id = orchestration
+        .as_ref()
+        .map(|metadata| metadata.provider_id().to_string());
     let upgrade = model.upgrade.map(|upgrade_id| {
         let upgrade_info = model.upgrade_info.clone();
         ModelUpgrade {
@@ -1712,11 +1339,8 @@ fn model_preset_from_api_model(model: ApiModel) -> ModelPreset {
     ModelPreset {
         id: model.id,
         model: model.model,
-        provider_id: model
-            .orchestration
-            .as_ref()
-            .map(|metadata| metadata.provider_id().to_string()),
-        orchestration: model.orchestration,
+        provider_id,
+        orchestration,
         display_name: model.display_name,
         description: model.description,
         default_reasoning_effort: model.default_reasoning_effort,
@@ -1800,36 +1424,7 @@ fn config_request_overrides_from_config(
     if config.bypass_hook_trust {
         overrides.insert("bypass_hook_trust".to_string(), true.into());
     }
-    for feature in [
-        codex_features::Feature::MultiAgentV2,
-        codex_features::Feature::MultiAgentMode,
-    ] {
-        if config.features.enabled(feature) {
-            overrides.insert(
-                format!("features.{}", feature.key()),
-                serde_json::Value::Bool(true),
-            );
-        }
-    }
-    // `thread/spawnAgent` reloads config inside the app-server before enforcing spawn depth.
-    // Forward the effective TUI value so native spawned panes honor `native_spawn_agent_config()`
-    // (including the standard crew's minimum depth) instead of falling back to the app-server's
-    // on-disk/default value.
-    overrides.insert(
-        "agents.max_depth".to_string(),
-        serde_json::json!(config.agent_max_depth),
-    );
     Some(overrides)
-}
-
-fn remove_model_resume_overrides(
-    overrides: Option<HashMap<String, serde_json::Value>>,
-) -> Option<HashMap<String, serde_json::Value>> {
-    let mut overrides = overrides?;
-    overrides.remove("model_reasoning_effort");
-    overrides.remove("model_reasoning_summary");
-    overrides.remove("model_verbosity");
-    (!overrides.is_empty()).then_some(overrides)
 }
 
 fn service_tier_override_from_config(config: &Config) -> Option<Option<String>> {
@@ -2067,29 +1662,6 @@ async fn started_thread_from_start_response(
         turns: response.thread.turns,
         blocks_direct_input,
     })
-}
-
-async fn started_thread_from_spawn_agent_response(
-    response: ThreadSpawnAgentResponse,
-    config: &Config,
-    thread_params_mode: ThreadParamsMode,
-) -> Result<AppServerStartedThread> {
-    let response = ThreadStartResponse {
-        thread: response.thread,
-        model: response.model,
-        model_provider: response.model_provider,
-        service_tier: response.service_tier,
-        cwd: response.cwd,
-        runtime_workspace_roots: response.runtime_workspace_roots,
-        instruction_sources: response.instruction_sources,
-        approval_policy: response.approval_policy,
-        approvals_reviewer: response.approvals_reviewer,
-        sandbox: response.sandbox,
-        active_permission_profile: response.active_permission_profile,
-        reasoning_effort: response.reasoning_effort,
-        multi_agent_mode: response.multi_agent_mode,
-    };
-    started_thread_from_start_response(response, config, thread_params_mode).await
 }
 
 async fn started_thread_from_resume_response(
@@ -2354,7 +1926,6 @@ mod tests {
     use codex_utils_path_uri::LegacyAppPathString;
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
-    use tracing_subscriber::prelude::*;
 
     async fn build_config(temp_dir: &TempDir) -> Config {
         ConfigBuilder::default()
@@ -2362,77 +1933,6 @@ mod tests {
             .build()
             .await
             .expect("config should build")
-    }
-
-    #[tokio::test]
-    async fn injected_turn_start_failure_persists_error_with_full_chain() {
-        let temp_dir = TempDir::new().expect("create temporary PFTerminal home");
-        let state = codex_state::StateRuntime::init(
-            temp_dir.path().to_path_buf(),
-            "test-provider".to_string(),
-        )
-        .await
-        .expect("initialize runtime databases");
-        let log_db = codex_state::log_db::start(state.clone());
-        let subscriber = tracing_subscriber::registry().with(log_db.clone());
-        let dispatch = tracing::Dispatch::new(subscriber);
-        let thread_id = ThreadId::new();
-        let error = color_eyre::eyre::eyre!("injected low-level fault")
-            .wrap_err("turn/start failed in TUI");
-
-        tracing::dispatcher::with_default(&dispatch, || {
-            record_turn_start_failure(thread_id, 1, &error);
-        });
-        log_db.flush().await;
-
-        let rows = state
-            .query_logs(&codex_state::LogQuery {
-                descending: true,
-                limit: Some(10),
-                ..Default::default()
-            })
-            .await
-            .expect("query persisted logs");
-        let row = rows
-            .iter()
-            .find(|row| row.level == "ERROR")
-            .expect("injected turn/start failure should persist an ERROR row");
-        let message = row
-            .message
-            .as_deref()
-            .expect("ERROR row should have a body");
-        assert!(message.contains("turn/start failed in TUI"));
-        assert!(message.contains("injected low-level fault"));
-        assert_eq!(
-            row.thread_id.as_deref(),
-            Some(thread_id.to_string().as_str())
-        );
-        assert!(temp_dir.path().join(codex_state::LOGS_DB_FILENAME).exists());
-    }
-
-    #[test]
-    fn auth_dot_json_backend_detection_honors_explicit_chatgpt_mode() {
-        let auth = AuthDotJson {
-            auth_mode: Some(AuthMode::Chatgpt),
-            openai_api_key: Some("sk-test-key".to_string()),
-            tokens: None,
-            last_refresh: None,
-            agent_identity: None,
-            personal_access_token: None,
-            bedrock_api_key: None,
-        };
-        assert!(auth_dot_json_has_codex_backend_auth(&auth));
-
-        let auth = AuthDotJson {
-            auth_mode: Some(AuthMode::ApiKey),
-            openai_api_key: Some("sk-test-key".to_string()),
-            tokens: None,
-            last_refresh: None,
-            agent_identity: None,
-            personal_access_token: None,
-            bedrock_api_key: None,
-        };
-        assert!(!auth_dot_json_has_codex_backend_auth(&auth));
     }
 
     fn rate_limit_snapshot(limit_id: &str) -> RateLimitSnapshot {
@@ -2837,7 +2337,6 @@ mod tests {
     async fn thread_lifecycle_params_forward_config_overrides_and_service_tier() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let mut config = build_config(&temp_dir).await;
-        config.model = Some("current-config-model".to_string());
         config.model_reasoning_effort = Some(ReasoningEffort::High);
         config.model_reasoning_summary = Some(ReasoningSummary::Detailed);
         config.model_verbosity = Some(Verbosity::Low);
@@ -2847,7 +2346,6 @@ mod tests {
             .set(WebSearchMode::Disabled)
             .expect("test web search mode should be allowed");
         config.bypass_hook_trust = true;
-        config.agent_max_depth = 7;
         config.service_tier = Some(ServiceTier::Fast.request_value().to_string());
         let thread_id = ThreadId::new();
 
@@ -2883,18 +2381,9 @@ mod tests {
             ("personality".to_string(), string("pragmatic")),
             ("web_search".to_string(), string("disabled")),
             ("bypass_hook_trust".to_string(), true.into()),
-            ("agents.max_depth".to_string(), serde_json::json!(7)),
-        ]);
-        let expected_resume_config = HashMap::from([
-            ("personality".to_string(), string("pragmatic")),
-            ("web_search".to_string(), string("disabled")),
-            ("bypass_hook_trust".to_string(), true.into()),
-            ("agents.max_depth".to_string(), serde_json::json!(7)),
         ]);
         assert_eq!(start.config, Some(expected_config.clone()));
-        assert_eq!(resume.model, None);
-        assert_eq!(resume.model_provider, None);
-        assert_eq!(resume.config, Some(expected_resume_config));
+        assert_eq!(resume.config, Some(expected_config.clone()));
         assert_eq!(fork.config, Some(expected_config));
     }
 
@@ -3199,6 +2688,7 @@ mod tests {
                 section_entered_at: None,
                 history_mode: Default::default(),
                 model_provider: "openai".to_string(),
+                runtime_route: None,
                 created_at: 1,
                 updated_at: 2,
                 recency_at: Some(2),

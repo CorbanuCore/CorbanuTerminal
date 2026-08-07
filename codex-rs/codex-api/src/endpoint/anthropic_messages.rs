@@ -15,6 +15,7 @@ use codex_client::EncodedJsonBody;
 use codex_client::HttpTransport;
 use codex_client::RequestTelemetry;
 use codex_client::StreamResponse;
+use codex_protocol::ResponseItemId;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ReasoningItemReasoningSummary;
@@ -213,6 +214,7 @@ impl From<AnthropicUsage> for TokenUsage {
         Self {
             input_tokens,
             cached_input_tokens: cache_read,
+            cache_write_input_tokens: cache_creation,
             output_tokens,
             reasoning_output_tokens: 0,
             total_tokens: input_tokens + output_tokens,
@@ -584,11 +586,11 @@ impl AnthropicStreamState {
         }
         if !self.message_added {
             let item = ResponseItem::Message {
-                id: Some(self.message_id()),
+                id: Some(ResponseItemId::from_server(self.message_id())),
                 role: "assistant".to_string(),
                 content: Vec::new(),
                 phase: None,
-                metadata: None,
+                internal_chat_message_metadata_passthrough: None,
             };
             if tx_event
                 .send(Ok(ResponseEvent::OutputItemAdded(item)))
@@ -635,12 +637,12 @@ impl AnthropicStreamState {
     ) -> bool {
         if !self.reasoning_added {
             let item = ResponseItem::Reasoning {
-                id: Some(self.reasoning_id()),
+                id: Some(ResponseItemId::from_server(self.reasoning_id())),
                 summary: Vec::new(),
                 content: None,
                 encrypted_content: None,
                 anthropic_content_block: None,
-                metadata: None,
+                internal_chat_message_metadata_passthrough: None,
             };
             if tx_event
                 .send(Ok(ResponseEvent::OutputItemAdded(item)))
@@ -698,12 +700,12 @@ impl AnthropicStreamState {
         });
         let anthropic_content_block = self.reasoning_block.take();
         let item = ResponseItem::Reasoning {
-            id: Some(self.reasoning_id()),
+            id: Some(ResponseItemId::from_server(self.reasoning_id())),
             summary: Vec::<ReasoningItemReasoningSummary>::new(),
             content,
             encrypted_content: None,
             anthropic_content_block,
-            metadata: None,
+            internal_chat_message_metadata_passthrough: None,
         };
         if tx_event
             .send(Ok(ResponseEvent::OutputItemDone(item)))
@@ -766,7 +768,9 @@ impl AnthropicStreamState {
             .clone()
             .unwrap_or_else(|| format!("anthropic_call_{index}"));
         let item = ResponseItem::FunctionCall {
-            id: Some(format!("fc_{response_id}_{index}")),
+            id: Some(ResponseItemId::from_server(format!(
+                "fc_{response_id}_{index}"
+            ))),
             name: tool_call.name.clone(),
             namespace: None,
             arguments: if tool_call.arguments.trim().is_empty() {
@@ -774,8 +778,9 @@ impl AnthropicStreamState {
             } else {
                 tool_call.arguments.clone()
             },
+            encrypted_function_args: None,
             call_id,
-            metadata: None,
+            internal_chat_message_metadata_passthrough: None,
         };
         tool_call.emitted = true;
         tx_event
@@ -807,11 +812,11 @@ impl AnthropicStreamState {
             input.clone(),
         );
         let item = ResponseItem::WebSearchCall {
-            id: server_tool_use.id.clone(),
+            id: server_tool_use.id.clone().map(ResponseItemId::from_server),
             status: Some("in_progress".to_string()),
             action: anthropic_web_search_action_from_input(&input),
             anthropic_content_block: Some(block),
-            metadata: None,
+            internal_chat_message_metadata_passthrough: None,
         };
         server_tool_use.emitted = true;
         tx_event
@@ -841,11 +846,13 @@ impl AnthropicStreamState {
         };
         let block = anthropic_web_search_tool_result_block(result.tool_use_id.as_deref(), content);
         let item = ResponseItem::WebSearchCall {
-            id: Some(format!("wsr_{response_id}_{index}")),
+            id: Some(ResponseItemId::from_server(format!(
+                "wsr_{response_id}_{index}"
+            ))),
             status: Some(status.to_string()),
             action: None,
             anthropic_content_block: Some(block),
-            metadata: None,
+            internal_chat_message_metadata_passthrough: None,
         };
         result.emitted = true;
         tx_event
@@ -887,11 +894,11 @@ impl AnthropicStreamState {
         if self.message_added {
             let text = std::mem::take(&mut self.message_text);
             let item = ResponseItem::Message {
-                id: Some(self.message_id()),
+                id: Some(ResponseItemId::from_server(self.message_id())),
                 role: "assistant".to_string(),
                 content: vec![ContentItem::OutputText { text }],
                 phase: None,
-                metadata: None,
+                internal_chat_message_metadata_passthrough: None,
             };
             if tx_event
                 .send(Ok(ResponseEvent::OutputItemDone(item)))
@@ -1149,9 +1156,7 @@ mod tests {
         // finished turn and let a sub-agent report success having done no work.
         for stop_reason in ["end_turn", "tool_use", "pause_turn"] {
             let events = collect_events(&[
-                format!(
-                    "event: message_start\ndata: {{\"type\":\"message_start\",\"message\":{{\"id\":\"msg_1\",\"model\":\"claude-fable-5\",\"usage\":{{\"input_tokens\":9,\"output_tokens\":0}}}}}}\n\n"
-                )
+                "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"model\":\"claude-fable-5\",\"usage\":{\"input_tokens\":9,\"output_tokens\":0}}}\n\n".to_string()
                 .as_bytes(),
                 format!(
                     "event: message_delta\ndata: {{\"type\":\"message_delta\",\"delta\":{{\"stop_reason\":\"{stop_reason}\"}},\"usage\":{{\"input_tokens\":9,\"output_tokens\":0}}}}\n\n"
@@ -1168,7 +1173,7 @@ mod tests {
                 "{stop_reason}: an empty stream must not report a completed turn: {events:?}"
             );
             assert!(
-                events.iter().any(|event| matches!(event, Err(_))),
+                events.iter().any(std::result::Result::is_err),
                 "{stop_reason}: an empty stream must surface a failure: {events:?}"
             );
         }
@@ -1311,6 +1316,7 @@ data: {"type":"message_stop"}
                     output_tokens: 2,
                     reasoning_output_tokens: 0,
                     total_tokens: 23,
+                    ..
                 }),
                 end_turn: Some(true),
                 ..

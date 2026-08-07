@@ -5,13 +5,15 @@ expression: sanitized
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│  >_ PFTerminal (v0.1.11)                                                    │
+│  >_ PFTerminal (v0.1.27)                                                    │
+│                                                                             │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date               │
+│ information on rate limits and credits                                      │
 │                                                                             │
 │  Remote:           unix:///tmp/codex-home/app-server-control/app-server-    │
 │                    control.sock (v0.133.0)                                  │
 │                                                                             │
-│  Model:            gpt-5.1-codex-max                                        │
-│  Model provider:   Ambient                                                  │
+│  Model:            gpt-5.1-codex-max (reasoning medium, summaries auto)     │
 │  Directory: [[workspace]]                                                   │
 │  Permissions:      Custom (workspace with network access, Ask for approval) │
 │  Agents.md:        <none>                                                   │

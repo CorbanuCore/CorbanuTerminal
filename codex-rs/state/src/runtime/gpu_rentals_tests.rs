@@ -15,7 +15,7 @@ fn create_params(client_operation_id: &str) -> GpuRentalCreateParams {
         installation_id: "install-1".to_string(),
         client_operation_id: client_operation_id.to_string(),
         provider: "fake".to_string(),
-        recipe_id: "deepseek-flash-2xh200".to_string(),
+        recipe_id: "deepseek-flash-0731-2xh200".to_string(),
         recipe_revision: "sha256:test".to_string(),
         offer_snapshot_json: r#"{"offer_id":"offer-1","hourly_microusd":2500000}"#.to_string(),
         quote_expires_at_ms: Some(NOW_MS + 60_000),
@@ -28,7 +28,7 @@ fn create_params(client_operation_id: &str) -> GpuRentalCreateParams {
 }
 
 async fn runtime() -> std::sync::Arc<StateRuntime> {
-    StateRuntime::init(unique_temp_dir(), "test-provider".to_string())
+    StateRuntime::init_for_testing(unique_temp_dir(), "test-provider".to_string())
         .await
         .expect("initialize state runtime")
 }
@@ -87,10 +87,10 @@ async fn expired_quote_never_enters_create_pending() {
 #[tokio::test]
 async fn leases_serialize_two_runtime_instances() {
     let codex_home = unique_temp_dir();
-    let first = StateRuntime::init(codex_home.clone(), "test-provider".to_string())
+    let first = StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
         .await
         .expect("initialize first runtime");
-    let second = StateRuntime::init(codex_home, "test-provider".to_string())
+    let second = StateRuntime::init_for_testing(codex_home, "test-provider".to_string())
         .await
         .expect("initialize second runtime");
     let params = create_params("op-lease");
@@ -104,8 +104,18 @@ async fn leases_serialize_two_runtime_instances() {
         .expect("request creation");
 
     let (first_claim, second_claim) = tokio::join!(
-        first.claim_due_gpu_rentals("controller-a", NOW_MS, 30_000, 1),
-        second.claim_due_gpu_rentals("controller-b", NOW_MS, 30_000, 1),
+        first.claim_due_gpu_rentals(
+            "controller-a",
+            NOW_MS,
+            /*lease_ttl_ms*/ 30_000,
+            /*limit*/ 1,
+        ),
+        second.claim_due_gpu_rentals(
+            "controller-b",
+            NOW_MS,
+            /*lease_ttl_ms*/ 30_000,
+            /*limit*/ 1,
+        ),
     );
     let total_claims =
         first_claim.expect("first claim").len() + second_claim.expect("second claim").len();
@@ -136,11 +146,23 @@ async fn provider_controller_only_claims_its_own_rentals() {
         .expect("request other creation");
 
     let fake_claims = runtime
-        .claim_due_gpu_rentals_for_provider("fake-controller", "fake", NOW_MS, 30_000, 10)
+        .claim_due_gpu_rentals_for_provider(
+            "fake-controller",
+            "fake",
+            NOW_MS,
+            /*lease_ttl_ms*/ 30_000,
+            /*limit*/ 10,
+        )
         .await
         .expect("claim fake rentals");
     let other_claims = runtime
-        .claim_due_gpu_rentals_for_provider("other-controller", "other", NOW_MS, 30_000, 10)
+        .claim_due_gpu_rentals_for_provider(
+            "other-controller",
+            "other",
+            NOW_MS,
+            /*lease_ttl_ms*/ 30_000,
+            /*limit*/ 10,
+        )
         .await
         .expect("claim other rentals");
     assert_eq!(fake_claims.len(), 1);
@@ -162,7 +184,12 @@ async fn state_update_is_owned_monotonic_and_releases_lease() {
         .await
         .expect("request creation");
     let lease = runtime
-        .claim_due_gpu_rentals("controller", NOW_MS, 30_000, 1)
+        .claim_due_gpu_rentals(
+            "controller",
+            NOW_MS,
+            /*lease_ttl_ms*/ 30_000,
+            /*limit*/ 1,
+        )
         .await
         .expect("claim rental")
         .pop()

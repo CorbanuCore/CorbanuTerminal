@@ -887,6 +887,23 @@ impl MessageProcessor {
             ClientRequest::Initialize { .. } => {
                 panic!("Initialize should be handled before initialized request dispatch");
             }
+            ClientRequest::ThreadSpawnAgent { params, .. } => {
+                self.thread_processor
+                    .thread_spawn_agent(
+                        request_id.clone(),
+                        params,
+                        app_server_client_name,
+                        client_version,
+                        supports_openai_form_elicitation,
+                        request_context,
+                    )
+                    .await
+            }
+            ClientRequest::ThreadAgentMessage { params, .. } => self
+                .thread_processor
+                .thread_agent_message(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::ConfigRead { params, .. } => self
                 .config_processor
                 .read(params)
@@ -1044,23 +1061,6 @@ impl MessageProcessor {
                     )
                     .await
             }
-            ClientRequest::ThreadSpawnAgent { params, .. } => {
-                self.thread_processor
-                    .thread_spawn_agent(
-                        request_id.clone(),
-                        params,
-                        app_server_client_name.clone(),
-                        client_version.clone(),
-                        supports_openai_form_elicitation,
-                        request_context,
-                    )
-                    .await
-            }
-            ClientRequest::ThreadAgentMessage { params, .. } => self
-                .thread_processor
-                .thread_agent_message(params)
-                .await
-                .map(|response| Some(response.into())),
             ClientRequest::ThreadUnsubscribe { params, .. } => {
                 self.thread_processor
                     .thread_unsubscribe(&request_id, params)
@@ -1312,9 +1312,7 @@ impl MessageProcessor {
                 self.turn_processor.thread_inject_items(params).await
             }
             ClientRequest::TurnSteer { params, .. } => {
-                self.turn_processor
-                    .turn_steer(&request_id, params, app_server_client_name.as_deref())
-                    .await
+                self.turn_processor.turn_steer(&request_id, params).await
             }
             ClientRequest::TurnInterrupt { params, .. } => {
                 self.turn_processor

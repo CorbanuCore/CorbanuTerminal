@@ -39,7 +39,6 @@ mod additional_context;
 mod agent_execution;
 mod agent_websocket;
 mod agents_md;
-mod anthropic_payload_limit;
 mod apply_patch_cli;
 #[cfg(not(target_os = "windows"))]
 mod approvals;
@@ -154,7 +153,6 @@ mod unified_exec_zsh_fork_approvals;
 mod unstable_features_warning;
 mod user_notification;
 mod user_shell_cmd;
-mod vercel_server_state;
 mod view_image;
 mod web_search;
 mod websocket_fallback;

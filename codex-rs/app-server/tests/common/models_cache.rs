@@ -17,8 +17,6 @@ fn preset_to_info(preset: &ModelPreset, priority: i32) -> ModelInfo {
         slug: preset.id.clone(),
         display_name: preset.display_name.clone(),
         description: Some(preset.description.clone()),
-        orchestration: preset.orchestration.clone(),
-        chat_completions: Default::default(),
         default_reasoning_level: Some(preset.default_reasoning_effort.clone()),
         supported_reasoning_levels: preset.supported_reasoning_efforts.clone(),
         shell_type: ConfigShellToolType::ShellCommand,
@@ -52,14 +50,16 @@ fn preset_to_info(preset: &ModelPreset, priority: i32) -> ModelInfo {
         comp_hash: None,
         effective_context_window_percent: 95,
         experimental_supported_tools: Vec::new(),
-        // Cache fixtures must round-trip the catalog's real modalities, not protocol defaults.
         input_modalities: preset.input_modalities.clone(),
         used_fallback_model_metadata: false,
+        orchestration: preset.orchestration.clone(),
+        chat_completions: Default::default(),
         supports_search_tool: false,
         use_responses_lite: false,
         auto_review_model_override: None,
         tool_mode: None,
-        multi_agent_version: None,
+        multi_agent_version: preset.multi_agent_version,
+        max_output_tokens: None,
     }
 }
 

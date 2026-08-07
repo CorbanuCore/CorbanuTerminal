@@ -37,7 +37,6 @@ use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::CompactedItem;
 use codex_protocol::protocol::ErrorEvent;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::InitialHistory;
 use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::ItemCompletedEvent;
 use codex_protocol::protocol::RolloutItem;
@@ -196,6 +195,7 @@ impl AgentControlHarness {
                     agent_path: None,
                     agent_nickname: None,
                     agent_role: None,
+                    agent_class: None,
                 })),
                 options,
             )
@@ -232,258 +232,6 @@ async fn persisted_originator(thread: &CodexThread) -> String {
             | RolloutItem::TurnContext(_) => None,
         })
         .expect("session metadata should be persisted")
-}
-
-fn role_spawn_source(
-    parent_thread_id: ThreadId,
-    depth: i32,
-    agent_path: &str,
-    agent_role: &str,
-) -> SessionSource {
-    SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-        parent_thread_id,
-        depth,
-        agent_path: Some(AgentPath::try_from(agent_path).expect("agent path")),
-        agent_nickname: None,
-        agent_role: Some(agent_role.to_string()),
-        agent_class: None,
-    })
-}
-
-fn crew_spawn_source(
-    parent_thread_id: ThreadId,
-    depth: i32,
-    agent_path: &str,
-    agent_role: &str,
-    logical_member_id: &str,
-) -> SessionSource {
-    SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-        parent_thread_id,
-        depth,
-        agent_path: Some(AgentPath::try_from(agent_path).expect("agent path")),
-        agent_nickname: Some(logical_member_id.to_string()),
-        agent_role: Some(agent_role.to_string()),
-        agent_class: Some(AgentClass::CrewMember {
-            crew_id: "qualification-crew".to_string(),
-            logical_member_id: logical_member_id.to_string(),
-            human_addressable: true,
-        }),
-    })
-}
-
-#[tokio::test]
-async fn crew_child_terminal_result_uses_one_triggering_native_mailbox_message() {
-    let (home, config) = test_config_with_cli_overrides(vec![(
-        "features.multi_agent_v2".to_string(),
-        TomlValue::Boolean(true),
-    )])
-    .await;
-    let harness = AgentControlHarness::new_with_config(home, config).await;
-    let (root_thread_id, _) = harness.start_thread().await;
-    let parent_source = crew_spawn_source(root_thread_id, 1, "/root/manager", "manager", "manager");
-    let parent = harness
-        .manager
-        .start_thread_with_options(StartThreadOptions {
-            config: harness.config.clone(),
-            initial_history: InitialHistory::New,
-            session_source: Some(parent_source),
-            thread_source: Some(ThreadSource::Subagent),
-            dynamic_tools: Vec::new(),
-            metrics_service_name: None,
-            multi_agent_mode: Some(MultiAgentMode::Proactive),
-            parent_trace: None,
-            environments: Vec::new(),
-            thread_extension_init: ExtensionDataInit::default(),
-            supports_openai_form_elicitation: false,
-        })
-        .await
-        .expect("crew manager should start");
-    assert!(
-        harness
-            .control
-            .auto_processes_terminal_results(parent.thread_id)
-            .await
-    );
-
-    let child = harness
-        .manager
-        .start_thread_with_options(StartThreadOptions {
-            config: harness.config.clone(),
-            initial_history: InitialHistory::New,
-            session_source: Some(crew_spawn_source(
-                parent.thread_id,
-                2,
-                "/root/manager/worker",
-                "worker",
-                "worker",
-            )),
-            thread_source: Some(ThreadSource::Subagent),
-            dynamic_tools: Vec::new(),
-            metrics_service_name: None,
-            multi_agent_mode: Some(MultiAgentMode::Proactive),
-            parent_trace: None,
-            environments: Vec::new(),
-            thread_extension_init: ExtensionDataInit::default(),
-            supports_openai_form_elicitation: false,
-        })
-        .await
-        .expect("crew worker should start");
-    let turn = child.thread.codex.session.new_default_turn().await;
-    let completed = EventMsg::TurnComplete(TurnCompleteEvent {
-        turn_id: turn.sub_id.clone(),
-        last_agent_message: Some("crew result".to_string()),
-        completed_at: None,
-        duration_ms: None,
-        time_to_first_token_ms: None,
-    });
-    child
-        .thread
-        .codex
-        .session
-        .send_event(turn.as_ref(), completed.clone())
-        .await;
-    child
-        .thread
-        .codex
-        .session
-        .send_event(turn.as_ref(), completed)
-        .await;
-    let expected_message_id = format!("completion:{}:{}", child.thread_id, turn.sub_id);
-
-    timeout(Duration::from_secs(5), async {
-        loop {
-            let terminal_messages = harness
-                .manager
-                .captured_ops()
-                .into_iter()
-                .filter(|(thread_id, op)| {
-                    *thread_id == parent.thread_id
-                        && matches!(
-                            op,
-                            Op::InterAgentCommunication { communication }
-                                if communication.kind
-                                    == Some(codex_protocol::protocol::AgentMessageKind::TerminalResult)
-                                    && communication.trigger_turn
-                                    && communication.message_id.as_deref()
-                                        == Some(expected_message_id.as_str())
-                        )
-                })
-                .count();
-            if terminal_messages == 1 {
-                break;
-            }
-            assert!(
-                terminal_messages < 2,
-                "stable completion identity must prevent duplicate native application"
-            );
-            sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("one triggering terminal result should reach the crew manager");
-}
-
-#[tokio::test]
-async fn spawn_agent_internal_treats_roles_as_profiles_and_enforces_structural_depth() {
-    let harness = AgentControlHarness::new().await;
-    let (root_thread_id, _) = harness.start_thread().await;
-
-    let nazgul = harness
-        .control
-        .spawn_agent_with_metadata(
-            harness.config.clone(),
-            text_input("lead the crew"),
-            Some(role_spawn_source(
-                root_thread_id,
-                1,
-                "/root/nazgul",
-                "nazgul",
-            )),
-            SpawnAgentOptions {
-                parent_thread_id: Some(root_thread_id),
-                ..Default::default()
-            },
-        )
-        .await
-        .expect("root-to-Nazgul is the legitimate native crew shape");
-
-    let _direct_orc = harness
-        .control
-        .spawn_agent_with_metadata(
-            harness.config.clone(),
-            text_input("direct worker"),
-            Some(role_spawn_source(
-                nazgul.thread_id,
-                2,
-                "/root/nazgul/orc",
-                "orc",
-            )),
-            SpawnAgentOptions {
-                parent_thread_id: Some(nazgul.thread_id),
-                ..Default::default()
-            },
-        )
-        .await
-        .expect("role labels do not encode a core authorization graph");
-
-    let worker = harness
-        .control
-        .spawn_agent_with_metadata(
-            harness.config.clone(),
-            text_input("general worker"),
-            Some(role_spawn_source(
-                root_thread_id,
-                1,
-                "/root/worker",
-                "worker",
-            )),
-            SpawnAgentOptions {
-                parent_thread_id: Some(root_thread_id),
-                ..Default::default()
-            },
-        )
-        .await
-        .expect("non-hierarchy worker should remain supported");
-    let _nested_troll = harness
-        .control
-        .spawn_agent_with_metadata(
-            harness.config.clone(),
-            text_input("nested role profile"),
-            Some(role_spawn_source(
-                worker.thread_id,
-                2,
-                "/root/worker/troll",
-                "troll",
-            )),
-            SpawnAgentOptions {
-                parent_thread_id: Some(worker.thread_id),
-                ..Default::default()
-            },
-        )
-        .await
-        .expect("crew policy, not a role string, owns delegation authorization");
-
-    let forged_depth = harness
-        .control
-        .spawn_agent_with_metadata(
-            harness.config.clone(),
-            text_input("invalid depth"),
-            Some(role_spawn_source(
-                root_thread_id,
-                2,
-                "/root/depth_forgery",
-                "worker",
-            )),
-            SpawnAgentOptions {
-                parent_thread_id: Some(root_thread_id),
-                ..Default::default()
-            },
-        )
-        .await;
-    assert_matches!(
-        forged_depth,
-        Err(CodexErr::InvalidRequest(message)) if message.contains("does not follow parent depth")
-    );
 }
 
 fn has_subagent_notification(history_items: &[ResponseItem]) -> bool {
@@ -898,80 +646,6 @@ async fn send_inter_agent_communication_without_turn_queues_message_without_trig
 }
 
 #[tokio::test]
-async fn durable_agent_mailbox_deduplicates_and_completes_after_rollout_flush() {
-    let (home, mut config) = test_config().await;
-    let _ = config.features.enable(Feature::Sqlite);
-    let harness = AgentControlHarness::new_with_config(home, config).await;
-    let (thread_id, thread) = harness.start_thread().await;
-    let communication = InterAgentCommunication::new(
-        AgentPath::root(),
-        AgentPath::try_from("/root/worker").expect("agent path"),
-        Vec::new(),
-        "one durable message".to_string(),
-        /*trigger_turn*/ false,
-    );
-
-    harness
-        .control
-        .send_inter_agent_communication(thread_id, communication.clone())
-        .await
-        .expect("first mailbox submission");
-    let captured_after_first = harness.manager.captured_ops().len();
-    harness
-        .control
-        .send_inter_agent_communication(thread_id, communication.clone())
-        .await
-        .expect("duplicate mailbox submission");
-    assert_eq!(harness.manager.captured_ops().len(), captured_after_first);
-
-    let state_db = harness.state_db.as_ref().expect("state db");
-    let pending = state_db
-        .list_recoverable_agent_messages(thread_id)
-        .await
-        .expect("recoverable mailbox");
-    assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].phase, codex_state::AgentMailboxPhase::Submitted);
-    let turn_context = thread.codex.session.new_default_turn().await;
-    thread
-        .codex
-        .session
-        .record_inter_agent_communication(turn_context.as_ref(), communication.clone())
-        .await;
-    let history_after_first_application = thread.codex.session.clone_history().await;
-    thread
-        .codex
-        .session
-        .record_inter_agent_communication(turn_context.as_ref(), communication.clone())
-        .await;
-    assert_eq!(
-        thread.codex.session.clone_history().await.raw_items(),
-        history_after_first_application.raw_items(),
-        "the same stable message ID must be materialized into local history once"
-    );
-    assert_eq!(
-        state_db
-            .list_recoverable_agent_messages(thread_id)
-            .await
-            .expect("applied mailbox"),
-        Vec::new()
-    );
-    assert_eq!(
-        state_db
-            .get_agent_message(
-                communication
-                    .message_id
-                    .as_deref()
-                    .expect("stable message id"),
-            )
-            .await
-            .expect("mailbox lookup")
-            .expect("mailbox row")
-            .phase,
-        codex_state::AgentMailboxPhase::Completed
-    );
-}
-
-#[tokio::test]
 async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
     let (home, mut config) = test_config().await;
     let _ = config.features.enable(Feature::MultiAgentV2);
@@ -979,18 +653,10 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
     let harness = AgentControlHarness::new_with_config(home, config).await;
     let (parent_thread_id, _parent_thread) = harness.start_paginated_thread().await;
     let agent_path = AgentPath::try_from("/root/worker").expect("agent path");
-    let mut child_config = harness.config.clone();
-    child_config.model_provider = child_config
-        .model_providers
-        .get("openrouter")
-        .cloned()
-        .expect("OpenRouter provider");
-    child_config.model_provider_id = "openrouter".to_string();
-    child_config.model = Some("x-ai/grok-4.5".to_string());
     let spawned_agent = harness
         .control
         .spawn_agent_with_metadata(
-            child_config,
+            harness.config.clone(),
             text_input("hello child"),
             Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
                 parent_thread_id,
@@ -1019,222 +685,6 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
         )])
         .await
         .expect("child rollout should persist with v2 metadata");
-    let recovery_communication = InterAgentCommunication::new(
-        AgentPath::root(),
-        agent_path.clone(),
-        Vec::new(),
-        "recover this admitted message".to_string(),
-        /*trigger_turn*/ false,
-    );
-    harness
-        .control
-        .admit_inter_agent_communication(spawned_agent.thread_id, &recovery_communication)
-        .await
-        .expect("durable mailbox admission");
-    let ambiguous_communication = InterAgentCommunication::new(
-        AgentPath::root(),
-        agent_path.clone(),
-        Vec::new(),
-        "do not replay this ambiguous message".to_string(),
-        /*trigger_turn*/ true,
-    );
-    harness
-        .control
-        .admit_inter_agent_communication(spawned_agent.thread_id, &ambiguous_communication)
-        .await
-        .expect("ambiguous mailbox admission");
-    let ambiguous_message_id = ambiguous_communication
-        .message_id
-        .as_deref()
-        .expect("message id");
-    assert!(
-        harness
-            .state_db
-            .as_ref()
-            .expect("state db")
-            .transition_agent_message(
-                ambiguous_message_id,
-                codex_state::AgentMailboxPhase::Ready,
-                codex_state::AgentMailboxPhase::Submitting,
-                1_000,
-            )
-            .await
-            .expect("submitting transition")
-    );
-    let submitted_communication = InterAgentCommunication::new(
-        AgentPath::root(),
-        agent_path.clone(),
-        Vec::new(),
-        "replay this locally queued message".to_string(),
-        /*trigger_turn*/ false,
-    );
-    harness
-        .control
-        .admit_inter_agent_communication(spawned_agent.thread_id, &submitted_communication)
-        .await
-        .expect("submitted mailbox admission");
-    let submitted_message_id = submitted_communication
-        .message_id
-        .as_deref()
-        .expect("message id");
-    assert!(
-        harness
-            .state_db
-            .as_ref()
-            .expect("state db")
-            .begin_agent_message_submission(
-                submitted_message_id,
-                codex_state::AgentMailboxPhase::Ready,
-                "submitted-attempt",
-                1_001,
-            )
-            .await
-            .expect("begin submitted attempt")
-    );
-    assert!(
-        harness
-            .state_db
-            .as_ref()
-            .expect("state db")
-            .transition_agent_message(
-                submitted_message_id,
-                codex_state::AgentMailboxPhase::Submitting,
-                codex_state::AgentMailboxPhase::Submitted,
-                1_002,
-            )
-            .await
-            .expect("submitted transition")
-    );
-    let provider_running_communication = InterAgentCommunication::new(
-        AgentPath::root(),
-        agent_path.clone(),
-        Vec::new(),
-        "do not replay provider-running work".to_string(),
-        /*trigger_turn*/ true,
-    );
-    harness
-        .control
-        .admit_inter_agent_communication(spawned_agent.thread_id, &provider_running_communication)
-        .await
-        .expect("provider-running mailbox admission");
-    let provider_running_message_id = provider_running_communication
-        .message_id
-        .as_deref()
-        .expect("message id");
-    assert!(
-        harness
-            .state_db
-            .as_ref()
-            .expect("state db")
-            .begin_agent_message_submission(
-                provider_running_message_id,
-                codex_state::AgentMailboxPhase::Ready,
-                "provider-running-attempt",
-                1_003,
-            )
-            .await
-            .expect("begin provider-running attempt")
-    );
-    assert!(
-        harness
-            .state_db
-            .as_ref()
-            .expect("state db")
-            .transition_agent_message(
-                provider_running_message_id,
-                codex_state::AgentMailboxPhase::Submitting,
-                codex_state::AgentMailboxPhase::Submitted,
-                1_004,
-            )
-            .await
-            .expect("provider submitted transition")
-    );
-    assert!(
-        harness
-            .state_db
-            .as_ref()
-            .expect("state db")
-            .transition_agent_message(
-                provider_running_message_id,
-                codex_state::AgentMailboxPhase::Submitted,
-                codex_state::AgentMailboxPhase::ProviderRunning,
-                1_005,
-            )
-            .await
-            .expect("provider running transition")
-    );
-    let retryable_communication = InterAgentCommunication::new(
-        AgentPath::root(),
-        agent_path.clone(),
-        Vec::new(),
-        "retry this deterministic local failure".to_string(),
-        /*trigger_turn*/ false,
-    );
-    harness
-        .control
-        .admit_inter_agent_communication(spawned_agent.thread_id, &retryable_communication)
-        .await
-        .expect("retryable mailbox admission");
-    let retryable_message_id = retryable_communication
-        .message_id
-        .as_deref()
-        .expect("message id");
-    assert!(
-        harness
-            .state_db
-            .as_ref()
-            .expect("state db")
-            .transition_agent_message(
-                retryable_message_id,
-                codex_state::AgentMailboxPhase::Ready,
-                codex_state::AgentMailboxPhase::RetryableFailure,
-                1_006,
-            )
-            .await
-            .expect("retryable transition")
-    );
-    let applied_submitted_communication = InterAgentCommunication::new(
-        AgentPath::root(),
-        agent_path.clone(),
-        Vec::new(),
-        "already persisted before submitted-state crash".to_string(),
-        /*trigger_turn*/ false,
-    );
-    harness
-        .control
-        .send_inter_agent_communication(
-            spawned_agent.thread_id,
-            applied_submitted_communication.clone(),
-        )
-        .await
-        .expect("submit applied-crash message");
-    let applied_submitted_message_id = applied_submitted_communication
-        .message_id
-        .as_deref()
-        .expect("message id");
-    let applied_turn_context = child_thread.codex.session.new_default_turn().await;
-    child_thread
-        .codex
-        .session
-        .record_inter_agent_communication(
-            applied_turn_context.as_ref(),
-            applied_submitted_communication.clone(),
-        )
-        .await;
-    assert!(
-        harness
-            .state_db
-            .as_ref()
-            .expect("state db")
-            .transition_agent_message(
-                applied_submitted_message_id,
-                codex_state::AgentMailboxPhase::Completed,
-                codex_state::AgentMailboxPhase::Submitted,
-                1_007,
-            )
-            .await
-            .expect("inject crash after local application but before provider outcome")
-    );
     child_thread
         .shutdown_and_wait()
         .await
@@ -1272,152 +722,6 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
         .get_thread(spawned_agent.thread_id)
         .await
         .expect("reloaded child thread should exist");
-    let reloaded_snapshot = harness
-        .manager
-        .get_thread(spawned_agent.thread_id)
-        .await
-        .expect("reloaded child thread should exist")
-        .config_snapshot()
-        .await;
-    assert_eq!(reloaded_snapshot.model_provider_id, "openrouter");
-    assert_eq!(reloaded_snapshot.model, "x-ai/grok-4.5");
-    assert_eq!(
-        harness
-            .manager
-            .captured_ops()
-            .iter()
-            .filter(|(thread_id, op)| {
-                *thread_id == spawned_agent.thread_id
-                    && matches!(
-                        op,
-                        Op::InterAgentCommunication { communication }
-                            if communication == &recovery_communication
-                    )
-            })
-            .count(),
-        1
-    );
-    assert_eq!(
-        harness
-            .manager
-            .captured_ops()
-            .iter()
-            .filter(|(thread_id, op)| {
-                *thread_id == spawned_agent.thread_id
-                    && matches!(
-                        op,
-                        Op::InterAgentCommunication { communication }
-                            if communication == &ambiguous_communication
-                    )
-            })
-            .count(),
-        0
-    );
-    for communication in [&submitted_communication, &retryable_communication] {
-        assert_eq!(
-            harness
-                .manager
-                .captured_ops()
-                .iter()
-                .filter(|(thread_id, op)| {
-                    *thread_id == spawned_agent.thread_id
-                        && matches!(
-                            op,
-                            Op::InterAgentCommunication { communication: captured }
-                                if captured == communication
-                        )
-                })
-                .count(),
-            1,
-            "safe local mailbox state should replay once"
-        );
-    }
-    assert_eq!(
-        harness
-            .manager
-            .captured_ops()
-            .iter()
-            .filter(|(thread_id, op)| {
-                *thread_id == spawned_agent.thread_id
-                    && matches!(
-                        op,
-                        Op::InterAgentCommunication { communication }
-                            if communication == &provider_running_communication
-                    )
-            })
-            .count(),
-        0,
-        "provider-running work must not replay automatically"
-    );
-    assert_eq!(
-        harness
-            .manager
-            .captured_ops()
-            .iter()
-            .filter(|(thread_id, op)| {
-                *thread_id == spawned_agent.thread_id
-                    && matches!(
-                        op,
-                        Op::InterAgentCommunication { communication }
-                            if communication == &applied_submitted_communication
-                    )
-            })
-            .count(),
-        1,
-        "the original local submission is captured once; recovery must not submit it again"
-    );
-    let ambiguous_row = harness
-        .state_db
-        .as_ref()
-        .expect("state db")
-        .list_recoverable_agent_messages(spawned_agent.thread_id)
-        .await
-        .expect("recoverable mailbox")
-        .into_iter()
-        .find(|message| message.communication.message_id.as_deref() == Some(ambiguous_message_id))
-        .expect("ambiguous mailbox row");
-    assert_eq!(
-        ambiguous_row.phase,
-        codex_state::AgentMailboxPhase::UnknownOutcome
-    );
-    let provider_running_row = harness
-        .state_db
-        .as_ref()
-        .expect("state db")
-        .list_recoverable_agent_messages(spawned_agent.thread_id)
-        .await
-        .expect("recoverable mailbox")
-        .into_iter()
-        .find(|message| {
-            message.communication.message_id.as_deref() == Some(provider_running_message_id)
-        })
-        .expect("provider-running mailbox row");
-    assert_eq!(
-        provider_running_row.phase,
-        codex_state::AgentMailboxPhase::UnknownOutcome
-    );
-    assert_eq!(
-        provider_running_row.attempt_id.as_deref(),
-        Some("provider-running-attempt"),
-        "recovery must retain the ambiguous attempt identity"
-    );
-    let applied_submitted_row = harness
-        .state_db
-        .as_ref()
-        .expect("state db")
-        .list_recoverable_agent_messages(spawned_agent.thread_id)
-        .await
-        .expect("recoverable mailbox")
-        .into_iter()
-        .find(|message| {
-            message.communication.message_id.as_deref() == Some(applied_submitted_message_id)
-        })
-        .expect("applied submitted mailbox row");
-    assert_eq!(
-        applied_submitted_row.phase,
-        codex_state::AgentMailboxPhase::UnknownOutcome,
-        "a locally applied submitted message has an ambiguous provider outcome after restart"
-    );
 
     let communication = InterAgentCommunication::new(
         AgentPath::root(),
@@ -2034,6 +1338,7 @@ async fn spawn_agent_can_fork_parent_thread_history_with_sanitized_items() {
                     summary: Vec::new(),
                     content: None,
                     encrypted_content: None,
+                    anthropic_content_block: None,
                     internal_chat_message_metadata_passthrough: None,
                 },
                 trigger_message.to_response_input_item().into(),
@@ -2493,6 +1798,7 @@ async fn spawn_agent_full_fork_restores_instructions_after_compaction_discards_p
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             })),
             SpawnAgentOptions {
                 fork_parent_spawn_call_id: Some(parent_spawn_call_id),
@@ -2637,6 +1943,7 @@ async fn spawn_agent_full_fork_legacy_compaction_rebuilds_child_instructions_onc
                     agent_path: None,
                     agent_nickname: None,
                     agent_role: None,
+                    agent_class: None,
                 })),
                 SpawnAgentOptions {
                     fork_parent_spawn_call_id: Some(parent_spawn_call_id.to_string()),
@@ -3507,7 +2814,7 @@ async fn multi_agent_v2_completion_ignores_dead_direct_parent() {
 }
 
 #[tokio::test]
-async fn multi_agent_v2_completion_queues_message_for_direct_parent() {
+async fn multi_agent_v2_completion_watcher_defers_to_session_delivery() {
     let harness = AgentControlHarness::new().await;
     let (_root_thread_id, root_thread) = harness.start_thread().await;
     let (worker_thread_id, _worker_thread) = harness.start_thread().await;
@@ -3524,6 +2831,9 @@ async fn multi_agent_v2_completion_queues_message_for_direct_parent() {
         .get_thread(tester_thread_id)
         .await
         .expect("tester thread should exist");
+    tester_thread
+        .session
+        .set_multi_agent_version_if_unset(MultiAgentVersion::V2);
     let worker_path = AgentPath::root().join("worker_a").expect("worker path");
     let tester_path = worker_path.join("tester").expect("tester path");
     harness.control.maybe_start_completion_watcher(
@@ -3556,37 +2866,22 @@ async fn multi_agent_v2_completion_queues_message_for_direct_parent() {
         )
         .await;
 
-    let expected_message = crate::session_prefix::format_inter_agent_completion_message(
-        worker_path.clone(),
-        tester_path.clone(),
-        &AgentStatus::Completed(Some("done".to_string())),
-    )
-    .expect("completed status should render");
-    timeout(Duration::from_secs(5), async {
-        loop {
-            let captured = harness
-                .manager
-                .captured_ops()
-                .into_iter()
-                .any(|(thread_id, op)| {
-                    thread_id == worker_thread_id
-                        && matches!(
-                            op,
-                            Op::InterAgentCommunication { communication }
-                                if communication.author == tester_path
-                                    && communication.recipient == worker_path
-                                    && communication.content == expected_message
-                                    && !communication.trigger_turn
-                        )
-                });
-            if captured {
-                break;
-            }
-            sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("completion watcher should queue a direct-parent message");
+    sleep(Duration::from_millis(100)).await;
+    assert!(
+        !harness
+            .manager
+            .captured_ops()
+            .into_iter()
+            .any(|(thread_id, op)| {
+                thread_id == worker_thread_id
+                    && matches!(
+                        op,
+                        Op::InterAgentCommunication { communication }
+                            if communication.author == tester_path
+                                && communication.recipient == worker_path
+                    )
+            })
+    );
 
     let root_history_items = root_thread
         .session
@@ -3600,7 +2895,7 @@ async fn multi_agent_v2_completion_queues_message_for_direct_parent() {
             tester_path,
             AgentPath::root(),
             Vec::new(),
-            expected_message,
+            "done".to_string(),
             /*trigger_turn*/ false,
         )
     ));
@@ -3718,6 +3013,7 @@ async fn spawn_thread_subagents_persist_parent_originator_across_new_and_truncat
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
         )
         .await
@@ -3742,6 +3038,7 @@ async fn spawn_thread_subagents_persist_parent_originator_across_new_and_truncat
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
+                agent_class: None,
             })),
             SpawnAgentOptions {
                 fork_parent_spawn_call_id: Some("spawn-call-last-n".to_string()),
@@ -3838,11 +3135,6 @@ async fn resume_thread_subagent_restores_stored_metadata() {
     let (parent_thread_id, _parent_thread) = harness.start_thread().await;
     let agent_path = AgentPath::from_string("/root/explorer".to_string())
         .expect("test agent path should be valid");
-    let expected_agent_class = AgentClass::CrewMember {
-        crew_id: "resume-test-crew".to_string(),
-        logical_member_id: "explorer".to_string(),
-        human_addressable: true,
-    };
 
     let child_thread_id = harness
         .control
@@ -3855,7 +3147,7 @@ async fn resume_thread_subagent_restores_stored_metadata() {
                 agent_path: Some(agent_path.clone()),
                 agent_nickname: None,
                 agent_role: Some("explorer".to_string()),
-                agent_class: Some(expected_agent_class.clone()),
+                agent_class: None,
             })),
         )
         .await
@@ -3955,7 +3247,7 @@ async fn resume_thread_subagent_restores_stored_metadata() {
         agent_path: resumed_agent_path,
         agent_nickname: resumed_nickname,
         agent_role: resumed_role,
-        agent_class: resumed_agent_class,
+        ..
     }) = resumed_snapshot.session_source
     else {
         panic!("expected thread-spawn sub-agent source");
@@ -4879,7 +4171,7 @@ async fn resume_agent_from_rollout_uses_edge_data_when_descendant_metadata_sourc
 }
 
 #[tokio::test]
-async fn resume_agent_from_rollout_keeps_missing_descendants_addressable_but_unloaded() {
+async fn resume_agent_from_rollout_skips_descendants_when_parent_resume_fails() {
     let harness = AgentControlHarness::new().await;
     let (parent_thread_id, parent_thread) = harness.start_thread().await;
 
@@ -4963,11 +4255,11 @@ async fn resume_agent_from_rollout_keeps_missing_descendants_addressable_but_unl
     );
     assert_eq!(
         harness.control.get_status(child_thread_id).await,
-        AgentStatus::Unloaded
+        AgentStatus::NotFound
     );
     assert_eq!(
         harness.control.get_status(grandchild_thread_id).await,
-        AgentStatus::Unloaded
+        AgentStatus::NotFound
     );
 
     let _ = harness
@@ -4975,14 +4267,4 @@ async fn resume_agent_from_rollout_keeps_missing_descendants_addressable_but_unl
         .shutdown_agent_tree(parent_thread_id)
         .await
         .expect("tree shutdown after partial subtree resume should succeed");
-}
-#[test]
-fn nickname_from_picker_label_accepts_visible_agent_label() {
-    assert_eq!(nickname_from_picker_label("Snaga [orc]"), Some("Snaga"));
-    assert_eq!(
-        nickname_from_picker_label("  Ghash the 2nd [orc]  "),
-        Some("Ghash the 2nd")
-    );
-    assert_eq!(nickname_from_picker_label("Snaga"), None);
-    assert_eq!(nickname_from_picker_label("[orc]"), None);
 }

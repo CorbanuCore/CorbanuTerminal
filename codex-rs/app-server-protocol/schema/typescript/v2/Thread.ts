@@ -4,6 +4,7 @@
 import type { AbsolutePathBuf } from "../AbsolutePathBuf";
 import type { GitInfo } from "./GitInfo";
 import type { SessionSource } from "./SessionSource";
+import type { ThreadRuntimeRoute } from "./ThreadRuntimeRoute";
 import type { ThreadSection } from "./ThreadSection";
 import type { ThreadSource } from "./ThreadSource";
 import type { ThreadStatus } from "./ThreadStatus";
@@ -37,6 +38,10 @@ sectionEnteredAt: number | null, /**
  * Model provider used for this thread (for example, 'openai').
  */
 modelProvider: string, /**
+ * Exact route configured by the live runtime. Absent for unloaded legacy records whose
+ * persisted metadata does not prove the model and effort.
+ */
+runtimeRoute: ThreadRuntimeRoute | null, /**
  * Unix timestamp (in seconds) when the thread was created.
  */
 createdAt: number, /**

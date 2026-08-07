@@ -403,6 +403,42 @@ impl AccountRequestProcessor {
         }
     }
 
+    async fn login_provider_api_key_v2(
+        &self,
+        request_id: ConnectionRequestId,
+        provider: String,
+        api_key: String,
+    ) {
+        let result = async {
+            let provider_info =
+                self.config.model_providers.get(&provider).ok_or_else(|| {
+                    invalid_request(format!("unknown model provider `{provider}`"))
+                })?;
+            let provider_key_id = provider_info.env_key.as_deref().ok_or_else(|| {
+                invalid_request(format!(
+                    "model provider `{provider}` does not accept provider API key login"
+                ))
+            })?;
+            login_with_provider_api_key(
+                &self.config.codex_home,
+                provider_key_id,
+                &api_key,
+                self.config.cli_auth_credentials_store_mode,
+                self.config.auth_keyring_backend_kind(),
+            )
+            .map_err(|err| internal_error(format!("failed to save provider API key: {err}")))?;
+            self.auth_manager.reload().await;
+            Ok::<LoginAccountResponse, JSONRPCErrorError>(LoginAccountResponse::ApiKey {})
+        }
+        .await;
+        let logged_in = result.is_ok();
+        self.outgoing.send_result(request_id, result).await;
+        if logged_in {
+            self.send_login_success_notifications(/*login_id*/ None)
+                .await;
+        }
+    }
+
     async fn login_amazon_bedrock_v2(
         &self,
         request_id: ConnectionRequestId,
@@ -467,6 +503,7 @@ impl AccountRequestProcessor {
         &self,
         codex_streamlined_login: bool,
         login_success_page: LoginSuccessPage,
+        allow_forced_api_for_provider_login: bool,
     ) -> std::result::Result<LoginServerOptions, JSONRPCErrorError> {
         let config = self.config.as_ref();
 
@@ -544,7 +581,11 @@ impl AccountRequestProcessor {
         login_success_page: LoginSuccessPage,
     ) -> Result<LoginAccountResponse, JSONRPCErrorError> {
         let opts = self
-            .login_chatgpt_common(codex_streamlined_login, login_success_page)
+            .login_chatgpt_common(
+                codex_streamlined_login,
+                login_success_page,
+                /*allow_forced_api_for_provider_login*/ false,
+            )
             .await?;
         let server = run_login_server(opts)
             .map_err(|err| internal_error(format!("failed to start login server: {err}")))?;
@@ -627,6 +668,7 @@ impl AccountRequestProcessor {
             .login_chatgpt_common(
                 /*codex_streamlined_login*/ false,
                 LoginSuccessPage::default(),
+                allow_forced_api_for_provider_login,
             )
             .await?;
         let device_code = request_device_code(&opts)
@@ -976,7 +1018,7 @@ impl AccountRequestProcessor {
                 auth_method: None,
                 auth_token: None,
                 requires_openai_auth: Some(false),
-                has_codex_backend_auth: Some(cached_codex_backend_auth),
+                has_codex_backend_auth: Some(self.auth_manager.current_auth_uses_codex_backend()),
             }
         } else {
             let auth = if do_refresh {
@@ -1017,16 +1059,14 @@ impl AccountRequestProcessor {
                         auth_method: reported_auth_method,
                         auth_token: token_opt,
                         requires_openai_auth: Some(true),
-                        has_codex_backend_auth: Some(
-                            auth.uses_codex_backend() || cached_codex_backend_auth,
-                        ),
+                        has_codex_backend_auth: Some(auth.uses_codex_backend()),
                     }
                 }
                 None => GetAuthStatusResponse {
                     auth_method: None,
                     auth_token: None,
                     requires_openai_auth: Some(true),
-                    has_codex_backend_auth: Some(cached_codex_backend_auth),
+                    has_codex_backend_auth: Some(false),
                 },
             }
         };

@@ -57,17 +57,11 @@ pub fn get_upgrade_version(config: &Config) -> Option<String> {
     })
 }
 
-const PFTERMINAL_LATEST_RELEASE_URL: &str =
-    "https://api.github.com/repos/agtico/PfTerminal/releases/latest";
+const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/agtico/PfTerminal/releases/latest";
 
 #[derive(Deserialize, Debug, Clone)]
 struct ReleaseInfo {
     tag_name: String,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-struct HomebrewCaskInfo {
-    version: String,
 }
 
 async fn check_for_update(
@@ -81,17 +75,6 @@ async fn check_for_update(
     )
     .with_legacy_custom_ca_fallback();
     let latest_version = match action {
-        Some(UpdateAction::BrewUpgrade) => {
-            let HomebrewCaskInfo { version } = client_pool
-                .get(HOMEBREW_CASK_API_URL)
-                .headers(default_headers())
-                .send()
-                .await?
-                .error_for_status()?
-                .json::<HomebrewCaskInfo>()
-                .await?;
-            version
-        }
         Some(UpdateAction::NpmGlobalLatest)
         | Some(UpdateAction::BunGlobalLatest)
         | Some(UpdateAction::PnpmGlobalLatest) => {

@@ -7,14 +7,6 @@ use http::StatusCode;
 use serde_json::Value;
 use serde_json::json;
 
-/// Anthropic documents a 32 MB Messages API request limit. Keep two decimal megabytes of
-/// headroom for serialization differences at proxies and gateways.
-pub(crate) const ANTHROPIC_MESSAGES_REQUEST_BUDGET_BYTES: usize = 30_000_000;
-
-/// A 413 response can indicate a lower intermediary limit. Retry once with a substantially
-/// smaller body instead of resending the request that the provider already rejected.
-pub(crate) const ANTHROPIC_MESSAGES_RETRY_BUDGET_BYTES: usize = 15_000_000;
-
 const OMITTED_IMAGE_PLACEHOLDER: &str = concat!(
     "[Earlier image omitted from this request to stay within the provider payload limit. ",
     "Use view_image again if that visual is still needed.]"

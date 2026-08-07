@@ -1714,10 +1714,7 @@ impl ChatComposer {
         }
     }
 
-    /// Drop a staged slash-command recall entry before it can be committed.
-    ///
-    /// Used for rejected secret-entry commands where the typed args must not be
-    /// made available through Up-arrow recall.
+    /// Discard a staged slash command so sensitive inline input is never added to recall history.
     pub(crate) fn clear_pending_slash_command_history(&mut self) {
         self.pending_slash_command_history = None;
     }
@@ -4907,7 +4904,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -4961,7 +4958,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_footer_hint_override(Some(vec![("K".to_string(), "label".to_string())]));
@@ -4999,7 +4996,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_footer_hint_override(Some(vec![("K".to_string(), "label".to_string())]));
@@ -5048,7 +5045,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             enhanced_keys_supported,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         setup(&mut composer);
@@ -5236,7 +5233,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         let area = Rect::new(0, 0, 40, 5);
@@ -5258,7 +5255,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_status_line_enabled(/*enabled*/ true);
@@ -5317,7 +5314,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_text_content_with_mention_bindings(
@@ -5345,7 +5342,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_text_content_with_mention_bindings(
@@ -5396,7 +5393,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_text_content_with_mention_bindings(
@@ -5432,7 +5429,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         let url = "https://github.com/openai/codex/pull/20252";
@@ -5469,7 +5466,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -5498,7 +5495,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -5767,7 +5764,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -5796,7 +5793,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_vim_enabled(/*enabled*/ true);
@@ -5834,7 +5831,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ true,
         );
         composer.set_vim_enabled(/*enabled*/ true);
@@ -5865,7 +5862,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ true,
         );
         composer.set_vim_enabled(/*enabled*/ true);
@@ -5900,7 +5897,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ true,
         );
         composer.set_collaboration_modes_enabled(/*enabled*/ true);
@@ -5939,7 +5936,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ true,
         );
         composer.set_vim_enabled(/*enabled*/ true);
@@ -5970,7 +5967,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ true,
         );
         composer.set_vim_enabled(/*enabled*/ true);
@@ -5995,7 +5992,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -6019,7 +6016,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -6045,7 +6042,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -6113,7 +6110,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -6146,7 +6143,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_steer_enabled(/*enabled*/ true);
@@ -6187,7 +6184,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_steer_enabled(/*enabled*/ true);
@@ -6221,7 +6218,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_steer_enabled(/*enabled*/ true);
@@ -6252,7 +6249,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_vim_enabled(/*enabled*/ true);
@@ -6292,7 +6289,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ true,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         let area = Rect::new(0, 0, 80, 10);
@@ -6325,7 +6322,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -6371,7 +6368,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         let remote_image_url = "https://example.com/one.png".to_string();
@@ -6413,7 +6410,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -6456,7 +6453,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -6496,7 +6493,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_steer_enabled(true);
@@ -6522,7 +6519,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -6552,7 +6549,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_connectors_enabled(/*enabled*/ true);
@@ -6596,7 +6593,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_connectors_enabled(/*enabled*/ true);
@@ -6636,7 +6633,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_text_content("$".to_string(), Vec::new(), Vec::new());
@@ -7305,7 +7302,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_text_content("$".to_string(), Vec::new(), Vec::new());
@@ -7342,7 +7339,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_connectors_enabled(/*enabled*/ true);
@@ -7592,7 +7589,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_connectors_enabled(/*enabled*/ true);
@@ -7632,7 +7629,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -7878,7 +7875,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -7905,7 +7902,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -7938,7 +7935,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -7981,7 +7978,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8022,7 +8019,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8066,7 +8063,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8115,7 +8112,7 @@ mod tests {
                 /*has_input_focus*/ true,
                 sender,
                 /*enhanced_keys_supported*/ false,
-                "Ask PFTerminal to do anything".to_string(),
+                "Ask Codex to do anything".to_string(),
                 /*disable_paste_burst*/ false,
             );
             composer.set_plugin_mentions(Some(vec![PluginCapabilitySummary {
@@ -8167,7 +8164,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8199,7 +8196,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_mentions_v2_enabled(/*enabled*/ true);
@@ -8235,7 +8232,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8266,7 +8263,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8290,7 +8287,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8324,7 +8321,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8373,7 +8370,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8447,49 +8444,6 @@ mod tests {
         }
     }
 
-    /// Behavior: terminal drivers often inject a full prompt as rapid chars and then send a real
-    /// Enter key. For long single-line prompts, that Enter should submit instead of leaving the
-    /// draft stuck until Ctrl+C appends it to history without dispatching a turn.
-    #[test]
-    fn long_single_line_burst_enter_submits() {
-        use crossterm::event::KeyCode;
-        use crossterm::event::KeyEvent;
-        use crossterm::event::KeyModifiers;
-
-        let (tx, _rx) = unbounded_channel::<AppEvent>();
-        let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(
-            /*has_input_focus*/ true,
-            sender,
-            /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
-            /*disable_paste_burst*/ false,
-        );
-
-        let prompt = "Create file qa_loop.txt containing exactly QA_FILE_EDIT_OK.";
-        let mut now = Instant::now();
-        let step = Duration::from_millis(1);
-        for ch in prompt.chars() {
-            let _ = composer.handle_input_basic_with_time(
-                KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
-                now,
-            );
-            now += step;
-        }
-
-        let (result, _) = composer.handle_submission_with_time(/*should_queue*/ false, now);
-
-        assert_eq!(
-            result,
-            InputResult::Submitted {
-                text: prompt.to_string(),
-                text_elements: Vec::new(),
-            }
-        );
-        assert!(composer.draft.textarea.text().is_empty());
-        assert!(!composer.is_in_paste_burst());
-    }
-
     /// Behavior: startup-pending submissions are queued immediately, so Enter should flush any
     /// buffered burst text into that queued message instead of turning into a draft newline.
     #[test]
@@ -8504,7 +8458,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8549,7 +8503,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8579,7 +8533,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8615,7 +8569,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8648,7 +8602,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8679,7 +8633,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8708,7 +8662,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8742,7 +8696,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_steer_enabled(true);
@@ -8770,7 +8724,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_steer_enabled(true);
@@ -8812,7 +8766,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_steer_enabled(false);
@@ -8857,7 +8811,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -8898,7 +8852,7 @@ mod tests {
                 /*has_input_focus*/ true,
                 sender.clone(),
                 /*enhanced_keys_supported*/ false,
-                "Ask PFTerminal to do anything".to_string(),
+                "Ask Codex to do anything".to_string(),
                 /*disable_paste_burst*/ false,
             );
 
@@ -9014,7 +8968,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -9042,7 +8996,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         type_chars_humanlike(&mut composer, &['/', 'm', 'o']);
@@ -9073,7 +9027,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -9101,7 +9055,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -9124,7 +9078,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         type_chars_humanlike(&mut composer, &['/', 'r', 'e', 's']);
@@ -9155,7 +9109,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -9178,7 +9132,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         type_chars_humanlike(&mut composer, &['/', 'p', 'e', 't']);
@@ -9209,7 +9163,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -9232,7 +9186,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         type_chars_humanlike(&mut composer, &['/', 'b', 't']);
@@ -9263,7 +9217,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -9286,7 +9240,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         type_chars_humanlike(&mut composer, &['/', 's', 'i']);
@@ -9313,7 +9267,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_service_tier_commands_enabled(/*enabled*/ true);
@@ -9374,7 +9328,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -9426,7 +9380,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_steer_enabled(true);
@@ -9460,7 +9414,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.draft.textarea.insert_str("restore me");
@@ -9498,7 +9452,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_task_running(/*running*/ true);
@@ -9542,7 +9496,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_queue_submissions(/*queue_submissions*/ true);
@@ -9578,7 +9532,7 @@ mod tests {
                 /*has_input_focus*/ true,
                 sender,
                 /*enhanced_keys_supported*/ false,
-                "Ask PFTerminal to do anything".to_string(),
+                "Ask Codex to do anything".to_string(),
                 /*disable_paste_burst*/ false,
             );
             composer.set_task_running(/*running*/ true);
@@ -9627,7 +9581,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer
@@ -9663,7 +9617,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_task_running(/*running*/ true);
@@ -9696,7 +9650,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         let mut keymap = RuntimeKeymap::defaults();
@@ -9722,7 +9676,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_task_running(/*running*/ true);
@@ -9756,7 +9710,7 @@ mod tests {
                 /*has_input_focus*/ true,
                 sender,
                 /*enhanced_keys_supported*/ false,
-                "Ask PFTerminal to do anything".to_string(),
+                "Ask Codex to do anything".to_string(),
                 /*disable_paste_burst*/ false,
             );
             composer.set_task_running(/*running*/ true);
@@ -9802,7 +9756,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -9830,7 +9784,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_task_running(/*running*/ true);
@@ -9860,7 +9814,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -9885,7 +9839,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -9929,7 +9883,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_collaboration_modes_enabled(/*enabled*/ true);
@@ -9951,7 +9905,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_collaboration_modes_enabled(/*enabled*/ true);
@@ -9972,7 +9926,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -10004,7 +9958,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -10032,7 +9986,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_task_running(/*running*/ false);
@@ -10061,7 +10015,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -10088,7 +10042,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -10138,7 +10092,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_collaboration_modes_enabled(/*enabled*/ true);
@@ -10176,7 +10130,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -10438,7 +10392,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -10517,7 +10471,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -10594,7 +10548,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -10636,7 +10590,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -10681,7 +10635,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -10718,7 +10672,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -10767,7 +10721,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         let path = PathBuf::from("/tmp/image1.png");
@@ -10805,7 +10759,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -10839,7 +10793,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         let remote_image_url = "https://example.com/remote.png".to_string();
@@ -10873,7 +10827,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         let remote_image_urls = vec![
@@ -10905,7 +10859,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -10960,7 +10914,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11011,7 +10965,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11044,7 +10998,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer
@@ -11069,7 +11023,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11102,7 +11056,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_text_content("hello".to_string(), Vec::new(), Vec::new());
@@ -11134,7 +11088,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11166,7 +11120,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11198,7 +11152,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11233,7 +11187,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11258,7 +11212,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11301,7 +11255,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11344,7 +11298,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11387,7 +11341,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11440,7 +11394,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         let path = PathBuf::from("/tmp/image2.png");
@@ -11479,7 +11433,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         let path = PathBuf::from("/tmp/image_dup.png");
@@ -11508,7 +11462,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         let path = PathBuf::from("/tmp/image3.png");
@@ -11551,7 +11505,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11577,7 +11531,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11637,7 +11591,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11700,7 +11654,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11741,7 +11695,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11765,7 +11719,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11802,7 +11756,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11841,7 +11795,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11870,7 +11824,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11917,7 +11871,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11956,7 +11910,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -11981,7 +11935,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12011,7 +11965,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12054,7 +12008,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12079,7 +12033,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12104,7 +12058,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_collaboration_modes_enabled(/*enabled*/ true);
@@ -12138,7 +12092,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12179,7 +12133,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_text_content("!git status".to_string(), Vec::new(), Vec::new());
@@ -12199,7 +12153,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_text_content("!git status".to_string(), Vec::new(), Vec::new());
@@ -12219,7 +12173,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
         composer.set_text_content("git status".to_string(), Vec::new(), Vec::new());
@@ -12239,7 +12193,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12264,7 +12218,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12298,7 +12252,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12324,7 +12278,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12351,7 +12305,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12379,7 +12333,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12400,7 +12354,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12425,7 +12379,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12462,7 +12416,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12482,7 +12436,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12527,7 +12481,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 
@@ -12564,7 +12518,7 @@ mod tests {
             /*has_input_focus*/ true,
             sender,
             /*enhanced_keys_supported*/ false,
-            "Ask PFTerminal to do anything".to_string(),
+            "Ask Codex to do anything".to_string(),
             /*disable_paste_burst*/ false,
         );
 

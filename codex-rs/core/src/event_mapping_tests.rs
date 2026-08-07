@@ -10,7 +10,6 @@ use codex_protocol::items::HookPromptFragment;
 use codex_protocol::items::TurnItem;
 use codex_protocol::items::WebSearchItem;
 use codex_protocol::items::build_hook_prompt_message;
-use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
 use codex_protocol::models::ReasoningItemContent;
@@ -248,43 +247,6 @@ fn parses_assistant_message_input_text_for_backward_compatibility() {
 }
 
 #[test]
-fn parses_plaintext_inter_agent_control_message_for_target_transcript() {
-    let item = ResponseItem::AgentMessage {
-        id: None,
-        author: "/root/troll_burzum".to_string(),
-        recipient: "/root/troll_burzum/orc_snaga".to_string(),
-        content: vec![AgentMessageInputContent::InputText {
-            text: "CONTROL EVENT — INTERRUPT\nActor: Burzum [troll]\nTarget: Snaga [orc]\nProcess effect: durable processes preserved".to_string(),
-        }],
-        metadata: None,
-    };
-
-    let turn_item = parse_turn_item(&item).expect("plaintext control message should be visible");
-    let TurnItem::AgentMessage(message) = turn_item else {
-        panic!("expected visible agent message");
-    };
-    assert!(message.content.iter().any(|content| matches!(
-        content,
-        AgentMessageContent::Text { text } if text.contains("CONTROL EVENT — INTERRUPT")
-    )));
-}
-
-#[test]
-fn does_not_render_encrypted_inter_agent_payload_as_plaintext() {
-    let item = ResponseItem::AgentMessage {
-        id: None,
-        author: "/root/troll_burzum".to_string(),
-        recipient: "/root/troll_burzum/orc_snaga".to_string(),
-        content: vec![AgentMessageInputContent::EncryptedContent {
-            encrypted_content: "opaque-ciphertext".to_string(),
-        }],
-        metadata: None,
-    };
-
-    assert!(parse_turn_item(&item).is_none());
-}
-
-#[test]
 fn skips_unnamed_image_label_text() {
     let image_url = "data:image/png;base64,abc".to_string();
     let label = codex_protocol::models::image_open_tag_text();
@@ -517,6 +479,7 @@ fn parses_reasoning_summary_and_raw_content() {
             text: "raw details".to_string(),
         }]),
         encrypted_content: None,
+        anthropic_content_block: None,
         internal_chat_message_metadata_passthrough: None,
     };
 
@@ -549,8 +512,8 @@ fn parses_reasoning_including_raw_content() {
                 text: "final thought".to_string(),
             },
         ]),
-        anthropic_content_block: None,
         encrypted_content: None,
+        anthropic_content_block: None,
         internal_chat_message_metadata_passthrough: None,
     };
 
@@ -577,6 +540,7 @@ fn parses_web_search_call() {
             query: Some("weather".to_string()),
             queries: None,
         }),
+        anthropic_content_block: None,
         internal_chat_message_metadata_passthrough: None,
     };
 
@@ -607,6 +571,7 @@ fn parses_web_search_open_page_call() {
         action: Some(WebSearchAction::OpenPage {
             url: Some("https://example.com".to_string()),
         }),
+        anthropic_content_block: None,
         internal_chat_message_metadata_passthrough: None,
     };
 
@@ -637,6 +602,7 @@ fn parses_web_search_find_in_page_call() {
             url: Some("https://example.com".to_string()),
             pattern: Some("needle".to_string()),
         }),
+        anthropic_content_block: None,
         internal_chat_message_metadata_passthrough: None,
     };
 
@@ -665,6 +631,7 @@ fn parses_partial_web_search_call_without_action_as_other() {
         id: Some(ResponseItemId::with_suffix("ws", "partial")),
         status: Some("in_progress".to_string()),
         action: None,
+        anthropic_content_block: None,
         internal_chat_message_metadata_passthrough: None,
     };
 

@@ -12,13 +12,11 @@ pub enum UpdateAction {
     NpmGlobalLatest,
     /// Update via `bun install -g @agticorp/pfterminal@latest`.
     BunGlobalLatest,
-    /// Update via `pnpm add -g @openai/codex@latest`.
+    /// Update via `pnpm add -g @agticorp/pfterminal@latest`.
     PnpmGlobalLatest,
-    /// Update via `brew upgrade codex`.
-    BrewUpgrade,
-    /// Update via `curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh`.
+    /// Update with the signed PFTerminal standalone installer.
     StandaloneUnix,
-    /// Update via `$env:PFTERMINAL_NON_INTERACTIVE=1; irm https://github.com/agtico/PfTerminal/releases/latest/download/install.ps1 | iex`.
+    /// Update with the signed PFTerminal Windows installer.
     StandaloneWindows,
 }
 
@@ -29,7 +27,8 @@ impl UpdateAction {
             InstallMethod::Npm => Some(UpdateAction::NpmGlobalLatest),
             InstallMethod::Bun => Some(UpdateAction::BunGlobalLatest),
             InstallMethod::Pnpm => Some(UpdateAction::PnpmGlobalLatest),
-            InstallMethod::Brew => Some(UpdateAction::BrewUpgrade),
+            // PFTerminal is not distributed through the Codex Homebrew cask.
+            InstallMethod::Brew => Some(UpdateAction::StandaloneUnix),
             InstallMethod::Standalone { platform, .. } => Some(match platform {
                 StandalonePlatform::Unix => UpdateAction::StandaloneUnix,
                 StandalonePlatform::Windows => UpdateAction::StandaloneWindows,
@@ -41,10 +40,9 @@ impl UpdateAction {
     /// Returns the list of command-line arguments for invoking the update.
     pub fn command_args(self) -> (&'static str, &'static [&'static str]) {
         match self {
-            UpdateAction::NpmGlobalLatest => ("npm", &["install", "-g", "@openai/codex"]),
-            UpdateAction::BunGlobalLatest => ("bun", &["install", "-g", "@openai/codex"]),
-            UpdateAction::PnpmGlobalLatest => ("pnpm", &["add", "-g", "@openai/codex"]),
-            UpdateAction::BrewUpgrade => ("brew", &["upgrade", "--cask", "codex"]),
+            UpdateAction::NpmGlobalLatest => ("npm", &["install", "-g", "@agticorp/pfterminal"]),
+            UpdateAction::BunGlobalLatest => ("bun", &["install", "-g", "@agticorp/pfterminal"]),
+            UpdateAction::PnpmGlobalLatest => ("pnpm", &["add", "-g", "@agticorp/pfterminal"]),
             UpdateAction::StandaloneUnix => (
                 "sh",
                 &[

@@ -47,6 +47,10 @@ pub(super) async fn enrich_loaded_threads<T>(
                 return;
             };
             match loaded_thread.agent_status().await {
+                AgentStatus::Unloaded => {
+                    thread.status = ThreadStatus::NotLoaded;
+                    return;
+                }
                 AgentStatus::Running => {
                     if watched_status.is_none() {
                         thread.status = resolve_thread_status(

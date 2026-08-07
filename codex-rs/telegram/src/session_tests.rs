@@ -128,7 +128,7 @@ async fn clear_turn_for_thread_removes_pending_approvals() {
 async fn replacement_thread_overwrites_stale_persisted_mapping() {
     let codex_home = unique_temp_dir("codex-telegram-session-replacement");
     fs::create_dir_all(&codex_home).expect("create codex home");
-    let conversation = ConversationKey::new(ChatId(42), None);
+    let conversation = ConversationKey::new(ChatId(42), /*thread_id*/ None);
     let sessions = SessionStore::load(&codex_home).await.unwrap();
     sessions
         .set_thread(conversation, "stale-thread".to_string())

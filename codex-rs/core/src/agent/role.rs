@@ -19,47 +19,22 @@ use codex_config::ConfigLayerStackOrdering;
 use codex_config::config_toml::ConfigToml;
 use codex_config::loader::resolve_relative_paths_in_config_toml;
 use codex_exec_server::LOCAL_FS;
-use codex_protocol::openai_models::ReasoningEffort;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::path::Path;
-use std::str::FromStr;
 use std::sync::LazyLock;
 use toml::Value as TomlValue;
 
 /// The role name used when a caller omits `agent_type`.
 pub const DEFAULT_ROLE_NAME: &str = "default";
 const AGENT_TYPE_UNAVAILABLE_ERROR: &str = "agent type is currently not available";
-const AGENT_NAMES: &str = include_str!("agent_names.txt");
 
-fn default_agent_nickname_list() -> Vec<&'static str> {
-    AGENT_NAMES
-        .lines()
-        .map(str::trim)
-        .filter(|name| !name.is_empty())
-        .collect()
-}
-
-pub(crate) fn agent_nickname_candidates(config: &Config, role_name: Option<&str>) -> Vec<String> {
-    let role_name = role_name.unwrap_or(DEFAULT_ROLE_NAME);
-    if let Some(candidates) =
-        resolve_role_config(config, role_name).and_then(|role| role.nickname_candidates.clone())
-    {
-        return candidates;
-    }
-
-    default_agent_nickname_list()
-        .into_iter()
-        .map(ToOwned::to_owned)
-        .collect()
-}
-
-/// Applies a named role layer to `config` while preserving caller-owned runtime settings.
+/// Applies a named role layer to `config` while preserving caller-owned provider settings.
 ///
 /// The role layer is inserted at session-flag precedence so it can override persisted config, but
-/// the caller's current `model`, `model_provider`, and `service_tier` remain sticky runtime
-/// choices unless the role explicitly sets the corresponding top-level config key. Rebuilding the
-/// config without those overrides would make a spawned agent silently fall back to default settings.
+/// the caller's current `model_provider` and `service_tier` remain sticky runtime choices unless
+/// the role explicitly sets the corresponding top-level config key. Rebuilding the config without
+/// those overrides would make a spawned agent silently fall back to default settings.
 pub(crate) async fn apply_role_to_config(
     config: &mut Config,
     role_name: Option<&str>,
@@ -130,24 +105,10 @@ async fn apply_role_to_config_inner(
     {
         return Ok(());
     }
-    let role_sets_model_runtime =
-        role_layer_toml.get("model").is_some() || role_layer_toml.get("model_provider").is_some();
-    let explicit_role_model = role_layer_toml
-        .get("model")
-        .and_then(TomlValue::as_str)
-        .map(ToOwned::to_owned);
-    let preserve_current_model = !role_sets_model_runtime;
-    let preserved_current_model = preserve_current_model
-        .then(|| config.model.clone())
-        .flatten();
     let preserve_current_provider = role_layer_toml.get("model_provider").is_none();
     let preserve_current_service_tier = role_layer_toml.get("service_tier").is_none();
-    let role_reasoning_effort = role_layer_toml
-        .get("model_reasoning_effort")
-        .and_then(TomlValue::as_str)
-        .and_then(|value| ReasoningEffort::from_str(value).ok());
 
-    let mut next_config = reload::build_next_config(
+    *config = reload::build_next_config(
         config,
         role_layer_toml,
         developer_instructions,
@@ -155,15 +116,6 @@ async fn apply_role_to_config_inner(
         preserve_current_service_tier,
     )
     .await?;
-    if let Some(model) = explicit_role_model {
-        next_config.model = Some(model);
-    } else if let Some(model) = preserved_current_model {
-        next_config.model = Some(model);
-    }
-    if let Some(reasoning_effort) = role_reasoning_effort {
-        next_config.model_reasoning_effort = Some(reasoning_effort);
-    }
-    *config = next_config;
     Ok(())
 }
 
@@ -310,9 +262,6 @@ mod reload {
         preserve_current_service_tier: bool,
     ) -> ConfigOverrides {
         ConfigOverrides {
-            model: preserve_current_model
-                .then(|| config.model.clone())
-                .flatten(),
             cwd: Some(config.cwd.to_path_buf()),
             model: preserve_current_model
                 .then(|| config.model.clone())
@@ -321,7 +270,6 @@ mod reload {
             service_tier: preserve_current_service_tier.then(|| config.service_tier.clone()),
             codex_linux_sandbox_exe: config.codex_linux_sandbox_exe.clone(),
             main_execve_wrapper_exe: config.main_execve_wrapper_exe.clone(),
-            workspace_roots: Some(config.workspace_roots.clone()),
             ..Default::default()
         }
     }
@@ -456,65 +404,6 @@ Rules:
                         nickname_candidates: None,
                     }
                 ),
-                (
-                    "nazgul".to_string(),
-                    AgentRoleConfig {
-                        description: Some(r#"Use `nazgul` for CTO-level architecture, delegation, security review, and orchestration.
-Nazgul report to Sauron/the human, translate the user's vision into implementation blueprints, delegate execution to Trolls rather than Orc ICs, and do not act as individual contributors."#.to_string()),
-                        config_file: Some("nazgul.toml".to_string().parse().unwrap_or_default()),
-                        nickname_candidates: Some(vec![
-                            "Angmar".to_string(),
-                            "Khamul".to_string(),
-                            "Morgul".to_string(),
-                            "DolGuldur".to_string(),
-                            "MinasMorgul".to_string(),
-                            "Guldur".to_string(),
-                            "Nurn".to_string(),
-                            "Cirith".to_string(),
-                            "Barad".to_string(),
-                        ]),
-                    }
-                ),
-                (
-                    "troll".to_string(),
-                    AgentRoleConfig {
-                        description: Some(r#"Use `troll` for engineering-manager supervision, review, coordination, and enforcement.
-Trolls report to the Nazgul CTO, manage Orc IC executors, prefer delegation over implementation, must wait for Orcs to finish before claiming completion, and must critically review Orc output before reporting final results."#.to_string()),
-                        config_file: Some("troll.toml".to_string().parse().unwrap_or_default()),
-                        nickname_candidates: Some(vec![
-                            "Burzum".to_string(),
-                            "Durbat".to_string(),
-                            "Lugburz".to_string(),
-                            "Ashdurb".to_string(),
-                            "Ghashlug".to_string(),
-                            "Krimpat".to_string(),
-                            "Durburz".to_string(),
-                            "Ugburz".to_string(),
-                            "Burzglob".to_string(),
-                            "Skailug".to_string(),
-                        ]),
-                    }
-                ),
-                (
-                    "orc".to_string(),
-                    AgentRoleConfig {
-                        description: Some(r#"Use `orc` for direct IC execution work under a supervising Troll.
-Orcs follow the Troll's assignment exactly, do not expand scope, produce concrete evidence such as changed files, tests, benchmark output, or findings, and must not spawn child agents."#.to_string()),
-                        config_file: Some("orc.toml".to_string().parse().unwrap_or_default()),
-                        nickname_candidates: Some(vec![
-                            "Snaga".to_string(),
-                            "Ghash".to_string(),
-                            "Krimp".to_string(),
-                            "Lug".to_string(),
-                            "Ruk".to_string(),
-                            "Uzg".to_string(),
-                            "Mauh".to_string(),
-                            "Thrak".to_string(),
-                            "Narg".to_string(),
-                            "Glob".to_string(),
-                        ]),
-                    }
-                ),
                 // Awaiter is temp removed
 //                 (
 //                     "awaiter".to_string(),
@@ -542,30 +431,9 @@ Orcs follow the Troll's assignment exactly, do not expand scope, produce concret
     pub(super) fn config_file_contents(path: &Path) -> Option<&'static str> {
         const EXPLORER: &str = include_str!("builtins/explorer.toml");
         const AWAITER: &str = include_str!("builtins/awaiter.toml");
-        const NAZGUL: &str = concat!(
-            include_str!("builtins/nazgul.toml"),
-            "\nbase_instructions = '''",
-            include_str!("builtins/nazgul_base.md"),
-            "'''\n"
-        );
-        const TROLL: &str = concat!(
-            include_str!("builtins/troll.toml"),
-            "\nbase_instructions = '''",
-            include_str!("builtins/troll_base.md"),
-            "'''\n"
-        );
-        const ORC: &str = concat!(
-            include_str!("builtins/orc.toml"),
-            "\nbase_instructions = '''",
-            include_str!("builtins/orc_base.md"),
-            "'''\n"
-        );
         match path.to_str()? {
             "explorer.toml" => Some(EXPLORER),
             "awaiter.toml" => Some(AWAITER),
-            "nazgul.toml" => Some(NAZGUL),
-            "troll.toml" => Some(TROLL),
-            "orc.toml" => Some(ORC),
             _ => None,
         }
     }

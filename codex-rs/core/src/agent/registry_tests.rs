@@ -194,38 +194,6 @@ fn release_is_idempotent_for_registered_threads() {
 }
 
 #[test]
-fn restored_threads_are_counted_once_and_keep_their_path_reserved() {
-    let registry = Arc::new(AgentRegistry::default());
-    let thread_id = ThreadId::new();
-    let path = agent_path("/root/worker");
-    let metadata = AgentMetadata {
-        agent_id: Some(thread_id),
-        agent_path: Some(path.clone()),
-        agent_nickname: Some("Worker".to_string()),
-        ..Default::default()
-    };
-
-    registry.restore_spawned_thread(metadata.clone());
-    registry.restore_spawned_thread(metadata);
-
-    assert_eq!(registry.agent_id_for_path(&path), Some(thread_id));
-    let err = match registry.reserve_spawn_slot(Some(1)) {
-        Ok(_) => panic!("the restored thread must consume exactly one configured slot"),
-        Err(err) => err,
-    };
-    let CodexErr::AgentLimitReached { max_threads } = err else {
-        panic!("expected CodexErr::AgentLimitReached");
-    };
-    assert_eq!(max_threads, 1);
-
-    registry.release_spawned_thread(thread_id);
-    let reservation = registry
-        .reserve_spawn_slot(Some(1))
-        .expect("releasing the restored thread should free its single slot");
-    drop(reservation);
-}
-
-#[test]
 fn failed_spawn_keeps_nickname_marked_used() {
     let registry = Arc::new(AgentRegistry::default());
     let mut reservation = registry
@@ -244,28 +212,6 @@ fn failed_spawn_keeps_nickname_marked_used() {
         .reserve_agent_nickname_with_preference(&["alpha", "beta"], /*preferred*/ None)
         .expect("unused name should still be preferred");
     assert_eq!(agent_nickname, "beta");
-}
-
-#[test]
-fn preferred_nickname_collision_gets_ordinal_suffix() {
-    let registry = Arc::new(AgentRegistry::default());
-    let mut first = registry
-        .reserve_spawn_slot(/*max_threads*/ None)
-        .expect("reserve first slot");
-    let first_name = first
-        .reserve_agent_nickname_with_preference(&["alpha"], Some("Snaga"))
-        .expect("reserve preferred name");
-    let first_id = ThreadId::new();
-    first.commit(agent_metadata(first_id));
-    assert_eq!(first_name, "Snaga");
-
-    let mut second = registry
-        .reserve_spawn_slot(/*max_threads*/ None)
-        .expect("reserve second slot");
-    let second_name = second
-        .reserve_agent_nickname_with_preference(&["beta"], Some("Snaga"))
-        .expect("duplicate preferred name should be made unique");
-    assert_eq!(second_name, "Snaga the 2nd");
 }
 
 #[test]

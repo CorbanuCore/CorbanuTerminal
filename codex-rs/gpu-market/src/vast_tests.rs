@@ -80,13 +80,14 @@ async fn mount_funded_account(server: &MockServer, expected_requests: u64) {
 
 fn create_request() -> CreateInstanceRequest {
     let request = requirements();
-    let raw = offers_response(3.25)["offers"][0].clone();
+    let raw = offers_response(/*price*/ 3.25)["offers"][0].clone();
     CreateInstanceRequest {
         offer: vast_offer(&raw, &request, unix_now_ms()).expect("valid test offer"),
         client_operation_id: "operation-1".to_string(),
         ownership_tag: "pft-install-rental-1".to_string(),
         image: "runtime@sha256:abc".to_string(),
         disk_gib: 400,
+        container_entrypoint: Vec::new(),
         launch_command: vec!["model-id".to_string(), "argument with space".to_string()],
         inference_port: 8000,
         endpoint_token: SecretValue::new("endpoint-secret".to_string()).unwrap(),
@@ -97,10 +98,12 @@ fn create_request() -> CreateInstanceRequest {
 #[tokio::test]
 async fn verified_offer_quotes_recipe_disk_in_the_full_hourly_price() {
     let server = MockServer::start().await;
-    mount_funded_account(&server, 1).await;
+    mount_funded_account(&server, /*expected_requests*/ 1).await;
     Mock::given(method("POST"))
         .and(path("/v0/bundles/"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(offers_response(3.25)))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(offers_response(/*price*/ 3.25)),
+        )
         .mount(&server)
         .await;
 
@@ -124,10 +127,12 @@ async fn verified_offer_quotes_recipe_disk_in_the_full_hourly_price() {
 #[tokio::test]
 async fn create_is_bound_to_atomic_exact_ask_and_ownership_label() {
     let server = MockServer::start().await;
-    mount_funded_account(&server, 2).await;
+    mount_funded_account(&server, /*expected_requests*/ 2).await;
     Mock::given(method("POST"))
         .and(path("/v0/bundles/"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(offers_response(3.25)))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(offers_response(/*price*/ 3.25)),
+        )
         .expect(1)
         .mount(&server)
         .await;
@@ -154,6 +159,7 @@ async fn create_is_bound_to_atomic_exact_ask_and_ownership_label() {
             ownership_tag: "pft-install-rental-1".to_string(),
             image: "runtime@sha256:abc".to_string(),
             disk_gib: 400,
+            container_entrypoint: Vec::new(),
             launch_command: vec!["model-id".to_string(), "argument with space".to_string()],
             inference_port: 8000,
             endpoint_token: SecretValue::new("endpoint-secret".to_string()).unwrap(),
@@ -189,7 +195,7 @@ async fn create_is_bound_to_atomic_exact_ask_and_ownership_label() {
 #[tokio::test]
 async fn rejected_create_with_disappeared_offer_is_reported_as_capacity_race() {
     let server = MockServer::start().await;
-    mount_funded_account(&server, 2).await;
+    mount_funded_account(&server, /*expected_requests*/ 2).await;
     Mock::given(method("PUT"))
         .and(path("/v0/asks/987/"))
         .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
@@ -222,7 +228,7 @@ async fn rejected_create_with_disappeared_offer_is_reported_as_capacity_race() {
 #[tokio::test]
 async fn rejected_create_with_still_rentable_offer_preserves_provider_rejection() {
     let server = MockServer::start().await;
-    mount_funded_account(&server, 2).await;
+    mount_funded_account(&server, /*expected_requests*/ 2).await;
     Mock::given(method("PUT"))
         .and(path("/v0/asks/987/"))
         .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
@@ -235,7 +241,9 @@ async fn rejected_create_with_still_rentable_offer_preserves_provider_rejection(
     Mock::given(method("POST"))
         .and(path("/v0/bundles/"))
         .and(body_partial_json(serde_json::json!({"id": {"eq": 987}})))
-        .respond_with(ResponseTemplate::new(200).set_body_json(offers_response(3.25)))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(offers_response(/*price*/ 3.25)),
+        )
         .expect(1)
         .mount(&server)
         .await;
@@ -291,7 +299,7 @@ fn provider_numeric_and_name_normalization_preserve_recipe_contract() {
             "cuda_max_good": 13.2
         }),
         &requirements(),
-        1,
+        /*now_ms*/ 1,
     )
     .unwrap();
 
@@ -480,7 +488,7 @@ async fn null_get_by_id_and_empty_inventory_remain_ambiguous() {
 #[tokio::test]
 async fn malformed_response_is_sanitized() {
     let server = MockServer::start().await;
-    mount_funded_account(&server, 1).await;
+    mount_funded_account(&server, /*expected_requests*/ 1).await;
     Mock::given(method("POST"))
         .and(path("/v0/bundles/"))
         .respond_with(ResponseTemplate::new(200).set_body_string(TEST_KEY))

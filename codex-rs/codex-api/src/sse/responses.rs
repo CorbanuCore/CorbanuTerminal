@@ -119,7 +119,7 @@ struct ResponseCompleted {
     end_turn: Option<bool>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize)]
 struct ResponseCompletedUsage {
     input_tokens: i64,
     input_tokens_details: Option<ResponseCompletedInputTokensDetails>,
@@ -500,7 +500,6 @@ async fn process_sse_with_treatment(
     let mut stream = stream.eventsource();
     let mut response_error: Option<ApiError> = None;
     let mut last_server_model: Option<String> = None;
-    let mut pending_usage: Option<TokenUsage> = None;
 
     loop {
         let start = Instant::now();
@@ -580,19 +579,9 @@ async fn process_sse_with_treatment(
             return;
         }
 
-        if event.kind() == "response.usage" {
-            pending_usage = event.token_usage();
-            continue;
-        }
-
         match process_responses_event(event) {
-            Ok(Some(mut event)) => {
+            Ok(Some(event)) => {
                 let is_completed = matches!(event, ResponseEvent::Completed { .. });
-                if let ResponseEvent::Completed { token_usage, .. } = &mut event
-                    && token_usage.is_none()
-                {
-                    *token_usage = pending_usage.take();
-                }
                 if tx_event.send(Ok(event)).await.is_err() {
                     return;
                 }

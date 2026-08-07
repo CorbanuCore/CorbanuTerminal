@@ -326,8 +326,10 @@ async fn remote_models_long_model_slug_is_sent_with_custom_reasoning() -> Result
     skip_if_sandbox!(Ok(()));
 
     let server = MockServer::start().await;
-    let requested_model = "gpt-5.3-codex-test";
-    let prefix_model = "gpt-5.3-codex";
+    // Use a truly remote-only prefix. Bundled model metadata deliberately owns
+    // the allowed reasoning levels for overlapping slugs.
+    let requested_model = "future-codex-test";
+    let prefix_model = "future-codex";
     let mut remote_model = test_remote_model_with_policy(
         prefix_model,
         ModelVisibility::List,
@@ -504,6 +506,7 @@ async fn remote_models_remote_model_uses_unified_exec() -> Result<()> {
         supports_image_detail_original: false,
         context_window: Some(272_000),
         max_context_window: None,
+        max_output_tokens: None,
         auto_compact_token_limit: None,
         comp_hash: None,
         effective_context_window_percent: 95,
@@ -760,6 +763,7 @@ async fn remote_models_apply_remote_base_instructions() -> Result<()> {
         supports_image_detail_original: false,
         context_window: Some(272_000),
         max_context_window: None,
+        max_output_tokens: None,
         auto_compact_token_limit: None,
         comp_hash: None,
         effective_context_window_percent: 95,
@@ -887,7 +891,7 @@ async fn remote_models_do_not_append_removed_builtin_presets() -> Result<()> {
     assert_eq!(*remote, expected_remote);
     let default_model = available
         .iter()
-        .find(|model| model.show_in_picker)
+        .find(|model| model.is_default)
         .expect("default model should be set");
     assert!(default_model.is_default);
     assert_eq!(
@@ -1225,9 +1229,11 @@ fn bundled_model_slug() -> String {
 }
 
 fn bundled_default_model_slug() -> String {
-    codex_core::test_support::all_model_presets()
+    let presets = codex_core::test_support::all_model_presets();
+    presets
         .iter()
-        .find(|preset| preset.is_default)
+        .find(|preset| preset.model == "gpt-5.6-sol" && preset.show_in_picker)
+        .or_else(|| presets.iter().find(|preset| preset.is_default))
         .expect("bundled models should include a default")
         .model
         .clone()
@@ -1289,6 +1295,7 @@ fn test_remote_model_with_policy(
         supports_image_detail_original: false,
         context_window: Some(272_000),
         max_context_window: None,
+        max_output_tokens: None,
         auto_compact_token_limit: None,
         comp_hash: None,
         effective_context_window_percent: 95,

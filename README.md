@@ -16,26 +16,28 @@ a local Solana wallet for SOL, USDC, and PFTerminal inference plans.
 ### Linux
 
 ```bash
-curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install.sh | sh
+curl --fail --location --proto '=https' --tlsv1.2 \
+  --output pfterminal-install.sh \
+  https://github.com/agtico/PfTerminal/releases/latest/download/install.sh
+less pfterminal-install.sh
+sh pfterminal-install.sh
 ```
 
 ### Windows
 
-```shell
-powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
-```
-
-The standalone installers download from `https://releases.openai.com/codex` by default and fall back to GitHub Releases if a metadata or asset download is unavailable. To force GitHub Releases, set `CODEX_INSTALLER_USE_RELEASES_OPENAI_COM` to `false` (`0` and `no` are also accepted):
-
-```shell
-curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_INSTALLER_USE_RELEASES_OPENAI_COM=false sh
-```
-
 ```powershell
-$env:CODEX_INSTALLER_USE_RELEASES_OPENAI_COM='false'; irm https://chatgpt.com/codex/install.ps1 | iex
+Invoke-WebRequest \
+  https://github.com/agtico/PfTerminal/releases/latest/download/install.ps1 \
+  -OutFile pfterminal-install.ps1
+Get-Content .\pfterminal-install.ps1
+powershell -ExecutionPolicy Bypass -File .\pfterminal-install.ps1
 ```
 
-Codex CLI can also be installed via the following package managers:
+### npm
+
+```bash
+npm install -g @agticorp/pfterminal
+```
 
 ### macOS
 
@@ -48,7 +50,11 @@ Download the latest DMG from
 Terminal install also works on macOS:
 
 ```bash
-curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install.sh | sh
+curl --fail --location --proto '=https' --tlsv1.2 \
+  --output pfterminal-install.sh \
+  https://github.com/agtico/PfTerminal/releases/latest/download/install.sh
+less pfterminal-install.sh
+sh pfterminal-install.sh
 ```
 
 The installer creates a `pfterminal` command, leaves any stock `codex` command
@@ -98,7 +104,10 @@ rm -rf "${PFTERMINAL_HOME:-$HOME/.pfterminal}"
 - Encrypted `/vault` storage for provider API keys and user credentials.
 - `pfterminal telegram` connector for allowlisted Telegram chats.
 - Codex-level coding workflows in a local terminal.
-- Native pane orchestration for Sauron → Nazgul → Troll → Orc agent workflows.
+- Native Codex agent orchestration with exact provider/model routing, catalogue
+  capability and billing metadata, durable agent identity, and `/agent`
+  inspection.
+- First-class `/gpu`, `/telegram`, and `/tasknode` workflows.
 - Separate PFTerminal home at `$HOME/.pfterminal`, so it does not collide with
   a stock Codex install.
 
@@ -109,7 +118,7 @@ PFTerminal ships provider adapters for the following routes:
 | Provider or route | Access |
 | --- | --- |
 | OpenAI | Codex account authentication or an API-backed configuration |
-| Anthropic | Direct Anthropic API keys and Claude Code plan-backed panes |
+| Anthropic | Direct Anthropic API keys and Claude Code plan-backed routes |
 | PFTerminal Plan | Prepaid inference plans purchased with USDC through `/wallet` |
 | Kimi Code | Direct Kimi Code access, including Kimi K3 |
 | Z.AI | Direct Z.AI access, including GLM models and an Anthropic-compatible route |
@@ -156,13 +165,16 @@ Use:
 - `/wallet` to create or restore a wallet, view SOL and USDC, control signing,
   and manage PFTerminal inference plans.
 - `/model` or `pfterminal -m <model>` to choose a model.
-- `/spawn` to create and route multi-agent work.
+- `/agent` to inspect native agents and their exact runtime routes.
+- `/spawn` to delegate a bounded task through native model-aware agents.
+- `/orchestrate` to open the native agent tree for multi-agent work.
+- `/gpu`, `/telegram`, and `/tasknode` for their respective product flows.
 
 ## Core Slash Commands
 
 Slash commands are typed inside the interactive `pfterminal` chat. PFTerminal
-inherits the normal Codex slash commands and adds a few commands for providers,
-credentials, wallets, panes, spawned agents, and Task Node.
+inherits the normal Codex slash commands and adds commands for providers,
+credentials, wallets, GPU rentals, Telegram, native agents, and Task Node.
 
 ### `/providers`
 
@@ -218,41 +230,34 @@ Useful forms:
   secret.
 - `/vault credential add` opens a masked entry flow for adding a new secret.
 
-### `/panes`
-
-Use `/panes` to switch between the main Codex conversation, native Codex agent
-threads, and Claude Code panes. A pane has its own visible transcript and
-running state, so long-running work can continue in one pane while you inspect
-another.
-
-The main pane is `Codex Main`. Other panes may be native Codex agent panes or
-Claude panes created from the pane picker or through `/spawn`.
-
 ### `/spawn`
 
-Use `/spawn` for managed multi-agent work. It can create or bind the hierarchy
-PFTerminal uses for larger tasks:
+`/spawn` opens a bounded-task prompt for the native Codex agent controller. The
+running model receives the authorized catalogue routes, including capability,
+vision support, reasoning levels, plan burn, API prices, and provider policy.
+It should choose the cheapest capable authorized route, prefer suitable plan
+capacity, and refuse an unavailable exact request instead of substituting.
 
-- **Nazgul**: the supervising/root pane.
-- **Troll**: a coordinating implementation or review pane.
-- **Orc**: a focused worker pane.
+The spawn result reports the child thread, provider, model, reasoning effort,
+service tier, billing class, vision capability, and selection rationale.
+`/agent` lists the live tree with each agent's exact route. `/orchestrate` opens
+that same native tree; it does not start a separate pane runtime.
 
-Useful forms:
+Full-history forks keep the selected history contract. Use a partial-history or
+no-history fork when a genuinely independent task needs a different route.
 
-- `/spawn` opens the role picker.
-- `/spawn status` shows the current hierarchy, running state, and recent
-  dispatches.
-- `/spawn nazgul`, `/spawn troll`, and `/spawn orc` create or bind specific
-  roles.
+### `/gpu`
 
-Use `/spawn` when you want work split across persistent panes instead of asking
-the current chat to do everything in one thread.
+`/gpu` opens GPU rental selection and authorization. The current DeepSeek
+recipe is `deepseek-ai/DeepSeek-V4-Flash-0731` on 2×H200 with an immutable model
+revision. PFTerminal shows the topology, hourly price, spend cap, termination
+time, and enforcement mode before any billable provider request.
 
 ## Telegram Connector
 
 `pfterminal telegram` starts a long-polling Telegram bot that sends allowlisted
 chat messages into PFTerminal agent threads and returns streamed replies.
-Configure it in `$CODEX_HOME/config.toml`:
+Configure it in `$HOME/.pfterminal/config.toml`:
 
 ```toml
 [telegram]
@@ -271,28 +276,6 @@ Approvals are confirmed with Telegram inline buttons.
 Run `/telegram` in PFTerminal for the normal masked-token, chat-discovery, and
 connector-management flow. `pfterminal telegram --setup` remains available for
 unattended host configuration.
-
-## Codex Sessions vs Claude Panes
-
-The default PFTerminal experience is a native Codex session. In that mode,
-PFTerminal runs the Codex harness directly: it manages the active model,
-tooling, permissions, local context, and command execution in the main terminal
-session.
-
-A Claude pane is different. It is a managed Claude Code subprocess wrapped by
-PFTerminal through the local exec/pane runner. PFTerminal starts the Claude Code
-process, feeds it the task, tracks its output, stores pane artifacts under
-`$HOME/.pfterminal/panes`, and shows the result inside the PFTerminal pane UI.
-
-In practice:
-
-- Use native Codex when you want the normal PFTerminal/Codex harness.
-- Use a Claude pane when you specifically want Claude Code behavior inside a
-  separate, inspectable pane.
-- Switching to a Claude pane with `/panes` does not turn the whole terminal into
-  Claude. It opens that pane's own subprocess-backed transcript.
-- Claude Plan panes use Claude Code's own plan auth. API-key Claude routes use
-  keys stored through `/providers` or `/vault`.
 
 ## Task Node Quick Guide
 

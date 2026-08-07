@@ -47,7 +47,7 @@ async fn thread_section_migration_preserves_legacy_pin_compatibility() {
         .open_read_write_pool(&state_path)
         .await
         .expect("sqlite database should open");
-    migrator_through(/*version*/ 44)
+    migrator_through(/*version*/ 50)
         .run(&pool)
         .await
         .expect("released thread migrations should apply");
@@ -176,7 +176,7 @@ INSERT INTO threads (
         ]
     );
 
-    let mut released_pin_migrator = migrator_through(/*version*/ 44);
+    let mut released_pin_migrator = migrator_through(/*version*/ 50);
     released_pin_migrator.ignore_missing = true;
     released_pin_migrator
         .run(&pool)
@@ -200,7 +200,7 @@ async fn thread_section_order_migration_backfills_stably() {
         .open_read_write_pool(&sqlite.state_db_path())
         .await
         .expect("sqlite database should open");
-    migrator_through(/*version*/ 45)
+    migrator_through(/*version*/ 51)
         .run(&pool)
         .await
         .expect("pre-ordering migrations should apply");

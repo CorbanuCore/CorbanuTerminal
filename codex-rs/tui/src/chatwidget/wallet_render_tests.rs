@@ -59,6 +59,6 @@ fn wallet_lines_measure_and_render_without_clipping_at_adjacent_widths() {
 
 #[test]
 fn wallet_lines_narrow_and_wide_snapshots() {
-    insta::assert_snapshot!("wallet_lines_content_width_63", render_wallet_lines(63));
-    insta::assert_snapshot!("wallet_lines_content_width_90", render_wallet_lines(90));
+    insta::assert_snapshot!("wallet_lines_content_width_63", render_wallet_lines(/*width*/ 63));
+    insta::assert_snapshot!("wallet_lines_content_width_90", render_wallet_lines(/*width*/ 90));
 }

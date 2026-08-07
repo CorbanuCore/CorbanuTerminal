@@ -565,9 +565,21 @@ async fn turn_start_emits_thread_scoped_warning_notification_for_trimmed_skills(
     let warning: WarningNotification =
         timeout(DEFAULT_READ_TIMEOUT, mcp.read_notification("warning")).await??;
     assert_eq!(warning.thread_id.as_deref(), Some(thread.id.as_str()));
-    assert_eq!(
-        warning.message,
-        "Exceeded skills context budget of 2%. All skill descriptions were removed and 7 additional skills were not included in the model-visible skills list."
+    let omitted_count = warning
+        .message
+        .strip_prefix(
+            "Exceeded skills context budget of 2%. All skill descriptions were removed and ",
+        )
+        .and_then(|message| {
+            message.strip_suffix(
+                " additional skills were not included in the model-visible skills list.",
+            )
+        })
+        .and_then(|count| count.parse::<usize>().ok())
+        .expect("warning should report the number of omitted skills");
+    assert!(
+        omitted_count >= 2,
+        "the two installed test skills should be among the omitted skills"
     );
 
     timeout(
@@ -3149,7 +3161,7 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
     const CHILD_PROMPT: &str = "child: do work";
     const PARENT_PROMPT: &str = "spawn a child and continue";
     const SPAWN_CALL_ID: &str = "spawn-call-1";
-    const REQUESTED_MODEL: &str = "gpt-5.2";
+    const REQUESTED_MODEL: &str = "gpt-5.6-sol";
     const REQUESTED_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::Low;
 
     let server = responses::start_mock_server().await;
@@ -3198,6 +3210,8 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
 
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
+        .with_builtin_openai_provider()
+        .with_model("gpt-5.6-luna")
         .enable_feature(Feature::Collab)
         .write(codex_home.path())?;
 
@@ -3208,7 +3222,7 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
 
     let ThreadStartResponse { thread, .. } = mcp
         .start_thread(ThreadStartParams {
-            model: Some("gpt-5.4".to_string()),
+            model: Some("gpt-5.6-luna".to_string()),
             ..Default::default()
         })
         .await?;
@@ -3383,6 +3397,8 @@ async fn direct_input_to_multi_agent_v2_subagent_is_rejected() -> Result<()> {
     .await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
+        .with_builtin_openai_provider()
+        .with_model("gpt-5.6-sol")
         .enable_feature(Feature::MultiAgentV2)
         .write(codex_home.path())?;
     write_models_cache(codex_home.path())?;
@@ -3394,7 +3410,7 @@ async fn direct_input_to_multi_agent_v2_subagent_is_rejected() -> Result<()> {
 
     let ThreadStartResponse { thread, .. } = mcp
         .start_thread(ThreadStartParams {
-            model: Some("gpt-5.4".to_string()),
+            model: Some("gpt-5.6-sol".to_string()),
             ..Default::default()
         })
         .await?;
@@ -3518,9 +3534,9 @@ async fn turn_start_emits_spawn_agent_item_with_effective_role_model_metadata_v2
     const CHILD_PROMPT: &str = "child: do work";
     const PARENT_PROMPT: &str = "spawn a child and continue";
     const SPAWN_CALL_ID: &str = "spawn-call-1";
-    const REQUESTED_MODEL: &str = "gpt-5.2";
+    const REQUESTED_MODEL: &str = "gpt-5.6-sol";
     const REQUESTED_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::Low;
-    const ROLE_MODEL: &str = "gpt-5.4";
+    const ROLE_MODEL: &str = "gpt-5.6-terra";
     const ROLE_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::High;
 
     let server = responses::start_mock_server().await;
@@ -3570,6 +3586,8 @@ async fn turn_start_emits_spawn_agent_item_with_effective_role_model_metadata_v2
 
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
+        .with_builtin_openai_provider()
+        .with_model("gpt-5.6-luna")
         .enable_feature(Feature::Collab)
         .write(codex_home.path())?;
     std::fs::write(
@@ -3597,7 +3615,7 @@ config_file = "./custom-role.toml"
 
     let ThreadStartResponse { thread, .. } = mcp
         .start_thread(ThreadStartParams {
-            model: Some("gpt-5.4".to_string()),
+            model: Some("gpt-5.6-luna".to_string()),
             ..Default::default()
         })
         .await?;

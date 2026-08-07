@@ -772,7 +772,7 @@ mod tests {
             ExternalAgentConfigMigrationItem {
                 item_type: ExternalAgentConfigMigrationItemType::Config,
                 description:
-                    "Migrate /Users/alex/.claude/settings.json into /Users/alex/.pfterminal/config.toml"
+                    "Migrate /Users/alex/.claude/settings.json into /Users/alex/.codex/config.toml"
                         .to_string(),
                 cwd: None,
                 details: None,

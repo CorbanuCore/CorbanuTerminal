@@ -898,6 +898,7 @@ async fn load_auth_for_pfterminal_falls_back_to_legacy_codex_home() {
         /*chatgpt_base_url*/ None,
         AuthKeyringBackendKind::Direct,
         /*agent_identity_authapi_base_url*/ None,
+        &crate::test_support::transport_default_auth_route_config(),
     )
     .await
     .expect("load auth")
@@ -1741,6 +1742,7 @@ async fn load_auth_reads_ambient_api_key_from_env() {
         /*chatgpt_base_url*/ None,
         AuthKeyringBackendKind::Direct,
         /*agent_identity_authapi_base_url*/ None,
+        &crate::test_support::transport_default_auth_route_config(),
     )
     .await
     .expect("env auth should load")
@@ -2435,6 +2437,7 @@ async fn provider_api_key_login_is_provider_scoped_and_not_primary_auth() {
         /*chatgpt_base_url*/ None,
         AuthKeyringBackendKind::default(),
         /*agent_identity_authapi_base_url*/ None,
+        &crate::test_support::transport_default_auth_route_config(),
     )
     .await
     .expect("primary auth load should succeed");
@@ -2447,6 +2450,7 @@ async fn provider_api_key_login_is_provider_scoped_and_not_primary_auth() {
         /*forced_chatgpt_workspace_id*/ None,
         /*chatgpt_base_url*/ None,
         AuthKeyringBackendKind::default(),
+        crate::test_support::transport_default_auth_route_config(),
     )
     .await;
     assert!(auth_manager.auth_cached().is_none());

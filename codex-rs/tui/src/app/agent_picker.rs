@@ -123,6 +123,7 @@ impl App {
                 continue;
             }
             let agent_path = crate::app_server_session::source_agent_path(&thread.source);
+            let runtime_route = thread.runtime_route.clone();
             let agent_nickname = thread
                 .agent_nickname
                 .or_else(|| previous.and_then(|entry| entry.agent_nickname.clone()));
@@ -134,6 +135,9 @@ impl App {
             }
             self.upsert_agent_picker_thread(thread_id, agent_nickname, agent_role, is_closed);
             self.agent_navigation.set_agent_path(thread_id, agent_path);
+            if let Some(runtime_route) = runtime_route {
+                self.set_agent_picker_runtime_route(thread_id, runtime_route);
+            }
             if !live && update_liveness {
                 self.agent_navigation.set_running(thread_id, is_running);
             }

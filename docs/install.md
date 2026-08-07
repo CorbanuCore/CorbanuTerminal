@@ -41,7 +41,11 @@ verifies the release artifact digest. This is the preferred path for Linux
 users and for macOS users who prefer terminal install over a DMG.
 
 ```bash
-curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install.sh | sh
+curl --fail --location --proto '=https' --tlsv1.2 \
+  --output pfterminal-install.sh \
+  https://github.com/agtico/PfTerminal/releases/latest/download/install.sh
+less pfterminal-install.sh
+sh pfterminal-install.sh
 ```
 
 The release installer creates a `pfterminal` launcher and leaves any existing
@@ -50,10 +54,9 @@ stock `codex` command alone. By default that launcher stores PFTerminal state in
 only when you need a custom install location:
 
 ```bash
-curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install.sh |
-  PFTERMINAL_INSTALL_DIR="$HOME/.local/bin" \
-  PFTERMINAL_HOME="$HOME/.pfterminal" \
-  sh
+PFTERMINAL_INSTALL_DIR="$HOME/.local/bin" \
+PFTERMINAL_HOME="$HOME/.pfterminal" \
+sh pfterminal-install.sh
 ```
 
 The installer requires a published GitHub release. If a fresh clone has no
@@ -256,20 +259,10 @@ The `/model` picker groups models into:
 - `Coding Plans`: OpenAI Codex, Ambient, and Z.AI plan-backed models.
 - `Pay Per API Call`: OpenRouter, Baseten, and Vercel metered models.
 
-Current visible model metadata:
-
-| Model                     | Provider   | Notes                                                                        |
-| ------------------------- | ---------- | ---------------------------------------------------------------------------- |
-| `gpt-5.5`                 | OpenAI     | Codex account model exposed through provider `openai`                        |
-| `zai-org/GLM-5.2-FP8`     | Ambient    | Ambient default GLM 5.2 coding model                                         |
-| `glm-5.2`                 | Z.AI       | Z.AI coding-plan GLM 5.2                                                     |
-| `zai-org/GLM-5.2`         | Baseten    | GLM 5.2, listed as `$1.50/M input`, `$0.30/M cached input`, `$4.50/M output` |
-| `zai/glm-5.2`             | Vercel     | GLM 5.2, listed as `$1.40/M input`, `$0.26/M cached input`, `$4.40/M output` |
-| `zai/glm-5.2-fast`        | Vercel     | GLM 5.2 Fast, listed as `$3.00/M input`, `$0.50/M cached input`, `$10.25/M output` |
-| `z-ai/glm-5.2`            | OpenRouter | GLM 5.2, listed as `$0.98/M input`, `$3.08/M output`                         |
-| `minimax/minimax-m3`      | OpenRouter | MiniMax M3, listed as `$0.30/M input`, `$1.20/M output`                      |
-| `openrouter/owl-alpha`    | OpenRouter | Owl Alpha, listed as `$0/M input`, `$0/M output`                             |
-| `google/gemini-3.5-flash` | OpenRouter | Gemini 3.5 Flash, listed as `$1.50/M input`, `$9.00/M output`                |
+The picker reads its routes, capabilities, plan eligibility, and prices from
+the versioned model catalogue shipped with the installed binary. Use `/model`
+for the current list instead of relying on a documentation copy that can go
+stale between releases.
 
 ## Basic Verification
 

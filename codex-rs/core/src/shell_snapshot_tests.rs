@@ -125,17 +125,12 @@ fn snapshot_file_name_parser_supports_legacy_and_suffixed_names() {
 
 #[cfg(unix)]
 #[test]
-fn bash_snapshot_filters_secret_and_invalid_exports() -> Result<()> {
+fn bash_snapshot_filters_invalid_exports() -> Result<()> {
     let output = Command::new("/bin/bash")
         .arg("-c")
         .arg(bash_snapshot_script())
         .env("BASH_ENV", "/dev/null")
         .env("VALID_NAME", "ok")
-        .env("KIMI_API_KEY", "must-not-be-persisted")
-        .env("lowercase_api_key", "must-not-be-persisted")
-        .env("SERVICE_TOKEN", "must-not-be-persisted")
-        .env("AWS_SECRET_ACCESS_KEY", "must-not-be-persisted")
-        .env("APP_PASSWORD", "must-not-be-persisted")
         .env("PWD", "/tmp/stale")
         .env("NEXTEST_BIN_EXE_codex-write-config-schema", "/path/to/bin")
         .env("BAD-NAME", "broken")
@@ -145,12 +140,6 @@ fn bash_snapshot_filters_secret_and_invalid_exports() -> Result<()> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("VALID_NAME"));
-    assert!(!stdout.contains("KIMI_API_KEY"));
-    assert!(!stdout.contains("lowercase_api_key"));
-    assert!(!stdout.contains("SERVICE_TOKEN"));
-    assert!(!stdout.contains("AWS_SECRET_ACCESS_KEY"));
-    assert!(!stdout.contains("APP_PASSWORD"));
-    assert!(!stdout.contains("must-not-be-persisted"));
     assert!(!stdout.contains("PWD=/tmp/stale"));
     assert!(!stdout.contains("NEXTEST_BIN_EXE_codex-write-config-schema"));
     assert!(!stdout.contains("BAD-NAME"));

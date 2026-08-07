@@ -193,10 +193,31 @@ impl App {
                         )
                     });
                 let uuid = thread_id.to_string();
-                let mut item = SelectionItem {
+                let description = if let Some(route) = entry.runtime_route.as_ref() {
+                    let effort = route
+                        .reasoning_effort
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| "provider default".to_string());
+                    let service_tier = route
+                        .service_tier
+                        .as_deref()
+                        .unwrap_or("default tier");
+                    let catalogue = entry
+                        .catalogue_summary
+                        .as_deref()
+                        .unwrap_or("catalogue evidence unavailable");
+                    format!(
+                        "{uuid} · {}/{} · effort {effort} · {service_tier} · {catalogue}",
+                        route.model_provider, route.model
+                    )
+                } else {
+                    format!("{uuid} · runtime route unavailable")
+                };
+                SelectionItem {
                     name: name.clone(),
                     name_prefix_spans: agent_picker_status_dot_spans(entry.is_closed),
-                    description: Some(uuid.clone()),
+                    description: Some(description),
                     is_current: self.active_thread_id == Some(thread_id),
                     actions: vec![Box::new(move |tx| {
                         tx.send(AppEvent::SelectAgentThread(id));
@@ -204,14 +225,7 @@ impl App {
                     dismiss_on_select: true,
                     search_value: Some(format!("{name} {uuid}")),
                     ..Default::default()
-                };
-                if let Some(reason) = self.unloaded_agent_thread_reason(thread_id) {
-                    item.actions.clear();
-                    item.is_disabled = true;
-                    item.disabled_reason = Some(reason);
-                    item.dismiss_on_select = false;
                 }
-                item
             })
             .collect();
 
@@ -250,7 +264,7 @@ impl App {
     ///
     /// These two writes stay paired so the picker rows and contextual footer continue to describe
     /// the same displayed thread after nickname or role updates.
-    pub(crate) fn upsert_agent_picker_thread(
+    pub(super) fn upsert_agent_picker_thread(
         &mut self,
         thread_id: ThreadId,
         agent_nickname: Option<String>,
@@ -267,6 +281,38 @@ impl App {
         self.sync_active_agent_label();
     }
 
+    /// Records route identity only from an authoritative thread response or live session state.
+    /// Parent configuration is never used as a fallback for a child.
+    pub(super) fn set_agent_picker_session_route(&mut self, session: &ThreadSessionState) {
+        if session.model.trim().is_empty() || session.model_provider_id.trim().is_empty() {
+            return;
+        }
+        self.set_agent_picker_runtime_route(
+            session.thread_id,
+            codex_app_server_protocol::ThreadRuntimeRoute {
+                model_provider: session.model_provider_id.clone(),
+                model: session.model.clone(),
+                reasoning_effort: session.reasoning_effort.clone(),
+                service_tier: session.service_tier.clone(),
+                selection_source: None,
+            },
+        );
+    }
+
+    pub(super) fn set_agent_picker_runtime_route(
+        &mut self,
+        thread_id: ThreadId,
+        runtime_route: codex_app_server_protocol::ThreadRuntimeRoute,
+    ) {
+        let catalogue_summary = runtime_route_summary(&runtime_route, &self.model_catalog);
+        self.agent_navigation.set_runtime_route(
+            thread_id,
+            Some(runtime_route),
+            Some(catalogue_summary),
+        );
+        self.sync_active_agent_label();
+    }
+
     /// Persists the app-server's authoritative ownership flag and updates the active composer.
     pub(super) fn mark_primary_thread_parent_owned(&mut self, thread_id: ThreadId) {
         self.agent_navigation.mark_parent_owned(thread_id);
@@ -277,9 +323,8 @@ impl App {
     ///
     /// Closing a thread is not the same as removing it: users can still inspect finished agent
     /// transcripts, and the stable next/previous traversal order should not collapse around them.
-    pub(crate) fn mark_agent_picker_thread_closed(&mut self, thread_id: ThreadId) {
+    pub(super) fn mark_agent_picker_thread_closed(&mut self, thread_id: ThreadId) {
         self.agent_navigation.mark_closed(thread_id);
-        self.note_assignment_node_gone(&crate::spawn_orchestration::thread_node_id(thread_id));
         self.sync_active_agent_label();
     }
 
@@ -297,6 +342,7 @@ impl App {
             Ok(thread) => {
                 let is_parent_owned = thread_blocks_direct_input(&thread);
                 let agent_path = source_agent_path(&thread.source);
+                let runtime_route = thread.runtime_route.clone();
                 let is_running = matches!(
                     thread.status,
                     codex_app_server_protocol::ThreadStatus::Active { .. }
@@ -323,6 +369,9 @@ impl App {
                     self.agent_navigation.mark_parent_owned(thread_id);
                 }
                 self.agent_navigation.set_agent_path(thread_id, agent_path);
+                if let Some(runtime_route) = runtime_route {
+                    self.set_agent_picker_runtime_route(thread_id, runtime_route);
+                }
                 if is_running {
                     self.agent_navigation.mark_running(thread_id);
                 } else {
@@ -334,11 +383,6 @@ impl App {
             Err(err) => {
                 if Self::is_terminal_thread_read_error(&err) && !has_replay_channel {
                     self.agent_navigation.remove(thread_id);
-                    self.spawn_parent_by_thread.remove(&thread_id);
-                    self.spawn_parent_by_node
-                        .remove(&crate::spawn_orchestration::thread_node_id(thread_id));
-                    self.spawn_parent_reports_by_node
-                        .remove(&crate::spawn_orchestration::thread_node_id(thread_id));
                     return false;
                 }
                 let is_closed = Self::closed_state_for_thread_read_error(
@@ -426,6 +470,7 @@ impl App {
                 (session, turns, false)
             }
         };
+        self.set_agent_picker_session_route(&session);
         let channel = self.ensure_thread_channel(thread_id);
         if !live_attached {
             channel.mark_replay_only();
@@ -468,10 +513,6 @@ impl App {
         app_server: &mut AppServerSession,
         thread_id: ThreadId,
     ) -> Result<()> {
-        self.save_active_claude_pane_transcript();
-        let _ = self
-            .claude_panes
-            .set_active_user_pane(crate::claude_panes::CODEX_MAIN_PANE_ID);
         if self.active_thread_id == Some(thread_id) {
             return Ok(());
         }
@@ -512,10 +553,8 @@ impl App {
                 }
             }
         } else if !self.thread_event_channels.contains_key(&thread_id) && is_replay_only {
-            let message = self
-                .unloaded_agent_thread_reason(thread_id)
-                .unwrap_or_else(|| format!("Agent thread {thread_id} is no longer available."));
-            self.chat_widget.add_error_message(message);
+            self.chat_widget
+                .add_error_message(format!("Agent thread {thread_id} is no longer available."));
             return Ok(());
         }
         let previous_thread_id = self.active_thread_id;
@@ -555,6 +594,20 @@ impl App {
 
         self.reset_for_thread_switch(tui)?;
         self.replay_thread_snapshot(snapshot, !is_replay_only);
+        if let Some(agent_path) = self
+            .agent_navigation
+            .get(&thread_id)
+            .and_then(|entry| entry.agent_path.as_deref())
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+        {
+            self.chat_widget.add_info_message(
+                format!(
+                    "Viewing spawned agent `{agent_path}` ({thread_id}). Its model work, tools, and any nested agents are separate billable activity."
+                ),
+                /*hint*/ None,
+            );
+        }
         if is_replay_only {
             let message = if attached_replay_only {
                 format!(
@@ -579,7 +632,7 @@ impl App {
                 .is_none_or(|entry| !entry.is_closed)
     }
 
-    pub(crate) fn reset_for_thread_switch(&mut self, tui: &mut tui::Tui) -> Result<()> {
+    pub(super) fn reset_for_thread_switch(&mut self, tui: &mut tui::Tui) -> Result<()> {
         self.reset_transcript_state_after_clear();
         tui.clear_pending_history_lines();
         Self::clear_terminal_for_thread_switch(&mut tui.terminal)?;
@@ -605,11 +658,6 @@ impl App {
         self.abort_all_thread_event_listeners();
         self.thread_event_channels.clear();
         self.agent_navigation.clear();
-        self.spawn_parent_by_thread.clear();
-        self.spawn_parent_by_node.clear();
-        self.spawn_crew = None;
-        self.spawn_status_by_thread.clear();
-        self.spawn_parent_reports_by_node.clear();
         self.side_threads.clear();
         self.active_thread_id = None;
         self.active_thread_rx = None;
@@ -652,9 +700,6 @@ impl App {
                 }
                 self.enqueue_primary_thread_session(started.session, started.turns)
                     .await?;
-                self.restore_native_spawn_panes_from_saved_state(app_server)
-                    .await;
-                self.audit_restored_assignments();
                 self.chat_widget.maybe_send_next_queued_input();
             }
             Err(err) => {
@@ -801,7 +846,7 @@ impl App {
     /// by `find_loaded_subagent_threads_for_primary`. Each discovered subagent is registered via
     /// `upsert_agent_picker_thread`, which writes to both `AgentNavigationState` and the
     /// `ChatWidget` metadata map.
-    pub(crate) async fn backfill_loaded_subagent_threads(
+    pub(super) async fn backfill_loaded_subagent_threads(
         &mut self,
         app_server: &mut AppServerSession,
     ) -> LoadedSubagentBackfill {

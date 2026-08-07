@@ -19,7 +19,7 @@ fn map_api_error_classifies_entitlement_401_separately_from_bad_credential() {
         body: Some(entitlement_body),
     }));
     assert!(
-        matches!(err, CodexErr::PlanEntitlementExceeded(_)),
+        matches!(err.details(), CodexErrorDetails::PlanEntitlementExceeded(_)),
         "entitlement 401 must not surface as an invalid API key: {err:?}"
     );
 
@@ -37,7 +37,7 @@ fn map_api_error_classifies_entitlement_401_separately_from_bad_credential() {
         body: Some(auth_body),
     }));
     assert!(
-        matches!(err, CodexErr::UnexpectedStatus(_)),
+        matches!(err.details(), CodexErrorDetails::UnexpectedStatus(_)),
         "a genuine auth 401 keeps the invalid-credential path: {err:?}"
     );
 }
@@ -269,7 +269,7 @@ fn map_api_error_maps_pfterminal_plan_limit_contract() {
         body: Some(body),
     }));
 
-    let CodexErr::UsageLimitReached(usage_limit) = err else {
+    let CodexErrorDetails::UsageLimitReached(usage_limit) = err.details() else {
         panic!("expected CodexErr::UsageLimitReached, got {err:?}");
     };
     assert_eq!(
@@ -305,7 +305,7 @@ fn map_api_error_maps_retry_after_ms_for_generic_429() {
         ),
     }));
 
-    let CodexErr::RetryLimit(retry_limit) = err else {
+    let CodexErrorDetails::RetryLimit(retry_limit) = err.details() else {
         panic!("expected CodexErr::RetryLimit, got {err:?}");
     };
     assert_eq!(retry_limit.request_id.as_deref(), Some("req-429"));
@@ -347,7 +347,7 @@ fn map_api_error_preserves_pfterminal_plan_limit_name_and_reset() {
         body: Some(body),
     }));
 
-    let CodexErr::UsageLimitReached(limit) = &err else {
+    let CodexErrorDetails::UsageLimitReached(limit) = err.details() else {
         panic!("expected PfTerminal plan usage limit, got {err:?}");
     };
     assert_eq!(

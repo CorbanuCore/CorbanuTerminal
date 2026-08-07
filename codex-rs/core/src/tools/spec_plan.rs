@@ -29,8 +29,6 @@ use crate::tools::handlers::RequestUserInputHandler;
 use crate::tools::handlers::ShellCommandHandler;
 use crate::tools::handlers::ShellCommandHandlerOptions;
 use crate::tools::handlers::SleepHandler;
-use crate::tools::handlers::StructuredEditHandler;
-use crate::tools::handlers::StructuredWriteHandler;
 use crate::tools::handlers::TestSyncHandler;
 use crate::tools::handlers::ToolSearchHandlerCache;
 use crate::tools::handlers::ViewImageHandler;
@@ -72,13 +70,10 @@ use codex_protocol::dynamic_tools::DynamicToolNamespaceTool;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::InputModality;
-use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ToolMode;
-use codex_protocol::permissions::FileSystemSandboxKind;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_tools::ResponsesApiNamespace;
 use codex_tools::ResponsesApiNamespaceTool;
-use codex_tools::ResponsesApiTool;
 use codex_tools::TOOL_SEARCH_TOOL_NAME;
 use codex_tools::ToolCall as ExtensionToolCall;
 use codex_tools::ToolEnvironmentMode;
@@ -457,6 +452,42 @@ fn image_generation_available(turn_context: &TurnContext) -> bool {
                 .auth_manager
                 .as_deref()
                 .is_some_and(AuthManager::current_auth_uses_codex_backend))
+}
+
+fn spawn_catalogue_models(
+    turn_context: &TurnContext,
+) -> Vec<codex_protocol::openai_models::ModelPreset> {
+    turn_context
+        .available_models
+        .iter()
+        .filter(|model| {
+            let Some(metadata) = model.orchestration.as_ref() else {
+                return false;
+            };
+            if !metadata.is_spawn_eligible() {
+                return false;
+            }
+            turn_context
+                .config
+                .agent_provider_allowlist
+                .as_ref()
+                .is_none_or(|allowlist| {
+                    allowlist
+                        .iter()
+                        .any(|provider| provider == metadata.provider_id())
+                })
+        })
+        .cloned()
+        .collect()
+}
+
+fn inherited_spawn_runtime(turn_context: &TurnContext) -> SpawnAgentRuntime {
+    SpawnAgentRuntime {
+        model_provider: turn_context.config.model_provider_id.clone(),
+        model: turn_context.model_info.slug.clone(),
+        reasoning_effort: turn_context.reasoning_effort.clone(),
+        service_tier: turn_context.config.service_tier.clone(),
+    }
 }
 
 fn wait_agent_timeout_options(turn_context: &TurnContext) -> WaitAgentTimeoutOptions {
@@ -858,7 +889,7 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
         ));
     }
 
-    if environment_mode.has_environment() && edit_tools_allowed_by_permission_profile(turn_context)
+    if environment_mode.has_environment() && turn_context.model_info.apply_patch_tool_type.is_some()
     {
         let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
         registry.add(ApplyPatchHandler::new(include_environment_id));
@@ -884,21 +915,6 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
     }
 }
 
-fn edit_tools_allowed_by_permission_profile(turn_context: &TurnContext) -> bool {
-    let file_system_policy = turn_context.permission_profile.file_system_sandbox_policy();
-    match file_system_policy.kind {
-        FileSystemSandboxKind::Unrestricted | FileSystemSandboxKind::ExternalSandbox => true,
-        FileSystemSandboxKind::Restricted => {
-            #[allow(deprecated)]
-            let cwd = turn_context.cwd.as_path();
-            file_system_policy.can_write_path_with_cwd(cwd, cwd)
-                || !file_system_policy
-                    .get_writable_roots_with_cwd(cwd)
-                    .is_empty()
-        }
-    }
-}
-
 #[instrument(level = "trace", skip_all)]
 fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut ToolRegistry) {
     let turn_context = context.turn_context;
@@ -919,7 +935,8 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
             registry.register_trusted(override_tool_exposure(
                 multi_agent_v2_handler(
                     SpawnAgentHandlerV2::new(SpawnAgentToolOptions {
-                        available_models: turn_context.available_models.clone(),
+                        available_models: spawn_catalogue_models(turn_context),
+                        inherited_runtime: Some(inherited_spawn_runtime(turn_context)),
                         agent_type_description,
                         expose_agent_type: !turn_context.config.agent_roles.is_empty(),
                         hide_agent_type_model_reasoning: hide_spawn_agent_metadata,
@@ -969,7 +986,8 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
             };
             registry.add_with_exposure(
                 SpawnAgentHandler::new(SpawnAgentToolOptions {
-                    available_models: turn_context.available_models.clone(),
+                    available_models: spawn_catalogue_models(turn_context),
+                    inherited_runtime: Some(inherited_spawn_runtime(turn_context)),
                     agent_type_description,
                     expose_agent_type: !turn_context.config.agent_roles.is_empty(),
                     hide_agent_type_model_reasoning: false,
@@ -1084,173 +1102,6 @@ fn multi_agent_v2_handler(
         }),
         None => Arc::new(handler),
     }
-}
-
-fn v1_plain_function_subagents_enabled(turn_context: &TurnContext) -> bool {
-    let provider_info = turn_context.provider.info();
-    !namespace_tools_enabled(turn_context)
-        && (provider_info.is_ambient()
-            || provider_info.is_kimi_code()
-            || provider_info.is_zai()
-            || provider_info.is_openrouter()
-            || provider_info.is_baseten()
-            || provider_info.is_vercel())
-}
-
-fn spawn_agent_available_models(
-    turn_context: &TurnContext,
-    supports_cross_provider_overrides: bool,
-) -> Vec<ModelPreset> {
-    if !supports_cross_provider_overrides
-        && third_party_provider_without_spawn_model_switching(turn_context)
-    {
-        return Vec::new();
-    }
-    let mut models = turn_context.available_models.clone();
-    if let Some(api_key) = turn_context.auth_manager.as_ref().and_then(|auth| {
-        auth.auth_mode()
-            .map(|mode| mode == codex_app_server_protocol::AuthMode::ApiKey)
-    }) {
-        for model in &mut models {
-            if let Some(metadata) = model.orchestration.as_mut() {
-                metadata.resolve_billing_auth_mode(api_key);
-            }
-        }
-    }
-    // V1 has no provider argument. Advertising a model on another provider makes the generated
-    // tool promise a route the handler cannot represent, so legacy sessions are restricted to
-    // their current provider. V2 carries an explicit provider/model pair and may cross providers.
-    if !supports_cross_provider_overrides {
-        models.retain(|model| {
-            model.provider_id.as_deref() == Some(turn_context.config.model_provider_id.as_str())
-        });
-    }
-    if let Some(allowlist) = turn_context.config.agent_provider_allowlist.as_ref() {
-        models.retain(|model| {
-            model
-                .provider_id
-                .as_ref()
-                .is_some_and(|provider| allowlist.contains(provider))
-        });
-    }
-    models.retain(|model| {
-        model.orchestration.as_ref().is_some_and(
-            codex_protocol::openai_models::ModelOrchestrationMetadata::is_spawn_eligible,
-        )
-    });
-    models
-}
-
-fn spawn_agent_inherited_runtime(turn_context: &TurnContext) -> Option<SpawnAgentRuntime> {
-    let model_provider = turn_context.config.model_provider_id.clone();
-    turn_context
-        .config
-        .agent_provider_allowlist
-        .as_ref()
-        .is_none_or(|allowlist| allowlist.contains(&model_provider))
-        .then(|| SpawnAgentRuntime {
-            model_provider,
-            model: turn_context.model_info.slug.clone(),
-            reasoning_effort: turn_context
-                .reasoning_effort
-                .clone()
-                .or_else(|| turn_context.model_info.default_reasoning_level.clone()),
-            service_tier: turn_context.config.service_tier.clone(),
-        })
-}
-
-fn third_party_provider_without_spawn_model_switching(turn_context: &TurnContext) -> bool {
-    let provider_info = turn_context.provider.info();
-    provider_info.is_ambient()
-        || provider_info.is_kimi_code()
-        || provider_info.is_zai()
-        || provider_info.is_openrouter()
-        || provider_info.is_baseten()
-        || provider_info.is_vercel()
-}
-
-fn multi_agent_v1_plain_function_handler(
-    handler: impl CoreToolRuntime + 'static,
-    plain_name: &'static str,
-) -> Arc<dyn CoreToolRuntime> {
-    Arc::new(MultiAgentV1PlainFunctionOverride {
-        handler: Arc::new(handler),
-        plain_name,
-    })
-}
-
-struct MultiAgentV1PlainFunctionOverride {
-    handler: Arc<dyn CoreToolRuntime>,
-    plain_name: &'static str,
-}
-
-impl ToolExecutor<ToolInvocation> for MultiAgentV1PlainFunctionOverride {
-    fn tool_name(&self) -> ToolName {
-        ToolName::plain(self.plain_name)
-    }
-
-    fn spec(&self) -> ToolSpec {
-        match self.handler.spec() {
-            ToolSpec::Namespace(namespace) => {
-                let mut tool = single_namespace_function(namespace, self.plain_name);
-                tool.name = self.plain_name.to_string();
-                tool.description = format!(
-                    "{}\n\nCompatibility alias for V1 subagent support on providers that do not support namespace tools.",
-                    tool.description
-                );
-                ToolSpec::Function(tool)
-            }
-            spec => spec,
-        }
-    }
-
-    fn exposure(&self) -> ToolExposure {
-        ToolExposure::Direct
-    }
-
-    fn supports_parallel_tool_calls(&self) -> bool {
-        self.handler.supports_parallel_tool_calls()
-    }
-
-    fn search_info(&self) -> Option<ToolSearchInfo> {
-        ToolSearchInfo::from_tool_spec(self.spec(), /*source_info*/ None)
-    }
-
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
-        self.handler.handle(invocation)
-    }
-}
-
-impl CoreToolRuntime for MultiAgentV1PlainFunctionOverride {
-    fn matches_kind(&self, payload: &crate::tools::context::ToolPayload) -> bool {
-        self.handler.matches_kind(payload)
-    }
-
-    fn create_diff_consumer(
-        &self,
-    ) -> Option<Box<dyn crate::tools::registry::ToolArgumentDiffConsumer>> {
-        self.handler.create_diff_consumer()
-    }
-}
-
-fn single_namespace_function(
-    namespace: ResponsesApiNamespace,
-    plain_name: &str,
-) -> ResponsesApiTool {
-    let mut tools = namespace.tools.into_iter();
-    let Some(ResponsesApiNamespaceTool::Function(tool)) = tools.next() else {
-        panic!(
-            "expected V1 multi-agent namespace `{}` to contain one function",
-            namespace.name
-        );
-    };
-    if tools.next().is_some() {
-        panic!(
-            "expected V1 multi-agent namespace `{}` for `{plain_name}` to contain only one function",
-            namespace.name
-        );
-    }
-    tool
 }
 
 struct MultiAgentV2NamespaceOverride {

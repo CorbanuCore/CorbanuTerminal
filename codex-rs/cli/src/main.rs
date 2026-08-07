@@ -2350,8 +2350,8 @@ async fn run_internal_gpu_controller(command: GpuControllerCommand) -> anyhow::R
         .cli_overrides(cli_kv_overrides)
         .build()
         .await?;
-    std::fs::create_dir_all(&config.sqlite_home)?;
-    let controller_lock_path = config.sqlite_home.join("gpu-controller.lock");
+    std::fs::create_dir_all(config.sqlite.home())?;
+    let controller_lock_path = config.sqlite.home().join("gpu-controller.lock");
     let controller_lock = std::fs::OpenOptions::new()
         .create(true)
         .read(true)
@@ -2362,8 +2362,7 @@ async fn run_internal_gpu_controller(command: GpuControllerCommand) -> anyhow::R
         Err(std::fs::TryLockError::WouldBlock) => return Ok(()),
         Err(std::fs::TryLockError::Error(error)) => return Err(error.into()),
     }
-    let state =
-        StateRuntime::init(config.sqlite_home.clone(), "gpu-controller".to_string()).await?;
+    let state = StateRuntime::init(config.sqlite.clone(), "gpu-controller".to_string()).await?;
     let installation_id = codex_core::resolve_installation_id(&config.codex_home).await?;
     let credentials = Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
         codex_vault::Vault::new(config.codex_home.to_path_buf()),
@@ -2413,7 +2412,7 @@ async fn run_internal_gpu_controller(command: GpuControllerCommand) -> anyhow::R
             return Ok(());
         }
         let has_billable_work = state
-            .list_gpu_rentals(1_000)
+            .list_gpu_rentals(/*limit*/ 1_000)
             .await?
             .into_iter()
             .any(|rental| rental.may_be_billable());
@@ -2448,103 +2447,19 @@ async fn run_vault_auth_helper(
 }
 
 async fn run_claude_pane_smoke_command(command: ClaudePaneSmokeCommand) -> anyhow::Result<()> {
-    let cli_kv_overrides = command
-        .config_overrides
-        .parse_overrides()
-        .map_err(anyhow::Error::msg)?;
-    let config = ConfigBuilder::default()
-        .cli_overrides(cli_kv_overrides)
-        .build()
-        .await?;
-    let cwd = command.cwd.unwrap_or_else(|| config.cwd.to_path_buf());
-    let report = codex_tui::claude_panes::run_claude_pane_smoke(
-        codex_tui::claude_panes::ClaudePaneSmokeOptions {
-            codex_home: config.codex_home.to_path_buf(),
-            cwd,
-            providers: command.providers,
-        },
+    let _ = command;
+    anyhow::bail!(
+        "claude-pane-smoke belonged to the retired parallel pane runtime; use native agent/provider qualification instead"
     )
-    .await?;
-    writeln!(std::io::stdout(), "{}", report.summary)?;
-    for entry in &report.entries {
-        let profile = entry.profile.as_deref().unwrap_or("unknown profile");
-        let error = entry
-            .error
-            .as_deref()
-            .map(|error| format!(" - {error}"))
-            .unwrap_or_default();
-        let timings = match (entry.first_turn_duration_ms, entry.second_turn_duration_ms) {
-            (Some(first), Some(second)) => format!("; first={first}ms resume={second}ms"),
-            (Some(first), None) => format!("; first={first}ms"),
-            (None, Some(second)) => format!("; resume={second}ms"),
-            (None, None) => String::new(),
-        };
-        writeln!(
-            std::io::stdout(),
-            "{}: {} ({profile}{timings}){error}",
-            entry.provider,
-            entry.status
-        )?;
-    }
-    if !report.passed {
-        anyhow::bail!(
-            "Claude pane smoke did not pass the selected provider gate; report: {}",
-            report.report_path.display()
-        );
-    }
-    Ok(())
 }
 
 async fn run_claude_pane_workflow_suite_command(
     command: ClaudePaneWorkflowSuiteCommand,
 ) -> anyhow::Result<()> {
-    let cli_kv_overrides = command
-        .config_overrides
-        .parse_overrides()
-        .map_err(anyhow::Error::msg)?;
-    let config = ConfigBuilder::default()
-        .cli_overrides(cli_kv_overrides)
-        .build()
-        .await?;
-    let cwd = command.cwd.unwrap_or_else(|| config.cwd.to_path_buf());
-    let report = codex_tui::claude_panes::run_claude_pane_workflow_suite(
-        codex_tui::claude_panes::ClaudePaneWorkflowOptions {
-            codex_home: config.codex_home.to_path_buf(),
-            cwd,
-            providers: command.providers,
-            workflows: command.workflows,
-        },
+    let _ = command;
+    anyhow::bail!(
+        "claude-pane-workflow-suite belonged to the retired parallel pane runtime; use native agent/provider qualification instead"
     )
-    .await?;
-    writeln!(std::io::stdout(), "{}", report.summary)?;
-    for entry in &report.entries {
-        let profile = entry.profile.as_deref().unwrap_or("unknown profile");
-        let error = entry
-            .error
-            .as_deref()
-            .map(|error| format!(" - {error}"))
-            .unwrap_or_default();
-        writeln!(
-            std::io::stdout(),
-            "{} / {}: {} ({profile}){error}",
-            entry.provider,
-            entry.workflow,
-            entry.status
-        )?;
-        if let Some(audit_path) = entry.audit_path.as_ref() {
-            writeln!(std::io::stdout(), "  audit: {}", audit_path.display())?;
-        }
-        if let Some(artifact_path) = entry.artifact_path.as_ref() {
-            writeln!(std::io::stdout(), "  artifact: {}", artifact_path.display())?;
-        }
-    }
-    if !report.passed {
-        anyhow::bail!(
-            "Claude pane workflow suite failed; report: {}",
-            report.report_path.display()
-        );
-    }
-    Ok(())
 }
 
 fn provider_vault_label_allowed_for_auth_helper(label: &str) -> bool {

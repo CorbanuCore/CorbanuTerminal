@@ -763,6 +763,16 @@
       ],
       "type": "string"
     },
+    "RuntimeSelectionSource": {
+      "description": "Authoritative reason a spawned thread received its initial runtime route.\n\nThis is persisted independently from the route itself so clients can explain whether a child was explicitly pinned or selected by policy without trying to infer intent from model names or the current parent configuration.",
+      "enum": [
+        "explicit_request",
+        "operator_default",
+        "agent_role",
+        "inherited_runtime"
+      ],
+      "type": "string"
+    },
     "SessionSource": {
       "oneOf": [
         {
@@ -1017,6 +1027,18 @@
             "integer",
             "null"
           ]
+        },
+        "runtimeRoute": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ThreadRuntimeRoute"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Exact route configured by the live runtime. Absent for unloaded legacy records whose persisted metadata does not prove the model and effort."
         },
         "section": {
           "anyOf": [
@@ -1910,6 +1932,50 @@
           "type": "object"
         }
       ]
+    },
+    "ThreadRuntimeRoute": {
+      "description": "Authoritative route currently configured for a loaded thread.\n\nStored threads created by older releases may omit this field. Clients must treat an absent route as unavailable identity evidence rather than inheriting or guessing from the viewer.",
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "modelProvider": {
+          "type": "string"
+        },
+        "reasoningEffort": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ReasoningEffort"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selectionSource": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RuntimeSelectionSource"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why the thread received this route when it was created. Legacy and non-spawned threads omit this value."
+        },
+        "serviceTier": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "model",
+        "modelProvider"
+      ],
+      "type": "object"
     },
     "ThreadSection": {
       "description": "An independently persisted, user-visible thread section.",

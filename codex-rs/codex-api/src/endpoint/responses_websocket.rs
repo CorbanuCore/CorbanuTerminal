@@ -917,6 +917,7 @@ mod tests {
         let api_request = ResponsesApiRequest {
             model: "gpt-test".to_string(),
             instructions: "Use the available tools.".to_string(),
+            previous_response_id: None,
             input: vec![ResponseItem::Message {
                 id: Some(ResponseItemId::with_suffix("msg", "1")),
                 role: "user".to_string(),
@@ -951,6 +952,11 @@ mod tests {
                 "traceparent".to_string(),
                 "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01".to_string(),
             )])),
+            thinking_budget: None,
+            emit_usage: None,
+            enable_thinking: None,
+            reasoning_effort: None,
+            provider_options: None,
         };
         let request = ResponsesWsRequest::ResponseCreate(ResponseCreateWsRequest {
             previous_response_id: Some("resp-1".to_string()),

@@ -201,7 +201,7 @@ async fn enqueue_queue_only_agent_mail(codex: &CodexThread, text: &str) {
                 AgentPath::root(),
                 Vec::new(),
                 text.to_string(),
-                /*trigger_turn*/ matches!(delivery, AgentMailDelivery::TriggerTurn),
+                /*trigger_turn*/ false,
             ),
         })
         .await
@@ -479,7 +479,7 @@ async fn any_new_input_interrupts_sleep() {
     wait_for_sleep_item_completed(&codex, FIRST_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
     wait_for_sleep_item_started(&codex, SECOND_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
 
-    submit_agent_mail(&codex, "new mailbox input", AgentMailDelivery::QueueOnly).await;
+    submit_queue_only_agent_mail(&codex, "new mailbox input").await;
     wait_for_sleep_item_completed(&codex, SECOND_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
     wait_for_turn_complete(&codex).await;
 
@@ -666,7 +666,7 @@ async fn injected_user_input_triggers_follow_up_request_with_deltas() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn queued_inter_agent_mail_waits_for_terminal_event_after_reasoning_item() {
+async fn queued_inter_agent_mail_triggers_follow_up_after_reasoning_item() {
     let (gate_reasoning_done_tx, gate_reasoning_done_rx) = oneshot::channel();
 
     let first_chunks = vec![
@@ -676,9 +676,14 @@ async fn queued_inter_agent_mail_waits_for_terminal_event_after_reasoning_item()
             gate_reasoning_done_rx,
             vec![
                 ev_reasoning_item("reason-1", &["thinking"], &[]),
-                ev_message_item_added("msg-1", ""),
-                ev_output_text_delta("first answer"),
-                ev_message_item_done("msg-1", "first answer"),
+                ev_function_call(
+                    "call-stale",
+                    "shell",
+                    r#"{"command":"echo stale tool call"}"#,
+                ),
+                ev_message_item_added("msg-stale", ""),
+                ev_output_text_delta("stale final"),
+                ev_message_item_done("msg-stale", "stale final"),
                 ev_completed("resp-1"),
             ],
         ),
@@ -693,17 +698,10 @@ async fn queued_inter_agent_mail_waits_for_terminal_event_after_reasoning_item()
 
     wait_for_reasoning_item_started(&codex).await;
 
-    submit_agent_mail(
-        &codex,
-        "queued child update",
-        AgentMailDelivery::TriggerTurn,
-    )
-    .await;
+    submit_queue_only_agent_mail(&codex, "queued child update").await;
 
     let _ = gate_reasoning_done_tx.send(());
 
-    wait_for_agent_message(&codex, "first answer").await;
-    server.wait_for_request_count(2).await;
     wait_for_turn_complete(&codex).await;
 
     let requests = server.requests().await;
@@ -713,7 +711,7 @@ async fn queued_inter_agent_mail_waits_for_terminal_event_after_reasoning_item()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn queued_inter_agent_mail_waits_for_terminal_event_after_commentary_message_item() {
+async fn queued_inter_agent_mail_triggers_follow_up_after_commentary_message_item() {
     let (gate_message_done_tx, gate_message_done_rx) = oneshot::channel();
 
     let first_chunks = vec![
@@ -733,9 +731,14 @@ async fn queued_inter_agent_mail_waits_for_terminal_event_after_commentary_messa
                         "phase": "commentary",
                     }
                 }),
-                ev_message_item_added("msg-final", ""),
-                ev_output_text_delta("final answer"),
-                ev_message_item_done("msg-final", "final answer"),
+                ev_function_call(
+                    "call-stale",
+                    "shell",
+                    r#"{"command":"echo stale tool call"}"#,
+                ),
+                ev_message_item_added("msg-stale", ""),
+                ev_output_text_delta("stale final"),
+                ev_message_item_done("msg-stale", "stale final"),
                 ev_completed("resp-1"),
             ],
         ),
@@ -757,18 +760,11 @@ async fn queued_inter_agent_mail_waits_for_terminal_event_after_commentary_messa
     })
     .await;
 
-    submit_agent_mail(
-        &codex,
-        "queued child update",
-        AgentMailDelivery::TriggerTurn,
-    )
-    .await;
+    submit_queue_only_agent_mail(&codex, "queued child update").await;
 
     let _ = gate_message_done_tx.send(());
 
     wait_for_agent_message(&codex, "first answer").await;
-    wait_for_agent_message(&codex, "final answer").await;
-    server.wait_for_request_count(2).await;
 
     wait_for_turn_complete(&codex).await;
 

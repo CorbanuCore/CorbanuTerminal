@@ -16,6 +16,7 @@ use codex_client::HttpTransport;
 use codex_client::RequestTelemetry;
 use codex_client::StreamResponse;
 use codex_client::TransportError;
+use codex_protocol::ResponseItemId;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ReasoningItemReasoningSummary;
@@ -295,6 +296,7 @@ impl From<ChatUsage> for TokenUsage {
                 .prompt_tokens_details
                 .map(|details| details.cached_tokens)
                 .unwrap_or(0),
+            cache_write_input_tokens: 0,
             output_tokens: value.completion_tokens,
             reasoning_output_tokens: value
                 .completion_tokens_details
@@ -807,13 +809,13 @@ impl ChatStreamState {
                     }
                     if self.message_added {
                         let item = ResponseItem::Message {
-                            id: Some(message_id),
+                            id: Some(ResponseItemId::from_server(message_id)),
                             role: "assistant".to_string(),
                             content: vec![ContentItem::OutputText {
                                 text: self.message_text,
                             }],
                             phase: None,
-                            metadata: None,
+                            internal_chat_message_metadata_passthrough: None,
                         };
                         if tx_event
                             .send(Ok(ResponseEvent::OutputItemDone(item)))
@@ -847,12 +849,13 @@ impl ChatStreamState {
                 .id
                 .unwrap_or_else(|| format!("chatcmpl_call_{index}"));
             let item = ResponseItem::FunctionCall {
-                id: Some(format!("fc_{call_id}")),
+                id: Some(ResponseItemId::from_server(format!("fc_{call_id}"))),
                 name: tool_call.name,
                 namespace: None,
                 arguments: tool_call.arguments,
+                encrypted_function_args: None,
                 call_id,
-                metadata: None,
+                internal_chat_message_metadata_passthrough: None,
             };
             if tx_event
                 .send(Ok(ResponseEvent::OutputItemDone(item)))
@@ -911,12 +914,12 @@ impl ChatStreamState {
         }
 
         let item = ResponseItem::Reasoning {
-            id: Some(self.reasoning_id()),
+            id: Some(ResponseItemId::from_server(self.reasoning_id())),
             summary: Vec::new(),
             content: Some(Vec::new()),
             encrypted_content: None,
             anthropic_content_block: None,
-            metadata: None,
+            internal_chat_message_metadata_passthrough: None,
         };
         if tx_event
             .send(Ok(ResponseEvent::OutputItemAdded(item)))
@@ -943,12 +946,12 @@ impl ChatStreamState {
             }]
         });
         let item = ResponseItem::Reasoning {
-            id: Some(self.reasoning_id()),
+            id: Some(ResponseItemId::from_server(self.reasoning_id())),
             summary: Vec::<ReasoningItemReasoningSummary>::new(),
             content,
             encrypted_content: None,
             anthropic_content_block: None,
-            metadata: None,
+            internal_chat_message_metadata_passthrough: None,
         };
         if tx_event
             .send(Ok(ResponseEvent::OutputItemDone(item)))
@@ -975,11 +978,11 @@ impl ChatStreamState {
 
         if !self.message_added {
             let item = ResponseItem::Message {
-                id: Some(self.message_id()),
+                id: Some(ResponseItemId::from_server(self.message_id())),
                 role: "assistant".to_string(),
                 content: Vec::new(),
                 phase: None,
-                metadata: None,
+                internal_chat_message_metadata_passthrough: None,
             };
             if tx_event
                 .send(Ok(ResponseEvent::OutputItemAdded(item)))
@@ -1084,12 +1087,13 @@ fn parse_serialized_function_call_text(text: &str) -> Result<Option<ResponseItem
     };
 
     Ok(Some(ResponseItem::FunctionCall {
-        id: Some(format!("fc_{call_id}")),
+        id: Some(ResponseItemId::from_server(format!("fc_{call_id}"))),
         name,
         namespace: None,
         arguments,
+        encrypted_function_args: None,
         call_id,
-        metadata: None,
+        internal_chat_message_metadata_passthrough: None,
     }))
 }
 
@@ -1486,6 +1490,7 @@ mod tests {
                     output_tokens: 2,
                     reasoning_output_tokens: 0,
                     total_tokens: 5,
+                    ..
                 }),
                 ..
             }) if response_id == "chatcmpl-1"
@@ -1648,7 +1653,7 @@ mod tests {
         assert_matches!(
             &events[0],
             Ok(ResponseEvent::OutputItemAdded(ResponseItem::Reasoning { id: Some(id), .. }))
-                if id == "rs_chatcmpl-reasoning"
+                if id.as_str() == "rs_chatcmpl-reasoning"
         );
         assert_matches!(
             &events[1],
@@ -1813,7 +1818,7 @@ mod tests {
             Duration::from_millis(30),
             DEFAULT_ACTIONABLE_SILENCE_TIMEOUT,
             /*telemetry*/ None,
-            None,
+            /*response_id_hint*/ None,
             /*metrics*/ None,
         )
         .await;
@@ -1862,7 +1867,7 @@ mod tests {
             Duration::from_millis(100),
             Duration::from_millis(30),
             /*telemetry*/ None,
-            None,
+            /*response_id_hint*/ None,
             /*metrics*/ None,
         )
         .await;
@@ -1931,7 +1936,7 @@ mod tests {
             Duration::from_millis(500),
             Duration::from_millis(60),
             /*telemetry*/ None,
-            None,
+            /*response_id_hint*/ None,
             /*metrics*/ None,
         )
         .await;
@@ -1962,7 +1967,7 @@ mod tests {
             Duration::from_millis(10),
             Duration::from_millis(50),
             /*telemetry*/ None,
-            None,
+            /*response_id_hint*/ None,
             /*metrics*/ None,
         )
         .await;
@@ -1990,7 +1995,7 @@ mod tests {
             Duration::from_secs(5),
             DEFAULT_ACTIONABLE_SILENCE_TIMEOUT,
             /*telemetry*/ None,
-            None,
+            /*response_id_hint*/ None,
             /*metrics*/ None,
         )
         .await;

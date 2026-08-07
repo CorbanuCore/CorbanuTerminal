@@ -64,6 +64,7 @@ use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::ResumedHistory;
 use codex_protocol::protocol::RolloutItem;
 use codex_protocol::protocol::RolloutLine;
+use codex_protocol::protocol::RuntimeSelectionSource;
 use codex_protocol::protocol::SessionContextWindow;
 use codex_protocol::protocol::SessionMeta;
 use codex_protocol::protocol::SessionMetaLine;
@@ -98,6 +99,7 @@ pub enum RolloutRecorderParams {
         parent_thread_id: Option<ThreadId>,
         source: Box<SessionSource>,
         thread_source: Option<ThreadSource>,
+        runtime_selection: Option<RuntimeSelectionSource>,
         originator: String,
         base_instructions: BaseInstructions,
         dynamic_tools: Vec<DynamicToolSpec>,
@@ -193,6 +195,7 @@ impl RolloutRecorderParams {
             parent_thread_id,
             source: Box::new(source),
             thread_source,
+            runtime_selection: None,
             originator,
             base_instructions,
             dynamic_tools,
@@ -208,6 +211,20 @@ impl RolloutRecorderParams {
     pub fn with_session_id(mut self, session_id: SessionId) -> Self {
         if let Self::Create { session_id: id, .. } = &mut self {
             *id = session_id;
+        }
+        self
+    }
+
+    pub fn with_runtime_selection(
+        mut self,
+        runtime_selection: Option<RuntimeSelectionSource>,
+    ) -> Self {
+        if let Self::Create {
+            runtime_selection: selected,
+            ..
+        } = &mut self
+        {
+            *selected = runtime_selection;
         }
         self
     }
@@ -804,6 +821,7 @@ impl RolloutRecorder {
                 parent_thread_id,
                 source,
                 thread_source,
+                runtime_selection,
                 originator,
                 base_instructions,
                 dynamic_tools,
@@ -843,6 +861,7 @@ impl RolloutRecorder {
                     agent_path: source.get_agent_path().map(Into::into),
                     source: *source,
                     thread_source,
+                    runtime_selection,
                     model_provider: Some(config.model_provider_id().to_string()),
                     base_instructions: Some(base_instructions),
                     dynamic_tools: if dynamic_tools.is_empty() {

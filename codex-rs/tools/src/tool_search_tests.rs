@@ -93,3 +93,34 @@ fn custom_search_text_is_augmented_with_spec_metadata() {
             .contains("custom: Custom role")
     );
 }
+
+#[test]
+fn custom_search_text_does_not_repeat_normalized_spec_fragments() {
+    let spec = ToolSpec::Function(ResponsesApiTool {
+        name: "create_event".to_string(),
+        description: "Create a calendar event.".to_string(),
+        strict: false,
+        defer_loading: None,
+        parameters: JsonSchema::object(
+            BTreeMap::from([(
+                "start_time".to_string(),
+                JsonSchema::string(/*description*/ None),
+            )]),
+            /*required*/ None,
+            /*additional_properties*/ None,
+        ),
+        output_schema: None,
+    });
+
+    let search_info = ToolSearchInfo::from_spec(
+        "create-event Create a calendar event. start time".to_string(),
+        spec,
+        /*source_info*/ None,
+    )
+    .expect("function should be searchable");
+
+    assert_eq!(
+        search_info.entry.search_text,
+        "create-event Create a calendar event. start time"
+    );
+}

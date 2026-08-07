@@ -15,6 +15,7 @@ pub struct MockResponsesConfig {
     root_config: Vec<String>,
     provider_config: Vec<String>,
     extra_config: Vec<String>,
+    use_builtin_openai_provider: bool,
 }
 
 impl MockResponsesConfig {
@@ -30,6 +31,7 @@ impl MockResponsesConfig {
             root_config: Vec::new(),
             provider_config: Vec::new(),
             extra_config: Vec::new(),
+            use_builtin_openai_provider: false,
         }
     }
 
@@ -50,6 +52,17 @@ impl MockResponsesConfig {
 
     pub fn with_model(mut self, model: &str) -> Self {
         self.model = model.to_string();
+        self
+    }
+
+    /// Route a mock server through the canonical OpenAI provider.
+    ///
+    /// Spawn tests must use a catalogue-valid provider/model pair because production spawn
+    /// policy deliberately rejects arbitrary custom-provider aliases for known models.
+    pub fn with_builtin_openai_provider(mut self) -> Self {
+        self.provider_id = "openai".to_string();
+        self.provider_name = "OpenAI".to_string();
+        self.use_builtin_openai_provider = true;
         self
     }
 
@@ -109,6 +122,7 @@ impl MockResponsesConfig {
             root_config,
             provider_config,
             extra_config,
+            use_builtin_openai_provider,
         } = self;
         let root_config = root_config.join("\n");
         let provider_config = provider_config.join("\n");
@@ -131,6 +145,26 @@ impl MockResponsesConfig {
             format!("[features]\n{feature_entries}\n\n")
         };
 
+        let openai_base_url = if use_builtin_openai_provider {
+            format!("openai_base_url = \"{provider_base_url}\"\n")
+        } else {
+            String::new()
+        };
+        let provider_table = if use_builtin_openai_provider {
+            String::new()
+        } else {
+            format!(
+                r#"[model_providers.{provider_id}]
+name = "{provider_name}"
+base_url = "{provider_base_url}"
+wire_api = "responses"
+request_max_retries = 0
+stream_max_retries = 0
+{provider_config}
+"#
+            )
+        };
+
         std::fs::write(
             codex_home.join("config.toml"),
             format!(
@@ -140,14 +174,9 @@ approval_policy = "{approval_policy}"
 sandbox_mode = "{sandbox_mode}"
 {root_config}
 model_provider = "{provider_id}"
+{openai_base_url}
 
-{feature_config}[model_providers.{provider_id}]
-name = "{provider_name}"
-base_url = "{provider_base_url}"
-wire_api = "responses"
-request_max_retries = 0
-stream_max_retries = 0
-{provider_config}
+{feature_config}{provider_table}
 
 {extra_config}
 "#

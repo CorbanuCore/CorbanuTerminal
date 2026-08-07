@@ -340,16 +340,11 @@ impl ToolOrchestrator {
                     );
                     return Err(ToolError::Codex(err));
                 }
-                let sandbox_startup_failure =
-                    is_sandbox_startup_failure(initial_sandbox, output.as_ref());
                 let unsandboxed_allowed =
                     unsandboxed_execution_allowed(&file_system_sandbox_policy);
                 // Under `Never` or `OnRequest`, do not retry without sandbox;
-                // surface a concise sandbox denial that preserves the original
-                // output. Exception: if the platform sandbox itself failed to
-                // start after an explicit OnRequest approval, the approval is
-                // enough to retry unsandboxed when doing so would not drop
-                // denied-read enforcement.
+                // surface a concise sandbox denial that preserves the
+                // original output.
                 if !tool.wants_no_sandbox_approval(approval_policy) {
                     let allow_on_request_network_prompt =
                         matches!(approval_policy, AskForApproval::OnRequest)
@@ -361,12 +356,7 @@ impl ToolOrchestrator {
                                 ),
                                 ExecApprovalRequirement::NeedsApproval { .. }
                             );
-                    let allow_on_request_startup_retry = allow_on_request_sandbox_startup_retry(
-                        approval_policy,
-                        already_approved,
-                        sandbox_startup_failure,
-                    );
-                    if !allow_on_request_network_prompt && !allow_on_request_startup_retry {
+                    if !allow_on_request_network_prompt {
                         otel.sandbox_outcome(
                             &otel_tn,
                             otel_ci,
@@ -393,8 +383,6 @@ impl ToolOrchestrator {
                             "Network access to \"{}\" is blocked by policy.",
                             network_approval_context.host
                         )
-                    } else if sandbox_startup_failure {
-                        "sandbox failed to start; retry without sandbox?".to_string()
                     } else {
                         build_denial_reason_from_output(output.as_ref())
                     };
@@ -402,12 +390,7 @@ impl ToolOrchestrator {
                 // Strict auto-review approval covers the sandboxed attempt only;
                 // retrying without the sandbox requires a fresh guardian review.
                 let bypass_retry_approval = !strict_auto_review
-                    && (tool.should_bypass_approval(approval_policy, already_approved)
-                        || allow_on_request_sandbox_startup_retry(
-                            approval_policy,
-                            already_approved,
-                            sandbox_startup_failure,
-                        ))
+                    && tool.should_bypass_approval(approval_policy, already_approved)
                     && network_approval_context.is_none();
                 if !bypass_retry_approval {
                     let approval_ctx = ApprovalCtx {
@@ -542,117 +525,4 @@ fn build_denial_reason_from_output(_output: &ExecToolCallOutput) -> String {
     // Keep approval reason terse and stable for UX/tests, but accept the
     // output so we can evolve heuristics later without touching call sites.
     "command failed; retry without sandbox?".to_string()
-}
-
-fn allow_on_request_sandbox_startup_retry(
-    approval_policy: AskForApproval,
-    already_approved: bool,
-    sandbox_startup_failure: bool,
-) -> bool {
-    matches!(approval_policy, AskForApproval::OnRequest)
-        && already_approved
-        && sandbox_startup_failure
-}
-
-fn is_sandbox_startup_failure(sandbox: SandboxType, output: &ExecToolCallOutput) -> bool {
-    if sandbox != SandboxType::LinuxSeccomp {
-        return false;
-    }
-    if !output.stdout.text.trim().is_empty() {
-        return false;
-    }
-
-    let text =
-        format!("{}\n{}", output.stderr.text, output.aggregated_output.text).to_ascii_lowercase();
-
-    const STARTUP_FAILURE_MARKERS: &[&str] = &[
-        "bubblewrap is unavailable",
-        "failed to exec bundled bubblewrap",
-        "failed to exec system bubblewrap",
-        "loopback: failed rtm_newaddr",
-        "loopback: failed rtm_newlink",
-        "no permissions to create a new namespace",
-        "setting up uid map: permission denied",
-        "creating new namespace failed",
-        "cannot create user namespace",
-    ];
-
-    STARTUP_FAILURE_MARKERS
-        .iter()
-        .any(|marker| text.contains(marker))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use codex_protocol::exec_output::StreamOutput;
-
-    fn denied_output(text: &str) -> ExecToolCallOutput {
-        output_with_streams("", text)
-    }
-
-    fn output_with_streams(stdout: &str, stderr: &str) -> ExecToolCallOutput {
-        ExecToolCallOutput {
-            exit_code: 1,
-            stdout: StreamOutput::new(stdout.to_string()),
-            stderr: StreamOutput::new(stderr.to_string()),
-            aggregated_output: StreamOutput::new(format!("{stdout}\n{stderr}")),
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn linux_sandbox_startup_failure_is_classified_narrowly() {
-        assert!(is_sandbox_startup_failure(
-            SandboxType::LinuxSeccomp,
-            &denied_output("bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"),
-        ));
-        assert!(is_sandbox_startup_failure(
-            SandboxType::LinuxSeccomp,
-            &denied_output("bubblewrap is unavailable: no system bwrap was found"),
-        ));
-        assert!(!is_sandbox_startup_failure(
-            SandboxType::LinuxSeccomp,
-            &denied_output("sandbox fails to start"),
-        ));
-        assert!(!is_sandbox_startup_failure(
-            SandboxType::LinuxSeccomp,
-            &output_with_streams(
-                "command ran before failing",
-                "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted",
-            ),
-        ));
-        assert!(!is_sandbox_startup_failure(
-            SandboxType::LinuxSeccomp,
-            &denied_output("bash: ./script.sh: Permission denied"),
-        ));
-        assert!(!is_sandbox_startup_failure(
-            SandboxType::None,
-            &denied_output("bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"),
-        ));
-    }
-
-    #[test]
-    fn on_request_sandbox_startup_retry_requires_prior_approval() {
-        assert!(allow_on_request_sandbox_startup_retry(
-            AskForApproval::OnRequest,
-            true,
-            true,
-        ));
-        assert!(!allow_on_request_sandbox_startup_retry(
-            AskForApproval::OnRequest,
-            false,
-            true,
-        ));
-        assert!(!allow_on_request_sandbox_startup_retry(
-            AskForApproval::Never,
-            true,
-            true,
-        ));
-        assert!(!allow_on_request_sandbox_startup_retry(
-            AskForApproval::OnRequest,
-            true,
-            false,
-        ));
-    }
 }

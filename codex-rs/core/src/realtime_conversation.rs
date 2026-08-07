@@ -1124,7 +1124,7 @@ async fn prepare_realtime_start(
     let provider = sess.provider().await;
     let auth_manager = sess
         .services
-        .model_client()
+        .model_client
         .auth_manager()
         .unwrap_or_else(|| Arc::clone(&sess.services.auth_manager));
     let auth = auth_manager.auth().await;
@@ -1421,7 +1421,7 @@ async fn handle_start_inner(
         codex_response_handoff_channel_prefixes,
         realtime_call_api_provider,
         session_config,
-        model_client: sess.services.model_client(),
+        model_client: sess.services.model_client.clone(),
         sdp,
     };
     let start_output = sess.conversation.start(start).await?;

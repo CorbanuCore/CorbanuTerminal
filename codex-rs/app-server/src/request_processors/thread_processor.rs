@@ -12,9 +12,13 @@ use codex_app_server_protocol::ThreadSectionMoveResponse;
 use codex_extension_api::ExtensionDataInit;
 use codex_protocol::AgentPath;
 use codex_protocol::config_types::MultiAgentMode;
+use codex_protocol::crew::AgentClass;
+use codex_protocol::crew::RetentionPolicy;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
+use codex_protocol::protocol::SessionSource as CoreSessionSource;
+use codex_protocol::protocol::SubAgentSource as CoreSubAgentSource;
 use codex_protocol::protocol::ThreadHistoryMode;
 
 const THREAD_LIST_DEFAULT_LIMIT: usize = 25;
@@ -22,17 +26,6 @@ const THREAD_LIST_MAX_LIMIT: usize = 100;
 const CODEX_TUI_CLIENT_NAME: &str = "codex-tui";
 const THREAD_ROLLBACK_DEPRECATION_SUMMARY: &str =
     "thread/rollback is deprecated and will be removed soon";
-
-fn trace_thread_processor_timing(label: &str, start: std::time::Instant) {
-    if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
-        tracing::debug!(
-            target: "pfterminal_thread_processor",
-            label,
-            elapsed_ms = start.elapsed().as_millis(),
-            "pfterminal thread processor timing"
-        );
-    }
-}
 
 #[derive(Debug, Clone)]
 enum ThreadStartResponseKind {
@@ -1217,6 +1210,9 @@ impl ThreadRequestProcessor {
                 experimental_raw_events,
                 request_trace,
                 initial_config_warnings,
+                spawn_agent_parent_thread_id,
+                spawn_agent_role,
+                response_kind,
             )
             .await
             {
@@ -1294,6 +1290,9 @@ impl ThreadRequestProcessor {
         experimental_raw_events: bool,
         request_trace: Option<W3cTraceContext>,
         initial_config_warnings: Arc<Vec<ConfigWarningNotification>>,
+        spawn_agent_parent_thread_id: Option<String>,
+        spawn_agent_role: Option<String>,
+        response_kind: ThreadStartResponseKind,
     ) -> Result<(), JSONRPCErrorError> {
         let thread_start_started_at = std::time::Instant::now();
         let requested_cwd = typesafe_overrides.cwd.clone();
@@ -1301,6 +1300,74 @@ impl ThreadRequestProcessor {
             .load_with_overrides(config_overrides.clone(), typesafe_overrides.clone())
             .await
             .map_err(|err| config_load_error(&err))?;
+        let spawn_session_source = match spawn_agent_parent_thread_id {
+            Some(parent_thread_id) => {
+                let parent_thread_id = ThreadId::from_string(&parent_thread_id)
+                    .map_err(|err| invalid_request(format!("invalid parent_thread_id: {err}")))?;
+                let agent_role = spawn_agent_role
+                    .map(|role| role.trim().to_string())
+                    .filter(|role| !role.is_empty());
+                let (agent_nickname, requested_agent_class) = match &response_kind {
+                    ThreadStartResponseKind::ThreadSpawnAgent {
+                        agent_nickname,
+                        agent_class,
+                    } => (
+                        agent_nickname
+                            .as_ref()
+                            .map(|nickname| nickname.trim().to_string())
+                            .filter(|nickname| !nickname.is_empty()),
+                        agent_class.clone(),
+                    ),
+                    ThreadStartResponseKind::ThreadStart => (None, None),
+                };
+                let parent_thread = listener_task_context
+                    .thread_manager
+                    .get_thread(parent_thread_id)
+                    .await
+                    .map_err(|err| invalid_request(format!("parent thread unavailable: {err}")))?;
+                let parent_snapshot = parent_thread.config_snapshot().await;
+                let parent_depth = match parent_snapshot.session_source {
+                    CoreSessionSource::SubAgent(CoreSubAgentSource::ThreadSpawn {
+                        depth, ..
+                    }) => depth,
+                    _ => 0,
+                };
+                let parent_agent_path = parent_snapshot
+                    .session_source
+                    .get_agent_path()
+                    .unwrap_or_else(AgentPath::root);
+                let agent_path = direct_spawn_agent_path(
+                    &parent_agent_path,
+                    agent_role.as_deref(),
+                    agent_nickname.as_deref(),
+                );
+                let depth = parent_depth + 1;
+                if depth > config.agent_max_depth {
+                    return Err(invalid_request(format!(
+                        "spawn depth {depth} exceeds configured agents.max_depth {}",
+                        config.agent_max_depth
+                    )));
+                }
+                let agent_class =
+                    Some(
+                        requested_agent_class.unwrap_or_else(|| AgentClass::EphemeralTask {
+                            assignment_id: format!("thread-spawn:{}", ThreadId::new()),
+                            retention: RetentionPolicy::Retain,
+                        }),
+                    );
+                Some(CoreSessionSource::SubAgent(
+                    CoreSubAgentSource::ThreadSpawn {
+                        parent_thread_id,
+                        depth,
+                        agent_path,
+                        agent_nickname,
+                        agent_role,
+                        agent_class,
+                    },
+                ))
+            }
+            None => None,
+        };
         // The user may have requested WorkspaceWrite or DangerFullAccess via
         // the command line, though in the process of deriving the Config, it
         // could be downgraded to ReadOnly (perhaps there is no sandbox
@@ -1386,139 +1453,66 @@ impl ThreadRequestProcessor {
                 .thread_manager
                 .default_environment_selections(&config.cwd, &config.workspace_roots)
         });
-        let spawn_session_source = match spawn_agent_parent_thread_id {
-            Some(parent_thread_id) => {
-                let parent_thread_id = ThreadId::from_string(&parent_thread_id)
-                    .map_err(|err| invalid_request(format!("invalid parent_thread_id: {err}")))?;
-                let agent_role = spawn_agent_role
-                    .map(|role| role.trim().to_string())
-                    .filter(|role| !role.is_empty());
-                let (agent_nickname, requested_agent_class) = match &response_kind {
-                    ThreadStartResponseKind::ThreadSpawnAgent {
-                        agent_nickname,
-                        agent_class,
-                    } => (
-                        agent_nickname
-                            .as_ref()
-                            .map(|nickname| nickname.trim().to_string())
-                            .filter(|nickname| !nickname.is_empty()),
-                        agent_class.clone(),
-                    ),
-                    ThreadStartResponseKind::ThreadStart => (None, None),
-                };
-                let parent_thread = listener_task_context
-                    .thread_manager
-                    .get_thread(parent_thread_id)
-                    .await
-                    .map_err(|err| invalid_request(format!("parent thread unavailable: {err}")))?;
-                let parent_snapshot = parent_thread.config_snapshot().await;
-                let parent_depth = match parent_snapshot.session_source {
-                    CoreSessionSource::SubAgent(CoreSubAgentSource::ThreadSpawn {
-                        depth, ..
-                    }) => depth,
-                    _ => 0,
-                };
-                let parent_agent_path = parent_snapshot
-                    .session_source
-                    .get_agent_path()
-                    .unwrap_or_else(AgentPath::root);
-                let agent_path = direct_spawn_agent_path(
-                    &parent_agent_path,
-                    agent_role.as_deref(),
-                    agent_nickname.as_deref(),
-                );
-                let depth = parent_depth + 1;
-                if depth > config.agent_max_depth {
-                    return Err(invalid_request(format!(
-                        "spawn depth {depth} exceeds configured agents.max_depth {}",
-                        config.agent_max_depth
-                    )));
-                }
-                let agent_class =
-                    Some(
-                        requested_agent_class.unwrap_or_else(|| AgentClass::EphemeralTask {
-                            assignment_id: format!("thread-spawn:{}", ThreadId::new()),
-                            retention: RetentionPolicy::Retain,
-                        }),
-                    );
-                Some(CoreSessionSource::SubAgent(
-                    CoreSubAgentSource::ThreadSpawn {
-                        parent_thread_id,
-                        depth,
-                        agent_path,
-                        agent_nickname,
-                        agent_role,
-                        agent_class,
-                    },
-                ))
-            }
-            None => None,
-        };
-        if let Some(agent_role) = spawn_session_source
-            .as_ref()
-            .and_then(CoreSessionSource::get_agent_role)
-            .filter(|role| codex_core::config::agent_role_config_exists(&config, role.as_str()))
-        {
-            codex_core::config::apply_agent_role_to_config(&mut config, Some(agent_role.as_str()))
-                .await
-                .map_err(invalid_request)?;
-        }
         let dynamic_tools = dynamic_tools.unwrap_or_default();
-        let is_spawn_agent_thread = spawn_session_source.is_some();
         if !dynamic_tools.is_empty() {
             validate_dynamic_tools(&dynamic_tools).map_err(invalid_request)?;
         }
-        // Count callable functions rather than top-level namespace containers.
-        let dynamic_tool_count: usize = dynamic_tools
-            .iter()
-            .map(|tool| match tool {
-                DynamicToolSpec::Function(_) => 1,
-                DynamicToolSpec::Namespace(namespace) => namespace.tools.len(),
-            })
-            .sum();
         let mut thread_extension_init = ExtensionDataInit::new();
         if !selected_capability_roots.is_empty() {
             thread_extension_init.insert(selected_capability_roots);
         }
         let create_thread_started_at = std::time::Instant::now();
+        let initial_history = match session_start_source
+            .unwrap_or(codex_app_server_protocol::ThreadStartSource::Startup)
+        {
+            codex_app_server_protocol::ThreadStartSource::Startup => InitialHistory::New,
+            codex_app_server_protocol::ThreadStartSource::Clear => InitialHistory::Cleared,
+        };
+        let new_thread = if let Some(spawn_session_source) = spawn_session_source {
+            let parent_thread_id = spawn_session_source
+                .parent_thread_id()
+                .ok_or_else(|| invalid_request("spawned agent source has no parent thread"))?;
+            let parent_thread = listener_task_context
+                .thread_manager
+                .get_thread(parent_thread_id)
+                .await
+                .map_err(|err| invalid_request(format!("parent thread unavailable: {err}")))?;
+            parent_thread
+                .spawn_idle_agent(config, spawn_session_source)
+                .await
+                .map_err(|err| internal_error(format!("error creating native agent: {err}")))?
+        } else {
+            listener_task_context
+                .thread_manager
+                .start_thread(StartThreadOptions {
+                    allow_provider_model_fallback,
+                    initial_history,
+                    history_mode,
+                    session_source: None,
+                    thread_source,
+                    dynamic_tools,
+                    metrics_service_name: service_name,
+                    parent_trace: request_trace,
+                    environments: Some(environments),
+                    thread_extension_init,
+                    supports_openai_form_elicitation,
+                    ..StartThreadOptions::new(config)
+                })
+                .await
+                .map_err(|err| match err.details() {
+                    CodexErrorDetails::InvalidRequest(message) => invalid_request(message.clone()),
+                    CodexErrorDetails::UnsupportedOperation(message) => {
+                        method_not_found(message.clone())
+                    }
+                    _ => internal_error(format!("error creating thread: {err}")),
+                })?
+        };
         let NewThread {
             thread_id,
             thread,
             session_configured,
             ..
-        } = listener_task_context
-            .thread_manager
-            .start_thread(StartThreadOptions {
-                allow_provider_model_fallback,
-                initial_history: match session_start_source
-                    .unwrap_or(codex_app_server_protocol::ThreadStartSource::Startup)
-                {
-                    codex_app_server_protocol::ThreadStartSource::Startup => InitialHistory::New,
-                    codex_app_server_protocol::ThreadStartSource::Clear => InitialHistory::Cleared,
-                },
-                history_mode,
-                thread_source,
-                dynamic_tools,
-                metrics_service_name: service_name,
-                parent_trace: request_trace,
-                environments: Some(environments),
-                thread_extension_init,
-                supports_openai_form_elicitation,
-                ..StartThreadOptions::new(config)
-            })
-            .instrument(tracing::info_span!(
-                "app_server.thread_start.create_thread",
-                otel.name = "app_server.thread_start.create_thread",
-                thread_start.dynamic_tool_count = dynamic_tool_count,
-            ))
-            .await
-            .map_err(|err| match err.details() {
-                CodexErrorDetails::InvalidRequest(message) => invalid_request(message.clone()),
-                CodexErrorDetails::UnsupportedOperation(message) => {
-                    method_not_found(message.clone())
-                }
-                _ => internal_error(format!("error creating thread: {err}")),
-            })?;
+        } = new_thread;
         let session_telemetry = thread.session_telemetry();
         session_telemetry.record_startup_phase(
             "thread_start_create_thread",
@@ -1532,17 +1526,6 @@ impl ThreadRequestProcessor {
             app_server_client_version,
         )
         .await?;
-
-        if is_spawn_agent_thread {
-            thread.ensure_rollout_materialized().await;
-            if let Err(err) = thread.flush_rollout().await {
-                tracing::warn!(
-                    thread_id = %thread_id,
-                    error = %err,
-                    "failed to flush newly spawned agent rollout"
-                );
-            }
-        }
 
         let instruction_sources = thread.legacy_instruction_sources().await;
         let config_snapshot = thread
@@ -1622,6 +1605,12 @@ impl ThreadRequestProcessor {
             multi_agent_mode: MultiAgentMode::ExplicitRequestOnly,
         };
         let notif = thread_started_notification(thread);
+        let response: ClientResponsePayload = match response_kind {
+            ThreadStartResponseKind::ThreadStart => response.into(),
+            ThreadStartResponseKind::ThreadSpawnAgent { .. } => {
+                ThreadSpawnAgentResponse::from(response).into()
+            }
+        };
         listener_task_context
             .outgoing
             .send_response_with_thread_originator(request_id, response, thread_originator)
@@ -2683,6 +2672,7 @@ impl ThreadRequestProcessor {
             }
             thread.session_id.clone_from(&fallback_thread.session_id);
             thread.ephemeral = fallback_thread.ephemeral;
+            thread.runtime_route = fallback_thread.runtime_route;
             thread.can_accept_direct_input = fallback_thread.can_accept_direct_input;
             thread
         } else {
@@ -3267,9 +3257,6 @@ impl ThreadRequestProcessor {
         app_server_client_version: Option<String>,
         supports_openai_form_elicitation: bool,
     ) -> Result<(), JSONRPCErrorError> {
-        let resume_started_at = std::time::Instant::now();
-        trace_thread_processor_timing("thread_resume_start", resume_started_at);
-
         if let Ok(thread_id) = ThreadId::from_string(&params.thread_id)
             && self
                 .pending_thread_unloads
@@ -3307,7 +3294,6 @@ impl ThreadRequestProcessor {
                 return Ok(());
             }
         };
-        trace_thread_processor_timing("thread_resume_after_list_permit", resume_started_at);
         let stored_thread_from_running_probe = match self
             .resume_running_thread(
                 &request_id,
@@ -3324,7 +3310,6 @@ impl ThreadRequestProcessor {
                 return Ok(());
             }
         };
-        trace_thread_processor_timing("thread_resume_after_running_probe", resume_started_at);
 
         let ThreadResumeParams {
             thread_id,
@@ -3452,10 +3437,6 @@ impl ThreadRequestProcessor {
                 session_configured,
                 ..
             }) => {
-                trace_thread_processor_timing(
-                    "thread_resume_after_resume_thread_with_history",
-                    resume_started_at,
-                );
                 if let Err(err) = Self::set_app_server_client_info(
                     codex_thread.as_ref(),
                     app_server_client_name,
@@ -3510,10 +3491,6 @@ impl ThreadRequestProcessor {
                     request_id.connection_id,
                     "thread",
                 );
-                trace_thread_processor_timing(
-                    "thread_resume_after_listener_attach",
-                    resume_started_at,
-                );
 
                 let mut thread = match self
                     .load_thread_from_resume_source_or_send_internal(
@@ -3534,10 +3511,6 @@ impl ThreadRequestProcessor {
                         return Ok(());
                     }
                 };
-                trace_thread_processor_timing(
-                    "thread_resume_after_response_thread_load",
-                    resume_started_at,
-                );
                 thread.thread_source = codex_thread
                     .config_snapshot()
                     .await
@@ -5370,7 +5343,7 @@ fn sanitize_agent_path_segment(value: &str) -> String {
             continue;
         };
         if ch == '_' {
-            if out.is_empty() || previous_underscore {
+            if previous_underscore {
                 continue;
             }
             previous_underscore = true;
@@ -5379,10 +5352,8 @@ fn sanitize_agent_path_segment(value: &str) -> String {
         }
         out.push(ch);
     }
-    while out.ends_with('_') {
-        out.pop();
-    }
-    if out.is_empty() || matches!(out.as_str(), "root" | "." | "..") {
+    let out = out.trim_matches('_').to_string();
+    if out.is_empty() {
         "agent".to_string()
     } else {
         out
@@ -5454,6 +5425,7 @@ pub(crate) fn thread_from_stored_thread(
         } else {
             thread.model_provider
         },
+        runtime_route: None,
         created_at: thread.created_at.timestamp(),
         updated_at: thread.updated_at.timestamp(),
         recency_at: Some(thread.recency_at.timestamp()),
@@ -5663,6 +5635,13 @@ fn build_thread_from_snapshot(
         section_entered_at: None,
         history_mode: config_snapshot.history_mode.into(),
         model_provider: config_snapshot.model_provider_id.clone(),
+        runtime_route: Some(codex_app_server_protocol::ThreadRuntimeRoute {
+            model_provider: config_snapshot.model_provider_id.clone(),
+            model: config_snapshot.model.clone(),
+            reasoning_effort: config_snapshot.reasoning_effort.clone(),
+            service_tier: config_snapshot.service_tier.clone(),
+            selection_source: config_snapshot.runtime_selection,
+        }),
         created_at: now,
         updated_at: now,
         recency_at: Some(now),

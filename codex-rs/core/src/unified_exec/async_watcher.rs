@@ -44,7 +44,6 @@ const UNIFIED_EXEC_OUTPUT_DELTA_MAX_BYTES: usize = 8192;
 pub(crate) fn start_streaming_output(
     process: &UnifiedExecProcess,
     context: &UnifiedExecContext,
-    transcript: Arc<Mutex<HeadTailBuffer>>,
 ) {
     let mut receiver = process.output_receiver();
     let output_drained = process.output_drained_notify();
@@ -111,7 +110,6 @@ pub(crate) fn start_streaming_output(
 
                     process_chunk(
                         &mut pending,
-                        &transcript,
                         &call_id,
                         &session_ref,
                         &turn_ref,
@@ -139,7 +137,6 @@ pub(crate) fn start_streaming_output(
 
                 process_chunk(
                     &mut pending,
-                    &transcript,
                     &call_id,
                     &session_ref,
                     &turn_ref,
@@ -222,7 +219,6 @@ pub(crate) fn spawn_exit_watcher(
 
 async fn process_chunk(
     pending: &mut VecDeque<u8>,
-    transcript: &Arc<Mutex<HeadTailBuffer>>,
     call_id: &str,
     session_ref: &Arc<Session>,
     turn_ref: &Arc<TurnContext>,
@@ -231,11 +227,6 @@ async fn process_chunk(
 ) {
     pending.extend(chunk);
     while let Some(prefix) = split_valid_utf8_prefix(pending) {
-        {
-            let mut guard = transcript.lock().await;
-            guard.push_chunk(prefix.to_vec());
-        }
-
         if *emitted_deltas >= MAX_EXEC_OUTPUT_DELTAS_PER_CALL {
             continue;
         }

@@ -1,3 +1,60 @@
+# PFTerminal 0.1.27
+
+## Added
+
+- PF Terminal now runs on the Codex foundation through upstream commit
+  `413492cd6`, retaining current Codex session, tool, TUI, and OpenAI lifecycle
+  behavior while restoring PF Terminal's multi-provider product surfaces.
+- A typed model catalogue now supplies provider, billing, capability, vision,
+  reasoning, and route-eligibility metadata to model selection and agent
+  spawning. Explicit child routes either run on the requested provider/model or
+  fail clearly; they never silently substitute another model.
+- The GPU rental catalogue now offers one DeepSeek recipe:
+  `deepseek-ai/DeepSeek-V4-Flash-0731` on 2×H200. The model revision, vLLM
+  runtime image, DSpark configuration, topology gate, and readiness contract
+  are immutable and covered by provider/controller/UI tests.
+
+## Fixed
+
+- Model changes are transactional across provider switches, compaction, and
+  resume. The UI commits the new identity only after the runtime accepts it,
+  and false cybersecurity downgrade warnings no longer misreport successful
+  Opus routes.
+- Agent orchestration now validates model capability, provider authorization,
+  billing, fork compatibility, and shared execution capacity through the
+  catalogue. Parent/child identity headers and terminal-result delivery are
+  covered across legacy and v2 orchestration paths.
+- Anthropic turns preserve signed thinking, stable cache markers, tool-only
+  completions, and source images while applying bounded request-size recovery.
+  Provider output limits replace PF-specific output and continuation caps.
+- Kimi and OpenAI-compatible Chat routes preserve provider reasoning and
+  continuation state without model-name special cases. OpenAI Responses keeps
+  upstream server-state and prompt-cache behavior.
+- Fast commands can no longer lose part of their final transcript when the
+  live output event consumer lags. The process producer now records a separate
+  bounded cumulative transcript for terminal results.
+- State startup distinguishes damaged databases from Codex/PF Terminal home
+  collisions and provides actionable recovery without mutating foreign state.
+
+## Documentation
+
+- The README leads with supported providers and documents `/providers`,
+  `/vault`, `/wallet`, `/model`, `/agent`, `/goal`, and `/gpu` workflows.
+
+## Qualification status
+
+- Provider, model catalogue, protocol, app-server, state, rollout, GPU rental,
+  installer, package-builder, orchestration, compaction, prompt-cache, and tool
+  regression suites pass in the release worktree. Platform installation, live
+  paid-route, OpenAI parity, and capped live GPU evidence are recorded as RC
+  promotion gates rather than inferred from unit tests.
+
+Previous release: 0.1.26.
+
+The changelog can be found on the [releases page](https://github.com/agtico/PfTerminal/releases).
+
+---
+
 # PFTerminal 0.1.26
 
 ## Fixed

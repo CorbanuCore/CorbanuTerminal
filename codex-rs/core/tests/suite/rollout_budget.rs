@@ -172,6 +172,7 @@ async fn subagent_usage_draws_from_the_shared_budget() -> Result<()> {
 
     let test = test_codex()
         .with_config(|config| {
+            config.model = Some("gpt-5.6-sol".to_string());
             config
                 .features
                 .enable(Feature::Collab)

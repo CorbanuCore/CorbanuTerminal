@@ -497,23 +497,7 @@ impl App {
         self.abort_thread_event_listener(thread_id);
         self.thread_event_channels.remove(&thread_id);
         self.side_threads.remove(&thread_id);
-        if self.is_spawn_orchestration_thread(thread_id) {
-            self.agent_navigation.mark_closed(thread_id);
-            self.spawn_status_by_thread
-                .entry(thread_id)
-                .or_insert_with(|| codex_app_server_protocol::CollabAgentState {
-                    status: codex_app_server_protocol::CollabAgentStatus::Shutdown,
-                    message: None,
-                });
-        } else {
-            self.agent_navigation.remove(thread_id);
-            self.spawn_parent_by_thread.remove(&thread_id);
-            self.spawn_parent_by_node
-                .remove(&crate::spawn_orchestration::thread_node_id(thread_id));
-            self.spawn_parent_reports_by_node
-                .remove(&crate::spawn_orchestration::thread_node_id(thread_id));
-            self.spawn_status_by_thread.remove(&thread_id);
-        }
+        self.agent_navigation.remove(thread_id);
         if self.active_thread_id == Some(thread_id) {
             self.clear_active_thread().await;
         } else {
@@ -704,6 +688,13 @@ impl App {
         {
             Ok(forked) => {
                 let child_thread_id = forked.session.thread_id;
+                self.upsert_agent_picker_thread(
+                    child_thread_id,
+                    /*agent_nickname*/ None,
+                    /*agent_role*/ None,
+                    /*is_closed*/ false,
+                );
+                self.set_agent_picker_session_route(&forked.session);
                 let channel = self.ensure_thread_channel(child_thread_id);
                 {
                     let mut store = channel.store.lock().await;
@@ -713,12 +704,6 @@ impl App {
                     .insert(child_thread_id, SideThreadState::new(parent_thread_id));
                 // `thread/started` is delivered after the fork response; seed navigation before
                 // the first selection without blocking on another app-server read.
-                self.upsert_agent_picker_thread(
-                    child_thread_id,
-                    /*agent_nickname*/ None,
-                    /*agent_role*/ None,
-                    /*is_closed*/ false,
-                );
                 if let Err(err) = app_server
                     .thread_inject_items(child_thread_id, vec![Self::side_boundary_prompt_item()])
                     .await

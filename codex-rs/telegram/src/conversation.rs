@@ -61,7 +61,7 @@ impl fmt::Display for ConversationKey {
 
 impl From<ChatId> for ConversationKey {
     fn from(chat_id: ChatId) -> Self {
-        Self::new(chat_id, None)
+        Self::new(chat_id, /*thread_id*/ None)
     }
 }
 

@@ -1056,6 +1056,7 @@ async fn run_subagent_global_instruction_case(fork_context: bool) -> Result<()> 
     )?;
     let mut builder = test_codex()
         .with_home(Arc::clone(&home))
+        .with_model("gpt-5.6-luna")
         .with_config(|config| {
             let _ = config.features.enable(Feature::Collab);
             let _ = config.features.disable(Feature::EnableRequestCompression);
@@ -1117,12 +1118,22 @@ async fn run_subagent_global_instruction_case(fork_context: bool) -> Result<()> 
         "subagent reports the parent's creation-time source"
     );
     if fork_context {
-        let seed_input = seed_request.input();
-        let child_input = child_request.input();
+        let child_user_texts = child_request.message_input_texts("user");
         assert_eq!(
-            child_input.get(..seed_input.len()),
-            Some(seed_input.as_slice()),
-            "forked subagent should replay the parent's original structured input prefix"
+            child_user_texts
+                .iter()
+                .filter(|text| text.as_str() == SPAWN_SEED_PROMPT)
+                .count(),
+            1,
+            "forked subagent should replay the parent's seed turn exactly once; observed: {child_user_texts:?}"
+        );
+        assert_eq!(
+            child_user_texts
+                .iter()
+                .filter(|text| text.as_str() == SPAWN_CHILD_PROMPT)
+                .count(),
+            1,
+            "forked subagent should contain its own prompt exactly once; observed: {child_user_texts:?}"
         );
     } else {
         let child_user_texts = child_request.message_input_texts("user");

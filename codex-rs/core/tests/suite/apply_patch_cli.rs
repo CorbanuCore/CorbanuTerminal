@@ -74,7 +74,7 @@ pub async fn apply_patch_harness() -> Result<TestCodexHarness> {
 async fn apply_patch_harness_with(
     configure: impl FnOnce(TestCodexBuilder) -> TestCodexBuilder,
 ) -> Result<TestCodexHarness> {
-    let builder = configure(test_codex().with_model("gpt-5.4"));
+    let builder = configure(test_codex());
     // Box harness construction so apply_patch_cli tests do not inline the
     // full test-thread startup path into each test future.
     Box::pin(TestCodexHarness::with_auto_env_builder(builder)).await
@@ -826,7 +826,6 @@ async fn apply_patch_cli_preserves_existing_hard_link_outside_workspace() -> Res
         Ok(()),
         "link setup needs local filesystem hard link creation"
     );
-    skip_if_sandbox!(Ok(()));
 
     let test_root = tempfile::tempdir_in(std::env::current_dir()?)?;
     let work_dir = AbsolutePathBuf::try_from(test_root.path().join("work"))?;
@@ -923,7 +922,6 @@ async fn apply_patch_cli_rejects_move_path_traversal_outside_workspace() -> Resu
     // TODO(anp): Remove after apply-patch fixtures use target-native paths.
     skip_if_target_windows!(Ok(()), "asserts POSIX workspace traversal behavior");
     skip_if_no_network!(Ok(()));
-    skip_if_sandbox!(Ok(()));
 
     let harness = apply_patch_harness().await?;
 

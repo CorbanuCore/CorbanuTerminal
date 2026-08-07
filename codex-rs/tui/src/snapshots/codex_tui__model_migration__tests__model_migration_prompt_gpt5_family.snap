@@ -1,10 +1,9 @@
 ---
 source: tui/src/model_migration.rs
-assertion_line: 480
 expression: terminal.backend()
 ---
 
-> PFTerminal just got an upgrade. Introducing gpt-5.1.
+> Codex just got an upgrade. Introducing gpt-5.1.
 
   We recommend switching from gpt-5 to gpt-5.1.
 

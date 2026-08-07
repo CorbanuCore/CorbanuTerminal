@@ -45,7 +45,14 @@ const SECRETS_VERSION: u8 = 1;
 const LOCAL_SECRETS_FILENAME: &str = "local.age";
 const CODEX_AUTH_SECRETS_FILENAME: &str = "codex_auth.age";
 const MCP_OAUTH_SECRETS_FILENAME: &str = "mcp_oauth.age";
-const LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR: u8 = 16;
+// This value protects a machine-generated 256-bit random key, not a human
+// passphrase. Its entropy provides the brute-force resistance; a high scrypt
+// factor only adds user-visible latency to every vault write. Ten is the
+// lowest factor used by age's own calibration loop and keeps the existing age
+// scrypt file format compatible while avoiding multi-second provider logins.
+// Files written by older PFTerminal builds at factor 16 remain readable and
+// are normalized after their first successful decrypt.
+const LOCAL_SECRETS_ENCRYPT_SCRYPT_WORK_FACTOR: u8 = 10;
 const LOCAL_SECRETS_MAX_SCRYPT_WORK_FACTOR: u8 = 20;
 
 /// Selects the local encrypted file used by a `LocalSecretsBackend`.

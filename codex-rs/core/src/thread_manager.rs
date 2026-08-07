@@ -793,9 +793,6 @@ impl ThreadManager {
             .get_resumed_session_sources()
             .unwrap_or_else(|| (self.state.session_source.clone(), None));
         let session_source = options.session_source.unwrap_or(resumed_session_source);
-        let agent_control = self
-            .agent_control_for_session_source(&options.config, &session_source)
-            .await;
         let thread_source = options.thread_source.or(resumed_thread_source);
         Box::pin(self.state.spawn_thread_with_source(
             options.config,
@@ -887,6 +884,7 @@ impl ThreadManager {
         parent_trace: Option<W3cTraceContext>,
         supports_openai_form_elicitation: bool,
     ) -> CodexResult<NewThread> {
+        let agent_control = self.agent_control_for_config(&config);
         let environments = default_thread_environment_selections(
             self.state.environment_manager.as_ref(),
             &config.cwd,
@@ -909,7 +907,7 @@ impl ThreadManager {
             /*history_mode*/ None,
             /*allow_provider_model_fallback*/ false,
             auth_manager,
-            agent_control.clone(),
+            agent_control,
             session_source,
             /*parent_thread_id*/ None,
             /*forked_from_thread_id*/ None,
@@ -925,18 +923,7 @@ impl ThreadManager {
             supports_openai_form_elicitation,
             /*user_shell_override*/ None,
         ))
-        .await?;
-        agent_control
-            .restore_persisted_agent_subtree(resumed_thread.thread_id)
-            .await?;
-        // Root-thread resume is also a provider/process recovery boundary. Child reloads
-        // reconcile their own mailbox in `ensure_v2_agent_loaded`, but the human root does not
-        // pass through that path. Reconcile it explicitly so ambiguous in-flight work is
-        // quarantined and safe local work is resumed exactly once.
-        agent_control
-            .recover_inter_agent_communications(resumed_thread.thread_id)
-            .await?;
-        Ok(resumed_thread)
+        .await
     }
 
     pub(crate) async fn start_thread_with_user_shell_override_for_tests(
@@ -1247,23 +1234,6 @@ impl ThreadManager {
         AgentControl::new(Arc::downgrade(&self.state), config.rollout_budget.clone())
     }
 
-    async fn agent_control_for_session_source(
-        &self,
-        config: &Config,
-        session_source: &SessionSource,
-    ) -> AgentControl {
-        let SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-            parent_thread_id, ..
-        }) = session_source
-        else {
-            return self.agent_control_for_config(config);
-        };
-        match self.get_thread(*parent_thread_id).await {
-            Ok(parent_thread) => parent_thread.codex.session.services.agent_control.clone(),
-            Err(_) => self.agent_control_for_config(config),
-        }
-    }
-
     #[cfg(test)]
     pub(crate) fn captured_ops(&self) -> Vec<(ThreadId, Op)> {
         self.state
@@ -1403,7 +1373,6 @@ impl ThreadManagerState {
             session_source,
             parent_thread_id,
             forked_from_thread_id,
-            config,
         )
         .await
         .unwrap_or_else(|| config.multi_agent_version_from_features())
@@ -1415,7 +1384,6 @@ impl ThreadManagerState {
         session_source: Option<&SessionSource>,
         parent_thread_id: Option<ThreadId>,
         forked_from_thread_id: Option<ThreadId>,
-        config: &Config,
     ) -> Option<MultiAgentVersion> {
         let inherited_thread_id = match session_source {
             Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
@@ -1435,15 +1403,7 @@ impl ThreadManagerState {
                 .and_then(|thread| thread.multi_agent_version()),
             None => None,
         };
-        resolve_spawn_multi_agent_version(
-            initial_history,
-            inherited_multi_agent_version,
-            matches!(
-                session_source,
-                Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. }))
-            ),
-            config.multi_agent_version_from_features(),
-        )
+        resolve_multi_agent_version(initial_history, inherited_multi_agent_version)
     }
 
     /// Resolves the provider snapshot for a newly spawned runtime.
@@ -1828,7 +1788,6 @@ impl ThreadManagerState {
                 Some(&session_source),
                 parent_thread_id,
                 forked_from_thread_id,
-                &config,
             )
             .await;
         let originator = self
@@ -1896,17 +1855,6 @@ impl ThreadManagerState {
             .await?;
         if source_changed_during_startup.load(Ordering::Acquire) {
             new_thread.thread.session.request_mcp_runtime_refresh();
-        }
-        if is_resumed_thread {
-            agent_control.restore_thread_spawn_metadata(
-                new_thread.thread_id,
-                &new_thread.thread.session_source,
-            );
-        } else {
-            agent_control.register_thread_spawn_metadata(
-                new_thread.thread_id,
-                &new_thread.thread.session_source,
-            );
         }
         if is_resumed_thread {
             new_thread.thread.emit_thread_resume_lifecycle().await;
@@ -2210,26 +2158,6 @@ fn append_interrupted_boundary(
             InitialHistory::Forked(history)
         }
     }
-}
-
-fn resolve_spawn_multi_agent_version(
-    initial_history: &InitialHistory,
-    inherited_multi_agent_version: Option<MultiAgentVersion>,
-    is_thread_spawn: bool,
-    configured_multi_agent_version: MultiAgentVersion,
-) -> Option<MultiAgentVersion> {
-    // A fresh app-server thread/spawnAgent request is an explicit runtime boundary. PFTerminal
-    // enables V2 on the child config even when the long-lived user-facing parent predates V2 and
-    // is pinned to V1. Preserve an explicitly disabled parent, but otherwise honor that V2 child
-    // request instead of silently exposing the legacy send_input(interrupt=true) surface.
-    if is_thread_spawn
-        && configured_multi_agent_version == MultiAgentVersion::V2
-        && inherited_multi_agent_version != Some(MultiAgentVersion::Disabled)
-    {
-        return Some(MultiAgentVersion::V2);
-    }
-
-    resolve_multi_agent_version(initial_history, inherited_multi_agent_version)
 }
 
 #[cfg(test)]

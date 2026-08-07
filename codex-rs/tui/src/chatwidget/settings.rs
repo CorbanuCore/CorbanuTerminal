@@ -5,21 +5,6 @@ use crate::app_event::AppEvent;
 use crate::chatwidget::rate_limits::RATE_LIMIT_SWITCH_PROMPT_VIEW_ID;
 
 impl ChatWidget {
-    pub(crate) fn replace_gpu_model_providers(
-        &mut self,
-        runtime_providers: &std::collections::HashMap<
-            String,
-            codex_model_provider_info::ModelProviderInfo,
-        >,
-    ) {
-        self.config
-            .model_providers
-            .retain(|provider_id, _| !provider_id.starts_with("gpu-"));
-        self.config
-            .model_providers
-            .extend(runtime_providers.clone());
-    }
-
     /// Set the approval policy in the widget's config copy.
     pub(crate) fn set_approval_policy(&mut self, policy: AskForApproval) {
         if let Err(err) = self
@@ -283,16 +268,6 @@ impl ChatWidget {
         self.refresh_model_dependent_surfaces();
     }
 
-    pub(crate) fn set_model_provider(
-        &mut self,
-        model_provider_id: String,
-        model_provider: codex_model_provider_info::ModelProviderInfo,
-    ) {
-        self.config.model_provider_id = model_provider_id;
-        self.config.model_provider = model_provider;
-        self.refresh_model_dependent_surfaces();
-    }
-
     pub(crate) fn current_model(&self) -> &str {
         if !self.collaboration_modes_enabled() {
             return self.current_collaboration_mode.model();
@@ -516,6 +491,19 @@ impl ChatWidget {
     fn apply_thread_settings(&mut self, mut settings: ThreadSettings) {
         let cwd_changed = self.config.cwd != settings.cwd;
         self.apply_thread_settings_cwd(settings.cwd.clone());
+        if let Some(provider) = self
+            .config
+            .model_providers
+            .get(&settings.model_provider)
+            .cloned()
+        {
+            self.config.model_provider = provider;
+        } else {
+            tracing::warn!(
+                model_provider = settings.model_provider,
+                "thread settings selected a provider missing from the TUI catalog"
+            );
+        }
         self.config.model_provider_id = settings.model_provider.clone();
         self.set_service_tier(settings.service_tier.clone());
         self.set_approval_policy(settings.approval_policy);
@@ -604,22 +592,12 @@ impl ChatWidget {
         self.refresh_model_dependent_surfaces();
     }
 
-    pub(super) fn model_display_name(&self) -> String {
+    pub(super) fn model_display_name(&self) -> &str {
         let model = self.current_model();
         if model.is_empty() {
-            DEFAULT_MODEL_DISPLAY_NAME.to_string()
+            DEFAULT_MODEL_DISPLAY_NAME
         } else {
-            self.model_catalog
-                .try_list_models()
-                .ok()
-                .and_then(|models| {
-                    models
-                        .into_iter()
-                        .find(|preset| preset.model == model)
-                        .map(|preset| preset.display_name)
-                })
-                .filter(|display_name| !display_name.trim().is_empty())
-                .unwrap_or_else(|| model.to_string())
+            model
         }
     }
 
@@ -746,15 +724,14 @@ impl ChatWidget {
         if previous_mode != next_mode
             && (previous_model != next_model || previous_effort != next_effort)
         {
-            let next_model_label = self.model_display_name();
-            let mut message = format!("Model changed to {next_model_label}");
+            let mut message = format!("Model changed to {next_model}");
             if !next_model.starts_with("codex-auto-") {
-                let reasoning_label = Self::status_line_reasoning_effort_label_for_model(
-                    next_model,
-                    next_effort.as_ref(),
-                );
+                let reasoning_label = match next_effort.as_ref() {
+                    None | Some(ReasoningEffortConfig::None) => "default",
+                    Some(effort) => effort.as_str(),
+                };
                 message.push(' ');
-                message.push_str(&reasoning_label);
+                message.push_str(reasoning_label);
             }
             message.push_str(" for ");
             message.push_str(next_mode.display_name());

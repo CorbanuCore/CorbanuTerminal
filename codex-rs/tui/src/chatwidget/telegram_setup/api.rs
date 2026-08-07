@@ -73,7 +73,7 @@ struct TelegramChat {
 
 pub(crate) async fn validate_token(token: &str) -> Result<TelegramBotIdentity, String> {
     let identity = telegram_identity(token).await?;
-    let webhook: WebhookInfo = telegram_call(token, "getWebhookInfo", None).await?;
+    let webhook: WebhookInfo = telegram_call(token, "getWebhookInfo", /*body*/ None).await?;
     if !webhook.url.is_empty() {
         return Err(
             "This bot currently uses a Telegram webhook. Remove that webhook before connecting it to PFTerminal polling."
@@ -133,7 +133,7 @@ async fn telegram_call<T: for<'de> Deserialize<'de>>(
 }
 
 async fn telegram_identity_at(api_root: &str, token: &str) -> Result<TelegramBotIdentity, String> {
-    let user: TelegramUser = telegram_call_at(api_root, token, "getMe", None).await?;
+    let user: TelegramUser = telegram_call_at(api_root, token, "getMe", /*body*/ None).await?;
     let username = user
         .username
         .ok_or_else(|| "Telegram returned a bot without a username.".to_string())?;

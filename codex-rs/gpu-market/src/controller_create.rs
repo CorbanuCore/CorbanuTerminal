@@ -134,6 +134,7 @@ where
             ownership_tag: lease.rental.ownership_tag.clone(),
             image: recipe.image.clone(),
             disk_gib: recipe.hardware.minimum_disk_gib,
+            container_entrypoint: recipe.container_entrypoint.clone(),
             launch_command: recipe.launch_command.clone(),
             inference_port: recipe.inference_port,
             endpoint_token,
@@ -145,9 +146,9 @@ where
                     .finish_gpu_rental_operation(
                         operation_id.as_str(),
                         "succeeded",
-                        None,
+                        /*provider_request_id*/ None,
                         Some(instance.resource_id.as_str()),
-                        None,
+                        /*sanitized_error*/ None,
                         now_ms,
                     )
                     .await?;
@@ -163,8 +164,8 @@ where
                     .finish_gpu_rental_operation(
                         operation_id.as_str(),
                         status,
-                        None,
-                        None,
+                        /*provider_request_id*/ None,
+                        /*provider_resource_id*/ None,
                         Some(error.safe_message.as_str()),
                         now_ms,
                     )

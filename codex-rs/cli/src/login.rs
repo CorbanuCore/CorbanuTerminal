@@ -17,7 +17,6 @@ use codex_login::ServerOptions;
 use codex_login::login_with_access_token;
 use codex_login::login_with_api_key;
 use codex_login::logout_with_revoke;
-use codex_login::logout_with_revoke_all_credentials;
 use codex_login::run_device_code_login;
 use codex_login::run_login_server;
 use codex_protocol::auth::AuthMode;
@@ -477,7 +476,7 @@ pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
     }
 }
 
-pub async fn run_logout(cli_config_overrides: CliConfigOverrides, all_credentials: bool) -> ! {
+pub async fn run_logout(cli_config_overrides: CliConfigOverrides, _all_credentials: bool) -> ! {
     let config = load_config_or_exit(cli_config_overrides).await;
     let auth_route_config = config.auth_route_config();
 

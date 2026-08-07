@@ -163,15 +163,6 @@ use crate::event_processor::EventProcessor;
 const DEFAULT_ANALYTICS_ENABLED: bool = true;
 const EXEC_DEFAULT_LOG_FILTER: &str = "error,opentelemetry_sdk=off,opentelemetry_otlp=off";
 
-fn trace_exec_timing(label: &str, start: std::time::Instant) {
-    if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
-        eprintln!(
-            "[pfterminal-exec] {label} elapsed_ms={}",
-            start.elapsed().as_millis()
-        );
-    }
-}
-
 enum InitialOperation {
     UserTurn {
         items: Vec<UserInput>,
@@ -346,7 +337,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         CloudConfigBundleLoader::default(),
     )
     .await;
-    trace_exec_timing("after_bootstrap_config", run_main_started_at);
     let bootstrap_config_toml = &bootstrap_config.config_toml;
 
     let chatgpt_base_url = bootstrap_config_toml
@@ -372,7 +362,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         auth_route_config,
     )
     .await;
-    trace_exec_timing("after_cloud_config_bundle", run_main_started_at);
     let run_cli_overrides = cli_kv_overrides.clone();
     let run_loader_overrides = loader_overrides.clone();
     let run_cloud_config_bundle = cloud_config_bundle.clone();
@@ -483,7 +472,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
             std::process::exit(1);
         }
     }
-    trace_exec_timing("after_execpolicy_warnings", run_main_started_at);
 
     set_default_client_residency_requirement(config.enforce_residency.value());
 
@@ -502,7 +490,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         eprintln!("{err}");
         std::process::exit(1);
     }
-    trace_exec_timing("after_enforce_login_restrictions", run_main_started_at);
 
     let otel = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         codex_core::otel_init::build_provider(
@@ -524,7 +511,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
     };
     codex_core::otel_init::record_process_start(otel.as_ref(), "codex_exec");
     codex_core::otel_init::install_sqlite_telemetry(otel.as_ref(), "codex_exec");
-    trace_exec_timing("after_otel_init", run_main_started_at);
 
     let otel_logger_layer = otel.as_ref().and_then(|o| o.logger_layer());
 
@@ -555,7 +541,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         arg0_paths.codex_linux_sandbox_exe.clone(),
     )?;
     let state_db = codex_core::init_state_db(&config).await;
-    trace_exec_timing("after_init_state_db", run_main_started_at);
     let environment_manager = if run_loader_overrides.ignore_user_config {
         EnvironmentManager::from_env(Some(local_runtime_paths), config.http_client_factory())
             .await?
@@ -567,7 +552,6 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         )
         .await?
     };
-    trace_exec_timing("after_environment_manager", run_main_started_at);
     let in_process_start_args = InProcessClientStartArgs {
         arg0_paths,
         config: std::sync::Arc::new(config.clone()),
@@ -687,9 +671,6 @@ async fn load_bootstrap_config_or_exit(
 }
 
 async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
-    let exec_session_started_at = std::time::Instant::now();
-    trace_exec_timing("run_exec_session_start", exec_session_started_at);
-
     let ExecRunArgs {
         in_process_start_args,
         state_db,
@@ -717,7 +698,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             last_message_file.clone(),
         )),
     };
-    trace_exec_timing("after_event_processor", exec_session_started_at);
     if oss {
         // We're in the oss section, so provider_id should be Some
         // Let's handle None case gracefully though just in case
@@ -798,7 +778,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             )
         }
     };
-    trace_exec_timing("after_initial_operation", exec_session_started_at);
 
     // When --yolo (dangerously_bypass_approvals_and_sandbox) is set, also skip the git repo check
     // since the user is explicitly running in an externally sandboxed environment.
@@ -811,24 +790,20 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
     }
 
     let mut request_ids = RequestIdSequencer::new();
-    trace_exec_timing("before_in_process_start", exec_session_started_at);
     let mut client = InProcessAppServerClient::start(in_process_start_args)
         .await
         .map_err(|err| {
             anyhow::anyhow!("failed to initialize in-process app-server client: {err}")
         })?;
-    trace_exec_timing("after_in_process_start", exec_session_started_at);
 
     // Handle resume subcommand through existing `thread/list` + `thread/resume`
     // APIs so exec no longer reaches into rollout storage directly.
     let (primary_thread_id, fallback_session_configured) = if let Some(ExecCommand::Resume(args)) =
         command.as_ref()
     {
-        trace_exec_timing("before_resolve_resume_thread_id", exec_session_started_at);
         if let Some(thread_id) =
             resolve_resume_thread_id(&client, &config, state_db.as_ref(), args).await?
         {
-            trace_exec_timing("after_resolve_resume_thread_id", exec_session_started_at);
             let response: ThreadResumeResponse = send_request_with_response(
                 &client,
                 ClientRequest::ThreadResume {
@@ -843,13 +818,11 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             )
             .await
             .map_err(anyhow::Error::msg)?;
-            trace_exec_timing("after_thread_resume", exec_session_started_at);
             let session_configured =
                 session_configured_from_thread_resume_response(&response, &config)
                     .map_err(anyhow::Error::msg)?;
             (session_configured.thread_id, session_configured)
         } else {
-            trace_exec_timing("after_resolve_resume_thread_id", exec_session_started_at);
             let response: ThreadStartResponse = send_request_with_response(
                 &client,
                 ClientRequest::ThreadStart {
@@ -860,7 +833,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             )
             .await
             .map_err(anyhow::Error::msg)?;
-            trace_exec_timing("after_thread_start_fallback", exec_session_started_at);
             let session_configured =
                 session_configured_from_thread_start_response(&response, &config)
                     .map_err(anyhow::Error::msg)?;
@@ -877,7 +849,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
         )
         .await
         .map_err(anyhow::Error::msg)?;
-        trace_exec_timing("after_thread_start", exec_session_started_at);
         let session_configured = session_configured_from_thread_start_response(&response, &config)
             .map_err(anyhow::Error::msg)?;
         (session_configured.thread_id, session_configured)
@@ -894,7 +865,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
     // Print the effective configuration and initial request so users can see what Codex
     // is using.
     event_processor.print_config_summary(&config, &prompt_summary, &session_configured);
-    trace_exec_timing("after_print_config_summary", exec_session_started_at);
     if !json_mode
         && let Some(message) =
             codex_core::config::system_bwrap_warning(config.permissions.permission_profile())
@@ -917,7 +887,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             items,
             output_schema,
         } => {
-            trace_exec_timing("before_turn_start", exec_session_started_at);
             let response: TurnStartResponse = send_request_with_response(
                 &client,
                 ClientRequest::TurnStart {
@@ -949,7 +918,6 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             )
             .await
             .map_err(anyhow::Error::msg)?;
-            trace_exec_timing("after_turn_start", exec_session_started_at);
             let task_id = response.turn.id;
             info!("Sent prompt with event ID: {task_id}");
             task_id

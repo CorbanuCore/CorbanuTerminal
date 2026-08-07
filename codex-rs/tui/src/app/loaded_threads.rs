@@ -146,6 +146,7 @@ mod tests {
             section_entered_at: None,
             history_mode: Default::default(),
             model_provider: "openai".to_string(),
+            runtime_route: None,
             created_at: 0,
             updated_at: 0,
             recency_at: Some(0),

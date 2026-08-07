@@ -7,7 +7,13 @@
 
 use crate::DbTelemetry;
 use crate::migrations::repair_legacy_recency_migration_version;
+use crate::migrations::runtime_goals_migrator;
+use crate::migrations::runtime_logs_migrator;
+use crate::migrations::runtime_memories_migrator;
+use crate::migrations::runtime_state_migrator;
+use crate::migrations::runtime_thread_history_migrator;
 use crate::runtime::RuntimeDbInitError;
+use crate::runtime::validate_applied_migrations;
 use crate::telemetry;
 use crate::telemetry::DbKind;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -26,16 +32,17 @@ use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
 
-const LOGS_DB_FILENAME: &str = "logs_2.sqlite";
-const GOALS_DB_FILENAME: &str = "goals_1.sqlite";
-const MEMORIES_DB_FILENAME: &str = "memories_1.sqlite";
-const STATE_DB_FILENAME: &str = "state_5.sqlite";
-const THREAD_HISTORY_DB_FILENAME: &str = "thread_history_1.sqlite";
+const LOGS_DB_FILENAME: &str = "pfterminal_logs_2.sqlite";
+const GOALS_DB_FILENAME: &str = "pfterminal_goals_1.sqlite";
+const MEMORIES_DB_FILENAME: &str = "pfterminal_memories_1.sqlite";
+const STATE_DB_FILENAME: &str = "pfterminal_state_5.sqlite";
+const THREAD_HISTORY_DB_FILENAME: &str = "pfterminal_thread_history_1.sqlite";
 
 #[derive(Clone, Copy)]
 struct RuntimeDbSpec {
     label: &'static str,
     filename: &'static str,
+    legacy_filename: &'static str,
     kind: DbKind,
     open_phase: &'static str,
     migrate_phase: &'static str,
@@ -50,6 +57,7 @@ impl RuntimeDbSpec {
 const STATE_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "state DB",
     filename: STATE_DB_FILENAME,
+    legacy_filename: "state_5.sqlite",
     kind: DbKind::State,
     open_phase: "open_state",
     migrate_phase: "migrate_state",
@@ -58,6 +66,7 @@ const STATE_DB: RuntimeDbSpec = RuntimeDbSpec {
 const LOGS_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "log DB",
     filename: LOGS_DB_FILENAME,
+    legacy_filename: "logs_2.sqlite",
     kind: DbKind::Logs,
     open_phase: "open_logs",
     migrate_phase: "migrate_logs",
@@ -66,6 +75,7 @@ const LOGS_DB: RuntimeDbSpec = RuntimeDbSpec {
 const GOALS_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "goals DB",
     filename: GOALS_DB_FILENAME,
+    legacy_filename: "goals_1.sqlite",
     kind: DbKind::Goals,
     open_phase: "open_goals",
     migrate_phase: "migrate_goals",
@@ -74,6 +84,7 @@ const GOALS_DB: RuntimeDbSpec = RuntimeDbSpec {
 const MEMORIES_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "memories DB",
     filename: MEMORIES_DB_FILENAME,
+    legacy_filename: "memories_1.sqlite",
     kind: DbKind::Memories,
     open_phase: "open_memories",
     migrate_phase: "migrate_memories",
@@ -82,6 +93,7 @@ const MEMORIES_DB: RuntimeDbSpec = RuntimeDbSpec {
 const THREAD_HISTORY_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "thread history DB",
     filename: THREAD_HISTORY_DB_FILENAME,
+    legacy_filename: "thread_history_1.sqlite",
     kind: DbKind::ThreadHistory,
     open_phase: "open_thread_history",
     migrate_phase: "migrate_thread_history",
@@ -100,11 +112,22 @@ pub struct RuntimeDbPath {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SqliteConfig {
     sqlite_home: AbsolutePathBuf,
+    logs_db_path_override: Option<AbsolutePathBuf>,
 }
 
 impl SqliteConfig {
     pub fn from_sqlite_home(sqlite_home: AbsolutePathBuf) -> Self {
-        Self { sqlite_home }
+        Self {
+            sqlite_home,
+            logs_db_path_override: None,
+        }
+    }
+
+    /// Use one explicit logs database while leaving the other runtime databases under the
+    /// configured SQLite home.
+    pub fn with_logs_db_path(mut self, logs_db_path: AbsolutePathBuf) -> Self {
+        self.logs_db_path_override = Some(logs_db_path);
+        self
     }
 
     pub fn new_for_testing(sqlite_home: AbsolutePathBuf) -> Self {
@@ -122,7 +145,10 @@ impl SqliteConfig {
 
     /// Return the path to the logs database.
     pub fn logs_db_path(&self) -> PathBuf {
-        LOGS_DB.path(self.home())
+        self.logs_db_path_override
+            .as_ref()
+            .map(|path| path.as_path().to_path_buf())
+            .unwrap_or_else(|| LOGS_DB.path(self.home()))
     }
 
     /// Return the path to the goals database.
@@ -149,6 +175,49 @@ impl SqliteConfig {
                 path: spec.path(self.home()),
             })
             .collect()
+    }
+
+    /// Adopt pre-namespace PF Terminal databases once, while refusing to touch an upstream
+    /// `.codex` home or a database whose applied migrations do not match this distribution.
+    pub(crate) async fn migrate_legacy_runtime_db_names(&self) -> anyhow::Result<()> {
+        let has_legacy_db = RUNTIME_DBS
+            .iter()
+            .any(|spec| self.home().join(spec.legacy_filename).exists());
+        if !has_legacy_db {
+            return Ok(());
+        }
+        if self.home().file_name().and_then(|name| name.to_str()) == Some(".codex") {
+            anyhow::bail!(
+                "refusing to rename upstream-named databases in {}: this database appears to belong to a different Codex/PFTerminal distribution; follow the repair recipe in pfterminal_codex_home_collision_incident_20260710.md",
+                self.home().display()
+            );
+        }
+
+        for spec in RUNTIME_DBS {
+            let legacy_path = self.home().join(spec.legacy_filename);
+            let namespaced_path = spec.path(self.home());
+            if !tokio::fs::try_exists(&legacy_path).await?
+                || tokio::fs::try_exists(&namespaced_path).await?
+            {
+                continue;
+            }
+            let migrator = match spec.kind {
+                DbKind::State => runtime_state_migrator(),
+                DbKind::Logs => runtime_logs_migrator(),
+                DbKind::Goals => runtime_goals_migrator(),
+                DbKind::Memories => runtime_memories_migrator(),
+                DbKind::ThreadHistory => runtime_thread_history_migrator(),
+            };
+            validate_applied_migrations(&legacy_path, &migrator).await?;
+            rename_if_source_still_exists(&legacy_path, &namespaced_path).await?;
+            for suffix in ["-wal", "-shm"] {
+                let legacy_sidecar = PathBuf::from(format!("{}{suffix}", legacy_path.display()));
+                let namespaced_sidecar =
+                    PathBuf::from(format!("{}{suffix}", namespaced_path.display()));
+                rename_if_source_still_exists(&legacy_sidecar, &namespaced_sidecar).await?;
+            }
+        }
+        Ok(())
     }
 
     pub(super) async fn open_state_db(
@@ -272,5 +341,19 @@ impl SqliteConfig {
             .max_connections(1)
             .connect_with(options)
             .await
+    }
+}
+
+async fn rename_if_source_still_exists(source: &Path, destination: &Path) -> anyhow::Result<()> {
+    match tokio::fs::rename(source, destination).await {
+        Ok(()) => Ok(()),
+        Err(err)
+            if err.kind() == std::io::ErrorKind::NotFound
+                && tokio::fs::try_exists(destination).await? =>
+        {
+            Ok(())
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err.into()),
     }
 }

@@ -1,4 +1,7 @@
 use crate::agent::AgentStatus;
+use crate::agent_communication::AgentCommunicationContext;
+use crate::agent_communication::AgentCommunicationKind;
+use crate::config::Config;
 use crate::config::ConstraintResult;
 use crate::elicitation::ElicitationRegistration;
 use crate::session::SessionIo;
@@ -15,6 +18,7 @@ use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::error::CodexErr;
+use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::mcp::CallToolResult;
 use codex_protocol::models::ActivePermissionProfile;
@@ -30,6 +34,7 @@ use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::RolloutItem;
+use codex_protocol::protocol::RuntimeSelectionSource;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::SessionConfiguredEvent;
 use codex_protocol::protocol::SessionSource;
@@ -61,6 +66,8 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 use codex_rollout::state_db::StateDbHandle;
+use codex_state::AgentMailboxAdmission;
+use codex_state::AgentMailboxPhase;
 
 #[derive(Clone, Debug)]
 pub struct ThreadConfigSnapshot {
@@ -80,6 +87,7 @@ pub struct ThreadConfigSnapshot {
     pub personality: Option<Personality>,
     pub collaboration_mode: CollaborationMode,
     pub session_source: SessionSource,
+    pub runtime_selection: Option<RuntimeSelectionSource>,
     pub history_mode: ThreadHistoryMode,
     pub forked_from_thread_id: Option<ThreadId>,
     pub parent_thread_id: Option<ThreadId>,
@@ -229,6 +237,195 @@ impl CodexThread {
         self.io.submit(op).await
     }
 
+    /// Create an idle child through this thread's native agent control plane.
+    pub async fn spawn_idle_agent(
+        &self,
+        config: Config,
+        session_source: SessionSource,
+    ) -> CodexResult<crate::thread_manager::NewThread> {
+        self.session
+            .services
+            .agent_control
+            .spawn_idle_agent(config, session_source, self.session_configured.thread_id)
+            .await
+    }
+
+    /// Durably enqueue a provider-neutral message for another native agent in this thread's tree.
+    ///
+    /// App-server clients use this bridge rather than maintaining a second dispatch queue.
+    pub async fn send_agent_message(
+        &self,
+        target_thread_id: ThreadId,
+        content: String,
+        trigger_turn: bool,
+        message_id: Option<String>,
+        assignment_id: Option<String>,
+        kind: AgentMessageKind,
+    ) -> CodexResult<String> {
+        if message_id.as_ref().is_some_and(|id| id.trim().is_empty()) {
+            return Err(CodexErr::InvalidRequest(
+                "agent mailbox message_id must not be empty".to_string(),
+            ));
+        }
+        if assignment_id
+            .as_ref()
+            .is_some_and(|id| id.trim().is_empty())
+        {
+            return Err(CodexErr::InvalidRequest(
+                "agent mailbox assignment_id must not be empty".to_string(),
+            ));
+        }
+
+        let control = &self.session.services.agent_control;
+        let author = self
+            .session_source
+            .get_agent_path()
+            .unwrap_or_else(codex_protocol::AgentPath::root);
+        let recipient = match control.ensure_agent_known(target_thread_id) {
+            Ok(target) => target.agent_path.ok_or_else(|| {
+                CodexErr::InvalidRequest(format!(
+                    "target agent {target_thread_id} is missing an agent path"
+                ))
+            })?,
+            Err(err)
+                if matches!(err.details(), CodexErrorDetails::ThreadNotFound(_))
+                    && self.session_source.parent_thread_id() == Some(target_thread_id) =>
+            {
+                let parent_path = author
+                    .as_str()
+                    .rsplit_once('/')
+                    .map(|(parent, _)| parent)
+                    .filter(|parent| !parent.is_empty())
+                    .unwrap_or(codex_protocol::AgentPath::ROOT);
+                codex_protocol::AgentPath::try_from(parent_path)
+                    .map_err(CodexErr::InvalidRequest)?
+            }
+            Err(err) => return Err(err),
+        };
+        let mut communication =
+            InterAgentCommunication::new(author, recipient, Vec::new(), content, trigger_turn);
+        if let Some(message_id) = message_id {
+            communication.message_id = Some(message_id);
+        }
+        communication.assignment_id = assignment_id;
+        communication.kind = Some(kind);
+        communication
+            .validate_mailbox_body()
+            .map_err(CodexErr::InvalidRequest)?;
+        let stable_message_id = communication
+            .message_id
+            .clone()
+            .ok_or_else(|| CodexErr::Fatal("agent mailbox message has no identity".to_string()))?;
+
+        let state_db = self.state_db();
+        if let Some(state_db) = state_db.as_ref() {
+            let now_ms = chrono::Utc::now().timestamp_millis();
+            let admission = state_db
+                .admit_agent_message(target_thread_id, &communication, now_ms)
+                .await
+                .map_err(|err| {
+                    CodexErr::Fatal(format!(
+                        "failed to admit agent message {stable_message_id}: {err}"
+                    ))
+                })?;
+            let ready_phase = match admission {
+                AgentMailboxAdmission::Inserted => {
+                    state_db
+                        .transition_agent_message(
+                            &stable_message_id,
+                            AgentMailboxPhase::Admitted,
+                            AgentMailboxPhase::Ready,
+                            now_ms,
+                        )
+                        .await
+                        .map_err(|err| {
+                            CodexErr::Fatal(format!(
+                                "failed to ready agent message {stable_message_id}: {err}"
+                            ))
+                        })?;
+                    AgentMailboxPhase::Ready
+                }
+                AgentMailboxAdmission::Existing(AgentMailboxPhase::Admitted) => {
+                    state_db
+                        .transition_agent_message(
+                            &stable_message_id,
+                            AgentMailboxPhase::Admitted,
+                            AgentMailboxPhase::Ready,
+                            now_ms,
+                        )
+                        .await
+                        .map_err(|err| {
+                            CodexErr::Fatal(format!(
+                                "failed to ready agent message {stable_message_id}: {err}"
+                            ))
+                        })?;
+                    AgentMailboxPhase::Ready
+                }
+                AgentMailboxAdmission::Existing(
+                    phase @ (AgentMailboxPhase::Ready | AgentMailboxPhase::RetryableFailure),
+                ) => phase,
+                AgentMailboxAdmission::Existing(_) => return Ok(stable_message_id),
+            };
+            let attempt_id = uuid::Uuid::now_v7().to_string();
+            let reserved = state_db
+                .begin_agent_message_submission(
+                    &stable_message_id,
+                    ready_phase,
+                    &attempt_id,
+                    now_ms,
+                )
+                .await
+                .map_err(|err| {
+                    CodexErr::Fatal(format!(
+                        "failed to reserve agent message {stable_message_id}: {err}"
+                    ))
+                })?;
+            if !reserved {
+                return Ok(stable_message_id);
+            }
+        }
+
+        let send_result = async {
+            control
+                .ensure_v2_agent_loaded(self.config().await.as_ref().clone(), target_thread_id)
+                .await?;
+            control
+                .send_inter_agent_communication(
+                    target_thread_id,
+                    communication,
+                    AgentCommunicationContext::new(
+                        AgentCommunicationKind::Message,
+                        self.session_configured.thread_id,
+                    ),
+                    /*parent_turn_id*/ None,
+                )
+                .await
+        }
+        .await;
+        if let Some(state_db) = state_db.as_ref() {
+            let next_phase = if send_result.is_ok() {
+                AgentMailboxPhase::Submitted
+            } else {
+                AgentMailboxPhase::RetryableFailure
+            };
+            state_db
+                .transition_agent_message(
+                    &stable_message_id,
+                    AgentMailboxPhase::Submitting,
+                    next_phase,
+                    chrono::Utc::now().timestamp_millis(),
+                )
+                .await
+                .map_err(|err| {
+                    CodexErr::Fatal(format!(
+                        "failed to record agent message {stable_message_id} outcome: {err}"
+                    ))
+                })?;
+        }
+        send_result?;
+        Ok(stable_message_id)
+    }
+
     /// Returns the session telemetry handle for thread-scoped production instrumentation.
     pub fn session_telemetry(&self) -> SessionTelemetry {
         self.session.services.session_telemetry.clone()
@@ -297,87 +494,6 @@ impl CodexThread {
         self.io
             .submit_user_input_with_client_user_message_id(op, trace, client_user_message_id)
             .await
-    }
-
-    /// Durably enqueue a provider-neutral message for another native agent in this thread's tree.
-    ///
-    /// Persistent crew products use this bridge rather than maintaining their own dispatch queue.
-    /// It routes through the same mailbox as model-issued `send_message` and `followup_task`.
-    pub async fn send_agent_message(
-        &self,
-        target_thread_id: ThreadId,
-        content: String,
-        trigger_turn: bool,
-        message_id: Option<String>,
-        assignment_id: Option<String>,
-        kind: AgentMessageKind,
-    ) -> CodexResult<String> {
-        if message_id.as_ref().is_some_and(|id| id.trim().is_empty()) {
-            return Err(CodexErr::InvalidRequest(
-                "agent mailbox message_id must not be empty".to_string(),
-            ));
-        }
-        if assignment_id
-            .as_ref()
-            .is_some_and(|id| id.trim().is_empty())
-        {
-            return Err(CodexErr::InvalidRequest(
-                "agent mailbox assignment_id must not be empty".to_string(),
-            ));
-        }
-
-        let control = &self.codex.session.services.agent_control;
-        let author = self
-            .session_source
-            .get_agent_path()
-            .unwrap_or_else(codex_protocol::AgentPath::root);
-        let recipient = match control.ensure_agent_known(target_thread_id) {
-            Ok(target) => target.agent_path.ok_or_else(|| {
-                CodexErr::InvalidRequest(format!(
-                    "target agent {target_thread_id} is missing an agent path"
-                ))
-            })?,
-            Err(CodexErr::ThreadNotFound(_))
-                if self.session_source.parent_thread_id() == Some(target_thread_id) =>
-            {
-                let parent_path = author
-                    .as_str()
-                    .rsplit_once('/')
-                    .map(|(parent, _)| parent)
-                    .filter(|parent| !parent.is_empty())
-                    .unwrap_or(codex_protocol::AgentPath::ROOT);
-                codex_protocol::AgentPath::try_from(parent_path)
-                    .map_err(CodexErr::InvalidRequest)?
-            }
-            Err(err) => return Err(err),
-        };
-        let mut communication =
-            InterAgentCommunication::new(author, recipient, Vec::new(), content, trigger_turn);
-        if let Some(message_id) = message_id {
-            communication.message_id = Some(message_id);
-        }
-        communication.assignment_id = assignment_id;
-        communication.kind = Some(kind);
-        communication
-            .validate_mailbox_body()
-            .map_err(CodexErr::InvalidRequest)?;
-        let stable_message_id = communication
-            .message_id
-            .clone()
-            .ok_or_else(|| CodexErr::Fatal("agent mailbox message has no identity".to_string()))?;
-
-        // Admission precedes potentially fallible reload work so a stable, acknowledged item can
-        // be reconciled if the target runtime becomes unavailable at this boundary.
-        control
-            .admit_inter_agent_communication(target_thread_id, &communication)
-            .await?;
-        control
-            .ensure_v2_agent_loaded(self.config().await.as_ref().clone(), target_thread_id)
-            .await?;
-        control
-            .send_inter_agent_communication(target_thread_id, communication)
-            .await?;
-        Ok(stable_message_id)
     }
 
     /// Persist whether this thread is eligible for future memory generation.
@@ -505,6 +621,7 @@ impl CodexThread {
             permission_profile,
             active_permission_profile,
             windows_sandbox_level,
+            model_provider,
             collaboration_mode: Some(collaboration_mode),
             reasoning_summary: summary,
             service_tier,

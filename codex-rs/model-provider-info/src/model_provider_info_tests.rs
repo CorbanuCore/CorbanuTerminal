@@ -8,6 +8,40 @@ use std::time::Duration;
 use tempfile::tempdir;
 
 #[test]
+fn provider_runtime_policy_is_typed_overridable_and_validated() {
+    let provider: ModelProviderInfo = toml::from_str(
+        r#"
+name = "Anthropic proxy"
+wire_api = "anthropic"
+
+[runtime_policy]
+request_body_max_bytes = 24000000
+retry_request_body_max_bytes = 12000000
+web_search_max_uses = 5
+"#,
+    )
+    .expect("typed provider policy should deserialize");
+
+    assert_eq!(provider.runtime_policy.request_body_max_bytes, 24_000_000);
+    assert_eq!(
+        provider.runtime_policy.retry_request_body_max_bytes,
+        12_000_000
+    );
+    assert_eq!(provider.runtime_policy.web_search_max_uses, Some(5));
+    assert_eq!(provider.validate(), Ok(()));
+
+    let mut invalid = provider;
+    invalid.runtime_policy.retry_request_body_max_bytes = 25_000_000;
+    assert_eq!(
+        invalid.validate(),
+        Err(
+            "runtime_policy.retry_request_body_max_bytes must not exceed request_body_max_bytes"
+                .to_string()
+        )
+    );
+}
+
+#[test]
 fn test_deserialize_ollama_model_provider_toml() {
     let azure_provider_toml = r#"
 name = "Ollama"
@@ -32,6 +66,7 @@ base_url = "http://localhost:11434/v1"
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: Default::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
@@ -71,6 +106,7 @@ query_params = { api-version = "2025-04-01-preview" }
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: Default::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
@@ -114,6 +150,7 @@ supports_standalone_web_search = true
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: Default::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
@@ -241,6 +278,7 @@ fn test_supports_remote_compaction_for_azure_name() {
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: Default::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
@@ -271,6 +309,7 @@ fn test_supports_remote_compaction_for_non_openai_non_azure_provider() {
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: Default::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
@@ -384,6 +423,7 @@ fn test_create_amazon_bedrock_provider() {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
@@ -428,9 +468,11 @@ fn test_create_ambient_provider() {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     );
     assert_eq!(AMBIENT_DEFAULT_MODEL, "z-ai/glm-5.2");
@@ -480,9 +522,11 @@ fn test_create_zai_provider() {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     );
     assert_eq!(ZAI_DEFAULT_MODEL, "glm-5.2");
@@ -511,9 +555,11 @@ fn test_create_anthropic_provider() {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     );
     assert_eq!(ANTHROPIC_DEFAULT_MODEL, "claude-opus-5");
@@ -558,9 +604,11 @@ fn test_create_claude_plan_provider() {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     );
     assert_eq!(CLAUDE_PLAN_MODEL, "claude-opus-5-plan");
@@ -728,7 +776,7 @@ fn test_built_in_model_providers_include_meta() {
     assert!(!meta.requires_openai_auth);
     assert!(!meta.supports_websockets);
     assert_eq!(
-        resolve_model_for_provider(None, META_PROVIDER_ID).as_deref(),
+        resolve_model_for_provider(/*model*/ None, META_PROVIDER_ID).as_deref(),
         Some(META_DEFAULT_MODEL)
     );
     assert_eq!(
@@ -757,7 +805,7 @@ fn kimi_code_provider_is_builtin_and_resolves_k3() {
     assert_eq!(kimi_code.wire_api, WireApi::Chat);
     assert!(kimi_code.is_kimi_code());
     assert_eq!(
-        resolve_model_for_provider(None, KIMI_CODE_PROVIDER_ID).as_deref(),
+        resolve_model_for_provider(/*model*/ None, KIMI_CODE_PROVIDER_ID).as_deref(),
         Some(KIMI_CODE_K3_MODEL)
     );
     assert_eq!(
@@ -792,7 +840,7 @@ fn openrouter_preserves_nonempty_model_slugs() {
             Some(OPENROUTER_DEFAULT_MODEL)
         );
         assert_eq!(
-            resolve_model_for_provider(None, provider).as_deref(),
+            resolve_model_for_provider(/*model*/ None, provider).as_deref(),
             Some(OPENROUTER_DEFAULT_MODEL)
         );
     }
@@ -809,14 +857,14 @@ fn direct_zai_retries_transient_provider_rate_limits() {
         .expect("OpenRouter provider should be built in");
 
     assert!(
-        zai.to_api_provider(None)
+        zai.to_api_provider(/*auth_mode*/ None)
             .expect("Z.AI should convert to API provider")
             .retry
             .retry_429
     );
     assert!(
         !openrouter
-            .to_api_provider(None)
+            .to_api_provider(/*auth_mode*/ None)
             .expect("OpenRouter should convert to API provider")
             .retry
             .retry_429
@@ -836,6 +884,7 @@ fn configured_built_in_provider_can_override_transport_knobs() {
             stream_actionable_timeout_ms: Some(240_000),
             stream_long_failure_retry_threshold_ms: Some(90_000),
             stream_long_failure_max_retries: Some(0),
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: Some(30_000),
             ..ModelProviderInfo::default()
         },
@@ -1140,6 +1189,15 @@ fn test_validate_provider_aws_rejects_websockets() {
     assert_eq!(
         provider.validate(),
         Err("provider aws cannot be combined with supports_websockets".to_string())
+    );
+}
+
+#[test]
+fn custom_openai_base_url_uses_http_unless_a_typed_provider_declares_websockets() {
+    assert!(ModelProviderInfo::create_openai_provider(/*base_url*/ None).supports_websockets);
+    assert!(
+        !ModelProviderInfo::create_openai_provider(Some("https://proxy.example/v1".to_string()))
+            .supports_websockets
     );
 }
 

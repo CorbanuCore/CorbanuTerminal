@@ -32,7 +32,7 @@ async fn gpu_authorization_uses_one_labeled_input_and_retries_in_place_snapshot(
         crate::app_event::GpuAuthorizationPromptState::default(),
     );
 
-    let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 80);
+    let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 80);
     assert!(rendered.contains("Maximum hourly price"));
     assert!(rendered.contains("USD per hour, for example 10"));
     assert!(!rendered.contains("<max hourly USD>"));
@@ -71,7 +71,7 @@ async fn gpu_duration_input_cannot_be_mistaken_for_another_dollar_limit() {
         },
     );
 
-    let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 100);
+    let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 100);
     assert!(rendered.contains("MINUTES"));
     assert!(rendered.contains("minutes (not dollars)"));
     assert!(rendered.contains("TIME LIMIT, NOT PRICE"));
@@ -80,9 +80,9 @@ async fn gpu_duration_input_cannot_be_mistaken_for_another_dollar_limit() {
 
 #[test]
 fn gpu_confirmation_duration_rounds_up_without_hiding_setup_time() {
-    assert_eq!(remaining_authorization_minutes(1_200_000, 1), 20);
-    assert_eq!(remaining_authorization_minutes(60_001, 1), 1);
-    assert_eq!(remaining_authorization_minutes(1, 2), 0);
+    assert_eq!(remaining_authorization_minutes(/*terminate_at_ms*/ 1_200_000, /*now_ms*/ 1), 20);
+    assert_eq!(remaining_authorization_minutes(/*terminate_at_ms*/ 60_001, /*now_ms*/ 1), 1);
+    assert_eq!(remaining_authorization_minutes(/*terminate_at_ms*/ 1, /*now_ms*/ 2), 0);
 }
 
 #[test]
@@ -122,7 +122,7 @@ async fn gpu_menu_excludes_nonbillable_history_snapshot() {
             codex_state::GpuRentalState::TerminatedConfirmed,
             Some("vast-1"),
         ),
-        rental("failed-rental", codex_state::GpuRentalState::Failed, None),
+        rental("failed-rental", codex_state::GpuRentalState::Failed, /*provider_resource_id*/ None),
         rental(
             "active-rental",
             codex_state::GpuRentalState::Ready,
@@ -130,7 +130,7 @@ async fn gpu_menu_excludes_nonbillable_history_snapshot() {
         ),
     ]);
 
-    let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 100);
+    let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 100);
     assert!(rendered.contains("active-rental"));
     assert!(!rendered.contains("terminated-rental"));
     assert!(!rendered.contains("failed-rental"));
@@ -147,7 +147,7 @@ fn rental(
         installation_id: "test-installation".to_string(),
         client_operation_id: format!("operation-{rental_id}"),
         provider: "vast".to_string(),
-        recipe_id: "deepseek-flash-2xh200".to_string(),
+        recipe_id: "deepseek-flash-0731-2xh200".to_string(),
         recipe_revision: "test-revision".to_string(),
         offer_snapshot_json: "{}".to_string(),
         quote_expires_at_ms: None,

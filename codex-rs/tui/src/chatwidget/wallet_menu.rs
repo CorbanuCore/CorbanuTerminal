@@ -145,12 +145,12 @@ pub(crate) struct WalletUsageWindow {
 
 impl ChatWidget {
     pub(crate) fn open_wallet_menu(&mut self) {
-        let params = wallet_params(None, self.wallet_capability.is_some());
+        let params = wallet_params(/*result*/ None, self.wallet_capability.is_some());
         if !self
             .bottom_pane
             .replace_selection_view_if_present(WALLET_MENU_VIEW_ID, params)
         {
-            self.show_selection_view(wallet_params(None, self.wallet_capability.is_some()));
+            self.show_selection_view(wallet_params(/*result*/ None, self.wallet_capability.is_some()));
         }
         self.refresh_wallet_status();
     }
@@ -384,7 +384,7 @@ impl ChatWidget {
             Ok(created) => {
                 self.add_info_message(
                     wallet_persistence_success_message(operation, &created.address),
-                    None,
+                    /*hint*/ None,
                 );
                 self.bottom_pane.show_view(Box::new(
                     crate::bottom_pane::wallet_recovery::WalletRecoveryView::new(
@@ -450,7 +450,7 @@ impl ChatWidget {
                             history_cell::new_info_event(
                                 "Recovery backup acknowledged. The secure view was cleared."
                                     .to_string(),
-                                None,
+                                /*hint*/ None,
                             ),
                         )));
                     })),
@@ -471,7 +471,7 @@ impl ChatWidget {
             let cell: Box<dyn HistoryCell> = match result {
                 Ok(()) => Box::new(history_cell::new_info_event(
                     "Wallet locked in every PfTerminal process.".to_string(),
-                    None,
+                    /*hint*/ None,
                 )),
                 Err(error) => Box::new(history_cell::new_error_event(format!(
                     "Wallet lock failed: {error}"
@@ -654,7 +654,7 @@ impl ChatWidget {
                 format_token_count(plan.weekly_token_limit),
                 format_token_count(plan.monthly_token_limit),
             ),
-            false,
+            /*dimmed*/ false,
         );
         push_wallet_line(
             &mut header,
@@ -666,7 +666,7 @@ impl ChatWidget {
                     )
                 },
             ),
-            true,
+            /*dimmed*/ true,
         );
         match remaining_usdc {
             Some((current, Some(remaining))) => header.push(Line::from(format!(
@@ -732,7 +732,7 @@ impl ChatWidget {
                 "Submitting the exact {} USDC payment for the {} plan…",
                 plan.price_usdc, plan.id
             ),
-            None,
+            /*hint*/ None,
         );
         let home = self.config.codex_home.as_path().to_path_buf();
         let tx = self.app_event_tx.clone();
@@ -790,7 +790,7 @@ impl ChatWidget {
                     self.add_info_message(
                         "Payment settled. Verifying the plan schedule and preparing its receipt…"
                             .to_string(),
-                        None,
+                        /*hint*/ None,
                     );
                     let home = self.config.codex_home.as_path().to_path_buf();
                     let tx = self.app_event_tx.clone();
@@ -813,7 +813,7 @@ impl ChatWidget {
                             self.add_info_message(
                                 "PfTerminal Plan access recovered. Credential stored securely."
                                     .to_string(),
-                                None,
+                                /*hint*/ None,
                             );
                             self.select_pfterminal_plan_provider();
                             self.open_wallet_menu();
@@ -895,15 +895,11 @@ impl ChatWidget {
     }
 
     pub(super) fn select_pfterminal_plan_provider(&self) {
-        self.app_event_tx.send(AppEvent::UpdateModelSelection {
-            model: AMBIENT_DEFAULT_MODEL.to_string(),
-            provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
-        });
-        self.app_event_tx.send(AppEvent::PersistModelSelection {
-            model: AMBIENT_DEFAULT_MODEL.to_string(),
-            provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
-            effort: None,
-        });
+        self.app_event_tx
+            .send(AppEvent::SelectProviderModel {
+                model: AMBIENT_DEFAULT_MODEL.to_string(),
+                provider: PFTERMINAL_PLAN_PROVIDER_ID.to_string(),
+            });
     }
 }
 
@@ -1038,7 +1034,7 @@ fn wallet_items(
         Some("devnet") => "Solana devnet",
         _ => "Solana mainnet",
     };
-    push_wallet_line(header, network, true);
+    push_wallet_line(header, network, /*dimmed*/ true);
     if let Some(balance) = overview.balances {
         header.push(Line::from(format!(
             "{:.6} SOL · {:.2} USDC",
@@ -1056,12 +1052,12 @@ fn wallet_items(
                 "PfTerminal Plan · {} linked to another wallet",
                 title_case_plan(&linked_plan.period.plan_id),
             ),
-            false,
+            /*dimmed*/ false,
         );
-        push_wallet_line(header, &linked_plan_owner_description(linked_plan), false);
+        push_wallet_line(header, &linked_plan_owner_description(linked_plan), /*dimmed*/ false);
     }
     if !overview.plan_credential_present {
-        push_wallet_line(header, "PfTerminal Plan · not connected", false);
+        push_wallet_line(header, "PfTerminal Plan · not connected", /*dimmed*/ false);
     }
     let upgrade_mode = overview.plan.as_ref().map(|plan| {
         let (current_plan_id, starts_at) = plan
@@ -1075,7 +1071,7 @@ fn wallet_items(
         }
     });
     if let Some(plan) = &overview.plan {
-        push_wallet_line(header, &wallet_plan_summary(plan), false);
+        push_wallet_line(header, &wallet_plan_summary(plan), /*dimmed*/ false);
     }
     if let Some(error) = overview.plan_error {
         header.push(Line::from(format!("Plan status: {error}").red()));
@@ -1088,7 +1084,7 @@ fn wallet_items(
             tx.send(AppEvent::InsertHistoryCell(Box::new(
                 history_cell::new_info_event(
                     format!("Solana receive address: {receive_address}"),
-                    None,
+                    /*hint*/ None,
                 ),
             )))
         })],
@@ -1487,11 +1483,11 @@ mod tests {
 
     #[test]
     fn connected_plan_exposes_dedicated_details_view() {
-        let mut active = overview(true);
+        let mut active = overview(/*locked*/ true);
         active.plan = Some(starter_plan());
         active.plan_credential_present = true;
         let mut header = ColumnRenderable::new();
-        let items = wallet_items(&mut header, active, false);
+        let items = wallet_items(&mut header, active, /*client_can_sign*/ false);
         let details = items
             .iter()
             .position(|item| item.name == "Plan details")
@@ -1517,11 +1513,11 @@ mod tests {
             Some(&linked.wallet_address)
         );
 
-        let mut overview = overview(false);
+        let mut overview = overview(/*locked*/ false);
         overview.linked_plan_for_other_wallet = other;
         overview.plan_credential_present = true;
         let mut header = ColumnRenderable::new();
-        let names = wallet_items(&mut header, overview, true)
+        let names = wallet_items(&mut header, overview, /*client_can_sign*/ true)
             .into_iter()
             .map(|item| item.name)
             .collect::<Vec<_>>();
@@ -1555,7 +1551,7 @@ mod tests {
 
     #[test]
     fn unlocked_daemon_without_this_tui_capability_requires_unlock_again() {
-        let items = names(false, false);
+        let items = names(/*locked*/ false, /*client_can_sign*/ false);
         assert!(items.iter().any(|name| name == "Buy PfTerminal Plan"));
         assert!(items.iter().any(|name| name == "Recover existing plan"));
         assert!(
@@ -1575,7 +1571,7 @@ mod tests {
 
     #[test]
     fn scoped_capability_enables_spending_actions_only_in_owning_tui() {
-        let items = names(false, true);
+        let items = names(/*locked*/ false, /*client_can_sign*/ true);
         assert!(items.iter().any(|name| name == "Buy PfTerminal Plan"));
         assert!(items.iter().any(|name| name == "Recover existing plan"));
         assert!(!items.iter().any(|name| name.starts_with("Unlock for")));
@@ -1584,7 +1580,7 @@ mod tests {
     #[test]
     fn fresh_locked_wallet_leads_with_purchase_and_keeps_recovery_secondary() {
         let mut header = ColumnRenderable::new();
-        let items = wallet_items(&mut header, overview(true), false);
+        let items = wallet_items(&mut header, overview(/*locked*/ true), /*client_can_sign*/ false);
         let purchase = items
             .iter()
             .position(|item| item.name == "Buy PfTerminal Plan")
@@ -1619,10 +1615,10 @@ mod tests {
 
     #[test]
     fn active_signing_operation_is_busy_without_offering_conflicting_actions() {
-        let mut busy = overview(false);
+        let mut busy = overview(/*locked*/ false);
         busy.daemon.busy = true;
         let mut header = ColumnRenderable::new();
-        let items = wallet_items(&mut header, busy, true);
+        let items = wallet_items(&mut header, busy, /*client_can_sign*/ true);
         let names = items
             .iter()
             .map(|item| item.name.as_str())
@@ -1637,10 +1633,10 @@ mod tests {
 
     #[test]
     fn active_plan_exposes_upgrade_before_and_after_unlock() {
-        let mut locked_overview = overview(true);
+        let mut locked_overview = overview(/*locked*/ true);
         locked_overview.plan = Some(starter_plan());
         let mut header = ColumnRenderable::new();
-        let locked_items = wallet_items(&mut header, locked_overview, false);
+        let locked_items = wallet_items(&mut header, locked_overview, /*client_can_sign*/ false);
         let locked_upgrade = locked_items
             .iter()
             .position(|item| item.name == "Upgrade PfTerminal Plan")
@@ -1660,10 +1656,10 @@ mod tests {
             })
         ));
 
-        let mut unlocked_overview = overview(false);
+        let mut unlocked_overview = overview(/*locked*/ false);
         unlocked_overview.plan = Some(starter_plan());
         let mut header = ColumnRenderable::new();
-        let unlocked_items = wallet_items(&mut header, unlocked_overview, true);
+        let unlocked_items = wallet_items(&mut header, unlocked_overview, /*client_can_sign*/ true);
         let unlocked_upgrade = unlocked_items
             .iter()
             .position(|item| item.name == "Upgrade PfTerminal Plan")
@@ -1689,10 +1685,10 @@ mod tests {
             starts_at: "2026-08-19T00:35:20Z".to_string(),
             ends_at: "2026-09-19T00:35:20Z".to_string(),
         });
-        let mut active = overview(false);
+        let mut active = overview(/*locked*/ false);
         active.plan = Some(status);
         let mut header = ColumnRenderable::new();
-        let items = wallet_items(&mut header, active, true);
+        let items = wallet_items(&mut header, active, /*client_can_sign*/ true);
         let upgrade = items
             .iter()
             .position(|item| item.name == "Upgrade PfTerminal Plan")
@@ -1738,13 +1734,13 @@ mod tests {
             starts_at: "2026-08-19T00:35:20Z".to_string(),
             ends_at: "2026-09-19T00:35:20Z".to_string(),
         });
-        let mut active = overview(true);
+        let mut active = overview(/*locked*/ true);
         active.plan = Some(status);
         active
             .plan_prices_usdc
             .insert("basic".to_string(), "20".to_string());
         let mut header = ColumnRenderable::new();
-        let items = wallet_items(&mut header, active, false);
+        let items = wallet_items(&mut header, active, /*client_can_sign*/ false);
         let receipt = items
             .iter()
             .position(|item| item.name == "View latest plan receipt")
@@ -1769,10 +1765,10 @@ mod tests {
 
     #[test]
     fn plan_disconnect_and_wallet_removal_are_separate_actions() {
-        let mut overview = overview(true);
+        let mut overview = overview(/*locked*/ true);
         overview.plan_credential_present = true;
         let mut header = ColumnRenderable::new();
-        let items = wallet_items(&mut header, overview, false);
+        let items = wallet_items(&mut header, overview, /*client_can_sign*/ false);
         let names = items
             .iter()
             .map(|item| item.name.as_str())
@@ -1816,9 +1812,9 @@ mod tests {
 
     #[test]
     fn recovery_backup_is_available_while_locked_and_requires_fresh_passcode_flow() {
-        let overview = overview(true);
+        let overview = overview(/*locked*/ true);
         let mut header = ColumnRenderable::new();
-        let items = wallet_items(&mut header, overview, false);
+        let items = wallet_items(&mut header, overview, /*client_can_sign*/ false);
         let backup = items
             .iter()
             .position(|item| item.name == "Back up recovery material")
@@ -1851,8 +1847,8 @@ mod tests {
 
     #[test]
     fn wallet_counts_format_for_status_and_allowance_copy() {
-        assert_eq!(format_token_count(1_000_000), "1,000,000");
-        assert_eq!(format_usdc_atomic(4_250_000), "4.25");
+        assert_eq!(format_token_count(/*value*/ 1_000_000), "1,000,000");
+        assert_eq!(format_usdc_atomic(/*value*/ 4_250_000), "4.25");
     }
 
     #[test]
@@ -1927,7 +1923,7 @@ mod tests {
             usdc_atomic: 11,
         });
 
-        chat.on_wallet_status_ready(1, Ok(overview(true)));
+        chat.on_wallet_status_ready(/*generation*/ 1, Ok(overview(/*locked*/ true)));
 
         assert_eq!(
             chat.wallet_balances,

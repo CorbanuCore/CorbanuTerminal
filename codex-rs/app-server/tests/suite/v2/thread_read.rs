@@ -489,6 +489,7 @@ async fn thread_search_occurrences_reads_paginated_projection() -> Result<()> {
             parent_thread_id: None,
             source: ProtocolSessionSource::Cli,
             thread_source: None,
+            runtime_selection: None,
             originator: "test_originator".to_string(),
             base_instructions: BaseInstructions::default(),
             dynamic_tools: Vec::new(),
@@ -1247,6 +1248,12 @@ async fn thread_read_loaded_thread_returns_precomputed_path_before_materializati
     assert!(read.preview.is_empty());
     assert_eq!(read.turns.len(), 0);
     assert_eq!(read.status, ThreadStatus::Idle);
+    let runtime_route = read
+        .runtime_route
+        .expect("loaded thread/read must expose authoritative runtime route");
+    assert_eq!(runtime_route.model, "mock-model");
+    assert_eq!(runtime_route.model_provider, read.model_provider);
+    assert_eq!(runtime_route.selection_source, None);
 
     Ok(())
 }
@@ -1537,6 +1544,7 @@ async fn paginated_history_lists_use_projected_turns_and_items() -> Result<()> {
             parent_thread_id: None,
             source: ProtocolSessionSource::Cli,
             thread_source: None,
+            runtime_selection: None,
             originator: "test_originator".to_string(),
             base_instructions: BaseInstructions::default(),
             dynamic_tools: Vec::new(),
@@ -2227,6 +2235,7 @@ async fn seed_pathless_store_thread(
             parent_thread_id: None,
             source: ProtocolSessionSource::Cli,
             thread_source: None,
+            runtime_selection: None,
             originator: "test_originator".to_string(),
             base_instructions: BaseInstructions::default(),
             dynamic_tools: Vec::new(),

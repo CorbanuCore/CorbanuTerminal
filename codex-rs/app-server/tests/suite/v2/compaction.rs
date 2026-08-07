@@ -143,8 +143,8 @@ async fn auto_compaction_remote_emits_started_and_completed_items() -> Result<()
     let codex_home = TempDir::new()?;
     compaction_config(&server.uri(), REMOTE_AUTO_COMPACT_LIMIT)
         .disable_feature(Feature::RemoteCompactionV2)
-        .with_provider_name("OpenAI")
-        .with_provider_config("requires_openai_auth = true")
+        .disable_feature(Feature::EnableRequestCompression)
+        .with_builtin_openai_provider()
         .write(codex_home.path())?;
     write_chatgpt_auth(
         codex_home.path(),

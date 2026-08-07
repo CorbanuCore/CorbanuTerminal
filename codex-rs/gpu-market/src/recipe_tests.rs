@@ -4,6 +4,8 @@ fn verified_recipe() -> GpuRecipe {
     GpuRecipe {
         id: "verified-test".to_string(),
         revision: "manifest-v1".to_string(),
+        model_family: "test".to_string(),
+        recommendation_priority: None,
         model_id: "owner/model".to_string(),
         served_model_id: "owner/model".to_string(),
         wire_api: "chat".to_string(),
@@ -33,6 +35,7 @@ fn verified_recipe() -> GpuRecipe {
         model_weight_bytes: 180_000_000_000,
         kv_cache_reserve_bytes: 40_000_000_000,
         workspace_reserve_bytes: 20_000_000_000,
+        container_entrypoint: Vec::new(),
         launch_command: vec![
             "server".to_string(),
             "owner/model".to_string(),
@@ -67,6 +70,33 @@ fn verified_recipe_accepts_only_complete_immutable_manifests() {
 }
 
 #[test]
+fn recommendation_selection_is_unique_and_excludes_unqualified_recipes() {
+    let mut qualified = verified_recipe();
+    qualified.id = "qualified".to_string();
+    qualified.model_family = "deepseek".to_string();
+    qualified.recommendation_priority = Some(1);
+
+    let mut experimental = verified_recipe();
+    experimental.id = "experimental".to_string();
+    experimental.model_family = "deepseek".to_string();
+    experimental.recommendation_priority = Some(0);
+    experimental.stability = RecipeStability::Experimental;
+
+    let catalog = RecipeCatalog::new(vec![experimental, qualified.clone()])
+        .expect("distinct recommendation slots");
+    assert_eq!(
+        catalog
+            .recommended_for_family("deepseek")
+            .map(|recipe| recipe.id.as_str()),
+        Some("qualified")
+    );
+
+    let mut duplicate = qualified.clone();
+    duplicate.id = "duplicate".to_string();
+    assert!(RecipeCatalog::new(vec![qualified, duplicate]).is_err());
+}
+
+#[test]
 fn legacy_manifests_default_the_served_alias_to_the_source_model() {
     let mut json = serde_json::to_value(verified_recipe()).expect("serialize recipe");
     json.as_object_mut()
@@ -92,54 +122,43 @@ fn legacy_manifests_default_to_chat_and_verified_protocols_are_bounded() {
 }
 
 #[test]
-fn built_in_deepseek_recipe_is_a_validated_runtime_specific_manifest() {
+fn recommended_deepseek_recipe_resolves_the_0731_vllm_dspark_manifest() {
     let catalog = RecipeCatalog::default();
     let recipe = catalog
-        .get("deepseek-flash-2xh200")
-        .expect("DeepSeek recipe");
+        .recommended_for_family("DEEPSEEK")
+        .expect("recommended DeepSeek recipe");
     RecipeCatalog::new(vec![recipe.clone()]).expect("valid built-in DeepSeek manifest");
 
     assert!(recipe.manifest_verified);
     assert_eq!(
         recipe.revision,
-        "deepseek-v4-flash-sglang-v0.5.15-post1-2xh200-r2"
+        "deepseek-v4-flash-0731-vllm-v0.26.0-2xh200-r1"
     );
-    assert_eq!(recipe.runtime, "sglang");
-    assert_eq!(recipe.serving_runtime_version, "0.5.15.post1");
+    assert_eq!(recipe.model_id, "deepseek-ai/DeepSeek-V4-Flash-0731");
+    assert_eq!(
+        recipe.model_revision,
+        "9e165c30e2704aec5d9d593cce3eebd58bbef1cb"
+    );
+    assert_eq!(recipe.runtime, "vllm");
+    assert_eq!(recipe.serving_runtime_version, "0.26.0");
     assert_eq!(recipe.tensor_parallel_size, 2);
     assert_eq!(recipe.maximum_context_tokens, 131_072);
     assert_eq!(recipe.maximum_concurrent_requests, 8);
-    assert_eq!(recipe.launch_command[0], "bash");
+    assert_eq!(recipe.container_entrypoint, ["bash", "-lc"]);
     assert!(recipe.launch_command.iter().any(|part| {
-        part.contains("--tool-call-parser deepseekv4")
+        part.contains("vllm serve deepseek-ai/DeepSeek-V4-Flash-0731")
+            && part.contains("--tool-call-parser deepseek_v4")
+            && part.contains("--reasoning-parser deepseek_v4")
             && part.contains("--api-key \"$PFT_ENDPOINT_TOKEN\"")
             && part.contains("nvidia-smi topo -m")
             && part.contains("for (i=2; i<=NF; i++)")
             && part.contains("PFTERMINAL_RUNTIME_GATE=nvlink-ok")
-            && !part.contains("--disable-cuda-graph")
-            && part.contains("--moe-runner-backend marlin")
-            && part.contains("--watchdog-timeout 1200")
-            && part.contains("SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1")
-            && part.contains("SGLANG_OPT_DEEPGEMM_HC_PRENORM=1")
-            && part.contains("SGLANG_OPT_USE_TILELANG_MHC_PRE=1")
-            && part.contains("--context-length 131072")
-            && part.contains("--max-running-requests 8")
-            && part.contains("--chunked-prefill-size 16384")
-            && part.contains("--speculative-algorithm EAGLE")
-            && part.contains("--speculative-num-steps 3")
-            && part.contains("--speculative-eagle-topk 1")
-            && part.contains("--speculative-num-draft-tokens 4")
+            && part.contains("--max-model-len 131072")
+            && part.contains("--speculative-config")
+            && part.contains("\"method\":\"dspark\"")
     }));
 
-    let tp4 = catalog
-        .get("deepseek-flash-4xh200")
-        .expect("qualified TP4 recipe");
-    assert_eq!(tp4.revision, "deepseek-v4-flash-sglang-v0.5.12-4xh200-r1");
-    assert!(
-        tp4.launch_command
-            .iter()
-            .any(|part| part.contains("--disable-cuda-graph"))
-    );
+    assert!(catalog.recommended_for_family("unknown").is_none());
 }
 
 #[test]
@@ -154,10 +173,8 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
     assert_eq!(
         ids,
         [
-            "deepseek-flash-2xh200",
-            "deepseek-flash-4xh200",
+            "deepseek-flash-0731-2xh200",
             "glm-5.2-fp8-8xh200",
-            "huihui-deepseek-v4-flash-q4k-2xh200-experimental",
             "huihui-glm-5.2-iq1m-2xh200-experimental"
         ]
     );
@@ -175,20 +192,26 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
         [
             RecipeStability::Qualified,
             RecipeStability::Qualified,
-            RecipeStability::Qualified,
-            RecipeStability::Experimental,
             RecipeStability::Experimental,
         ]
+    );
+
+    let deepseek_recipes = catalog
+        .list()
+        .iter()
+        .filter(|recipe| recipe.model_family == "deepseek")
+        .collect::<Vec<_>>();
+    assert_eq!(deepseek_recipes.len(), 1);
+    assert_eq!(
+        deepseek_recipes[0].model_id,
+        "deepseek-ai/DeepSeek-V4-Flash-0731"
     );
 }
 
 #[test]
 fn fine_tune_recipes_pin_source_runtime_artifacts_auth_and_topology() {
     let catalog = RecipeCatalog::default();
-    for id in [
-        "huihui-deepseek-v4-flash-q4k-2xh200-experimental",
-        "huihui-glm-5.2-iq1m-2xh200-experimental",
-    ] {
+    for id in ["huihui-glm-5.2-iq1m-2xh200-experimental"] {
         let recipe = catalog.get(id).expect("fine-tune recipe");
         let launch = recipe.launch_command.join(" ");
         assert_eq!(recipe.stability, RecipeStability::Experimental);
@@ -217,31 +240,21 @@ fn fine_tune_recipes_pin_source_runtime_artifacts_auth_and_topology() {
         assert!(
             launch.contains("527fbf917c39189a1e3b31d34fa955601680b2d5c8055d2a87b8b9588dec7bb9")
         );
-        if id.contains("deepseek") {
-            assert_eq!(recipe.runtime, "ds4");
-            assert_eq!(recipe.served_model_id(), "deepseek-v4-flash");
-            assert_eq!(recipe.wire_api, "responses");
-            assert!(launch.contains("--tensor-parallel 2"));
-            assert!(launch.contains("--ctx 131072"));
-            assert!(launch.contains("https://github.com/agtico/ds4.git"));
-            assert!(!launch.contains("--kv-disk-dir"));
-        } else {
-            assert_eq!(recipe.runtime, "llama.cpp");
-            assert_eq!(recipe.served_model_id(), recipe.model_id);
-            assert_eq!(recipe.wire_api, "chat");
-            assert_eq!(recipe.maximum_context_tokens, 300_000);
-            assert_eq!(recipe.kv_cache_reserve_bytes, 28_000_000_000);
-            assert!(launch.contains("--alias"));
-            assert!(launch.contains("--api-key \"$PFT_ENDPOINT_TOKEN\""));
-            assert!(launch.contains("--ctx-size 300000"));
-            assert!(launch.contains("for gpu in 0 1"));
-            assert!(launch.contains("CUDA_VISIBLE_DEVICES=\"$gpu\""));
-            assert!(launch.contains("$0 !~ /\\(0 MiB, 0 MiB free\\)$/"));
-            assert!(launch.contains("PFTERMINAL_RUNTIME_GATE=cuda-ok"));
-            // Upstream CUDA does not expose split buffers for this GLM IQ1_M
-            // path, so distribute complete layers rather than tensor rows.
-            assert!(launch.contains("--split-mode layer"));
-        }
+        assert_eq!(recipe.runtime, "llama.cpp");
+        assert_eq!(recipe.served_model_id(), recipe.model_id);
+        assert_eq!(recipe.wire_api, "chat");
+        assert_eq!(recipe.maximum_context_tokens, 300_000);
+        assert_eq!(recipe.kv_cache_reserve_bytes, 28_000_000_000);
+        assert!(launch.contains("--alias"));
+        assert!(launch.contains("--api-key \"$PFT_ENDPOINT_TOKEN\""));
+        assert!(launch.contains("--ctx-size 300000"));
+        assert!(launch.contains("for gpu in 0 1"));
+        assert!(launch.contains("CUDA_VISIBLE_DEVICES=\"$gpu\""));
+        assert!(launch.contains("$0 !~ /\\(0 MiB, 0 MiB free\\)$/"));
+        assert!(launch.contains("PFTERMINAL_RUNTIME_GATE=cuda-ok"));
+        // Upstream CUDA does not expose split buffers for this GLM IQ1_M
+        // path, so distribute complete layers rather than tensor rows.
+        assert!(launch.contains("--split-mode layer"));
     }
 }
 

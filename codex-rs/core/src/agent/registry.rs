@@ -110,9 +110,6 @@ impl AgentRegistry {
                 .remove(&thread_id)
                 .and_then(|key| active_agents.agent_tree.remove(key.as_str()))
                 .is_some_and(|metadata| {
-                    if let Some(nickname) = metadata.agent_nickname.as_ref() {
-                        active_agents.used_agent_nicknames.remove(nickname);
-                    }
                     !metadata.agent_path.as_ref().is_some_and(AgentPath::is_root)
                 })
         };
@@ -147,33 +144,6 @@ impl AgentRegistry {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .agent_tree
             .get(agent_path.as_str())
-            .and_then(|metadata| metadata.agent_id)
-    }
-
-    pub(crate) fn agent_metadata_for_path(&self, agent_path: &AgentPath) -> Option<AgentMetadata> {
-        self.active_agents
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .agent_tree
-            .get(agent_path.as_str())
-            .cloned()
-    }
-
-    pub(crate) fn agent_id_for_nickname(&self, agent_nickname: &str) -> Option<ThreadId> {
-        let agent_nickname = agent_nickname.trim();
-        if agent_nickname.is_empty() {
-            return None;
-        }
-        self.active_agents
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .agent_tree
-            .values()
-            .find(|metadata| {
-                metadata.agent_nickname.as_deref().is_some_and(|candidate| {
-                    candidate == agent_nickname || candidate.eq_ignore_ascii_case(agent_nickname)
-                })
-            })
             .and_then(|metadata| metadata.agent_id)
     }
 
@@ -232,52 +202,13 @@ impl AgentRegistry {
         }
     }
 
-    pub(crate) fn restore_spawned_thread(&self, agent_metadata: AgentMetadata) {
-        let Some(thread_id) = agent_metadata.agent_id else {
-            return;
-        };
-        let key = agent_metadata
-            .agent_path
-            .as_ref()
-            .map(ToString::to_string)
-            .unwrap_or_else(|| format!("thread:{thread_id}"));
-        let mut active_agents = self
-            .active_agents
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let is_new_non_root = !active_agents.agent_tree.contains_key(&key)
-            && !agent_metadata
-                .agent_path
-                .as_ref()
-                .is_some_and(AgentPath::is_root);
-        if let Some(agent_nickname) = agent_metadata.agent_nickname.clone() {
-            active_agents.used_agent_nicknames.insert(agent_nickname);
-        }
-        active_agents.agent_tree.insert(key, agent_metadata);
-        drop(active_agents);
-        if is_new_non_root {
-            self.total_count.fetch_add(1, Ordering::AcqRel);
-        }
-    }
-
     fn reserve_agent_nickname(&self, names: &[&str], preferred: Option<&str>) -> Option<String> {
         let mut active_agents = self
             .active_agents
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let agent_nickname = if let Some(preferred) = preferred {
-            if !active_agents.used_agent_nicknames.contains(preferred) {
-                preferred.to_string()
-            } else {
-                let mut reset_count = 1;
-                loop {
-                    let nickname = format_agent_nickname(preferred, reset_count);
-                    if !active_agents.used_agent_nicknames.contains(&nickname) {
-                        break nickname;
-                    }
-                    reset_count += 1;
-                }
-            }
+            preferred.to_string()
         } else {
             if names.is_empty() {
                 return None;

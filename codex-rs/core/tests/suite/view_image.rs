@@ -763,6 +763,87 @@ async fn view_image_tool_can_preserve_original_resolution_when_requested_on_gpt5
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn view_image_original_detail_bounds_tall_full_page_screenshot_before_next_request()
+-> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let server = start_mock_server().await;
+    let mut builder = test_codex().with_model("gpt-5.4");
+    let test = builder.build_with_auto_env(&server).await?;
+    let TestCodex {
+        codex,
+        session_configured,
+        ..
+    } = &test;
+
+    let rel_path = "assets/tall-full-page.png";
+    write_workspace_png(
+        &test,
+        rel_path,
+        /*width*/ 288,
+        /*height*/ 10_000,
+        [0u8, 80, 255, 255],
+    )
+    .await?;
+
+    let call_id = "view-image-tall-original";
+    let arguments = serde_json::json!({ "path": rel_path, "detail": "original" }).to_string();
+    responses::mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-1"),
+            ev_function_call(call_id, "view_image", &arguments),
+            ev_completed("resp-1"),
+        ]),
+    )
+    .await;
+    let next_request = responses::mount_sse_once(
+        &server,
+        sse(vec![
+            ev_assistant_message("msg-1", "done"),
+            ev_completed("resp-2"),
+        ]),
+    )
+    .await;
+
+    codex
+        .submit(disabled_user_turn(
+            &test,
+            vec![UserInput::Text {
+                text: "inspect the full-page screenshot".into(),
+                text_elements: Vec::new(),
+            }],
+            session_configured.model.clone(),
+        ))
+        .await?;
+    wait_for_event_with_timeout(
+        codex,
+        |event| matches!(event, EventMsg::TurnComplete(_)),
+        VIEW_IMAGE_TURN_COMPLETE_TIMEOUT,
+    )
+    .await;
+
+    let request = next_request.single_request();
+    let output = request.function_call_output(call_id);
+    let image_url = output["output"][0]["image_url"]
+        .as_str()
+        .expect("bounded image data URL");
+    let (_, encoded) = image_url.split_once(',').expect("data URL payload");
+    let decoded = BASE64_STANDARD.decode(encoded).expect("base64 image");
+    let image = load_from_memory(&decoded).expect("processed screenshot");
+    assert_eq!(
+        image.dimensions(),
+        (173, 6000),
+        "original detail still has a hard request-projection boundary"
+    );
+    assert!(
+        image_url.len() < 1_000_000,
+        "the projected screenshot should stay well below the multi-megabyte incident payload"
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn view_image_tool_errors_clearly_for_unsupported_detail_values() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1387,6 +1468,7 @@ async fn view_image_tool_returns_unsupported_message_for_text_only_model() -> an
         supports_image_detail_original: false,
         context_window: Some(272_000),
         max_context_window: None,
+        max_output_tokens: None,
         auto_compact_token_limit: None,
         comp_hash: None,
         effective_context_window_percent: 95,

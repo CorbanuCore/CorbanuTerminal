@@ -15,7 +15,6 @@ use codex_app_server_protocol::CancelLoginAccountParams;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::LoginAccountParams;
 use codex_app_server_protocol::LoginAccountResponse;
-use codex_login::OPENAI_API_KEY_ENV_VAR;
 use codex_login::read_openai_api_key_from_env;
 use codex_protocol::auth::AuthMode;
 use crossterm::event::KeyCode;
@@ -87,9 +86,7 @@ pub(crate) enum SignInState {
     ChatGptSuccessMessage,
     ChatGptSuccess,
     ApiKeyEntry(ApiKeyInputState),
-    ApiKeyConfigured {
-        provider: Option<String>,
-    },
+    ApiKeyConfigured,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,34 +94,11 @@ pub(crate) enum SignInOption {
     ChatGpt,
     DeviceCode,
     ApiKey,
-    ProviderApiKey(usize),
 }
 
 const API_KEY_DISABLED_MESSAGE: &str = "API key login is disabled.";
-const API_KEY_MASK_CHAR: char = '•';
-
 fn onboarding_request_id() -> codex_app_server_protocol::RequestId {
     codex_app_server_protocol::RequestId::String(Uuid::new_v4().to_string())
-}
-
-fn masked_api_key(value: &str) -> String {
-    std::iter::repeat_n(API_KEY_MASK_CHAR, value.chars().count()).collect()
-}
-
-fn read_non_empty_env_var(env_var: &str) -> Option<String> {
-    std::env::var(env_var)
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-}
-
-fn read_api_key_from_env(provider_env_key: Option<&str>) -> Option<(String, String)> {
-    match provider_env_key {
-        Some(env_var) => read_non_empty_env_var(env_var).map(|value| (env_var.to_string(), value)),
-        None => {
-            read_openai_api_key_from_env().map(|value| (OPENAI_API_KEY_ENV_VAR.to_string(), value))
-        }
-    }
 }
 
 pub(super) async fn cancel_login_attempt(
@@ -144,19 +118,7 @@ pub(super) async fn cancel_login_attempt(
 #[derive(Clone, Default)]
 pub(crate) struct ApiKeyInputState {
     value: String,
-    prepopulated_env_var: Option<String>,
-}
-
-impl ApiKeyInputState {
-    pub(crate) fn from_env(provider_env_key: Option<&str>) -> Self {
-        match read_api_key_from_env(provider_env_key) {
-            Some((env_var, value)) => Self {
-                value,
-                prepopulated_env_var: Some(env_var),
-            },
-            None => Self::default(),
-        }
-    }
+    prepopulated_from_env: bool,
 }
 
 #[derive(Clone)]
@@ -265,14 +227,6 @@ impl KeyboardHandler for AuthModeWidget {
 
 #[derive(Clone)]
 #[allow(dead_code)]
-pub(crate) struct ApiKeyProviderOption {
-    pub id: String,
-    pub name: String,
-    pub env_var: String,
-}
-
-#[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct AuthModeWidget {
     pub request_frame: FrameRequester,
     pub highlighted_mode: SignInOption,
@@ -281,10 +235,6 @@ pub(crate) struct AuthModeWidget {
     pub login_status: LoginStatus,
     pub app_server_request_handle: AppServerRequestHandle,
     pub forced_login_method: Option<ForcedLoginMethod>,
-    pub api_key_provider_id: String,
-    pub api_key_provider_name: String,
-    pub api_key_env_var: Option<String>,
-    pub api_key_provider_options: Vec<ApiKeyProviderOption>,
     pub animations_enabled: bool,
     pub animations_suppressed: Cell<bool>,
 }
@@ -361,45 +311,22 @@ impl AuthModeWidget {
         !matches!(self.forced_login_method, Some(ForcedLoginMethod::Chatgpt))
     }
 
-    fn provider_picker_enabled(&self) -> bool {
-        !self.api_key_provider_options.is_empty() && self.is_api_login_allowed()
-    }
-
     fn is_chatgpt_login_allowed(&self) -> bool {
         !matches!(self.forced_login_method, Some(ForcedLoginMethod::Api))
     }
 
-    fn is_device_code_login_allowed(&self) -> bool {
-        self.provider_picker_enabled() || self.is_chatgpt_login_allowed()
-    }
-
     fn displayed_sign_in_options(&self) -> Vec<SignInOption> {
-        if self.provider_picker_enabled() {
-            let mut options = vec![SignInOption::DeviceCode];
-            options
-                .extend((0..self.api_key_provider_options.len()).map(SignInOption::ProviderApiKey));
-            return options;
-        }
-
+        let mut options = vec![SignInOption::ChatGpt];
         if self.is_chatgpt_login_allowed() {
-            let mut options = vec![SignInOption::ChatGpt];
             options.push(SignInOption::DeviceCode);
-            if self.is_api_login_allowed() {
-                options.push(SignInOption::ApiKey);
-            }
-            options
-        } else if self.is_api_login_allowed() {
-            vec![SignInOption::ApiKey]
-        } else {
-            Vec::new()
         }
+        if self.is_api_login_allowed() {
+            options.push(SignInOption::ApiKey);
+        }
+        options
     }
 
     fn selectable_sign_in_options(&self) -> Vec<SignInOption> {
-        if self.provider_picker_enabled() {
-            return self.displayed_sign_in_options();
-        }
-
         let mut options = Vec::new();
         if self.is_chatgpt_login_allowed() {
             options.push(SignInOption::ChatGpt);
@@ -441,7 +368,7 @@ impl AuthModeWidget {
                 }
             }
             SignInOption::DeviceCode => {
-                if self.is_device_code_login_allowed() {
+                if self.is_chatgpt_login_allowed() {
                     self.start_device_code_login();
                 }
             }
@@ -452,88 +379,28 @@ impl AuthModeWidget {
                     self.disallow_api_login();
                 }
             }
-            SignInOption::ProviderApiKey(index) => {
-                if self.select_provider_api_key_option(index) {
-                    self.start_api_key_entry();
-                }
-            }
         }
-    }
-
-    fn ambient_api_key_required(&self) -> bool {
-        matches!(self.forced_login_method, Some(ForcedLoginMethod::Api))
-    }
-
-    fn provider_api_key_required(&self) -> bool {
-        self.ambient_api_key_required()
-            || self.api_key_env_var.is_some()
-            || self.provider_picker_enabled()
-    }
-
-    fn api_key_provider_label(&self) -> String {
-        if self.api_key_provider_name.is_empty() {
-            "provider".to_string()
-        } else {
-            self.api_key_provider_name.clone()
-        }
-    }
-
-    fn select_provider_api_key_option(&mut self, index: usize) -> bool {
-        let Some(option) = self.api_key_provider_options.get(index).cloned() else {
-            return false;
-        };
-        self.api_key_provider_id = option.id;
-        self.api_key_provider_name = option.name;
-        self.api_key_env_var = Some(option.env_var);
-        self.set_error(/*message*/ None);
-        true
     }
 
     fn disallow_api_login(&mut self) {
-        self.highlighted_mode = self
-            .displayed_sign_in_options()
-            .into_iter()
-            .next()
-            .unwrap_or(SignInOption::ApiKey);
+        self.highlighted_mode = SignInOption::ChatGpt;
         self.set_error(Some(API_KEY_DISABLED_MESSAGE.to_string()));
         *self.sign_in_state.write().unwrap() = SignInState::PickMode;
         self.request_frame.schedule_frame();
     }
 
     fn render_pick_mode(&self, area: Rect, buf: &mut Buffer) {
-        let mut lines: Vec<Line> = if self.provider_picker_enabled() {
-            vec![
-                Line::from(vec![
-                    "  ".into(),
-                    "Choose a provider account for PFTerminal".into(),
-                ]),
-                "".into(),
-            ]
-        } else if self.provider_api_key_required() {
-            vec![
-                Line::from(vec![
-                    "  ".into(),
-                    format!(
-                        "Connect a {} API key to use PFTerminal",
-                        self.api_key_provider_label()
-                    )
-                    .into(),
-                ]),
-                "".into(),
-            ]
-        } else {
-            vec![
-                Line::from(vec![
-                    "  ".into(),
-                    "Sign in with ChatGPT to use OpenAI-hosted models".into(),
-                ]),
-                Line::from(vec![
-                    "  ".into(),
-                    "or connect an API key for usage-based billing".into(),
-                ]),
-                "".into(),
-            ]
-        };
+        let mut lines: Vec<Line> = vec![
+            Line::from(vec![
+                "  ".into(),
+                "Sign in with ChatGPT to use PFTerminal with your paid plan".into(),
+            ]),
+            Line::from(vec![
+                "  ".into(),
+                "or connect an API key for usage-based billing".into(),
+            ]),
+            "".into(),
+        ];
 
         let create_mode_item = |idx: usize,
                                 selected_mode: SignInOption,
@@ -582,30 +449,20 @@ impl AuthModeWidget {
                     ));
                 }
                 SignInOption::DeviceCode => {
-                    let (text, description) = if self.provider_picker_enabled() {
-                        ("Provider: OpenAI Codex Account", "Sign in with device code")
-                    } else {
-                        ("Sign in with Device Code", device_code_description)
-                    };
-                    lines.extend(create_mode_item(idx, option, text, description));
+                    lines.extend(create_mode_item(
+                        idx,
+                        option,
+                        "Sign in with Device Code",
+                        device_code_description,
+                    ));
                 }
                 SignInOption::ApiKey => {
-                    let text = if self.provider_api_key_required() {
-                        format!("Provide your {} API key", self.api_key_provider_label())
-                    } else {
-                        "Provide your own API key".to_string()
-                    };
-                    lines.extend(create_mode_item(idx, option, &text, "Pay for what you use"));
-                }
-                SignInOption::ProviderApiKey(provider_index) => {
-                    if let Some(provider) = self.api_key_provider_options.get(provider_index) {
-                        let description = format!("Use a key stored as {}", provider.env_var);
-                        let text =
-                            crate::onboarding::onboarding_screen::provider_api_key_display_name(
-                                provider,
-                            );
-                        lines.extend(create_mode_item(idx, option, &text, &description));
-                    }
+                    lines.extend(create_mode_item(
+                        idx,
+                        option,
+                        "Provide your own API key",
+                        "Pay for what you use",
+                    ));
                 }
             }
             lines.push("".into());
@@ -711,10 +568,10 @@ impl AuthModeWidget {
             "".into(),
             "  Before you start:".into(),
             "".into(),
-            "  Decide how much autonomy you want to grant Codex".into(),
+            "  Decide how much autonomy you want to grant PFTerminal".into(),
             docs_line,
             "".into(),
-            "  Codex can make mistakes".into(),
+            "  PFTerminal can make mistakes".into(),
             HyperlinkLine::new(
                 "  Review the code it writes and commands it runs"
                     .dim()
@@ -750,23 +607,10 @@ impl AuthModeWidget {
     }
 
     fn render_api_key_configured(&self, area: Rect, buf: &mut Buffer) {
-        let configured_message = if self.provider_api_key_required() {
-            format!("✓ {} API key configured", self.api_key_provider_label())
-        } else {
-            "✓ API key configured".to_string()
-        };
-        let usage_message = if self.provider_api_key_required() {
-            format!(
-                "  PFTerminal will use {} with your API key.",
-                self.api_key_provider_label()
-            )
-        } else {
-            "  Codex will use usage-based billing with your API key.".to_string()
-        };
         let lines = vec![
-            configured_message.fg(Color::Green).into(),
+            "✓ API key configured".fg(Color::Green).into(),
             "".into(),
-            usage_message.into(),
+            "  PFTerminal will use usage-based billing with your API key.".into(),
         ];
 
         Paragraph::new(lines)
@@ -785,19 +629,14 @@ impl AuthModeWidget {
         let mut intro_lines: Vec<Line> = vec![
             Line::from(vec![
                 "> ".into(),
-                if self.provider_api_key_required() {
-                    format!("Use your {} API key", self.api_key_provider_label())
-                } else {
-                    "Use your own API key for usage-based billing".to_string()
-                }
-                .bold(),
+                "Use your own OpenAI API key for usage-based billing".bold(),
             ]),
             "".into(),
-            "  Paste or type your API key below. It will be stored in your vault.".into(),
+            "  Paste or type your API key below. It will be stored locally in auth.json.".into(),
             "".into(),
         ];
-        if let Some(env_var) = state.prepopulated_env_var.as_ref() {
-            intro_lines.push(format!("  Detected {env_var} environment variable.").into());
+        if state.prepopulated_from_env {
+            intro_lines.push("  Detected OPENAI_API_KEY environment variable.".into());
             intro_lines.push(
                 "  Paste a different key if you prefer to use another account."
                     .dim()
@@ -812,7 +651,7 @@ impl AuthModeWidget {
         let content_line: Line = if state.value.is_empty() {
             vec!["Paste or type your API key".dim()].into()
         } else {
-            Line::from(masked_api_key(&state.value))
+            Line::from(state.value.clone())
         };
         Paragraph::new(content_line)
             .wrap(Wrap { trim: false })
@@ -868,9 +707,9 @@ impl AuthModeWidget {
                 } else {
                     match key_event.code {
                         KeyCode::Backspace => {
-                            if state.prepopulated_env_var.is_some() {
+                            if state.prepopulated_from_env {
                                 state.value.clear();
-                                state.prepopulated_env_var = None;
+                                state.prepopulated_from_env = false;
                             } else {
                                 state.value.pop();
                             }
@@ -883,9 +722,9 @@ impl AuthModeWidget {
                                 && !key_event.modifiers.contains(KeyModifiers::CONTROL)
                                 && !key_event.modifiers.contains(KeyModifiers::ALT) =>
                         {
-                            if state.prepopulated_env_var.is_some() {
+                            if state.prepopulated_from_env {
                                 state.value.clear();
-                                state.prepopulated_env_var = None;
+                                state.prepopulated_from_env = false;
                             }
                             state.value.push(c);
                             self.set_error(/*message*/ None);
@@ -916,9 +755,9 @@ impl AuthModeWidget {
 
         let mut guard = self.sign_in_state.write().unwrap();
         if let SignInState::ApiKeyEntry(state) = &mut *guard {
-            if state.prepopulated_env_var.is_some() {
+            if state.prepopulated_from_env {
                 state.value = trimmed.to_string();
-                state.prepopulated_env_var = None;
+                state.prepopulated_from_env = false;
             } else {
                 state.value.push_str(trimmed);
             }
@@ -938,26 +777,23 @@ impl AuthModeWidget {
             return;
         }
         self.set_error(/*message*/ None);
-        let prefill_from_env = read_api_key_from_env(self.api_key_env_var.as_deref());
+        let prefill_from_env = read_openai_api_key_from_env();
         let mut guard = self.sign_in_state.write().unwrap();
         match &mut *guard {
             SignInState::ApiKeyEntry(state) => {
                 if state.value.is_empty() {
-                    if let Some((env_var, prefill)) = prefill_from_env.as_ref() {
-                        state.value = prefill.clone();
-                        state.prepopulated_env_var = Some(env_var.clone());
+                    if let Some(prefill) = prefill_from_env {
+                        state.value = prefill;
+                        state.prepopulated_from_env = true;
                     } else {
-                        state.prepopulated_env_var = None;
+                        state.prepopulated_from_env = false;
                     }
                 }
             }
             _ => {
                 *guard = SignInState::ApiKeyEntry(ApiKeyInputState {
-                    value: prefill_from_env
-                        .as_ref()
-                        .map(|(_, value)| value.clone())
-                        .unwrap_or_default(),
-                    prepopulated_env_var: prefill_from_env.map(|(env_var, _)| env_var),
+                    value: prefill_from_env.clone().unwrap_or_default(),
+                    prepopulated_from_env: prefill_from_env.is_some(),
                 });
             }
         }
@@ -971,34 +807,23 @@ impl AuthModeWidget {
             return;
         }
         self.set_error(/*message*/ None);
-        let provider = self
-            .api_key_env_var
-            .as_ref()
-            .map(|_| self.api_key_provider_id.clone());
         let request_handle = self.app_server_request_handle.clone();
         let sign_in_state = self.sign_in_state.clone();
         let error = self.error.clone();
         let request_frame = self.request_frame.clone();
         tokio::spawn(async move {
-            let params = match provider.as_ref() {
-                Some(provider) => LoginAccountParams::ProviderApiKey {
-                    provider: provider.clone(),
-                    api_key: api_key.clone(),
-                },
-                None => LoginAccountParams::ApiKey {
-                    api_key: api_key.clone(),
-                },
-            };
             match request_handle
                 .request_typed::<LoginAccountResponse>(ClientRequest::LoginAccount {
                     request_id: onboarding_request_id(),
-                    params,
+                    params: LoginAccountParams::ApiKey {
+                        api_key: api_key.clone(),
+                    },
                 })
                 .await
             {
                 Ok(LoginAccountResponse::ApiKey {}) => {
                     *error.write().unwrap() = None;
-                    *sign_in_state.write().unwrap() = SignInState::ApiKeyConfigured { provider };
+                    *sign_in_state.write().unwrap() = SignInState::ApiKeyConfigured;
                 }
                 Ok(other) => {
                     *error.write().unwrap() = Some(format!(
@@ -1006,14 +831,14 @@ impl AuthModeWidget {
                     ));
                     *sign_in_state.write().unwrap() = SignInState::ApiKeyEntry(ApiKeyInputState {
                         value: api_key,
-                        prepopulated_env_var: None,
+                        prepopulated_from_env: false,
                     });
                 }
                 Err(err) => {
                     *error.write().unwrap() = Some(format!("Failed to save API key: {err}"));
                     *sign_in_state.write().unwrap() = SignInState::ApiKeyEntry(ApiKeyInputState {
                         value: api_key,
-                        prepopulated_env_var: None,
+                        prepopulated_from_env: false,
                     });
                 }
             }
@@ -1139,13 +964,6 @@ impl AuthModeWidget {
             })
             .unwrap_or(LoginStatus::NotAuthenticated);
     }
-
-    pub(crate) fn configured_provider_api_key(&self) -> Option<String> {
-        match &*self.sign_in_state.read().unwrap() {
-            SignInState::ApiKeyConfigured { provider } => provider.clone(),
-            _ => None,
-        }
-    }
 }
 
 impl StepStateProvider for AuthModeWidget {
@@ -1157,9 +975,7 @@ impl StepStateProvider for AuthModeWidget {
             | SignInState::ChatGptContinueInBrowser(_)
             | SignInState::ChatGptDeviceCode(_)
             | SignInState::ChatGptSuccessMessage => StepState::InProgress,
-            SignInState::ChatGptSuccess | SignInState::ApiKeyConfigured { .. } => {
-                StepState::Complete
-            }
+            SignInState::ChatGptSuccess | SignInState::ApiKeyConfigured => StepState::Complete,
         }
     }
 }
@@ -1186,7 +1002,7 @@ impl WidgetRef for AuthModeWidget {
             SignInState::ApiKeyEntry(state) => {
                 self.render_api_key_entry(area, buf, state);
             }
-            SignInState::ApiKeyConfigured { .. } => {
+            SignInState::ApiKeyConfigured => {
                 self.render_api_key_configured(area, buf);
             }
         }
@@ -1286,149 +1102,10 @@ mod tests {
             login_status: LoginStatus::NotAuthenticated,
             app_server_request_handle: AppServerRequestHandle::InProcess(client.request_handle()),
             forced_login_method: Some(ForcedLoginMethod::Chatgpt),
-            api_key_provider_id: "openai".to_string(),
-            api_key_provider_name: "OpenAI".to_string(),
-            api_key_env_var: None,
-            api_key_provider_options: Vec::new(),
             animations_enabled: true,
             animations_suppressed: std::cell::Cell::new(false),
         };
         (widget, codex_home)
-    }
-
-    fn buffer_text(buf: &Buffer, area: Rect) -> String {
-        let mut out = String::new();
-        for y in area.top()..area.bottom() {
-            for x in area.left()..area.right() {
-                out.push_str(buf[(x, y)].symbol());
-            }
-            out.push('\n');
-        }
-        out
-    }
-
-    #[tokio::test]
-    async fn provider_key_picker_shows_codex_account_and_provider_keys() {
-        let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.forced_login_method = Some(ForcedLoginMethod::Api);
-        widget.highlighted_mode = SignInOption::ProviderApiKey(0);
-        widget.api_key_provider_options = vec![
-            ApiKeyProviderOption {
-                id: "ambient".to_string(),
-                name: "Ambient".to_string(),
-                env_var: "AMBIENT_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "zai".to_string(),
-                name: "Z.AI".to_string(),
-                env_var: "ZAI_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "openrouter".to_string(),
-                name: "OpenRouter".to_string(),
-                env_var: "OPENROUTER_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "baseten".to_string(),
-                name: "Baseten".to_string(),
-                env_var: "BASETEN_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "vercel".to_string(),
-                name: "Vercel".to_string(),
-                env_var: "AI_GATEWAY_API_KEY".to_string(),
-            },
-        ];
-
-        assert_eq!(
-            widget.displayed_sign_in_options(),
-            vec![
-                SignInOption::DeviceCode,
-                SignInOption::ProviderApiKey(0),
-                SignInOption::ProviderApiKey(1),
-                SignInOption::ProviderApiKey(2),
-                SignInOption::ProviderApiKey(3),
-                SignInOption::ProviderApiKey(4)
-            ]
-        );
-
-        let area = Rect::new(0, 0, 80, 20);
-        let mut buf = Buffer::empty(area);
-        widget.render_pick_mode(area, &mut buf);
-        let rendered = buffer_text(&buf, area);
-
-        assert!(
-            rendered.contains("Provider: OpenAI Codex Account"),
-            "rendered:\n{rendered}"
-        );
-        assert!(
-            rendered.contains("Provider: Ambient API Key"),
-            "rendered:\n{rendered}"
-        );
-        assert!(
-            rendered.contains("Provider: Z.AI API Key"),
-            "rendered:\n{rendered}"
-        );
-        assert!(
-            rendered.contains("Provider: OpenRouter API Key"),
-            "rendered:\n{rendered}"
-        );
-        assert!(
-            rendered.contains("Provider: Baseten API Key"),
-            "rendered:\n{rendered}"
-        );
-        assert!(
-            rendered.contains("Provider: Vercel API Key"),
-            "rendered:\n{rendered}"
-        );
-        assert!(!rendered.contains("ChatGPT"), "rendered:\n{rendered}");
-        assert!(rendered.contains("device code"), "rendered:\n{rendered}");
-    }
-
-    #[tokio::test]
-    async fn provider_key_picker_device_code_selection_starts_login() {
-        let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.forced_login_method = Some(ForcedLoginMethod::Api);
-        widget.highlighted_mode = SignInOption::DeviceCode;
-        widget.api_key_provider_options = vec![ApiKeyProviderOption {
-            id: "zai".to_string(),
-            name: "Z.AI".to_string(),
-            env_var: "ZAI_API_KEY".to_string(),
-        }];
-
-        widget.handle_sign_in_option(SignInOption::DeviceCode);
-
-        assert!(matches!(
-            &*widget.sign_in_state.read().unwrap(),
-            SignInState::ChatGptDeviceCode(state) if state.login_id().is_none()
-        ));
-    }
-
-    #[tokio::test]
-    async fn api_key_entry_masks_entered_key_when_rendered() {
-        let (widget, _tmp) = widget_forced_chatgpt().await;
-        let area = Rect::new(0, 0, 80, 12);
-        let mut buf = Buffer::empty(area);
-        let state = ApiKeyInputState {
-            value: "sk-visible-secret".to_string(),
-            prepopulated_env_var: None,
-        };
-
-        widget.render_api_key_entry(area, &mut buf, &state);
-        let rendered = buffer_text(&buf, area);
-
-        assert!(
-            !rendered.contains("sk-visible-secret"),
-            "rendered:\n{rendered}"
-        );
-        assert!(
-            rendered.contains("•••••••••••••••••"),
-            "rendered:\n{rendered}"
-        );
-        assert!(
-            rendered.contains("stored in your vault"),
-            "rendered:\n{rendered}"
-        );
     }
 
     #[tokio::test]
@@ -1462,19 +1139,6 @@ mod tests {
             SignInState::PickMode
         ));
         assert_eq!(widget.login_status, LoginStatus::NotAuthenticated);
-    }
-
-    #[tokio::test]
-    async fn configured_provider_api_key_reads_provider_success_state() {
-        let (widget, _tmp) = widget_forced_chatgpt().await;
-        *widget.sign_in_state.write().unwrap() = SignInState::ApiKeyConfigured {
-            provider: Some(codex_model_provider_info::OPENROUTER_PROVIDER_ID.to_string()),
-        };
-
-        assert_eq!(
-            widget.configured_provider_api_key().as_deref(),
-            Some(codex_model_provider_info::OPENROUTER_PROVIDER_ID)
-        );
     }
 
     #[tokio::test]
@@ -1641,10 +1305,10 @@ mod tests {
 
           Before you start:
 
-          Decide how much autonomy you want to grant Codex
+          Decide how much autonomy you want to grant PFTerminal
           For more details see the Codex docs
 
-          Codex can make mistakes
+          PFTerminal can make mistakes
           Review the code it writes and commands it runs
 
           Powered by your ChatGPT account

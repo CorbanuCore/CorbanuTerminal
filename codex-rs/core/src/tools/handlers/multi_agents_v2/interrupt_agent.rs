@@ -33,48 +33,23 @@ async fn handle_interrupt_agent(
         call_id,
         ..
     } = invocation;
-    ensure_manager_tool_allowed(&turn, "interrupt_agent")?;
     let arguments = function_arguments(payload)?;
     let args: InterruptAgentArgs = parse_arguments(&arguments)?;
-    let reason = args.reason.trim();
-    if reason.is_empty() {
-        return Err(FunctionCallError::RespondToModel(
-            "interrupt reason must not be empty".to_string(),
-        ));
-    }
-    let superseding_task = args
-        .superseding_task
-        .map(|task| task.trim().to_string())
-        .filter(|task| !task.is_empty());
-    let explicit_agent_path = AgentPath::try_from(args.target.trim()).ok();
-    if explicit_agent_path.as_ref().is_some_and(AgentPath::is_root) {
-        return Err(FunctionCallError::RespondToModel(
-            "root is not a spawned agent".to_string(),
-        ));
-    }
     let agent_id = resolve_agent_target(&session, &turn, &args.target).await?;
-    if session.services.agent_control.is_root_thread(agent_id) {
+    let receiver_agent = session
+        .services
+        .agent_control
+        .ensure_agent_known(agent_id)
+        .map_err(|err| collab_agent_error(agent_id, err))?;
+    if receiver_agent
+        .agent_path
+        .as_ref()
+        .is_some_and(AgentPath::is_root)
+    {
         return Err(FunctionCallError::RespondToModel(
             "root is not a spawned agent".to_string(),
         ));
     }
-    let receiver_agent = match explicit_agent_path.as_ref() {
-        Some(agent_path) => session
-            .services
-            .agent_control
-            .get_agent_metadata_for_path(agent_path)
-            .filter(|metadata| metadata.agent_id == Some(agent_id))
-            .ok_or_else(|| {
-                FunctionCallError::RespondToModel(format!(
-                    "live agent path `{agent_path}` no longer matches its resolved thread"
-                ))
-            })?,
-        None => session
-            .services
-            .agent_control
-            .ensure_agent_known(agent_id)
-            .map_err(|err| collab_agent_error(agent_id, err))?,
-    };
     if agent_id == session.thread_id {
         return Err(FunctionCallError::RespondToModel(
             "an agent cannot interrupt itself; return your result and let the parent interrupt you if needed"
@@ -85,31 +60,6 @@ async fn handle_interrupt_agent(
         FunctionCallError::RespondToModel("target agent is missing an agent_path".to_string())
     })?;
     let status = session.services.agent_control.get_status(agent_id).await;
-    let actor_path = turn
-        .session_source
-        .get_agent_path()
-        .unwrap_or_else(AgentPath::root);
-    let actor = match (
-        turn.session_source.get_nickname(),
-        turn.session_source.get_agent_role(),
-    ) {
-        (Some(nickname), Some(role)) => format!("{nickname} [{role}] · {actor_path}"),
-        (Some(nickname), None) => format!("{nickname} · {actor_path}"),
-        (None, _) => actor_path.to_string(),
-    };
-    let target = match (
-        receiver_agent.agent_nickname.as_deref(),
-        receiver_agent.agent_role.as_deref(),
-    ) {
-        (Some(nickname), Some(role)) => format!("{nickname} [{role}] · {receiver_agent_path}"),
-        (Some(nickname), None) => format!("{nickname} · {receiver_agent_path}"),
-        (None, _) => receiver_agent_path.to_string(),
-    };
-    let process_effect = "model turn aborted; active turn-owned tool processes receive SIGTERM cleanup before abort; durable unified-exec background processes are preserved and remain inspectable in /ps".to_string();
-    let audit_copy = format!(
-        "Actor: {actor}\nTarget: {target}\nReason: {reason}\nSuperseding task/dispatch: {}\nProcess effect: {process_effect}",
-        superseding_task.as_deref().unwrap_or("none")
-    );
     let result = match session
         .services
         .agent_control
@@ -142,11 +92,6 @@ async fn handle_interrupt_agent(
 
     Ok(InterruptAgentResult {
         previous_status: status,
-        actor,
-        target,
-        reason: reason.to_string(),
-        superseding_task,
-        process_effect,
     })
 }
 
@@ -160,18 +105,11 @@ impl CoreToolRuntime for Handler {
 #[serde(deny_unknown_fields)]
 struct InterruptAgentArgs {
     target: String,
-    reason: String,
-    superseding_task: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct InterruptAgentResult {
     pub(crate) previous_status: AgentStatus,
-    actor: String,
-    target: String,
-    reason: String,
-    superseding_task: Option<String>,
-    process_effect: String,
 }
 
 impl ToolOutput for InterruptAgentResult {

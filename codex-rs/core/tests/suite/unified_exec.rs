@@ -2968,9 +2968,11 @@ PY
     .await;
     assert!(end_event.aggregated_output.contains("HEAD\n"));
     assert!(end_event.aggregated_output.contains("TAIL\n"));
-    assert_regex_match(
-        r"\.\.\. \d+ bytes omitted \.\.\.",
-        &end_event.aggregated_output,
+    assert!(
+        regex_lite::Regex::new(r"\.\.\. \d+ bytes omitted \.\.\.")?
+            .is_match(&end_event.aggregated_output),
+        "large-output end event omitted its truncation marker ({} bytes retained)",
+        end_event.aggregated_output.len()
     );
 
     wait_for_event(&test.codex, |event| {

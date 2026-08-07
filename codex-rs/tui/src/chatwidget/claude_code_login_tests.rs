@@ -67,7 +67,7 @@ fn claude_login_ready_view_snapshot() {
         "https://claude.com/oauth/authorize?code=true&state=example".to_string(),
         input_tx,
     );
-    let area = Rect::new(0, 0, 60, view.desired_height(60));
+    let area = Rect::new(0, 0, 60, view.desired_height(/*width*/ 60));
     let mut buffer = Buffer::empty(area);
     view.render(area, &mut buffer);
     let rendered = (0..area.height)

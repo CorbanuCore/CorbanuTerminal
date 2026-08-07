@@ -28,7 +28,7 @@ pub(crate) const TELEGRAM_DISCOVERY_VIEW_ID: &str = "telegram-discovery";
 
 impl ChatWidget {
     pub(crate) fn open_telegram_menu(&mut self) {
-        self.show_selection_view(telegram_menu_params(None));
+        self.show_selection_view(telegram_menu_params(/*result*/ None));
         let codex_home = self.config.codex_home.clone().to_path_buf();
         let tx = self.app_event_tx.clone();
         tokio::spawn(async move {
@@ -448,7 +448,6 @@ pub(crate) async fn discover_chats(codex_home: PathBuf) -> Result<TelegramDiscov
 fn approval_policy_name(policy: AskForApproval) -> &'static str {
     match policy {
         AskForApproval::UnlessTrusted => "untrusted",
-        AskForApproval::OnFailure => "on-failure",
         AskForApproval::OnRequest => "on-request",
         AskForApproval::Granular(_) => "on-request",
         AskForApproval::Never => "never",

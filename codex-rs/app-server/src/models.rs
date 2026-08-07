@@ -38,7 +38,7 @@ fn model_from_preset(preset: ModelPreset) -> Model {
         availability_nux: preset.availability_nux.map(Into::into),
         display_name: preset.display_name.to_string(),
         description: preset.description.to_string(),
-        orchestration: preset.orchestration,
+        orchestration: preset.orchestration.clone(),
         hidden: !preset.show_in_picker,
         supported_reasoning_efforts: reasoning_efforts_from_preset(
             preset.supported_reasoning_efforts,

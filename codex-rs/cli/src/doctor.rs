@@ -3799,7 +3799,7 @@ mod tests {
         let (_temp, config) = kimi_code_config_with_vault_key(/*store_key*/ false).await;
         let check = auth_check(&config);
         assert_eq!(check.status, CheckStatus::Fail);
-        let remediation = check.remediation.clone().unwrap_or_default();
+        let remediation = check.remediation.unwrap_or_default();
         assert!(
             remediation.contains("vault") || remediation.contains("KIMI_API_KEY"),
             "remediation should point at /vault or the env var, got: {remediation}"

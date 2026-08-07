@@ -66,9 +66,9 @@ pub enum SlashCommand {
     Plugins,
     Providers,
     Telegram,
-    Logout,
     Wallet,
     Vault,
+    Logout,
     Quit,
     Exit,
     Feedback,
@@ -103,14 +103,16 @@ impl SlashCommand {
             SlashCommand::Delete => "permanently delete this session and exit",
             SlashCommand::Clear => "clear the terminal and start a new chat",
             SlashCommand::Fork => "fork the current chat",
-            SlashCommand::App => "continue this session in the Desktop app",
-            SlashCommand::Quit | SlashCommand::Exit => "exit Codex",
+            SlashCommand::App => "continue this session in PFTerminal Desktop",
+            SlashCommand::Quit | SlashCommand::Exit => "exit PFTerminal",
             SlashCommand::Copy => "copy last response as markdown",
             SlashCommand::Raw => "toggle raw scrollback mode for copy-friendly terminal selection",
             SlashCommand::Diff => "show git diff (including untracked files)",
             SlashCommand::Docs => "open MkDocs documentation in the terminal",
             SlashCommand::Mention => "mention a file",
-            SlashCommand::Skills => "use skills to improve how PFTerminal performs specific tasks",
+            SlashCommand::Skills => {
+                "use skills to improve how PFTerminal performs specific tasks"
+            }
             SlashCommand::Import => "import setup, this project, and recent chats from Claude Code",
             SlashCommand::Hooks => "view and manage lifecycle hooks",
             SlashCommand::Status => "show current session configuration and token usage",
@@ -133,10 +135,10 @@ impl SlashCommand {
             SlashCommand::Plan => "switch to Plan mode",
             SlashCommand::Goal => "set or view the goal for a long-running task",
             SlashCommand::Agent | SlashCommand::MultiAgents => "switch the active agent thread",
-            SlashCommand::Spawn => "orchestrate Nazgul, Troll, and Orc agent roles",
-            SlashCommand::Orchestrate => "attach and manage native pane whips",
-            SlashCommand::Tasknode => "interact with Task Node tasks and rewards",
-            SlashCommand::Panes => "switch PFTerminal, Claude Code, or agent panes",
+            SlashCommand::Spawn => "delegate a task through native model-aware agents",
+            SlashCommand::Orchestrate => "inspect and control the native agent tree",
+            SlashCommand::Tasknode => "interact with Task Node tasks, chat, and rewards",
+            SlashCommand::Panes => "switch PFTerminal or native agent panes",
             SlashCommand::Side | SlashCommand::Btw => {
                 "start a side conversation in an ephemeral fork"
             }
@@ -153,10 +155,10 @@ impl SlashCommand {
             SlashCommand::Mcp => "list configured MCP tools; use /mcp verbose for details",
             SlashCommand::Apps => "manage apps",
             SlashCommand::Plugins => "browse plugins",
-            SlashCommand::Providers => "add provider API keys to the encrypted vault",
+            SlashCommand::Providers => "view configured providers and securely store API keys",
             SlashCommand::Telegram => "connect and manage PFTerminal from Telegram",
+            SlashCommand::Wallet => "manage the local wallet and PF Terminal inference plan",
             SlashCommand::Vault => "manage the encrypted credential vault (keys, tokens)",
-            SlashCommand::Wallet => "manage SOL, USDC, and PfTerminal inference plans",
             SlashCommand::Logout => "log out of PFTerminal",
             SlashCommand::Rollout => "print the rollout file path",
             SlashCommand::TestApproval => "test approval request",
@@ -180,6 +182,9 @@ impl SlashCommand {
                 | SlashCommand::Fork
                 | SlashCommand::Plan
                 | SlashCommand::Goal
+                | SlashCommand::Spawn
+                | SlashCommand::Orchestrate
+                | SlashCommand::Tasknode
                 | SlashCommand::Ide
                 | SlashCommand::Keymap
                 | SlashCommand::Mcp
@@ -191,13 +196,11 @@ impl SlashCommand {
                 | SlashCommand::Btw
                 | SlashCommand::Resume
                 | SlashCommand::SandboxReadRoot
-                | SlashCommand::Spawn
-                | SlashCommand::Orchestrate
-                | SlashCommand::Tasknode
-                | SlashCommand::Vault
-                | SlashCommand::Wallet
+                | SlashCommand::Providers
                 | SlashCommand::Telegram
                 | SlashCommand::Gpu
+                | SlashCommand::Wallet
+                | SlashCommand::Vault
         )
     }
 
@@ -213,13 +216,6 @@ impl SlashCommand {
                 | SlashCommand::Status
                 | SlashCommand::Usage
                 | SlashCommand::Ide
-                | SlashCommand::Providers
-                | SlashCommand::Telegram
-                | SlashCommand::Tasknode
-                | SlashCommand::Orchestrate
-                | SlashCommand::Vault
-                | SlashCommand::Wallet
-                | SlashCommand::Gpu
         )
     }
 
@@ -265,19 +261,19 @@ impl SlashCommand {
             | SlashCommand::Stop
             | SlashCommand::App
             | SlashCommand::Goal
+            | SlashCommand::Spawn
+            | SlashCommand::Orchestrate
+            | SlashCommand::Tasknode
+            | SlashCommand::Panes
             | SlashCommand::Mcp
             | SlashCommand::Apps
             | SlashCommand::Plugins
             | SlashCommand::Providers
             | SlashCommand::Telegram
-            | SlashCommand::Panes
-            | SlashCommand::Spawn
-            | SlashCommand::Orchestrate
-            | SlashCommand::Tasknode
+            | SlashCommand::Wallet
+            | SlashCommand::Vault
             | SlashCommand::Title
             | SlashCommand::Statusline
-            | SlashCommand::Vault
-            | SlashCommand::Wallet
             | SlashCommand::AutoReview
             | SlashCommand::Feedback
             | SlashCommand::Ide
@@ -344,9 +340,6 @@ mod tests {
         assert!(SlashCommand::Raw.available_in_side_conversation());
         assert!(SlashCommand::Raw.supports_inline_args());
         assert!(SlashCommand::App.available_during_task());
-        assert!(SlashCommand::Telegram.available_during_task());
-        assert!(SlashCommand::Telegram.available_in_side_conversation());
-        assert!(SlashCommand::Telegram.supports_inline_args());
     }
 
     #[test]
@@ -356,5 +349,48 @@ mod tests {
             SlashCommand::from_str("approve"),
             Ok(SlashCommand::AutoReview)
         );
+    }
+
+    #[test]
+    fn pf_product_commands_are_first_class_and_visible() {
+        for (name, command) in [
+            ("gpu", SlashCommand::Gpu),
+            ("providers", SlashCommand::Providers),
+            ("spawn", SlashCommand::Spawn),
+            ("orchestrate", SlashCommand::Orchestrate),
+            ("panes", SlashCommand::Panes),
+            ("docs", SlashCommand::Docs),
+            ("tasknode", SlashCommand::Tasknode),
+            ("telegram", SlashCommand::Telegram),
+            ("vault", SlashCommand::Vault),
+            ("wallet", SlashCommand::Wallet),
+        ] {
+            assert_eq!(SlashCommand::from_str(name), Ok(command));
+            assert!(
+                super::built_in_slash_commands()
+                    .iter()
+                    .any(|(candidate, value)| *candidate == name && *value == command)
+            );
+        }
+    }
+
+    #[test]
+    fn pf_product_command_descriptions_keep_pfterminal_identity() {
+        for command in [
+            SlashCommand::Init,
+            SlashCommand::App,
+            SlashCommand::Quit,
+            SlashCommand::Skills,
+            SlashCommand::Personality,
+            SlashCommand::Permissions,
+            SlashCommand::Logout,
+        ] {
+            assert!(
+                command.description().contains("PFTerminal"),
+                "{} description lost PF product identity: {}",
+                command.command(),
+                command.description()
+            );
+        }
     }
 }

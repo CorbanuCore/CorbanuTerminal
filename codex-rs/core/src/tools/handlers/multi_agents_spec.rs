@@ -1,6 +1,10 @@
 use super::multi_agents_common::MAX_SPAWN_AGENT_MODEL_OVERRIDES;
 use super::multi_agents_common::model_supports_multi_agent_backend;
+use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::ModelBilling;
+use codex_protocol::openai_models::ModelCapabilityTier;
 use codex_protocol::openai_models::ModelPreset;
+use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiNamespace;
@@ -14,11 +18,13 @@ use std::collections::BTreeMap;
 pub const MULTI_AGENT_V1_NAMESPACE: &str = "multi_agent_v1";
 const MULTI_AGENT_V1_NAMESPACE_DESCRIPTION: &str = "Tools for spawning and managing sub-agents.";
 
-const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE: &str = "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed.";
+const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V1: &str = "Spawned agents inherit your current runtime when no model is selected. Choose from the catalogue when a different capability or billing route is a better fit.";
+const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2: &str = "Spawned agents inherit your current provider and model when both runtime fields are omitted. To select another exact route, set both `model_provider` and `model`.";
 const SPAWN_AGENT_TYPE_OVERRIDE_DESCRIPTION_V1: &str = "Agent type override for the new agent. Omit to inherit the parent agent type with a full-history fork; otherwise, `default` is used.";
 const SPAWN_AGENT_MODEL_OVERRIDE_DESCRIPTION: &str =
     "Model override for the new agent. Omit unless an explicit override is needed.";
-const SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION: &str = "Provider override for the new agent. Set this together with `model`; omit both to inherit the parent runtime.";
+const SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION: &str =
+    "Provider override for the new agent. Set this together with `model`; omit both to inherit.";
 const SPAWN_AGENT_SERVICE_TIER_OVERRIDE_DESCRIPTION: &str =
     "Service tier override for the new agent. Omit unless explicitly requested.";
 const MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION: usize = 64;
@@ -35,10 +41,19 @@ pub struct SpawnAgentToolOptions {
     pub usage_hint_text: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpawnAgentRuntime {
+    pub model_provider: String,
+    pub model: String,
+    pub reasoning_effort: Option<ReasoningEffort>,
+    pub service_tier: Option<String>,
+}
+
 impl Default for SpawnAgentToolOptions {
     fn default() -> Self {
         Self {
             available_models: Vec::new(),
+            inherited_runtime: None,
             agent_type_description: String::new(),
             expose_agent_type: true,
             hide_agent_type_model_reasoning: false,
@@ -68,10 +83,14 @@ impl Default for WaitAgentTimeoutOptions {
 
 pub fn create_spawn_agent_tool_v1(options: SpawnAgentToolOptions) -> ToolSpec {
     let available_models_description = (!options.hide_agent_type_model_reasoning).then(|| {
-        spawn_agent_models_description(&options.available_models, options.multi_agent_version)
+        spawn_agent_models_description(
+            &options.available_models,
+            options.multi_agent_version,
+            options.inherited_runtime.as_ref(),
+        )
     });
-    let inherited_model_guidance =
-        (!options.hide_agent_type_model_reasoning).then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE);
+    let inherited_model_guidance = (!options.hide_agent_type_model_reasoning)
+        .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V1);
     let return_value_description =
         "Returns the spawned agent id plus the user-facing nickname when available.";
     let mut properties = spawn_agent_common_properties_v1(&options.agent_type_description);
@@ -103,11 +122,15 @@ pub fn create_spawn_agent_tool_v1(options: SpawnAgentToolOptions) -> ToolSpec {
 
 pub fn create_spawn_agent_tool_v2(options: SpawnAgentToolOptions) -> ToolSpec {
     let available_models_description = options.expose_spawn_agent_model_overrides.then(|| {
-        spawn_agent_models_description(&options.available_models, options.multi_agent_version)
+        spawn_agent_models_description(
+            &options.available_models,
+            options.multi_agent_version,
+            options.inherited_runtime.as_ref(),
+        )
     });
     let inherited_model_guidance = (options.expose_spawn_agent_model_overrides
         && !options.hide_agent_type_model_reasoning)
-        .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE);
+        .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2);
     let mut properties = spawn_agent_common_properties_v2(&options.agent_type_description);
     if !options.expose_agent_type {
         properties.remove("agent_type");
@@ -116,6 +139,7 @@ pub fn create_spawn_agent_tool_v2(options: SpawnAgentToolOptions) -> ToolSpec {
         properties.remove("service_tier");
     }
     if !options.expose_spawn_agent_model_overrides {
+        properties.remove("model_provider");
         properties.remove("model");
         properties.remove("reasoning_effort");
     }
@@ -197,7 +221,8 @@ pub fn create_send_message_tool() -> ToolSpec {
             "message".to_string(),
             JsonSchema::string(Some(
                 "Message text to queue on the target agent.".to_string(),
-            )),
+            ))
+            .with_encrypted(),
         ),
     ]);
 
@@ -229,7 +254,8 @@ pub fn create_followup_task_tool() -> ToolSpec {
             "message".to_string(),
             JsonSchema::string(Some(
                 "Message text to send to the target agent.".to_string(),
-            )),
+            ))
+            .with_encrypted(),
         ),
     ]);
 
@@ -306,7 +332,7 @@ pub fn create_list_agents_tool() -> ToolSpec {
     ToolSpec::Function(ResponsesApiTool {
         name: "list_agents".to_string(),
         description:
-            "List live agents in the current root thread tree. Optionally filter by task-path prefix."
+            "List live agents in the current root thread tree, including each exact provider, model, reasoning effort, service tier, thread id, and status. Optionally filter by task-path prefix."
                 .to_string(),
         strict: false,
         defer_loading: None,
@@ -338,58 +364,22 @@ pub fn create_close_agent_tool_v1() -> ToolSpec {
 }
 
 pub fn create_interrupt_agent_tool_v2() -> ToolSpec {
-    let properties = BTreeMap::from([
-        (
-            "target".to_string(),
-            JsonSchema::string(Some(
-                "Agent id or canonical task name to interrupt (from spawn_agent).".to_string(),
-            )),
-        ),
-        (
-            "reason".to_string(),
-            JsonSchema::string(Some(
-                "Operator-visible reason for interrupting the current turn.".to_string(),
-            )),
-        ),
-        (
-            "superseding_task".to_string(),
-            JsonSchema::string(Some(
-                "Replacement instruction or dispatch identifier, when this interrupt supersedes work."
-                    .to_string(),
-            )),
-        ),
-    ]);
+    let properties = BTreeMap::from([(
+        "target".to_string(),
+        JsonSchema::string(Some(
+            "Agent id or canonical task name to interrupt (from spawn_agent).".to_string(),
+        )),
+    )]);
 
     ToolSpec::Function(ResponsesApiTool {
         name: "interrupt_agent".to_string(),
-        description: "Interrupt an agent's current model turn with an operator-visible reason, and return its previous status. The agent remains available for messages and follow-up tasks.".to_string(),
+        description: "Interrupt an agent's current turn, if any, and return its previous status. The agent remains available for messages and follow-up tasks.".to_string(),
         strict: false,
         defer_loading: None,
-        parameters: JsonSchema::object(
-            properties,
-            Some(vec!["target".to_string(), "reason".to_string()]),
-            Some(false.into()),
-        ),
-        output_schema: Some(interrupt_agent_output_schema()),
-    })
-}
-
-fn interrupt_agent_output_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "previous_status": {
-                "description": "The agent status observed before the interrupt request was handled.",
-                "allOf": [agent_status_output_schema()]
-            },
-            "actor": {"type": "string"},
-            "target": {"type": "string"},
-            "reason": {"type": "string"},
-            "superseding_task": {"type": ["string", "null"]},
-            "process_effect": {"type": "string"}
-        },
-        "required": ["previous_status", "actor", "target", "reason", "superseding_task", "process_effect"],
-        "additionalProperties": false
+        parameters: JsonSchema::object(properties, Some(vec!["target".to_string()]), Some(false.into())),
+        output_schema: Some(agent_previous_status_output_schema(
+            "The agent status observed before the interrupt request was handled.",
+        )),
     })
 }
 
@@ -435,9 +425,20 @@ fn spawn_agent_output_schema_v1() -> Value {
             "nickname": {
                 "type": ["string", "null"],
                 "description": "User-facing nickname for the spawned agent when available."
-            }
+            },
+            "model_provider": {"type": "string"},
+            "model": {"type": "string"},
+            "reasoning_effort": {"type": ["string", "null"]},
+            "service_tier": {"type": ["string", "null"]},
+            "capability": {"type": "string"},
+            "billing": {"type": "string"},
+            "vision": {"type": "boolean"},
+            "selection_rationale": {"type": "string"}
         },
-        "required": ["agent_id", "nickname"],
+        "required": [
+            "agent_id", "nickname", "model_provider", "model", "reasoning_effort",
+            "service_tier", "capability", "billing", "vision", "selection_rationale"
+        ],
         "additionalProperties": false
     })
 }
@@ -468,30 +469,18 @@ fn spawn_agent_output_schema_v2(hide_agent_metadata: bool) -> Value {
                 "type": ["string", "null"],
                 "description": "User-facing nickname for the spawned agent when available."
             },
-            "model_provider": {
-                "type": "string",
-                "description": "Resolved provider used by the spawned agent."
-            },
-            "model": {
-                "type": "string",
-                "description": "Resolved model used by the spawned agent."
-            },
-            "reasoning_effort": {
-                "type": ["string", "null"],
-                "description": "Resolved reasoning effort used by the spawned agent."
-            },
-            "service_tier": {
-                "type": ["string", "null"],
-                "description": "Resolved service tier used by the spawned agent."
-            }
+            "model_provider": {"type": "string"},
+            "model": {"type": "string"},
+            "reasoning_effort": {"type": ["string", "null"]},
+            "service_tier": {"type": ["string", "null"]},
+            "capability": {"type": "string"},
+            "billing": {"type": "string"},
+            "vision": {"type": "boolean"},
+            "selection_rationale": {"type": "string"}
         },
         "required": [
-            "task_name",
-            "nickname",
-            "model_provider",
-            "model",
-            "reasoning_effort",
-            "service_tier"
+            "task_name", "nickname", "model_provider", "model", "reasoning_effort",
+            "service_tier", "capability", "billing", "vision", "selection_rationale"
         ],
         "additionalProperties": false
     })
@@ -524,20 +513,27 @@ fn list_agents_output_schema() -> Value {
                             "type": "string",
                             "description": "Canonical task name for the agent when available, otherwise the agent id."
                         },
-                        "agent_nickname": {
-                            "type": ["string", "null"],
-                            "description": "User-facing nickname for the agent when available."
-                        },
-                        "agent_role": {
-                            "type": ["string", "null"],
-                            "description": "Role name for the agent when available, for example troll or orc."
+                        "agent_thread_id": {
+                            "type": "string",
+                            "description": "Durable thread identifier for this agent."
                         },
                         "agent_status": {
                             "description": "Last known status of the agent.",
                             "allOf": [agent_status_output_schema()]
-                        }
+                        },
+                        "model_provider": {"type": "string"},
+                        "model": {"type": "string"},
+                        "reasoning_effort": {"type": ["string", "null"]},
+                        "service_tier": {"type": ["string", "null"]}
+                        ,"capability": {"type": "string"}
+                        ,"billing": {"type": "string"}
+                        ,"vision": {"type": "boolean"}
                     },
-                    "required": ["agent_name", "agent_status"],
+                    "required": [
+                        "agent_name", "agent_thread_id", "agent_status", "model_provider",
+                        "model", "reasoning_effort", "service_tier", "capability", "billing",
+                        "vision"
+                    ],
                     "additionalProperties": false
                 },
                 "description": "Live agents visible in the current root thread tree."
@@ -589,54 +585,9 @@ fn wait_output_schema_v2() -> Value {
             "timed_out": {
                 "type": "boolean",
                 "description": "Whether the wait call returned because no mailbox update arrived before the timeout."
-            },
-            "waiting_for": {
-                "type": "string",
-                "description": "The eligible child-agent subtree whose mailbox activity is being awaited."
-            },
-            "wake_conditions": {
-                "type": "string",
-                "description": "The events that end the wait."
-            },
-            "consecutive_empty_waits": {"type": "integer"},
-            "watchdog_escalated": {"type": "boolean"},
-            "agents": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "agent_name": {
-                            "type": "string",
-                            "description": "Canonical task name for the agent when available, otherwise the agent id."
-                        },
-                        "agent_nickname": {
-                            "type": ["string", "null"],
-                            "description": "User-facing nickname for the agent when available."
-                        },
-                        "agent_role": {
-                            "type": ["string", "null"],
-                            "description": "Role name for the agent when available, for example troll or orc."
-                        },
-                        "agent_status": {
-                            "description": "Last known status of the agent.",
-                            "allOf": [agent_status_output_schema()]
-                        },
-                        "last_task_message": {
-                            "type": ["string", "null"],
-                            "description": "Most recent user or inter-agent instruction received by the agent, when available."
-                        },
-                        "last_result_message": {
-                            "type": ["string", "null"],
-                            "description": "Bounded preview of the agent's most recent final result or terminal error, when available."
-                        }
-                    },
-                    "required": ["agent_name", "agent_nickname", "agent_role", "agent_status", "last_task_message", "last_result_message"],
-                    "additionalProperties": false
-                },
-                "description": "Live agents visible in the current root thread tree after the wait."
             }
         },
-        "required": ["message", "timed_out", "waiting_for", "wake_conditions", "consecutive_empty_waits", "watchdog_escalated", "agents"],
+        "required": ["message", "timed_out"],
         "additionalProperties": false
     })
 }
@@ -746,7 +697,8 @@ fn spawn_agent_common_properties_v2(agent_type_description: &str) -> BTreeMap<St
             "message".to_string(),
             JsonSchema::string(Some(
                 "Initial plain-text task for the new agent.".to_string(),
-            )),
+            ))
+            .with_encrypted(),
         ),
         (
             "agent_type".to_string(),
@@ -762,15 +714,15 @@ fn spawn_agent_common_properties_v2(agent_type_description: &str) -> BTreeMap<St
             )),
         ),
         (
-            "model".to_string(),
-            JsonSchema::string(Some(
-                SPAWN_AGENT_MODEL_OVERRIDE_DESCRIPTION.to_string(),
-            )),
-        ),
-        (
             "model_provider".to_string(),
             JsonSchema::string(Some(
                 SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION.to_string(),
+            )),
+        ),
+        (
+            "model".to_string(),
+            JsonSchema::string(Some(
+                SPAWN_AGENT_MODEL_OVERRIDE_DESCRIPTION.to_string(),
             )),
         ),
         (
@@ -791,8 +743,8 @@ fn spawn_agent_common_properties_v2(agent_type_description: &str) -> BTreeMap<St
 
 fn hide_spawn_agent_metadata_options(properties: &mut BTreeMap<String, JsonSchema>) {
     properties.remove("agent_type");
-    properties.remove("model");
     properties.remove("model_provider");
+    properties.remove("model");
     properties.remove("reasoning_effort");
     properties.remove("service_tier");
 }
@@ -899,16 +851,39 @@ Note that passing `fork_turns="none"` will not pass any surrounding context to t
 fn spawn_agent_models_description(
     models: &[ModelPreset],
     multi_agent_version: MultiAgentVersion,
+    inherited_runtime: Option<&SpawnAgentRuntime>,
 ) -> String {
+    let inherited_runtime = inherited_runtime.map_or_else(
+        || "Current inherited runtime: unavailable.".to_string(),
+        |runtime| {
+            let effort = runtime
+                .reasoning_effort
+                .as_ref()
+                .map_or("provider default", ReasoningEffort::as_str);
+            let service_tier = runtime
+                .service_tier
+                .as_deref()
+                .map_or_else(String::new, |tier| format!("; service tier {tier}"));
+            format!(
+                "Current inherited runtime: `{}` / `{}`; effort {effort}{service_tier}.",
+                runtime.model_provider, runtime.model
+            )
+        },
+    );
     let visible_models: Vec<&ModelPreset> = models
         .iter()
         .filter(|model| model.show_in_picker)
         .filter(|model| model_supports_multi_agent_backend(model, multi_agent_version))
+        .filter(|model| {
+            model.orchestration.as_ref().is_some_and(
+                codex_protocol::openai_models::ModelOrchestrationMetadata::is_spawn_eligible,
+            )
+        })
         .take(MAX_SPAWN_AGENT_MODEL_OVERRIDES)
         .collect();
     if visible_models.is_empty() {
         return format!(
-            "{inherited_runtime}\nNo authorized picker-visible model overrides are currently loaded."
+            "{inherited_runtime}\nNo authorized picker-visible runtime overrides are currently loaded."
         );
     }
 
@@ -939,7 +914,7 @@ fn spawn_agent_models_description(
             let reasoning_efforts_suffix = if efforts.is_empty() {
                 String::new()
             } else {
-                format!(" Reasoning efforts: {efforts}.")
+                format!(" efforts: {efforts};")
             };
             let service_tiers = model
                 .service_tiers
@@ -950,14 +925,14 @@ fn spawn_agent_models_description(
             let service_tiers_suffix = if service_tiers.is_empty() {
                 String::new()
             } else {
-                format!(" tiers: {service_tiers};")
+                format!(" service tiers: {service_tiers};")
             };
             let model_slug = &model.model;
             let runtime = model.provider_id.as_deref().map_or_else(
-                || format!("model `{model_slug}` (provider unspecified; not a cross-provider route)"),
+                || format!("model `{model_slug}` (provider unavailable)"),
                 |provider| format!("`{provider}` / `{model_slug}`"),
             );
-            let economics_suffix = model
+            let economics = model
                 .orchestration
                 .as_ref()
                 .and_then(|metadata| metadata.billing().map(|billing| (metadata, billing)))
@@ -965,40 +940,26 @@ fn spawn_agent_models_description(
                     let billing = match billing {
                         ModelBilling::Plan {
                             relative_burn_millis,
-                        } => {
-                            format!("plan, burn {}x", format_millis(*relative_burn_millis))
-                        }
+                        } => format!("plan burn {}x", format_millis(*relative_burn_millis)),
                         ModelBilling::PlanSchedule {
                             off_peak_relative_burn_millis,
                             peak_relative_burn_millis,
                             peak_start_utc_hour,
                             peak_end_utc_hour,
-                            promotional_off_peak_relative_burn_millis,
-                            promotion_valid_through_utc,
-                        } => {
-                            let promotion = promotional_off_peak_relative_burn_millis
-                                .zip(promotion_valid_through_utc.as_deref())
-                                .map_or_else(String::new, |(burn, valid_through)| {
-                                    format!(
-                                        ", promotional off-peak {}x through {valid_through}",
-                                        format_millis(burn)
-                                    )
-                                });
-                            format!(
-                                "plan, normal off-peak {}x / peak {}x at {:02}:00-{:02}:00 UTC{}",
-                                format_millis(*off_peak_relative_burn_millis),
-                                format_millis(*peak_relative_burn_millis),
-                                peak_start_utc_hour,
-                                peak_end_utc_hour,
-                                promotion
-                            )
-                        }
+                            ..
+                        } => format!(
+                            "plan burn {}x off-peak / {}x at {:02}:00-{:02}:00 UTC",
+                            format_millis(*off_peak_relative_burn_millis),
+                            format_millis(*peak_relative_burn_millis),
+                            peak_start_utc_hour,
+                            peak_end_utc_hour
+                        ),
                         ModelBilling::Metered {
                             input_milli_usd_per_million_tokens,
                             output_milli_usd_per_million_tokens,
                             ..
                         } => format!(
-                            "metered ${}/${} per M tok",
+                            "metered ${}/${} per M input/output tokens",
                             format_millis(*input_milli_usd_per_million_tokens),
                             format_millis(*output_milli_usd_per_million_tokens)
                         ),
@@ -1008,21 +969,25 @@ fn spawn_agent_models_description(
                             api_key_output_milli_usd_per_million_tokens,
                             ..
                         } => format!(
-                            "auth-dependent: subscription burn {}x or API ${}/${} per M tok",
+                            "subscription burn {}x or API ${}/${} per M input/output tokens",
                             format_millis(*plan_relative_burn_millis),
                             format_millis(*api_key_input_milli_usd_per_million_tokens),
                             format_millis(*api_key_output_milli_usd_per_million_tokens)
                         ),
                         ModelBilling::Local => "local".to_string(),
                     };
-                    format!(" {billing}, {};", metadata.capability())
+                    format!("{}; {billing};", metadata.capability())
                 });
-            let frontier_effort_suffix = model
+            let vision = if model.input_modalities.contains(&InputModality::Image) {
+                " vision;"
+            } else {
+                " text-only;"
+            };
+            let frontier = if model
                 .orchestration
                 .as_ref()
-                .filter(|metadata| metadata.capability() == ModelCapabilityTier::Frontier)
-                .and_then(|_| {
-                    let frontier_efforts = model
+                .is_some_and(|metadata| metadata.capability() == ModelCapabilityTier::Frontier) { {
+                    let efforts = model
                         .supported_reasoning_efforts
                         .iter()
                         .filter_map(|preset| {
@@ -1030,41 +995,25 @@ fn spawn_agent_models_description(
                             matches!(effort, "max" | "ultra").then_some(effort)
                         })
                         .collect::<Vec<_>>();
-                    (!frontier_efforts.is_empty()).then(|| {
-                        format!(
-                            " frontier efforts: {}{};",
-                            frontier_efforts.join(", "),
-                            if frontier_efforts
-                                .contains(&"ultra") { " (ultra includes automatic delegation)" } else { Default::default() }
-                        )
-                    })
-                })
-                .unwrap_or_default();
-            let vision_suffix = if model
-                .input_modalities
-                .iter()
-                .any(|modality| matches!(modality, InputModality::Image))
-            {
-                " vision;"
-            } else {
-                " text-only;"
-            };
-            let reasoning_efforts_suffix = reasoning_efforts_suffix
-                .strip_prefix(" Reasoning efforts: ")
-                .and_then(|suffix| suffix.strip_suffix('.'))
-                .map_or_else(String::new, |efforts| format!(" efforts: {efforts};"));
+                    if !efforts.is_empty() { format!(" frontier efforts: {};", efforts.join(", ")) } else { Default::default() }
+                } } else { Default::default() };
             format!(
-                "- {runtime};{economics_suffix}{frontier_effort_suffix}{vision_suffix}{reasoning_efforts_suffix}{service_tiers_suffix}"
+                "- {runtime}; {economics}{frontier}{vision}{reasoning_efforts_suffix}{service_tiers_suffix}"
             )
-                .trim_end_matches(';')
-                .to_string()
+            .trim_end_matches(';')
+            .to_string()
         })
         .collect::<Vec<_>>()
         .join("\n");
     format!(
         "{inherited_runtime}\n\
-Available authorized exact runtime overrides (optional; omit both fields to inherit the current runtime). Pass the provider as `model_provider` and the model as `model`.\n\
-Default allocation policy: compare the task with this catalogue before every spawn. Prefer an authorized `plan` runtime over a `metered` runtime when both can do the work, then choose the lowest-burn capable plan runtime. Use `fast` for mechanical or tightly specified work, `balanced` for ordinary engineering, and `frontier` only for genuinely hard reasoning, planning, or review. For frontier models with `max` or `ultra`, reserve those efforts for frontier work; `ultra` is the orchestration setting when automatic delegation is actually needed. Vision work requires a `vision` runtime; never send images to `text-only`. Plan capacity is finite, not free. If the user names a provider or model, treat it as an exact constraint: if it is unavailable or unauthorized, report that failure and do not substitute another runtime without the user's explicit consent.\n{model_descriptions}"
+Available exact runtime overrides:\n\
+Allocation policy: use the cheapest authorized route that meets the task. Prefer plan capacity \
+over metered APIs when capability matches; use fast for mechanical work, balanced for ordinary \
+engineering, and frontier for genuinely hard planning, implementation, or review. Vision tasks \
+require a vision route. GPT-5.5 and every catalogue-disabled model are ineligible. An explicit \
+user provider/model request is a hard constraint: refuse when unavailable and never substitute \
+silently.\n{model_descriptions}"
     )
 }
 

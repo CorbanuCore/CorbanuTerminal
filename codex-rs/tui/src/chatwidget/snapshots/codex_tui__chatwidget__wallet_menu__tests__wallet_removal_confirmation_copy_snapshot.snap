@@ -1,6 +1,5 @@
 ---
 source: tui/src/chatwidget/wallet_menu.rs
-assertion_line: 1092
 expression: rendered
 ---
 Remove wallet from this device

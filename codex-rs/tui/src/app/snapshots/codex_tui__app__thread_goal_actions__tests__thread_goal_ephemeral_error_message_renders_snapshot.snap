@@ -1,6 +1,5 @@
 ---
 source: tui/src/app/thread_goal_actions.rs
-assertion_line: 418
 expression: terminal.backend()
 ---
 

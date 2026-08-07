@@ -70,3 +70,19 @@ fn legacy_mock_responses_writer_preserves_provider_auth_and_feature_overrides() 
         assert!(config.contains(expected), "config is missing {expected}");
     }
 }
+
+#[test]
+fn builtin_openai_mock_route_uses_the_canonical_provider_without_redefining_it() {
+    let home = TempDir::new().expect("temporary CODEX_HOME");
+    MockResponsesConfig::new("http://127.0.0.1:1234")
+        .with_builtin_openai_provider()
+        .with_model("gpt-5.6-sol")
+        .write(home.path())
+        .expect("write built-in OpenAI mock route");
+
+    let config =
+        std::fs::read_to_string(home.path().join("config.toml")).expect("read config.toml");
+    assert!(config.contains("model_provider = \"openai\""));
+    assert!(config.contains("openai_base_url = \"http://127.0.0.1:1234/v1\""));
+    assert!(!config.contains("[model_providers.openai]"));
+}

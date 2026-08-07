@@ -1,6 +1,129 @@
 # PF Terminal Upstream Codex Convergence Plan
 
+> The convergence history remains authoritative evidence. Release execution is governed by
+> `PFTERMINAL-0.1.27-COMPREHENSIVE-RELEASE-SPEC-20260731.md`.
+
 Date: 2026-07-30
+
+## Implementation status
+
+Work is active on `integrate/upstream-20260730`.
+
+Completed and verified so far:
+
+- Recovery tag `pfterminal-v0.1.26-pre-convergence` preserves the released PF
+  source while the installed 0.1.26 package remains untouched.
+- Current upstream Codex `413492cd6c3a4d4f8dff6f406247ccda5a9d88aa`
+  is merged as one coherent source state. The only newer upstream commit at
+  qualification time, `4642370542739d5dd080b0c87a9de06a6435d3db`, refreshes
+  generated app-server exports; PF Terminal regenerated both stable and
+  experimental exports from the converged protocol.
+- Released PF migrations 0040-0045 retain their exact bytes and checksums;
+  colliding upstream migrations were renumbered to 0046-0052.
+- Upstream owns compaction, turn completion, tool loops, permissions, and the
+  native agent lifecycle. The former global continuation cap, transcript-tail
+  completion classifier, natural-language shell-budget regexes, dispatch-cycle
+  pause, durable report truncation, and Claude Code identity prompt are absent.
+- The canonical catalogue now drives exact provider/model spawn resolution and
+  reports billing, vision, capability, tier, effort, and selection rationale.
+  GPT-5.5 is ineligible; Sol, Terra, and Luna remain distinct catalogue routes.
+- Native V2 spawning can explicitly select eligible Kimi, GLM, OpenRouter,
+  Vercel, Z.AI, Anthropic, and OpenAI routes. An explicit request is either
+  honored exactly or refused without substitution.
+- Native close/resume now restores open descendant runtimes while preserving
+  explicitly closed subtrees.
+- App-server `thread/spawnAgent` and `thread/sendAgentMessage` again use the
+  upstream native control plane rather than the removed parallel pane runtime.
+  The public-API integration test now proves parent-to-child delivery,
+  child-to-parent delivery, and stable-ID deduplication without a second model
+  turn.
+- `/vault`, `/providers`, and `/wallet` are restored on the upstream TUI. The
+  provider screen is derived from configured providers, and plan activation
+  persists the exact provider/model pair instead of inferring one from a model
+  name.
+- Anthropic web search no longer injects PF Terminal's arbitrary fixed
+  eight-use cap.
+- Stable and experimental app-server schemas plus `config.schema.json` are
+  regenerated from the converged types.
+- Provider/model changes are one acknowledged state transition. The TUI no
+  longer mutates its displayed model before app-server acknowledgement, the
+  active `ModelClientSession` is rebound to the selected provider, and local
+  plus legacy remote compaction use that same selected route. A two-endpoint
+  integration test proves the old provider receives no post-switch compaction
+  or sampling request.
+- MultiAgentV2 completion has one owner: the child session's terminal-event
+  path. The detached initial-turn watcher now defers to it, so each child turn
+  produces one non-triggering direct-parent mailbox result. The 69-test
+  MultiAgentV2 slice and the app-server stable-ID mailbox test pass.
+- Selecting a spawned-agent transcript now displays its full agent path,
+  thread ID, and an explicit warning that its model calls, tools, and nested
+  agents are separate billable work.
+- Image projection now bounds original-detail screenshots before the next
+  provider request. The regression fixture reduces a 288×10,000 image to
+  173×6,000 and keeps the projected data URL below 1 MB while retaining the
+  source artifact.
+- PF runtime databases remain distribution-namespaced after the upstream
+  SQLite refactor. Legacy PF filenames are adopted only after migration
+  validation, `.codex` homes are refused, and corruption recovery still
+  identifies the exact failed file. All 190 state tests and the state doctest
+  pass.
+- `cargo check --workspace --all-targets`, generated schema regeneration, and
+  the Bazel dependency-lock check pass.
+- Remaining semantic differences are recorded in
+  [`FORK_POLICY.md`](../../FORK_POLICY.md).
+
+Resolved P0 incident evidence:
+
+- **Model switching reported success without changing the running model.**
+  In released 0.1.26 session
+  `019fb4d1-d35c-78f2-a82f-6a525065ee27`, switching from
+  `claude-fable-5-plan` to `gpt-5.6-sol` displayed “Model changed,” but the
+  replacement turn never reached Sol. The runtime first attempted
+  previous-model remote compaction with Fable through the ChatGPT account,
+  received “model is not supported,” and ended the turn. The converged runtime
+  now acknowledges the exact committed pair and performs compaction plus
+  sampling only on the selected provider.
+- **A focused child silently became a manager and exposed internal mailbox
+  protocol as ordinary pane output.** In 0.1.26 thread
+  `019fb5ea-81a6-7c41-a323-24066c0eb961`, the pane was attached to
+  `/root/default_codex_1` but did not make that identity clear. A read-only
+  “ramp up” request inherited proactive delegation instructions and spawned
+  four grandchildren. At `2026-07-31T02:11:39Z`, a grandchild completion
+  correctly addressed to that child was persisted twice: once as typed
+  `inter_agent_communication` and again as a visible commentary
+  `agent_message` containing the raw `Message Type: FINAL_ANSWER` envelope.
+  The terminal result also set `trigger_turn=true`, starting another paid
+  parent turn that then hit a provider stream failure. Focused agent identity,
+  nested-spawn policy, mailbox delivery, user-visible rendering, and
+  completion-triggered inference now have separate explicit ownership.
+- **Oversized visual tool output poisoned every later request in a long-running
+  turn.** In the same 0.1.26 child thread, `view_image` inserted
+  an original-detail 2880×36,956 screenshot as a 9,205,602-character data URL
+  (about 6.9 MB decoded) directly into history. After three verbose child
+  reports arrived, Sol made four stream attempts lasting 63–71 seconds each
+  and produced no response. The first two were the unfinished parent
+  synthesis; the next two followed a user message steered into that same
+  still-open turn. Request projection now resizes oversized visual outputs
+  without deleting the source artifact.
+
+The converged debug candidate is ready for operator testing:
+
+- `just fix` and `just fmt` completed, and the exact
+  `codex-rs/target/debug/pfterminal` binary built successfully.
+- `/home/pfrpc/.local/bin/pfterminal-debug` resolves only that binary and now
+  defaults to the isolated `~/.pfterminal-debug` home. Its first run seeds
+  configuration and encrypted credential material, but never copies or opens
+  stable sessions or databases from `~/.pfterminal`.
+- A real PTY smoke reached the branded PFTerminal onboarding surface under
+  the isolated home, and the runtime created only `pfterminal_*` database
+  names. Because ChatGPT authentication is home-bound, the first isolated
+  OpenAI launch can require one login before entering the composer.
+- The built binary identifies as `pfterminal 0.1.26`; its SHA-256 is
+  `e018a35808a032df9e329d98ca06252a432adffe34ea9ce6a2287df16a1a2744`.
+
+Release-candidate benchmarks, platform artifacts, and the complete workspace
+`just test` remain later release gates; repository policy requires separate
+user approval before the complete workspace test.
 
 ## Objective
 
@@ -76,10 +199,12 @@ The first implementation PR must turn this table into a checked, code-referenced
 | Parent retains 12 child reports and truncates each to 12K characters | Replace | Durable upstream mailbox/history semantics. UI previews may be bounded, but full evidence must remain addressable. |
 | Claude Plan injects `You are Claude Code` | Remove unless proven necessary | PF Terminal identity. If plan authentication requires a compatibility header or prompt, document the contract and scope it to the transport adapter rather than presenting it as product identity. |
 | Anthropic request body reduced to 30 MB and 15 MB after 413 | Retain provider constraint, parameterize policy | Keep protection for Anthropic's real payload limit. Move budgets and image-retention order into typed provider policy; show omissions and preserve durable image references. |
+| Streams lasting at least 60 seconds receive exactly one retry | Remove as a PF-wide hard cap | Use upstream retry semantics by default. Provider-specific retry limits require typed provider evidence, an operator-visible setting, idempotency analysis, and tests that distinguish a transport failure before output from a partially delivered/billable response. |
 | Third-party provider cooldown and cross-process lease | Retain with configuration | This has a written hammer-reduction design. Make TTL, cooldown, applicability, and override visible and test crash recovery. |
 | Provider allowlist | Retain | It is explicit operator spend policy. Unset means every configured provider is eligible; the active policy must be visible in spawn diagnostics. |
 | Model cost, billing class, vision, reasoning, and plan preference | Retain | One canonical catalogue consumed by picker, spawn tools, runtime resolution, and accounting. Unknown billing makes a model ineligible for automatic spawn rather than inventing a price. |
 | Nazgul/Troll/Orc orchestration prompts | Make opt-in | Preserve the named `/orchestrate` workflow as a profile. Normal native agent spawning must use upstream Codex behavior plus model-aware runtime selection, without inheriting the hierarchy's managerial personality. |
+| Model picker reports success before the selected runtime can start | Replace | Treat provider/model switching as an acknowledged state transition. Do not display success until the app-server commits the exact provider/model pair. If previous-model compaction is unsupported on the old route, use a provider-compatible local/current-model compaction path or return a visible failed-switch state while keeping the prior model active. Never leave the UI claiming one model while the next turn runs—or fails—on another. |
 
 ## Integration strategy
 
@@ -261,6 +386,17 @@ single ledger.
 
 ### Incident regressions
 
+- [ ] Reproduce the 0.1.26 Fable-to-Sol switch in a copied session whose
+  history requires compaction.
+- [ ] Confirm the UI does not announce a model change before the app-server
+  acknowledges the exact provider/model pair.
+- [ ] Confirm an unsupported previous-model remote-compaction route cannot
+  block the newly selected model from receiving its first turn.
+- [ ] Confirm a failed switch leaves the prior provider/model visibly active
+  and emits one actionable error rather than a success message followed by an
+  unrelated compaction error.
+- [ ] Cover plan-to-API, API-to-plan, and cross-provider switches with
+  compaction both below and above threshold.
 - [ ] Resume a copied session with the released PF database migrations.
 - [ ] Resume after automatic compaction.
 - [ ] Run the isometric-game visual task through Opus with repeated screenshots until
@@ -270,6 +406,17 @@ single ledger.
 - [ ] Confirm a sixth productive continuation does not terminate the turn.
 - [ ] Confirm a long child report remains retrievable after UI preview truncation.
 - [ ] Confirm parent and child survive compaction with task ownership intact.
+- [ ] Make the focused agent path and parent relationship continuously visible;
+  a child pane must never be visually indistinguishable from the root.
+- [ ] Require nested delegation to obey an explicit depth/cost policy rather
+  than inheriting a blanket “spawn whenever parallel work helps” instruction.
+- [ ] Render child completion as a typed orchestration event; never copy the
+  internal `FINAL_ANSWER` routing envelope into ordinary assistant commentary.
+- [ ] Persist each completion once and prove that UI projection does not create
+  a duplicate assistant message.
+- [ ] Do not start a paid parent inference merely to display a terminal child
+  result; trigger continuation only when the parent has an unfinished
+  assignment that requires synthesis.
 - [ ] Confirm `Ctrl+T` transcript scrolling and `--no-alt-screen` scrollback.
 - [ ] Confirm provider overload, 413, 429, malformed tool calls, and interrupted streams
   recover without duplicate billing loops.
@@ -305,11 +452,11 @@ No PR may combine an upstream import, a provider behavior change, and a benchmar
 
 ## Rollout and rollback
 
-- [ ] Publish a debug binary under an isolated executable name and isolated test home.
+- [x] Publish a debug binary under an isolated executable name and isolated test home.
 - [ ] Run existing 0.1.26 and converged debug sessions side by side.
 - [ ] Promote to an RC only after migration, provider, orchestration, and OpenAI parity
   gates pass.
-- [ ] Do not overwrite the stable standalone package pointer during RC qualification.
+- [x] Do not overwrite the stable standalone package pointer during RC qualification.
 - [ ] Store the exact upstream commit, PF commit, binaries, checksums, configs, and
   benchmark inputs in release evidence.
 - [ ] Make rollback restore the 0.1.26 binary without downgrading or rewriting the state

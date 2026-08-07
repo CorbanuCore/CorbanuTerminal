@@ -264,7 +264,11 @@ async fn dispatch_lifecycle_trace_records_incompatible_payload_failures() -> any
         )
         .await;
 
-    assert!(matches!(result, Err(FunctionCallError::Fatal(_))));
+    assert!(matches!(
+        result,
+        Err(FunctionCallError::RespondToModel(message))
+            if message.contains("incompatible payload")
+    ));
     let replayed = codex_rollout_trace::replay_bundle(single_bundle_dir(temp.path())?)?;
     let tool_call = &replayed.tool_calls["incompatible-call"];
     assert_eq!(tool_call.execution.status, ExecutionStatus::Failed);

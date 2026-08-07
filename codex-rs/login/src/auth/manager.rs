@@ -63,6 +63,8 @@ use codex_config::types::AuthCredentialsStoreMode;
 use codex_http_client::HttpClient;
 use codex_http_client::HttpClientFactory;
 use codex_http_client::OutboundProxyPolicy;
+pub use codex_model_provider_info::AMBIENT_API_KEY_ENV_VAR;
+pub use codex_model_provider_info::KIMI_CODE_API_KEY_ENV_VAR;
 use codex_protocol::account::PlanType as AccountPlanType;
 use codex_protocol::auth::PlanType as InternalPlanType;
 use codex_protocol::auth::RefreshTokenFailedError;
@@ -938,6 +940,7 @@ pub async fn logout_with_revoke(
         auth_credentials_store_mode,
         keyring_backend_kind,
         /*include_provider_credentials*/ false,
+        auth_route_config,
     )
     .await
 }
@@ -946,12 +949,14 @@ pub async fn logout_with_revoke_all_credentials(
     codex_home: &Path,
     auth_credentials_store_mode: AuthCredentialsStoreMode,
     keyring_backend_kind: AuthKeyringBackendKind,
+    auth_route_config: &AuthRouteConfig,
 ) -> std::io::Result<bool> {
     logout_with_revoke_common(
         codex_home,
         auth_credentials_store_mode,
         keyring_backend_kind,
         /*include_provider_credentials*/ true,
+        auth_route_config,
     )
     .await
 }
@@ -961,6 +966,7 @@ async fn logout_with_revoke_common(
     auth_credentials_store_mode: AuthCredentialsStoreMode,
     keyring_backend_kind: AuthKeyringBackendKind,
     include_provider_credentials: bool,
+    auth_route_config: &AuthRouteConfig,
 ) -> std::io::Result<bool> {
     let auth_dot_json = match load_auth_dot_json(
         codex_home,
@@ -1895,6 +1901,18 @@ fn refresh_token_endpoint() -> String {
 }
 
 impl AuthDotJson {
+    fn has_primary_auth_material(&self) -> bool {
+        self.auth_mode.is_some()
+            || self.openai_api_key.is_some()
+            || self.tokens.is_some()
+            || self
+                .agent_identity
+                .as_ref()
+                .is_some_and(AgentIdentityStorage::has_auth_material)
+            || self.personal_access_token.is_some()
+            || self.bedrock_api_key.is_some()
+    }
+
     fn from_external_access_token(
         access_token: &str,
         chatgpt_account_id: &str,
@@ -2215,7 +2233,28 @@ pub struct AuthManager {
     agent_identity_lock: Semaphore,
     agent_identity_bootstrap_cooldown: Mutex<AgentIdentityBootstrapCooldown>,
     external_auth: RwLock<Option<Arc<dyn ExternalAuth>>>,
+    provider_api_key_cache: RwLock<ProviderApiKeyCache>,
     auth_route_config: AuthRouteConfig,
+}
+
+#[derive(Debug)]
+struct ProviderApiKeyCache {
+    storage_revision: u64,
+    entries: HashMap<String, Option<String>>,
+}
+
+impl ProviderApiKeyCache {
+    fn new() -> Self {
+        Self {
+            storage_revision: provider_api_key_storage_revision(),
+            entries: HashMap::new(),
+        }
+    }
+
+    fn clear_to_current_revision(&mut self) {
+        self.storage_revision = provider_api_key_storage_revision();
+        self.entries.clear();
+    }
 }
 
 /// Configuration view required to construct a shared [`AuthManager`].
@@ -2317,6 +2356,7 @@ impl AuthManager {
             agent_identity_lock: Semaphore::new(/*permits*/ 1),
             agent_identity_bootstrap_cooldown: Mutex::default(),
             external_auth: RwLock::new(None),
+            provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             auth_route_config,
         }
     }
@@ -2343,6 +2383,7 @@ impl AuthManager {
             agent_identity_lock: Semaphore::new(/*permits*/ 1),
             agent_identity_bootstrap_cooldown: Mutex::default(),
             external_auth: RwLock::new(None),
+            provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             auth_route_config: crate::test_support::transport_default_auth_route_config(),
         })
     }
@@ -2368,6 +2409,7 @@ impl AuthManager {
             agent_identity_lock: Semaphore::new(/*permits*/ 1),
             agent_identity_bootstrap_cooldown: Mutex::default(),
             external_auth: RwLock::new(None),
+            provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             auth_route_config: crate::test_support::transport_default_auth_route_config(),
         })
     }
@@ -2401,6 +2443,7 @@ impl AuthManager {
             agent_identity_lock: Semaphore::new(/*permits*/ 1),
             agent_identity_bootstrap_cooldown: Mutex::default(),
             external_auth: RwLock::new(None),
+            provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             auth_route_config: crate::test_support::transport_default_auth_route_config(),
         })
     }
@@ -2426,6 +2469,7 @@ impl AuthManager {
             external_auth: RwLock::new(Some(
                 Arc::new(BearerTokenRefresher::new(config)) as Arc<dyn ExternalAuth>
             )),
+            provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             // External bearer auth refreshes by running the provider's command and never makes
             // auth-owned HTTP requests, so this route is intentionally inert.
             auth_route_config: AuthRouteConfig::from_http_client_factory(HttpClientFactory::new(

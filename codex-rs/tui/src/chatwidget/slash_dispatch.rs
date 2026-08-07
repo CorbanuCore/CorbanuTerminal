@@ -36,7 +36,7 @@ const SIDE_SLASH_COMMAND_UNAVAILABLE_HINT: &str =
     "Press Ctrl+C to return to the main thread first.";
 const GOAL_USAGE_HINT: &str = "Example: /goal improve benchmark coverage";
 const RAW_USAGE: &str = "Usage: /raw [on|off]";
-const USAGE_CHATGPT_LOGIN_REQUIRED: &str = "Sign in with ChatGPT to view OpenAI usage with /usage.";
+const USAGE_CHATGPT_LOGIN_REQUIRED: &str = "Sign in with ChatGPT to use /usage.";
 
 fn tasknode_new_chat_id() -> String {
     format!("chat_{}", uuid::Uuid::new_v4().simple())
@@ -338,19 +338,27 @@ impl ChatWidget {
             SlashCommand::Agent | SlashCommand::MultiAgents => {
                 self.app_event_tx.send(AppEvent::OpenAgentPicker);
             }
-            SlashCommand::Spawn => {
-                self.app_event_tx.send(AppEvent::OpenSpawnRolePicker);
-            }
-            SlashCommand::Orchestrate => {
-                self.app_event_tx.send(AppEvent::HandleOrchestrateCommand {
-                    args: String::new(),
-                });
-            }
+            SlashCommand::Spawn => self.open_native_spawn_prompt(),
+            SlashCommand::Orchestrate => self.open_native_orchestration(),
             SlashCommand::Tasknode => {
                 self.app_event_tx.send(AppEvent::OpenTaskNodeMenu);
             }
             SlashCommand::Panes => {
-                self.app_event_tx.send(AppEvent::OpenPanePicker);
+                // The released `/panes` entry point remains compatible while the converged
+                // runtime uses Codex's single native agent graph instead of a second pane engine.
+                self.app_event_tx.send(AppEvent::OpenAgentPicker);
+            }
+            SlashCommand::Vault => {
+                self.open_vault_menu();
+            }
+            SlashCommand::Providers => {
+                self.open_provider_credentials_menu();
+            }
+            SlashCommand::Telegram => {
+                self.open_telegram_menu();
+            }
+            SlashCommand::Wallet => {
+                self.open_wallet_menu();
             }
             SlashCommand::Permissions => {
                 self.open_permissions_popup();
@@ -468,7 +476,7 @@ impl ChatWidget {
                 });
             }
             SlashCommand::Docs => {
-                self.open_mkdocs_viewer(/*page_hint*/ None);
+                self.open_mkdocs_viewer(/*args*/ None);
             }
             SlashCommand::Mention => {
                 self.insert_str("@");
@@ -532,20 +540,6 @@ impl ChatWidget {
             }
             SlashCommand::MemoryUpdate => {
                 self.add_app_server_stub_message("Memory maintenance");
-            }
-            SlashCommand::Vault => {
-                // Bare `/vault` opens the action menu. Subcommands flow through the inline-args
-                // path and still render command output.
-                self.open_vault_menu();
-            }
-            SlashCommand::Wallet => {
-                self.open_wallet_menu();
-            }
-            SlashCommand::Providers => {
-                self.open_provider_credentials_menu();
-            }
-            SlashCommand::Telegram => {
-                self.open_telegram_menu();
             }
             SlashCommand::Mcp => {
                 self.add_mcp_output(McpServerStatusDetail::ToolsAndAuthOnly);
@@ -753,10 +747,103 @@ impl ChatWidget {
                 "verbose" => self.add_mcp_output(McpServerStatusDetail::Full),
                 _ => self.add_error_message("Usage: /mcp [verbose]".to_string()),
             },
+            SlashCommand::Gpu => {
+                let mut parts = trimmed.split_whitespace();
+                match (parts.next(), parts.next(), parts.next()) {
+                    (None | Some("status"), None, None) => {
+                        self.app_event_tx.send(AppEvent::OpenGpuMenu);
+                    }
+                    (Some("stop"), Some(rental_id), None) => {
+                        self.app_event_tx.send(AppEvent::DisableGpuServing {
+                            rental_id: rental_id.to_string(),
+                        });
+                    }
+                    (Some("terminate"), Some(rental_id), None) => {
+                        self.app_event_tx.send(AppEvent::TerminateGpuRental {
+                            rental_id: rental_id.to_string(),
+                        });
+                    }
+                    _ => self.add_error_message(
+                        "Usage: /gpu [status|stop <rental-id>|terminate <rental-id>]".to_string(),
+                    ),
+                }
+            }
+            SlashCommand::Telegram => match trimmed.to_ascii_lowercase().as_str() {
+                "" | "status" => self.open_telegram_menu(),
+                "connect" => self.open_telegram_token_entry(),
+                "start" => self.app_event_tx.send(AppEvent::StartTelegramConnector),
+                "stop" => self.app_event_tx.send(AppEvent::StopTelegramConnector),
+                "disconnect" => self.app_event_tx.send(AppEvent::ConfirmTelegramDisconnect),
+                _ => self.add_error_message(
+                    "Usage: /telegram [status|connect|start|stop|disconnect]".to_string(),
+                ),
+            },
+            SlashCommand::Tasknode => {
+                let mut parts = trimmed.splitn(2, ' ');
+                let action = parts.next().unwrap_or_default().to_ascii_lowercase();
+                let rest = parts.next().unwrap_or_default().trim();
+                match action.as_str() {
+                    "" => self.app_event_tx.send(AppEvent::OpenTaskNodeMenu),
+                    "link" => self.app_event_tx.send(AppEvent::OpenTaskNodeLink),
+                    "status" => self.app_event_tx.send(AppEvent::OpenTaskNodeStatus),
+                    "tasks" | "outstanding" => self.app_event_tx.send(
+                        AppEvent::OpenTaskNodeTaskList {
+                            tab: if rest.is_empty() { "outstanding" } else { rest }.to_string(),
+                        },
+                    ),
+                    "task" if !rest.is_empty() => self.app_event_tx.send(
+                        AppEvent::OpenTaskNodeTaskActions {
+                            task_id: rest.to_string(),
+                        },
+                    ),
+                    "task" => self
+                        .add_error_message("Usage: /tasknode task <task-id>".to_string()),
+                    "verification" | "refused" | "rewarded" => self.app_event_tx.send(
+                        AppEvent::OpenTaskNodeTaskList {
+                            tab: action,
+                        },
+                    ),
+                    "request" if rest.is_empty() => self
+                        .app_event_tx
+                        .send(AppEvent::OpenTaskNodeTaskRequestPrompt),
+                    "request" => self.app_event_tx.send(AppEvent::SubmitTaskNodeTaskRequest {
+                        detail: rest.to_string(),
+                    }),
+                    "context" => self.app_event_tx.send(AppEvent::OpenTaskNodeContext),
+                    "chat" if rest.is_empty() => self.app_event_tx.send(AppEvent::OpenTaskNodeChat),
+                    "chat" => self.app_event_tx.send(AppEvent::SubmitTaskNodeChat {
+                        conversation_id: tasknode_new_chat_id(),
+                        title: "New chat".to_string(),
+                        message: rest.to_string(),
+                    }),
+                    "requests" => self.app_event_tx.send(AppEvent::OpenTaskNodeRequestList),
+                    "balance" => self.app_event_tx.send(AppEvent::OpenTaskNodeBalance),
+                    "rewards" => self.app_event_tx.send(AppEvent::OpenTaskNodeRewards),
+                    "logout" => self.app_event_tx.send(AppEvent::LogoutTaskNode),
+                    _ => self.add_error_message(
+                        "Usage: /tasknode [link|status|tasks|task|request|context|chat|requests|verification|balance|rewards|logout]"
+                            .to_string(),
+                    ),
+                }
+            }
+            SlashCommand::Spawn => {
+                if trimmed.is_empty() {
+                    self.open_native_spawn_prompt();
+                } else {
+                    self.submit_native_spawn_request(trimmed.to_string());
+                }
+            }
+            SlashCommand::Orchestrate => {
+                if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("status") {
+                    self.open_native_orchestration();
+                } else {
+                    self.add_error_message("Usage: /orchestrate [status]".to_string());
+                }
+            }
+            SlashCommand::Docs => {
+                self.open_mkdocs_viewer(Some(trimmed.to_string()));
+            }
             SlashCommand::Vault => {
-                // `/vault credential add` opens the secure (masked) entry overlay rather than
-                // accepting a secret as chat text. Reject extra args so accidental inline secrets
-                // do not enter local slash-command recall.
                 let mut parts = trimmed.split_whitespace();
                 if matches!(
                     (parts.next(), parts.next()),
@@ -791,141 +878,6 @@ impl ChatWidget {
                     )));
                 });
             }
-            SlashCommand::Wallet => match trimmed.to_ascii_lowercase().as_str() {
-                "status" => self.open_wallet_menu(),
-                "create" => self.open_wallet_create(),
-                "restore" => self.open_wallet_restore(),
-                "lock" => self.lock_wallet(),
-                "unlock" => self.open_wallet_unlock(
-                    codex_wallet_daemon::UnlockPolicy::Timed {
-                        duration_seconds: 15 * 60,
-                    },
-                    crate::app_event::WalletUnlockContinuation::WalletMenu,
-                ),
-                _ => self.add_error_message(
-                    "Usage: /wallet [status|create|restore|unlock|lock]".to_string(),
-                ),
-            },
-            SlashCommand::Telegram => match trimmed.to_ascii_lowercase().as_str() {
-                "" | "status" => self.open_telegram_menu(),
-                "connect" => self.open_telegram_token_entry(),
-                "start" => self.app_event_tx.send(AppEvent::StartTelegramConnector),
-                "stop" => self.app_event_tx.send(AppEvent::StopTelegramConnector),
-                "disconnect" => self.app_event_tx.send(AppEvent::ConfirmTelegramDisconnect),
-                _ => self.add_error_message(
-                    "Usage: /telegram [status|connect|start|stop|disconnect]".to_string(),
-                ),
-            },
-            SlashCommand::Gpu => {
-                let mut parts = trimmed.split_whitespace();
-                match (parts.next(), parts.next(), parts.next()) {
-                    (None | Some("status"), None, None) => {
-                        self.app_event_tx.send(AppEvent::OpenGpuMenu);
-                    }
-                    (Some("stop"), Some(rental_id), None) => {
-                        self.app_event_tx.send(AppEvent::DisableGpuServing {
-                            rental_id: rental_id.to_string(),
-                        });
-                    }
-                    (Some("terminate"), Some(rental_id), None) => {
-                        self.app_event_tx.send(AppEvent::TerminateGpuRental {
-                            rental_id: rental_id.to_string(),
-                        });
-                    }
-                    _ => self.add_error_message(
-                        "Usage: /gpu [status|stop <rental-id>|terminate <rental-id>]".to_string(),
-                    ),
-                }
-            }
-            SlashCommand::Spawn => {
-                let mut parts = trimmed.splitn(2, ' ');
-                let action = parts.next().unwrap_or_default().to_ascii_lowercase();
-                let _rest = parts.next().unwrap_or_default().trim();
-                match action.as_str() {
-                    "" => self.app_event_tx.send(AppEvent::OpenSpawnRolePicker),
-                    "status" => self.app_event_tx.send(AppEvent::OpenSpawnStatus),
-                    "nazgul" => self.app_event_tx.send(AppEvent::OpenSpawnNazgulPicker),
-                    "troll" => self.app_event_tx.send(AppEvent::OpenSpawnParentPicker {
-                        role: crate::spawn_orchestration::SpawnRole::Troll,
-                    }),
-                    "orc" => self.app_event_tx.send(AppEvent::OpenSpawnParentPicker {
-                        role: crate::spawn_orchestration::SpawnRole::Orc,
-                    }),
-                    _ => self
-                        .add_error_message("Usage: /spawn [status|nazgul|troll|orc]".to_string()),
-                }
-            }
-            SlashCommand::Orchestrate => {
-                self.app_event_tx.send(AppEvent::HandleOrchestrateCommand {
-                    args: trimmed.to_string(),
-                });
-            }
-            SlashCommand::Tasknode => {
-                let mut parts = trimmed.splitn(2, ' ');
-                let action = parts.next().unwrap_or_default().to_ascii_lowercase();
-                let rest = parts.next().unwrap_or_default().trim();
-                match action.as_str() {
-                    "" => self.app_event_tx.send(AppEvent::OpenTaskNodeMenu),
-                    "link" => self.app_event_tx.send(AppEvent::OpenTaskNodeLink),
-                    "status" => self.app_event_tx.send(AppEvent::OpenTaskNodeStatus),
-                    "tasks" | "outstanding" => {
-                        self.app_event_tx.send(AppEvent::OpenTaskNodeTaskList {
-                            tab: if rest.is_empty() {
-                                "outstanding".to_string()
-                            } else {
-                                rest.to_string()
-                            },
-                        })
-                    }
-                    "task" => {
-                        if rest.is_empty() {
-                            self.add_error_message("Usage: /tasknode task <task-id>".to_string());
-                        } else {
-                            self.app_event_tx.send(AppEvent::OpenTaskNodeTaskActions {
-                                task_id: rest.to_string(),
-                            });
-                        }
-                    }
-                    "verification" => self.app_event_tx.send(AppEvent::OpenTaskNodeTaskList {
-                        tab: "verification".to_string(),
-                    }),
-                    "refused" => self.app_event_tx.send(AppEvent::OpenTaskNodeTaskList {
-                        tab: "refused".to_string(),
-                    }),
-                    "rewarded" => self.app_event_tx.send(AppEvent::OpenTaskNodeTaskList {
-                        tab: "rewarded".to_string(),
-                    }),
-                    "request" => {
-                        if rest.is_empty() {
-                            self.app_event_tx.send(AppEvent::OpenTaskNodeTaskRequestPrompt);
-                        } else {
-                            self.app_event_tx.send(AppEvent::SubmitTaskNodeTaskRequest {
-                                detail: rest.to_string(),
-                            });
-                        }
-                    }
-                    "context" => self.app_event_tx.send(AppEvent::OpenTaskNodeContext),
-                    "chat" => {
-                        if rest.is_empty() {
-                            self.app_event_tx.send(AppEvent::OpenTaskNodeChat);
-                        } else {
-                            self.app_event_tx.send(AppEvent::SubmitTaskNodeChat {
-                                conversation_id: tasknode_new_chat_id(),
-                                title: "New chat".to_string(),
-                                message: rest.to_string(),
-                            });
-                        }
-                    }
-                    "requests" => self.app_event_tx.send(AppEvent::OpenTaskNodeRequestList),
-                    "balance" => self.app_event_tx.send(AppEvent::OpenTaskNodeBalance),
-                    "rewards" => self.app_event_tx.send(AppEvent::OpenTaskNodeRewards),
-                    "logout" => self.app_event_tx.send(AppEvent::LogoutTaskNode),
-                    _ => self.add_error_message(
-                        "Usage: /tasknode [link|status|tasks|task|request|context|chat|requests|verification|balance|rewards|logout]"
-                            .to_string(),
-                    ),
-                }
-            }
             SlashCommand::Keymap => match trimmed.to_ascii_lowercase().as_str() {
                 "" => self.open_keymap_picker(),
                 "debug" => {
@@ -951,9 +903,6 @@ impl ChatWidget {
                 }
                 _ => self.add_error_message(RAW_USAGE.to_string()),
             },
-            SlashCommand::Docs => {
-                self.open_mkdocs_viewer(Some(trimmed.to_string()));
-            }
             SlashCommand::Rename if !trimmed.is_empty() => {
                 if !self.ensure_thread_rename_allowed() {
                     return;
@@ -964,7 +913,7 @@ impl ChatWidget {
                     self.add_error_message("Thread name cannot be empty.".to_string());
                     return;
                 };
-                self.app_event_tx.rename_current_pane(name);
+                self.app_event_tx.set_thread_name(name);
             }
             SlashCommand::New if !trimmed.is_empty() => {
                 self.app_event_tx.send(AppEvent::NewSession {
@@ -1223,30 +1172,24 @@ impl ChatWidget {
         }
 
         if !command.supports_inline_args() {
-            // A recognized command must never degrade into user text: with an
-            // external worker pane active, that text would be forwarded to the
-            // worker as a task, silently swallowing control-plane commands.
-            self.add_info_message(
-                format!("'/{name}' does not take inline arguments; running the bare command."),
-                /*hint*/ None,
-            );
-            return match command {
-                SlashCommandItem::Builtin(cmd) => {
-                    self.dispatch_command(cmd);
-                    self.queued_command_drain_result(cmd)
-                }
-                SlashCommandItem::ServiceTier(command) => {
-                    self.handle_service_tier_command_dispatch(command);
-                    QueueDrain::Continue
-                }
-            };
+            self.submit_user_message(UserMessage {
+                text,
+                local_images,
+                remote_image_urls,
+                text_elements,
+                mention_bindings,
+            });
+            return QueueDrain::Stop;
         }
-        let cmd = match command {
-            SlashCommandItem::Builtin(cmd) => cmd,
-            SlashCommandItem::ServiceTier(command) => {
-                self.handle_service_tier_command_dispatch(command);
-                return QueueDrain::Continue;
-            }
+        let SlashCommandItem::Builtin(cmd) = command else {
+            self.submit_user_message(UserMessage {
+                text,
+                local_images,
+                remote_image_urls,
+                text_elements,
+                mention_bindings,
+            });
+            return QueueDrain::Stop;
         };
 
         let trimmed_start = rest.trim_start();
@@ -1272,35 +1215,6 @@ impl ChatWidget {
         self.queued_command_drain_result(cmd)
     }
 
-    /// If `text` is a recognized slash command, dispatch it through the normal
-    /// slash-command path and return true. External-pane input forwarding uses
-    /// this to keep control-plane commands global: a slash command entered
-    /// while a Claude worker pane is active must act on PFTerminal itself,
-    /// never become a task forwarded to the worker.
-    pub(crate) fn try_dispatch_slash_input(&mut self, text: &str) -> bool {
-        let trimmed = text.trim();
-        let Some((name, _rest, _rest_offset)) = parse_slash_name(trimmed) else {
-            return false;
-        };
-        if name.contains('/') {
-            return false;
-        }
-        let service_tier_commands = self.current_model_service_tier_commands();
-        if find_slash_command(name, self.builtin_command_flags(), &service_tier_commands).is_none()
-        {
-            return false;
-        }
-        let user_message = UserMessage {
-            text: trimmed.to_string(),
-            local_images: Vec::new(),
-            remote_image_urls: Vec::new(),
-            text_elements: Vec::new(),
-            mention_bindings: Vec::new(),
-        };
-        self.submit_queued_slash_prompt(QueuedUserMessage::from(user_message));
-        true
-    }
-
     fn builtin_command_flags(&self) -> BuiltinCommandFlags {
         #[cfg(target_os = "windows")]
         let allow_elevate_sandbox = {
@@ -1314,8 +1228,7 @@ impl ChatWidget {
             collaboration_modes_enabled: self.collaboration_modes_enabled(),
             connectors_enabled: self.connectors_enabled(),
             plugins_command_enabled: self.config.features.enabled(Feature::Plugins),
-            token_activity_command_enabled: self.has_codex_backend_auth
-                || self.pfterminal_plan_key_is_linked(),
+            token_activity_command_enabled: self.has_codex_backend_auth,
             goal_command_enabled: self.config.features.enabled(Feature::Goals),
             service_tier_commands_enabled: self.fast_mode_enabled(),
             personality_command_enabled: self.config.features.enabled(Feature::Personality),
@@ -1325,7 +1238,7 @@ impl ChatWidget {
     }
 
     fn ensure_usage_command_available(&mut self) -> bool {
-        if self.has_codex_backend_auth || self.pfterminal_plan_key_is_linked() {
+        if self.has_codex_backend_auth {
             return true;
         }
         self.add_error_message(USAGE_CHATGPT_LOGIN_REQUIRED.to_string());
@@ -1348,16 +1261,16 @@ impl ChatWidget {
             | SlashCommand::Mcp
             | SlashCommand::Apps
             | SlashCommand::Plugins
+            | SlashCommand::Gpu
             | SlashCommand::Providers
-            | SlashCommand::Panes
+            | SlashCommand::Telegram
+            | SlashCommand::Tasknode
             | SlashCommand::Spawn
             | SlashCommand::Orchestrate
-            | SlashCommand::Tasknode
-            | SlashCommand::Rollout
-            | SlashCommand::Vault
+            | SlashCommand::Panes
             | SlashCommand::Wallet
-            | SlashCommand::Telegram
-            | SlashCommand::Gpu
+            | SlashCommand::Vault
+            | SlashCommand::Rollout
             | SlashCommand::Copy
             | SlashCommand::Raw
             | SlashCommand::Vim

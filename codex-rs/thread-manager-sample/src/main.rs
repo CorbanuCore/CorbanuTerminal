@@ -188,6 +188,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
         startup_warnings: Vec::new(),
         bypass_hook_trust: false,
         model,
+        runtime_selection: None,
         service_tier: None,
         review_model: None,
         model_context_window: None,
@@ -195,6 +196,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
         model_auto_compact_token_limit_scope: AutoCompactTokenLimitScope::Total,
         model_provider_id,
         model_provider,
+        agent_provider_allowlist: None,
         personality: None,
         permissions: Permissions::from_approval_and_profile(
             Constrained::allow_any(AskForApproval::Never),

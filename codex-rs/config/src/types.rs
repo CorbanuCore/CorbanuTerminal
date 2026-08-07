@@ -699,8 +699,8 @@ pub struct Tui {
     pub animations: bool,
 
     /// Show startup tooltips in the TUI welcome screen.
-    /// Defaults to `false`.
-    #[serde(default)]
+    /// Defaults to `true`.
+    #[serde(default = "default_true")]
     pub show_tooltips: bool,
 
     /// Start the composer in Vim mode (`Normal`) by default.

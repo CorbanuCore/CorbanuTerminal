@@ -245,7 +245,7 @@ impl From<ThreadStartResponse> for ThreadSpawnAgentResponse {
             sandbox: response.sandbox,
             active_permission_profile: response.active_permission_profile,
             reasoning_effort: response.reasoning_effort,
-            multi_agent_mode: response.multi_agent_mode,
+            multi_agent_mode: Some(response.multi_agent_mode),
         }
     }
 }

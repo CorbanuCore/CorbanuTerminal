@@ -21,6 +21,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 PACKAGE_VARIANTS["pfterminal"],
                 build_entrypoint=False,
                 extra_cargo_bins=["pfterminal-walletd"],
+                build_code_mode_host=False,
                 build_bwrap=False,
                 build_codex_command_runner=False,
                 build_codex_windows_sandbox_setup=False,
@@ -41,6 +42,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 profile="release",
                 entrypoint_bin=entrypoint,
                 extra_bins={"pfterminal-walletd": wallet_daemon},
+                code_mode_host_bin=touch_file(root / "codex-code-mode-host"),
                 bwrap_bin=None,
                 codex_command_runner_bin=None,
                 codex_windows_sandbox_setup_bin=None,
@@ -55,6 +57,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 TARGET_SPECS["aarch64-apple-darwin"],
                 PACKAGE_VARIANTS["codex"],
                 build_entrypoint=False,
+                extra_cargo_bins=[],
                 build_code_mode_host=False,
                 build_bwrap=False,
                 build_codex_command_runner=False,
@@ -71,6 +74,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 TARGET_SPECS["x86_64-unknown-linux-musl"],
                 PACKAGE_VARIANTS["codex"],
                 build_entrypoint=False,
+                extra_cargo_bins=[],
                 build_code_mode_host=False,
                 build_bwrap=False,
                 build_codex_command_runner=False,
@@ -87,6 +91,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 TARGET_SPECS["x86_64-pc-windows-msvc"],
                 PACKAGE_VARIANTS["codex"],
                 build_entrypoint=False,
+                extra_cargo_bins=[],
                 build_code_mode_host=False,
                 build_bwrap=False,
                 build_codex_command_runner=False,
@@ -101,6 +106,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 TARGET_SPECS["x86_64-pc-windows-msvc"],
                 PACKAGE_VARIANTS["codex"],
                 build_entrypoint=False,
+                extra_cargo_bins=[],
                 build_code_mode_host=False,
                 build_bwrap=False,
                 build_codex_command_runner=True,
@@ -115,6 +121,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 TARGET_SPECS["aarch64-apple-darwin"],
                 PACKAGE_VARIANTS["codex-app-server"],
                 build_entrypoint=False,
+                extra_cargo_bins=[],
                 build_code_mode_host=True,
                 build_bwrap=False,
                 build_codex_command_runner=False,
@@ -128,6 +135,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
             root = Path(temp_dir)
             entrypoint = touch_file(root / "codex.exe")
             code_mode_host = touch_file(root / "codex-code-mode-host.exe")
+            pfterminal = touch_file(root / "pfterminal.exe")
             command_runner = touch_file(root / "codex-command-runner.exe")
             sandbox_setup = touch_file(root / "codex-windows-sandbox-setup.exe")
 
@@ -137,6 +145,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 cargo=str(root / "cargo-that-should-not-run"),
                 profile="release",
                 entrypoint_bin=entrypoint,
+                extra_bins={"pfterminal.exe": pfterminal},
                 code_mode_host_bin=code_mode_host,
                 bwrap_bin=None,
                 codex_command_runner_bin=command_runner,

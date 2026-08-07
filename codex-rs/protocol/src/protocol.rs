@@ -761,6 +761,18 @@ pub struct InterAgentCommunication {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub id: Option<ResponseItemId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub message_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub assignment_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub kind: Option<AgentMessageKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub created_at_ms: Option<i64>,
     pub author: AgentPath,
     pub recipient: AgentPath,
     #[serde(default)]
@@ -785,6 +797,14 @@ impl InterAgentCommunication {
     ) -> Self {
         Self {
             id: None,
+            message_id: Some(uuid::Uuid::now_v7().to_string()),
+            assignment_id: None,
+            kind: Some(if trigger_turn {
+                AgentMessageKind::FollowUp
+            } else {
+                AgentMessageKind::Informational
+            }),
+            created_at_ms: Some(chrono::Utc::now().timestamp_millis()),
             author,
             recipient,
             other_recipients,
@@ -804,6 +824,14 @@ impl InterAgentCommunication {
     ) -> Self {
         Self {
             id: None,
+            message_id: Some(uuid::Uuid::now_v7().to_string()),
+            assignment_id: None,
+            kind: Some(if trigger_turn {
+                AgentMessageKind::FollowUp
+            } else {
+                AgentMessageKind::Informational
+            }),
+            created_at_ms: Some(chrono::Utc::now().timestamp_millis()),
             author,
             recipient,
             other_recipients,
@@ -812,6 +840,43 @@ impl InterAgentCommunication {
             internal_chat_message_metadata_passthrough: None,
             trigger_turn,
         }
+    }
+
+    pub fn ensure_message_identity(&mut self) -> &str {
+        let message_id = self
+            .message_id
+            .get_or_insert_with(|| uuid::Uuid::now_v7().to_string());
+        self.created_at_ms
+            .get_or_insert_with(|| chrono::Utc::now().timestamp_millis());
+        message_id.as_str()
+    }
+
+    pub fn with_kind(mut self, kind: AgentMessageKind) -> Self {
+        self.kind = Some(kind);
+        self
+    }
+
+    pub fn with_assignment_id(mut self, assignment_id: impl Into<String>) -> Self {
+        self.assignment_id = Some(assignment_id.into());
+        self
+    }
+
+    pub fn with_message_id(mut self, message_id: impl Into<String>) -> Self {
+        self.message_id = Some(message_id.into());
+        self
+    }
+
+    pub fn validate_mailbox_body(&self) -> Result<(), String> {
+        let body_len = self
+            .encrypted_content
+            .as_ref()
+            .map_or_else(|| self.content.len(), String::len);
+        if body_len > MAX_AGENT_MESSAGE_BYTES {
+            return Err(format!(
+                "agent message is {body_len} bytes; maximum is {MAX_AGENT_MESSAGE_BYTES} bytes"
+            ));
+        }
+        Ok(())
     }
 
     pub fn set_turn_id_if_missing(&mut self, turn_id: &str) {
@@ -2758,6 +2823,11 @@ impl InitialHistory {
             .and_then(|meta| meta.parent_thread_id)
     }
 
+    pub fn get_resumed_runtime_selection(&self) -> Option<RuntimeSelectionSource> {
+        self.get_resumed_session_meta()
+            .and_then(|meta| meta.runtime_selection)
+    }
+
     fn get_session_meta(&self) -> Option<&SessionMeta> {
         match self {
             InitialHistory::New | InitialHistory::Cleared => None,
@@ -2895,6 +2965,34 @@ pub enum SubAgentSource {
     },
     MemoryConsolidation,
     Other(String),
+}
+
+/// Authoritative reason a spawned thread received its initial runtime route.
+///
+/// This is persisted independently from the route itself so clients can explain
+/// whether a child was explicitly pinned or selected by policy without trying
+/// to infer intent from model names or the current parent configuration.
+#[derive(
+    Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, JsonSchema, TS,
+)]
+#[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
+pub enum RuntimeSelectionSource {
+    ExplicitRequest,
+    OperatorDefault,
+    AgentRole,
+    InheritedRuntime,
+}
+
+impl RuntimeSelectionSource {
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::ExplicitRequest => "explicit spawn request",
+            Self::OperatorDefault => "operator-configured subagent default",
+            Self::AgentRole => "agent role configuration",
+            Self::InheritedRuntime => "inherited current runtime",
+        }
+    }
 }
 
 impl fmt::Display for SessionSource {
@@ -3149,6 +3247,9 @@ pub struct SessionMeta {
     /// Optional canonical agent path assigned to an AgentControl-spawned sub-agent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_path: Option<String>,
+    /// Durable provenance for the initial runtime route selected for this thread.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_selection: Option<RuntimeSelectionSource>,
     pub model_provider: Option<String>,
     /// base_instructions for the session. This *should* always be present when creating a new session,
     /// but may be missing for older sessions. If not present, fall back to rendering the base_instructions
@@ -3200,6 +3301,7 @@ impl Default for SessionMeta {
             agent_nickname: None,
             agent_role: None,
             agent_path: None,
+            runtime_selection: None,
             model_provider: None,
             base_instructions: None,
             dynamic_tools: None,
@@ -3353,6 +3455,8 @@ pub struct TurnContextItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_system_sandbox_policy: Option<FileSystemSandboxPolicy>,
     pub model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comp_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -4700,6 +4804,10 @@ mod tests {
     fn inter_agent_communication_response_input_item_preserves_commentary_phase() {
         let mut communication = InterAgentCommunication {
             id: Some(ResponseItemId::with_suffix("amsg", "1")),
+            message_id: None,
+            assignment_id: None,
+            kind: None,
+            created_at_ms: None,
             author: AgentPath::root(),
             recipient: AgentPath::root().join("reviewer").expect("recipient path"),
             other_recipients: vec![AgentPath::root().join("worker").expect("recipient path")],
@@ -6215,6 +6323,7 @@ mod tests {
             workspace_roots: None,
             current_date: None,
             timezone: None,
+            model_provider: None,
             approval_policy: AskForApproval::Never,
             approvals_reviewer: None,
             sandbox_policy: SandboxPolicy::DangerFullAccess,

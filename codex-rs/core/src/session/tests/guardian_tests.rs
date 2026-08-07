@@ -33,13 +33,11 @@ use codex_protocol::request_permissions::RequestPermissionsResponse;
 use core_test_support::PathExt;
 use core_test_support::TempDirExt;
 use core_test_support::codex_linux_sandbox_exe_or_skip;
-use core_test_support::responses::chat_completions_sse;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_response_once;
 use core_test_support::responses::mount_sse_once;
-use core_test_support::responses::mount_sse_once_chat_completions;
 use core_test_support::responses::sse;
 use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
@@ -73,22 +71,26 @@ where
 #[tokio::test]
 async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
     let server = start_mock_server().await;
-    // The default Ambient provider uses the Chat Completions wire API.
-    let guardian_assessment = serde_json::json!({
-        "risk_level": "low",
-        "user_authorization": "high",
-        "outcome": "allow",
-        "rationale": "The request grants narrowly scoped network access for this turn.",
-    })
-    .to_string();
-    let guardian_request_log = mount_sse_once_chat_completions(
+    let guardian_request_log = mount_sse_once(
         &server,
-        chat_completions_sse("z-ai/glm-5.2", &guardian_assessment),
+        sse(vec![
+            ev_response_created("resp-guardian"),
+            ev_assistant_message(
+                "msg-guardian",
+                &serde_json::json!({
+                    "risk_level": "low",
+                    "user_authorization": "high",
+                    "outcome": "allow",
+                    "rationale": "The request grants narrowly scoped network access for this turn.",
+                })
+                .to_string(),
+            ),
+            ev_completed("resp-guardian"),
+        ]),
     )
     .await;
 
-    let (mut session, mut turn_context_raw, _codex_home) =
-        make_session_and_context_with_provider_auth().await;
+    let (mut session, mut turn_context_raw) = make_session_and_context().await;
     *session.active_turn.lock().await = Some(ActiveTurn::default());
     turn_context_raw
         .approval_policy
@@ -160,7 +162,7 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
     );
 
     let guardian_request = guardian_request_log.single_request();
-    assert_eq!(guardian_request.path(), "/v1/chat/completions");
+    assert_eq!(guardian_request.path(), "/v1/responses");
     assert!(guardian_request.body_contains_text("request_permissions"));
     assert!(guardian_request.body_contains_text("need network"));
 }
@@ -290,8 +292,7 @@ async fn guardian_allows_shell_command_additional_permissions_requests_past_poli
     )
     .await;
 
-    let (mut session, mut turn_context_raw, _codex_home) =
-        make_session_and_context_with_provider_auth().await;
+    let (mut session, mut turn_context_raw) = make_session_and_context().await;
     turn_context_raw
         .approval_policy
         .set(AskForApproval::OnRequest)
@@ -371,22 +372,26 @@ async fn guardian_allows_shell_command_additional_permissions_requests_past_poli
 #[tokio::test]
 async fn strict_auto_review_turn_grant_forces_guardian_for_shell_command_policy_skip() {
     let server = start_mock_server().await;
-    // The default Ambient provider uses the Chat Completions wire API.
-    let guardian_assessment = serde_json::json!({
-        "risk_level": "low",
-        "user_authorization": "high",
-        "outcome": "allow",
-        "rationale": "The command stays within the strict turn permission grant.",
-    })
-    .to_string();
-    let guardian_request_log = mount_sse_once_chat_completions(
+    let guardian_request_log = mount_sse_once(
         &server,
-        chat_completions_sse("z-ai/glm-5.2", &guardian_assessment),
+        sse(vec![
+            ev_response_created("resp-guardian"),
+            ev_assistant_message(
+                "msg-guardian",
+                &serde_json::json!({
+                    "risk_level": "low",
+                    "user_authorization": "high",
+                    "outcome": "allow",
+                    "rationale": "The command stays within the strict turn permission grant.",
+                })
+                .to_string(),
+            ),
+            ev_completed("resp-guardian"),
+        ]),
     )
     .await;
 
-    let (mut session, mut turn_context_raw, _codex_home) =
-        make_session_and_context_with_provider_auth().await;
+    let (mut session, mut turn_context_raw) = make_session_and_context().await;
     let active_turn = crate::state::ActiveTurn::default();
     let originating_turn_state = Arc::clone(&active_turn.turn_state);
     *session.active_turn.lock().await = Some(active_turn);

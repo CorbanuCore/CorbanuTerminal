@@ -56,7 +56,7 @@ impl BridgeRuntime {
                 active_model.as_deref(),
                 &active_provider,
                 &catalog,
-                0,
+                /*page*/ 0,
             )
             .await?;
             return Ok(());
@@ -541,7 +541,8 @@ fn model_label(model: Option<&str>) -> &str {
 fn parse_approval_policy(arg: &str) -> Option<AskForApproval> {
     match arg.trim().to_ascii_lowercase().as_str() {
         "untrusted" => Some(AskForApproval::UnlessTrusted),
-        "on-failure" => Some(AskForApproval::OnFailure),
+        // Upstream Codex accepts the legacy spelling as an alias for on-request.
+        "on-failure" => Some(AskForApproval::OnRequest),
         "on-request" => Some(AskForApproval::OnRequest),
         "never" => Some(AskForApproval::Never),
         _ => None,
@@ -555,7 +556,6 @@ mod tests;
 fn approval_policy_name(policy: AskForApproval) -> &'static str {
     match policy {
         AskForApproval::UnlessTrusted => "untrusted",
-        AskForApproval::OnFailure => "on-failure",
         AskForApproval::OnRequest => "on-request",
         AskForApproval::Granular { .. } => "granular",
         AskForApproval::Never => "never",

@@ -22,8 +22,6 @@ use futures::FutureExt;
 use futures::future::BoxFuture;
 use futures::future::Shared;
 use std::sync::atomic::AtomicBool;
-use std::sync::atomic::AtomicU8;
-use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use tracing::instrument;
 
@@ -43,110 +41,6 @@ impl TurnSkillsContext {
 }
 
 pub(crate) type ShellSnapshotTask = Shared<BoxFuture<'static, Option<Arc<ShellSnapshotFile>>>>;
-
-const STRICT_APPLY_PATCH_ONE_GRAMMAR_FAILURE: u8 = 1;
-const STRICT_APPLY_PATCH_FALLBACK_ACTIVE: u8 = 2;
-
-#[derive(Debug, Default)]
-pub(crate) struct ModelEditProtocolState {
-    strict_apply_patch_grammar_state: AtomicU8,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum PatchFallbackTransition {
-    Unchanged { consecutive_failures: u8 },
-    Activated { consecutive_failures: u8 },
-}
-
-impl PatchFallbackTransition {
-    pub(crate) fn consecutive_failures(self) -> u8 {
-        match self {
-            Self::Unchanged {
-                consecutive_failures,
-            }
-            | Self::Activated {
-                consecutive_failures,
-            } => consecutive_failures,
-        }
-    }
-}
-
-impl ModelEditProtocolState {
-    fn record_grammar_failure(&self) -> PatchFallbackTransition {
-        let mut current = self
-            .strict_apply_patch_grammar_state
-            .load(Ordering::Acquire);
-        loop {
-            if current >= STRICT_APPLY_PATCH_FALLBACK_ACTIVE {
-                return PatchFallbackTransition::Unchanged {
-                    consecutive_failures: STRICT_APPLY_PATCH_FALLBACK_ACTIVE,
-                };
-            }
-            let next = current.saturating_add(1);
-            match self.strict_apply_patch_grammar_state.compare_exchange(
-                current,
-                next,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            ) {
-                Ok(_) if next == STRICT_APPLY_PATCH_FALLBACK_ACTIVE => {
-                    return PatchFallbackTransition::Activated {
-                        consecutive_failures: next,
-                    };
-                }
-                Ok(_) => {
-                    return PatchFallbackTransition::Unchanged {
-                        consecutive_failures: next,
-                    };
-                }
-                Err(observed) => current = observed,
-            }
-        }
-    }
-
-    fn record_parse_success(&self) {
-        let mut current = self
-            .strict_apply_patch_grammar_state
-            .load(Ordering::Acquire);
-        while current == STRICT_APPLY_PATCH_ONE_GRAMMAR_FAILURE {
-            match self.strict_apply_patch_grammar_state.compare_exchange(
-                current,
-                0,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            ) {
-                Ok(_) => return,
-                Err(observed) => current = observed,
-            }
-        }
-    }
-
-    fn fallback_enabled(&self) -> bool {
-        self.strict_apply_patch_grammar_state
-            .load(Ordering::Acquire)
-            >= STRICT_APPLY_PATCH_FALLBACK_ACTIVE
-    }
-}
-
-#[derive(Debug, Default)]
-pub(crate) struct ExplicitToolBudgetState {
-    shell_command_limit: AtomicU64,
-    shell_commands_used: AtomicU64,
-}
-
-#[derive(Debug, Default)]
-pub(crate) struct MalformedToolCallState {
-    counts: Mutex<HashMap<String, u8>>,
-}
-
-impl MalformedToolCallState {
-    async fn record(&self, signature: String) -> u8 {
-        let mut counts = self.counts.lock().await;
-        let count = counts.entry(signature).or_insert(0);
-        *count = count.saturating_add(1);
-        *count
-    }
-}
 
 #[derive(Clone)]
 pub(crate) struct TurnEnvironment {
@@ -260,8 +154,6 @@ pub struct TurnContext {
     pub(crate) turn_skills: TurnSkillsContext,
     pub(crate) turn_timing_state: Arc<TurnTimingState>,
     pub(crate) terminal_error: Arc<Mutex<Option<ErrorEvent>>>,
-    pub(crate) server_model_warning_emitted: AtomicBool,
-    pub(crate) provider_cache_pressure_warning_emitted: AtomicBool,
     pub(crate) model_verification_emitted: AtomicBool,
 }
 
@@ -429,16 +321,6 @@ impl TurnContext {
             turn_skills: self.turn_skills.clone(),
             turn_timing_state: Arc::clone(&self.turn_timing_state),
             terminal_error: Arc::clone(&self.terminal_error),
-            model_edit_protocol_state: Arc::clone(&self.model_edit_protocol_state),
-            explicit_tool_budget_state: Arc::clone(&self.explicit_tool_budget_state),
-            malformed_tool_call_state: Arc::clone(&self.malformed_tool_call_state),
-            server_model_warning_emitted: AtomicBool::new(
-                self.server_model_warning_emitted.load(Ordering::Relaxed),
-            ),
-            provider_cache_pressure_warning_emitted: AtomicBool::new(
-                self.provider_cache_pressure_warning_emitted
-                    .load(Ordering::Relaxed),
-            ),
             model_verification_emitted: AtomicBool::new(
                 self.model_verification_emitted.load(Ordering::Relaxed),
             ),
@@ -501,6 +383,7 @@ impl TurnContext {
             network: self.turn_context_network_item(),
             file_system_sandbox_policy: self.non_legacy_file_system_sandbox_policy(),
             model: self.model_info.slug.clone(),
+            model_provider: Some(self.config.model_provider_id.clone()),
             comp_hash: self.model_info.comp_hash.clone(),
             personality: self.personality,
             collaboration_mode: Some(self.collaboration_mode()),
@@ -553,7 +436,6 @@ impl Session {
         // todo(aibrahim): store this state somewhere else so we don't need to mut config
         let config = session_configuration.original_config_do_not_use.clone();
         let mut per_turn_config = (*config).clone();
-        per_turn_config.model = Some(session_configuration.collaboration_mode.model().to_string());
         per_turn_config.cwd = cwd;
         let workspace_roots = session_configuration.primary_workspace_roots();
         per_turn_config.workspace_roots = workspace_roots.clone();
@@ -563,13 +445,6 @@ impl Session {
         per_turn_config.model_reasoning_effort =
             session_configuration.collaboration_mode.reasoning_effort();
         per_turn_config.model_reasoning_summary = session_configuration.model_reasoning_summary;
-        if let Some(runtime_limit) = session_configuration.runtime_model_context_window {
-            per_turn_config.model_context_window = Some(
-                per_turn_config
-                    .model_context_window
-                    .map_or(runtime_limit, |configured| configured.min(runtime_limit)),
-            );
-        }
         per_turn_config.service_tier = session_configuration.service_tier.clone();
         per_turn_config.personality = session_configuration.personality;
         per_turn_config.approvals_reviewer = session_configuration.approvals_reviewer;
@@ -638,22 +513,7 @@ impl Session {
         let auth_manager_for_context = auth_manager.clone();
         let provider_for_context = create_model_provider(provider, auth_manager);
         let session_telemetry_for_context = session_telemetry;
-        let mut available_models = models_manager.try_list_models().unwrap_or_default();
-        let runtime_provider_id = per_turn_config.model_provider_id.clone();
-        if runtime_provider_id.starts_with("gpu-")
-            && !available_models
-                .iter()
-                .any(|preset| preset.model == model_info.slug)
-        {
-            let mut preset = ModelPreset::from(model_info.clone());
-            preset.provider_id = Some(runtime_provider_id.clone());
-            preset.orchestration = Some(ModelOrchestrationMetadata::Eligible {
-                provider_id: runtime_provider_id,
-                capability: ModelCapabilityTier::Balanced,
-                billing: ModelBilling::Local,
-            });
-            available_models.push(preset);
-        }
+        let available_models = models_manager.try_list_models().unwrap_or_default();
         let unified_exec_shell_mode = UnifiedExecShellMode::for_session(
             codex_tools::unified_exec_feature_mode_for_features(per_turn_config.features.get()),
             crate::tools::tool_user_shell_type(user_shell),
@@ -729,11 +589,6 @@ impl Session {
             turn_skills: TurnSkillsContext::new(skills_snapshot),
             turn_timing_state: Arc::new(TurnTimingState::default()),
             terminal_error: Arc::new(Mutex::new(None)),
-            model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
-            explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
-            malformed_tool_call_state: Arc::new(MalformedToolCallState::default()),
-            server_model_warning_emitted: AtomicBool::new(false),
-            provider_cache_pressure_warning_emitted: AtomicBool::new(false),
             model_verification_emitted: AtomicBool::new(false),
         }
     }
@@ -741,12 +596,8 @@ impl Session {
     pub(crate) async fn new_turn_with_sub_id(
         &self,
         sub_id: String,
-        mut updates: SessionSettingsUpdate,
+        updates: SessionSettingsUpdate,
     ) -> CodexResult<Arc<TurnContext>> {
-        // GPU endpoints are process-local controller transports and can change while a
-        // session remains open. Refresh the selected runtime provider before every turn so
-        // recovery does not leave the session's ModelClient pinned to a dead local port.
-        self.ensure_runtime_model_provider(&mut updates).await;
         let notify_config_contributors = !self.services.extensions.config_contributors().is_empty();
         let update_result: CodexResult<_> = {
             let mut state = self.state.lock().await;
@@ -763,18 +614,6 @@ impl Session {
                     });
                     let new_config = notify_config_contributors
                         .then(|| Self::build_effective_session_config(&next));
-                    let model_provider_changed = state
-                        .session_configuration
-                        .original_config_do_not_use
-                        .model_provider_id
-                        != next.original_config_do_not_use.model_provider_id
-                        || state.session_configuration.provider != next.provider;
-                    let model_client_configuration = model_provider_changed.then(|| next.clone());
-                    let stale_startup_prewarm = if model_provider_changed {
-                        state.take_session_startup_prewarm()
-                    } else {
-                        None
-                    };
                     if updates.environments.is_some() {
                         self.services
                             .turn_environments
@@ -790,8 +629,6 @@ impl Session {
                         permission_profile_changed,
                         previous_config,
                         new_config,
-                        model_client_configuration,
-                        stale_startup_prewarm,
                     ))
                 }
                 Err(err) => Err(CodexErr::InvalidRequest(err.to_string())),
@@ -822,14 +659,6 @@ impl Session {
         self.emit_config_changed_contributors(previous_config.as_ref(), new_config.as_ref());
         if mcp_inputs_changed {
             self.schedule_mcp_prewarm();
-        }
-
-        if let Some(configuration) = model_client_configuration {
-            self.services
-                .replace_model_client(self.build_model_client_for_configuration(&configuration));
-        }
-        if let Some(startup_prewarm) = stale_startup_prewarm {
-            startup_prewarm.abort().await;
         }
 
         if permission_profile_changed {
@@ -1053,7 +882,3 @@ impl Session {
         state.session_configuration.clone()
     }
 }
-
-#[cfg(test)]
-#[path = "turn_context_tests.rs"]
-mod tests;

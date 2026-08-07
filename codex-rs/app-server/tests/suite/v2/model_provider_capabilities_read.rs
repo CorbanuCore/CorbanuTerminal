@@ -25,80 +25,12 @@ async fn read_default_provider_capabilities() -> Result<()> {
     let received: ModelProviderCapabilitiesReadResponse =
         timeout(DEFAULT_TIMEOUT, mcp.read_response(request_id)).await??;
 
-    to_response(response)
-}
-
-#[tokio::test]
-async fn read_openai_provider_capabilities() -> Result<()> {
-    let codex_home = TempDir::new()?;
-    std::fs::write(
-        codex_home.path().join("config.toml"),
-        r#"model_provider = "openai"
-"#,
-    )?;
-    let received = read_capabilities(codex_home.path()).await?;
-
-    // This test pins the explicitly-configured OpenAI provider's capability
-    // contract. OpenAI uses the ProviderCapabilities::default() branch.
     let expected = ModelProviderCapabilitiesReadResponse {
         namespace_tools: true,
         image_generation: true,
         web_search: true,
     };
     assert_eq!(received, expected);
-    Ok(())
-}
-
-#[tokio::test]
-async fn read_default_provider_capabilities_profiles_cover_all_branches() -> Result<()> {
-    let codex_home = TempDir::new()?;
-    std::fs::write(
-        codex_home.path().join("config.toml"),
-        r#"model_provider = "ambient"
-"#,
-    )?;
-    let received = read_capabilities(codex_home.path()).await?;
-    // Explicitly-configured Ambient intentionally exposes no namespace tools,
-    // image generation, or web search.
-    let expected = ModelProviderCapabilitiesReadResponse {
-        namespace_tools: false,
-        image_generation: false,
-        web_search: false,
-    };
-    assert_eq!(received, expected);
-
-    let codex_home = TempDir::new()?;
-    std::fs::write(
-        codex_home.path().join("config.toml"),
-        r#"model_provider = "openrouter"
-"#,
-    )?;
-    let received = read_capabilities(codex_home.path()).await?;
-    // Explicitly-configured OpenRouter exposes hosted web search only.
-    let expected = ModelProviderCapabilitiesReadResponse {
-        namespace_tools: false,
-        image_generation: false,
-        web_search: true,
-    };
-    assert_eq!(received, expected);
-
-    let codex_home = TempDir::new()?;
-    std::fs::write(
-        codex_home.path().join("config.toml"),
-        r#"model_provider = "openai"
-"#,
-    )?;
-    let received = read_capabilities(codex_home.path()).await?;
-    // Explicitly-configured OpenAI uses ProviderCapabilities::default().
-    let expected = ModelProviderCapabilitiesReadResponse {
-        namespace_tools: true,
-        image_generation: true,
-        web_search: true,
-    };
-    assert_eq!(received, expected);
-
-    // Bedrock has a provider-specific override; the existing test below pins
-    // that separate capability contract.
     Ok(())
 }
 

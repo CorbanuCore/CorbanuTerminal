@@ -11,6 +11,13 @@ use codex_login::ExternalAuth;
 use codex_login::ExternalAuthRefreshContext;
 use codex_login::TokenData;
 use codex_protocol::auth::AuthMode;
+use codex_protocol::openai_models::ChatReasoningEffortProtocol;
+use codex_protocol::openai_models::ChatReasoningProtocol;
+use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::ModelBilling;
+use codex_protocol::openai_models::ModelCapabilityTier;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
+use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
@@ -29,6 +36,13 @@ mod model_info_overrides_tests;
 
 const DEFAULT_HTTP_CLIENT_FACTORY: HttpClientFactory =
     HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault);
+
+fn assert_standard_base(actual: &str) {
+    assert_eq!(
+        actual.trim_end(),
+        crate::model_info::BASE_INSTRUCTIONS.trim_end()
+    );
+}
 
 fn remote_model(slug: &str, display: &str, priority: i32) -> ModelInfo {
     remote_model_with_visibility(slug, display, priority, "list")
@@ -235,9 +249,12 @@ async fn manager_without_cache_fetches_on_every_refresh() {
         )
         .await;
 
-    assert_eq!(catalog.models, remote_models);
+    assert!(
+        catalog.models.iter().any(|model| model.slug == "remote"),
+        "remote discovery should be merged into the bundled catalogue"
+    );
     assert_eq!(second_catalog, catalog);
-    assert_eq!(manager.get_remote_models().await, remote_models);
+    assert_eq!(manager.get_remote_models().await, catalog.models);
     assert_eq!(endpoint.fetch_count(), 2);
 }
 
@@ -600,14 +617,20 @@ async fn chatgpt_cache_does_not_evict_pfterminal_provider_models() {
         openai_manager_for_tests(codex_home.path().to_path_buf(), fetch_endpoint.clone());
 
     fetch_manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("initial refresh succeeds");
 
     let cache_endpoint = TestModelsEndpoint::new(Vec::new());
     let cache_manager = openai_manager_for_tests(codex_home.path().to_path_buf(), cache_endpoint);
     let available = cache_manager
-        .list_models(RefreshStrategy::OnlineIfUncached)
+        .list_models(
+            RefreshStrategy::OnlineIfUncached,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await;
     let slugs = available
         .iter()
@@ -645,7 +668,10 @@ async fn remote_model_overlay_preserves_bundled_orchestration_metadata() {
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
 
     manager
-        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .refresh_available_models(
+            RefreshStrategy::OnlineIfUncached,
+            &DEFAULT_HTTP_CLIENT_FACTORY,
+        )
         .await
         .expect("refresh succeeds");
 
@@ -733,7 +759,9 @@ async fn chatgpt_catalog_keeps_verified_gpt_5_6_models_when_remote_omits_them() 
     let endpoint = TestModelsEndpoint::new(vec![Vec::new()]);
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
 
-    let available = manager.list_models(RefreshStrategy::Online).await;
+    let available = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
     let picker_visibility = available
         .iter()
         .filter(|model| model.model.starts_with("gpt-5.6-"))
@@ -770,7 +798,9 @@ async fn chatgpt_catalog_honors_explicit_remote_hiding_for_gpt_5_6_models() {
     let endpoint = TestModelsEndpoint::new(vec![remote_models]);
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
 
-    let available = manager.list_models(RefreshStrategy::Online).await;
+    let available = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
 
     assert!(
         available
@@ -797,7 +827,9 @@ async fn chatgpt_catalog_shows_server_advertised_gpt_5_6_models() {
     let endpoint = TestModelsEndpoint::new(vec![remote_models]);
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
 
-    let available = manager.list_models(RefreshStrategy::Online).await;
+    let available = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
     assert!(
         available
             .iter()
@@ -808,9 +840,9 @@ async fn chatgpt_catalog_shows_server_advertised_gpt_5_6_models() {
         .find(|model| model.model == "gpt-5.6-sol")
         .expect("server-advertised Sol should be available");
     assert!(
-        sol.supported_reasoning_efforts.iter().any(
-            |level| matches!(&level.effort, ReasoningEffort::Custom(value) if value == "ultra")
-        ),
+        sol.supported_reasoning_efforts
+            .iter()
+            .any(|level| level.effort == ReasoningEffort::Ultra),
         "runtime model metadata must preserve server-advertised custom efforts"
     );
     let advertised = available
@@ -857,7 +889,9 @@ async fn remote_catalog_preserves_bundled_reasoning_when_remote_omits_it() {
     let endpoint = TestModelsEndpoint::new(vec![vec![remote_model]]);
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
 
-    let available = manager.list_models(RefreshStrategy::Online).await;
+    let available = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
     let deepseek = available
         .iter()
         .find(|model| model.model == "deepseek/deepseek-v4-pro")
@@ -1474,42 +1508,42 @@ fn bundled_models_json_contains_gpt_5_6_family_metadata() {
         vec![
             (
                 "gpt-5.6-sol",
-                Some(372_000),
+                Some(272_000),
                 Some(ReasoningEffort::Low),
                 vec![
                     ReasoningEffort::Low,
                     ReasoningEffort::Medium,
                     ReasoningEffort::High,
                     ReasoningEffort::XHigh,
-                    ReasoningEffort::Custom("max".to_string()),
-                    ReasoningEffort::Custom("ultra".to_string()),
+                    ReasoningEffort::Max,
+                    ReasoningEffort::Ultra,
                 ],
                 ModelVisibility::List,
             ),
             (
                 "gpt-5.6-terra",
-                Some(372_000),
+                Some(272_000),
                 Some(ReasoningEffort::Medium),
                 vec![
                     ReasoningEffort::Low,
                     ReasoningEffort::Medium,
                     ReasoningEffort::High,
                     ReasoningEffort::XHigh,
-                    ReasoningEffort::Custom("max".to_string()),
-                    ReasoningEffort::Custom("ultra".to_string()),
+                    ReasoningEffort::Max,
+                    ReasoningEffort::Ultra,
                 ],
                 ModelVisibility::List,
             ),
             (
                 "gpt-5.6-luna",
-                Some(372_000),
+                Some(272_000),
                 Some(ReasoningEffort::Medium),
                 vec![
                     ReasoningEffort::Low,
                     ReasoningEffort::Medium,
                     ReasoningEffort::High,
                     ReasoningEffort::XHigh,
-                    ReasoningEffort::Custom("max".to_string()),
+                    ReasoningEffort::Max,
                 ],
                 ModelVisibility::List,
             ),
@@ -1718,63 +1752,20 @@ fn bundled_models_json_contains_ambient_models() {
 }
 
 #[test]
-fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
+fn bundled_third_party_models_use_the_pf_terminal_codex_base_without_foreign_identity() {
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
 
-    for slug in [
-        "z-ai/glm-5.2",
-        "moonshotai/kimi-k2.7-code",
-        "zai/glm-5.2",
-        "zai/glm-5.2-fast",
-        "zai-org/GLM-5.2",
-        "ambient/large",
-        "glm-5.2",
-        "minimax/minimax-m3",
-        "openrouter/owl-alpha",
-        "google/gemini-3.5-flash",
-        "x-ai/grok-4.5",
-        "deepseek/deepseek-v4-pro",
-        "tencent/hy3:free",
-        "muse-spark-1.1",
-        "claude-opus-5-plan",
-        "claude-fable-5-plan",
-        "claude-opus-5",
-        "claude-fable-5",
-    ] {
-        let model = response
-            .models
-            .iter()
-            .find(|model| model.slug == slug)
-            .unwrap_or_else(|| panic!("bundled models.json should include {slug}"));
-
+    for model in response.models.iter().filter(|model| {
+        model
+            .orchestration
+            .as_ref()
+            .is_some_and(|metadata| metadata.provider_id() != "openai")
+    }) {
         assert_standard_base(&model.base_instructions);
-        assert!(
-            model
-                .base_instructions
-                .contains(STANDARD_BASE_OUTCOME_MARKER)
-        );
-        assert!(
-            model
-                .base_instructions
-                .contains(STANDARD_BASE_EVIDENCE_MARKER)
-        );
-        assert!(!model.base_instructions.contains(OLD_STANDARD_BASE_MARKER));
+        assert!(model.base_instructions.contains("PF Terminal"));
+        assert!(!model.base_instructions.contains("You are Claude Code"));
     }
-
-    let gpt55 = response
-        .models
-        .iter()
-        .find(|model| model.slug == "gpt-5.5")
-        .expect("bundled models.json should include gpt-5.5");
-
-    assert!(gpt55.base_instructions.contains(GPT55_GUIDE_MARKER));
-    assert!(
-        !gpt55
-            .base_instructions
-            .contains(STANDARD_BASE_EVIDENCE_MARKER)
-    );
-    assert_ne!(gpt55.base_instructions.trim_end(), STANDARD_BASE.trim_end());
 }
 
 #[test]
@@ -1790,10 +1781,7 @@ fn bundled_models_json_contains_kimi_code_k3() {
     assert_eq!(kimi.display_name, "Kimi Code K3");
     assert_eq!(kimi.context_window, Some(262_144));
     assert_eq!(kimi.max_context_window, Some(1_048_576));
-    assert_eq!(
-        kimi.default_reasoning_level,
-        Some(ReasoningEffort::Custom("max".to_string()))
-    );
+    assert_eq!(kimi.default_reasoning_level, Some(ReasoningEffort::Max));
     assert_eq!(
         kimi.supported_reasoning_levels
             .iter()
@@ -1802,13 +1790,17 @@ fn bundled_models_json_contains_kimi_code_k3() {
         vec![
             ReasoningEffort::Low,
             ReasoningEffort::High,
-            ReasoningEffort::Custom("max".to_string()),
+            ReasoningEffort::Max,
         ]
     );
     assert!(kimi.supports_parallel_tool_calls);
     assert_eq!(
         kimi.chat_completions.reasoning_protocol,
         ChatReasoningProtocol::PreservedRequired
+    );
+    assert_eq!(
+        kimi.chat_completions.reasoning_effort_protocol,
+        ChatReasoningEffortProtocol::LowHighMaxRequiredDefaultMax
     );
     assert_standard_base(&kimi.base_instructions);
 
@@ -1919,10 +1911,7 @@ fn bundled_models_json_contains_openrouter_models() {
     let kimi = openrouter_model("moonshotai/kimi-k3");
     assert_eq!(kimi.display_name, "OpenRouter Kimi K3");
     assert_eq!(kimi.context_window, Some(1_048_576));
-    assert_eq!(
-        kimi.default_reasoning_level,
-        Some(ReasoningEffort::Custom("max".to_string()))
-    );
+    assert_eq!(kimi.default_reasoning_level, Some(ReasoningEffort::Max));
     assert_eq!(
         kimi.supported_reasoning_levels
             .iter()
@@ -1931,7 +1920,7 @@ fn bundled_models_json_contains_openrouter_models() {
         vec![
             ReasoningEffort::Low,
             ReasoningEffort::High,
-            ReasoningEffort::Custom("max".to_string()),
+            ReasoningEffort::Max,
         ]
     );
     assert_eq!(
@@ -1941,6 +1930,10 @@ fn bundled_models_json_contains_openrouter_models() {
     assert_eq!(
         kimi.chat_completions.reasoning_protocol,
         ChatReasoningProtocol::PreservedRequired
+    );
+    assert_eq!(
+        kimi.chat_completions.reasoning_effort_protocol,
+        ChatReasoningEffortProtocol::ProviderDefault
     );
     assert!(
         kimi.description
@@ -1988,7 +1981,7 @@ fn bundled_models_json_contains_openrouter_models() {
             ReasoningEffort::Medium,
             ReasoningEffort::High,
             ReasoningEffort::XHigh,
-            ReasoningEffort::Custom("max".to_string()),
+            ReasoningEffort::Max,
         ]
     );
     assert_eq!(claude_opus.visibility, ModelVisibility::List);
@@ -2027,7 +2020,7 @@ fn bundled_models_json_contains_openrouter_models() {
             ReasoningEffort::Medium,
             ReasoningEffort::High,
             ReasoningEffort::XHigh,
-            ReasoningEffort::Custom("max".to_string()),
+            ReasoningEffort::Max,
         ]
     );
     assert_eq!(claude_fable_plan.visibility, ModelVisibility::List);
@@ -2074,6 +2067,12 @@ fn bundled_models_json_contains_openrouter_models() {
     assert_eq!(baseten_glm.context_window, Some(1_048_576));
     assert_eq!(baseten_glm.default_reasoning_level, None);
     assert!(baseten_glm.supported_reasoning_levels.is_empty());
+    assert_eq!(
+        baseten_glm
+            .chat_completions
+            .reasoning_effort_protocol,
+        ChatReasoningEffortProtocol::NoneHighMaxDefaultHigh
+    );
     assert_eq!(baseten_glm.visibility, ModelVisibility::List);
     assert!(
         baseten_glm

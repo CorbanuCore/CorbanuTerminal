@@ -11,411 +11,10 @@ use crate::config_update::format_config_error;
 use crate::external_agent_config_migration::flow::ExternalAgentConfigMigrationFlowOutcome;
 #[cfg(target_os = "windows")]
 use codex_config::types::WindowsSandboxModeToml;
-use codex_protocol::protocol::AgentMessageKind;
-use std::collections::HashSet;
 
 const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
-const RESERVED_PANE_DISPLAY_NAMES: &[&str] = &["Codex - Main", "me", "none", "root", "nazgul"];
 
 impl App {
-    pub(super) async fn refresh_gpu_runtime_overlay(&mut self) {
-        let Some(state_db) = self.state_db.as_ref() else {
-            self.model_catalog.replace_gpu_models(Vec::new());
-            self.refresh_gpu_spend_indicator().await;
-            return;
-        };
-        let providers = match state_db.list_gpu_runtime_providers().await {
-            Ok(providers) => providers,
-            Err(error) => {
-                tracing::warn!(%error, "failed to refresh GPU runtime provider overlay");
-                self.refresh_gpu_spend_indicator().await;
-                return;
-            }
-        };
-        let models = providers
-            .iter()
-            .filter_map(super::gpu_runtime_model_preset)
-            .collect();
-        let runtime_providers = providers
-            .into_iter()
-            .filter_map(|provider| {
-                codex_core::config::gpu_runtime_model_provider(provider, &self.config.codex_home)
-            })
-            .collect::<std::collections::HashMap<_, _>>();
-        self.model_catalog.replace_gpu_models(models);
-        self.config
-            .model_providers
-            .retain(|provider_id, _| !provider_id.starts_with("gpu-"));
-        self.config
-            .model_providers
-            .extend(runtime_providers.clone());
-        self.chat_widget
-            .replace_gpu_model_providers(&runtime_providers);
-        self.refresh_gpu_notifications().await;
-        self.refresh_gpu_spend_indicator().await;
-    }
-
-    async fn refresh_gpu_notifications(&mut self) {
-        let Some(state_db) = self.state_db.clone() else {
-            return;
-        };
-        let Ok(rentals) = state_db.list_gpu_rentals(1_000).await else {
-            return;
-        };
-        let now_ms = chrono::Utc::now().timestamp_millis();
-        for rental in rentals {
-            let Some((kind, message, is_error)) = gpu_notification(&rental) else {
-                continue;
-            };
-            match state_db
-                .record_gpu_notification_once(
-                    rental.rental_id.as_str(),
-                    rental.state_sequence,
-                    kind.as_str(),
-                    now_ms,
-                )
-                .await
-            {
-                Ok(true) if is_error => self.chat_widget.add_error_message(message),
-                Ok(true) => self.chat_widget.add_info_message(message, None),
-                Ok(false) => {}
-                Err(error) => {
-                    tracing::warn!(%error, "failed to deduplicate GPU rental notification")
-                }
-            }
-        }
-    }
-
-    fn normalize_pane_display_name(&self, name: &str) -> Result<String> {
-        let normalized = name.split_whitespace().collect::<Vec<_>>().join(" ");
-        if normalized.is_empty() {
-            color_eyre::eyre::bail!("Pane name cannot be empty.");
-        }
-        if RESERVED_PANE_DISPLAY_NAMES
-            .iter()
-            .any(|reserved| reserved.eq_ignore_ascii_case(&normalized))
-        {
-            color_eyre::eyre::bail!("`{normalized}` is reserved; choose a different pane name.");
-        }
-        Ok(normalized)
-    }
-
-    fn occupied_pane_name_keys(&self, exclude_node_id: Option<&str>) -> HashSet<String> {
-        let mut occupied = HashSet::new();
-        let mut insert = |value: &str| {
-            let folded = value.trim().to_ascii_lowercase();
-            if !folded.is_empty() {
-                occupied.insert(folded);
-            }
-        };
-
-        for (thread_id, entry) in self.agent_navigation.ordered_threads() {
-            let node_id = crate::spawn_orchestration::thread_node_id(thread_id);
-            if exclude_node_id == Some(node_id.as_str()) {
-                continue;
-            }
-            let label = self.thread_label(thread_id);
-            insert(&label);
-            if let Some(nickname) = entry.agent_nickname.as_deref() {
-                insert(nickname);
-                if Some(thread_id) != self.primary_thread_id
-                    && entry
-                        .agent_role
-                        .as_deref()
-                        .map(|role| role == "default")
-                        .unwrap_or(true)
-                {
-                    insert(&format!("Codex - {nickname}"));
-                }
-            }
-        }
-        for pane in self.claude_panes.panes() {
-            let node_id = crate::spawn_orchestration::pane_node_id(&pane.id);
-            if exclude_node_id == Some(node_id.as_str()) {
-                continue;
-            }
-            insert(&pane.title);
-        }
-        occupied
-    }
-
-    fn unique_pane_display_name(
-        &self,
-        requested: &str,
-        exclude_node_id: Option<&str>,
-    ) -> Result<String> {
-        let base = self.normalize_pane_display_name(requested)?;
-        let occupied = self.occupied_pane_name_keys(exclude_node_id);
-        let mut candidate = base.clone();
-        for suffix in 2..1000 {
-            if !occupied.contains(&candidate.to_ascii_lowercase()) {
-                return Ok(candidate);
-            }
-            candidate = format!("{base} ({suffix})");
-        }
-        color_eyre::eyre::bail!("Could not find an unused pane name for `{base}`.");
-    }
-
-    fn unique_native_pane_nickname(
-        &self,
-        requested: &str,
-        exclude_thread_id: Option<ThreadId>,
-    ) -> Result<String> {
-        let mut base = self.normalize_pane_display_name(requested)?;
-        if let Some(stripped) = base.strip_prefix("Codex - ") {
-            base = self.normalize_pane_display_name(stripped)?;
-        }
-        let exclude_node_id = exclude_thread_id.map(crate::spawn_orchestration::thread_node_id);
-        let occupied = self.occupied_pane_name_keys(exclude_node_id.as_deref());
-        let mut candidate = base.clone();
-        for suffix in 2..1000 {
-            let candidate_key = candidate.to_ascii_lowercase();
-            let display_key = format!("codex - {}", candidate.to_ascii_lowercase());
-            if !occupied.contains(&candidate_key) && !occupied.contains(&display_key) {
-                return Ok(candidate);
-            }
-            candidate = format!("{base} ({suffix})");
-        }
-        color_eyre::eyre::bail!("Could not find an unused pane name for `{base}`.");
-    }
-
-    async fn rename_current_pane_display_name(
-        &mut self,
-        app_server: &mut AppServerSession,
-        name: String,
-    ) {
-        if let Some(pane_id) = self
-            .claude_panes
-            .active_claude_pane_id()
-            .map(ToString::to_string)
-        {
-            self.rename_claude_pane_display_name(pane_id, name);
-            return;
-        }
-
-        let Some(thread_id) = self.current_displayed_thread_id() else {
-            self.chat_widget
-                .add_error_message("No active Codex pane to rename.".to_string());
-            return;
-        };
-        self.rename_codex_pane_display_name(app_server, thread_id, name)
-            .await;
-    }
-
-    fn rename_claude_pane_display_name(&mut self, pane_id: String, name: String) {
-        let exclude = crate::spawn_orchestration::pane_node_id(&pane_id);
-        let title = match self.unique_pane_display_name(&name, Some(exclude.as_str())) {
-            Ok(title) => title,
-            Err(err) => {
-                self.chat_widget.add_error_message(err.to_string());
-                return;
-            }
-        };
-        match self.claude_panes.rename_pane(&pane_id, title.clone()) {
-            Ok(()) => {
-                self.sync_active_agent_label();
-                self.persist_pane_state();
-                self.chat_widget
-                    .add_info_message(format!("Renamed pane to {title}."), None);
-            }
-            Err(err) => self
-                .chat_widget
-                .add_error_message(format!("Failed to rename pane: {err}")),
-        }
-    }
-
-    async fn rename_codex_pane_display_name(
-        &mut self,
-        app_server: &mut AppServerSession,
-        thread_id: ThreadId,
-        name: String,
-    ) {
-        let nickname = match self.unique_native_pane_nickname(&name, Some(thread_id)) {
-            Ok(nickname) => nickname,
-            Err(err) => {
-                self.chat_widget.add_error_message(err.to_string());
-                return;
-            }
-        };
-        let backend_name = nickname.clone();
-        if let Err(err) = app_server.thread_set_name(thread_id, backend_name).await {
-            self.chat_widget
-                .add_error_message(format!("Failed to rename thread: {err}"));
-            return;
-        }
-        self.agent_navigation
-            .set_agent_nickname(thread_id, Some(nickname.clone()));
-        self.persist_existing_thread_agent_nickname(thread_id, Some(nickname.clone()))
-            .await;
-        self.sync_active_agent_label();
-        self.persist_pane_state();
-        self.chat_widget
-            .add_info_message(format!("Renamed pane to {nickname}."), None);
-    }
-
-    async fn persist_existing_thread_agent_nickname(
-        &self,
-        thread_id: ThreadId,
-        agent_nickname: Option<String>,
-    ) {
-        let Some(state_db) = self.state_db.as_ref() else {
-            return;
-        };
-        let Ok(Some(mut metadata)) = state_db.get_thread(thread_id).await else {
-            return;
-        };
-        let now = Utc::now();
-        metadata.updated_at = now;
-        metadata.recency_at = now;
-        metadata.agent_nickname = agent_nickname;
-        if let Err(err) = state_db.upsert_thread(&metadata).await {
-            tracing::warn!(
-                thread_id = %thread_id,
-                error = %err,
-                "failed to persist renamed pane nickname"
-            );
-        }
-    }
-}
-
-fn gpu_notification(rental: &codex_state::GpuRental) -> Option<(String, String, bool)> {
-    use codex_state::GpuRentalState;
-    match rental.observed_state {
-        GpuRentalState::Ready => Some((
-            "ready".to_string(),
-            format!(
-                "GPU rental {} is READY and its model is available in the picker.",
-                rental.rental_id
-            ),
-            false,
-        )),
-        GpuRentalState::Degraded => Some((
-            "degraded".to_string(),
-            format!(
-                "GPU rental {} is DEGRADED and has been disabled for new selections.",
-                rental.rental_id
-            ),
-            true,
-        )),
-        GpuRentalState::Failed => Some((
-            "failed".to_string(),
-            failed_gpu_notification(
-                rental.rental_id.as_str(),
-                rental.last_error_message.as_deref(),
-            ),
-            true,
-        )),
-        GpuRentalState::TerminationUnconfirmed => Some((
-            "termination-unconfirmed".to_string(),
-            format!(
-                "GPU rental {} cleanup is UNCONFIRMED; it remains visible as a billing risk.",
-                rental.rental_id
-            ),
-            true,
-        )),
-        GpuRentalState::TerminatedConfirmed => Some((
-            "terminated".to_string(),
-            format!(
-                "GPU rental {} termination is provider-confirmed.",
-                rental.rental_id
-            ),
-            false,
-        )),
-        _ => rental.provision_step.as_deref().and_then(|step| {
-            crate::chatwidget::gpu_menu::gpu_provision_phase_label(step)?;
-            let progress = crate::chatwidget::gpu_menu::gpu_progress_summary(
-                rental,
-                chrono::Utc::now().timestamp_millis(),
-            );
-            Some((
-                format!("progress-{step}"),
-                format!(
-                    "GPU rental {}: {progress}. Provider billing is active; /gpu shows current spend and termination controls.",
-                    rental.rental_id
-                ),
-                false,
-            ))
-        }),
-    }
-}
-
-fn failed_gpu_notification(rental_id: &str, reason: Option<&str>) -> String {
-    reason.map_or_else(
-        || format!("GPU rental {rental_id} failed before a billable resource was confirmed."),
-        |reason| {
-            format!(
-                "GPU rental {rental_id} failed before a billable resource was confirmed: {reason}"
-            )
-        },
-    )
-}
-
-impl App {
-    #[cfg(test)]
-    pub(super) fn start_gpu_controller(&mut self) {}
-
-    #[cfg(not(test))]
-    pub(super) fn start_gpu_controller(&mut self) {
-        let executable = match std::env::current_exe() {
-            Ok(executable) => executable,
-            Err(error) => {
-                self.chat_widget.add_error_message(format!(
-                    "GPU rental state was saved, but the independent controller could not be located: {error}"
-                ));
-                return;
-            }
-        };
-        match std::process::Command::new(executable)
-            .arg("internal-gpu-controller")
-            .env("CODEX_HOME", self.config.codex_home.as_path())
-            .env(codex_state::SQLITE_HOME_ENV, self.config.sqlite_home.as_path())
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-        {
-            Ok(_) => {}
-            Err(error) => self.chat_widget.add_error_message(format!(
-                "GPU rental state was saved, but the independent controller did not start: {error}. Run `pfterminal internal-gpu-controller` before relying on local TTL or spend enforcement."
-            )),
-        }
-    }
-
-    pub(super) async fn refresh_gpu_spend_indicator(&mut self) {
-        let Some(state_db) = self.state_db.as_ref() else {
-            self.chat_widget.set_gpu_spend_status(None);
-            return;
-        };
-        let status = state_db
-            .list_gpu_rentals(1_000)
-            .await
-            .ok()
-            .and_then(|rentals| {
-                let billable = rentals
-                    .into_iter()
-                    .filter(codex_state::GpuRental::may_be_billable)
-                    .collect::<Vec<_>>();
-                if billable.is_empty() {
-                    return None;
-                }
-                let estimated = billable
-                    .iter()
-                    .map(|rental| rental.estimated_accrued_microusd)
-                    .sum::<i64>() as f64
-                    / 1_000_000.0;
-                let hourly_cap = billable
-                    .iter()
-                    .map(|rental| rental.max_hourly_microusd)
-                    .sum::<i64>() as f64
-                    / 1_000_000.0;
-                Some(format!(
-                    "GPU SPEND {} active · ${estimated:.2} est · ≤${hourly_cap:.2}/hr",
-                    billable.len()
-                ))
-            });
-        self.chat_widget.set_gpu_spend_status(status);
-    }
-
     pub(super) async fn handle_event(
         &mut self,
         tui: &mut tui::Tui,
@@ -423,6 +22,483 @@ impl App {
         event: AppEvent,
     ) -> Result<AppRunControl> {
         match event {
+            AppEvent::OpenGpuMenu => {
+                self.open_gpu_menu().await;
+            }
+            AppEvent::OpenGpuRental { rental_id } => {
+                self.open_gpu_rental(rental_id).await;
+            }
+            AppEvent::DisableGpuServing { rental_id } => {
+                self.disable_gpu_serving(rental_id).await;
+            }
+            AppEvent::TerminateGpuRental { rental_id } => {
+                self.terminate_gpu_rental(rental_id).await;
+            }
+            AppEvent::OpenGpuAuthorizationPrompt { recipe_id, state } => {
+                self.chat_widget
+                    .open_gpu_authorization_prompt(recipe_id, state);
+            }
+            AppEvent::SearchGpuOffers {
+                recipe_id,
+                maximum_hourly_microusd,
+                maximum_total_microusd,
+                ttl_minutes,
+            } => {
+                self.search_gpu_offers(
+                    recipe_id,
+                    maximum_hourly_microusd,
+                    maximum_total_microusd,
+                    ttl_minutes,
+                );
+            }
+            AppEvent::GpuOffersLoaded {
+                recipe_id,
+                authorization,
+                offers,
+            } => match offers {
+                Ok(offers) => {
+                    self.chat_widget
+                        .open_gpu_offers(recipe_id, authorization, offers);
+                }
+                Err(message) => self.chat_widget.add_error_message(message),
+            },
+            AppEvent::OpenGpuConfirmation {
+                recipe_id,
+                authorization,
+                offer,
+            } => {
+                self.chat_widget
+                    .open_gpu_confirmation(recipe_id, authorization, offer);
+            }
+            AppEvent::ConfirmGpuRental {
+                recipe_id,
+                authorization,
+                offer,
+            } => {
+                self.confirm_gpu_rental(recipe_id, authorization, offer);
+            }
+            AppEvent::GpuRentalConfirmationFinished { result } => {
+                self.on_gpu_rental_confirmation_finished(result);
+            }
+            AppEvent::OpenGpuProviderCredential { provider } => {
+                self.chat_widget.open_gpu_provider_credential(provider);
+            }
+            AppEvent::SaveGpuProviderCredential { provider, api_key } => {
+                self.save_gpu_provider_credential(provider, api_key);
+            }
+            AppEvent::OpenWallet => {
+                self.chat_widget.open_wallet_menu();
+            }
+            AppEvent::OpenWalletPlanUsage => {
+                self.chat_widget.open_wallet_plan_usage();
+            }
+            AppEvent::WalletPlanUsageReady { result } => {
+                self.chat_widget.on_wallet_plan_usage_ready(result);
+            }
+            AppEvent::OpenWalletCreate => {
+                self.chat_widget.open_wallet_create();
+            }
+            AppEvent::OpenWalletRestore => {
+                self.chat_widget.open_wallet_restore();
+            }
+            AppEvent::OpenWalletRestorePasscode { recovery } => {
+                self.chat_widget.open_wallet_restore_passcode(recovery);
+            }
+            AppEvent::OpenWalletRecoveryBackup => {
+                self.chat_widget.open_wallet_recovery_backup();
+            }
+            AppEvent::WalletRecoveryBackupFinished { result } => {
+                self.chat_widget.on_wallet_recovery_backup_finished(result);
+            }
+            AppEvent::OpenWalletUnlock {
+                policy,
+                continuation,
+            } => {
+                self.chat_widget.open_wallet_unlock(policy, continuation);
+            }
+            AppEvent::OpenWalletCustomUnlock {
+                validation_error,
+                continuation,
+            } => {
+                self.chat_widget
+                    .open_wallet_custom_unlock(validation_error, continuation);
+            }
+            AppEvent::WalletLockRequested => {
+                self.chat_widget.lock_wallet();
+            }
+            AppEvent::ConfirmWalletPlanDisconnect => {
+                self.chat_widget.confirm_wallet_plan_disconnect();
+            }
+            AppEvent::WalletPlanDisconnectRequested => {
+                self.chat_widget.disconnect_wallet_plan();
+            }
+            AppEvent::WalletPlanDisconnected { result } => {
+                self.chat_widget.on_wallet_plan_disconnected(result);
+            }
+            AppEvent::ConfirmWalletRemoval { address } => {
+                self.chat_widget.confirm_wallet_removal(address);
+            }
+            AppEvent::WalletRemoveRequested { address } => {
+                self.chat_widget.remove_wallet_from_device(address);
+            }
+            AppEvent::WalletRemoved { result } => {
+                self.chat_widget.on_wallet_removed(result);
+            }
+            AppEvent::WalletStatusReady { generation, result } => {
+                self.chat_widget.on_wallet_status_ready(generation, result);
+            }
+            AppEvent::WalletCreateFinished { operation, result } => {
+                self.chat_widget
+                    .on_wallet_create_finished(operation, result);
+            }
+            AppEvent::WalletUnlockFinished {
+                policy,
+                continuation,
+                result,
+            } => {
+                self.chat_widget
+                    .on_wallet_unlock_finished(policy, continuation, result);
+            }
+            AppEvent::OpenWalletPlans { mode } => {
+                self.chat_widget.open_wallet_plans(mode);
+            }
+            AppEvent::WalletPlansReady { mode, result } => {
+                self.chat_widget.on_wallet_plans_ready(mode, result);
+            }
+            AppEvent::ConfirmWalletPlanPurchase { plan } => {
+                self.chat_widget.confirm_wallet_plan_purchase(plan);
+            }
+            AppEvent::WalletPlanPurchaseRequested { plan } => {
+                self.chat_widget.purchase_wallet_plan(plan);
+            }
+            AppEvent::WalletPlanProvisioned { operation, result } => {
+                self.chat_widget
+                    .on_wallet_plan_provisioned(operation, result);
+            }
+            AppEvent::WalletPlanReceiptReady { receipt } => {
+                self.chat_widget.on_wallet_plan_receipt_ready(receipt);
+            }
+            AppEvent::OpenWalletPlanReceipt { receipt } => {
+                self.chat_widget.open_wallet_plan_receipt(receipt);
+            }
+            AppEvent::CloseWalletPlanReceipt => {
+                self.chat_widget.close_wallet_plan_receipt();
+            }
+            AppEvent::WalletRecoverPlanRequested => {
+                self.chat_widget.recover_wallet_plan_access();
+            }
+            AppEvent::OpenProviderApiKeyAdd {
+                provider_id,
+                provider_name,
+                env_key,
+            } => {
+                self.chat_widget
+                    .open_provider_api_key_add(provider_id, provider_name, env_key);
+            }
+            AppEvent::SaveProviderApiKey {
+                provider_id,
+                display_name,
+                api_key,
+            } => {
+                let request_handle = app_server.request_handle();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = request_handle
+                        .request_typed::<codex_app_server_protocol::LoginAccountResponse>(
+                            ClientRequest::LoginAccount {
+                                request_id: codex_app_server_protocol::RequestId::String(format!(
+                                    "provider-api-key-login-{}",
+                                    Uuid::new_v4()
+                                )),
+                                params:
+                                    codex_app_server_protocol::LoginAccountParams::ProviderApiKey {
+                                        provider: provider_id,
+                                        api_key: api_key.into_inner(),
+                                    },
+                            },
+                        )
+                        .await;
+                    let history_event = match result {
+                        Ok(codex_app_server_protocol::LoginAccountResponse::ApiKey {}) => {
+                            history_cell::new_info_event(
+                                format!("Stored {display_name} in the vault."),
+                                /*hint*/ None,
+                            )
+                        }
+                        Ok(other) => history_cell::new_error_event(format!(
+                            "Failed to store {display_name}: unexpected response: {other:?}"
+                        )),
+                        Err(err) => history_cell::new_error_event(format!(
+                            "Failed to store {display_name}: {err}"
+                        )),
+                    };
+                    tx.send(AppEvent::InsertHistoryCell(Box::new(history_event)));
+                });
+            }
+            AppEvent::OpenTelegram => self.chat_widget.open_telegram_menu(),
+            AppEvent::OpenTelegramTokenEntry => self.chat_widget.open_telegram_token_entry(),
+            AppEvent::ValidateTelegramToken { token } => {
+                let codex_home = self.config.codex_home.clone().to_path_buf();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = crate::chatwidget::telegram_setup::validate_and_store_token(
+                        codex_home, token,
+                    )
+                    .await;
+                    tx.send(AppEvent::TelegramTokenValidated { result });
+                });
+            }
+            AppEvent::TelegramTokenValidated { result } => match result {
+                Ok(identity) => {
+                    let generation = self.chat_widget.begin_telegram_discovery(Some(identity));
+                    self.app_event_tx
+                        .send(AppEvent::PollTelegramChats { generation });
+                }
+                Err(error) => {
+                    self.chat_widget.add_error_message(error);
+                    self.chat_widget.open_telegram_token_entry();
+                }
+            },
+            AppEvent::DiscoverTelegramChats => {
+                let generation = self.chat_widget.begin_telegram_discovery(/*identity*/ None);
+                self.app_event_tx
+                    .send(AppEvent::PollTelegramChats { generation });
+            }
+            AppEvent::PollTelegramChats { generation } => {
+                let codex_home = self.config.codex_home.clone().to_path_buf();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = crate::chatwidget::telegram_setup::discover_chats(codex_home).await;
+                    tx.send(AppEvent::TelegramChatsDiscovered { generation, result });
+                });
+            }
+            AppEvent::TelegramChatsDiscovered { generation, result } => match result {
+                Ok(discovery) => {
+                    if self
+                        .chat_widget
+                        .apply_telegram_discovery(generation, discovery)
+                    {
+                        let tx = self.app_event_tx.clone();
+                        tokio::spawn(async move {
+                            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                            tx.send(AppEvent::PollTelegramChats { generation });
+                        });
+                    }
+                }
+                Err(error) => self
+                    .chat_widget
+                    .telegram_discovery_failed(generation, error),
+            },
+            AppEvent::ConfirmTelegramChat { candidate } => {
+                self.chat_widget.confirm_telegram_chat(candidate);
+            }
+            AppEvent::ConnectTelegramChat {
+                candidate,
+                defaults,
+            } => {
+                let codex_home = self.config.codex_home.clone().to_path_buf();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::chatwidget::telegram_setup::connect_chat(
+                            &codex_home,
+                            candidate,
+                            defaults,
+                        )
+                    })
+                    .await
+                    .map_err(|error| format!("Telegram connection task failed: {error}"))
+                    .and_then(|result| result);
+                    tx.send(AppEvent::TelegramOperationFinished { result });
+                });
+            }
+            AppEvent::StartTelegramConnector => {
+                let codex_home = self.config.codex_home.clone().to_path_buf();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::chatwidget::telegram_setup::start_connector(&codex_home)
+                    })
+                    .await
+                    .map_err(|error| format!("Telegram start task failed: {error}"))
+                    .and_then(|result| result);
+                    tx.send(AppEvent::TelegramOperationFinished { result });
+                });
+            }
+            AppEvent::StopTelegramConnector => {
+                let codex_home = self.config.codex_home.clone().to_path_buf();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::chatwidget::telegram_setup::stop_connector(&codex_home)
+                    })
+                    .await
+                    .map_err(|error| format!("Telegram stop task failed: {error}"))
+                    .and_then(|result| result);
+                    tx.send(AppEvent::TelegramOperationFinished { result });
+                });
+            }
+            AppEvent::ReplaceTelegramBot => {
+                let codex_home = self.config.codex_home.clone().to_path_buf();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::chatwidget::telegram_setup::stop_connector(&codex_home)
+                    })
+                    .await
+                    .map_err(|error| format!("Telegram stop task failed: {error}"))
+                    .and_then(|result| result);
+                    if result.is_ok() {
+                        tx.send(AppEvent::OpenTelegramTokenEntry);
+                    } else {
+                        tx.send(AppEvent::TelegramOperationFinished { result });
+                    }
+                });
+            }
+            AppEvent::ConfirmTelegramDisconnect => {
+                self.chat_widget.confirm_telegram_disconnect();
+            }
+            AppEvent::DisconnectTelegram => {
+                let codex_home = self.config.codex_home.clone().to_path_buf();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::chatwidget::telegram_setup::disconnect(&codex_home)
+                    })
+                    .await
+                    .map_err(|error| format!("Telegram disconnect task failed: {error}"))
+                    .and_then(|result| result);
+                    tx.send(AppEvent::TelegramOperationFinished { result });
+                });
+            }
+            AppEvent::TelegramOperationFinished { result } => {
+                match result {
+                    Ok(message) => self.chat_widget.add_info_message(message, /*hint*/ None),
+                    Err(error) => self.chat_widget.add_error_message(error),
+                }
+                self.chat_widget.open_telegram_menu();
+            }
+            AppEvent::TelegramStatusReady { result } => {
+                self.chat_widget.refresh_telegram_menu(result);
+            }
+            AppEvent::OpenCodexAccountDeviceLogin => {
+                self.chat_widget.open_codex_account_device_login_pending();
+                let request_handle = app_server.request_handle();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = request_handle
+                        .request_typed::<codex_app_server_protocol::LoginAccountResponse>(
+                            ClientRequest::LoginAccount {
+                                request_id: codex_app_server_protocol::RequestId::String(format!(
+                                    "codex-account-device-login-{}",
+                                    Uuid::new_v4()
+                                )),
+                                params: codex_app_server_protocol::LoginAccountParams::OpenaiProviderDeviceCode,
+                            },
+                        )
+                        .await;
+                    match result {
+                        Ok(codex_app_server_protocol::LoginAccountResponse::ChatgptDeviceCode {
+                            login_id,
+                            verification_url,
+                            user_code,
+                        }) => tx.send(AppEvent::CodexAccountDeviceLoginReady {
+                            login_id,
+                            verification_url,
+                            user_code,
+                        }),
+                        Ok(other) => tx.send(AppEvent::CodexAccountDeviceLoginFailed {
+                            message: format!("Unexpected account/login/start response: {other:?}"),
+                        }),
+                        Err(err) => tx.send(AppEvent::CodexAccountDeviceLoginFailed {
+                            message: err.to_string(),
+                        }),
+                    }
+                });
+            }
+            AppEvent::OpenClaudeCodePlanLogin => {
+                let input_tx =
+                    crate::chatwidget::claude_code_login::start(self.app_event_tx.clone());
+                self.chat_widget
+                    .open_claude_code_plan_login_pending(input_tx);
+            }
+            AppEvent::ClaudeCodePlanLoginReady {
+                verification_url,
+                input_tx,
+            } => self
+                .chat_widget
+                .open_claude_code_plan_login_ready(verification_url, input_tx),
+            AppEvent::OpenClaudeCodePlanLoginCodeEntry { input_tx } => self
+                .chat_widget
+                .open_claude_code_plan_login_code_entry(input_tx),
+            AppEvent::ClaudeCodePlanLoginFinished { result } => self
+                .chat_widget
+                .on_claude_code_plan_login_finished(result),
+            AppEvent::ProviderCredentialStatusesReady {
+                claude_status,
+                pfterminal_plan_status,
+                api_key_statuses,
+            } => self.chat_widget.refresh_provider_credentials_status(
+                claude_status,
+                pfterminal_plan_status,
+                api_key_statuses,
+            ),
+            AppEvent::CodexAccountDeviceLoginReady {
+                login_id,
+                verification_url,
+                user_code,
+            } => self.chat_widget.open_codex_account_device_login_ready(
+                login_id,
+                verification_url,
+                user_code,
+            ),
+            AppEvent::CodexAccountDeviceLoginFailed { message } => self
+                .chat_widget
+                .on_codex_account_device_login_failed(message),
+            AppEvent::CancelCodexAccountDeviceLogin { login_id } => {
+                self.chat_widget.add_info_message(
+                    "OpenAI Codex account login canceled.".to_string(),
+                    /*hint*/ None,
+                );
+                let request_handle = app_server.request_handle();
+                tokio::spawn(async move {
+                    let _ = request_handle
+                        .request_typed::<codex_app_server_protocol::CancelLoginAccountResponse>(
+                            ClientRequest::CancelLoginAccount {
+                                request_id: codex_app_server_protocol::RequestId::String(format!(
+                                    "cancel-codex-account-device-login-{}",
+                                    Uuid::new_v4()
+                                )),
+                                params: codex_app_server_protocol::CancelLoginAccountParams {
+                                    login_id,
+                                },
+                            },
+                        )
+                        .await;
+                });
+            }
+            AppEvent::OpenVaultCredentialAdd => {
+                self.chat_widget.open_vault_credential_add();
+            }
+            AppEvent::OpenVaultCredentialsList => {
+                self.chat_widget.open_vault_credentials_list();
+            }
+            AppEvent::OpenVaultCredentialActions { label } => {
+                self.chat_widget.open_vault_credential_actions(label);
+            }
+            AppEvent::OpenVaultCopySecret { label } => {
+                self.chat_widget.copy_vault_secret_to_clipboard(label);
+            }
+            AppEvent::VaultMenuCredentialsReady { result } => {
+                self.chat_widget.on_vault_menu_credentials_ready(result);
+            }
+            AppEvent::VaultCredentialsReady { result } => {
+                self.chat_widget.on_vault_credentials_ready(result);
+            }
+            AppEvent::VaultCopySecretFinished { label, result } => {
+                self.chat_widget
+                    .on_vault_copy_secret_finished(label, result);
+            }
             AppEvent::NewSession { name } => {
                 self.start_fresh_session_with_summary_hint(
                     tui, app_server, /*session_start_source*/ None,
@@ -505,9 +581,7 @@ impl App {
                             }
                         }
                     }
-                    SessionSelection::Exit
-                    | SessionSelection::StartFresh
-                    | SessionSelection::ResumePanesOnly { .. } => {
+                    SessionSelection::Exit | SessionSelection::StartFresh => {
                         self.refresh_in_memory_config_from_disk_best_effort(
                             "closing the session picker",
                         )
@@ -1521,37 +1595,81 @@ impl App {
                 self.chat_widget.on_connectors_loaded(result, is_final);
             }
             AppEvent::UpdateReasoningEffort(effort) => {
-                self.on_update_reasoning_effort(effort.clone());
                 self.sync_active_thread_reasoning_setting(app_server, effort)
                     .await;
             }
             AppEvent::UpdateModel(model) => {
-                self.chat_widget.set_model(&model);
-                self.sync_active_thread_model_setting(app_server, model)
-                    .await;
+                if let Some(mut params) =
+                    self.active_thread_model_setting_update_params(model.clone())
+                {
+                    params.model_provider =
+                        codex_model_provider_info::canonical_catalog_provider(&model)
+                            .map(str::to_string);
+                    self.send_thread_settings_update(app_server, params).await;
+                }
                 self.sync_active_thread_service_tier_to_cached_session()
                     .await;
             }
-            AppEvent::UpdateModelSelection { model, provider } => {
-                if let Some(model_provider) = provider.as_ref() {
-                    let Some(provider_info) =
-                        self.config.model_providers.get(model_provider).cloned()
-                    else {
-                        self.chat_widget.add_error_message(format!(
-                            "Model provider `{model_provider}` is not configured."
-                        ));
-                        return Ok(AppRunControl::Continue);
-                    };
-                    self.config.model_provider_id = model_provider.clone();
-                    self.config.model_provider = provider_info.clone();
-                    self.chat_widget
-                        .set_model_provider(model_provider.clone(), provider_info);
+            AppEvent::UpdateModelAndReasoning { model, effort } => {
+                if let Some(mut params) = self
+                    .active_thread_model_and_reasoning_setting_update_params(model.clone(), effort)
+                {
+                    params.model_provider =
+                        codex_model_provider_info::canonical_catalog_provider(&model)
+                            .map(str::to_string);
+                    self.send_thread_settings_update(app_server, params).await;
                 }
-                self.chat_widget.set_model(&model);
-                self.sync_active_thread_model_selection(app_server, model, provider)
-                    .await;
                 self.sync_active_thread_service_tier_to_cached_session()
                     .await;
+            }
+            AppEvent::SelectModelAndReasoning { model, effort } => {
+                let mut accepted = false;
+                if let Some(mut params) = self
+                    .active_thread_model_and_reasoning_setting_update_params(
+                        model.clone(),
+                        effort.clone(),
+                    )
+                {
+                    params.model_provider =
+                        codex_model_provider_info::canonical_catalog_provider(&model)
+                            .map(str::to_string);
+                    accepted = self.send_thread_settings_update(app_server, params).await;
+                }
+                if accepted
+                    && let Some(thread_id) = self.active_thread_id
+                {
+                    self.pending_model_selection = Some(PendingModelSelection::Catalog {
+                        thread_id,
+                        model,
+                        effort,
+                    });
+                }
+            }
+            AppEvent::UpdateProviderModelSelection { model, provider } => {
+                if let Some(mut params) = self.active_thread_model_setting_update_params(model) {
+                    params.model_provider = Some(provider);
+                    self.send_thread_settings_update(app_server, params).await;
+                }
+                self.sync_active_thread_service_tier_to_cached_session()
+                    .await;
+            }
+            AppEvent::SelectProviderModel { model, provider } => {
+                let mut accepted = false;
+                if let Some(mut params) =
+                    self.active_thread_model_setting_update_params(model.clone())
+                {
+                    params.model_provider = Some(provider.clone());
+                    accepted = self.send_thread_settings_update(app_server, params).await;
+                }
+                if accepted
+                    && let Some(thread_id) = self.active_thread_id
+                {
+                    self.pending_model_selection = Some(PendingModelSelection::Provider {
+                        thread_id,
+                        model,
+                        provider,
+                    });
+                }
             }
             AppEvent::UpdatePersonality(personality) => {
                 self.on_update_personality(personality);
@@ -1577,10 +1695,15 @@ impl App {
             AppEvent::ApplyAdvancedReasoning { model, effort } => {
                 let default_effort =
                     self.on_apply_advanced_reasoning(model.as_str(), effort.clone());
-                if let Some(mut params) =
-                    self.active_thread_model_setting_update_params(model.clone())
+                if let Some(mut params) = self
+                    .active_thread_model_and_reasoning_setting_update_params(
+                        model.clone(),
+                        Some(effort),
+                    )
                 {
-                    params.effort = Some(effort.clone());
+                    params.model_provider =
+                        codex_model_provider_info::canonical_catalog_provider(&model)
+                            .map(str::to_string);
                     self.send_thread_settings_update(app_server, params).await;
                 }
                 self.sync_active_thread_service_tier_to_cached_session()
@@ -1600,779 +1723,14 @@ impl App {
                     tracing::error!(error = %error, "failed to persist conversation model");
                     self.chat_widget
                         .add_error_message(format!("Failed to save default model: {error}"));
-                } else {
-                    self.chat_widget.add_info_message(
-                        format!("Model changed to {model} {effort} for this conversation"),
-                        /*hint*/ None,
-                    );
                 }
             }
             AppEvent::OpenPlanReasoningScopePrompt { model, effort } => {
                 self.chat_widget
-                    .open_reasoning_popup_for_purpose(model, purpose);
-            }
-            AppEvent::OpenPlanReasoningScopePrompt {
-                model,
-                provider,
-                effort,
-            } => {
-                self.chat_widget
-                    .open_plan_reasoning_scope_prompt(model, provider, effort);
+                    .open_plan_reasoning_scope_prompt(model, effort);
             }
             AppEvent::OpenAllModelsPopup { models } => {
                 self.chat_widget.open_all_models_popup(models);
-            }
-            AppEvent::OpenGpuMenu => {
-                self.refresh_gpu_spend_indicator().await;
-                let Some(state_db) = self.state_db.as_ref() else {
-                    self.chat_widget.add_error_message(
-                        "GPU rental state is unavailable in this session.".to_string(),
-                    );
-                    return Ok(AppRunControl::Continue);
-                };
-                match state_db.list_gpu_rentals(100).await {
-                    Ok(rentals) => self.chat_widget.open_gpu_menu(rentals),
-                    Err(error) => self
-                        .chat_widget
-                        .add_error_message(format!("Unable to read GPU rentals: {error}")),
-                }
-            }
-            AppEvent::OpenGpuRental { rental_id } => {
-                let Some(state_db) = self.state_db.as_ref() else {
-                    self.chat_widget.add_error_message(
-                        "GPU rental state is unavailable in this session.".to_string(),
-                    );
-                    return Ok(AppRunControl::Continue);
-                };
-                match state_db.get_gpu_rental(rental_id.as_str()).await {
-                    Ok(Some(rental)) => self.chat_widget.open_gpu_rental(rental),
-                    Ok(None) => self
-                        .chat_widget
-                        .add_error_message(format!("GPU rental {rental_id} was not found.")),
-                    Err(error) => self
-                        .chat_widget
-                        .add_error_message(format!("Unable to read GPU rental: {error}")),
-                }
-            }
-            AppEvent::DisableGpuServing { rental_id } => {
-                let Some(state_db) = self.state_db.as_ref() else {
-                    self.chat_widget.add_error_message(
-                        "GPU rental state is unavailable in this session.".to_string(),
-                    );
-                    return Ok(AppRunControl::Continue);
-                };
-                let now_ms = chrono::Utc::now().timestamp_millis();
-                match state_db
-                    .set_gpu_runtime_provider_health(rental_id.as_str(), "degraded", now_ms)
-                    .await
-                {
-                    Ok(true) => self.chat_widget.add_info_message(
-                        format!(
-                            "Stopped serving GPU rental {rental_id}. Provider billing may continue."
-                        ),
-                        None,
-                    ),
-                    Ok(false) => self.chat_widget.add_error_message(format!(
-                        "GPU rental {rental_id} has no active runtime provider."
-                    )),
-                    Err(error) => self
-                        .chat_widget
-                        .add_error_message(format!("Unable to stop GPU serving: {error}")),
-                }
-                self.refresh_gpu_spend_indicator().await;
-            }
-            AppEvent::TerminateGpuRental { rental_id } => {
-                let Some(state_db) = self.state_db.as_ref() else {
-                    self.chat_widget.add_error_message(
-                        "GPU rental state is unavailable in this session.".to_string(),
-                    );
-                    return Ok(AppRunControl::Continue);
-                };
-                let now_ms = chrono::Utc::now().timestamp_millis();
-                let _ = state_db
-                    .set_gpu_runtime_provider_health(rental_id.as_str(), "degraded", now_ms)
-                    .await;
-                match state_db
-                    .request_gpu_rental_termination(rental_id.as_str(), now_ms)
-                    .await
-                {
-                    Ok(true) => {
-                        self.chat_widget.add_info_message(
-                            format!(
-                                "Termination requested for GPU rental {rental_id}; billing remains unresolved until the provider confirms absence."
-                            ),
-                            None,
-                        );
-                        self.start_gpu_controller();
-                    }
-                    Ok(false) => self.chat_widget.add_error_message(format!(
-                        "GPU rental {rental_id} is already terminal or cannot be terminated."
-                    )),
-                    Err(error) => self
-                        .chat_widget
-                        .add_error_message(format!("Unable to terminate GPU rental: {error}")),
-                }
-                self.refresh_gpu_spend_indicator().await;
-            }
-            AppEvent::OpenGpuAuthorizationPrompt { recipe_id, state } => self
-                .chat_widget
-                .open_gpu_authorization_prompt(recipe_id, state),
-            AppEvent::SearchGpuOffers {
-                recipe_id,
-                maximum_hourly_microusd,
-                maximum_total_microusd,
-                ttl_minutes,
-            } => {
-                let Some(state_db) = self.state_db.clone() else {
-                    self.chat_widget.add_error_message(
-                        "GPU rental state is unavailable in this session.".to_string(),
-                    );
-                    return Ok(AppRunControl::Continue);
-                };
-                let tx = self.app_event_tx.clone();
-                let codex_home = self.config.codex_home.clone();
-                let now_ms = chrono::Utc::now().timestamp_millis();
-                let authorization = codex_gpu_market::RentalAuthorization {
-                    client_operation_id: Uuid::new_v4().to_string(),
-                    maximum_hourly_microusd,
-                    maximum_total_microusd,
-                    terminate_at_ms: now_ms.saturating_add(ttl_minutes.saturating_mul(60_000)),
-                    acknowledged_local_enforcement: true,
-                };
-                self.chat_widget.add_info_message(
-                    format!("Searching verified capacity for {recipe_id}…"),
-                    None,
-                );
-                tokio::spawn(async move {
-                    let result = async {
-                        let installation_id = codex_core::resolve_installation_id(&codex_home)
-                            .await
-                            .map_err(|error| error.to_string())?;
-                        let credentials =
-                            Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
-                                codex_vault::Vault::new(codex_home.to_path_buf()),
-                            )));
-                        let service = codex_gpu_market::GpuMarketService::new(
-                            state_db,
-                            codex_gpu_market::RecipeCatalog::default(),
-                            installation_id,
-                        );
-                        service
-                            .search(
-                                recipe_id.as_str(),
-                                maximum_hourly_microusd,
-                                &codex_gpu_market::VastProvider::new(credentials.clone()),
-                                &codex_gpu_market::RunpodProvider::new(credentials),
-                            )
-                            .await
-                            .map_err(|error| error.safe_message)
-                    }
-                    .await;
-                    tx.send(AppEvent::GpuOffersLoaded {
-                        recipe_id,
-                        authorization,
-                        offers: result,
-                    });
-                });
-            }
-            AppEvent::GpuOffersLoaded {
-                recipe_id,
-                authorization,
-                offers,
-            } => match offers {
-                Ok(offers) => {
-                    self.chat_widget
-                        .open_gpu_offers(recipe_id, authorization, offers);
-                }
-                Err(message) => self.chat_widget.add_error_message(message),
-            },
-            AppEvent::OpenGpuConfirmation {
-                recipe_id,
-                authorization,
-                offer,
-            } => self
-                .chat_widget
-                .open_gpu_confirmation(recipe_id, authorization, offer),
-            AppEvent::ConfirmGpuRental {
-                recipe_id,
-                authorization,
-                offer,
-            } => {
-                let Some(state_db) = self.state_db.clone() else {
-                    self.chat_widget.add_error_message(
-                        "GPU rental state is unavailable in this session.".to_string(),
-                    );
-                    return Ok(AppRunControl::Continue);
-                };
-                let tx = self.app_event_tx.clone();
-                let codex_home = self.config.codex_home.clone();
-                tokio::spawn(async move {
-                    let result = async {
-                        let installation_id = codex_core::resolve_installation_id(&codex_home)
-                            .await
-                            .map_err(|error| error.to_string())?;
-                        let credentials =
-                            Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
-                                codex_vault::Vault::new(codex_home.to_path_buf()),
-                            )));
-                        let rental_id = format!("gpu-{}", authorization.client_operation_id);
-                        credentials
-                            .ensure_rental_endpoint_token(rental_id.as_str())
-                            .map_err(|_| {
-                                "Could not create the scoped GPU endpoint credential. No rental was started."
-                                    .to_string()
-                            })?;
-                        let service = codex_gpu_market::GpuMarketService::new(
-                            state_db,
-                            codex_gpu_market::RecipeCatalog::default(),
-                            installation_id,
-                        );
-                        let now_ms = chrono::Utc::now().timestamp_millis();
-                        match offer.provider.as_str() {
-                            "vast" => {
-                                service
-                                    .confirm(
-                                        recipe_id.as_str(),
-                                        &offer,
-                                        &authorization,
-                                        &codex_gpu_market::VastProvider::new(credentials.clone()),
-                                        now_ms,
-                                    )
-                                    .await
-                            }
-                            "runpod" => {
-                                service
-                                    .confirm(
-                                        recipe_id.as_str(),
-                                        &offer,
-                                        &authorization,
-                                        &codex_gpu_market::RunpodProvider::new(credentials.clone()),
-                                        now_ms,
-                                    )
-                                    .await
-                            }
-                            _ => Err(codex_gpu_market::ProviderError::new(
-                                codex_gpu_market::ProviderErrorKind::InvalidRequest,
-                                "Unsupported GPU provider.",
-                            )),
-                        }
-                        .map_err(|error| error.safe_message)
-                    }
-                    .await;
-                    tx.send(AppEvent::GpuRentalConfirmationFinished { result });
-                });
-            }
-            AppEvent::GpuRentalConfirmationFinished { result } => match result {
-                Ok(rental) => {
-                    if rental.observed_state == codex_state::GpuRentalState::Failed {
-                        let reason = rental.last_error_message.as_deref().unwrap_or(
-                            "The earlier allocation attempt failed before a resource was created.",
-                        );
-                        self.chat_widget.add_error_message(format!(
-                            "That confirmation already produced GPU rental {}, which failed: {reason} Choose another current offer from /gpu.",
-                            rental.rental_id
-                        ));
-                    } else {
-                        self.chat_widget.add_info_message(
-                            format!(
-                                "GPU rental {} was authorized. The independent controller is starting; /gpu remains authoritative for billing state.",
-                                rental.rental_id
-                            ),
-                            None,
-                        );
-                        self.start_gpu_controller();
-                    }
-                    self.refresh_gpu_spend_indicator().await;
-                }
-                Err(message) => self.chat_widget.add_error_message(message),
-            },
-            AppEvent::OpenGpuProviderCredential { provider } => {
-                self.chat_widget.open_gpu_provider_credential(provider);
-            }
-            AppEvent::SaveGpuProviderCredential { provider, api_key } => {
-                let (label, display_name) = match provider.as_str() {
-                    "runpod" => (codex_gpu_market::RUNPOD_API_KEY_LABEL, "RunPod"),
-                    "vast" => (codex_gpu_market::VAST_API_KEY_LABEL, "Vast.ai"),
-                    _ => {
-                        self.chat_widget
-                            .add_error_message("Unsupported GPU provider credential.".to_string());
-                        return Ok(AppRunControl::Continue);
-                    }
-                };
-                let vault = codex_vault::Vault::new(self.config.codex_home.clone().to_path_buf());
-                let secret = api_key.into_inner();
-                let result = if vault.exists(label).unwrap_or(false) {
-                    vault
-                        .update(label, Some(secret), None, None, None)
-                        .map(|_| ())
-                } else {
-                    vault.add(codex_vault::AddCredential {
-                        label: label.to_string(),
-                        credential_type: codex_vault::CredentialType::ApiKey,
-                        provider: Some(provider),
-                        notes: Some("PFTerminal GPU rental provider credential".to_string()),
-                        revocation_notes: Some(
-                            "Revoke at the provider and delete from /vault when retired."
-                                .to_string(),
-                        ),
-                        secret,
-                    })
-                };
-                match result {
-                    Ok(()) => self.chat_widget.add_info_message(
-                        format!("Stored {display_name} API key in the vault."),
-                        None,
-                    ),
-                    Err(_) => self.chat_widget.add_error_message(format!(
-                        "Could not store {display_name} API key in the vault."
-                    )),
-                }
-            }
-            AppEvent::OpenProviderApiKeyAdd {
-                provider_id,
-                provider_name,
-                env_key,
-            } => {
-                self.chat_widget
-                    .open_provider_api_key_add(provider_id, provider_name, env_key);
-            }
-            AppEvent::SaveProviderApiKey {
-                provider_id,
-                display_name,
-                api_key,
-            } => {
-                let request_handle = app_server.request_handle();
-                let tx = self.app_event_tx.clone();
-                tokio::spawn(async move {
-                    let result = request_handle
-                        .request_typed::<codex_app_server_protocol::LoginAccountResponse>(
-                            ClientRequest::LoginAccount {
-                                request_id: codex_app_server_protocol::RequestId::String(format!(
-                                    "provider-api-key-login-{}",
-                                    Uuid::new_v4()
-                                )),
-                                params:
-                                    codex_app_server_protocol::LoginAccountParams::ProviderApiKey {
-                                        provider: provider_id,
-                                        api_key: api_key.into_inner(),
-                                    },
-                            },
-                        )
-                        .await;
-
-                    match result {
-                        Ok(codex_app_server_protocol::LoginAccountResponse::ApiKey {}) => {
-                            tx.send(AppEvent::InsertHistoryCell(Box::new(
-                                history_cell::new_info_event(
-                                    format!("Stored {display_name} in the vault."),
-                                    /*hint*/ None,
-                                ),
-                            )));
-                        }
-                        Ok(other) => {
-                            tx.send(AppEvent::InsertHistoryCell(Box::new(
-                                history_cell::new_error_event(format!(
-                                    "Failed to store {display_name}: unexpected account/login/start response: {other:?}"
-                                )),
-                            )));
-                        }
-                        Err(err) => {
-                            tx.send(AppEvent::InsertHistoryCell(Box::new(
-                                history_cell::new_error_event(format!(
-                                    "Failed to store {display_name}: {err}"
-                                )),
-                            )));
-                        }
-                    }
-                });
-            }
-            AppEvent::OpenTelegram => {
-                self.chat_widget.open_telegram_menu();
-            }
-            AppEvent::OpenTelegramTokenEntry => {
-                self.chat_widget.open_telegram_token_entry();
-            }
-            AppEvent::ValidateTelegramToken { token } => {
-                let codex_home = self.config.codex_home.clone().to_path_buf();
-                let tx = self.app_event_tx.clone();
-                tokio::spawn(async move {
-                    let result = crate::chatwidget::telegram_setup::validate_and_store_token(
-                        codex_home, token,
-                    )
-                    .await;
-                    tx.send(AppEvent::TelegramTokenValidated { result });
-                });
-            }
-            AppEvent::TelegramTokenValidated { result } => match result {
-                Ok(identity) => {
-                    let generation = self.chat_widget.begin_telegram_discovery(Some(identity));
-                    self.app_event_tx
-                        .send(AppEvent::PollTelegramChats { generation });
-                }
-                Err(error) => {
-                    self.chat_widget.add_error_message(error);
-                    self.chat_widget.open_telegram_token_entry();
-                }
-            },
-            AppEvent::DiscoverTelegramChats => {
-                let generation = self.chat_widget.begin_telegram_discovery(None);
-                self.app_event_tx
-                    .send(AppEvent::PollTelegramChats { generation });
-            }
-            AppEvent::PollTelegramChats { generation } => {
-                let codex_home = self.config.codex_home.clone().to_path_buf();
-                let tx = self.app_event_tx.clone();
-                tokio::spawn(async move {
-                    let result =
-                        crate::chatwidget::telegram_setup::discover_chats(codex_home).await;
-                    tx.send(AppEvent::TelegramChatsDiscovered { generation, result });
-                });
-            }
-            AppEvent::TelegramChatsDiscovered { generation, result } => match result {
-                Ok(discovery) => {
-                    if self
-                        .chat_widget
-                        .apply_telegram_discovery(generation, discovery)
-                    {
-                        let tx = self.app_event_tx.clone();
-                        tokio::spawn(async move {
-                            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                            tx.send(AppEvent::PollTelegramChats { generation });
-                        });
-                    }
-                }
-                Err(error) => self
-                    .chat_widget
-                    .telegram_discovery_failed(generation, error),
-            },
-            AppEvent::ConfirmTelegramChat { candidate } => {
-                self.chat_widget.confirm_telegram_chat(candidate);
-            }
-            AppEvent::ConnectTelegramChat {
-                candidate,
-                defaults,
-            } => {
-                let codex_home = self.config.codex_home.clone().to_path_buf();
-                let tx = self.app_event_tx.clone();
-                tokio::spawn(async move {
-                    let result = tokio::task::spawn_blocking(move || {
-                        crate::chatwidget::telegram_setup::connect_chat(
-                            &codex_home,
-                            candidate,
-                            defaults,
-                        )
-                    })
-                    .await
-                    .map_err(|error| format!("Telegram connection task failed: {error}"))
-                    .and_then(|result| result);
-                    tx.send(AppEvent::TelegramOperationFinished { result });
-                });
-            }
-            AppEvent::StartTelegramConnector => {
-                let codex_home = self.config.codex_home.clone().to_path_buf();
-                let tx = self.app_event_tx.clone();
-                tokio::spawn(async move {
-                    let result = tokio::task::spawn_blocking(move || {
-                        crate::chatwidget::telegram_setup::start_connector(&codex_home)
-                    })
-                    .await
-                    .map_err(|error| format!("Telegram start task failed: {error}"))
-                    .and_then(|result| result);
-                    tx.send(AppEvent::TelegramOperationFinished { result });
-                });
-            }
-            AppEvent::StopTelegramConnector => {
-                let codex_home = self.config.codex_home.clone().to_path_buf();
-                let tx = self.app_event_tx.clone();
-                tokio::spawn(async move {
-                    let result = tokio::task::spawn_blocking(move || {
-                        crate::chatwidget::telegram_setup::stop_connector(&codex_home)
-                    })
-                    .await
-                    .map_err(|error| format!("Telegram stop task failed: {error}"))
-                    .and_then(|result| result);
-                    tx.send(AppEvent::TelegramOperationFinished { result });
-                });
-            }
-            AppEvent::ReplaceTelegramBot => {
-                let codex_home = self.config.codex_home.clone().to_path_buf();
-                let tx = self.app_event_tx.clone();
-                tokio::spawn(async move {
-                    let result = tokio::task::spawn_blocking(move || {
-                        crate::chatwidget::telegram_setup::stop_connector(&codex_home)
-                    })
-                    .await
-                    .map_err(|error| format!("Telegram stop task failed: {error}"))
-                    .and_then(|result| result);
-                    if result.is_ok() {
-                        tx.send(AppEvent::OpenTelegramTokenEntry);
-                    } else {
-                        tx.send(AppEvent::TelegramOperationFinished { result });
-                    }
-                });
-            }
-            AppEvent::ConfirmTelegramDisconnect => {
-                self.chat_widget.confirm_telegram_disconnect();
-            }
-            AppEvent::DisconnectTelegram => {
-                let codex_home = self.config.codex_home.clone().to_path_buf();
-                let tx = self.app_event_tx.clone();
-                tokio::spawn(async move {
-                    let result = tokio::task::spawn_blocking(move || {
-                        crate::chatwidget::telegram_setup::disconnect(&codex_home)
-                    })
-                    .await
-                    .map_err(|error| format!("Telegram disconnect task failed: {error}"))
-                    .and_then(|result| result);
-                    tx.send(AppEvent::TelegramOperationFinished { result });
-                });
-            }
-            AppEvent::TelegramOperationFinished { result } => {
-                match result {
-                    Ok(message) => self.chat_widget.add_info_message(message, None),
-                    Err(error) => self.chat_widget.add_error_message(error),
-                }
-                self.chat_widget.open_telegram_menu();
-            }
-            AppEvent::TelegramStatusReady { result } => {
-                self.chat_widget.refresh_telegram_menu(result);
-            }
-            AppEvent::OpenCodexAccountDeviceLogin => {
-                self.chat_widget.open_codex_account_device_login_pending();
-                let request_handle = app_server.request_handle();
-                let tx = self.app_event_tx.clone();
-                tokio::spawn(async move {
-                    let result = request_handle
-                        .request_typed::<codex_app_server_protocol::LoginAccountResponse>(
-                            ClientRequest::LoginAccount {
-                                request_id: codex_app_server_protocol::RequestId::String(format!(
-                                    "codex-account-device-login-{}",
-                                    Uuid::new_v4()
-                                )),
-                                params: codex_app_server_protocol::LoginAccountParams::OpenaiProviderDeviceCode,
-                            },
-                        )
-                        .await;
-
-                    match result {
-                        Ok(
-                            codex_app_server_protocol::LoginAccountResponse::ChatgptDeviceCode {
-                                login_id,
-                                verification_url,
-                                user_code,
-                            },
-                        ) => {
-                            tx.send(AppEvent::CodexAccountDeviceLoginReady {
-                                login_id,
-                                verification_url,
-                                user_code,
-                            });
-                        }
-                        Ok(other) => {
-                            tx.send(AppEvent::CodexAccountDeviceLoginFailed {
-                                message: format!(
-                                    "Unexpected account/login/start response: {other:?}"
-                                ),
-                            });
-                        }
-                        Err(err) => {
-                            tx.send(AppEvent::CodexAccountDeviceLoginFailed {
-                                message: err.to_string(),
-                            });
-                        }
-                    }
-                });
-            }
-            AppEvent::OpenClaudeCodePlanLogin => {
-                let input_tx =
-                    crate::chatwidget::claude_code_login::start(self.app_event_tx.clone());
-                self.chat_widget
-                    .open_claude_code_plan_login_pending(input_tx);
-            }
-            AppEvent::ClaudeCodePlanLoginReady {
-                verification_url,
-                input_tx,
-            } => {
-                self.chat_widget
-                    .open_claude_code_plan_login_ready(verification_url, input_tx);
-            }
-            AppEvent::OpenClaudeCodePlanLoginCodeEntry { input_tx } => {
-                self.chat_widget
-                    .open_claude_code_plan_login_code_entry(input_tx);
-            }
-            AppEvent::ClaudeCodePlanLoginFinished { result } => {
-                self.chat_widget.on_claude_code_plan_login_finished(result);
-            }
-            AppEvent::ProviderCredentialStatusesReady {
-                claude_status,
-                pfterminal_plan_status,
-                api_key_statuses,
-            } => {
-                self.chat_widget.refresh_provider_credentials_status(
-                    claude_status,
-                    pfterminal_plan_status,
-                    api_key_statuses,
-                );
-            }
-            AppEvent::CodexAccountDeviceLoginReady {
-                login_id,
-                verification_url,
-                user_code,
-            } => {
-                self.chat_widget.open_codex_account_device_login_ready(
-                    login_id,
-                    verification_url,
-                    user_code,
-                );
-            }
-            AppEvent::CodexAccountDeviceLoginFailed { message } => {
-                self.chat_widget
-                    .on_codex_account_device_login_failed(message);
-            }
-            AppEvent::CancelCodexAccountDeviceLogin { login_id } => {
-                self.chat_widget.add_info_message(
-                    "OpenAI Codex account login canceled.".to_string(),
-                    /*hint*/ None,
-                );
-                let request_handle = app_server.request_handle();
-                tokio::spawn(async move {
-                    let _ = request_handle
-                        .request_typed::<codex_app_server_protocol::CancelLoginAccountResponse>(
-                            ClientRequest::CancelLoginAccount {
-                                request_id: codex_app_server_protocol::RequestId::String(format!(
-                                    "cancel-codex-account-device-login-{}",
-                                    Uuid::new_v4()
-                                )),
-                                params: codex_app_server_protocol::CancelLoginAccountParams {
-                                    login_id,
-                                },
-                            },
-                        )
-                        .await;
-                });
-            }
-            AppEvent::OpenVaultCredentialAdd => {
-                self.chat_widget.open_vault_credential_add();
-            }
-            AppEvent::OpenWallet => {
-                self.chat_widget.open_wallet_menu();
-            }
-            AppEvent::OpenWalletPlanUsage => {
-                self.chat_widget.open_wallet_plan_usage();
-            }
-            AppEvent::WalletPlanUsageReady { result } => {
-                self.chat_widget.on_wallet_plan_usage_ready(result);
-            }
-            AppEvent::OpenWalletCreate => {
-                self.chat_widget.open_wallet_create();
-            }
-            AppEvent::OpenWalletRestore => {
-                self.chat_widget.open_wallet_restore();
-            }
-            AppEvent::OpenWalletRestorePasscode { recovery } => {
-                self.chat_widget.open_wallet_restore_passcode(recovery);
-            }
-            AppEvent::OpenWalletRecoveryBackup => {
-                self.chat_widget.open_wallet_recovery_backup();
-            }
-            AppEvent::WalletRecoveryBackupFinished { result } => {
-                self.chat_widget.on_wallet_recovery_backup_finished(result);
-            }
-            AppEvent::OpenWalletUnlock {
-                policy,
-                continuation,
-            } => {
-                self.chat_widget.open_wallet_unlock(policy, continuation);
-            }
-            AppEvent::OpenWalletCustomUnlock {
-                validation_error,
-                continuation,
-            } => {
-                self.chat_widget
-                    .open_wallet_custom_unlock(validation_error, continuation);
-            }
-            AppEvent::WalletLockRequested => {
-                self.chat_widget.lock_wallet();
-            }
-            AppEvent::ConfirmWalletPlanDisconnect => {
-                self.chat_widget.confirm_wallet_plan_disconnect();
-            }
-            AppEvent::WalletPlanDisconnectRequested => {
-                self.chat_widget.disconnect_wallet_plan();
-            }
-            AppEvent::WalletPlanDisconnected { result } => {
-                self.chat_widget.on_wallet_plan_disconnected(result);
-            }
-            AppEvent::ConfirmWalletRemoval { address } => {
-                self.chat_widget.confirm_wallet_removal(address);
-            }
-            AppEvent::WalletRemoveRequested { address } => {
-                self.chat_widget.remove_wallet_from_device(address);
-            }
-            AppEvent::WalletRemoved { result } => {
-                self.chat_widget.on_wallet_removed(result);
-            }
-            AppEvent::WalletStatusReady { generation, result } => {
-                self.chat_widget.on_wallet_status_ready(generation, result);
-            }
-            AppEvent::WalletCreateFinished { operation, result } => {
-                self.chat_widget
-                    .on_wallet_create_finished(operation, result);
-            }
-            AppEvent::WalletUnlockFinished {
-                policy,
-                continuation,
-                result,
-            } => {
-                self.chat_widget
-                    .on_wallet_unlock_finished(policy, continuation, result);
-            }
-            AppEvent::OpenWalletPlans { mode } => {
-                self.chat_widget.open_wallet_plans(mode);
-            }
-            AppEvent::WalletPlansReady { mode, result } => {
-                self.chat_widget.on_wallet_plans_ready(mode, result);
-            }
-            AppEvent::ConfirmWalletPlanPurchase { plan } => {
-                self.chat_widget.confirm_wallet_plan_purchase(plan);
-            }
-            AppEvent::WalletPlanPurchaseRequested { plan } => {
-                self.chat_widget.purchase_wallet_plan(plan);
-            }
-            AppEvent::WalletPlanProvisioned { operation, result } => {
-                self.chat_widget
-                    .on_wallet_plan_provisioned(operation, result);
-            }
-            AppEvent::WalletPlanReceiptReady { receipt } => {
-                self.chat_widget.on_wallet_plan_receipt_ready(receipt);
-            }
-            AppEvent::OpenWalletPlanReceipt { receipt } => {
-                self.chat_widget.open_wallet_plan_receipt(receipt);
-            }
-            AppEvent::CloseWalletPlanReceipt => {
-                self.chat_widget.close_wallet_plan_receipt();
-            }
-            AppEvent::WalletRecoverPlanRequested => {
-                self.chat_widget.recover_wallet_plan_access();
-            }
-            AppEvent::OpenVaultCredentialsList => {
-                self.chat_widget.open_vault_credentials_list();
-            }
-            AppEvent::OpenVaultCredentialActions { label } => {
-                self.chat_widget.open_vault_credential_actions(label);
-            }
-            AppEvent::OpenVaultCopySecret { label } => {
-                self.chat_widget.copy_vault_secret_to_clipboard(label);
-            }
-            AppEvent::VaultMenuCredentialsReady { result } => {
-                self.chat_widget.on_vault_menu_credentials_ready(result);
-            }
-            AppEvent::VaultCredentialsReady { result } => {
-                self.chat_widget.on_vault_credentials_ready(result);
-            }
-            AppEvent::VaultCopySecretFinished { label, result } => {
-                self.chat_widget
-                    .on_vault_copy_secret_finished(label, result);
             }
             AppEvent::OpenTaskNodeMenu => {
                 self.chat_widget.open_tasknode_menu();
@@ -2563,6 +1921,9 @@ impl App {
             }
             AppEvent::LogoutTaskNode => {
                 self.chat_widget.logout_tasknode();
+            }
+            AppEvent::SubmitNativeSpawnRequest { task } => {
+                self.chat_widget.submit_native_spawn_request(task);
             }
             AppEvent::OpenFullAccessConfirmation {
                 preset,
@@ -3069,16 +2430,11 @@ impl App {
                     let _ = (preset, mode, profile_selection);
                 }
             }
-            AppEvent::PersistModelSelection {
-                model,
-                provider,
-                effort,
-            } => {
+            AppEvent::PersistModelSelection { model, effort } => {
                 match crate::config_update::write_config_batch(
                     app_server.request_handle(),
                     crate::config_update::build_model_selection_edits(
                         model.as_str(),
-                        provider.as_deref(),
                         effort.as_ref(),
                     ),
                 )
@@ -3089,40 +2445,7 @@ impl App {
                             .as_ref()
                             .map(std::string::ToString::to_string)
                             .unwrap_or_else(|| "default".to_string());
-                        tracing::info!(
-                            "Selected model: {model}, Selected provider: {:?}, Selected effort: {effort_label}",
-                            provider
-                        );
-                        let model_label = self
-                            .model_catalog
-                            .try_list_models()
-                            .ok()
-                            .and_then(|models| {
-                                models
-                                    .into_iter()
-                                    .find(|preset| preset.model == model)
-                                    .map(|preset| preset.display_name)
-                            })
-                            .filter(|display_name| !display_name.trim().is_empty())
-                            .unwrap_or_else(|| model.clone());
-                        let provider_label = provider.as_deref().map(|provider_id| {
-                            self.config
-                                .model_providers
-                                .get(provider_id)
-                                .map(|provider| provider.name.clone())
-                                .filter(|name| !name.trim().is_empty())
-                                .unwrap_or_else(|| provider_id.to_string())
-                        });
-                        let mut message = if let Some(provider_label) = provider_label {
-                            format!("Model changed to {model_label} via {provider_label}")
-                        } else {
-                            format!("Model changed to {model_label}")
-                        };
-                        if let Some(label) = Self::reasoning_label_for(&model, effort.as_ref()) {
-                            message.push(' ');
-                            message.push_str(&label);
-                        }
-                        self.chat_widget.add_info_message(message, /*hint*/ None);
+                        tracing::info!("Selected model: {model}, Selected effort: {effort_label}");
                     }
                     Err(err) => {
                         let error = format_config_error(&err);
@@ -3133,6 +2456,25 @@ impl App {
                         self.chat_widget
                             .add_error_message(format!("Failed to save default model: {error}"));
                     }
+                }
+            }
+            AppEvent::PersistProviderModelSelection { model, provider } => {
+                let edits = vec![
+                    crate::config_update::replace_config_value("model", serde_json::json!(model)),
+                    crate::config_update::replace_config_value(
+                        "model_provider",
+                        serde_json::json!(provider),
+                    ),
+                    crate::config_update::clear_config_value("model_reasoning_effort"),
+                ];
+                if let Err(err) =
+                    crate::config_update::write_config_batch(app_server.request_handle(), edits)
+                        .await
+                {
+                    self.chat_widget.add_error_message(format!(
+                        "Failed to persist PF Terminal Plan selection: {}",
+                        format_config_error(&err)
+                    ));
                 }
             }
             AppEvent::PluginUninstallLoaded {
@@ -3454,701 +2796,8 @@ impl App {
                 self.apply_agent_picker_thread_refresh(primary_thread_id, request_id, result);
             }
             AppEvent::SelectAgentThread(thread_id) => {
-                self.save_active_claude_pane_transcript();
-                let _ = self
-                    .claude_panes
-                    .set_active_user_pane(crate::claude_panes::CODEX_MAIN_PANE_ID);
                 self.select_agent_thread_and_discard_side(tui, app_server, thread_id)
                     .await?;
-            }
-            AppEvent::OpenPanePicker => {
-                self.open_pane_picker(app_server).await;
-            }
-            AppEvent::OpenCodexPaneModelPicker => {
-                self.open_codex_pane_model_picker();
-            }
-            AppEvent::OpenClaudePaneProfilePicker => {
-                self.open_claude_pane_profile_picker();
-            }
-            AppEvent::OpenSpawnRolePicker => {
-                self.open_spawn_role_picker();
-            }
-            AppEvent::OpenSpawnNazgulPanePicker => {
-                self.open_spawn_nazgul_pane_picker();
-            }
-            AppEvent::OpenSpawnNazgulPicker => {
-                self.open_spawn_nazgul_picker();
-            }
-            AppEvent::BindSpawnNazgulPane { pane_id } => {
-                self.bind_spawn_nazgul_pane(pane_id);
-            }
-            AppEvent::OpenSpawnParentPicker { role } => {
-                self.open_spawn_parent_picker(role);
-            }
-            AppEvent::OpenSpawnHarnessPicker {
-                role,
-                parent_node_id,
-            } => {
-                self.open_spawn_harness_picker(role, parent_node_id);
-            }
-            AppEvent::OpenSpawnModelPicker {
-                role,
-                parent_node_id,
-            } => {
-                self.open_spawn_model_picker(role, parent_node_id);
-            }
-            AppEvent::OpenSpawnClaudeProfilePicker {
-                role,
-                parent_node_id,
-            } => {
-                self.open_spawn_claude_profile_picker(role, parent_node_id);
-            }
-            AppEvent::CreateSpawnAgent {
-                role,
-                parent_node_id,
-                agent_nickname,
-                model,
-                provider,
-                effort,
-            } => {
-                let Some(agent_type) = role.agent_type() else {
-                    self.chat_widget.add_error_message(
-                        "Nazgul is a pane binding, not a spawned worker.".to_string(),
-                    );
-                    return Ok(AppRunControl::Continue);
-                };
-                let Some(parent_thread_id) =
-                    self.backend_parent_thread_for_spawn(role, parent_node_id.as_deref())
-                else {
-                    self.chat_widget.add_error_message(
-                        "Cannot spawn a native agent before Codex Main has started.".to_string(),
-                    );
-                    return Ok(AppRunControl::Continue);
-                };
-                if role == crate::spawn_orchestration::SpawnRole::Troll {
-                    self.persist_bound_nazgul_root_thread_metadata().await;
-                }
-                let logical_parent_node_id =
-                    self.logical_parent_node_for_spawn(role, parent_node_id.as_deref());
-                let agent_nickname =
-                    agent_nickname.or_else(|| self.next_spawn_agent_nickname(role));
-                if let Err(err) = self
-                    .ensure_native_spawn_provider_ready(provider.as_deref())
-                    .await
-                {
-                    self.chat_widget.add_error_message(err.to_string());
-                    return Ok(AppRunControl::Continue);
-                }
-                let spawn_config = match self.native_spawn_agent_config() {
-                    Ok(config) => config,
-                    Err(err) => {
-                        self.chat_widget.add_error_message(err.to_string());
-                        return Ok(AppRunControl::Continue);
-                    }
-                };
-                match app_server
-                    .spawn_agent_thread(
-                        &spawn_config,
-                        parent_thread_id,
-                        agent_type.to_string(),
-                        agent_nickname.clone(),
-                        model.clone(),
-                        provider.clone(),
-                        effort.clone(),
-                        /*base_instructions*/ None,
-                    )
-                    .await
-                {
-                    Ok(started) => {
-                        let thread_id = started.session.thread_id;
-                        self.register_spawn_agent_pane(
-                            thread_id,
-                            parent_thread_id,
-                            logical_parent_node_id.clone(),
-                            agent_nickname.clone(),
-                            agent_type,
-                            started,
-                            true,
-                        )
-                        .await;
-                        // When spawning a Nazgul pane, bind it as the visible root so subsequent
-                        // Troll spawns and "Nazgul" dispatches route to this pane.
-                        let bound_as_nazgul = role == crate::spawn_orchestration::SpawnRole::Nazgul;
-                        if bound_as_nazgul {
-                            self.set_spawn_nazgul_pane_binding(
-                                crate::spawn_orchestration::thread_node_id(thread_id),
-                            );
-                            self.persist_bound_nazgul_root_thread_metadata().await;
-                        }
-                        let logical_node_id = crate::spawn_orchestration::thread_node_id(thread_id);
-                        let crew_result = if bound_as_nazgul {
-                            self.ensure_custom_spawn_root(&logical_node_id)
-                        } else {
-                            let runtime = self
-                                .spawn_native_runtime_by_node
-                                .get(&logical_node_id)
-                                .cloned()
-                                .ok_or_else(|| {
-                                    color_eyre::eyre::eyre!(
-                                        "spawned pane {logical_node_id} has no persisted runtime"
-                                    )
-                                });
-                            runtime.and_then(|runtime| {
-                                self.record_custom_spawn_member(
-                                    &logical_node_id,
-                                    &logical_parent_node_id,
-                                    role,
-                                    agent_nickname
-                                        .clone()
-                                        .unwrap_or_else(|| role.label().to_string()),
-                                    runtime,
-                                )
-                            })
-                        };
-                        if let Err(err) = crew_result {
-                            self.mark_crew_incomplete(err.to_string());
-                            self.chat_widget.add_error_message(format!(
-                                "Spawned the pane, but could not persist its crew identity: {err}"
-                            ));
-                            return Ok(AppRunControl::Continue);
-                        }
-                        self.persist_pane_state();
-                        if self.active_thread_id.is_none() {
-                            self.select_agent_thread_and_discard_side(tui, app_server, thread_id)
-                                .await?;
-                        }
-                        let binding_suffix = if bound_as_nazgul {
-                            " and bound it as the Nazgul root"
-                        } else {
-                            ""
-                        };
-                        self.chat_widget.add_info_message(
-                            format!(
-                                "Spawned Codex {} pane{}{binding_suffix}.",
-                                role.label(),
-                                agent_nickname
-                                    .as_deref()
-                                    .map(|nickname| format!(" {nickname}"))
-                                    .unwrap_or_default()
-                            ),
-                            Some(format!("{model}; no task was started.")),
-                        );
-                    }
-                    Err(err) => {
-                        tracing::error!(
-                            error = ?err,
-                            error_chain = %format!("{err:#}"),
-                            role = role.label(),
-                            "thread/spawnAgent retry limit reached; keeping the TUI alive"
-                        );
-                        self.chat_widget.add_error_message(format!(
-                            "Failed to spawn Codex {} pane: {err:#}",
-                            role.label()
-                        ));
-                    }
-                }
-            }
-            AppEvent::CreateSpawnStandardCrew => {
-                match self.create_spawn_standard_crew(app_server).await {
-                    Ok((nazgul_thread_id, troll_thread_id)) => {
-                        self.open_spawn_status();
-                        self.chat_widget.add_info_message(
-                            "Created standard crew: Nazgul + Troll + 3 Orcs.".to_string(),
-                            Some(format!(
-                                "Nazgul: {nazgul_thread_id}. Troll: {troll_thread_id}. No task was started. Send work explicitly from /spawn status or by dispatch block."
-                            )),
-                        );
-                    }
-                    Err(err) => {
-                        tracing::error!(
-                            error = ?err,
-                            error_chain = %format!("{err:#}"),
-                            "standard crew spawn failed; keeping all live panes available"
-                        );
-                        self.chat_widget
-                            .add_error_message(format!("Failed to create standard crew: {err:#}"));
-                    }
-                }
-            }
-            AppEvent::OpenSpawnAgentTaskPrompt { thread_id } => {
-                self.open_spawn_agent_task_prompt(thread_id);
-            }
-            AppEvent::OpenSpawnClaudePaneTaskPrompt { pane_id } => {
-                self.open_spawn_claude_pane_task_prompt(pane_id);
-            }
-            AppEvent::SubmitSpawnAgentTask { thread_id, task } => {
-                if self.spawn_legacy_read_only
-                    || self.spawn_crew.as_ref().is_some_and(|crew| {
-                        !matches!(crew.status, crate::crew_state::CrewCreationStatus::Ready)
-                    })
-                {
-                    let target_node_id = self.logical_native_node_for_thread(thread_id);
-                    let acks = self.take_spawn_dispatch_acks_for_task(&target_node_id, task.trim());
-                    self.release_spawn_dispatch_origins(&acks);
-                    self.record_spawn_dispatch_acks(
-                        &acks,
-                        "failed",
-                        "crew identity or creation state is not reconciled",
-                        true,
-                    );
-                    self.chat_widget.add_error_message(
-                        "This /spawn hierarchy is read-only until its crew identity and creation \
-                         state are reconciled."
-                            .to_string(),
-                    );
-                    return Ok(AppRunControl::Continue);
-                }
-                let task = task.trim().to_string();
-                if task.is_empty() {
-                    self.chat_widget
-                        .add_error_message("Spawn task cannot be empty.".to_string());
-                    return Ok(AppRunControl::Continue);
-                }
-                let task = self.spawn_agent_task_for_submission(thread_id, &task);
-                let label = self.thread_label(thread_id);
-                let target_node_id = self.logical_native_node_for_thread(thread_id);
-                let mut pending =
-                    self.pending_dispatch_from_registered_task(&target_node_id, task.clone());
-                let source_node_id = pending
-                    .acks
-                    .first()
-                    .map(|ack| ack.source_node_id.clone())
-                    .unwrap_or_else(|| self.spawn_root_node_id());
-                let source_thread_id = self
-                    .spawn_node_backing_thread_id(&source_node_id)
-                    .or(self.primary_thread_id)
-                    .unwrap_or(thread_id);
-                let seq = pending
-                    .acks
-                    .first()
-                    .map(|ack| ack.seq)
-                    .unwrap_or_else(|| self.reserve_spawn_dispatch_seq_without_persist());
-                let origin_id = pending
-                    .acks
-                    .first()
-                    .and_then(|ack| ack.origin_id.as_deref())
-                    .map(str::to_string)
-                    .unwrap_or_else(|| format!("host-seq-{seq:020}"));
-                pending.assign_identity(seq, &source_node_id, &target_node_id, Some(&origin_id));
-                let message_id = pending.dispatch_id.clone();
-                let acks = pending.acks;
-                let params = ThreadAgentMessageParams {
-                    source_thread_id: source_thread_id.to_string(),
-                    target_thread_id: thread_id.to_string(),
-                    message_id: Some(message_id.clone()),
-                    assignment_id: Some(message_id),
-                    kind: AgentMessageKind::Assignment,
-                    content: task.clone(),
-                    trigger_turn: true,
-                };
-                match app_server.send_agent_message(params).await {
-                    Ok(_) => {
-                        self.spawn_processed_dispatch_origins.insert(origin_id);
-                        self.spawn_processed_dispatch_seq_ids
-                            .extend(acks.iter().map(|ack| ack.seq));
-                        self.evict_spawn_processed_dispatch_seq_ids();
-                        for ack in &acks {
-                            self.note_assignment_dispatch_delivered(&ack.source_node_id);
-                        }
-                        self.record_spawn_dispatch_acks(
-                            &acks,
-                            "queued",
-                            "durably admitted to the native mailbox",
-                            false,
-                        );
-                        self.spawn_status_by_thread.insert(
-                            thread_id,
-                            codex_app_server_protocol::CollabAgentState {
-                                status: codex_app_server_protocol::CollabAgentStatus::Running,
-                                message: None,
-                            },
-                        );
-                        self.agent_navigation.set_running(thread_id, true);
-                        self.agent_navigation.set_last_task_message(
-                            thread_id,
-                            Some(task.chars().take(240).collect()),
-                        );
-                        self.persist_pane_state();
-                    }
-                    Err(error) => {
-                        self.release_spawn_dispatch_origins(&acks);
-                        self.record_spawn_dispatch_acks(
-                            &acks,
-                            "failed",
-                            format!("native mailbox admission failed: {error:#}"),
-                            true,
-                        );
-                        self.chat_widget.add_error_message(format!(
-                            "Could not admit task for {label}; no automatic replay was attempted: {error:#}"
-                        ));
-                    }
-                }
-            }
-            AppEvent::SendSpawnAgentMailboxMessage { params } => {
-                if let Err(err) = app_server.send_agent_message(params).await {
-                    tracing::error!(
-                        error = ?err,
-                        error_chain = %format!("{err:#}"),
-                        "failed to deliver edge-adapter report through native mailbox"
-                    );
-                    self.chat_widget.add_error_message(format!(
-                        "A child report could not be durably delivered: {err:#}"
-                    ));
-                }
-            }
-            AppEvent::SubmitSpawnClaudePaneTask { pane_id, task } => {
-                if self.spawn_legacy_read_only {
-                    self.chat_widget.add_error_message(
-                        "This restored legacy /spawn hierarchy is read-only. Existing Claude panes \
-                         can be inspected but not mutated by the new control plane."
-                            .to_string(),
-                    );
-                    return Ok(AppRunControl::Continue);
-                }
-                let target = crate::spawn_orchestration::pane_node_id(&pane_id);
-                if task.len() > crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES {
-                    let acks = self.take_spawn_dispatch_acks_for_task(&target, &task);
-                    self.release_spawn_dispatch_origins(&acks);
-                    let detail = format!(
-                        "task is {} bytes; maximum is {} bytes",
-                        task.len(),
-                        crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES
-                    );
-                    self.record_spawn_dispatch_acks(&acks, "failed", &detail, true);
-                    self.chat_widget.add_error_message(detail);
-                    return Ok(AppRunControl::Continue);
-                }
-                if self.claude_panes.claude_pane_is_running(&pane_id) {
-                    let acks = self.take_spawn_dispatch_acks_for_task(&target, &task);
-                    self.release_spawn_dispatch_origins(&acks);
-                    self.record_spawn_dispatch_acks(
-                        &acks,
-                        "failed",
-                        "legacy external Claude pane is busy; no secondary queue or automatic retry exists",
-                        true,
-                    );
-                    self.chat_widget.add_error_message(format!(
-                        "Cannot send task to {pane_id}: the legacy external Claude pane is busy. \
-                         Wait for it to finish or use a native Claude Plan member in /spawn."
-                    ));
-                    return Ok(AppRunControl::Continue);
-                }
-                self.submit_claude_pane_task(pane_id, task);
-            }
-            AppEvent::OpenSpawnStatus => {
-                self.open_spawn_status();
-            }
-            AppEvent::HandleOrchestrateCommand { args } => {
-                self.handle_orchestrate_command(args);
-            }
-            AppEvent::OpenOrchestrateTargetPicker => {
-                self.open_orchestrate_target_picker();
-            }
-            AppEvent::OpenOrchestrateFastTargetPicker => {
-                self.open_orchestrate_fast_target_picker();
-            }
-            AppEvent::OpenOrchestrateFastManagerPicker { target } => {
-                self.open_orchestrate_fast_manager_picker(target);
-            }
-            AppEvent::AttachOrchestrateFastManager {
-                target,
-                manager_node_id,
-            } => {
-                let args = crate::orchestrate::orchestrate_guided_attach_args(
-                    &target,
-                    "8h",
-                    crate::orchestrate::DRAFT_WITH_MANAGER_SPEC,
-                    &manager_node_id,
-                );
-                match self.attach_guided_assignment(&args) {
-                    Ok(message) => self.chat_widget.add_info_message(message, None),
-                    Err(err) => self.chat_widget.add_error_message(err),
-                }
-            }
-            AppEvent::OpenOrchestrateDurationPicker { target } => {
-                self.open_orchestrate_duration_picker(target);
-            }
-            AppEvent::OpenOrchestrateWhipPicker {
-                target,
-                duration_arg,
-                duration_label,
-            } => {
-                self.open_orchestrate_whip_picker(target, duration_arg, duration_label);
-            }
-            AppEvent::OpenOrchestrateWriteWhipPrompt {
-                target,
-                duration_arg,
-                duration_label,
-            } => {
-                self.open_orchestrate_write_whip_prompt(target, duration_arg, duration_label);
-            }
-            AppEvent::OpenOrchestrateSaveWhipPrompt {
-                target,
-                duration_arg,
-                duration_label,
-                instructions,
-            } => {
-                self.open_orchestrate_save_whip_prompt(
-                    target,
-                    duration_arg,
-                    duration_label,
-                    instructions,
-                );
-            }
-            AppEvent::SaveOrchestrateWhipAndConfirm {
-                target,
-                duration_arg,
-                duration_label,
-                requested_name,
-                instructions,
-            } => {
-                self.save_orchestrate_whip_and_open_confirm(
-                    target,
-                    duration_arg,
-                    duration_label,
-                    requested_name,
-                    instructions,
-                );
-            }
-            AppEvent::OpenOrchestrateConfirm {
-                target,
-                duration_arg,
-                duration_label,
-                whip_name,
-                manager_node_id,
-            } => {
-                self.open_orchestrate_confirm(
-                    target,
-                    duration_arg,
-                    duration_label,
-                    whip_name,
-                    manager_node_id,
-                );
-            }
-            AppEvent::OpenOrchestrateManagerPicker {
-                target,
-                duration_arg,
-                duration_label,
-                whip_name,
-            } => {
-                self.open_orchestrate_manager_picker(
-                    target,
-                    duration_arg,
-                    duration_label,
-                    whip_name,
-                );
-            }
-            AppEvent::CreateOrchestrateManager {
-                target,
-                duration_arg,
-                whip_name,
-            } => {
-                let Some(parent_thread_id) = self.primary_thread_id.or(self.active_thread_id)
-                else {
-                    self.chat_widget.add_error_message(
-                        "Cannot create a Manager before Codex Main has started.".to_string(),
-                    );
-                    return Ok(AppRunControl::Continue);
-                };
-                let spawn_config = match self.native_spawn_agent_config() {
-                    Ok(config) => config,
-                    Err(err) => {
-                        self.chat_widget.add_error_message(err.to_string());
-                        return Ok(AppRunControl::Continue);
-                    }
-                };
-                let model = self.native_spawn_default_model();
-                let provider = crate::chatwidget::ChatWidget::model_provider_for_selection(&model);
-                let nickname = match self.unique_native_pane_nickname("Manager", None) {
-                    Ok(nickname) => nickname,
-                    Err(err) => {
-                        self.chat_widget.add_error_message(err.to_string());
-                        return Ok(AppRunControl::Continue);
-                    }
-                };
-                match app_server
-                    .spawn_agent_thread(
-                        &spawn_config,
-                        parent_thread_id,
-                        "default".to_string(),
-                        Some(nickname.clone()),
-                        model,
-                        provider,
-                        None,
-                        None,
-                    )
-                    .await
-                {
-                    Ok(started) => {
-                        let thread_id = started.session.thread_id;
-                        self.register_codex_user_pane(thread_id, Some(nickname.clone()), started)
-                            .await;
-                        let manager_node_id = crate::spawn_orchestration::thread_node_id(thread_id);
-                        let args = crate::orchestrate::orchestrate_guided_attach_args(
-                            &target,
-                            &duration_arg,
-                            &whip_name,
-                            &manager_node_id,
-                        );
-                        match self.attach_guided_assignment(&args) {
-                            Ok(message) => {
-                                self.chat_widget.add_info_message(message, None);
-                                self.chat_widget.add_info_message(
-                                    format!("Created Manager {nickname}."),
-                                    Some(
-                                        "The assignment brief was sent to the new pane."
-                                            .to_string(),
-                                    ),
-                                );
-                            }
-                            Err(err) => self.chat_widget.add_error_message(format!(
-                                "Manager pane {nickname} created but not bound: {err}"
-                            )),
-                        }
-                    }
-                    Err(err) => self
-                        .chat_widget
-                        .add_error_message(format!("Failed to create Manager: {err}")),
-                }
-            }
-            AppEvent::OpenOrchestrateWhipDetails { whip_id } => {
-                self.open_orchestrate_whip_details(whip_id);
-            }
-            AppEvent::OpenOrchestrateExtendDurationPicker { whip_id } => {
-                self.open_orchestrate_extend_duration_picker(whip_id);
-            }
-            AppEvent::WhipSweepTick => {
-                self.sweep_orchestrate_whips();
-            }
-            AppEvent::SelectUserPane { pane_id } => {
-                let is_codex_main = pane_id == crate::claude_panes::CODEX_MAIN_PANE_ID;
-                self.select_user_pane(tui, pane_id).await;
-                if is_codex_main && let Some(primary_thread_id) = self.primary_thread_id {
-                    self.select_agent_thread_and_discard_side(tui, app_server, primary_thread_id)
-                        .await?;
-                }
-            }
-            AppEvent::CreateCodexPane {
-                model,
-                provider,
-                effort,
-                display_name,
-            } => {
-                let Some(parent_thread_id) = self.primary_thread_id.or(self.active_thread_id)
-                else {
-                    self.chat_widget.add_error_message(
-                        "Cannot create a Codex pane before Codex Main has started.".to_string(),
-                    );
-                    return Ok(AppRunControl::Continue);
-                };
-                let spawn_config = match self.native_spawn_agent_config() {
-                    Ok(config) => config,
-                    Err(err) => {
-                        self.chat_widget.add_error_message(err.to_string());
-                        return Ok(AppRunControl::Continue);
-                    }
-                };
-                let requested_name =
-                    display_name.unwrap_or_else(|| self.next_codex_pane_nickname());
-                let nickname = match self.unique_native_pane_nickname(&requested_name, None) {
-                    Ok(nickname) => nickname,
-                    Err(err) => {
-                        self.chat_widget.add_error_message(err.to_string());
-                        return Ok(AppRunControl::Continue);
-                    }
-                };
-                match app_server
-                    .spawn_agent_thread(
-                        &spawn_config,
-                        parent_thread_id,
-                        "default".to_string(),
-                        Some(nickname.clone()),
-                        model.clone(),
-                        provider.clone(),
-                        effort.clone(),
-                        /*base_instructions*/ None,
-                    )
-                    .await
-                {
-                    Ok(started) => {
-                        let thread_id = started.session.thread_id;
-                        self.register_codex_user_pane(thread_id, Some(nickname.clone()), started)
-                            .await;
-                        self.save_active_claude_pane_transcript();
-                        let _ = self
-                            .claude_panes
-                            .set_active_user_pane(crate::claude_panes::CODEX_MAIN_PANE_ID);
-                        self.select_agent_thread_and_discard_side(tui, app_server, thread_id)
-                            .await?;
-                        self.chat_widget.add_info_message(
-                            format!("Created and switched to Codex pane {nickname}."),
-                            Some(format!("{model}; no task was started.")),
-                        );
-                    }
-                    Err(err) => {
-                        self.chat_widget
-                            .add_error_message(format!("Failed to create Codex pane: {err}"));
-                    }
-                }
-            }
-            AppEvent::OpenCodexPaneNamePrompt {
-                model,
-                provider,
-                effort,
-            } => {
-                self.open_codex_pane_name_prompt(model, provider, effort);
-            }
-            AppEvent::OpenClaudePaneNamePrompt { profile } => {
-                self.open_claude_pane_name_prompt(profile);
-            }
-            AppEvent::CreateClaudePane {
-                profile,
-                display_name,
-            } => {
-                let display_name = match display_name {
-                    Some(display_name) => {
-                        match self.unique_pane_display_name(&display_name, None) {
-                            Ok(name) => Some(name),
-                            Err(err) => {
-                                self.chat_widget.add_error_message(err.to_string());
-                                return Ok(AppRunControl::Continue);
-                            }
-                        }
-                    }
-                    None => None,
-                };
-                self.create_claude_pane(tui, profile, display_name).await;
-            }
-            AppEvent::RenameCurrentPane { name } => {
-                self.rename_current_pane_display_name(app_server, name)
-                    .await;
-            }
-            AppEvent::OpenRenameCodexPanePrompt { thread_id } => {
-                self.open_rename_codex_pane_prompt(thread_id);
-            }
-            AppEvent::OpenRenameClaudePanePrompt { pane_id } => {
-                self.open_rename_claude_pane_prompt(pane_id);
-            }
-            AppEvent::RenameCodexPane { thread_id, name } => {
-                self.rename_codex_pane_display_name(app_server, thread_id, name)
-                    .await;
-            }
-            AppEvent::RenameClaudePane { pane_id, name } => {
-                self.rename_claude_pane_display_name(pane_id, name);
-            }
-            AppEvent::CreateSpawnClaudePane {
-                role,
-                parent_node_id,
-                profile,
-            } => {
-                self.create_spawn_claude_pane(tui, role, parent_node_id, profile)
-                    .await;
-            }
-            AppEvent::ClaudePaneTurnFinished { pane_id, result } => {
-                self.on_claude_pane_turn_finished(pane_id, result);
-            }
-            AppEvent::ClaudePaneTurnProgress { progress } => {
-                self.on_claude_pane_turn_progress(progress);
             }
             AppEvent::StartSide {
                 parent_thread_id,
@@ -4272,11 +2921,6 @@ impl App {
                 text,
                 collaboration_mode,
             } => {
-                if let Some(thread_id) = self.active_thread_id {
-                    self.note_assignment_user_turn(&crate::spawn_orchestration::thread_node_id(
-                        thread_id,
-                    ));
-                }
                 self.chat_widget
                     .submit_user_message_with_mode(text, collaboration_mode);
             }
@@ -4701,21 +3345,5 @@ impl App {
                 AppRunControl::Continue
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod gpu_notification_tests {
-    use super::failed_gpu_notification;
-
-    #[test]
-    fn failed_rental_notification_includes_actionable_provider_reason() {
-        let message = failed_gpu_notification(
-            "gpu-test",
-            Some("The selected capacity was claimed. Search again from /gpu."),
-        );
-
-        assert!(message.contains("selected capacity was claimed"));
-        assert!(message.contains("/gpu"));
     }
 }

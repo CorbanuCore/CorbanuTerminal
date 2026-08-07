@@ -150,17 +150,6 @@ pub(super) async fn spawn_review_thread(
         turn_skills: TurnSkillsContext::new(parent_turn_context.turn_skills.snapshot.clone()),
         turn_timing_state: Arc::new(TurnTimingState::default()),
         terminal_error: Arc::new(Mutex::new(None)),
-        model_edit_protocol_state: Arc::new(
-            crate::session::turn_context::ModelEditProtocolState::default(),
-        ),
-        explicit_tool_budget_state: Arc::new(
-            crate::session::turn_context::ExplicitToolBudgetState::default(),
-        ),
-        malformed_tool_call_state: Arc::new(
-            crate::session::turn_context::MalformedToolCallState::default(),
-        ),
-        server_model_warning_emitted: AtomicBool::new(false),
-        provider_cache_pressure_warning_emitted: AtomicBool::new(false),
         model_verification_emitted: AtomicBool::new(false),
     };
 

@@ -9,9 +9,8 @@ expression: snapshot
   └ Please continue and return the answer only.
 
 • Waiting for Robie [explorer]
-  └ Wakes on a child report/message, follow-up task, human steering, or timeout.
 
-• Wait ended — child status update
+• Finished waiting
   └ Robie [explorer]: Completed - 39916800
     Bob [worker]: Error - tool timeout
 

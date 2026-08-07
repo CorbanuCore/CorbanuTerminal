@@ -321,6 +321,7 @@ impl CodexErr {
 
     codex_err_tuple_constructors!(
         Stream(message: String),
+        PlanEntitlementExceeded(message: String),
         ThreadNotFound(thread_id: ThreadId),
         UnexpectedStatus(error: UnexpectedResponseError),
         InvalidRequest(message: String),
@@ -377,6 +378,7 @@ impl CodexErr {
             | CodexErrorDetails::LandlockSandboxExecutableNotProvided
             | CodexErrorDetails::RetryLimit(_)
             | CodexErrorDetails::ContextWindowExceeded
+            | CodexErrorDetails::PlanEntitlementExceeded(_)
             | CodexErrorDetails::ThreadNotFound(_)
             | CodexErrorDetails::AgentLimitReached { .. }
             | CodexErrorDetails::Spawn
@@ -471,14 +473,6 @@ impl CodexErr {
         };
         http_status_code.as_ref().map(StatusCode::as_u16)
     }
-}
-
-fn is_retryable_http_status(status: StatusCode) -> bool {
-    status.is_server_error()
-        || matches!(
-            status,
-            StatusCode::REQUEST_TIMEOUT | StatusCode::TOO_MANY_REQUESTS
-        )
 }
 
 #[derive(Debug)]

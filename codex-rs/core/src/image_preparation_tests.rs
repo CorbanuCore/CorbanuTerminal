@@ -73,6 +73,9 @@ fn detail_policies_apply_the_expected_budgets() {
         (Some(ImageDetail::High), (2048, 2048), (1600, 1600)),
         (Some(ImageDetail::Original), (6401, 100), (6000, 94)),
         (Some(ImageDetail::Original), (3201, 3201), (3200, 3200)),
+        // Tall full-page screenshots must be projected into a bounded request
+        // instead of poisoning every later sampling step in the turn.
+        (Some(ImageDetail::Original), (288, 10_000), (173, 6000)),
         (Some(ImageDetail::Auto), (2048, 2048), (1600, 1600)),
         (None, (2048, 2048), (1600, 1600)),
     ] {

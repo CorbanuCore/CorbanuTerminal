@@ -11,6 +11,7 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::AgentStatus;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
@@ -35,6 +36,7 @@ use core_test_support::responses::strip_metadata_from_json;
 use core_test_support::responses::strip_response_item_ids_from_json;
 use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::TestCodex;
+use core_test_support::test_codex::TestCodexBuilder;
 use core_test_support::test_codex::local_selections;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
@@ -60,24 +62,50 @@ const TURN_0_FORK_PROMPT: &str = "seed fork context";
 const TURN_1_PROMPT: &str = "spawn a child and continue";
 const TURN_2_NO_WAIT_PROMPT: &str = "follow up without wait";
 const CHILD_PROMPT: &str = "child: do work";
-const INHERITED_MODEL: &str = "gpt-5.2";
+const INHERITED_MODEL: &str = "gpt-5.6-luna";
 const INHERITED_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::XHigh;
-const REQUESTED_MODEL: &str = "gpt-5.4";
+const REQUESTED_MODEL: &str = "gpt-5.6-sol";
 const REQUESTED_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::Low;
 const V2_DEFAULT_MODEL: &str = "gpt-5.6-terra";
 const V2_DEFAULT_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::High;
 const V2_REQUESTED_MODEL: &str = "gpt-5.6-sol";
 const V2_REQUESTED_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::Low;
-const ROLE_MODEL: &str = "gpt-5.4";
+const ROLE_MODEL: &str = "gpt-5.6-luna";
 const ROLE_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::High;
 const SUBAGENT_START_CONTEXT: &str = "subagent start context reaches child";
 const SUBAGENT_STOP_CONTINUATION: &str = "continue only the child";
 const INTERNAL_SUBAGENT_PROMPT: &str = "internal subagent: review";
 
+fn v1_test_codex() -> TestCodexBuilder {
+    test_codex()
+        .with_model(INHERITED_MODEL)
+        .with_config(|config| {
+            let model_catalog = config.model_catalog.get_or_insert_with(|| {
+                bundled_models_response().expect("bundled models.json should parse")
+            });
+            for slug in [INHERITED_MODEL, REQUESTED_MODEL, ROLE_MODEL] {
+                model_catalog
+                    .models
+                    .iter_mut()
+                    .find(|model| model.slug == slug)
+                    .unwrap_or_else(|| panic!("{slug} should exist in bundled models.json"))
+                    .multi_agent_version = Some(MultiAgentVersion::V1);
+            }
+        })
+}
+
+fn v2_test_codex() -> TestCodexBuilder {
+    test_codex().with_model(V2_DEFAULT_MODEL)
+}
+
 fn body_contains(req: &wiremock::Request, text: &str) -> bool {
     decoded_body(req)
         .and_then(|body| String::from_utf8(body).ok())
         .is_some_and(|body| body.contains(text))
+}
+
+fn request_header<'a>(req: &'a wiremock::Request, name: &str) -> Option<&'a str> {
+    req.headers.get(name).and_then(|value| value.to_str().ok())
 }
 
 fn request_has_input_type(req: &wiremock::Request, ty: &str) -> bool {
@@ -113,31 +141,6 @@ fn log_field<'a>(line: &'a str, name: &str) -> Option<&'a str> {
     line.split_ascii_whitespace()
         .find_map(|field| field.strip_prefix(&prefix))
         .map(|value| value.trim_matches('"'))
-}
-
-fn body_has_input_type(req: &wiremock::Request, expected_type: &str) -> bool {
-    let is_zstd = req
-        .headers
-        .get("content-encoding")
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| {
-            value
-                .split(',')
-                .any(|entry| entry.trim().eq_ignore_ascii_case("zstd"))
-        });
-    let bytes = if is_zstd {
-        zstd::stream::decode_all(std::io::Cursor::new(&req.body)).ok()
-    } else {
-        Some(req.body.clone())
-    };
-    bytes
-        .and_then(|body| serde_json::from_slice::<Value>(&body).ok())
-        .and_then(|body| body.get("input").and_then(Value::as_array).cloned())
-        .is_some_and(|items| {
-            items
-                .iter()
-                .any(|item| item.get("type").and_then(Value::as_str) == Some(expected_type))
-        })
 }
 
 fn has_subagent_notification(req: &ResponsesRequest) -> bool {
@@ -389,13 +392,18 @@ async fn wait_for_requests(
 async fn wait_for_request_with_model(
     mock: &core_test_support::responses::ResponseMock,
     model: &str,
+    expected_text: &str,
 ) -> Result<ResponsesRequest> {
     let deadline = Instant::now() + Duration::from_secs(2);
     loop {
         if let Some(request) = mock
             .requests()
             .into_iter()
-            .find(|request| request.body_json()["model"] == model)
+            .find(|request| {
+                request.body_json()["model"] == model
+                    && request.body_contains_text(expected_text)
+                    && request.header("x-openai-subagent").as_deref() == Some("collab_spawn")
+            })
         {
             return Ok(request);
         }
@@ -490,7 +498,7 @@ async fn setup_turn_one_with_custom_spawned_child(
     )
     .await;
 
-    let mut builder = configure_test(test_codex().with_config(|config| {
+    let mut builder = configure_test(v1_test_codex().with_config(|config| {
         config
             .features
             .enable(Feature::Collab)
@@ -605,7 +613,7 @@ async fn subagent_start_replaces_session_start_and_injects_context() -> Result<(
     )
     .await;
 
-    let test = test_codex()
+    let test = v1_test_codex()
         .with_pre_build_hook(|home| {
             write_subagent_lifecycle_hooks(home, /*stop_prompts*/ &[], "worker")
                 .expect("failed to write subagent hook fixture");
@@ -706,7 +714,9 @@ async fn subagent_stop_replaces_stop_and_skips_internal_subagents() -> Result<()
     let first_child_request = mount_sse_once_match(
         &server,
         |req: &wiremock::Request| {
-            body_contains(req, CHILD_PROMPT) && !body_contains(req, SPAWN_CALL_ID)
+            body_contains(req, CHILD_PROMPT)
+                && !body_contains(req, SPAWN_CALL_ID)
+                && request_header(req, "x-openai-subagent") == Some("collab_spawn")
         },
         sse(vec![
             ev_response_created("resp-child-1"),
@@ -749,7 +759,7 @@ async fn subagent_stop_replaces_stop_and_skips_internal_subagents() -> Result<()
     )
     .await;
 
-    let test = test_codex()
+    let test = v1_test_codex()
         .with_pre_build_hook(|home| {
             write_subagent_lifecycle_hooks(
                 home,
@@ -966,7 +976,7 @@ async fn spawned_child_receives_forked_parent_context(
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = v1_test_codex()
         .with_history_mode(history_mode)
         .with_config(|config| {
             config
@@ -986,7 +996,8 @@ async fn spawned_child_receives_forked_parent_context(
     test.submit_turn(TURN_1_PROMPT).await?;
     let parent_body = spawn_turn.single_request().body_json();
 
-    let child_request = wait_for_request_with_model(&child_request_log, REQUESTED_MODEL).await?;
+    let child_request =
+        wait_for_request_with_model(&child_request_log, REQUESTED_MODEL, CHILD_PROMPT).await?;
     assert!(child_request.body_contains_text(TURN_0_FORK_PROMPT));
     let child_body = child_request.body_json();
     let original_parent_turn_id = parent_body["client_metadata"]["turn_id"]
@@ -1046,7 +1057,11 @@ async fn spawned_child_receives_forked_parent_context(
 
     test.submit_turn("reuse the legacy child").await?;
     let followup_parent_body = parent.single_request().body_json();
-    let reused_child_body = wait_for_request_with_model(&followup, REQUESTED_MODEL)
+    let reused_child_body = wait_for_request_with_model(
+        &followup,
+        REQUESTED_MODEL,
+        "legacy child follow-up",
+    )
         .await?
         .body_json();
     let followup_parent_turn_id = followup_parent_body["client_metadata"]["turn_id"]
@@ -1125,7 +1140,9 @@ async fn spawned_full_history_v2_child_uses_model_precedence_without_dropping_co
     let child_request_log = mount_sse_once_match(
         &server,
         |req: &wiremock::Request| {
-            body_contains(req, CHILD_PROMPT) && !body_contains(req, SPAWN_CALL_ID)
+            body_contains(req, CHILD_PROMPT)
+                && !body_contains(req, SPAWN_CALL_ID)
+                && request_header(req, "x-openai-subagent") == Some("collab_spawn")
         },
         sse(vec![
             ev_response_created("resp-child-1"),
@@ -1134,7 +1151,7 @@ async fn spawned_full_history_v2_child_uses_model_precedence_without_dropping_co
         ]),
     )
     .await;
-    let _turn1_followup = mount_sse_once_match(
+    let turn1_followup = mount_sse_once_match(
         &server,
         |req: &wiremock::Request| body_contains(req, SPAWN_CALL_ID),
         sse(vec![
@@ -1144,7 +1161,7 @@ async fn spawned_full_history_v2_child_uses_model_precedence_without_dropping_co
         ]),
     )
     .await;
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = v2_test_codex().with_config(|config| {
         config
             .features
             .enable(Feature::Collab)
@@ -1153,7 +1170,7 @@ async fn spawned_full_history_v2_child_uses_model_precedence_without_dropping_co
             .features
             .enable(Feature::MultiAgentV2)
             .expect("test config should allow feature update");
-        config.model = Some(INHERITED_MODEL.to_string());
+        config.model = Some(V2_DEFAULT_MODEL.to_string());
         config.model_reasoning_effort = Some(INHERITED_REASONING_EFFORT);
         config.agent_default_subagent_model = Some(V2_DEFAULT_MODEL.to_string());
         config.agent_default_subagent_reasoning_effort = Some(V2_DEFAULT_REASONING_EFFORT);
@@ -1164,8 +1181,24 @@ async fn spawned_full_history_v2_child_uses_model_precedence_without_dropping_co
     let _ = seed_turn.single_request();
     test.submit_turn(TURN_1_PROMPT).await?;
     let _ = spawn_turn.single_request();
+    let followup_request = turn1_followup.single_request();
+    let followup_body = followup_request.body_json().to_string();
+    let expected_runtime_effort = format!(
+        "\\\"reasoning_effort\\\":\\\"{}\\\"",
+        expected_reasoning_effort
+    );
+    assert!(
+        followup_body.contains(&expected_runtime_effort),
+        "spawn result must report the selected reasoning effort; expected {expected_runtime_effort:?} in {followup_body}"
+    );
 
-    let child_request = wait_for_request_with_model(&child_request_log, expected_model).await?;
+    let child_request =
+        wait_for_request_with_model(&child_request_log, expected_model, CHILD_PROMPT).await?;
+    assert_eq!(
+        child_request.header("x-openai-subagent").as_deref(),
+        Some("collab_spawn"),
+        "the captured request must come from the spawned child"
+    );
     assert!(child_request.body_contains_text(TURN_0_FORK_PROMPT));
     let child_body = child_request.body_json();
     assert_eq!(
@@ -1241,7 +1274,7 @@ async fn spawn_agent_uses_configured_subagent_defaults() -> Result<()> {
     Some(REQUESTED_MODEL),
     None,
     REQUESTED_MODEL,
-    Some(ReasoningEffort::Medium);
+    Some(ReasoningEffort::Low);
     "model only"
 )]
 #[test_case(
@@ -1339,16 +1372,11 @@ async fn spawned_agent_uses_summary_support_for_final_model(
     };
     assert_eq!(child_body["model"], json!(REQUESTED_MODEL));
     let expected_reasoning = if child_supports_summary {
-        json!({"effort": "medium", "summary": "detailed"})
+        json!({"effort": "low", "summary": "detailed", "context": "all_turns"})
     } else {
-        json!({"effort": "medium"})
+        json!({"effort": "low", "context": "all_turns"})
     };
     assert_eq!(child_body["reasoning"], expected_reasoning);
-    assert_eq!(
-        child_body.get("stream_options").is_some(),
-        child_supports_summary
-    );
-
     Ok(())
 }
 
@@ -1400,7 +1428,7 @@ async fn spawned_multi_agent_v2_child_inherits_parent_developer_context() -> Res
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = v2_test_codex().with_config(|config| {
         config
             .features
             .enable(Feature::Collab)
@@ -1488,7 +1516,7 @@ async fn multi_agent_v2_spawn_sends_agent_message_to_child(plaintext: bool) -> R
     )
     .await;
 
-    let mut builder = test_codex().with_model("koffing").with_config(|config| {
+    let mut builder = v2_test_codex().with_config(|config| {
         config
             .features
             .enable(Feature::Collab)
@@ -1705,8 +1733,7 @@ async fn plaintext_multi_agent_v2_completion_sends_agent_message(
         ]),
     )
     .await;
-    let test = test_codex()
-        .with_model("koffing")
+    let test = v2_test_codex()
         .with_config(|config| {
             config
                 .features
@@ -1797,7 +1824,7 @@ async fn skills_toggle_skips_instructions_for_parent_and_spawned_child() -> Resu
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = v2_test_codex()
         .with_pre_build_hook(|home| {
             write_home_skill(home, "demo", "demo-skill", "demo skill").expect("write home skill");
         })
@@ -1946,7 +1973,7 @@ async fn spawn_agent_rejects_reasoning_effort_unsupported_by_role_model() -> Res
     )
     .await;
 
-    let test = test_codex()
+    let test = v1_test_codex()
         .with_config(|config| {
             config
                 .features
@@ -1978,7 +2005,10 @@ async fn spawn_agent_rejects_reasoning_effort_unsupported_by_role_model() -> Res
     assert_eq!(
         output.as_deref(),
         Some(
-            "Reasoning effort `ultra` is not supported for model `gpt-5.4`. Supported reasoning efforts: low, medium, high, xhigh"
+            format!(
+                "Reasoning effort `ultra` is not supported for model `{ROLE_MODEL}`. Supported reasoning efforts: low, medium, high, xhigh, max"
+            )
+            .as_str()
         )
     );
     Ok(())
@@ -2013,31 +2043,29 @@ async fn spawn_agent_tool_description_mentions_role_locked_settings() -> Result<
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_model("gpt-5.4")
-        .with_config(|config| {
-            config
-                .features
-                .enable(Feature::Collab)
-                .expect("test config should allow feature update");
-            config.multi_agent_v2.hide_spawn_agent_metadata = false;
-            let role_path = config.codex_home.join("custom-role.toml");
-            std::fs::write(
-                &role_path,
-                format!(
-                    "developer_instructions = \"Stay focused\"\nmodel = \"{ROLE_MODEL}\"\nmodel_reasoning_effort = \"{ROLE_REASONING_EFFORT}\"\n",
-                ),
-            )
-            .expect("write role config");
-            config.agent_roles.insert(
-                "custom".to_string(),
-                AgentRoleConfig {
-                    description: Some("Custom role".to_string()),
-                    config_file: Some(role_path.to_path_buf()),
-                    nickname_candidates: None,
-                },
-            );
-        });
+    let mut builder = v1_test_codex().with_config(|config| {
+        config
+            .features
+            .enable(Feature::Collab)
+            .expect("test config should allow feature update");
+        config.multi_agent_v2.hide_spawn_agent_metadata = false;
+        let role_path = config.codex_home.join("custom-role.toml");
+        std::fs::write(
+            &role_path,
+            format!(
+                "developer_instructions = \"Stay focused\"\nmodel = \"{ROLE_MODEL}\"\nmodel_reasoning_effort = \"{ROLE_REASONING_EFFORT}\"\n",
+            ),
+        )
+        .expect("write role config");
+        config.agent_roles.insert(
+            "custom".to_string(),
+            AgentRoleConfig {
+                description: Some("Custom role".to_string()),
+                config_file: Some(role_path.to_path_buf()),
+                nickname_candidates: None,
+            },
+        );
+    });
     let test = builder.build(&server).await?;
 
     test.submit_turn(TURN_1_PROMPT).await?;
@@ -2046,16 +2074,16 @@ async fn spawn_agent_tool_description_mentions_role_locked_settings() -> Result<
     assert_eq!(requests.len(), 2);
     let output = requests[1].tool_search_output(call_id);
     let spawn_agent = namespace_child_tool(&output, "multi_agent_v1", "spawn_agent")
-        .unwrap_or_else(|| {
-            panic!("tool_search should return multi_agent_v1.spawn_agent; output={output}")
-        });
+        .expect("tool_search should return multi_agent_v1.spawn_agent");
     let agent_type_description = tool_parameter_description(spawn_agent, "agent_type")
         .expect("spawn_agent agent_type description");
     let custom_role_description =
         role_block(&agent_type_description, "custom").expect("custom role description");
     assert_eq!(
         custom_role_description,
-        "custom: {\nCustom role\n- This role's model is set to `gpt-5.4` and its reasoning effort is set to `high`. These settings cannot be changed.\n}"
+        format!(
+            "custom: {{\nCustom role\n- This role's model is set to `{ROLE_MODEL}` and its reasoning effort is set to `high`. These settings cannot be changed.\n}}"
+        )
     );
 
     Ok(())

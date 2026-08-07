@@ -175,7 +175,7 @@ impl ChatWidget {
     }
 
     fn refresh_status_line_from_selections(&mut self, selections: &StatusSurfaceSelections) {
-        let enabled = !selections.status_line_items.is_empty() || self.gpu_spend_status.is_some();
+        let enabled = !selections.status_line_items.is_empty();
         self.bottom_pane.set_status_line_enabled(enabled);
         if !enabled {
             self.set_status_line(/*status_line*/ None);
@@ -190,15 +190,10 @@ impl ChatWidget {
             }
         }
 
-        let mut line = status_line_from_segments(segments, self.config.tui_status_line_use_colors)
-            .unwrap_or_default();
-        if let Some(gpu_spend_status) = self.gpu_spend_status.as_ref() {
-            if !line.spans.is_empty() {
-                line.spans.push(" · ".dim());
-            }
-            line.spans.push(gpu_spend_status.clone().red().bold());
-        }
-        self.set_status_line(Some(line));
+        self.set_status_line(status_line_from_segments(
+            segments,
+            self.config.tui_status_line_use_colors,
+        ));
         let hyperlink_url = selections
             .status_line_items
             .contains(&StatusLineItem::PullRequestNumber)
@@ -659,12 +654,9 @@ impl ChatWidget {
     /// git metadata.
     pub(super) fn status_line_value_for_item(&mut self, item: StatusLineItem) -> Option<String> {
         match item {
-            StatusLineItem::ModelName => Some(self.status_model_display_name()),
+            StatusLineItem::ModelName => Some(self.model_display_name().to_string()),
             StatusLineItem::ModelWithReasoning => Some(self.model_with_reasoning_display_name()),
-            StatusLineItem::Reasoning => self
-                .active_external_model_display
-                .is_none()
-                .then(|| self.reasoning_display_name()),
+            StatusLineItem::Reasoning => Some(self.reasoning_display_name()),
             StatusLineItem::CurrentDir => {
                 Some(format_directory_display(
                     self.status_line_cwd(),
@@ -757,8 +749,6 @@ impl ChatWidget {
             ),
             StatusLineItem::WorkspaceHeadline => self.status_line_workspace_headline.clone(),
             StatusLineItem::TaskProgress => self.terminal_title_task_progress(),
-            StatusLineItem::Brand => Some("Post Fiat Terminal".to_string()),
-            StatusLineItem::Tps => Some(self.tps_estimator.label(Instant::now())),
         }
     }
 
@@ -802,8 +792,6 @@ impl ChatWidget {
             StatusSurfacePreviewItem::Model => StatusLineItem::ModelName,
             StatusSurfacePreviewItem::ModelWithReasoning => StatusLineItem::ModelWithReasoning,
             StatusSurfacePreviewItem::Reasoning => StatusLineItem::Reasoning,
-            StatusSurfacePreviewItem::Brand => StatusLineItem::Brand,
-            StatusSurfacePreviewItem::Tps => StatusLineItem::Tps,
         };
         self.status_line_value_for_item(status_line_item)
     }
@@ -862,42 +850,27 @@ impl ChatWidget {
                 .status_line_value_for_item(StatusLineItem::FastMode)
                 .map(|value| Self::truncate_terminal_title_part(value, /*max_chars*/ 32)),
             TerminalTitleItem::Model => Some(Self::truncate_terminal_title_part(
-                self.status_model_display_name(),
+                self.model_display_name().to_string(),
                 /*max_chars*/ 32,
             )),
             TerminalTitleItem::ModelWithReasoning => Some(Self::truncate_terminal_title_part(
                 self.model_with_reasoning_display_name(),
                 /*max_chars*/ 32,
             )),
-            TerminalTitleItem::Reasoning => self
-                .active_external_model_display
-                .as_ref()
-                .is_none()
-                .then(|| {
-                    Self::truncate_terminal_title_part(
-                        self.reasoning_display_name(),
-                        /*max_chars*/ 32,
-                    )
-                }),
+            TerminalTitleItem::Reasoning => Some(Self::truncate_terminal_title_part(
+                self.reasoning_display_name(),
+                /*max_chars*/ 32,
+            )),
             TerminalTitleItem::TaskProgress => self.terminal_title_task_progress(),
         }
     }
 
-    fn status_model_display_name(&self) -> String {
-        self.active_external_model_display
-            .clone()
-            .unwrap_or_else(|| self.model_display_name())
-    }
-
     fn reasoning_display_name(&self) -> String {
         let effort = self.effective_reasoning_effort();
-        Self::status_line_reasoning_effort_label_for_model(self.current_model(), effort.as_ref())
+        Self::status_line_reasoning_effort_label(effort.as_ref())
     }
 
     fn model_with_reasoning_display_name(&self) -> String {
-        if let Some(model_display) = self.active_external_model_display.as_ref() {
-            return model_display.clone();
-        }
         let label = self.reasoning_display_name();
         let service_tier_label = self
             .current_service_tier()

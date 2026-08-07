@@ -6,9 +6,11 @@ use crate::JsonSchema;
 use crate::TS;
 use codex_experimental_api_macros::ExperimentalApi;
 use codex_protocol::protocol::SessionSource as CoreSessionSource;
+use codex_protocol::protocol::RuntimeSelectionSource;
 use codex_protocol::protocol::SubAgentSource as CoreSubAgentSource;
 use codex_protocol::protocol::ThreadHistoryMode as CoreThreadHistoryMode;
 use codex_protocol::protocol::ThreadSource as CoreThreadSource;
+use codex_protocol::openai_models::ReasoningEffort;
 use codex_utils_absolute_path::AbsolutePathBuf;
 #[cfg(test)]
 use schemars::r#gen::SchemaGenerator;
@@ -178,6 +180,24 @@ pub struct ThreadSection {
     pub name: String,
 }
 
+/// Authoritative route currently configured for a loaded thread.
+///
+/// Stored threads created by older releases may omit this field. Clients must treat an absent
+/// route as unavailable identity evidence rather than inheriting or guessing from the viewer.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase", export_to = "v2/")]
+pub struct ThreadRuntimeRoute {
+    pub model_provider: String,
+    pub model: String,
+    pub reasoning_effort: Option<ReasoningEffort>,
+    pub service_tier: Option<String>,
+    /// Why the thread received this route when it was created.
+    /// Legacy and non-spawned threads omit this value.
+    #[serde(default)]
+    pub selection_source: Option<RuntimeSelectionSource>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS, ExperimentalApi)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -210,6 +230,10 @@ pub struct Thread {
     pub history_mode: ThreadHistoryMode,
     /// Model provider used for this thread (for example, 'openai').
     pub model_provider: String,
+    /// Exact route configured by the live runtime. Absent for unloaded legacy records whose
+    /// persisted metadata does not prove the model and effort.
+    #[serde(default)]
+    pub runtime_route: Option<ThreadRuntimeRoute>,
     /// Unix timestamp (in seconds) when the thread was created.
     #[ts(type = "number")]
     pub created_at: i64,

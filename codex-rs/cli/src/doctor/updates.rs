@@ -24,7 +24,6 @@ use super::run_command;
 const VERSION_FILE_NAME: &str = "version.json";
 const PFTERMINAL_LATEST_RELEASE_URL: &str =
     "https://api.github.com/repos/agtico/PfTerminal/releases/latest";
-const HOMEBREW_CASK_API_URL: &str = "https://formulae.brew.sh/api/cask/codex.json";
 
 /// Builds the update-health row for the current installation.
 ///
@@ -132,26 +131,20 @@ fn push_cached_version_details(details: &mut Vec<String>, version_file: &Path) {
 
 fn update_action_label(context: &InstallContext) -> &'static str {
     match &context.method {
-        InstallMethod::Npm => "npm install -g @openai/codex",
-        InstallMethod::Bun => "bun install -g @openai/codex",
-        InstallMethod::Pnpm => "pnpm add -g @openai/codex",
-        InstallMethod::Brew => "brew upgrade --cask codex",
+        InstallMethod::Npm => "npm install -g @agticorp/pfterminal",
+        InstallMethod::Bun => "bun install -g @agticorp/pfterminal",
+        InstallMethod::Pnpm => "pnpm add -g @agticorp/pfterminal",
+        InstallMethod::Brew => "install from the latest PF Terminal release",
         InstallMethod::Standalone { .. } => "standalone installer",
         InstallMethod::Other => "manual or unknown",
     }
 }
 
-fn fetch_latest_version(context: &InstallContext) -> Result<String, String> {
-    match &context.method {
-        InstallMethod::Brew => fetch_homebrew_cask_version(),
-        InstallMethod::Npm
-        | InstallMethod::Bun
-        | InstallMethod::Pnpm
-        | InstallMethod::Standalone { .. }
-        | InstallMethod::Other => {
-            fetch_latest_github_release_version(PFTERMINAL_LATEST_RELEASE_URL)
-        }
-    }
+fn fetch_latest_version(_context: &InstallContext) -> Result<String, String> {
+    // PF Terminal does not publish the upstream Codex Homebrew cask. Every detected install
+    // context must compare against the PF Terminal release stream so doctor never recommends or
+    // reports a different product's version.
+    fetch_latest_github_release_version(PFTERMINAL_LATEST_RELEASE_URL)
 }
 
 fn fetch_latest_github_release_version(latest_release_url: &str) -> Result<String, String> {
@@ -165,15 +158,6 @@ fn fetch_latest_github_release_version(latest_release_url: &str) -> Result<Strin
         .strip_prefix("rust-v")
         .map(str::to_string)
         .ok_or_else(|| format!("failed to parse latest tag {}", info.tag_name))
-}
-
-fn fetch_homebrew_cask_version() -> Result<String, String> {
-    #[derive(Deserialize)]
-    struct HomebrewCaskInfo {
-        version: String,
-    }
-
-    http_get_json::<HomebrewCaskInfo>(HOMEBREW_CASK_API_URL).map(|info| info.version)
 }
 
 fn http_get_json<T>(url: &str) -> Result<T, String>
@@ -233,7 +217,21 @@ mod tests {
                 method: InstallMethod::Pnpm,
                 package_layout: None,
             }),
-            "pnpm add -g @openai/codex"
+            "pnpm add -g @agticorp/pfterminal"
+        );
+        assert_eq!(
+            update_action_label(&InstallContext {
+                method: InstallMethod::Bun,
+                package_layout: None,
+            }),
+            "bun install -g @agticorp/pfterminal"
+        );
+        assert_eq!(
+            update_action_label(&InstallContext {
+                method: InstallMethod::Brew,
+                package_layout: None,
+            }),
+            "install from the latest PF Terminal release"
         );
         assert_eq!(
             update_action_label(&InstallContext {

@@ -1,28 +1,24 @@
-#[cfg(test)]
 use codex_features::FEATURES;
 use codex_protocol::account::PlanType;
-#[cfg(test)]
 use lazy_static::lazy_static;
-#[cfg(test)]
 use rand::Rng;
 
-#[cfg(test)]
+const ANNOUNCEMENT_TIP_URL: &str =
+    "https://raw.githubusercontent.com/openai/codex/main/announcement_tip.toml";
+
 const IS_MACOS: bool = cfg!(target_os = "macos");
-#[cfg(test)]
 const IS_WINDOWS: bool = cfg!(target_os = "windows");
 
 const APP_TOOLTIP: &str = "Try the **Desktop app**. Run 'codex app' or visit https://chatgpt.com/codex?app-landing-page=true";
 const FAST_TOOLTIP: &str =
     "*New* Use **/fast** to enable our fastest inference with increased plan usage.";
 const OTHER_TOOLTIP: &str = "*New* Build faster with the **Desktop app**. Run 'codex app' or visit https://chatgpt.com/codex?app-landing-page=true";
-const OTHER_TOOLTIP_NON_MAC: &str = "*New* Build faster with Codex.";
+const OTHER_TOOLTIP_NON_MAC: &str = "*New* Build faster with PFTerminal.";
 const FREE_GO_TOOLTIP: &str =
-    "*New* For a limited time, Codex is included in your plan for free – let’s build together.";
+    "*New* For a limited time, Codex is included in your plan for free – use it in PFTerminal.";
 
-#[cfg(test)]
 const RAW_TOOLTIPS: &str = include_str!("../tooltips.txt");
 
-#[cfg(test)]
 lazy_static! {
     static ref TOOLTIPS: Vec<&'static str> = RAW_TOOLTIPS
         .lines()
@@ -45,7 +41,6 @@ lazy_static! {
     };
 }
 
-#[cfg(test)]
 fn experimental_tooltips() -> Vec<&'static str> {
     FEATURES
         .iter()
@@ -54,11 +49,44 @@ fn experimental_tooltips() -> Vec<&'static str> {
 }
 
 /// Pick a random tooltip to show to the user when starting Codex.
-pub(crate) fn get_tooltip(_plan: Option<PlanType>, _fast_mode_enabled: bool) -> Option<String> {
-    None
+pub(crate) fn get_tooltip(plan: Option<PlanType>, fast_mode_enabled: bool) -> Option<String> {
+    let mut rng = rand::rng();
+
+    if let Some(announcement) = announcement::fetch_announcement_tip(plan) {
+        return Some(announcement);
+    }
+
+    // Leave small chance for a random tooltip to be shown.
+    if rng.random_ratio(8, 10) {
+        match plan {
+            Some(plan_type)
+                if matches!(
+                    plan_type,
+                    PlanType::Plus | PlanType::Enterprise | PlanType::Pro | PlanType::ProLite
+                ) || plan_type.is_team_like()
+                    || plan_type.is_business_like() =>
+            {
+                if let Some(tooltip) = pick_paid_tooltip(&mut rng, fast_mode_enabled) {
+                    return Some(tooltip.to_string());
+                }
+            }
+            Some(PlanType::Go) | Some(PlanType::Free) => {
+                return Some(FREE_GO_TOOLTIP.to_string());
+            }
+            _ => {
+                let tooltip = if IS_MACOS {
+                    OTHER_TOOLTIP
+                } else {
+                    OTHER_TOOLTIP_NON_MAC
+                };
+                return Some(tooltip.to_string());
+            }
+        }
+    }
+
+    pick_tooltip(&mut rng).map(str::to_string)
 }
 
-#[cfg(test)]
 fn paid_app_tooltip() -> Option<&'static str> {
     if IS_MACOS || IS_WINDOWS {
         Some(APP_TOOLTIP)
@@ -71,7 +99,6 @@ fn paid_app_tooltip() -> Option<&'static str> {
 /// generic random tip pool. Keep this business logic explicit: we currently split
 /// that slot between the app promo and Fast mode, but suppress the Fast promo once
 /// the user already has Fast mode enabled.
-#[cfg(test)]
 fn pick_paid_tooltip<R: Rng + ?Sized>(
     rng: &mut R,
     fast_mode_enabled: bool,
@@ -83,7 +110,6 @@ fn pick_paid_tooltip<R: Rng + ?Sized>(
     }
 }
 
-#[cfg(test)]
 fn pick_tooltip<R: Rng + ?Sized>(rng: &mut R) -> Option<&'static str> {
     if ALL_TOOLTIPS.is_empty() {
         None
@@ -95,24 +121,20 @@ fn pick_tooltip<R: Rng + ?Sized>(rng: &mut R) -> Option<&'static str> {
 }
 
 pub(crate) mod announcement {
-    #[cfg(test)]
+    use crate::tooltips::ANNOUNCEMENT_TIP_URL;
     use crate::version::CODEX_CLI_VERSION;
-    #[cfg(test)]
     use chrono::NaiveDate;
-    #[cfg(test)]
     use chrono::Utc;
     use codex_http_client::ClientRouteClass;
     use codex_http_client::HttpClientFactory;
     use codex_http_client::RouteAwareClientPool;
     use codex_protocol::account::PlanType;
-    #[cfg(test)]
     use regex_lite::Regex;
-    #[cfg(test)]
     use serde::Deserialize;
     use std::sync::OnceLock;
     use std::time::Duration;
 
-    #[cfg(test)]
+    static ANNOUNCEMENT_TIP: OnceLock<Option<String>> = OnceLock::new();
     const CURRENT_OS: TargetOs = TargetOs::current();
 
     /// Prewarm the cache of the announcement tip.
@@ -135,7 +157,6 @@ pub(crate) mod announcement {
             .and_then(|raw| parse_announcement_tip_toml(&raw, plan))
     }
 
-    #[cfg(test)]
     #[derive(Debug, Deserialize)]
     struct AnnouncementTipRaw {
         content: String,
@@ -147,13 +168,11 @@ pub(crate) mod announcement {
         target_oses: Option<Vec<TargetOs>>,
     }
 
-    #[cfg(test)]
     #[derive(Debug, Deserialize)]
     struct AnnouncementTipDocument {
         announcements: Vec<AnnouncementTipRaw>,
     }
 
-    #[cfg(test)]
     #[derive(Debug)]
     struct AnnouncementTip {
         content: String,
@@ -165,7 +184,6 @@ pub(crate) mod announcement {
         target_oses: Option<Vec<TargetOs>>,
     }
 
-    #[cfg(test)]
     #[derive(Debug, Deserialize, Copy, Clone, PartialEq, Eq)]
     #[serde(rename_all = "lowercase")]
     enum TargetOs {
@@ -176,7 +194,6 @@ pub(crate) mod announcement {
         Unknown,
     }
 
-    #[cfg(test)]
     impl TargetOs {
         const fn current() -> Self {
             if cfg!(target_os = "macos") {
@@ -236,7 +253,6 @@ pub(crate) mod announcement {
         latest_match
     }
 
-    #[cfg(test)]
     impl AnnouncementTip {
         fn from_raw(raw: AnnouncementTipRaw) -> Option<Self> {
             let content = raw.content.trim();

@@ -182,6 +182,10 @@ impl BridgeRuntime {
             | ServerNotification::WindowsWorldWritableWarning(_)
             | ServerNotification::WindowsSandboxSetupCompleted(_)
             | ServerNotification::AccountLoginCompleted(_) => Ok(()),
+            // The connector intentionally renders only user-relevant turn events. Newly added
+            // app-server lifecycle notifications are safe to ignore until they gain a Telegram
+            // presentation.
+            _ => Ok(()),
         }
     }
 

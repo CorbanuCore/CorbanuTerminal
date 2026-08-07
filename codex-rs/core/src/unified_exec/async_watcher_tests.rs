@@ -50,8 +50,8 @@ async fn streaming_output_harness() -> anyhow::Result<StreamingOutputHarness> {
     );
     let (session, turn, rx_event) = make_session_and_context_with_rx().await;
     let context = UnifiedExecContext::new(session, turn, "streaming-output-test".to_string());
-    let transcript = Arc::new(tokio::sync::Mutex::new(HeadTailBuffer::default()));
-    start_streaming_output(&process, &context, Arc::clone(&transcript));
+    let transcript = process.event_transcript();
+    start_streaming_output(&process, &context);
 
     Ok(StreamingOutputHarness {
         process,

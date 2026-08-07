@@ -32,7 +32,6 @@ pub struct CompactionInput<'a> {
     pub model: &'a str,
     pub input: &'a [ResponseItem],
     pub instructions: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<ResponsesApiTools>,
     pub parallel_tool_calls: bool,
     pub reasoning: Option<Reasoning>,
@@ -158,6 +157,43 @@ pub enum ResponseEvent {
     },
     RateLimits(RateLimitSnapshot),
     ModelsEtag(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CompletionFinishReason {
+    Stop,
+    Length,
+    ContentFilter,
+    ToolCalls,
+    FunctionCall,
+    ProviderError(String),
+    Unknown(String),
+}
+
+impl CompletionFinishReason {
+    pub fn from_provider(value: impl Into<String>) -> Self {
+        let value = value.into();
+        match value.as_str() {
+            "stop" => Self::Stop,
+            "length" | "max_tokens" => Self::Length,
+            "content_filter" | "content_filtered" => Self::ContentFilter,
+            "tool_calls" => Self::ToolCalls,
+            "function_call" => Self::FunctionCall,
+            "error" | "failed" | "server_error" => Self::ProviderError(value),
+            _ => Self::Unknown(value),
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Stop => "stop",
+            Self::Length => "length",
+            Self::ContentFilter => "content_filter",
+            Self::ToolCalls => "tool_calls",
+            Self::FunctionCall => "function_call",
+            Self::ProviderError(value) | Self::Unknown(value) => value,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -292,20 +328,18 @@ impl Serialize for ResponsesApiTools {
     }
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResponsesApiRequest {
     pub model: String,
     pub instructions: String,
     pub previous_response_id: Option<String>,
     pub input: Vec<ResponseItem>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<ResponsesApiTools>,
     pub tool_choice: String,
     pub parallel_tool_calls: bool,
     pub reasoning: Option<Reasoning>,
     pub store: bool,
     pub stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub stream_options: Option<StreamOptions>,
     pub include: Vec<String>,
     pub service_tier: Option<String>,
@@ -335,10 +369,12 @@ impl Serialize for ResponsesApiRequest {
     where
         S: serde::Serializer,
     {
-        let mut field_count = 8;
+        let mut field_count = 7;
         field_count += usize::from(!self.instructions.is_empty());
         field_count += usize::from(self.previous_response_id.is_some());
+        field_count += usize::from(self.tools.is_some());
         field_count += usize::from(self.reasoning.is_some());
+        field_count += usize::from(self.stream_options.is_some());
         field_count += usize::from(self.service_tier.is_some());
         field_count += usize::from(self.prompt_cache_key.is_some());
         field_count += usize::from(self.text.is_some());
@@ -362,7 +398,9 @@ impl Serialize for ResponsesApiRequest {
         } else {
             state.serialize_field("input", &non_anthropic_request_input(&self.input))?;
         }
-        state.serialize_field("tools", &self.tools)?;
+        if let Some(tools) = &self.tools {
+            state.serialize_field("tools", tools)?;
+        }
         state.serialize_field("tool_choice", &self.tool_choice)?;
         state.serialize_field("parallel_tool_calls", &self.parallel_tool_calls)?;
         if let Some(reasoning) = &self.reasoning {
@@ -370,6 +408,9 @@ impl Serialize for ResponsesApiRequest {
         }
         state.serialize_field("store", &self.store)?;
         state.serialize_field("stream", &self.stream)?;
+        if let Some(stream_options) = &self.stream_options {
+            state.serialize_field("stream_options", stream_options)?;
+        }
         state.serialize_field("include", &self.include)?;
         if let Some(service_tier) = &self.service_tier {
             state.serialize_field("service_tier", service_tier)?;
@@ -451,7 +492,8 @@ fn ambient_chunk_from_response_item(item: &ResponseItem) -> Option<AmbientReason
         // string input makes the next turn treat private chain-of-thought as user
         // visible context and can amplify a single provider leak into a loop.
         ResponseItem::Reasoning { .. } => None,
-        ResponseItem::FunctionCall { .. }
+        ResponseItem::AdditionalTools { .. }
+        | ResponseItem::FunctionCall { .. }
         | ResponseItem::CustomToolCall { .. }
         | ResponseItem::LocalShellCall { .. }
         | ResponseItem::ToolSearchCall { .. }
@@ -493,7 +535,7 @@ fn response_item_for_non_anthropic_request(item: &ResponseItem) -> ResponseItem 
             ..
         } => {
             *anthropic_content_block = None;
-            *content = Some(Vec::new());
+            *content = None;
         }
         ResponseItem::WebSearchCall {
             anthropic_content_block,
@@ -501,7 +543,8 @@ fn response_item_for_non_anthropic_request(item: &ResponseItem) -> ResponseItem 
         } => {
             *anthropic_content_block = None;
         }
-        ResponseItem::Message { .. }
+        ResponseItem::AdditionalTools { .. }
+        | ResponseItem::Message { .. }
         | ResponseItem::AgentMessage { .. }
         | ResponseItem::LocalShellCall { .. }
         | ResponseItem::FunctionCall { .. }
@@ -525,6 +568,7 @@ fn ambient_text_from_content_items(content: &[ContentItem]) -> Option<String> {
         .map(|item| match item {
             ContentItem::InputText { text } | ContentItem::OutputText { text } => text.clone(),
             ContentItem::InputImage { image_url, .. } => format!("[image: {image_url}]"),
+            ContentItem::InputAudio { audio_url } => format!("[audio: {audio_url}]"),
         })
         .filter(|text| !text.trim().is_empty())
         .collect();
@@ -742,31 +786,23 @@ impl<'a> From<&'a ResponsesApiRequest> for ResponseCreateWsRequest<'a> {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct ResponseCreateWsRequest<'a> {
     pub model: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
     pub instructions: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub previous_response_id: Option<String>,
     pub input: &'a [ResponseItem],
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<&'a RawValue>,
     pub tool_choice: &'a str,
     pub parallel_tool_calls: bool,
     pub reasoning: Option<&'a Reasoning>,
     pub store: bool,
     pub stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub stream_options: Option<&'a StreamOptions>,
     pub include: &'a [String],
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<&'a TextControls>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub generate: Option<bool>,
     pub client_metadata: Option<HashMap<String, String>>,
     pub thinking_budget: Option<i64>,
@@ -775,15 +811,17 @@ pub struct ResponseCreateWsRequest<'a> {
     pub reasoning_effort: Option<String>,
 }
 
-impl Serialize for ResponseCreateWsRequest {
+impl Serialize for ResponseCreateWsRequest<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        let mut field_count = 8;
+        let mut field_count = 7;
         field_count += usize::from(!self.instructions.is_empty());
         field_count += usize::from(self.previous_response_id.is_some());
+        field_count += usize::from(self.tools.is_some());
         field_count += usize::from(self.reasoning.is_some());
+        field_count += usize::from(self.stream_options.is_some());
         field_count += usize::from(self.service_tier.is_some());
         field_count += usize::from(self.prompt_cache_key.is_some());
         field_count += usize::from(self.text.is_some());
@@ -802,8 +840,10 @@ impl Serialize for ResponseCreateWsRequest {
         if let Some(previous_response_id) = &self.previous_response_id {
             state.serialize_field("previous_response_id", previous_response_id)?;
         }
-        state.serialize_field("input", &non_anthropic_request_input(&self.input))?;
-        state.serialize_field("tools", &self.tools)?;
+        state.serialize_field("input", &non_anthropic_request_input(self.input))?;
+        if let Some(tools) = &self.tools {
+            state.serialize_field("tools", tools)?;
+        }
         state.serialize_field("tool_choice", &self.tool_choice)?;
         state.serialize_field("parallel_tool_calls", &self.parallel_tool_calls)?;
         if let Some(reasoning) = &self.reasoning {
@@ -811,6 +851,9 @@ impl Serialize for ResponseCreateWsRequest {
         }
         state.serialize_field("store", &self.store)?;
         state.serialize_field("stream", &self.stream)?;
+        if let Some(stream_options) = &self.stream_options {
+            state.serialize_field("stream_options", stream_options)?;
+        }
         state.serialize_field("include", &self.include)?;
         if let Some(service_tier) = &self.service_tier {
             state.serialize_field("service_tier", service_tier)?;
@@ -1001,23 +1044,27 @@ mod tests {
     fn ambient_input_does_not_replay_reasoning_items() {
         let input = vec![
             ResponseItem::Reasoning {
-                id: Some("rs_1".to_string()),
+                id: Some(codex_protocol::ResponseItemId::from_server(
+                    "rs_1".to_string(),
+                )),
                 summary: Vec::new(),
                 content: Some(vec![ReasoningItemContent::ReasoningText {
                     text: "private chain of thought".to_string(),
                 }]),
                 encrypted_content: None,
                 anthropic_content_block: None,
-                metadata: None,
+                internal_chat_message_metadata_passthrough: None,
             },
             ResponseItem::Message {
-                id: Some("msg_1".to_string()),
+                id: Some(codex_protocol::ResponseItemId::from_server(
+                    "msg_1".to_string(),
+                )),
                 role: "user".to_string(),
                 content: vec![ContentItem::InputText {
                     text: "inspect StakeHub".to_string(),
                 }],
                 phase: None,
-                metadata: None,
+                internal_chat_message_metadata_passthrough: None,
             },
         ];
 
@@ -1029,7 +1076,9 @@ mod tests {
 
     fn reasoning_item_with_anthropic_block() -> ResponseItem {
         ResponseItem::Reasoning {
-            id: Some("rs_anthropic".to_string()),
+            id: Some(codex_protocol::ResponseItemId::from_server(
+                "rs_anthropic".to_string(),
+            )),
             summary: Vec::<ReasoningItemReasoningSummary>::new(),
             content: Some(vec![ReasoningItemContent::ReasoningText {
                 text: "summarized thinking".to_string(),
@@ -1040,13 +1089,15 @@ mod tests {
                 "thinking": "summarized thinking",
                 "signature": "sig-abc"
             })),
-            metadata: None,
+            internal_chat_message_metadata_passthrough: None,
         }
     }
 
     fn web_search_item_with_anthropic_block() -> ResponseItem {
         ResponseItem::WebSearchCall {
-            id: Some("srvtoolu_1".to_string()),
+            id: Some(codex_protocol::ResponseItemId::from_server(
+                "srvtoolu_1".to_string(),
+            )),
             status: Some("completed".to_string()),
             action: Some(WebSearchAction::Search {
                 query: Some("yield".to_string()),
@@ -1058,7 +1109,7 @@ mod tests {
                 "name": "web_search",
                 "input": { "query": "yield" }
             })),
-            metadata: None,
+            internal_chat_message_metadata_passthrough: None,
         }
     }
 
@@ -1071,21 +1122,24 @@ mod tests {
                 reasoning_item_with_anthropic_block(),
                 web_search_item_with_anthropic_block(),
                 ResponseItem::Message {
-                    id: Some("msg_1".to_string()),
+                    id: Some(codex_protocol::ResponseItemId::from_server(
+                        "msg_1".to_string(),
+                    )),
                     role: "user".to_string(),
                     content: vec![ContentItem::InputText {
                         text: "continue".to_string(),
                     }],
                     phase: None,
-                    metadata: None,
+                    internal_chat_message_metadata_passthrough: None,
                 },
             ],
-            tools: Vec::new(),
+            tools: None,
             tool_choice: "auto".to_string(),
             parallel_tool_calls: false,
             reasoning: None,
             store: false,
             stream: true,
+            stream_options: None,
             include: Vec::new(),
             service_tier: None,
             prompt_cache_key: None,
@@ -1169,7 +1223,7 @@ mod tests {
             model: "gpt-5.5",
             input: &input,
             instructions: "",
-            tools: Vec::new(),
+            tools: None,
             parallel_tool_calls: false,
             reasoning: None,
             service_tier: None,

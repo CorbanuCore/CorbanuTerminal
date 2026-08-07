@@ -1448,6 +1448,7 @@ async fn session_end_skips_subagents() -> Result<()> {
             agent_path: None,
             agent_nickname: None,
             agent_role: None,
+            agent_class: None,
         },
     ] {
         let subagent = test
@@ -2680,7 +2681,6 @@ async fn permission_request_hook_allow_bypasses_strict_auto_review() -> Result<(
 #[tokio::test]
 async fn permission_request_hook_allows_apply_patch_with_write_alias() -> Result<()> {
     skip_if_no_network!(Ok(()));
-    skip_if_sandbox!(Ok(()));
 
     let server = start_mock_server().await;
     let call_id = "permissionrequest-apply-patch";
@@ -2710,7 +2710,6 @@ async fn permission_request_hook_allows_apply_patch_with_write_alias() -> Result
     .await;
 
     let mut builder = test_codex()
-        .with_model("gpt-5.4")
         .with_pre_build_hook(|home| {
             write_permission_request_hook(
                 home,
@@ -2788,7 +2787,6 @@ async fn permission_request_hook_sees_raw_exec_command_input() -> Result<()> {
     .await;
 
     let mut builder = test_codex()
-        .with_model("gpt-5.4")
         .with_pre_build_hook(|home| {
             install_allow_permission_request_hook(home)
                 .expect("failed to write permission request hook test fixture");
@@ -3308,7 +3306,6 @@ async fn assert_pre_tool_use_rewrites_bash_surface(surface: BashRewriteSurface) 
 
     let updated_input = serde_json::json!({ "command": rewritten_command });
     let mut builder = test_codex()
-        .with_model("gpt-5.4")
         .with_pre_build_hook(move |home| {
             write_updating_pre_tool_use_hook(home, "^Bash$", &updated_input)
                 .expect("failed to write updating pre tool use hook fixture");
@@ -3808,7 +3805,6 @@ async fn pre_tool_use_blocks_shell_when_defined_in_config_toml() -> Result<()> {
     .await;
 
     let mut builder = test_codex()
-        .with_model("gpt-5.4")
         .with_pre_build_hook(|home| {
             write_pre_tool_use_hook_toml(
                 home,
@@ -3892,7 +3888,6 @@ async fn pre_tool_use_merges_hooks_json_and_config_toml() -> Result<()> {
     .await;
 
     let mut builder = test_codex()
-        .with_model("gpt-5.4")
         .with_pre_build_hook(|home| {
             write_pre_tool_use_hook(home, Some("^Bash$"), "allow", "unused")
                 .expect("failed to write hooks.json hook fixture");
@@ -3995,7 +3990,6 @@ async fn pre_tool_use_blocks_exec_command_before_execution() -> Result<()> {
     .await;
 
     let mut builder = test_codex()
-        .with_model("gpt-5.4")
         .with_pre_build_hook(|home| {
             write_pre_tool_use_hook(home, Some("^Bash$"), "exit_2", "blocked exec command")
                 .expect("failed to write pre tool use hook test fixture");
@@ -4077,7 +4071,6 @@ async fn pre_tool_use_blocks_apply_patch_before_execution() -> Result<()> {
     .await;
 
     let mut builder = test_codex()
-        .with_model("gpt-5.4")
         .with_pre_build_hook(|home| {
             write_pre_tool_use_hook(
                 home,
@@ -4158,7 +4151,6 @@ async fn pre_tool_use_rewrites_apply_patch_before_execution() -> Result<()> {
 
     let updated_input = serde_json::json!({ "command": rewritten_patch });
     let mut builder = test_codex()
-        .with_model("gpt-5.4")
         .with_pre_build_hook(move |home| {
             write_updating_pre_tool_use_hook(home, "^apply_patch$", &updated_input)
                 .expect("failed to write updating pre tool use hook fixture");
@@ -4221,7 +4213,6 @@ async fn pre_tool_use_blocks_apply_patch_with_write_alias() -> Result<()> {
     .await;
 
     let mut builder = test_codex()
-        .with_model("gpt-5.4")
         .with_pre_build_hook(|home| {
             write_pre_tool_use_hook(home, Some("^Write$"), "json_deny", "blocked write alias")
                 .expect("failed to write pre tool use hook test fixture");
@@ -4413,7 +4404,6 @@ async fn post_tool_use_records_additional_context_for_shell_command() -> Result<
 
     let post_context = "Remember the bash post-tool note.";
     let mut builder = test_codex()
-        .with_model("gpt-5.4")
         .with_pre_build_hook(|home| {
             write_post_tool_use_hook(home, Some("^Bash$"), "context", post_context)
                 .expect("failed to write post tool use hook test fixture");
@@ -4503,7 +4493,6 @@ async fn post_tool_use_block_decision_replaces_shell_command_output_with_reason(
 
     let reason = "bash output looked sketchy";
     let mut builder = test_codex()
-        .with_model("gpt-5.4")
         .with_pre_build_hook(|home| {
             write_post_tool_use_hook(home, Some("^Bash$"), "decision_block", reason)
                 .expect("failed to write post tool use hook test fixture");
@@ -4862,7 +4851,6 @@ async fn post_tool_use_records_additional_context_for_apply_patch() -> Result<()
 
     let post_context = "Remember the apply_patch post-tool note.";
     let mut builder = test_codex()
-        .with_model("gpt-5.4")
         .with_pre_build_hook(|home| {
             write_post_tool_use_hook(home, Some("^apply_patch$"), "context", post_context)
                 .expect("failed to write post tool use hook test fixture");
@@ -4934,7 +4922,6 @@ async fn post_tool_use_records_apply_patch_context_with_edit_alias() -> Result<(
 
     let post_context = "Remember the edit alias post-tool note.";
     let mut builder = test_codex()
-        .with_model("gpt-5.4")
         .with_pre_build_hook(|home| {
             write_post_tool_use_hook(home, Some("^Edit$"), "context", post_context)
                 .expect("failed to write post tool use hook test fixture");

@@ -4,6 +4,8 @@ use crate::agent::role::apply_role_to_config_for_multi_agent_v2;
 use crate::config::PermissionProfileSnapshot;
 use codex_extension_api::ExtensionDataInit;
 
+const AGENT_NAMES: &str = include_str!("../agent_names.txt");
+
 struct SpawnAgentThreadInheritance {
     environments: Option<TurnEnvironmentSnapshot>,
     exec_policy: Option<Arc<crate::exec_policy::ExecPolicyManager>>,
@@ -16,8 +18,31 @@ struct SpawnAgentThreadInheritance {
 /// provide user input directly, making an uncontextualized inter-agent communication
 /// unrepresentable.
 enum SpawnInitialInput {
+    Idle,
     UserInput(Vec<UserInput>),
     InterAgentCommunication(InterAgentCommunication, AgentCommunicationContext),
+}
+
+fn default_agent_nickname_list() -> Vec<&'static str> {
+    AGENT_NAMES
+        .lines()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .collect()
+}
+
+pub(super) fn agent_nickname_candidates(config: &Config, role_name: Option<&str>) -> Vec<String> {
+    let role_name = role_name.unwrap_or(DEFAULT_ROLE_NAME);
+    if let Some(candidates) =
+        resolve_role_config(config, role_name).and_then(|role| role.nickname_candidates.clone())
+    {
+        return candidates;
+    }
+
+    default_agent_nickname_list()
+        .into_iter()
+        .map(ToOwned::to_owned)
+        .collect()
 }
 
 fn keep_forked_rollout_item(item: &RolloutItem, preserve_reference_context_item: bool) -> bool {
@@ -206,6 +231,31 @@ impl AgentControl {
         .await
     }
 
+    pub(crate) async fn spawn_idle_agent(
+        &self,
+        config: Config,
+        session_source: SessionSource,
+        parent_thread_id: ThreadId,
+    ) -> CodexResult<crate::thread_manager::NewThread> {
+        let live_agent = Box::pin(self.spawn_agent_internal(
+            config,
+            SpawnInitialInput::Idle,
+            Some(session_source),
+            SpawnAgentOptions {
+                parent_thread_id: Some(parent_thread_id),
+                ..Default::default()
+            },
+        ))
+        .await?;
+        let state = self.upgrade()?;
+        let thread = state.get_thread(live_agent.thread_id).await?;
+        Ok(crate::thread_manager::NewThread {
+            thread_id: live_agent.thread_id,
+            session_configured: thread.session_configured(),
+            thread,
+        })
+    }
+
     pub(crate) async fn spawn_agent_with_communication(
         &self,
         config: Config,
@@ -244,25 +294,6 @@ impl AgentControl {
                 include_history: false,
             })
             .await?;
-        let stored_model = stored_thread.model.clone().ok_or_else(|| {
-            CodexErr::InvalidRequest(format!(
-                "cannot resume agent {thread_id}: its persisted runtime has no model"
-            ))
-        })?;
-        let stored_provider = config
-            .model_providers
-            .get(&stored_thread.model_provider)
-            .cloned()
-            .ok_or_else(|| {
-                CodexErr::InvalidRequest(format!(
-                    "cannot resume agent {thread_id}: persisted provider `{}` is not configured",
-                    stored_thread.model_provider
-                ))
-            })?;
-        config.model = Some(stored_model);
-        config.model_provider_id = stored_thread.model_provider;
-        config.model_provider = stored_provider;
-        config.model_reasoning_effort = stored_thread.reasoning_effort.clone();
         let stored_source = stored_thread.source.clone();
         let stored_parent_thread_id = stored_thread.parent_thread_id;
         let history = load_agent_model_context(&state, thread_id, stored_thread.history_mode)
@@ -344,8 +375,6 @@ impl AgentControl {
             Ok(reloaded_thread) => {
                 residency_slot.commit(reloaded_thread.thread_id);
                 state.notify_thread_created(reloaded_thread.thread_id);
-                self.recover_inter_agent_communications(reloaded_thread.thread_id)
-                    .await?;
                 Ok(())
             }
             Err(err) => {
@@ -376,29 +405,7 @@ impl AgentControl {
                 &config,
             )
             .await;
-        if let Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-            parent_thread_id,
-            depth,
-            ..
-        })) = session_source.as_ref()
-        {
-            let parent_thread = state.get_thread(*parent_thread_id).await?;
-            let parent_snapshot = parent_thread.config_snapshot().await;
-            let parent_depth = match &parent_snapshot.session_source {
-                SessionSource::SubAgent(SubAgentSource::ThreadSpawn { depth, .. }) => *depth,
-                _ => 0,
-            };
-            let expected_depth = parent_depth + 1;
-            if *depth != expected_depth {
-                return Err(CodexErr::InvalidRequest(format!(
-                    "spawn depth {depth} does not follow parent depth {parent_depth}"
-                )));
-            }
-        }
-        let initial_operation_uses_v2_mailbox = multi_agent_version == MultiAgentVersion::V2
-            && matches!(initial_operation, Op::InterAgentCommunication { .. });
-        if !initial_operation_uses_v2_mailbox && let Some(session_source) = session_source.as_ref()
-        {
+        if let Some(session_source) = session_source.as_ref() {
             self.ensure_execution_capacity(multi_agent_version, session_source)?;
         }
         let agent_max_threads = config.effective_agent_max_threads(multi_agent_version);
@@ -433,8 +440,8 @@ impl AgentControl {
                 parent_thread_id,
                 depth,
                 agent_path,
+                agent_nickname,
                 agent_role,
-                agent_class,
                 ..
             })) => {
                 let (session_source, agent_metadata) = self.prepare_thread_spawn(
@@ -444,8 +451,7 @@ impl AgentControl {
                     depth,
                     agent_path,
                     agent_role,
-                    /*preferred_agent_nickname*/ None,
-                    agent_class,
+                    agent_nickname,
                 )?;
                 (Some(session_source), agent_metadata)
             }
@@ -547,6 +553,7 @@ impl AgentControl {
         .await;
 
         match initial_input {
+            SpawnInitialInput::Idle => {}
             SpawnInitialInput::UserInput(input) => {
                 self.send_input_after_capacity_check(
                     new_thread.thread_id,
@@ -864,8 +871,6 @@ impl AgentControl {
         if config.multi_agent_version_from_features() == MultiAgentVersion::V2
             || resumed_multi_agent_version == MultiAgentVersion::V2
         {
-            self.restore_persisted_agent_subtree(resumed_thread_id)
-                .await?;
             return Ok(resumed_thread_id);
         }
         let Some(agent_graph_store) = state.agent_graph_store() else {
@@ -976,6 +981,7 @@ impl AgentControl {
                 agent_path,
                 agent_role: _,
                 agent_nickname: _,
+                agent_class: _,
             }) => self.prepare_thread_spawn(
                 &mut reservation,
                 &config,

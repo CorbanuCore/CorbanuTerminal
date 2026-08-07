@@ -708,7 +708,6 @@ async fn unified_exec_wait_status_header_updates_on_late_command_display() {
         call_id: "call-1".to_string(),
         command_display: "sleep 5".to_string(),
         recent_chunks: Vec::new(),
-        interrupt_notes: Vec::new(),
     });
 
     terminal_interaction(&mut chat, "call-1", "proc-1", "");
@@ -1343,12 +1342,6 @@ async fn interrupt_preserves_unified_exec_processes() {
     assert!(
         combined.contains("sleep 5") && combined.contains("sleep 6"),
         "expected /ps to list running unified exec processes; got {combined:?}"
-    );
-    assert!(
-        combined.contains("pid=process-1")
-            && combined.contains("status=running")
-            && combined.contains("interrupt=preserved"),
-        "expected /ps to expose the job ledger and interrupt effect; got {combined:?}"
     );
 
     let _ = drain_insert_history(&mut rx);

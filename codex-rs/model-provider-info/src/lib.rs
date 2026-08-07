@@ -32,6 +32,8 @@ const DEFAULT_STREAM_LONG_FAILURE_RETRY_THRESHOLD_MS: u64 = 60_000;
 const DEFAULT_STREAM_LONG_FAILURE_MAX_RETRIES: u64 = 1;
 const DEFAULT_STREAM_MAX_RETRIES: u64 = 5;
 const DEFAULT_REQUEST_MAX_RETRIES: u64 = 4;
+const DEFAULT_ANTHROPIC_REQUEST_BODY_MAX_BYTES: usize = 30_000_000;
+const DEFAULT_ANTHROPIC_RETRY_BODY_MAX_BYTES: usize = 15_000_000;
 pub const DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS: u64 = 15_000;
 /// Hard cap for user-configured `stream_max_retries`.
 const MAX_STREAM_MAX_RETRIES: u64 = 100;
@@ -516,6 +518,30 @@ impl<'de> Deserialize<'de> for WireApi {
 }
 
 /// Serializable representation of a provider definition.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct ProviderRuntimePolicy {
+    /// Maximum serialized request body accepted before inline images are omitted.
+    pub request_body_max_bytes: usize,
+    /// Maximum serialized request body used for one retry after HTTP 413.
+    pub retry_request_body_max_bytes: usize,
+    /// Optional provider-side web-search call limit for one response.
+    ///
+    /// `None` leaves the provider's own default in control.
+    pub web_search_max_uses: Option<u32>,
+}
+
+impl Default for ProviderRuntimePolicy {
+    fn default() -> Self {
+        Self {
+            request_body_max_bytes: DEFAULT_ANTHROPIC_REQUEST_BODY_MAX_BYTES,
+            retry_request_body_max_bytes: DEFAULT_ANTHROPIC_RETRY_BODY_MAX_BYTES,
+            web_search_max_uses: None,
+        }
+    }
+}
+
+/// Serializable representation of a provider definition.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct ModelProviderInfo {
@@ -570,6 +596,10 @@ pub struct ModelProviderInfo {
     pub stream_long_failure_retry_threshold_ms: Option<u64>,
     /// Maximum retry count for long stream failures. Values above one are clamped to one.
     pub stream_long_failure_max_retries: Option<u64>,
+    /// Typed request and provider-tool budgets. These defaults are operator-overridable and are
+    /// consumed only by adapters that need them.
+    #[serde(default)]
+    pub runtime_policy: ProviderRuntimePolicy,
     /// Maximum time (in milliseconds) to wait for a websocket connection attempt before treating
     /// it as failed.
     pub websocket_connect_timeout_ms: Option<u64>,
@@ -599,6 +629,27 @@ pub struct ModelProviderAwsAuthInfo {
 
 impl ModelProviderInfo {
     pub fn validate(&self) -> std::result::Result<(), String> {
+        if self.runtime_policy.request_body_max_bytes == 0 {
+            return Err(
+                "runtime_policy.request_body_max_bytes must be greater than zero".to_string(),
+            );
+        }
+        if self.runtime_policy.retry_request_body_max_bytes == 0 {
+            return Err(
+                "runtime_policy.retry_request_body_max_bytes must be greater than zero".to_string(),
+            );
+        }
+        if self.runtime_policy.retry_request_body_max_bytes
+            > self.runtime_policy.request_body_max_bytes
+        {
+            return Err(
+                "runtime_policy.retry_request_body_max_bytes must not exceed request_body_max_bytes"
+                    .to_string(),
+            );
+        }
+        if self.runtime_policy.web_search_max_uses == Some(0) {
+            return Err("runtime_policy.web_search_max_uses must be greater than zero".to_string());
+        }
         if let Some(chat_completions_provider) = &self.chat_completions_provider
             && !chat_completions_provider.is_object()
         {
@@ -803,6 +854,11 @@ impl ModelProviderInfo {
     }
 
     pub fn create_openai_provider(base_url: Option<String>) -> ModelProviderInfo {
+        // A custom OpenAI endpoint is only known to implement the HTTP Responses API. Assuming
+        // the first-party WebSocket transport makes proxies and local test servers spend their
+        // retry budget on an unsupported protocol before falling back. Users with a WebSocket-
+        // capable alternate endpoint can declare a typed custom provider explicitly.
+        let supports_websockets = base_url.is_none();
         ModelProviderInfo {
             name: OPENAI_PROVIDER_NAME.into(),
             base_url,
@@ -840,9 +896,10 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: true,
-            supports_websockets: true,
+            supports_websockets,
             supports_standalone_web_search: true,
         }
     }
@@ -867,9 +924,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -902,9 +961,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -928,9 +989,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -957,9 +1020,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -983,9 +1048,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1009,9 +1076,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1035,9 +1104,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1061,9 +1132,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1087,9 +1160,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1113,9 +1188,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1139,9 +1216,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1165,9 +1244,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1191,9 +1272,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1217,9 +1300,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1243,9 +1328,11 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            supports_standalone_web_search: false,
         }
     }
 
@@ -1280,6 +1367,7 @@ impl ModelProviderInfo {
             stream_actionable_timeout_ms: None,
             stream_long_failure_retry_threshold_ms: None,
             stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
@@ -1289,6 +1377,72 @@ impl ModelProviderInfo {
 
     pub fn is_openai(&self) -> bool {
         self.name == OPENAI_PROVIDER_NAME
+    }
+
+    pub fn is_anthropic(&self) -> bool {
+        self.name == ANTHROPIC_PROVIDER_NAME
+    }
+
+    pub fn is_claude_plan(&self) -> bool {
+        self.name == CLAUDE_PLAN_PROVIDER_NAME
+    }
+
+    /// Direct Anthropic API keys are sent as `x-api-key`; the other built-in
+    /// provider API keys remain Bearer tokens.
+    pub fn api_key_header_name(&self) -> Option<&'static str> {
+        (self.env_key.as_deref() == Some(ANTHROPIC_API_KEY_ENV_VAR)).then_some("x-api-key")
+    }
+
+    pub fn is_ambient(&self) -> bool {
+        self.name == AMBIENT_PROVIDER_NAME
+    }
+
+    pub fn is_pfterminal_plan(&self) -> bool {
+        self.name == PFTERMINAL_PLAN_PROVIDER_NAME
+    }
+
+    pub fn is_kimi_code(&self) -> bool {
+        self.name == KIMI_CODE_PROVIDER_NAME
+    }
+
+    pub fn chat_stop_semantics(&self) -> ChatStopSemantics {
+        if self.is_kimi_code() {
+            ChatStopSemantics::AmbiguousForActionTurns
+        } else {
+            ChatStopSemantics::ReliableTerminal
+        }
+    }
+
+    pub fn is_zai(&self) -> bool {
+        self.name == ZAI_PROVIDER_NAME
+    }
+
+    fn retries_transient_rate_limits(&self) -> bool {
+        self.is_zai()
+    }
+
+    pub fn is_openrouter(&self) -> bool {
+        self.name == OPENROUTER_PROVIDER_NAME
+    }
+
+    pub fn is_meta(&self) -> bool {
+        self.name == META_PROVIDER_NAME
+    }
+
+    pub fn is_baseten(&self) -> bool {
+        self.name == BASETEN_PROVIDER_NAME
+    }
+
+    pub fn is_vercel(&self) -> bool {
+        self.name == VERCEL_PROVIDER_NAME
+    }
+
+    /// Detect Vercel AI Gateway by endpoint so renamed custom providers receive
+    /// the same routing behavior without relying on a display-name convention.
+    pub fn is_vercel_gateway(&self) -> bool {
+        self.base_url
+            .as_deref()
+            .is_some_and(is_vercel_gateway_base_url)
     }
 
     pub fn uses_openai_actor_authorization(&self) -> bool {
@@ -1434,6 +1588,7 @@ fn apply_transport_overrides(
     built_in_provider: &mut ModelProviderInfo,
     configured_provider: ModelProviderInfo,
 ) {
+    built_in_provider.runtime_policy = configured_provider.runtime_policy;
     if configured_provider.request_max_retries.is_some() {
         built_in_provider.request_max_retries = configured_provider.request_max_retries;
     }
@@ -1506,6 +1661,7 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: Default::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,

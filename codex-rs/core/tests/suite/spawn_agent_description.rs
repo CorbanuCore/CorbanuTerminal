@@ -10,6 +10,9 @@ use codex_models_manager::manager::SharedModelsManager;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::ModelInfo;
+use codex_protocol::openai_models::ModelBilling;
+use codex_protocol::openai_models::ModelCapabilityTier;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ModelServiceTier;
 use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ModelsResponse;
@@ -59,7 +62,15 @@ fn test_model_info(
 ) -> ModelInfo {
     ModelInfo {
         slug: slug.to_string(),
-        orchestration: None,
+        orchestration: Some(ModelOrchestrationMetadata::Eligible {
+            provider_id: "openai".to_string(),
+            capability: ModelCapabilityTier::Balanced,
+            billing: ModelBilling::Metered {
+                input_milli_usd_per_million_tokens: 1_000,
+                output_milli_usd_per_million_tokens: 2_000,
+                cached_input_milli_usd_per_million_tokens: Some(100),
+            },
+        }),
         chat_completions: Default::default(),
         display_name: display_name.to_string(),
         description: Some(description.to_string()),
@@ -95,6 +106,7 @@ fn test_model_info(
         supports_image_detail_original: false,
         context_window: Some(272_000),
         max_context_window: None,
+        max_output_tokens: None,
         auto_compact_token_limit: None,
         comp_hash: None,
         effective_context_window_percent: 95,
@@ -196,43 +208,32 @@ async fn spawn_agent_description_lists_visible_models_and_reasoning_efforts() ->
         spawn_agent_description(&body).expect("spawn_agent description should be present");
 
     assert!(
-        description.contains(
-            "- `ambient` / `z-ai/glm-5.2`; metered $0.76/$2.42 per M tok, balanced; text-only; efforts: medium (default), xhigh"
-        ),
-        "expected an eligible exact provider route in spawn_agent description: {description:?}"
+        description.contains("- `openai` / `visible-model`; balanced; metered $1/$2 per M input/output tokens"),
+        "expected visible model summary in spawn_agent description: {description:?}"
+    );
+    assert!(
+        description.contains("Available exact runtime overrides:"),
+        "expected model choices to be framed as overrides in spawn_agent description: {description:?}"
     );
     assert!(
         description.contains(
-            "Available authorized exact runtime overrides (optional; omit both fields to inherit the current runtime). Pass the provider as `model_provider` and the model as `model`."
+            "An explicit user provider/model request is a hard constraint: refuse when unavailable and never substitute silently."
         ),
-        "expected provider/model choices to be framed as exact runtime pairs: {description:?}"
-    );
-    assert!(
-        description
-            .contains("Current inherited runtime: `ambient` / `visible-model`; effort medium."),
-        "expected the exact parent runtime in the spawn catalogue: {description:?}"
+        "expected exact-route guidance in spawn_agent description: {description:?}"
     );
     assert!(
         description.contains(
-            "Default allocation policy: compare the task with this catalogue before every spawn."
+            "use the cheapest authorized route that meets the task"
         ),
-        "expected model-aware default allocation policy: {description:?}"
+        "expected capability and cost allocation guidance in spawn_agent description: {description:?}"
     );
     assert!(
-        description.contains(
-            "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed."
-        ),
-        "expected inherited-model guidance in spawn_agent description: {description:?}"
+        description.contains("efforts: low, medium (default), high"),
+        "expected default reasoning effort in spawn_agent description: {description:?}"
     );
     assert!(
-        description.contains(
-            "Do not set the `model` field unless the user explicitly asks for a different model or there is a clear task-specific reason."
-        ),
-        "expected model override usage guidance in spawn_agent description: {description:?}"
-    );
-    assert!(
-        !description.contains("- model `visible-model`"),
-        "remote models without orchestration policy must fail closed as overrides: {description:?}"
+        description.contains("service tiers: priority"),
+        "expected service tier guidance in spawn_agent description: {description:?}"
     );
     assert!(
         !description.contains("hidden-model"),

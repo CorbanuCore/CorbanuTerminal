@@ -1,5 +1,10 @@
 # GPU rental release qualification — 2026-07-16
 
+> Historical evidence only. Any pre-0731 DeepSeek recipe mentioned below is
+> retired and is not launchable in PF Terminal 0.1.27. The sole selectable
+> DeepSeek rental is `deepseek-flash-0731-2xh200` for
+> `deepseek-ai/DeepSeek-V4-Flash-0731`.
+
 Status: **PASS — live qualification complete; release may proceed with stated limitations**
 
 Candidate:

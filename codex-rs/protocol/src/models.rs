@@ -853,6 +853,11 @@ pub enum ResponseItem {
         #[ts(optional)]
         content: Option<Vec<ReasoningItemContent>>,
         encrypted_content: Option<String>,
+        /// Provider-native reasoning block that must be replayed byte-for-byte
+        /// when continuing an Anthropic Messages conversation.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "unknown", optional)]
+        anthropic_content_block: Option<serde_json::Value>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         internal_chat_message_metadata_passthrough: Option<InternalChatMessageMetadataPassthrough>,
@@ -1348,7 +1353,7 @@ fn should_serialize_reasoning_content(content: &Option<Vec<ReasoningItemContent>
         Some(content) => !content
             .iter()
             .any(|c| matches!(c, ReasoningItemContent::ReasoningText { .. })),
-        None => false,
+        None => true,
     }
 }
 
@@ -3448,6 +3453,7 @@ mod tests {
                 id: expected_id.clone(),
                 status: expected_status.clone(),
                 action: expected_action.clone(),
+                anthropic_content_block: None,
                 internal_chat_message_metadata_passthrough: None,
             };
             assert_eq!(parsed, expected);

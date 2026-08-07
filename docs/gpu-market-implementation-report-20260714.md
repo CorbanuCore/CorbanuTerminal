@@ -1,5 +1,10 @@
 # GPU market implementation report — 2026-07-15
 
+> Historical implementation record. Its pre-0731 DeepSeek recipes are retired
+> and are not present in the 0.1.27 product catalogue. The sole selectable
+> DeepSeek rental is `deepseek-flash-0731-2xh200` for
+> `deepseek-ai/DeepSeek-V4-Flash-0731`.
+
 ## Outcome
 
 The GPU rental market is implemented on `feat/gpu-market-v2` and was qualified

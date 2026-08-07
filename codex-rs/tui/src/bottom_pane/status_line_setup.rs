@@ -15,10 +15,9 @@
 //! - Permissions profile
 //! - Approval mode
 //! - Context usage (remaining %, used %, window size)
-//! - Unified tokens-per-second estimate
 //! - Usage limits (primary, secondary)
 //! - Session info (thread title, thread ID, tokens used)
-//! - Application version and product brand
+//! - Application version
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -143,12 +142,6 @@ pub(crate) enum StatusLineItem {
 
     /// Latest checklist task progress from `update_plan` (if available).
     TaskProgress,
-
-    /// Product branding.
-    Brand,
-
-    /// Unified generated-token throughput estimate.
-    Tps,
 }
 
 impl StatusLineItem {
@@ -201,8 +194,6 @@ impl StatusLineItem {
             StatusLineItem::TaskProgress => {
                 "Latest task progress from update_plan (omitted until available)"
             }
-            StatusLineItem::Brand => "Product branding",
-            StatusLineItem::Tps => "Generated tokens per second from the unified estimator",
         }
     }
 
@@ -234,8 +225,6 @@ impl StatusLineItem {
             StatusLineItem::ThreadTitle => StatusSurfacePreviewItem::ThreadTitle,
             StatusLineItem::WorkspaceHeadline => StatusSurfacePreviewItem::WorkspaceHeadline,
             StatusLineItem::TaskProgress => StatusSurfacePreviewItem::TaskProgress,
-            StatusLineItem::Brand => StatusSurfacePreviewItem::Brand,
-            StatusLineItem::Tps => StatusSurfacePreviewItem::Tps,
         }
     }
 }
@@ -480,12 +469,6 @@ mod tests {
             "reasoning".parse::<StatusLineItem>(),
             Ok(StatusLineItem::Reasoning)
         );
-    }
-
-    #[test]
-    fn brand_is_selectable_id() {
-        assert_eq!(StatusLineItem::Brand.to_string(), "brand");
-        assert_eq!("brand".parse::<StatusLineItem>(), Ok(StatusLineItem::Brand));
     }
 
     #[test]

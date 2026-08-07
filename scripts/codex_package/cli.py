@@ -83,6 +83,16 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--extra-bin",
+        action="append",
+        default=[],
+        metavar="NAME=PATH",
+        help=(
+            "Optional prebuilt extra executable for the selected package variant. "
+            "May be repeated. Missing extras are built with Cargo."
+        ),
+    )
+    parser.add_argument(
         "--code-mode-host-bin",
         type=Path,
         help=(
@@ -163,6 +173,7 @@ def main() -> int:
             "prebuilt entrypoint executable",
             "--entrypoint-bin",
         ),
+        extra_bins=extra_bins,
         code_mode_host_bin=resolve_optional_input_path(
             args.code_mode_host_bin,
             "prebuilt code-mode host executable",
@@ -187,6 +198,7 @@ def main() -> int:
     version = read_workspace_version()
     inputs = PackageInputs(
         entrypoint_bin=source_outputs.entrypoint_bin,
+        extra_bins=source_outputs.extra_bins,
         code_mode_host_bin=source_outputs.code_mode_host_bin,
         rg_bin=resolve_rg_bin(spec, args.rg_bin),
         zsh_bin=resolve_zsh_bin(spec, args.zsh_manifest, zsh_bin=args.zsh_bin),

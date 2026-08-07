@@ -63,13 +63,13 @@ impl Drop for WalletRecoveryView {
 impl BottomPaneView for WalletRecoveryView {
     fn handle_key_event(&mut self, event: KeyEvent) {
         match event.code {
-            KeyCode::Enter => self.close(true),
-            KeyCode::Esc => self.close(false),
+            KeyCode::Enter => self.close(/*accepted*/ true),
+            KeyCode::Esc => self.close(/*accepted*/ false),
             _ => {}
         }
     }
     fn on_ctrl_c(&mut self) -> CancellationEvent {
-        self.close(false);
+        self.close(/*accepted*/ false);
         CancellationEvent::Handled
     }
     fn is_complete(&self) -> bool {

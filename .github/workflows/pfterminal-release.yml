@@ -7,12 +7,17 @@ on:
         description: "Release version; must match codex-rs/Cargo.toml."
         required: true
         type: string
-        default: "0.1.26"
+        default: "0.1.27"
       publish_release:
         description: "Create or update the matching GitHub release."
         required: true
         type: boolean
         default: false
+      prerelease:
+        description: "Mark the published GitHub release as a prerelease until RC qualification is complete."
+        required: true
+        type: boolean
+        default: true
       make_latest:
         description: "Mark the GitHub release as latest when publishing."
         required: true
@@ -43,8 +48,15 @@ jobs:
         shell: bash
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          MAKE_LATEST: ${{ inputs.make_latest }}
         run: |
           set -euo pipefail
+
+          if [[ "$PRERELEASE" == "true" && "$MAKE_LATEST" == "true" ]]; then
+            echo "A prerelease cannot be promoted to latest in the same run"
+            exit 1
+          fi
 
           if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta)(\.[0-9]+)?)?$ ]]; then
             echo "release_version must be x.y.z, x.y.z-alpha.N, or x.y.z-beta.N"
@@ -537,6 +549,13 @@ jobs:
           cp scripts/install/install.sh release-dist/install.sh
           cp scripts/install/install.ps1 release-dist/install.ps1
 
+          awk -v heading="# PFTerminal ${{ needs.validate.outputs.version }}" '
+            $0 == heading { emit = 1 }
+            emit && $0 == "---" { exit }
+            emit { print }
+          ' CHANGELOG.md > release-dist/RELEASE_NOTES.md
+          test -s release-dist/RELEASE_NOTES.md
+
           find release-dist -maxdepth 1 -type f \( -name 'pfterminal-package-*.tar.gz' -o -name 'pfterminal-package-*.zip' \) -print |
             sort |
             while IFS= read -r archive; do
@@ -588,4 +607,5 @@ jobs:
           files: release-dist/*
           overwrite_files: true
           make_latest: ${{ inputs.make_latest }}
-          prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
+          prerelease: ${{ inputs.prerelease }}
+          body_path: release-dist/RELEASE_NOTES.md

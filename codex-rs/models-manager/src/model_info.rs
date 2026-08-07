@@ -1,6 +1,8 @@
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::openai_models::ConfigShellToolType;
+use codex_protocol::openai_models::ChatCompletionsCapabilities;
+use codex_protocol::openai_models::ChatReasoningEffortProtocol;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelInstructionsVariables;
 use codex_protocol::openai_models::ModelMessages;
@@ -127,9 +129,9 @@ fn clear_instruction_messages(model: &mut ModelInfo) {
 
 /// Build a minimal fallback model descriptor for missing/unknown slugs.
 pub fn model_info_from_slug(slug: &str) -> ModelInfo {
-    let is_deepseek_v4_flash = slug == "deepseek-ai/DeepSeek-V4-Flash";
+    let is_deepseek_v4_flash = slug == "deepseek-ai/DeepSeek-V4-Flash-0731";
     let curated_gpu_model = match slug {
-        "deepseek-ai/DeepSeek-V4-Flash" => Some(("DeepSeek V4 Flash", 384_000)),
+        "deepseek-ai/DeepSeek-V4-Flash-0731" => Some(("DeepSeek V4 Flash 0731", 1_048_576)),
         "zai-org/GLM-5.2-FP8" => Some(("GLM 5.2 FP8", 131_072)),
         _ => None,
     };
@@ -144,7 +146,14 @@ pub fn model_info_from_slug(slug: &str) -> ModelInfo {
     ModelInfo {
         slug: slug.to_string(),
         orchestration: None,
-        chat_completions: Default::default(),
+        chat_completions: ChatCompletionsCapabilities {
+            reasoning_effort_protocol: if is_deepseek_v4_flash {
+                ChatReasoningEffortProtocol::HighMaxDefaultHigh
+            } else {
+                ChatReasoningEffortProtocol::ProviderDefault
+            },
+            ..Default::default()
+        },
         display_name,
         description: None,
         default_reasoning_level: is_deepseek_v4_flash.then_some(ReasoningEffort::High),
@@ -185,6 +194,7 @@ pub fn model_info_from_slug(slug: &str) -> ModelInfo {
         supports_image_detail_original: false,
         context_window: Some(context_window),
         max_context_window: Some(context_window),
+        max_output_tokens: (slug == "deepseek-ai/DeepSeek-V4-Flash-0731").then_some(393_216),
         auto_compact_token_limit: None,
         comp_hash: None,
         effective_context_window_percent: 95,
@@ -200,21 +210,31 @@ pub fn model_info_from_slug(slug: &str) -> ModelInfo {
 }
 
 fn local_personality_messages_for_slug(slug: &str) -> Option<ModelMessages> {
-    match slug {
-        "gpt-5.2-codex" | "exp-codex-personality" => Some(ModelMessages {
-            instructions_template: Some(format!(
-                "{DEFAULT_PERSONALITY_HEADER}\n\n{PERSONALITY_PLACEHOLDER}\n\n{BASE_INSTRUCTIONS}"
-            )),
-            instructions_variables: Some(ModelInstructionsVariables {
-                personality_default: Some(String::new()),
-                personality_friendly: Some(LOCAL_FRIENDLY_TEMPLATE.to_string()),
-                personality_pragmatic: Some(LOCAL_PRAGMATIC_TEMPLATE.to_string()),
-            }),
-            approvals: None,
-            auto_review: None,
-            permissions: None,
-            token_budget: None,
+    let lower_slug = slug.to_ascii_lowercase();
+    let header = if matches!(slug, "gpt-5.2-codex" | "exp-codex-personality") {
+        DEFAULT_PERSONALITY_HEADER
+    } else if lower_slug.contains("glm")
+        || lower_slug.contains("zai")
+        || lower_slug.contains("deepseek")
+    {
+        COMPAT_PERSONALITY_HEADER
+    } else {
+        return None;
+    };
+
+    Some(ModelMessages {
+        instructions_template: Some(format!(
+            "{header}\n\n{PERSONALITY_PLACEHOLDER}\n\n{BASE_INSTRUCTIONS}"
+        )),
+        instructions_variables: Some(ModelInstructionsVariables {
+            personality_default: Some(String::new()),
+            personality_friendly: Some(LOCAL_FRIENDLY_TEMPLATE.to_string()),
+            personality_pragmatic: Some(LOCAL_PRAGMATIC_TEMPLATE.to_string()),
         }),
+        approvals: None,
+        auto_review: None,
+        permissions: None,
+        token_budget: None,
     })
 }
 

@@ -1335,7 +1335,6 @@ async fn multiple_auto_compact_per_task_runs_after_token_limit_hit() {
         "type": "message"
       },
       {
-        "content": null,
         "encrypted_content": encrypted_content_1,
         "summary": [
           {
@@ -1435,7 +1434,6 @@ async fn multiple_auto_compact_per_task_runs_after_token_limit_hit() {
         "type": "message"
       },
       {
-        "content": null,
         "encrypted_content": encrypted_content_2,
         "summary": [
           {
@@ -1535,7 +1533,6 @@ async fn multiple_auto_compact_per_task_runs_after_token_limit_hit() {
         "type": "message"
       },
       {
-        "content": null,
         "encrypted_content": encrypted_content_3,
         "summary": [
           {
@@ -2794,6 +2791,132 @@ async fn pre_sampling_legacy_remote_compact_falls_back_after_previous_model_inva
         Some(next_model)
     );
     assert_eq!(requests[1].body_json()["model"].as_str(), Some(next_model));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cross_provider_model_switch_compacts_and_samples_only_on_selected_provider() {
+    skip_if_no_network!();
+
+    let previous_server = MockServer::start().await;
+    let selected_server = MockServer::start().await;
+    let previous_model = "gpt-5.4";
+    let selected_model = "gpt-5.2";
+    let model_catalog = ModelsResponse {
+        models: vec![
+            model_info_with_optional_comp_hash(previous_model, Some("hash-a")),
+            model_info_with_optional_comp_hash(selected_model, Some("hash-b")),
+        ],
+    };
+    let previous_requests = mount_sse_sequence(
+        &previous_server,
+        vec![sse(vec![
+            ev_assistant_message("m1", "before provider switch"),
+            ev_completed_with_tokens("r1", /*total_tokens*/ 100),
+        ])],
+    )
+    .await;
+    let selected_requests = mount_sse_sequence(
+        &selected_server,
+        vec![
+            sse(vec![
+                ev_assistant_message("m2", "SELECTED_PROVIDER_SUMMARY"),
+                ev_completed_with_tokens("r2", /*total_tokens*/ 10),
+            ]),
+            sse(vec![
+                ev_assistant_message("m3", "after provider switch"),
+                ev_completed_with_tokens("r3", /*total_tokens*/ 100),
+            ]),
+        ],
+    )
+    .await;
+
+    let previous_provider = non_openai_model_provider(&previous_server);
+    let selected_provider = non_openai_model_provider(&selected_server);
+    let mut builder = test_codex()
+        .with_auth(CodexAuth::from_api_key("Test API Key"))
+        .with_model(previous_model)
+        .with_config(move |config| {
+            let previous_provider_id = config.model_provider_id.clone();
+            config.model_provider = previous_provider.clone();
+            config
+                .model_providers
+                .insert(previous_provider_id, previous_provider);
+            config
+                .model_providers
+                .insert("selected-provider".to_string(), selected_provider);
+            config.model_catalog = Some(model_catalog);
+            set_test_compact_prompt(config);
+        });
+    let test = builder
+        .build(&previous_server)
+        .await
+        .expect("build test codex");
+
+    test.codex
+        .submit(disabled_permission_user_turn(
+            "before provider switch",
+            test.cwd.path().to_path_buf(),
+            previous_model.to_string(),
+        ))
+        .await
+        .expect("submit first user turn");
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+
+    core_test_support::submit_thread_settings(
+        &test.codex,
+        codex_protocol::protocol::ThreadSettingsOverrides {
+            model: Some(selected_model.to_string()),
+            model_provider: Some("selected-provider".to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("commit exact provider/model pair");
+    let committed = test.codex.config_snapshot().await;
+    assert_eq!(committed.model, selected_model);
+    assert_eq!(committed.model_provider_id, "selected-provider");
+
+    test.codex
+        .submit(disabled_permission_user_turn(
+            "after provider switch",
+            test.cwd.path().to_path_buf(),
+            selected_model.to_string(),
+        ))
+        .await
+        .expect("submit selected-provider turn");
+    let terminal = wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::Error(_) | EventMsg::TurnComplete(_))
+    })
+    .await;
+    if let EventMsg::Error(error) = terminal {
+        panic!(
+            "selected-provider turn failed before completion (previous={}, selected={}): {error:?}",
+            previous_server.uri(),
+            selected_server.uri()
+        );
+    }
+
+    let previous = previous_requests.requests();
+    let selected = selected_requests.requests();
+    assert_eq!(
+        previous.len(),
+        1,
+        "the old provider must not receive compaction or sampling after acknowledgement"
+    );
+    assert_eq!(
+        selected.len(),
+        2,
+        "the selected provider should receive compaction and follow-up sampling"
+    );
+    assert!(
+        selected
+            .iter()
+            .all(|request| { request.body_json()["model"].as_str() == Some(selected_model) }),
+        "every request on the selected route must use the selected model"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -4800,11 +4923,7 @@ async fn snapshot_request_shape_pre_turn_compaction_including_incoming_user_mess
     let request_log = mount_sse_sequence(&server, vec![sse1, sse2, sse3, sse4]).await;
 
     let model_provider = non_openai_model_provider(&server);
-    // This scenario verifies that compaction retains an incoming image for a model that accepts
-    // image input. Keep that capability explicit instead of inheriting the product's default
-    // provider/model, which may legitimately be text-only.
     let codex = test_codex()
-        .with_model("gpt-5.4")
         .with_config(move |config| {
             config.model_provider = model_provider;
             set_test_compact_prompt(config);

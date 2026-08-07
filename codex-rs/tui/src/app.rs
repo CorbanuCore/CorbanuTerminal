@@ -20,7 +20,6 @@ use crate::app_event_sender::AppEventSender;
 use crate::app_server_session::AppServerBootstrap;
 use crate::app_server_session::AppServerSession;
 use crate::app_server_session::AppServerStartedThread;
-use crate::app_server_session::ResumeModelOverride;
 use crate::app_server_session::TurnPermissionsOverride;
 use crate::app_server_session::app_server_rate_limit_snapshots;
 use crate::bottom_pane::AppLinkViewParams;
@@ -63,6 +62,7 @@ use crate::model_migration::migration_copy_for_models;
 use crate::model_migration::run_model_migration_prompt;
 use crate::multi_agents::agent_picker_status_dot_spans;
 use crate::multi_agents::format_agent_picker_item_name;
+use crate::multi_agents::runtime_route_summary;
 use crate::multi_agents::next_agent_shortcut_matches;
 use crate::multi_agents::previous_agent_shortcut_matches;
 use crate::multi_agents::sub_agent_activity_display;
@@ -97,7 +97,6 @@ use codex_app_server_protocol::ConfigBatchWriteParams;
 use codex_app_server_protocol::ConfigReadResponse;
 use codex_app_server_protocol::ConfigValueWriteParams;
 use codex_app_server_protocol::ConfigWriteResponse;
-use codex_app_server_protocol::ErrorNotification;
 use codex_app_server_protocol::FeedbackUploadParams;
 use codex_app_server_protocol::FeedbackUploadResponse;
 use codex_app_server_protocol::GetAccountRateLimitsResponse;
@@ -139,7 +138,6 @@ use codex_config::ConfigLayerStackOrdering;
 use codex_config::LoaderOverrides;
 use codex_config::types::ApprovalsReviewer;
 use codex_config::types::MemoriesToml;
-#[cfg(test)]
 use codex_config::types::ModelAvailabilityNuxConfig;
 #[cfg(target_os = "windows")]
 use codex_config::types::WindowsToml;
@@ -151,6 +149,7 @@ use codex_model_provider_info::ModelProviderInfo;
 use codex_models_manager::model_presets::HIDE_GPT_5_1_CODEX_MAX_MIGRATION_PROMPT_CONFIG;
 use codex_models_manager::model_presets::HIDE_GPT5_1_MIGRATION_PROMPT_CONFIG;
 use codex_otel::SessionTelemetry;
+use codex_otel::TelemetryAuthMode;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::Personality;
 #[cfg(target_os = "windows")]
@@ -158,12 +157,7 @@ use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
 use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::InputModality;
-#[cfg(test)]
 use codex_protocol::openai_models::ModelAvailabilityNux;
-use codex_protocol::openai_models::ModelBilling;
-use codex_protocol::openai_models::ModelCapabilityTier;
-use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ModelUpgrade;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
@@ -192,11 +186,8 @@ use std::collections::VecDeque;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::sync::atomic::AtomicU64;
-use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::Duration;
@@ -208,8 +199,6 @@ use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::task::JoinHandle;
-use tokio_stream::Stream;
-use tokio_stream::StreamExt;
 use toml::Value as TomlValue;
 use uuid::Uuid;
 mod agent_message_consolidation;
@@ -222,6 +211,7 @@ pub(crate) mod app_server_requests;
 mod background_requests;
 mod config_persistence;
 mod event_dispatch;
+mod gpu_rentals;
 mod history_ui;
 mod input;
 mod loaded_threads;
@@ -255,130 +245,6 @@ use self::thread_events::*;
 
 const EXTERNAL_EDITOR_HINT: &str = "Save and close external editor to continue.";
 const THREAD_EVENT_CHANNEL_CAPACITY: usize = 32768;
-const TUI_INPUT_WATCHDOG_INTERVAL: Duration = Duration::from_secs(5);
-const TUI_INPUT_WATCHDOG_STALLED_AFTER: Duration = Duration::from_secs(10);
-const WHIP_SWEEP_INTERVAL: Duration = Duration::from_secs(45);
-
-type BoxedTuiEventStream = Pin<Box<dyn Stream<Item = TuiEvent> + Send + 'static>>;
-
-struct DrainedTuiEvents {
-    rx: mpsc::UnboundedReceiver<TuiEvent>,
-    watchdog: TuiInputDrainWatchdog,
-}
-
-#[derive(Clone)]
-struct TuiInputDrainWatchdog {
-    pending_events: Arc<AtomicUsize>,
-    last_drained_ms: Arc<AtomicU64>,
-    last_handled_ms: Arc<AtomicU64>,
-    started_at: Instant,
-}
-
-impl TuiInputDrainWatchdog {
-    fn new() -> Self {
-        let started_at = Instant::now();
-        Self {
-            pending_events: Arc::new(AtomicUsize::new(0)),
-            last_drained_ms: Arc::new(AtomicU64::new(0)),
-            last_handled_ms: Arc::new(AtomicU64::new(0)),
-            started_at,
-        }
-    }
-
-    fn elapsed_ms(&self) -> u64 {
-        self.started_at
-            .elapsed()
-            .as_millis()
-            .min(u128::from(u64::MAX)) as u64
-    }
-
-    fn note_drained(&self) {
-        self.last_drained_ms
-            .store(self.elapsed_ms(), Ordering::Relaxed);
-        self.pending_events.fetch_add(1, Ordering::Relaxed);
-    }
-
-    fn note_drainer_send_failed(&self) {
-        self.pending_events
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |pending| {
-                pending.checked_sub(1)
-            })
-            .ok();
-    }
-
-    fn note_handled(&self) {
-        self.last_handled_ms
-            .store(self.elapsed_ms(), Ordering::Relaxed);
-        self.pending_events
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |pending| {
-                pending.checked_sub(1)
-            })
-            .ok();
-    }
-}
-
-fn spawn_tui_event_drainer(mut tui_events: BoxedTuiEventStream) -> DrainedTuiEvents {
-    let (tx, rx) = mpsc::unbounded_channel();
-    let watchdog = TuiInputDrainWatchdog::new();
-    let drainer_watchdog = watchdog.clone();
-    tokio::spawn(async move {
-        while let Some(event) = tui_events.next().await {
-            drainer_watchdog.note_drained();
-            if tx.send(event).is_err() {
-                drainer_watchdog.note_drainer_send_failed();
-                break;
-            }
-        }
-    });
-
-    DrainedTuiEvents { rx, watchdog }
-}
-
-fn spawn_tui_input_watchdog(
-    watchdog: TuiInputDrainWatchdog,
-    frame_requester: tui::FrameRequester,
-) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(TUI_INPUT_WATCHDOG_INTERVAL);
-        loop {
-            interval.tick().await;
-            let pending_events = watchdog.pending_events.load(Ordering::Relaxed);
-            if pending_events == 0 {
-                continue;
-            }
-
-            let now_ms = watchdog.elapsed_ms();
-            let last_handled_ms = watchdog.last_handled_ms.load(Ordering::Relaxed);
-            if now_ms.saturating_sub(last_handled_ms)
-                >= TUI_INPUT_WATCHDOG_STALLED_AFTER.as_millis() as u64
-            {
-                tracing::warn!(
-                    pending_events,
-                    last_drained_ms = watchdog.last_drained_ms.load(Ordering::Relaxed),
-                    last_handled_ms,
-                    "tui input watchdog observed queued terminal events without handler progress"
-                );
-                frame_requester.schedule_frame();
-            }
-        }
-    })
-}
-
-fn spawn_whip_sweep_tick(app_event_tx: AppEventSender) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        let interval_duration = if std::env::var("PFTERMINAL_ORCHESTRATE_QA").as_deref() == Ok("1")
-        {
-            Duration::from_millis(250)
-        } else {
-            WHIP_SWEEP_INTERVAL
-        };
-        let mut interval = tokio::time::interval(interval_duration);
-        loop {
-            interval.tick().await;
-            app_event_tx.send(AppEvent::WhipSweepTick);
-        }
-    })
-}
 
 enum ThreadInteractiveRequest {
     AppLink(AppLinkViewParams),
@@ -404,46 +270,6 @@ fn collab_receiver_thread_ids(notification: &ServerNotification) -> Option<&[Str
                 receiver_thread_ids,
                 ..
             } => Some(receiver_thread_ids),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-fn collab_sender_thread_id(notification: &ServerNotification) -> Option<ThreadId> {
-    let sender_thread_id = match notification {
-        ServerNotification::ItemStarted(notification) => match &notification.item {
-            ThreadItem::CollabAgentToolCall {
-                sender_thread_id, ..
-            } => sender_thread_id,
-            _ => return None,
-        },
-        ServerNotification::ItemCompleted(notification) => match &notification.item {
-            ThreadItem::CollabAgentToolCall {
-                sender_thread_id, ..
-            } => sender_thread_id,
-            _ => return None,
-        },
-        _ => return None,
-    };
-    ThreadId::from_string(sender_thread_id).ok()
-}
-
-fn collab_receiver_status<'a>(
-    notification: &'a ServerNotification,
-    receiver_thread_id: &str,
-) -> Option<&'a codex_app_server_protocol::CollabAgentState> {
-    match notification {
-        ServerNotification::ItemStarted(notification) => match &notification.item {
-            ThreadItem::CollabAgentToolCall { agents_states, .. } => {
-                agents_states.get(receiver_thread_id)
-            }
-            _ => None,
-        },
-        ServerNotification::ItemCompleted(notification) => match &notification.item {
-            ThreadItem::CollabAgentToolCall { agents_states, .. } => {
-                agents_states.get(receiver_thread_id)
-            }
             _ => None,
         },
         _ => None,
@@ -654,21 +480,7 @@ fn resume_hint_for_resumable_thread(
     rollout_path: Option<&Path>,
 ) -> Option<String> {
     let thread = resumable_thread(thread_id, thread_name, rollout_path)?;
-    resume_hint_for_thread(&thread)
-}
-
-fn resume_hint_for_thread(thread: &ResumableThread) -> Option<String> {
     codex_utils_cli::resume_hint(thread.thread_name.as_deref(), Some(thread.thread_id))
-}
-
-fn resume_hint_for_pane_layout_thread(
-    codex_home: &Path,
-    thread_id: Option<ThreadId>,
-) -> Option<String> {
-    let thread_id = thread_id?;
-    let thread_id_text = thread_id.to_string();
-    crate::claude_panes::load_pane_layout(codex_home, Some(&thread_id_text))?;
-    codex_utils_cli::resume_hint(None, Some(thread_id))
 }
 
 fn rollout_path_is_resumable(rollout_path: &Path) -> bool {
@@ -716,7 +528,6 @@ pub(crate) struct App {
     pub(crate) file_search: FileSearchManager,
 
     pub(crate) transcript_cells: Vec<Arc<dyn HistoryCell>>,
-    pub(crate) claude_pane_transcript_cells: HashMap<String, Vec<Arc<dyn HistoryCell>>>,
 
     // Pager overlay state (Transcript or Static like Diff)
     pub(crate) overlay: Option<Overlay>,
@@ -765,54 +576,12 @@ pub(crate) struct App {
 
     thread_event_channels: HashMap<ThreadId, ThreadEventChannel>,
     thread_event_listener_tasks: HashMap<ThreadId, JoinHandle<()>>,
-    pub(crate) agent_navigation: AgentNavigationState,
-    pub(crate) spawn_parent_by_thread: HashMap<ThreadId, ThreadId>,
-    pub(crate) spawn_parent_by_node: HashMap<String, String>,
-    pub(crate) spawn_native_runtime_by_node:
-        HashMap<String, crate::dispatch_queue::SavedNativeSpawnRuntime>,
-    pub(crate) spawn_native_endpoint_by_node: HashMap<String, ThreadId>,
-    pub(crate) spawn_crew: Option<crate::crew_state::CrewInstanceState>,
-    /// A restored pre-CrewSpec hierarchy remains inspectable but cannot be mutated by the native
-    /// control plane because its identity and parentage cannot be proven.
-    pub(crate) spawn_legacy_read_only: bool,
-    pub(crate) spawn_status_by_thread:
-        HashMap<ThreadId, codex_app_server_protocol::CollabAgentState>,
-    /// Active `wait_agent` call by native spawn thread, keyed to the exact turn and item so a
-    /// delayed completion from an older wait cannot clear a newer wait state.
-    pub(crate) spawn_waiting_for_agents_by_thread: HashMap<ThreadId, (String, String)>,
-    pub(crate) spawn_parent_reports_by_node: HashMap<String, VecDeque<String>>,
-    pub(crate) spawn_dispatch_acks_by_target_task:
-        HashMap<(String, String), VecDeque<crate::spawn_orchestration::SpawnDispatchAck>>,
-    pub(crate) spawn_next_dispatch_seq: u64,
-    pub(crate) spawn_processed_dispatch_seq_ids: HashSet<u64>,
-    pub(crate) spawn_processed_dispatch_origins: HashSet<String>,
-    /// Terminal turn notifications are observed both on receipt and during buffered replay. Keep
-    /// orchestration side effects idempotent across those two delivery paths.
-    pub(crate) spawn_processed_terminal_turns: HashSet<(ThreadId, String)>,
-    /// Loop-breaker state for auto child-report processing turns, keyed by parent node id.
-    pub(crate) spawn_auto_loop_state_by_node:
-        HashMap<String, crate::spawn_orchestration::SpawnAutoLoopState>,
-    /// False after resume until a live operator/non-auto turn proves current intent.
-    pub(crate) spawn_operator_input_seen: bool,
-    pub(crate) spawn_quarantine_notified_by_node: HashSet<String>,
-    pub(crate) spawn_context_left_by_thread: HashMap<ThreadId, i64>,
-    pub(crate) spawn_last_report_seq_by_node: HashMap<String, u64>,
-    pub(crate) spawn_last_dispatch_seq_by_node: HashMap<String, u64>,
-    pub(crate) spawn_last_event_at_by_node: HashMap<String, String>,
-    pub(crate) spawn_nazgul_pane_id: Option<String>,
-    pub(crate) spawn_nazgul_rebind_required: bool,
-    #[allow(clippy::box_collection)]
-    pub(crate) orchestrate_whips: Box<HashMap<String, crate::orchestrate::Whip>>,
-    pub(crate) orchestrate_next_whip_seq: u64,
-    #[cfg(test)]
-    pub(crate) orchestrate_now_override: Option<chrono::DateTime<chrono::Utc>>,
-    #[allow(clippy::box_collection)]
-    pub(crate) orchestrate_idle_generation_by_target: Box<HashMap<String, u64>>,
+    agent_navigation: AgentNavigationState,
     side_threads: HashMap<ThreadId, SideThreadState>,
     abandoned_side_threads: HashSet<ThreadId>,
     active_thread_id: Option<ThreadId>,
     active_thread_rx: Option<mpsc::Receiver<ThreadBufferedEvent>>,
-    pub(crate) primary_thread_id: Option<ThreadId>,
+    primary_thread_id: Option<ThreadId>,
     last_subagent_backfill_attempt: Option<ThreadId>,
     primary_session_configured: Option<ThreadSessionState>,
     pending_primary_events: VecDeque<ThreadBufferedEvent>,
@@ -827,6 +596,21 @@ pub(crate) struct App {
     // Serialize hook enablement writes per hook so stale completions cannot
     // persist an older toggle after a newer one.
     pending_hook_enabled_writes: HashMap<String, Option<bool>>,
+    pending_model_selection: Option<PendingModelSelection>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PendingModelSelection {
+    Catalog {
+        thread_id: ThreadId,
+        model: String,
+        effort: Option<ReasoningEffortConfig>,
+    },
+    Provider {
+        thread_id: ThreadId,
+        model: String,
+        provider: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -866,49 +650,6 @@ async fn resolve_runtime_model_provider_base_url(provider: &ModelProviderInfo) -
             tracing::warn!(%err, "failed to resolve runtime model provider base URL for status");
             None
         }
-    }
-}
-
-fn gpu_runtime_model_preset(provider: &codex_state::GpuRuntimeProvider) -> Option<ModelPreset> {
-    if provider.health != "ready" || !provider.provider_id.starts_with("gpu-") {
-        return None;
-    }
-    Some(ModelPreset {
-        id: format!("{}:{}", provider.provider_id, provider.model_id),
-        model: provider.model_id.clone(),
-        provider_id: Some(provider.provider_id.clone()),
-        orchestration: Some(ModelOrchestrationMetadata::Eligible {
-            provider_id: provider.provider_id.clone(),
-            capability: ModelCapabilityTier::Balanced,
-            billing: ModelBilling::Local,
-        }),
-        display_name: provider.model_id.clone(),
-        description: format!(
-            "{} · active GPU rental {} · ${:.4}/hour",
-            gpu_infrastructure_provider_label(provider.infrastructure_provider.as_str()),
-            provider.rental_id,
-            provider.display_hourly_microusd as f64 / 1_000_000.0
-        ),
-        default_reasoning_effort: ReasoningEffortConfig::None,
-        supported_reasoning_efforts: Vec::new(),
-        supports_personality: false,
-        additional_speed_tiers: Vec::new(),
-        service_tiers: Vec::new(),
-        default_service_tier: None,
-        is_default: false,
-        upgrade: None,
-        show_in_picker: true,
-        availability_nux: None,
-        supported_in_api: true,
-        input_modalities: vec![InputModality::Text],
-    })
-}
-
-fn gpu_infrastructure_provider_label(provider: &str) -> &str {
-    match provider {
-        "runpod" => "RunPod",
-        "vast" => "Vast.ai",
-        _ => "GPU marketplace",
     }
 }
 
@@ -980,7 +721,7 @@ fn session_start_error(
 fn archived_session_guidance(err: &color_eyre::eyre::Report) -> Option<String> {
     let err = err.to_string();
     let message = &err[err.find("session ")?..];
-    if !message.contains(" is archived. Run `pfterminal unarchive ") {
+    if !message.contains(" is archived. Run `codex unarchive ") {
         return None;
     }
     let message = message
@@ -1009,27 +750,6 @@ fn active_turn_interrupt_race(error: &TypedRequestError) -> Option<String> {
 }
 
 impl App {
-    fn exit_resumable_thread(&self) -> Option<ResumableThread> {
-        let active_rollout_path = self.chat_widget.rollout_path();
-        if let Some(thread) = resumable_thread(
-            self.chat_widget.thread_id(),
-            self.chat_widget.thread_name(),
-            active_rollout_path.as_deref(),
-        ) {
-            return Some(thread);
-        }
-
-        let primary_session = self.primary_session_configured.as_ref()?;
-        if self.primary_thread_id != Some(primary_session.thread_id) {
-            return None;
-        }
-        resumable_thread(
-            Some(primary_session.thread_id),
-            primary_session.thread_name.clone(),
-            primary_session.rollout_path.as_deref(),
-        )
-    }
-
     pub fn chatwidget_init_for_forked_or_resumed_thread(
         &self,
         tui: &mut tui::Tui,
@@ -1075,7 +795,6 @@ impl App {
         initial_prompt: Option<String>,
         initial_images: Vec<PathBuf>,
         session_selection: SessionSelection,
-        startup_resume_model_override: Option<ResumeModelOverride>,
         feedback: codex_feedback::CodexFeedback,
         is_first_run: bool,
         should_prompt_windows_sandbox_nux_at_startup: bool,
@@ -1086,6 +805,7 @@ impl App {
         startup_bootstrap: Option<AppServerBootstrap>,
         startup_hooks_browser: Option<HooksListEntry>,
     ) -> Result<AppExitInfo> {
+        use tokio_stream::StreamExt;
         let startup_started_at = Instant::now();
         let (app_event_tx, mut app_event_rx) = unbounded_channel();
         let app_event_tx = AppEventSender::new(app_event_tx);
@@ -1095,34 +815,6 @@ impl App {
             config.tui_notifications.method,
             config.tui_notifications.condition,
         );
-
-        let startup_resume_model_override = match (
-            startup_resume_model_override,
-            &session_selection,
-            state_db.as_ref(),
-        ) {
-            (Some(explicit), _, _) => Some(explicit),
-            (None, SessionSelection::Resume(target), Some(state_db)) => {
-                match state_db.get_thread(target.thread_id).await {
-                    Ok(Some(metadata)) => apply_persisted_resume_runtime(
-                        &mut config,
-                        metadata.model.as_deref(),
-                        metadata.model_provider.as_str(),
-                        metadata.reasoning_effort.clone(),
-                    ),
-                    Ok(None) => None,
-                    Err(error) => {
-                        tracing::warn!(
-                            thread_id = %target.thread_id,
-                            %error,
-                            "failed to load persisted runtime for startup resume"
-                        );
-                        None
-                    }
-                }
-            }
-            (None, _, _) => None,
-        };
 
         let harness_overrides =
             normalize_harness_overrides_for_cwd(harness_overrides, &config.cwd)?;
@@ -1173,7 +865,7 @@ impl App {
         let feedback_audience = bootstrap.feedback_audience;
         let auth_mode = bootstrap.auth_mode;
         let has_chatgpt_account = bootstrap.has_chatgpt_account;
-        let has_codex_backend_auth = bootstrap.has_codex_backend_auth;
+        let has_codex_backend_auth = matches!(auth_mode, Some(TelemetryAuthMode::Chatgpt));
         let requires_openai_auth = bootstrap.requires_openai_auth;
         let status_account_display = bootstrap.status_account_display.clone();
         let initial_plan_type = bootstrap.plan_type;
@@ -1220,21 +912,10 @@ impl App {
         let thread_and_widget_started_at = Instant::now();
         let pending_startup_thread_start = matches!(
             &session_selection,
-            SessionSelection::StartFresh
-                | SessionSelection::ResumePanesOnly { .. }
-                | SessionSelection::Exit
+            SessionSelection::StartFresh | SessionSelection::Exit
         );
-        let restore_pane_layout_for_thread_id = match &session_selection {
-            SessionSelection::Resume(target_session) => Some(target_session.thread_id.to_string()),
-            SessionSelection::ResumePanesOnly { codex_thread_id } => Some(codex_thread_id.clone()),
-            SessionSelection::Fork(_) | SessionSelection::StartFresh | SessionSelection::Exit => {
-                None
-            }
-        };
         let (mut chat_widget, initial_started_thread) = match session_selection {
-            SessionSelection::StartFresh
-            | SessionSelection::ResumePanesOnly { .. }
-            | SessionSelection::Exit => {
+            SessionSelection::StartFresh | SessionSelection::Exit => {
                 spawn_startup_thread_start(&app_server, config.clone(), app_event_tx.clone());
                 // Count a startup tooltip once the initial chat widget can render it.
                 let startup_tooltip_override =
@@ -1359,132 +1040,11 @@ impl App {
             color_eyre::eyre::eyre!(
                 "Invalid `tui.keymap` configuration: {err}\n\
 Fix the config and retry.\n\
-See the PFTerminal keymap documentation for supported actions and examples."
+See the Codex keymap documentation for supported actions and examples."
             )
         })?;
         #[cfg(not(debug_assertions))]
         let upgrade_version = crate::updates::get_upgrade_version(&config);
-
-        let restored_pane_layout =
-            restore_pane_layout_for_thread_id
-                .as_deref()
-                .and_then(|thread_id| {
-                    crate::claude_panes::load_pane_layout(
-                        config.codex_home.as_ref(),
-                        Some(thread_id),
-                    )
-                });
-        let restored_spawn_parent_by_node = restored_pane_layout
-            .as_ref()
-            .map(|layout| {
-                layout
-                    .spawn_parent_by_node
-                    .iter()
-                    .map(|(key, value)| (key.clone(), value.clone()))
-                    .collect()
-            })
-            .unwrap_or_default();
-        let restored_claude_panes = crate::claude_panes::ClaudePaneRegistry::restore_from_disk(
-            config.codex_home.as_ref(),
-            restored_pane_layout.as_ref(),
-        );
-        let restored_spawn_nazgul_pane_id = restored_pane_layout
-            .as_ref()
-            .and_then(|layout| layout.spawn_nazgul_pane_id.clone())
-            .filter(|pane_id| {
-                // `codex-main`, any restored Claude pane, or a native Codex agent thread node id
-                // (`thread:<uuid>`) are all valid Nazgul root bindings.
-                if pane_id == crate::claude_panes::CODEX_MAIN_PANE_ID {
-                    return true;
-                }
-                if crate::spawn_orchestration::node_id_thread(pane_id).is_some() {
-                    return true;
-                }
-                restored_claude_panes
-                    .panes()
-                    .iter()
-                    .any(|pane| pane.id == *pane_id)
-            });
-        let restored_spawn_nazgul_rebind_required = restored_pane_layout
-            .as_ref()
-            .is_some_and(|layout| layout.spawn_nazgul_rebind_required);
-        let restored_spawn_legacy_read_only = restored_pane_layout.as_ref().is_some_and(|layout| {
-            !layout.spawn_pending_dispatches.is_empty()
-                || layout.spawn_crew.is_none()
-                    && (layout.spawn_nazgul_pane_id.is_some()
-                        || !layout.spawn_parent_by_node.is_empty()
-                        || !layout.claude_pane_ids.is_empty())
-        });
-        let mut restored_orchestrate_whips: HashMap<_, _> = restored_pane_layout
-            .as_ref()
-            .map(|layout| {
-                layout
-                    .orchestrate_whips
-                    .iter()
-                    .filter(|(_, whip)| whip.state != crate::orchestrate::WhipState::Detached)
-                    .map(|(key, value)| (key.clone(), value.clone()))
-                    .collect()
-            })
-            .unwrap_or_default();
-        for whip in restored_orchestrate_whips.values_mut() {
-            if matches!(
-                whip.kind,
-                crate::orchestrate::WhipKind::Assignment {
-                    phase: crate::orchestrate::AssignmentPhase::Executing,
-                    ..
-                }
-            ) {
-                whip.last_fire_utc = Some(chrono::Utc::now());
-                // Generation zero represents the state restored from disk. Treat any saved
-                // Worker output as already observed so restart honors one full cadence; a fresh
-                // completion increments the generation and can still trigger immediately.
-                whip.last_idle_generation_fired = Some(0);
-            } else {
-                whip.last_idle_generation_fired = Some(0);
-            }
-        }
-        let restored_orchestrate_next_whip_seq = restored_pane_layout
-            .as_ref()
-            .map(|layout| layout.orchestrate_next_whip_seq)
-            .unwrap_or_else(|| {
-                restored_orchestrate_whips
-                    .keys()
-                    .filter_map(|id| {
-                        id.strip_prefix("whip-")
-                            .or_else(|| id.strip_prefix("assignment-"))?
-                            .parse::<u64>()
-                            .ok()
-                    })
-                    .max()
-                    .unwrap_or(0)
-            });
-        let restored_orchestrate_idle_generation_by_target = restored_orchestrate_whips
-            .values()
-            .map(|whip| (whip.target.clone(), 0))
-            .collect();
-        let restored_spawn_next_dispatch_seq = restored_pane_layout
-            .as_ref()
-            .map(|layout| layout.spawn_next_dispatch_seq.max(1))
-            .unwrap_or(1);
-        let restored_spawn_processed_dispatch_seq_ids = restored_pane_layout
-            .as_ref()
-            .map(|layout| {
-                crate::spawn_orchestration::bounded_spawn_processed_dispatch_seq_ids(
-                    layout.spawn_processed_dispatch_seq_ids.iter().copied(),
-                    restored_spawn_next_dispatch_seq,
-                )
-            })
-            .unwrap_or_default();
-        let restored_spawn_processed_dispatch_origins = restored_pane_layout
-            .as_ref()
-            .map(|layout| {
-                layout
-                    .spawn_processed_dispatch_origin_ids
-                    .iter()
-                    .cloned()
-                    .collect()
-            })
-            .unwrap_or_default();
 
         let mut app = Self {
             model_catalog,
@@ -1505,7 +1065,6 @@ See the PFTerminal keymap documentation for supported actions and examples."
             enhanced_keys_supported,
             keymap: runtime_keymap,
             transcript_cells: Vec::new(),
-            claude_pane_transcript_cells: HashMap::new(),
             overlay: None,
             deferred_history_lines: Vec::new(),
             has_emitted_history_lines: false,
@@ -1527,60 +1086,6 @@ See the PFTerminal keymap documentation for supported actions and examples."
             thread_event_channels: HashMap::new(),
             thread_event_listener_tasks: HashMap::new(),
             agent_navigation: AgentNavigationState::default(),
-            spawn_parent_by_thread: HashMap::new(),
-            spawn_parent_by_node: restored_spawn_parent_by_node,
-            spawn_native_runtime_by_node: restored_pane_layout
-                .as_ref()
-                .map(|layout| {
-                    layout
-                        .spawn_native_runtime_by_node
-                        .clone()
-                        .into_iter()
-                        .collect()
-                })
-                .unwrap_or_default(),
-            spawn_native_endpoint_by_node: restored_pane_layout
-                .as_ref()
-                .map(|layout| {
-                    layout
-                        .spawn_native_endpoint_by_node
-                        .iter()
-                        .filter_map(|(node, endpoint)| {
-                            ThreadId::from_string(endpoint)
-                                .ok()
-                                .map(|endpoint| (node.clone(), endpoint))
-                        })
-                        .collect()
-                })
-                .unwrap_or_default(),
-            spawn_crew: restored_pane_layout
-                .as_ref()
-                .and_then(|layout| layout.spawn_crew.clone()),
-            spawn_legacy_read_only: restored_spawn_legacy_read_only,
-            spawn_status_by_thread: HashMap::new(),
-            spawn_waiting_for_agents_by_thread: HashMap::new(),
-            spawn_parent_reports_by_node: HashMap::new(),
-            spawn_dispatch_acks_by_target_task: HashMap::new(),
-            spawn_next_dispatch_seq: restored_spawn_next_dispatch_seq,
-            spawn_processed_dispatch_seq_ids: restored_spawn_processed_dispatch_seq_ids,
-            spawn_processed_dispatch_origins: restored_spawn_processed_dispatch_origins,
-            spawn_processed_terminal_turns: HashSet::new(),
-            spawn_auto_loop_state_by_node: HashMap::new(),
-            spawn_operator_input_seen: false,
-            spawn_quarantine_notified_by_node: HashSet::new(),
-            spawn_context_left_by_thread: HashMap::new(),
-            spawn_last_report_seq_by_node: HashMap::new(),
-            spawn_last_dispatch_seq_by_node: HashMap::new(),
-            spawn_last_event_at_by_node: HashMap::new(),
-            spawn_nazgul_pane_id: restored_spawn_nazgul_pane_id,
-            spawn_nazgul_rebind_required: restored_spawn_nazgul_rebind_required,
-            orchestrate_whips: Box::new(restored_orchestrate_whips),
-            orchestrate_next_whip_seq: restored_orchestrate_next_whip_seq,
-            #[cfg(test)]
-            orchestrate_now_override: None,
-            orchestrate_idle_generation_by_target: Box::new(
-                restored_orchestrate_idle_generation_by_target,
-            ),
             side_threads: HashMap::new(),
             abandoned_side_threads: HashSet::new(),
             active_thread_id: None,
@@ -1594,11 +1099,11 @@ See the PFTerminal keymap documentation for supported actions and examples."
             rate_limit_hard_stop_generation: 0,
             pending_plugin_enabled_writes: HashMap::new(),
             pending_hook_enabled_writes: HashMap::new(),
+            pending_model_selection: None,
         };
-        app.refresh_gpu_spend_indicator().await;
-        // A rental outlives the TUI that created it. Reattach the independent reconciler on
-        // every startup; its process lock deduplicates concurrent PFTerminal processes and it
-        // exits immediately when there is no potentially billable work.
+        // Rentals and Telegram sessions outlive the TUI that created them. Reattach their
+        // independent controllers on every startup; both implementations deduplicate work and
+        // return immediately when nothing is configured.
         app.start_gpu_controller();
         let telegram_home = app.config.codex_home.clone().to_path_buf();
         tokio::spawn(async move {
@@ -1611,16 +1116,12 @@ See the PFTerminal keymap documentation for supported actions and examples."
                 Ok(Err(error)) => {
                     tracing::warn!(%error, "configured Telegram connector did not start")
                 }
-                Err(error) => {
-                    tracing::warn!(%error, "Telegram connector startup task failed")
-                }
+                Err(error) => tracing::warn!(%error, "Telegram connector startup task failed"),
             }
         });
         if let Some(entry) = startup_hooks_browser {
             app.chat_widget.open_hooks_browser(entry);
         }
-        app.seed_restored_claude_pane_transcripts();
-        app.show_restored_active_claude_pane();
         let initial_session_started_at = Instant::now();
         if let Some(started) = initial_started_thread {
             let thread_id = started.session.thread_id;
@@ -1629,9 +1130,6 @@ See the PFTerminal keymap documentation for supported actions and examples."
             }
             app.enqueue_primary_thread_session(started.session, started.turns)
                 .await?;
-            app.restore_native_spawn_panes_from_saved_state(&mut app_server)
-                .await;
-            app.audit_restored_assignments();
             if should_prompt_for_paused_goal_after_startup_resume {
                 app.maybe_prompt_resume_paused_goal_after_resume(&mut app_server, thread_id)
                     .await;
@@ -1670,12 +1168,8 @@ See the PFTerminal keymap documentation for supported actions and examples."
         }
 
         let event_stream_started_at = Instant::now();
-        let drained_tui_events = spawn_tui_event_drainer(tui.event_stream());
-        let tui_input_watchdog =
-            spawn_tui_input_watchdog(drained_tui_events.watchdog.clone(), tui.frame_requester());
-        let _whip_sweep_tick = spawn_whip_sweep_tick(app.app_event_tx.clone());
-        let mut tui_event_rx = drained_tui_events.rx;
-        let tui_input_watchdog_state = drained_tui_events.watchdog;
+        let tui_events = tui.event_stream();
+        tokio::pin!(tui_events);
 
         tui.frame_requester().schedule_frame();
         tracing::info!(
@@ -1702,14 +1196,6 @@ See the PFTerminal keymap documentation for supported actions and examples."
         }
 
         let mut listen_for_app_server_events = true;
-        let mut app_server_reconnect_tick = tokio::time::interval(Duration::from_secs(5));
-        app_server_reconnect_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        let mut gpu_runtime_overlay_tick = tokio::time::interval(Duration::from_secs(5));
-        gpu_runtime_overlay_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        let (app_server_reconnect_tx, mut app_server_reconnect_rx) =
-            mpsc::unbounded_channel::<Result<AppServerSession, String>>();
-        let mut app_server_reconnect_inflight = false;
-        let mut app_server_reconnect_failure_notified = false;
         let mut waiting_for_initial_session_configured = wait_for_initial_session_configured;
 
         #[cfg(not(debug_assertions))]
@@ -1741,13 +1227,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     Some(event) = app_event_rx.recv() => {
                         match Box::pin(app.handle_event(tui, &mut app_server, event)).await {
                             Ok(control) => control,
-                            Err(err) => {
-                                tracing::error!(error = ?err, "contained app event handler failure");
-                                app.chat_widget.add_error_message(format!(
-                                    "A command failed but PFTerminal is still running: {err:#}"
-                                ));
-                                AppRunControl::Continue
-                            },
+                            Err(err) => break Err(err),
                         }
                     }
                     active = async {
@@ -1762,58 +1242,21 @@ See the PFTerminal keymap documentation for supported actions and examples."
                     ) => {
                         if let Some(event) = active {
                             if let Err(err) = app.handle_active_thread_event(tui, &mut app_server, event).await {
-                                tracing::error!(error = ?err, "contained active-thread event failure");
-                                app.chat_widget.add_error_message(format!(
-                                    "A pane event failed but PFTerminal is still running: {err:#}"
-                                ));
+                                break Err(err);
                             }
                         } else {
                             app.clear_active_thread().await;
                         }
                         AppRunControl::Continue
                     }
-                    event = tui_event_rx.recv() => {
+                    event = tui_events.next() => {
                         if let Some(event) = event {
-                            tui_input_watchdog_state.note_handled();
                             match app.handle_tui_event(tui, &mut app_server, event).await {
                                 Ok(control) => control,
-                                Err(err) => {
-                                    tracing::error!(error = ?err, "contained terminal input handler failure");
-                                    app.chat_widget.add_error_message(format!(
-                                        "An input command failed but PFTerminal is still running: {err:#}"
-                                    ));
-                                    AppRunControl::Continue
-                                },
+                                Err(err) => break Err(err),
                             }
                         } else {
                             tracing::warn!("terminal input stream closed; shutting down active thread");
-                            app.handle_exit_mode(&mut app_server, ExitMode::ShutdownFirst).await
-                        }
-                    }
-                    signal = tokio::signal::ctrl_c() => {
-                        if let Err(err) = signal {
-                            tracing::warn!(error = %err, "failed to listen for SIGINT");
-                            AppRunControl::Continue
-                        } else if app.active_thread_id.is_some() {
-                            match Box::pin(app.handle_event(
-                                tui,
-                                &mut app_server,
-                                AppEvent::CodexOp(
-                                    AppCommand::interrupt_and_restore_prompt_if_no_output(),
-                                ),
-                            ))
-                            .await
-                            {
-                                Ok(control) => control,
-                                Err(err) => {
-                                    tracing::error!(error = ?err, "contained interrupt handler failure");
-                                    app.chat_widget.add_error_message(format!(
-                                        "Interrupt failed but PFTerminal is still running: {err:#}"
-                                    ));
-                                    AppRunControl::Continue
-                                },
-                            }
-                        } else {
                             app.handle_exit_mode(&mut app_server, ExitMode::ShutdownFirst).await
                         }
                     }
@@ -1823,66 +1266,8 @@ See the PFTerminal keymap documentation for supported actions and examples."
                             None => {
                                 listen_for_app_server_events = false;
                                 tracing::warn!("app-server event stream closed");
-                                app.chat_widget.add_error_message(
-                                    "App-server event stream closed; PFTerminal is degraded and will reconnect automatically."
-                                        .to_string(),
-                                );
                             }
                         }
-                        AppRunControl::Continue
-                    }
-                    _ = app_server_reconnect_tick.tick(), if !listen_for_app_server_events && !app_server_reconnect_inflight => {
-                        app_server_reconnect_inflight = true;
-                        let config = app.config.clone();
-                        let target = app.app_server_target.clone();
-                        let state_db = app.state_db.clone();
-                        let environment_manager = app.environment_manager.clone();
-                        let reconnect_tx = app_server_reconnect_tx.clone();
-                        tokio::spawn(async move {
-                            let result = crate::start_app_server_for_picker(
-                                &config,
-                                &target,
-                                state_db,
-                                environment_manager,
-                            )
-                            .await
-                            .map_err(|error| format!("{error:#}"));
-                            let _ = reconnect_tx.send(result);
-                        });
-                        AppRunControl::Continue
-                    }
-                    Some(result) = app_server_reconnect_rx.recv(), if app_server_reconnect_inflight => {
-                        app_server_reconnect_inflight = false;
-                        match result {
-                            Ok(mut replacement) => {
-                                std::mem::swap(&mut app_server, &mut replacement);
-                                tokio::spawn(async move {
-                                    if let Err(error) = replacement.shutdown().await {
-                                        tracing::warn!(%error, "old app-server shutdown after reconnect failed");
-                                    }
-                                });
-                                app.restore_native_spawn_panes_from_saved_state(&mut app_server).await;
-                                listen_for_app_server_events = true;
-                                app_server_reconnect_failure_notified = false;
-                                app.chat_widget.add_info_message(
-                                    "App-server connection restored.".to_string(),
-                                    Some("Pending identified deliveries are being reconciled.".to_string()),
-                                );
-                            }
-                            Err(error) => {
-                                tracing::warn!(%error, "bounded app-server reconnect attempt failed");
-                                if !app_server_reconnect_failure_notified {
-                                    app_server_reconnect_failure_notified = true;
-                                    app.chat_widget.add_error_message(format!(
-                                        "App-server reconnect failed; retrying every 5 seconds: {error:#}"
-                                    ));
-                                }
-                            }
-                        }
-                        AppRunControl::Continue
-                    }
-                    _ = gpu_runtime_overlay_tick.tick() => {
-                        app.refresh_gpu_runtime_overlay().await;
                         AppRunControl::Continue
                     }
                 };
@@ -1898,25 +1283,9 @@ See the PFTerminal keymap documentation for supported actions and examples."
                 }
             }
         };
-        let shutdown_detail = match &exit_reason_result {
-            Ok(_) => "user or terminal exit",
-            Err(_) => "TUI event loop failure",
-        };
-        if let Err(error) = app
-            .show_backend_shutdown_control_events(tui, shutdown_detail)
-            .await
-        {
-            tracing::error!(
-                error = ?error,
-                error_chain = %format!("{error:#}"),
-                "failed to render backend shutdown control events"
-            );
-        }
-        app.abort_all_thread_event_listeners();
         if let Err(err) = app_server.shutdown().await {
-            tracing::error!(error = ?err, "failed to shut down embedded app server");
+            tracing::warn!(error = %err, "failed to shut down embedded app server");
         }
-        tui_input_watchdog.abort();
         let clear_pet_result = tui.clear_ambient_pet_image();
         let clear_result = tui.terminal.clear();
         let exit_reason = match exit_reason_result {
@@ -1935,17 +1304,12 @@ See the PFTerminal keymap documentation for supported actions and examples."
                 return Err(err);
             }
         };
-        let exit_resumable_thread = app.exit_resumable_thread();
-        let thread_id = exit_resumable_thread
-            .as_ref()
-            .map(|thread| thread.thread_id)
-            .or_else(|| app.chat_widget.thread_id().or(app.primary_thread_id));
-        let resume_hint = exit_resumable_thread
-            .as_ref()
-            .and_then(resume_hint_for_thread)
-            .or_else(|| {
-                resume_hint_for_pane_layout_thread(app.config.codex_home.as_ref(), thread_id)
-            });
+        let thread_id = app.chat_widget.thread_id().or(app.primary_thread_id);
+        let resume_hint = resume_hint_for_resumable_thread(
+            thread_id,
+            app.chat_widget.thread_name(),
+            app.chat_widget.rollout_path().as_deref(),
+        );
         Ok(AppExitInfo {
             token_usage: app.token_usage(),
             thread_id,
@@ -2039,50 +1403,6 @@ See the PFTerminal keymap documentation for supported actions and examples."
         Ok(())
     }
 
-    async fn show_backend_shutdown_control_events(
-        &mut self,
-        tui: &mut tui::Tui,
-        detail: &str,
-    ) -> Result<()> {
-        let message = format!("CONTROL EVENT — TUI shutdown: {detail}");
-        self.chat_widget.add_info_message(
-            message.clone(),
-            Some(
-                "Stopping every pane and flushing rollouts before returning to the shell."
-                    .to_string(),
-            ),
-        );
-        let mut thread_ids = self
-            .thread_event_channels
-            .keys()
-            .copied()
-            .collect::<Vec<_>>();
-        if let Some(thread_id) = self.primary_thread_id {
-            thread_ids.push(thread_id);
-        }
-        thread_ids.sort_by_key(ThreadId::to_string);
-        thread_ids.dedup();
-        for thread_id in thread_ids {
-            let notification =
-                ServerNotification::Warning(codex_app_server_protocol::WarningNotification {
-                    thread_id: Some(thread_id.to_string()),
-                    message: message.clone(),
-                });
-            if let Err(error) = self
-                .enqueue_thread_notification(thread_id, notification)
-                .await
-            {
-                tracing::error!(
-                    %thread_id,
-                    error = ?error,
-                    error_chain = %format!("{error:#}"),
-                    "failed to record backend shutdown control event"
-                );
-            }
-        }
-        self.show_shutdown_feedback(tui)
-    }
-
     fn render_chat_widget_frame(&mut self, tui: &mut tui::Tui) -> Result<Rect> {
         let width = tui.terminal.size()?.width;
         self.with_chat_widget_frame(width, |desired_height, chat_widget| {
@@ -2109,33 +1429,6 @@ See the PFTerminal keymap documentation for supported actions and examples."
         let chat_widget = self.chat_widget.as_renderable();
         render(chat_widget.desired_height(width), &chat_widget)
     }
-}
-
-fn apply_persisted_resume_runtime(
-    config: &mut Config,
-    model: Option<&str>,
-    model_provider: &str,
-    reasoning_effort: Option<codex_protocol::openai_models::ReasoningEffort>,
-) -> Option<ResumeModelOverride> {
-    let model = model?.to_string();
-    config.model = Some(model.clone());
-    if let Some(reasoning_effort) = reasoning_effort {
-        config.model_reasoning_effort = Some(reasoning_effort);
-    }
-    if let Some(provider) = config.model_providers.get(model_provider).cloned() {
-        config.model_provider_id = model_provider.to_string();
-        config.model_provider = provider;
-    } else {
-        tracing::warn!(
-            model,
-            model_provider,
-            "persisted resume provider is not configured in this client"
-        );
-    }
-    Some(ResumeModelOverride {
-        model: Some(model),
-        model_provider: Some(model_provider.to_string()),
-    })
 }
 
 impl Drop for App {

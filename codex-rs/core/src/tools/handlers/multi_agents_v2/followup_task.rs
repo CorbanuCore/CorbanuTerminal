@@ -26,7 +26,6 @@ impl Handler {
         &self,
         invocation: ToolInvocation,
     ) -> Result<Box<dyn crate::tools::context::ToolOutput>, FunctionCallError> {
-        ensure_manager_tool_allowed(&invocation.turn, "followup_task")?;
         let arguments = function_arguments(invocation.payload.clone())?;
         let args: FollowupTaskArgs = parse_arguments(&arguments)?;
         handle_message_string_tool(

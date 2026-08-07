@@ -33,6 +33,12 @@ class PackageLayoutTest(unittest.TestCase):
                             entrypoint_bin=touch_executable(
                                 root / variant.executable_stem
                             ),
+                            extra_bins={
+                                extra.entrypoint_name(spec): touch_executable(
+                                    root / extra.entrypoint_name(spec)
+                                )
+                                for extra in variant.extra_binaries
+                            },
                             code_mode_host_bin=touch_executable(
                                 root / "codex-code-mode-host"
                             ),
@@ -72,6 +78,7 @@ class PackageLayoutTest(unittest.TestCase):
             package_dir.mkdir()
             inputs = PackageInputs(
                 entrypoint_bin=touch_executable(root / "codex-app-server"),
+                extra_bins={},
                 code_mode_host_bin=touch_executable(root / "codex-code-mode-host"),
                 rg_bin=touch_executable(root / "rg"),
                 zsh_bin=None,

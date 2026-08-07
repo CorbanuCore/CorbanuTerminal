@@ -82,7 +82,9 @@ async fn secure_offer_is_normalized_and_secret_stays_in_auth_header() {
     Mock::given(method("POST"))
         .and(path("/graphql"))
         .and(header("authorization", format!("Bearer {TEST_KEY}")))
-        .respond_with(ResponseTemplate::new(200).set_body_json(offer_response(3.5)))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(offer_response(/*price*/ 3.5)),
+        )
         .expect(1)
         .mount(&server)
         .await;
@@ -107,7 +109,8 @@ async fn count_specific_offer_accepts_runpod_response_without_available_counts()
     Mock::given(method("POST"))
         .and(path("/graphql"))
         .respond_with(
-            ResponseTemplate::new(200).set_body_json(offer_response_without_available_counts(3.5)),
+            ResponseTemplate::new(200)
+                .set_body_json(offer_response_without_available_counts(/*price*/ 3.5)),
         )
         .expect(1)
         .mount(&server)
@@ -127,7 +130,9 @@ async fn create_revalidates_price_and_uses_owned_secure_pod() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/graphql"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(offer_response(3.5)))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(offer_response(/*price*/ 3.5)),
+        )
         .expect(2)
         .mount(&server)
         .await;
@@ -157,6 +162,7 @@ async fn create_revalidates_price_and_uses_owned_secure_pod() {
             ownership_tag: "pft-install-lease-1".to_string(),
             image: "example.invalid/runtime@sha256:abc".to_string(),
             disk_gib: 400,
+            container_entrypoint: vec!["bash".to_string(), "-lc".to_string()],
             launch_command: vec!["model-id".to_string(), "--revision=abc".to_string()],
             inference_port: 8000,
             endpoint_token: SecretValue::new("endpoint-secret".to_string()).unwrap(),
@@ -179,6 +185,10 @@ async fn create_revalidates_price_and_uses_owned_secure_pod() {
     assert_eq!(create_body["name"], "pft-install-lease-1");
     assert!(create_body.get("startSsh").is_none());
     assert_eq!(create_body["ports"][0], "8000/http");
+    assert_eq!(
+        create_body["dockerEntrypoint"],
+        serde_json::json!(["bash", "-lc"])
+    );
     assert_eq!(create_body["dockerStartCmd"][0], "model-id");
     assert_eq!(create_body["env"]["PFT_ENDPOINT_TOKEN"], "endpoint-secret");
     assert!(!create_body.to_string().contains(TEST_KEY));
@@ -189,7 +199,9 @@ async fn changed_price_fails_closed_before_create() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/graphql"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(offer_response(3.5)))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(offer_response(/*price*/ 3.5)),
+        )
         .up_to_n_times(1)
         .mount(&server)
         .await;
@@ -202,7 +214,9 @@ async fn changed_price_fails_closed_before_create() {
     server.reset().await;
     Mock::given(method("POST"))
         .and(path("/graphql"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(offer_response(3.75)))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(offer_response(/*price*/ 3.75)),
+        )
         .mount(&server)
         .await;
 
@@ -213,6 +227,7 @@ async fn changed_price_fails_closed_before_create() {
             ownership_tag: "pft-install-lease-1".to_string(),
             image: "runtime@sha256:abc".to_string(),
             disk_gib: 400,
+            container_entrypoint: Vec::new(),
             launch_command: vec!["model-id".to_string()],
             inference_port: 8000,
             endpoint_token: SecretValue::new("endpoint-secret".to_string()).unwrap(),

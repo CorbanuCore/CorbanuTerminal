@@ -104,6 +104,7 @@ pub struct CreateInstanceRequest {
     pub ownership_tag: String,
     pub image: String,
     pub disk_gib: u64,
+    pub container_entrypoint: Vec<String>,
     pub launch_command: Vec<String>,
     pub inference_port: u16,
     pub endpoint_token: crate::SecretValue,
@@ -118,6 +119,7 @@ impl fmt::Debug for CreateInstanceRequest {
             .field("ownership_tag", &self.ownership_tag)
             .field("image", &self.image)
             .field("disk_gib", &self.disk_gib)
+            .field("container_entrypoint", &self.container_entrypoint)
             .field("launch_command", &self.launch_command)
             .field("inference_port", &self.inference_port)
             .field("endpoint_token", &"[REDACTED]")

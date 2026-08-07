@@ -123,10 +123,15 @@ async fn unverified_recipe_fails_before_provider_search() {
         RecipeCatalog::default(),
         "installation-1".to_string(),
     );
-    let first = QuoteProvider::new("first", 2_000_000);
-    let second = QuoteProvider::new("second", 1_000_000);
+    let first = QuoteProvider::new("first", /*price*/ 2_000_000);
+    let second = QuoteProvider::new("second", /*price*/ 1_000_000);
     let error = service
-        .search("qwen-32b-1xh200", 3_000_000, &first, &second)
+        .search(
+            "qwen-32b-1xh200",
+            /*maximum_hourly_microusd*/ 3_000_000,
+            &first,
+            &second,
+        )
         .await
         .expect_err("unverified recipe must fail closed");
     assert_eq!(error.kind, ProviderErrorKind::InvalidRequest);
@@ -137,10 +142,15 @@ async fn unverified_recipe_fails_before_provider_search() {
 #[tokio::test]
 async fn compatible_offers_are_ranked_only_after_hard_filters() {
     let service = service().await;
-    let first = QuoteProvider::new("first", 2_000_000);
-    let second = QuoteProvider::new("second", 1_000_000);
+    let first = QuoteProvider::new("first", /*price*/ 2_000_000);
+    let second = QuoteProvider::new("second", /*price*/ 1_000_000);
     let offers = service
-        .search("test-recipe", 3_000_000, &first, &second)
+        .search(
+            "test-recipe",
+            /*maximum_hourly_microusd*/ 3_000_000,
+            &first,
+            &second,
+        )
         .await
         .expect("search offers");
     assert_eq!(offers.len(), 2);
@@ -151,10 +161,16 @@ async fn compatible_offers_are_ranked_only_after_hard_filters() {
 #[tokio::test]
 async fn insecure_provider_is_excluded_before_inventory_or_spend() {
     let service = service().await;
-    let insecure = QuoteProvider::new("insecure", 500_000).without_secure_transport();
-    let secure = QuoteProvider::new("secure", 1_000_000);
+    let insecure =
+        QuoteProvider::new("insecure", /*price*/ 500_000).without_secure_transport();
+    let secure = QuoteProvider::new("secure", /*price*/ 1_000_000);
     let offers = service
-        .search("test-recipe", 2_000_000, &insecure, &secure)
+        .search(
+            "test-recipe",
+            /*maximum_hourly_microusd*/ 2_000_000,
+            &insecure,
+            &secure,
+        )
         .await
         .expect("secure provider remains available");
 
@@ -183,7 +199,7 @@ fn two_rate_limited_providers_do_not_masquerade_as_empty_inventory() {
 fn one_unconfigured_provider_does_not_block_configured_inventory() {
     let offers = vec![offer(
         "configured",
-        1_000_000,
+        /*price*/ 1_000_000,
         &SearchOffersRequest {
             hardware: hardware(),
             allow_interruptible: false,
@@ -250,7 +266,7 @@ fn unfunded_provider_does_not_hide_another_providers_offers() {
             ProviderErrorKind::InsufficientFunds,
             "Fund the first provider.",
         )),
-        Ok(vec![offer("second", 2_000_000, &request)]),
+        Ok(vec![offer("second", /*price*/ 2_000_000, &request)]),
     )
     .expect("a funded provider remains usable");
 
@@ -261,14 +277,14 @@ fn unfunded_provider_does_not_hide_another_providers_offers() {
 #[tokio::test]
 async fn confirmation_is_idempotent_and_never_calls_provider_create() {
     let service = service().await;
-    let provider = QuoteProvider::new("first", 2_000_000);
+    let provider = QuoteProvider::new("first", /*price*/ 2_000_000);
     let request = SearchOffersRequest {
         hardware: hardware(),
         allow_interruptible: false,
         require_verified_or_secure: true,
         maximum_hourly_microusd: 3_000_000,
     };
-    let selected = offer("first", 2_000_000, &request);
+    let selected = offer("first", /*price*/ 2_000_000, &request);
     let authorization = RentalAuthorization {
         client_operation_id: "operation-1".to_string(),
         maximum_hourly_microusd: 3_000_000,
@@ -299,7 +315,7 @@ async fn confirmation_is_idempotent_and_never_calls_provider_create() {
 #[tokio::test]
 async fn recorded_confirmation_replay_survives_expired_authorization() {
     let service = service().await;
-    let provider = QuoteProvider::new("first", 2_000_000);
+    let provider = QuoteProvider::new("first", /*price*/ 2_000_000);
     let request = SearchOffersRequest {
         hardware: hardware(),
         allow_interruptible: false,
@@ -316,7 +332,7 @@ async fn recorded_confirmation_replay_survives_expired_authorization() {
     let created = service
         .confirm(
             "test-recipe",
-            &offer("first", 2_000_000, &request),
+            &offer("first", /*price*/ 2_000_000, &request),
             &authorization,
             &provider,
             NOW_MS,
@@ -327,7 +343,7 @@ async fn recorded_confirmation_replay_survives_expired_authorization() {
     let replay = service
         .confirm(
             "test-recipe",
-            &offer("first", 2_000_000, &request),
+            &offer("first", /*price*/ 2_000_000, &request),
             &authorization,
             &provider,
             NOW_MS + 2_000,
@@ -342,7 +358,7 @@ async fn recorded_confirmation_replay_survives_expired_authorization() {
 #[tokio::test]
 async fn new_expired_authorization_has_actionable_recovery() {
     let service = service().await;
-    let provider = QuoteProvider::new("first", 2_000_000);
+    let provider = QuoteProvider::new("first", /*price*/ 2_000_000);
     let request = SearchOffersRequest {
         hardware: hardware(),
         allow_interruptible: false,
@@ -352,7 +368,7 @@ async fn new_expired_authorization_has_actionable_recovery() {
     let error = service
         .confirm(
             "test-recipe",
-            &offer("first", 2_000_000, &request),
+            &offer("first", /*price*/ 2_000_000, &request),
             &RentalAuthorization {
                 client_operation_id: "new-expired".to_string(),
                 maximum_hourly_microusd: 3_000_000,
@@ -374,7 +390,8 @@ async fn new_expired_authorization_has_actionable_recovery() {
 #[tokio::test]
 async fn confirmation_tolerates_bounded_transient_offer_inventory_omissions() {
     let service = service().await;
-    let provider = QuoteProvider::new("first", 2_000_000).with_transient_omissions(2);
+    let provider = QuoteProvider::new("first", /*price*/ 2_000_000)
+        .with_transient_omissions(/*count*/ 2);
     let request = SearchOffersRequest {
         hardware: hardware(),
         allow_interruptible: false,
@@ -384,7 +401,7 @@ async fn confirmation_tolerates_bounded_transient_offer_inventory_omissions() {
     let rental = service
         .confirm(
             "test-recipe",
-            &offer("first", 2_000_000, &request),
+            &offer("first", /*price*/ 2_000_000, &request),
             &RentalAuthorization {
                 client_operation_id: "transient-inventory".to_string(),
                 maximum_hourly_microusd: 3_000_000,
@@ -405,7 +422,8 @@ async fn confirmation_tolerates_bounded_transient_offer_inventory_omissions() {
 #[tokio::test]
 async fn atomic_offer_handle_skips_rotating_inventory_revalidation() {
     let service = service().await;
-    let provider = QuoteProvider::new("first", 2_000_000).with_atomic_create_handle();
+    let provider =
+        QuoteProvider::new("first", /*price*/ 2_000_000).with_atomic_create_handle();
     let request = SearchOffersRequest {
         hardware: hardware(),
         allow_interruptible: false,
@@ -415,7 +433,7 @@ async fn atomic_offer_handle_skips_rotating_inventory_revalidation() {
     let rental = service
         .confirm(
             "test-recipe",
-            &offer("first", 2_000_000, &request),
+            &offer("first", /*price*/ 2_000_000, &request),
             &RentalAuthorization {
                 client_operation_id: "atomic-offer-handle".to_string(),
                 maximum_hourly_microusd: 3_000_000,
@@ -436,7 +454,8 @@ async fn atomic_offer_handle_skips_rotating_inventory_revalidation() {
 #[tokio::test]
 async fn confirmation_rejects_unqualified_transport_before_provider_search() {
     let service = service().await;
-    let provider = QuoteProvider::new("insecure", 1_000_000).without_secure_transport();
+    let provider =
+        QuoteProvider::new("insecure", /*price*/ 1_000_000).without_secure_transport();
     let request = SearchOffersRequest {
         hardware: hardware(),
         allow_interruptible: false,
@@ -446,7 +465,7 @@ async fn confirmation_rejects_unqualified_transport_before_provider_search() {
     let error = service
         .confirm(
             "test-recipe",
-            &offer("insecure", 1_000_000, &request),
+            &offer("insecure", /*price*/ 1_000_000, &request),
             &RentalAuthorization {
                 client_operation_id: "unqualified-transport".to_string(),
                 maximum_hourly_microusd: 2_000_000,
@@ -467,7 +486,7 @@ async fn confirmation_rejects_unqualified_transport_before_provider_search() {
 #[tokio::test]
 async fn local_enforcement_requires_explicit_acknowledgement() {
     let service = service().await;
-    let provider = QuoteProvider::new("first", 2_000_000);
+    let provider = QuoteProvider::new("first", /*price*/ 2_000_000);
     let request = SearchOffersRequest {
         hardware: hardware(),
         allow_interruptible: false,
@@ -477,7 +496,7 @@ async fn local_enforcement_requires_explicit_acknowledgement() {
     let error = service
         .confirm(
             "test-recipe",
-            &offer("first", 2_000_000, &request),
+            &offer("first", /*price*/ 2_000_000, &request),
             &RentalAuthorization {
                 client_operation_id: "operation-no-ack".to_string(),
                 maximum_hourly_microusd: 3_000_000,
@@ -496,7 +515,10 @@ async fn local_enforcement_requires_explicit_acknowledgement() {
 
 async fn state() -> Arc<StateRuntime> {
     let path = std::env::temp_dir().join(format!("gpu-market-test-{}", uuid::Uuid::new_v4()));
-    StateRuntime::init(path, "test-provider".to_string())
+    let sqlite = codex_state::SqliteConfig::from_sqlite_home(
+        path.try_into().expect("temporary path is absolute"),
+    );
+    StateRuntime::init(sqlite, "test-provider".to_string())
         .await
         .expect("initialize state")
 }
@@ -513,6 +535,8 @@ fn recipe() -> GpuRecipe {
     GpuRecipe {
         id: "test-recipe".to_string(),
         revision: "manifest-v1".to_string(),
+        model_family: "test".to_string(),
+        recommendation_priority: None,
         model_id: "test/model".to_string(),
         served_model_id: "test/model".to_string(),
         wire_api: "chat".to_string(),
@@ -534,6 +558,7 @@ fn recipe() -> GpuRecipe {
         model_weight_bytes: 100_000_000_000,
         kv_cache_reserve_bytes: 20_000_000_000,
         workspace_reserve_bytes: 10_000_000_000,
+        container_entrypoint: Vec::new(),
         launch_command: vec![
             "server".to_string(),
             "test/model".to_string(),

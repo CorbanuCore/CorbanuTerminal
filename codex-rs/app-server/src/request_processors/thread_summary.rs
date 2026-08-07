@@ -313,6 +313,7 @@ pub(crate) fn summary_to_thread(
         section_entered_at: None,
         history_mode: ThreadHistoryMode::Legacy,
         model_provider,
+        runtime_route: None,
         created_at: created_at.map(|dt| dt.timestamp()).unwrap_or(0),
         updated_at: updated_at.map(|dt| dt.timestamp()).unwrap_or(0),
         recency_at: updated_at.map(|dt| dt.timestamp()),

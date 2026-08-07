@@ -5,6 +5,7 @@ use super::app_server_event_targets::ServerNotificationThreadTarget;
 use super::app_server_event_targets::server_notification_thread_target;
 use super::app_server_event_targets::server_request_thread_id;
 use crate::app_command::AppCommand;
+use crate::app_event::AppEvent;
 use crate::app_event::ConnectorsSnapshot;
 use crate::app_info::app_info_from_api;
 use crate::app_server_session::AppServerSession;
@@ -52,9 +53,8 @@ impl App {
             }
             AppServerEvent::Disconnected { message } => {
                 tracing::warn!("app-server event stream disconnected: {message}");
-                self.chat_widget.add_error_message(format!(
-                    "App-server connection degraded; PFTerminal will reconnect automatically: {message}"
-                ));
+                self.chat_widget.add_error_message(message.clone());
+                self.app_event_tx.send(AppEvent::FatalExitRequest(message));
             }
         }
     }
@@ -117,6 +117,11 @@ impl App {
                 );
                 return;
             }
+            ServerNotification::AccountLoginCompleted(notification) => {
+                self.chat_widget
+                    .on_codex_account_login_completed(notification.clone());
+                return;
+            }
             ServerNotification::ExternalAgentConfigImportCompleted(notification) => {
                 let should_report_completion =
                     app_server_client.consume_external_agent_config_import_completion();
@@ -153,9 +158,6 @@ impl App {
             }
             _ => {}
         }
-
-        self.cache_collab_receiver_threads_for_notification(&notification);
-        self.update_spawn_status_for_thread_notification(&notification);
 
         match server_notification_thread_target(&notification) {
             ServerNotificationThreadTarget::Thread(thread_id) => {

@@ -19,22 +19,25 @@ fn communication(message_id: &str) -> InterAgentCommunication {
 
 #[tokio::test]
 async fn mailbox_admission_is_idempotent_and_recoverable() {
-    let runtime = StateRuntime::init(test_support::unique_temp_dir(), "test-provider".to_string())
-        .await
-        .expect("state runtime");
+    let runtime = StateRuntime::init_for_testing(
+        test_support::unique_temp_dir(),
+        "test-provider".to_string(),
+    )
+    .await
+    .expect("state runtime");
     let recipient = ThreadId::new();
     let message = communication("message-1");
 
     assert_eq!(
         runtime
-            .admit_agent_message(recipient, &message, 1_000)
+            .admit_agent_message(recipient, &message, /*now_ms*/ 1_000)
             .await
             .expect("first admission"),
         AgentMailboxAdmission::Inserted
     );
     assert_eq!(
         runtime
-            .admit_agent_message(recipient, &message, 1_001)
+            .admit_agent_message(recipient, &message, /*now_ms*/ 1_001)
             .await
             .expect("duplicate admission"),
         AgentMailboxAdmission::Existing(AgentMailboxPhase::Admitted)
@@ -43,7 +46,7 @@ async fn mailbox_admission_is_idempotent_and_recoverable() {
     timestamp_retry.created_at_ms = Some(9_999);
     assert_eq!(
         runtime
-            .admit_agent_message(recipient, &timestamp_retry, 1_001)
+            .admit_agent_message(recipient, &timestamp_retry, /*now_ms*/ 1_001)
             .await
             .expect("server timestamp must not alter logical identity"),
         AgentMailboxAdmission::Existing(AgentMailboxPhase::Admitted)
@@ -54,7 +57,7 @@ async fn mailbox_admission_is_idempotent_and_recoverable() {
                 "message-1",
                 AgentMailboxPhase::Admitted,
                 AgentMailboxPhase::Ready,
-                1_002,
+                /*now_ms*/ 1_002,
             )
             .await
             .expect("ready transition")
@@ -77,13 +80,16 @@ async fn mailbox_admission_is_idempotent_and_recoverable() {
 
 #[tokio::test]
 async fn mailbox_records_a_new_attempt_without_changing_logical_identity() {
-    let runtime = StateRuntime::init(test_support::unique_temp_dir(), "test-provider".to_string())
-        .await
-        .expect("state runtime");
+    let runtime = StateRuntime::init_for_testing(
+        test_support::unique_temp_dir(),
+        "test-provider".to_string(),
+    )
+    .await
+    .expect("state runtime");
     let recipient = ThreadId::new();
     let message = communication("message-1");
     runtime
-        .admit_agent_message(recipient, &message, 1_000)
+        .admit_agent_message(recipient, &message, /*now_ms*/ 1_000)
         .await
         .expect("admission");
     assert!(
@@ -92,7 +98,7 @@ async fn mailbox_records_a_new_attempt_without_changing_logical_identity() {
                 "message-1",
                 AgentMailboxPhase::Admitted,
                 AgentMailboxPhase::Ready,
-                1_001,
+                /*now_ms*/ 1_001,
             )
             .await
             .expect("ready")
@@ -103,7 +109,7 @@ async fn mailbox_records_a_new_attempt_without_changing_logical_identity() {
                 "message-1",
                 AgentMailboxPhase::Ready,
                 "attempt-1",
-                1_002,
+                /*now_ms*/ 1_002,
             )
             .await
             .expect("begin attempt")
@@ -124,18 +130,21 @@ async fn mailbox_records_a_new_attempt_without_changing_logical_identity() {
 
 #[tokio::test]
 async fn completed_mailbox_message_is_terminal_but_remains_auditable() {
-    let runtime = StateRuntime::init(test_support::unique_temp_dir(), "test-provider".to_string())
-        .await
-        .expect("state runtime");
+    let runtime = StateRuntime::init_for_testing(
+        test_support::unique_temp_dir(),
+        "test-provider".to_string(),
+    )
+    .await
+    .expect("state runtime");
     let recipient = ThreadId::new();
     let message = communication("message-1");
     runtime
-        .admit_agent_message(recipient, &message, 1_000)
+        .admit_agent_message(recipient, &message, /*now_ms*/ 1_000)
         .await
         .expect("admission");
     assert!(
         runtime
-            .mark_agent_message_completed("message-1", 1_001)
+            .mark_agent_message_completed("message-1", /*now_ms*/ 1_001)
             .await
             .expect("completion")
     );
@@ -157,20 +166,23 @@ async fn completed_mailbox_message_is_terminal_but_remains_auditable() {
 
 #[tokio::test]
 async fn mailbox_rejects_message_id_reuse_for_different_content() {
-    let runtime = StateRuntime::init(test_support::unique_temp_dir(), "test-provider".to_string())
-        .await
-        .expect("state runtime");
+    let runtime = StateRuntime::init_for_testing(
+        test_support::unique_temp_dir(),
+        "test-provider".to_string(),
+    )
+    .await
+    .expect("state runtime");
     let recipient = ThreadId::new();
     let first = communication("message-1");
     runtime
-        .admit_agent_message(recipient, &first, 1_000)
+        .admit_agent_message(recipient, &first, /*now_ms*/ 1_000)
         .await
         .expect("first admission");
     let mut conflicting = first;
     conflicting.content = "different work".to_string();
 
     let error = runtime
-        .admit_agent_message(recipient, &conflicting, 1_001)
+        .admit_agent_message(recipient, &conflicting, /*now_ms*/ 1_001)
         .await
         .expect_err("message-id collision must fail");
     assert!(

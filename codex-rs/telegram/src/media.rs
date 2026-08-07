@@ -490,7 +490,7 @@ mod tests {
 
     #[test]
     fn largest_photo_picks_by_pixel_area_not_order() {
-        let photos = vec![photo(1280, 720, 90_000, "b"), photo(320, 180, 8_000, "a")];
+        let photos = vec![photo(/*width*/ 1280, /*height*/ 720, /*size*/ 90_000, "b"), photo(/*width*/ 320, /*height*/ 180, /*size*/ 8_000, "a")];
         assert_eq!(largest_photo(&photos).unwrap().width, 1280);
     }
 
@@ -557,7 +557,7 @@ mod tests {
         tokio::fs::write(&payload, b"payload").await.unwrap();
         tokio::fs::write(&metadata, b"metadata").await.unwrap();
 
-        store.cleanup_with_limits(std::time::Duration::MAX, 0).await;
+        store.cleanup_with_limits(std::time::Duration::MAX, /*max_bytes*/ 0).await;
 
         assert!(!payload.exists());
         assert!(!metadata.exists());

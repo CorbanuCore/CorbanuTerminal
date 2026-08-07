@@ -1,12 +1,9 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use sha2::Digest;
-use sha2::Sha256;
 use tokio::sync::RwLock;
 use tokio::task::JoinError;
 use tokio_util::either::Either;
@@ -49,7 +46,6 @@ pub(crate) struct ToolCallRuntime {
     step_context: Arc<StepContext>,
     tracker: SharedTurnDiffTracker,
     parallel_execution: Arc<RwLock<()>>,
-    tool_call_counts: Arc<RwLock<HashMap<String, u8>>>,
 }
 
 impl ToolCallRuntime {
@@ -65,7 +61,6 @@ impl ToolCallRuntime {
             step_context,
             tracker,
             parallel_execution: Arc::new(RwLock::new(())),
-            tool_call_counts: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -167,7 +162,7 @@ impl ToolCallRuntime {
                     let _ = execution_started_at.set(Instant::now());
                 }
 
-                let result = router
+                router
                     .dispatch_tool_call_with_terminal_outcome(
                         session,
                         step_context,
@@ -178,30 +173,7 @@ impl ToolCallRuntime {
                         dispatch_terminal_outcome_reached,
                     )
                     .instrument(dispatch_span.clone())
-                    .await;
-                match result {
-                    Err(FunctionCallError::MalformedToolCall {
-                        diagnostic,
-                        message,
-                    }) => {
-                        let signature = malformed_tool_call_signature(&diagnostic);
-                        let count = turn.record_malformed_tool_call(signature).await;
-                        if count > 1 {
-                            Err(FunctionCallError::Fatal(format!(
-                                "stopped the turn after {count} equivalent malformed tool calls \
-                                 for `{}` (category={}); the model did not correct the tool payload \
-                                 after one retry",
-                                diagnostic.tool, diagnostic.category
-                            )))
-                        } else {
-                            Err(FunctionCallError::MalformedToolCall {
-                                diagnostic,
-                                message,
-                            })
-                        }
-                    }
-                    other => other,
-                }
+                    .await
             }));
 
         async move {
@@ -249,40 +221,6 @@ impl ToolCallRuntime {
         }
         .in_current_span()
     }
-}
-
-fn tool_call_signature(call: &ToolCall) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(call.tool_name.to_string().as_bytes());
-    hasher.update(b"\0");
-    hasher.update(call.payload.log_payload().as_bytes());
-    let digest = hasher.finalize();
-    let payload_hash = digest
-        .iter()
-        .take(8)
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    format!("{}:{payload_hash}", call.tool_name)
-}
-
-fn malformed_tool_call_signature(diagnostic: &codex_tools::MalformedToolCallDiagnostic) -> String {
-    let normalized_excerpt = diagnostic
-        .excerpt
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    let mut hasher = Sha256::new();
-    hasher.update(diagnostic.tool.as_bytes());
-    hasher.update(b"\0");
-    hasher.update(diagnostic.category.as_bytes());
-    hasher.update(b"\0");
-    hasher.update(normalized_excerpt.as_bytes());
-    let digest = hasher.finalize();
-    digest
-        .iter()
-        .take(16)
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
 }
 
 impl ToolCallRuntime {
@@ -629,45 +567,6 @@ mod tests {
 
     impl CoreToolRuntime for ImmediateHandler {}
 
-    struct MalformedHandler {
-        tool_name: codex_tools::ToolName,
-    }
-
-    impl ToolExecutor<ToolInvocation> for MalformedHandler {
-        fn tool_name(&self) -> codex_tools::ToolName {
-            self.tool_name.clone()
-        }
-
-        fn spec(&self) -> codex_tools::ToolSpec {
-            codex_tools::ToolSpec::Function(codex_tools::ResponsesApiTool {
-                name: self.tool_name.name.clone(),
-                description: "Malformed-call test tool.".to_string(),
-                strict: false,
-                defer_loading: None,
-                parameters: codex_tools::JsonSchema::default(),
-                output_schema: None,
-            })
-        }
-
-        fn handle(&self, _invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
-            Box::pin(async {
-                let diagnostic = codex_tools::MalformedToolCallDiagnostic {
-                    tool: "structured_write".to_string(),
-                    byte_len: 71,
-                    category: "Eof".to_string(),
-                    excerpt: "{\"path\":\"runtime/engine.js\",\"mode\":\"overwrite\"".to_string(),
-                    finish_reason: None,
-                };
-                Err(FunctionCallError::MalformedToolCall {
-                    message: format!("{diagnostic}"),
-                    diagnostic,
-                })
-            })
-        }
-    }
-
-    impl CoreToolRuntime for MalformedHandler {}
-
     struct CancellationCleanupHandler {
         tool_name: codex_tools::ToolName,
         started: std::sync::Mutex<Option<oneshot::Sender<()>>>,
@@ -852,119 +751,6 @@ mod tests {
             .drain(..)
             .collect::<Vec<_>>();
         assert_eq!(vec![ToolCallOutcome::Completed { success: true }], actual);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn repeated_identical_tool_calls_are_stopped_after_budget() -> anyhow::Result<()> {
-        let (session, turn_context) = crate::session::tests::make_session_and_context().await;
-        let session = Arc::new(session);
-        let turn_context = Arc::new(turn_context);
-        let tool_name = codex_tools::ToolName::plain("test_tool");
-        let handler = Arc::new(ImmediateHandler {
-            tool_name: tool_name.clone(),
-        }) as Arc<dyn CoreToolRuntime>;
-        let router = Arc::new(ToolRouter::from_parts(
-            ToolRegistry::from_tools([handler]),
-            Vec::new(),
-        ));
-        let tracker = Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new()));
-        let runtime = ToolCallRuntime::new(router, session, turn_context, tracker);
-        let cancellation_token = CancellationToken::new();
-
-        for idx in 0..MAX_IDENTICAL_TOOL_CALLS_PER_TURN {
-            let response = runtime
-                .clone()
-                .handle_tool_call(
-                    ToolCall {
-                        tool_name: tool_name.clone(),
-                        call_id: format!("call-{idx}"),
-                        payload: ToolPayload::Function {
-                            arguments: "{\"cmd\":\"pwd\"}".to_string(),
-                        },
-                    },
-                    cancellation_token.clone(),
-                )
-                .await?;
-            let ResponseInputItem::FunctionCallOutput { output, .. } = response else {
-                panic!("expected function call output");
-            };
-            assert_eq!(output.success, Some(true));
-        }
-
-        let response = runtime
-            .handle_tool_call(
-                ToolCall {
-                    tool_name,
-                    call_id: "call-blocked".to_string(),
-                    payload: ToolPayload::Function {
-                        arguments: "{\"cmd\":\"pwd\"}".to_string(),
-                    },
-                },
-                cancellation_token,
-            )
-            .await?;
-        let ResponseInputItem::FunctionCallOutput { output, .. } = response else {
-            panic!("expected function call output");
-        };
-        assert_eq!(output.success, Some(false));
-        let FunctionCallOutputBody::Text(message) = output.body else {
-            panic!("expected text output");
-        };
-        assert!(
-            message.contains("repeated identical tool call stopped"),
-            "{message}"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn equivalent_malformed_calls_stop_across_sampling_runtimes() -> anyhow::Result<()> {
-        let (session, turn_context) = crate::session::tests::make_session_and_context().await;
-        let session = Arc::new(session);
-        let turn_context = Arc::new(turn_context);
-        let tool_name = codex_tools::ToolName::plain("structured_write");
-        let handler = Arc::new(MalformedHandler {
-            tool_name: tool_name.clone(),
-        }) as Arc<dyn CoreToolRuntime>;
-        let router = Arc::new(ToolRouter::from_parts(
-            ToolRegistry::from_tools([handler]),
-            Vec::new(),
-        ));
-        let tracker = Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new()));
-        let call = |call_id: &str| ToolCall {
-            tool_name: tool_name.clone(),
-            call_id: call_id.to_string(),
-            payload: ToolPayload::Function {
-                arguments: "{\"path\":\"runtime/engine.js\",\"mode\":\"overwrite\"".to_string(),
-            },
-        };
-
-        let first_runtime = ToolCallRuntime::new(
-            Arc::clone(&router),
-            Arc::clone(&session),
-            Arc::clone(&turn_context),
-            Arc::clone(&tracker),
-        );
-        let first = first_runtime
-            .handle_tool_call(call("call-1"), CancellationToken::new())
-            .await?;
-        let ResponseInputItem::FunctionCallOutput { output, .. } = first else {
-            panic!("first malformed call should return a corrective tool result");
-        };
-        assert_eq!(output.success, Some(false));
-
-        // A new runtime represents the next model sampling request in the same user turn.
-        let second_runtime = ToolCallRuntime::new(router, session, turn_context, tracker);
-        let second = second_runtime
-            .handle_tool_call(call("call-2"), CancellationToken::new())
-            .await;
-        let Err(CodexErr::Fatal(message)) = second else {
-            panic!("second equivalent malformed call must stop the turn: {second:?}");
-        };
-        assert!(message.contains("after 2 equivalent malformed tool calls"));
 
         Ok(())
     }

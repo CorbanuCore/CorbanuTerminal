@@ -12,6 +12,7 @@ use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::HistoryPosition;
 use codex_protocol::protocol::RolloutItem;
 use codex_protocol::protocol::RolloutLine;
+use codex_protocol::protocol::RuntimeSelectionSource;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::SessionMeta;
 use codex_protocol::protocol::SessionMetaLine;
@@ -193,6 +194,7 @@ async fn state_db_init_backfills_before_returning() -> anyhow::Result<()> {
             agent_path: None,
             agent_nickname: None,
             agent_role: None,
+            runtime_selection: None,
             model_provider: None,
             base_instructions: None,
             dynamic_tools: None,
@@ -528,6 +530,7 @@ async fn recorder_materializes_on_flush_with_pending_items() -> std::io::Result<
             Vec::new(),
         )
         .with_session_id(session_id)
+        .with_runtime_selection(Some(RuntimeSelectionSource::ExplicitRequest))
         .with_history_mode(ThreadHistoryMode::Paginated)
         .with_initial_window_id(initial_window_id.clone()),
     )
@@ -549,6 +552,12 @@ async fn recorder_materializes_on_flush_with_pending_items() -> std::io::Result<
         ))])
         .await?;
     recorder.flush().await?;
+    let (persisted, _, _) = RolloutRecorder::load_rollout_items(&rollout_path).await?;
+    assert!(persisted.iter().any(|item| matches!(
+        item,
+        RolloutItem::SessionMeta(line)
+            if line.meta.runtime_selection == Some(RuntimeSelectionSource::ExplicitRequest)
+    )));
     assert!(
         rollout_path.exists(),
         "flush with pending items should materialize the rollout"
@@ -1628,6 +1637,7 @@ async fn resume_candidate_matches_cwd_reads_latest_turn_context() -> std::io::Re
             network: None,
             file_system_sandbox_policy: None,
             model: "test-model".to_string(),
+            model_provider: None,
             comp_hash: None,
             personality: None,
             collaboration_mode: None,

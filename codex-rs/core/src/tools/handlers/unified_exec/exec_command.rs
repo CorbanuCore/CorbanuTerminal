@@ -8,13 +8,11 @@ use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
 use crate::tools::context::boxed_tool_output;
 use crate::tools::handlers::apply_granted_turn_permissions;
-use crate::tools::handlers::apply_patch::InterceptedPatchSource;
 use crate::tools::handlers::apply_patch::intercept_apply_patch;
 use crate::tools::handlers::implicit_granted_permissions;
 use crate::tools::handlers::normalize_and_validate_additional_permissions;
 use crate::tools::handlers::parse_arguments;
 use crate::tools::handlers::parse_arguments_with_base_path;
-use crate::tools::handlers::reject_source_write_heredoc_when_structured_edit_enabled;
 use crate::tools::handlers::resolve_tool_environment;
 use crate::tools::handlers::rewrite_function_string_argument;
 use crate::tools::handlers::updated_hook_command;
@@ -190,7 +188,6 @@ impl ExecCommandHandler {
                 parse_arguments(&arguments)?
             }
         };
-        reject_source_write_heredoc_when_structured_edit_enabled(turn.as_ref(), &args.cmd)?;
         let hook_command = args.cmd.clone();
         // TODO(anp) wire PathUri through implicit skills instead of skipping on foreign paths
         if let Some(native_cwd) = native_cwd.as_ref() {
@@ -323,7 +320,6 @@ impl ExecCommandHandler {
             Some(&tracker),
             &context.call_id,
             "exec_command",
-            InterceptedPatchSource::StrictShell,
         )
         .await?
         {

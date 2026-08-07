@@ -289,8 +289,8 @@ use crate::bottom_pane::QueuedInputAction;
 use crate::bottom_pane::SelectionAction;
 use crate::bottom_pane::SelectionItem;
 use crate::bottom_pane::SelectionViewParams;
-use crate::bottom_pane::custom_prompt_view::CustomPromptSubmitMode;
 use crate::bottom_pane::custom_prompt_view::CustomPromptView;
+use crate::bottom_pane::custom_prompt_view::CustomPromptSubmitMode;
 use crate::bottom_pane::popup_consts::standard_popup_hint_line;
 use crate::clipboard_paste::paste_image_to_temp_png;
 use crate::collaboration_modes;
@@ -372,13 +372,16 @@ use self::skills::find_skill_mentions_with_tool_mentions;
 use self::skills::is_app_mentionable;
 mod plugin_catalog;
 mod plugins;
+pub(crate) mod claude_code_login;
+mod pfterminal_plan_status;
+pub(crate) mod provider_credentials;
 use self::plugins::PluginInstallAuthFlowState;
 use self::plugins::PluginListFetchState;
 use self::plugins::PluginsCacheState;
 mod plan_implementation;
 use self::plan_implementation::PLAN_IMPLEMENTATION_TITLE;
 mod model_popups;
-pub(crate) use model_popups::ModelSelectionPurpose;
+mod native_orchestration;
 mod notifications;
 use self::notifications::Notification;
 mod permission_popups;
@@ -415,6 +418,7 @@ use self::status_state::StatusState;
 use self::status_state::TerminalTitleStatusKind;
 mod status_controls;
 mod status_surfaces;
+mod tasknode_menu;
 mod streaming;
 use self::status_surfaces::CachedProjectRootName;
 mod tokens;
@@ -422,17 +426,11 @@ pub(crate) use self::tokens::TokenActivityView;
 mod tool_lifecycle;
 mod tool_requests;
 mod transcript;
+pub(crate) mod telegram_setup;
 use self::transcript::TranscriptState;
-mod tps;
-use self::tps::TpsEstimator;
 mod turn_lifecycle;
 mod turn_runtime;
 use self::turn_lifecycle::TurnLifecycleState;
-pub(crate) mod claude_code_login;
-mod pfterminal_plan_status;
-pub(crate) mod provider_credentials;
-mod tasknode_menu;
-pub(crate) mod telegram_setup;
 mod usage;
 mod user_messages;
 mod vault_menu;
@@ -570,12 +568,9 @@ pub(crate) struct ChatWidget {
     session_header: SessionHeader,
     initial_user_message: Option<UserMessage>,
     status_account_display: Option<StatusAccountDisplay>,
-    gpu_spend_status: Option<String>,
-    active_external_model_display: Option<String>,
     runtime_model_provider_base_url: Option<String>,
     pub(crate) remote_connection: Option<RemoteConnectionStatus>,
     token_info: Option<TokenUsageInfo>,
-    tps_estimator: TpsEstimator,
     rate_limit_snapshots_by_limit_id: BTreeMap<String, RateLimitSnapshotDisplay>,
     refreshing_status_outputs: Vec<(u64, StatusHistoryHandle)>,
     next_status_refresh_request_id: u64,
@@ -603,16 +598,17 @@ pub(crate) struct ChatWidget {
     // Stream lifecycle controller for proposed plan output.
     plan_stream_controller: Option<PlanStreamController>,
     pending_stream_consolidations: usize,
-    tasknode_menu_counts: Option<tasknode_menu::TaskNodeMenuCountsCache>,
-    tasknode_menu_poll_generation: u64,
-    tasknode_active_chat_stream_id: Option<String>,
     /// Holds the platform clipboard lease so copied text remains available while supported.
     clipboard_lease: Option<crate::clipboard_copy::ClipboardLease>,
     wallet_capability: Option<zeroize::Zeroizing<String>>,
     wallet_status_generation: u64,
-    telegram_discovery_generation: u64,
     wallet_payment_config: Option<crate::chatwidget::wallet_menu::WalletPaymentConfig>,
     wallet_balances: Option<codex_wallet::WalletBalances>,
+    pending_provider_codex_login_id: Option<String>,
+    telegram_discovery_generation: u64,
+    tasknode_menu_counts: Option<tasknode_menu::TaskNodeMenuCountsCache>,
+    tasknode_menu_poll_generation: u64,
+    tasknode_active_chat_stream_id: Option<String>,
     copy_last_response_binding: Vec<KeyBinding>,
     running_commands: HashMap<String, RunningCommand>,
     collab_agent_metadata: HashMap<ThreadId, AgentMetadata>,
@@ -652,7 +648,6 @@ pub(crate) struct ChatWidget {
     plugin_remote_section_errors: Vec<crate::app_event::PluginRemoteSectionError>,
     plugin_install_apps_needing_auth: Vec<AppSummary>,
     plugin_install_auth_flow: Option<PluginInstallAuthFlowState>,
-    pending_provider_codex_login_id: Option<String>,
     plugins_active_tab_id: Option<String>,
     newly_installed_marketplace_tab_id: Option<String>,
     // Queue of interruptive UI events deferred during an active write cycle
@@ -1175,12 +1170,8 @@ impl ChatWidget {
     fn apply_token_info(&mut self, info: TokenUsageInfo) {
         let percent = self.context_remaining_percent(&info);
         let used_tokens = self.context_used_tokens(&info, percent.is_some());
-        let tps_updated = self.tps_estimator.record_provider_usage(&info);
         self.bottom_pane.set_context_window(percent, used_tokens);
         self.token_info = Some(info);
-        if tps_updated {
-            self.refresh_status_surfaces();
-        }
     }
 
     fn context_remaining_percent(&self, info: &TokenUsageInfo) -> Option<i64> {
@@ -1434,17 +1425,7 @@ impl ChatWidget {
             .unified_exec_processes
             .iter()
             .map(|process| history_cell::UnifiedExecProcessDetails {
-                command_display: format!(
-                    "{} · pid={}{} · status=running · call={} · output=thread-transcript",
-                    process.command_display,
-                    process.key,
-                    process
-                        .interrupt_notes
-                        .last()
-                        .map(|_| " · interrupt=preserved".to_string())
-                        .unwrap_or_default(),
-                    process.call_id,
-                ),
+                command_display: process.command_display.clone(),
                 recent_chunks: process.recent_chunks.clone(),
             })
             .collect();
@@ -1703,18 +1684,9 @@ impl ChatWidget {
         self.bottom_pane.composer_is_empty()
     }
 
-    pub(crate) fn visible_task_running(&self) -> bool {
-        self.bottom_pane.is_task_running()
-    }
-
     #[cfg(test)]
     pub(crate) fn is_task_running_for_test(&self) -> bool {
         self.bottom_pane.is_task_running()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn status_indicator_visible_for_test(&self) -> bool {
-        self.bottom_pane.status_indicator_visible()
     }
 
     pub(crate) fn toggle_vim_mode_and_notify(&mut self) {

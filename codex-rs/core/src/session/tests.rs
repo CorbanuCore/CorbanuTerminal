@@ -44,9 +44,6 @@ use codex_http_client::RouteAwareClientPool;
 use codex_login::CodexAuth;
 use codex_login::auth::AgentIdentityAuthPolicy;
 use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
-use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
-use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_models_manager::bundled_models_response;
 use codex_models_manager::model_info;
 use codex_models_manager::test_support::construct_model_info_offline_for_tests;
@@ -3473,6 +3470,7 @@ async fn record_initial_history_forked_hydrates_previous_turn_settings() {
         network: None,
         file_system_sandbox_policy: None,
         model: previous_model.to_string(),
+        model_provider: None,
         comp_hash: None,
         personality: turn_context.personality,
         collaboration_mode: Some(turn_context.collaboration_mode()),
@@ -3529,6 +3527,7 @@ async fn record_initial_history_forked_hydrates_previous_turn_settings() {
         session.previous_turn_settings().await,
         Some(PreviousTurnSettings {
             model: previous_model.to_string(),
+            model_provider: None,
             comp_hash: None,
             realtime_active: Some(turn_context.realtime_active),
         })
@@ -3572,6 +3571,7 @@ async fn thread_rollback_drops_last_turn_from_history() {
     sess.persist_rollout_items(&rollout_items).await;
     sess.set_previous_turn_settings(Some(PreviousTurnSettings {
         model: "stale-model".to_string(),
+        model_provider: None,
         comp_hash: None,
         realtime_active: Some(tc.realtime_active),
     }))
@@ -3763,6 +3763,7 @@ async fn thread_rollback_recomputes_previous_turn_settings_and_reference_context
     .await;
     sess.set_previous_turn_settings(Some(PreviousTurnSettings {
         model: "stale-model".to_string(),
+        model_provider: None,
         comp_hash: None,
         realtime_active: None,
     }))
@@ -3780,6 +3781,7 @@ async fn thread_rollback_recomputes_previous_turn_settings_and_reference_context
         sess.previous_turn_settings().await,
         Some(PreviousTurnSettings {
             model: tc.model_info.slug.clone(),
+            model_provider: Some(tc.config.model_provider_id.clone()),
             comp_hash: None,
             realtime_active: Some(tc.realtime_active),
         })
@@ -4137,7 +4139,6 @@ async fn set_rate_limits_retains_previous_credits() {
         model_reasoning_summary: config.model_reasoning_summary,
         developer_instructions: config.developer_instructions.clone(),
         service_tier: None,
-        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -4156,6 +4157,7 @@ async fn set_rate_limits_retains_previous_credits() {
         app_server_client_name: None,
         app_server_client_version: None,
         session_source: SessionSource::Exec,
+        runtime_selection: None,
         history_mode: Default::default(),
         forked_from_thread_id: None,
         parent_thread_id: None,
@@ -4247,7 +4249,6 @@ async fn set_rate_limits_updates_plan_type_when_present() {
         model_reasoning_summary: config.model_reasoning_summary,
         developer_instructions: config.developer_instructions.clone(),
         service_tier: None,
-        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -4266,6 +4267,7 @@ async fn set_rate_limits_updates_plan_type_when_present() {
         app_server_client_name: None,
         app_server_client_version: None,
         session_source: SessionSource::Exec,
+        runtime_selection: None,
         history_mode: Default::default(),
         forked_from_thread_id: None,
         parent_thread_id: None,
@@ -4523,6 +4525,7 @@ async fn open_thread_persistence(session: &mut Session) -> PathBuf {
             parent_thread_id: None,
             source: SessionSource::Exec,
             thread_source: None,
+            runtime_selection: None,
             originator: "test_originator".to_string(),
             base_instructions: BaseInstructions::default(),
             dynamic_tools: Vec::new(),
@@ -4570,27 +4573,11 @@ fn text_block(s: &str) -> serde_json::Value {
     })
 }
 
-/// Writes a dummy Ambient provider API key so the default Ambient provider can
-/// authenticate in tests. The default Ambient provider resolves auth from
-/// `provider_auth.json` (not from the auth manager's cached `CodexAuth`), so
-/// tests that trigger model requests (e.g. guardian review subagents) need this
-/// file to exist on disk.
-fn write_test_provider_auth(codex_home: &Path) {
-    login_with_provider_api_key(
-        codex_home,
-        AMBIENT_API_KEY_ENV_VAR,
-        "test-ambient-api-key",
-        codex_login::AuthCredentialsStoreMode::File,
-        codex_login::AuthKeyringBackendKind::default(),
-    )
-    .expect("write test provider API key");
-}
-
 async fn build_test_config(codex_home: &Path) -> Config {
     ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.to_path_buf())
         .harness_overrides(ConfigOverrides {
-            model: Some("gpt-5.5".to_string()),
+            model: Some("gpt-5.6-sol".to_string()),
             ..Default::default()
         })
         .build()
@@ -4771,214 +4758,6 @@ async fn session_settings_null_service_tier_update_uses_default_service_tier() {
 }
 
 #[tokio::test]
-async fn session_update_settings_model_provider_rebuilds_model_client() {
-    let (session, _rx_event) = make_session_with_config_and_rx(|config| {
-        let provider = config
-            .model_providers
-            .get(AMBIENT_PROVIDER_ID)
-            .expect("ambient provider should be configured")
-            .clone();
-        config.model_provider_id = AMBIENT_PROVIDER_ID.to_string();
-        config.model_provider = provider;
-    })
-    .await
-    .expect("session should initialize");
-
-    assert!(
-        session.services.model_client().provider_info().is_ambient(),
-        "test should start on Ambient"
-    );
-
-    session
-        .update_settings(SessionSettingsUpdate {
-            model_provider: Some(ZAI_PROVIDER_ID.to_string()),
-            ..Default::default()
-        })
-        .await
-        .expect("provider update should apply");
-
-    assert!(
-        session.services.model_client().provider_info().is_zai(),
-        "provider update should rebuild the runtime model client"
-    );
-}
-
-#[tokio::test]
-async fn session_new_turn_refreshes_runtime_gpu_provider_endpoint_without_reselection() {
-    const NOW_MS: i64 = 1_800_000_000_000;
-    let state_home = tempfile::tempdir().expect("state home");
-    let state = codex_state::StateRuntime::init(
-        state_home.path().to_path_buf(),
-        "runtime-provider-test".to_string(),
-    )
-    .await
-    .expect("initialize state");
-    let rental_id = "gpu-runtime-session-test";
-    state
-        .create_gpu_rental(
-            &codex_state::GpuRentalCreateParams {
-                rental_id: rental_id.to_string(),
-                installation_id: "installation-1".to_string(),
-                client_operation_id: "operation-1".to_string(),
-                provider: "vast".to_string(),
-                recipe_id: "deepseek-flash-2xh200".to_string(),
-                recipe_revision: "test-revision".to_string(),
-                offer_snapshot_json: "{\"offer_id\":\"offer-1\"}".to_string(),
-                quote_expires_at_ms: Some(NOW_MS + 60_000),
-                max_hourly_microusd: 8_000_000,
-                max_total_microusd: 20_000_000,
-                terminate_at_ms: NOW_MS + 3_600_000,
-                enforcement_class: codex_state::GpuLimitEnforcement::LocalControllerDependent,
-                ownership_tag: "pft-runtime-session-test".to_string(),
-            },
-            NOW_MS,
-        )
-        .await
-        .expect("create rental");
-    let lease = state
-        .claim_due_gpu_rentals("controller", NOW_MS, 10_000, 1)
-        .await
-        .expect("claim rental")
-        .remove(0);
-    assert!(
-        state
-            .update_gpu_rental(
-                &lease,
-                &codex_state::GpuRentalUpdate {
-                    desired_state: Some(codex_state::GpuRentalState::Ready),
-                    observed_state: Some(codex_state::GpuRentalState::Ready),
-                    next_retry_at_ms: Some(NOW_MS),
-                    ..Default::default()
-                },
-                NOW_MS,
-            )
-            .await
-            .expect("mark rental ready")
-    );
-    let runtime_provider_id = "gpu-runtime-session-test-provider";
-    assert!(
-        state
-            .upsert_gpu_runtime_provider(
-                &codex_state::GpuRuntimeProviderUpsert {
-                    rental_id: rental_id.to_string(),
-                    provider_id: runtime_provider_id.to_string(),
-                    base_url: "https://rental.example.invalid/v1".to_string(),
-                    model_id: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
-                    wire_api: "chat".to_string(),
-                    health: "ready".to_string(),
-                    display_hourly_microusd: 7_000_000,
-                    maximum_context_tokens: 65_536,
-                    catalog_sequence: 1,
-                },
-                NOW_MS,
-            )
-            .await
-            .expect("register runtime provider")
-    );
-
-    let sqlite_home = state_home.path().to_path_buf();
-    let session = make_session_with_config(move |config| {
-        config.sqlite_home = sqlite_home;
-        assert!(!config.model_providers.contains_key(runtime_provider_id));
-    })
-    .await
-    .expect("session should initialize before runtime provider injection");
-
-    let update = SessionSettingsUpdate {
-        model_provider: Some(runtime_provider_id.to_string()),
-        collaboration_mode: Some(CollaborationMode {
-            mode: ModeKind::Default,
-            settings: Settings {
-                model: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
-                reasoning_effort: Some(codex_protocol::openai_models::ReasoningEffort::None),
-                developer_instructions: None,
-            },
-        }),
-        ..Default::default()
-    };
-
-    session
-        .preview_settings(&update)
-        .await
-        .expect("runtime provider should hot-load during settings preview");
-
-    session
-        .update_settings(update)
-        .await
-        .expect("runtime provider should hot-load into the existing session");
-
-    assert_eq!(
-        session.services.model_client().provider_info().base_url,
-        Some("https://rental.example.invalid/v1".to_string())
-    );
-
-    let mut refreshed_runtime = state
-        .list_gpu_runtime_providers()
-        .await
-        .expect("list runtime providers")
-        .remove(0);
-    refreshed_runtime.base_url = "https://replacement.example.invalid/v1".to_string();
-    assert!(
-        state
-            .refresh_gpu_runtime_provider(
-                &codex_state::GpuRuntimeProviderUpsert {
-                    rental_id: refreshed_runtime.rental_id,
-                    provider_id: refreshed_runtime.provider_id,
-                    base_url: refreshed_runtime.base_url,
-                    model_id: refreshed_runtime.model_id,
-                    wire_api: refreshed_runtime.wire_api,
-                    health: refreshed_runtime.health,
-                    display_hourly_microusd: refreshed_runtime.display_hourly_microusd,
-                    maximum_context_tokens: refreshed_runtime
-                        .maximum_context_tokens
-                        .expect("runtime context window"),
-                    catalog_sequence: refreshed_runtime.catalog_sequence,
-                },
-                NOW_MS + 1,
-            )
-            .await
-            .expect("refresh runtime provider")
-    );
-    let next_turn = session
-        .new_turn_with_sub_id(
-            "turn-after-endpoint-recovery".to_string(),
-            SessionSettingsUpdate::default(),
-        )
-        .await
-        .expect("new turn should refresh the selected runtime provider");
-    assert_eq!(
-        session.services.model_client().provider_info().base_url,
-        Some("https://replacement.example.invalid/v1".to_string())
-    );
-    assert_eq!(
-        next_turn.provider.info().base_url,
-        Some("https://replacement.example.invalid/v1".to_string())
-    );
-
-    assert_eq!(
-        session.new_default_turn().await.model_context_window(),
-        Some(62_259),
-        "runtime endpoint cap and the standard 95% safety margin must override broader model-card metadata"
-    );
-
-    session
-        .update_settings(SessionSettingsUpdate {
-            model_provider: Some(AMBIENT_PROVIDER_ID.to_string()),
-            ..Default::default()
-        })
-        .await
-        .expect("switch back to static provider");
-    assert!(
-        session
-            .new_default_turn()
-            .await
-            .model_context_window()
-            .is_some_and(|window| window > 62_259),
-        "leaving a runtime provider must clear its endpoint-specific context cap"
-    );
-}
-
-#[tokio::test]
 async fn session_settings_legacy_fast_service_tier_update_uses_priority_request_value() {
     let session_configuration = make_session_configuration_for_tests().await;
 
@@ -4992,50 +4771,6 @@ async fn session_settings_legacy_fast_service_tier_update_uses_priority_request_
     assert_eq!(
         updated.service_tier,
         Some(ServiceTier::Fast.request_value().to_string())
-    );
-}
-
-#[tokio::test]
-async fn per_turn_context_ceiling_tracks_static_provider_switches() {
-    let session_configuration = make_session_configuration_for_tests().await;
-    let plan_configuration = session_configuration
-        .apply(&SessionSettingsUpdate {
-            model_provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
-            collaboration_mode: Some(CollaborationMode {
-                mode: ModeKind::Default,
-                settings: Settings {
-                    model: AMBIENT_DEFAULT_MODEL.to_string(),
-                    reasoning_effort: None,
-                    developer_instructions: None,
-                },
-            }),
-            ..Default::default()
-        })
-        .expect("switch to PfTerminal Plan");
-    let plan_turn =
-        Session::build_per_turn_config(&plan_configuration, plan_configuration.cwd().clone());
-    assert_eq!(plan_turn.model.as_deref(), Some(AMBIENT_DEFAULT_MODEL));
-    assert_eq!(
-        plan_turn.to_models_manager_config().model_context_window,
-        Some(AMBIENT_GLM_5_2_CONTEXT_WINDOW)
-    );
-
-    let openrouter_configuration = plan_configuration
-        .apply(&SessionSettingsUpdate {
-            model_provider: Some(OPENROUTER_PROVIDER_ID.to_string()),
-            ..Default::default()
-        })
-        .expect("switch to OpenRouter");
-    let openrouter_turn = Session::build_per_turn_config(
-        &openrouter_configuration,
-        openrouter_configuration.cwd().clone(),
-    );
-    assert_eq!(
-        openrouter_turn
-            .to_models_manager_config()
-            .model_context_window,
-        None,
-        "the Ambient route ceiling must not leak into another provider"
     );
 }
 
@@ -5062,7 +4797,6 @@ pub(crate) async fn make_session_configuration_for_tests() -> SessionConfigurati
         model_reasoning_summary: config.model_reasoning_summary,
         developer_instructions: config.developer_instructions.clone(),
         service_tier: None,
-        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -5081,6 +4815,7 @@ pub(crate) async fn make_session_configuration_for_tests() -> SessionConfigurati
         app_server_client_name: None,
         app_server_client_version: None,
         session_source: SessionSource::Exec,
+        runtime_selection: None,
         history_mode: Default::default(),
         forked_from_thread_id: None,
         parent_thread_id: None,
@@ -5779,10 +5514,7 @@ async fn session_new_fails_when_zsh_fork_enabled_without_packaged_zsh() {
     config.zsh_path = None;
     let config = Arc::new(config);
 
-    let auth_manager = AuthManager::from_auth_for_testing_with_home(
-        CodexAuth::from_api_key("Test API Key"),
-        config.codex_home.to_path_buf(),
-    );
+    let auth_manager = AuthManager::from_auth_for_testing(CodexAuth::from_api_key("Test API Key"));
     let models_manager = models_manager_with_provider(
         config.codex_home.to_path_buf(),
         auth_manager.clone(),
@@ -5805,7 +5537,6 @@ async fn session_new_fails_when_zsh_fork_enabled_without_packaged_zsh() {
         model_reasoning_summary: config.model_reasoning_summary,
         developer_instructions: config.developer_instructions.clone(),
         service_tier: None,
-        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -5824,6 +5555,7 @@ async fn session_new_fails_when_zsh_fork_enabled_without_packaged_zsh() {
         app_server_client_name: None,
         app_server_client_version: None,
         session_source: SessionSource::Exec,
+        runtime_selection: None,
         history_mode: Default::default(),
         forked_from_thread_id: None,
         parent_thread_id: None,
@@ -5833,7 +5565,6 @@ async fn session_new_fails_when_zsh_fork_enabled_without_packaged_zsh() {
         user_shell_override: None,
     };
 
-    let (tx_sub, _rx_sub) = async_channel::bounded(16);
     let (tx_event, _rx_event) = async_channel::unbounded();
     let (agent_status_tx, _agent_status_rx) = watch::channel(AgentStatus::PendingInit);
     let plugins_manager = Arc::new(PluginsManager::new(config.codex_home.to_path_buf()));
@@ -5851,7 +5582,6 @@ async fn session_new_fails_when_zsh_fork_enabled_without_packaged_zsh() {
         auth_manager,
         models_manager,
         Arc::new(ExecPolicyManager::default()),
-        tx_sub,
         tx_event,
         agent_status_tx,
         InitialHistory::New,
@@ -5911,16 +5641,13 @@ pub(crate) async fn build_world_state_from_turn_context(
 }
 
 // todo: use online model info
-async fn make_session_and_context_for_home(codex_home: &Path) -> (Session, TurnContext) {
-    let (tx_sub, _rx_sub) = async_channel::bounded(16);
+pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
     let (tx_event, _rx_event) = async_channel::unbounded();
-    let config = build_test_config(codex_home).await;
+    let codex_home = tempfile::tempdir().expect("create temp dir");
+    let config = build_test_config(codex_home.path()).await;
     let config = Arc::new(config);
     let thread_id = ThreadId::default();
-    let auth_manager = AuthManager::from_auth_for_testing_with_home(
-        CodexAuth::from_api_key("Test API Key"),
-        config.codex_home.to_path_buf(),
-    );
+    let auth_manager = AuthManager::from_auth_for_testing(CodexAuth::from_api_key("Test API Key"));
     let models_manager = models_manager_with_provider(
         config.codex_home.to_path_buf(),
         auth_manager.clone(),
@@ -5948,7 +5675,6 @@ async fn make_session_and_context_for_home(codex_home: &Path) -> (Session, TurnC
         model_reasoning_summary: config.model_reasoning_summary,
         developer_instructions: config.developer_instructions.clone(),
         service_tier: None,
-        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -5967,6 +5693,7 @@ async fn make_session_and_context_for_home(codex_home: &Path) -> (Session, TurnC
         app_server_client_name: None,
         app_server_client_version: None,
         session_source: SessionSource::Exec,
+        runtime_selection: None,
         history_mode: Default::default(),
         forked_from_thread_id: None,
         parent_thread_id: None,
@@ -6074,7 +5801,7 @@ async fn make_session_and_context_for_home(codex_home: &Path) -> (Session, TurnC
         )),
         attestation_provider: None,
         time_provider: Arc::new(crate::current_time::SystemTimeProvider),
-        model_client: arc_swap::ArcSwap::from_pointee(ModelClient::new(
+        model_client: ModelClient::new(
             Some(auth_manager.clone()),
             AgentIdentityAuthPolicy::JwtOnly,
             thread_id,
@@ -6141,7 +5868,6 @@ async fn make_session_and_context_for_home(codex_home: &Path) -> (Session, TurnC
     let session = Session {
         thread_id,
         installation_id: "11111111-1111-4111-8111-111111111111".to_string(),
-        tx_sub,
         tx_event,
         agent_status: agent_status_tx,
         state: Mutex::new(state),
@@ -6159,7 +5885,6 @@ async fn make_session_and_context_for_home(codex_home: &Path) -> (Session, TurnC
         conversation: Arc::new(RealtimeConversationManager::new()),
         active_turn: Mutex::new(None),
         input_queue: super::input_queue::InputQueue::new(),
-        applied_agent_message_ids: Mutex::new(HashSet::new()),
         guardian_review_session: crate::guardian::GuardianReviewSessionManager::default(),
         services,
         git_enrichment_policy: GitEnrichmentPolicy::Fresh,
@@ -6169,20 +5894,6 @@ async fn make_session_and_context_for_home(codex_home: &Path) -> (Session, TurnC
 
     session.mark_mcp_runtime_dirty();
     (session, turn_context)
-}
-
-pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
-    let codex_home = tempfile::tempdir().expect("create temp dir");
-    make_session_and_context_for_home(codex_home.path()).await
-}
-
-pub(crate) type ProviderAuthSessionContext = (Session, TurnContext, tempfile::TempDir);
-
-pub(crate) async fn make_session_and_context_with_provider_auth() -> ProviderAuthSessionContext {
-    let codex_home = tempfile::tempdir().expect("create temp dir");
-    write_test_provider_auth(codex_home.path());
-    let (session, turn_context) = make_session_and_context_for_home(codex_home.path()).await;
-    (session, turn_context, codex_home)
 }
 
 async fn make_session_with_config(
@@ -6209,10 +5920,7 @@ async fn make_session_with_config_and_rx(
     let mut config = build_test_config(codex_home.path()).await;
     mutator(&mut config);
     let config = Arc::new(config);
-    let auth_manager = AuthManager::from_auth_for_testing_with_home(
-        CodexAuth::from_api_key("Test API Key"),
-        config.codex_home.to_path_buf(),
-    );
+    let auth_manager = AuthManager::from_auth_for_testing(CodexAuth::from_api_key("Test API Key"));
     let models_manager = models_manager_with_provider(
         config.codex_home.to_path_buf(),
         auth_manager.clone(),
@@ -6236,7 +5944,6 @@ async fn make_session_with_config_and_rx(
         model_reasoning_summary: config.model_reasoning_summary,
         developer_instructions: config.developer_instructions.clone(),
         service_tier: None,
-        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -6255,6 +5962,7 @@ async fn make_session_with_config_and_rx(
         app_server_client_name: None,
         app_server_client_version: None,
         session_source: SessionSource::Exec,
+        runtime_selection: None,
         history_mode: Default::default(),
         forked_from_thread_id: None,
         parent_thread_id: None,
@@ -6274,7 +5982,6 @@ async fn make_session_with_config_and_rx(
     ));
     let environment_manager = Arc::new(EnvironmentManager::default_for_tests());
 
-    let (tx_sub, _rx_sub) = async_channel::bounded(16);
     let session = Session::new(
         session_configuration,
         Arc::clone(&config),
@@ -6283,7 +5990,6 @@ async fn make_session_with_config_and_rx(
         auth_manager,
         models_manager,
         Arc::new(ExecPolicyManager::default()),
-        tx_sub,
         tx_event,
         agent_status_tx,
         InitialHistory::New,
@@ -6325,10 +6031,7 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
     let mut config = build_test_config(codex_home.path()).await;
     config.ephemeral = true;
     let config = Arc::new(config);
-    let auth_manager = AuthManager::from_auth_for_testing_with_home(
-        CodexAuth::from_api_key("Test API Key"),
-        config.codex_home.to_path_buf(),
-    );
+    let auth_manager = AuthManager::from_auth_for_testing(CodexAuth::from_api_key("Test API Key"));
     let models_manager = models_manager_with_provider(
         config.codex_home.to_path_buf(),
         auth_manager.clone(),
@@ -6352,7 +6055,6 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
         model_reasoning_summary: config.model_reasoning_summary,
         developer_instructions: config.developer_instructions.clone(),
         service_tier: None,
-        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -6371,6 +6073,7 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
         app_server_client_name: None,
         app_server_client_version: None,
         session_source: session_source.clone(),
+        runtime_selection: None,
         history_mode: Default::default(),
         forked_from_thread_id: None,
         parent_thread_id: None,
@@ -6390,7 +6093,6 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
     ));
     let environment_manager = Arc::new(EnvironmentManager::default_for_tests());
 
-    let (tx_sub, _rx_sub) = async_channel::bounded(16);
     let session = Session::new(
         session_configuration,
         Arc::clone(&config),
@@ -6399,7 +6101,6 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
         auth_manager,
         models_manager,
         Arc::new(ExecPolicyManager::default()),
-        tx_sub,
         tx_event,
         agent_status_tx,
         initial_history,
@@ -6486,6 +6187,9 @@ async fn resumed_subagent_session_restores_persisted_session_id() {
                     session_id: parent_session_id,
                     id: thread_id,
                     source: session_source.clone(),
+                    runtime_selection: Some(
+                        codex_protocol::protocol::RuntimeSelectionSource::AgentRole,
+                    ),
                     ..SessionMeta::default()
                 },
                 git: None,
@@ -6500,6 +6204,10 @@ async fn resumed_subagent_session_restores_persisted_session_id() {
 
     assert_eq!(session.thread_id(), thread_id);
     assert_eq!(session.session_id(), parent_session_id);
+    assert_eq!(
+        session.thread_config_snapshot().await.runtime_selection,
+        Some(codex_protocol::protocol::RuntimeSelectionSource::AgentRole)
+    );
 
     let event = rx_event.recv().await.expect("session configured event");
     let EventMsg::SessionConfigured(event) = event.msg else {
@@ -7671,6 +7379,7 @@ async fn shutdown_complete_does_not_append_to_thread_store_after_shutdown() {
             parent_thread_id: None,
             source: SessionSource::Exec,
             thread_source: None,
+            runtime_selection: None,
             originator: "test_originator".to_string(),
             base_instructions: BaseInstructions::default(),
             dynamic_tools: Vec::new(),
@@ -7750,6 +7459,7 @@ async fn submission_loop_channel_close_runs_full_thread_teardown() {
             parent_thread_id: None,
             source: SessionSource::Exec,
             thread_source: None,
+            runtime_selection: None,
             originator: "test_originator".to_string(),
             base_instructions: BaseInstructions::default(),
             dynamic_tools: Vec::new(),
@@ -8116,7 +7826,6 @@ where
         dynamic_tools,
         codex_home.path(),
         configure_config,
-        /*start_submission_loop*/ false,
     )
     .await
 }
@@ -8126,7 +7835,6 @@ async fn make_session_and_context_with_auth_config_home_and_rx<F>(
     dynamic_tools: Vec<DynamicToolSpec>,
     codex_home: &Path,
     configure_config: F,
-    start_submission_loop: bool,
 ) -> (
     Arc<Session>,
     Arc<TurnContext>,
@@ -8135,15 +7843,13 @@ async fn make_session_and_context_with_auth_config_home_and_rx<F>(
 where
     F: FnOnce(&mut Config),
 {
-    let (tx_sub, rx_sub) = async_channel::bounded(16);
     let (tx_event, rx_event) = async_channel::unbounded();
     let mut config = build_test_config(codex_home).await;
     configure_config(&mut config);
     let state_db = None;
     let config = Arc::new(config);
     let thread_id = ThreadId::default();
-    let auth_manager =
-        AuthManager::from_auth_for_testing_with_home(auth, config.codex_home.to_path_buf());
+    let auth_manager = AuthManager::from_auth_for_testing(auth);
     let models_manager = models_manager_with_provider(
         config.codex_home.to_path_buf(),
         auth_manager.clone(),
@@ -8171,7 +7877,6 @@ where
         model_reasoning_summary: config.model_reasoning_summary,
         developer_instructions: config.developer_instructions.clone(),
         service_tier: None,
-        runtime_model_context_window: None,
         personality: config.personality,
         base_instructions: config
             .base_instructions
@@ -8190,6 +7895,7 @@ where
         app_server_client_name: None,
         app_server_client_version: None,
         session_source: SessionSource::Exec,
+        runtime_selection: None,
         history_mode: Default::default(),
         forked_from_thread_id: None,
         parent_thread_id: None,
@@ -8296,7 +8002,7 @@ where
         )),
         attestation_provider: None,
         time_provider: Arc::new(crate::current_time::SystemTimeProvider),
-        model_client: arc_swap::ArcSwap::from_pointee(ModelClient::new(
+        model_client: ModelClient::new(
             Some(Arc::clone(&auth_manager)),
             AgentIdentityAuthPolicy::JwtOnly,
             thread_id,
@@ -8363,7 +8069,6 @@ where
     let session = Arc::new(Session {
         thread_id,
         installation_id: "11111111-1111-4111-8111-111111111111".to_string(),
-        tx_sub,
         tx_event,
         agent_status: agent_status_tx,
         state: Mutex::new(state),
@@ -8381,7 +8086,6 @@ where
         conversation: Arc::new(RealtimeConversationManager::new()),
         active_turn: Mutex::new(None),
         input_queue: super::input_queue::InputQueue::new(),
-        applied_agent_message_ids: Mutex::new(HashSet::new()),
         guardian_review_session: crate::guardian::GuardianReviewSessionManager::default(),
         services,
         git_enrichment_policy: GitEnrichmentPolicy::Fresh,
@@ -8391,22 +8095,6 @@ where
 
     session.mark_mcp_runtime_dirty();
     (session, turn_context, rx_event)
-}
-
-async fn make_session_and_context_with_submission_loop_and_rx() -> (
-    Arc<Session>,
-    Arc<TurnContext>,
-    async_channel::Receiver<Event>,
-) {
-    let codex_home = tempfile::tempdir().expect("create temp dir");
-    make_session_and_context_with_auth_config_home_and_rx(
-        CodexAuth::from_api_key("Test API Key"),
-        Vec::new(),
-        codex_home.path(),
-        |_config| {},
-        /*start_submission_loop*/ true,
-    )
-    .await
 }
 
 pub(crate) async fn make_session_and_context_with_dynamic_tools_and_rx(
@@ -9717,6 +9405,7 @@ async fn build_initial_context_restates_realtime_start_when_reference_context_is
     turn_context.realtime_active = true;
     let previous_turn_settings = PreviousTurnSettings {
         model: turn_context.model_info.slug.clone(),
+        model_provider: None,
         comp_hash: None,
         realtime_active: Some(true),
     };
@@ -9992,6 +9681,7 @@ async fn build_initial_context_prepends_model_switch_message() {
     let (session, turn_context) = make_session_and_context().await;
     let previous_turn_settings = PreviousTurnSettings {
         model: "previous-regular-model".to_string(),
+        model_provider: None,
         comp_hash: None,
         realtime_active: None,
     };
@@ -10046,6 +9736,7 @@ async fn record_context_updates_and_set_reference_context_item_persists_full_rei
     session
         .set_previous_turn_settings(Some(PreviousTurnSettings {
             model: previous_context.model_info.slug.clone(),
+            model_provider: None,
             comp_hash: None,
             realtime_active: Some(previous_context.realtime_active),
         }))
@@ -10198,6 +9889,7 @@ async fn attach_in_memory_thread_store(
             parent_thread_id: None,
             source: SessionSource::Exec,
             thread_source: None,
+            runtime_selection: None,
             originator: "test_originator".to_string(),
             base_instructions: BaseInstructions::default(),
             dynamic_tools: Vec::new(),
@@ -10612,32 +10304,9 @@ async fn abort_gracefully_emits_marker_before_turn_aborted() {
     assert!(rx.try_recv().is_err());
 }
 
-async fn expect_user_message_item_started(
-    rx: &async_channel::Receiver<Event>,
-    expected_content: &[UserInput],
-) {
-    let deadline = tokio::time::Instant::now() + StdDuration::from_secs(2);
-    loop {
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        let event = tokio::time::timeout(remaining, rx.recv())
-            .await
-            .expect("expected item started event")
-            .expect("channel open");
-        if matches!(
-            event.msg,
-            EventMsg::ItemStarted(ItemStartedEvent {
-                item: TurnItem::UserMessage(UserMessageItem { content, .. }),
-                ..
-            }) if content == expected_content
-        ) {
-            return;
-        }
-    }
-}
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn task_finish_starts_follow_up_turn_for_leftover_pending_user_input() {
-    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
+async fn task_finish_emits_turn_item_lifecycle_for_leftover_pending_user_input() {
+    let (sess, tc, rx) = make_session_and_context_with_rx().await;
     let input = vec![TurnInput::UserInput {
         content: vec![UserInput::Text {
             text: "hello".to_string(),
@@ -10705,7 +10374,50 @@ async fn task_finish_starts_follow_up_turn_for_leftover_pending_user_input() {
         .expect("expected item started event")
         .expect("channel open");
     assert!(matches!(
-        first.msg,
+        second.msg,
+        EventMsg::ItemStarted(ItemStartedEvent {
+            item: TurnItem::UserMessage(UserMessageItem { content, .. }),
+            ..
+        }) if content == pending_user_input
+    ));
+
+    let third = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+        .await
+        .expect("expected item completed event")
+        .expect("channel open");
+    assert!(matches!(
+        third.msg,
+        EventMsg::ItemCompleted(ItemCompletedEvent {
+            item: TurnItem::UserMessage(UserMessageItem { content, .. }),
+            ..
+        }) if content == pending_user_input
+    ));
+
+    let fourth = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+        .await
+        .expect("expected legacy user message event")
+        .expect("channel open");
+    assert!(matches!(
+        fourth.msg,
+        EventMsg::UserMessage(UserMessageEvent {
+                client_id: None,
+            message,
+            images,
+            text_elements,
+            local_images,
+            ..
+        }) if message == "late pending input"
+            && images == Some(Vec::new())
+            && text_elements == vec![text_element]
+            && local_images.is_empty()
+    ));
+
+    let fifth = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+        .await
+        .expect("expected turn complete event")
+        .expect("channel open");
+    assert!(matches!(
+        fifth.msg,
         EventMsg::TurnComplete(TurnCompleteEvent {
             turn_id,
             last_agent_message: None,
@@ -10714,359 +10426,6 @@ async fn task_finish_starts_follow_up_turn_for_leftover_pending_user_input() {
             ..
         }) if turn_id == tc.sub_id
     ));
-
-    let second = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
-        .await
-        .expect("expected follow-up turn started event")
-        .expect("channel open");
-    let follow_up_turn_id = match second.msg {
-        EventMsg::TurnStarted(TurnStartedEvent { turn_id, .. }) => turn_id,
-        other => panic!("expected follow-up turn started event, got {other:?}"),
-    };
-    assert_ne!(follow_up_turn_id, tc.sub_id);
-
-    expect_user_message_item_started(&rx, &pending_user_input).await;
-
-    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn task_finish_submits_follow_up_when_active_turn_was_replaced() {
-    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
-    sess.spawn_task(
-        Arc::clone(&tc),
-        Vec::new(),
-        NeverEndingTask {
-            kind: TaskKind::Regular,
-            listen_to_cancellation_token: false,
-        },
-    )
-    .await;
-
-    while rx.try_recv().is_ok() {}
-
-    let pending_user_input = vec![UserInput::Text {
-        text: "survives finish replacement".to_string(),
-        text_elements: Vec::new(),
-    }];
-    sess.steer_input(
-        pending_user_input.clone(),
-        /*additional_context*/ Default::default(),
-        Some(&tc.sub_id),
-        /*client_user_message_id*/ None,
-        /*responsesapi_client_metadata*/ None,
-    )
-    .await
-    .expect("steer pending input into active turn");
-
-    let guardian_guard = sess
-        .services
-        .guardian_rejection_circuit_breaker
-        .lock()
-        .await;
-    let finish_session = Arc::clone(&sess);
-    let finish_context = Arc::clone(&tc);
-    let finish = tokio::spawn(async move {
-        finish_session
-            .on_task_finished(finish_context, /*task_result*/ Ok(None))
-            .await;
-    });
-
-    let first = {
-        let started_at = std::time::Instant::now();
-        loop {
-            match rx.try_recv() {
-                Ok(event) => break event,
-                Err(async_channel::TryRecvError::Empty)
-                    if started_at.elapsed() < std::time::Duration::from_secs(2) =>
-                {
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                }
-                Err(async_channel::TryRecvError::Empty) => {
-                    panic!("expected original turn complete event");
-                }
-                Err(async_channel::TryRecvError::Closed) => {
-                    panic!("channel open");
-                }
-            }
-        }
-    };
-    assert!(matches!(
-        first.msg,
-        EventMsg::TurnComplete(TurnCompleteEvent { turn_id, .. }) if turn_id == tc.sub_id
-    ));
-
-    *sess
-        .active_turn
-        .try_lock()
-        .expect("active turn lock available while finish is paused") = Some(ActiveTurn::default());
-    drop(guardian_guard);
-    finish.await.expect("finish task should not panic");
-
-    let second = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
-        .await
-        .expect("expected follow-up turn started event")
-        .expect("channel open");
-    assert!(matches!(
-        second.msg,
-        EventMsg::TurnStarted(TurnStartedEvent { turn_id, .. }) if turn_id != tc.sub_id
-    ));
-
-    expect_user_message_item_started(&rx, &pending_user_input).await;
-
-    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn task_finish_starts_turn_for_trigger_turn_mailbox_tail() {
-    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
-    sess.spawn_task(
-        Arc::clone(&tc),
-        Vec::new(),
-        NeverEndingTask {
-            kind: TaskKind::Regular,
-            listen_to_cancellation_token: false,
-        },
-    )
-    .await;
-
-    while rx.try_recv().is_ok() {}
-
-    sess.input_queue
-        .defer_mailbox_delivery_to_next_turn(&sess.active_turn, &tc.sub_id)
-        .await;
-    sess.input_queue
-        .enqueue_mailbox_communication(InterAgentCommunication::new(
-            AgentPath::try_from("/root/worker").expect("worker path should parse"),
-            AgentPath::root(),
-            Vec::new(),
-            "late trigger update".to_string(),
-            /*trigger_turn*/ true,
-        ))
-        .await;
-
-    sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
-        .await;
-
-    let first = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
-        .await
-        .expect("expected original turn complete event")
-        .expect("channel open");
-    assert!(matches!(
-        first.msg,
-        EventMsg::TurnComplete(TurnCompleteEvent { turn_id, .. }) if turn_id == tc.sub_id
-    ));
-
-    let second = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
-        .await
-        .expect("expected mailbox-triggered follow-up turn started event")
-        .expect("channel open");
-    assert!(matches!(
-        second.msg,
-        EventMsg::TurnStarted(TurnStartedEvent { turn_id, .. }) if turn_id != tc.sub_id
-    ));
-
-    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn non_steerable_turn_defers_user_input_until_completion() {
-    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
-    sess.spawn_task(
-        Arc::clone(&tc),
-        Vec::new(),
-        NeverEndingTask {
-            kind: TaskKind::Compact,
-            listen_to_cancellation_token: false,
-        },
-    )
-    .await;
-
-    while rx.try_recv().is_ok() {}
-
-    let deferred_input = vec![UserInput::Text {
-        text: "run after compact".to_string(),
-        text_elements: Vec::new(),
-    }];
-    super::handlers::user_input_or_turn_inner(
-        &sess,
-        "deferred-input".to_string(),
-        Op::UserInput {
-            items: deferred_input.clone(),
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: ThreadSettingsOverrides::default(),
-        },
-        /*client_user_message_id*/ None,
-    )
-    .await;
-
-    assert!(
-        rx.try_recv().is_err(),
-        "non-steerable input should not emit an immediate error"
-    );
-
-    sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
-        .await;
-
-    let first = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
-        .await
-        .expect("expected compact turn complete event")
-        .expect("channel open");
-    assert!(matches!(
-        first.msg,
-        EventMsg::TurnComplete(TurnCompleteEvent { turn_id, .. }) if turn_id == tc.sub_id
-    ));
-
-    let second = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
-        .await
-        .expect("expected deferred-input follow-up turn started event")
-        .expect("channel open");
-    assert!(matches!(
-        second.msg,
-        EventMsg::TurnStarted(TurnStartedEvent { turn_id, .. }) if turn_id != tc.sub_id
-    ));
-
-    expect_user_message_item_started(&rx, &deferred_input).await;
-
-    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn non_steerable_defer_race_starts_fresh_turn_without_error() {
-    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
-    sess.spawn_task(
-        Arc::clone(&tc),
-        Vec::new(),
-        NeverEndingTask {
-            kind: TaskKind::Compact,
-            listen_to_cancellation_token: false,
-        },
-    )
-    .await;
-
-    while rx.try_recv().is_ok() {}
-
-    let deferred_input = vec![UserInput::Text {
-        text: "run after compact race".to_string(),
-        text_elements: Vec::new(),
-    }];
-    let (reached_tx, reached_rx) = tokio::sync::oneshot::channel();
-    let (release_tx, release_rx) = tokio::sync::oneshot::channel();
-    super::handlers::set_active_turn_not_steerable_defer_hook_for_test(reached_tx, release_rx);
-
-    let handler_session = Arc::clone(&sess);
-    let handler_input = deferred_input.clone();
-    let handler = tokio::spawn(async move {
-        super::handlers::user_input_or_turn_inner(
-            &handler_session,
-            "deferred-race-input".to_string(),
-            Op::UserInput {
-                items: handler_input,
-                final_output_json_schema: None,
-                responsesapi_client_metadata: None,
-                additional_context: Default::default(),
-                thread_settings: ThreadSettingsOverrides::default(),
-            },
-            /*client_user_message_id*/ None,
-        )
-        .await;
-    });
-
-    reached_rx
-        .await
-        .expect("handler should reach the pre-defer race hook");
-    sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
-        .await;
-
-    let compact_complete = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
-        .await
-        .expect("expected compact turn complete event")
-        .expect("channel open");
-    assert!(matches!(
-        compact_complete.msg,
-        EventMsg::TurnComplete(TurnCompleteEvent { turn_id, .. }) if turn_id == tc.sub_id
-    ));
-
-    release_tx.send(()).expect("handler release receiver open");
-    handler.await.expect("handler task should not panic");
-
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
-    loop {
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        let event = tokio::time::timeout(remaining, rx.recv())
-            .await
-            .expect("expected fresh turn start without error")
-            .expect("channel open");
-        match event.msg {
-            EventMsg::Error(err) => panic!("defer race should not emit an error: {err:?}"),
-            EventMsg::TurnStarted(TurnStartedEvent { turn_id, .. }) => {
-                assert_ne!(turn_id, tc.sub_id);
-                break;
-            }
-            _ => {}
-        }
-    }
-
-    expect_user_message_item_started(&rx, &deferred_input).await;
-
-    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn interrupt_clears_steered_input_without_follow_up_turn() {
-    let (sess, tc, rx) = make_session_and_context_with_rx().await;
-    sess.spawn_task(
-        Arc::clone(&tc),
-        Vec::new(),
-        NeverEndingTask {
-            kind: TaskKind::Regular,
-            listen_to_cancellation_token: true,
-        },
-    )
-    .await;
-
-    while rx.try_recv().is_ok() {}
-
-    sess.steer_input(
-        vec![UserInput::Text {
-            text: "drop on interrupt".to_string(),
-            text_elements: Vec::new(),
-        }],
-        /*additional_context*/ Default::default(),
-        Some(&tc.sub_id),
-        /*client_user_message_id*/ None,
-        /*responsesapi_client_metadata*/ None,
-    )
-    .await
-    .expect("steer pending input into active turn");
-
-    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
-
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
-    loop {
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        let event = tokio::time::timeout(remaining, rx.recv())
-            .await
-            .expect("expected turn aborted event")
-            .expect("channel open");
-        if matches!(event.msg, EventMsg::TurnAborted(_)) {
-            break;
-        }
-    }
-
-    assert!(sess.active_turn.lock().await.is_none());
-    assert_eq!(
-        Vec::<TurnInput>::new(),
-        sess.input_queue.get_pending_input(&sess.active_turn).await
-    );
-    assert!(
-        tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv())
-            .await
-            .is_err(),
-        "interrupt should not start a follow-up turn for cleared steer input"
-    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -11414,23 +10773,17 @@ async fn steer_input_returns_active_turn_id() {
     }];
     let turn_id = sess
         .steer_input(
-            steer_input.clone(),
+            steer_input,
             /*additional_context*/ Default::default(),
             Some(&tc.sub_id),
-            /*client_user_message_id*/ Some("delivery-steer-1".to_string()),
+            /*client_user_message_id*/ None,
             /*responsesapi_client_metadata*/ None,
         )
         .await
         .expect("steering with matching expected turn id should succeed");
 
     assert_eq!(turn_id, tc.sub_id);
-    assert_eq!(
-        sess.input_queue.get_pending_input(&sess.active_turn).await,
-        vec![TurnInput::UserInput {
-            content: steer_input,
-            client_id: Some("delivery-steer-1".to_string()),
-        }]
-    );
+    assert!(sess.input_queue.has_pending_input(&sess.active_turn).await);
 }
 
 #[tokio::test]
@@ -11806,7 +11159,7 @@ async fn abort_review_task_emits_exited_then_aborted_and_records_history() {
 }
 
 #[tokio::test]
-async fn fatal_tool_error_stops_turn_and_reports_error() {
+async fn incompatible_tool_payload_returns_recoverable_tool_error() {
     let (session, turn_context, _rx) = make_session_and_context_with_rx().await;
     let step_context = StepContext::for_test(Arc::clone(&turn_context));
     let (tool_runtimes, hosted_specs) = tool_runtimes_for_test_step(step_context.as_ref());
@@ -11841,16 +11194,16 @@ async fn fatal_tool_error_stops_turn_and_reports_error() {
         )
         .await
         .err()
-        .expect("expected fatal error");
+        .expect("expected recoverable tool error");
 
     match err {
-        FunctionCallError::Fatal(message) => {
+        FunctionCallError::RespondToModel(message) => {
             assert_eq!(
                 message,
                 "tool shell_command invoked with incompatible payload"
             );
         }
-        other => panic!("expected FunctionCallError::Fatal, got {other:?}"),
+        other => panic!("expected FunctionCallError::RespondToModel, got {other:?}"),
     }
 }
 

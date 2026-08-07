@@ -24,6 +24,14 @@ impl RecipeStability {
 pub struct GpuRecipe {
     pub id: String,
     pub revision: String,
+    /// Stable catalogue family used for model-aware recommendation. This is
+    /// explicit metadata rather than an inference from a model or display name.
+    #[serde(default)]
+    pub model_family: String,
+    /// Lower values are preferred within a family. `None` keeps a recipe
+    /// available as an explicit choice without making it an automatic default.
+    #[serde(default)]
+    pub recommendation_priority: Option<u16>,
     /// Immutable artifact source, normally a Hugging Face repository ID.
     pub model_id: String,
     /// Model identity exposed by the serving runtime. Empty values from older
@@ -55,6 +63,8 @@ pub struct GpuRecipe {
     ///
     /// Runtime-specific launch behavior belongs to the immutable recipe. The
     /// controller must not infer a vLLM/SGLang command from the model name.
+    #[serde(default)]
+    pub container_entrypoint: Vec<String>,
     pub launch_command: Vec<String>,
     pub environment_allowlist: Vec<String>,
     pub startup_deadline_ms: u64,
@@ -80,10 +90,8 @@ impl Default for RecipeCatalog {
     fn default() -> Self {
         Self {
             recipes: vec![
-                deepseek_flash_recipe(2),
-                deepseek_flash_recipe(4),
+                deepseek_flash_0731_recipe(),
                 glm_5_2_recipe(),
-                crate::gguf_recipes::huihui_deepseek_v4_flash_recipe(),
                 crate::gguf_recipes::huihui_glm_5_2_recipe(),
             ],
         }
@@ -93,12 +101,21 @@ impl Default for RecipeCatalog {
 impl RecipeCatalog {
     pub fn new(recipes: Vec<GpuRecipe>) -> anyhow::Result<Self> {
         let mut ids = std::collections::HashSet::new();
+        let mut recommendation_slots = std::collections::HashSet::new();
         for recipe in &recipes {
             if recipe.id.trim().is_empty() || !ids.insert(recipe.id.as_str()) {
                 return Err(anyhow::anyhow!("recipe ids must be non-empty and unique"));
             }
             if recipe.hardware.gpu_count == 0 || recipe.tensor_parallel_size == 0 {
                 return Err(anyhow::anyhow!("recipe GPU counts must be positive"));
+            }
+            if let Some(priority) = recipe.recommendation_priority {
+                anyhow::ensure!(
+                    !recipe.model_family.trim().is_empty()
+                        && recommendation_slots
+                            .insert((recipe.model_family.to_ascii_lowercase(), priority,)),
+                    "recommended recipe family and priority must be non-empty and unique"
+                );
             }
             if recipe.manifest_verified {
                 validate_verified_recipe(recipe)?;
@@ -113,6 +130,23 @@ impl RecipeCatalog {
 
     pub fn get(&self, id: &str) -> Option<&GpuRecipe> {
         self.recipes.iter().find(|recipe| recipe.id == id)
+    }
+
+    pub fn recommended_for_family(&self, family: &str) -> Option<&GpuRecipe> {
+        self.recipes
+            .iter()
+            .filter(|recipe| {
+                recipe.manifest_verified
+                    && recipe.stability == RecipeStability::Qualified
+                    && recipe.model_family.eq_ignore_ascii_case(family)
+            })
+            .filter_map(|recipe| {
+                recipe
+                    .recommendation_priority
+                    .map(|priority| (priority, recipe))
+            })
+            .min_by_key(|(priority, _)| *priority)
+            .map(|(_, recipe)| recipe)
     }
 }
 
@@ -217,7 +251,13 @@ fn validate_verified_recipe(recipe: &GpuRecipe) -> anyhow::Result<()> {
                     .any(|name| name == "HF_TOKEN")),
         "verified recipe environment allowlist is unsafe or incomplete"
     );
-    let launch = recipe.launch_command.join(" ");
+    let launch = recipe
+        .container_entrypoint
+        .iter()
+        .chain(recipe.launch_command.iter())
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(" ");
     anyhow::ensure!(
         launch.contains(recipe.model_id.as_str())
             && launch.contains(recipe.model_revision.as_str()),
@@ -266,51 +306,12 @@ fn has_image_digest(value: &str) -> bool {
     })
 }
 
-fn deepseek_flash_recipe(gpu_count: u16) -> GpuRecipe {
-    let (
-        recipe_revision,
-        image,
-        serving_runtime_version,
-        runtime_environment,
-        runtime_flags,
-        maximum_context_tokens,
-        maximum_concurrent_requests,
-    ) = match gpu_count {
-        2 => (
-            "deepseek-v4-flash-sglang-v0.5.15-post1-2xh200-r2",
-            "lmsysorg/sglang@sha256:00c53fe4c31bf22d7b37537f28bbdfd924c02de13cdfb4bff7378c9c34d75ab2",
-            "0.5.15.post1",
-            concat!(
-                "SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1 ",
-                "SGLANG_OPT_DEEPGEMM_HC_PRENORM=1 ",
-                "SGLANG_OPT_USE_TILELANG_MHC_PRE=1"
-            ),
-            concat!(
-                "--context-length 131072 --max-running-requests 8 ",
-                "--chunked-prefill-size 16384 --mem-fraction-static 0.82 ",
-                "--speculative-algorithm EAGLE --speculative-num-steps 3 ",
-                "--speculative-eagle-topk 1 --speculative-num-draft-tokens 4"
-            ),
-            131_072,
-            8,
-        ),
-        4 => (
-            "deepseek-v4-flash-sglang-v0.5.12-4xh200-r1",
-            "lmsysorg/sglang@sha256:015f39a45844be5a7b35270c56dc4d9ebcfe9b0c21a3b4f877a4ee22e795bd7a",
-            "0.5.12+127b9e3283f7c2a43234b852ff5c9f1796d53624",
-            "SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1",
-            concat!(
-                "--context-length 65536 --max-running-requests 2 --disable-cuda-graph ",
-                "--chunked-prefill-size 8192 --mem-fraction-static 0.82"
-            ),
-            65_536,
-            2,
-        ),
-        _ => unreachable!("the curated DeepSeek catalog contains only TP2 and TP4 recipes"),
-    };
+fn deepseek_flash_0731_recipe() -> GpuRecipe {
+    let model_id = "deepseek-ai/DeepSeek-V4-Flash-0731";
+    let model_revision = "9e165c30e2704aec5d9d593cce3eebd58bbef1cb";
     let launch = concat!(
         "set -euo pipefail; printf 'PFTERMINAL_RUNTIME_GATE=begin\\n'; ",
-        "test \"$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)\" -eq {GPU_COUNT}; ",
+        "test \"$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)\" -eq 2; ",
         "nvidia-smi --query-gpu=name --format=csv,noheader | ",
         "awk 'index($0, \"H200\") == 0 { exit 1 }'; ",
         "printf 'PFTERMINAL_RUNTIME_GATE=gpu-identity-ok\\n'; ",
@@ -319,54 +320,56 @@ fn deepseek_flash_recipe(gpu_count: u16) -> GpuRecipe {
         "printf 'PFTERMINAL_RUNTIME_GATE=driver-ok\\n'; ",
         "nvidia-smi topo -m | awk '$1 == \"GPU0\" { for (i=2; i<=NF; i++) if ($i ~ /^NV[0-9]+$/) ok=1 } END { exit !ok }'; ",
         "printf 'PFTERMINAL_RUNTIME_GATE=nvlink-ok\\n'; ",
-        "{RUNTIME_ENVIRONMENT} exec python3 -m sglang.launch_server ",
-        "--model-path deepseek-ai/DeepSeek-V4-Flash ",
-        "--revision 60d8d70770c6776ff598c94bb586a859a38244f1 ",
-        "--served-model-name deepseek-ai/DeepSeek-V4-Flash ",
-        "--host 0.0.0.0 --port 8000 --tp {GPU_COUNT} --enable-p2p-check ",
-        "{RUNTIME_FLAGS} ",
-        "--watchdog-timeout 1200 --trust-remote-code --moe-runner-backend marlin ",
-        "--tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 ",
+        "exec vllm serve deepseek-ai/DeepSeek-V4-Flash-0731 ",
+        "--revision 9e165c30e2704aec5d9d593cce3eebd58bbef1cb ",
+        "--served-model-name deepseek-ai/DeepSeek-V4-Flash-0731 ",
+        "--host 0.0.0.0 --port 8000 --tensor-parallel-size 2 ",
+        "--trust-remote-code --kv-cache-dtype fp8 --block-size 256 ",
+        "--tokenizer-mode deepseek_v4 --tool-call-parser deepseek_v4 ",
+        "--enable-auto-tool-choice --reasoning-parser deepseek_v4 ",
+        "--speculative-config '{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"draft_sample_method\":\"greedy\"}' ",
+        "--max-model-len 131072 --max-num-seqs 8 --max-num-batched-tokens 8192 ",
+        "--gpu-memory-utilization 0.90 --no-enable-flashinfer-autotune ",
         "--api-key \"$PFT_ENDPOINT_TOKEN\""
-    )
-    .replace("{GPU_COUNT}", gpu_count.to_string().as_str())
-    .replace("{RUNTIME_ENVIRONMENT}", runtime_environment)
-    .replace("{RUNTIME_FLAGS}", runtime_flags);
+    );
     GpuRecipe {
-        id: format!("deepseek-flash-{gpu_count}xh200"),
-        revision: recipe_revision.to_string(),
-        model_id: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
-        served_model_id: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
+        id: "deepseek-flash-0731-2xh200".to_string(),
+        revision: "deepseek-v4-flash-0731-vllm-v0.26.0-2xh200-r1".to_string(),
+        model_family: "deepseek".to_string(),
+        recommendation_priority: Some(0),
+        model_id: model_id.to_string(),
+        served_model_id: model_id.to_string(),
         wire_api: "chat".to_string(),
-        model_revision: "60d8d70770c6776ff598c94bb586a859a38244f1".to_string(),
-        image: image.to_string(),
-        runtime: "sglang".to_string(),
-        serving_runtime_version: serving_runtime_version.to_string(),
+        model_revision: model_revision.to_string(),
+        image: "vllm/vllm-openai@sha256:770fe65b2c73ee74a5c42165cf3433de4048cc2cd9c57a937ca4e35aba5aa87b".to_string(),
+        runtime: "vllm".to_string(),
+        serving_runtime_version: "0.26.0".to_string(),
         license_id: "MIT".to_string(),
         requires_huggingface_token: false,
         minimum_driver_version: "570.26".to_string(),
         gpu_architectures: vec!["sm_90".to_string()],
-        weight_format: "mixed-fp4-fp8".to_string(),
+        weight_format: "mixed-fp4-fp8-dspark".to_string(),
         hardware: HardwareRequirements {
             gpu_model: "NVIDIA H200".to_string(),
-            gpu_count,
+            gpu_count: 2,
             minimum_vram_mib_per_gpu: 130_000,
             minimum_host_ram_mib: 256 * 1024,
-            minimum_disk_gib: 400,
+            minimum_disk_gib: 450,
             requires_high_bandwidth_interconnect: true,
             allowed_cuda_versions: vec!["13.0".to_string()],
         },
-        tensor_parallel_size: gpu_count,
-        maximum_context_tokens,
-        maximum_concurrent_requests,
-        expected_download_bytes: 158_100_000_000,
-        model_weight_bytes: 158_069_433_298,
+        tensor_parallel_size: 2,
+        maximum_context_tokens: 131_072,
+        maximum_concurrent_requests: 8,
+        expected_download_bytes: 166_898_660_330,
+        model_weight_bytes: 166_886_535_336,
         kv_cache_reserve_bytes: 48_000_000_000,
         workspace_reserve_bytes: 48_000_000_000,
-        launch_command: vec!["bash".to_string(), "-lc".to_string(), launch],
+        container_entrypoint: vec!["bash".to_string(), "-lc".to_string()],
+        launch_command: vec![launch.to_string()],
         environment_allowlist: vec!["PFT_ENDPOINT_TOKEN".to_string()],
         startup_deadline_ms: 45 * 60 * 1_000,
-        download_deadline_ms: 35 * 60 * 1_000,
+        download_deadline_ms: 40 * 60 * 1_000,
         probe_deadline_ms: 10 * 60 * 1_000,
         inference_port: 8000,
         chat_encoding: "deepseek-v4-encoding".to_string(),
@@ -380,6 +383,8 @@ fn glm_5_2_recipe() -> GpuRecipe {
     GpuRecipe {
         id: "glm-5.2-fp8-8xh200".to_string(),
         revision: "glm-5.2-fp8-sglang-v0.5.15-post1-r1".to_string(),
+        model_family: "glm".to_string(),
+        recommendation_priority: Some(0),
         model_id: "zai-org/GLM-5.2-FP8".to_string(),
         served_model_id: "zai-org/GLM-5.2-FP8".to_string(),
         wire_api: "chat".to_string(),
@@ -408,6 +413,7 @@ fn glm_5_2_recipe() -> GpuRecipe {
         model_weight_bytes: 753_375_793_584,
         kv_cache_reserve_bytes: 160_000_000_000,
         workspace_reserve_bytes: 100_000_000_000,
+        container_entrypoint: Vec::new(),
         launch_command: vec![
             "bash".to_string(),
             "-lc".to_string(),

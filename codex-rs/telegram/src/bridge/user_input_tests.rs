@@ -30,14 +30,14 @@ fn text_only_unchanged() {
 
 #[test]
 fn queue_limits_are_hard_for_items_and_bytes() {
-    assert!(queue_capacity_error(15, 0, 1).is_none());
+    assert!(queue_capacity_error(/*item_count*/ 15, /*queued_bytes*/ 0, /*incoming_bytes*/ 1).is_none());
     assert!(
-        queue_capacity_error(16, 0, 1)
+        queue_capacity_error(/*item_count*/ 16, /*queued_bytes*/ 0, /*incoming_bytes*/ 1)
             .unwrap()
             .contains("16 messages")
     );
     assert!(
-        queue_capacity_error(0, PER_CONVERSATION_QUEUE_BYTES, 1)
+        queue_capacity_error(/*item_count*/ 0, PER_CONVERSATION_QUEUE_BYTES, /*incoming_bytes*/ 1)
             .unwrap()
             .contains("256 KiB")
     );

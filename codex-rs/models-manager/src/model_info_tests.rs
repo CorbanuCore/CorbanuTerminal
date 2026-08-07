@@ -2,13 +2,18 @@ use super::*;
 
 #[test]
 fn curated_gpu_models_have_conservative_non_fallback_metadata() {
-    let deepseek = model_info_from_slug("deepseek-ai/DeepSeek-V4-Flash");
+    let deepseek = model_info_from_slug("deepseek-ai/DeepSeek-V4-Flash-0731");
     assert!(!deepseek.used_fallback_model_metadata);
-    assert_eq!(deepseek.context_window, Some(384_000));
+    assert_eq!(deepseek.context_window, Some(1_048_576));
+    assert_eq!(deepseek.max_output_tokens, Some(393_216));
     assert!(deepseek.model_messages.is_some());
     assert_eq!(
         deepseek.default_reasoning_level,
         Some(ReasoningEffort::High)
+    );
+    assert_eq!(
+        deepseek.chat_completions.reasoning_effort_protocol,
+        ChatReasoningEffortProtocol::HighMaxDefaultHigh
     );
     assert_eq!(
         deepseek

@@ -5,7 +5,6 @@ use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::CodexErrorInfo;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::ModelRerouteReason;
 use codex_protocol::protocol::ModelVerification;
 use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
@@ -65,7 +64,8 @@ fn disabled_text_turn(test: &TestCodex, text: &str) -> Op {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn openai_model_header_mismatch_emits_warning_event() -> Result<()> {
+async fn model_header_mismatch_records_reported_identity_without_inventing_cyber_reroute()
+-> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
@@ -80,28 +80,25 @@ async fn openai_model_header_mismatch_emits_warning_event() -> Result<()> {
         .submit(disabled_text_turn(&test, "trigger safety check"))
         .await?;
 
-    let reroute = wait_for_event(&test.codex, |event| {
-        matches!(event, EventMsg::ModelReroute(_))
-    })
-    .await;
-    let EventMsg::ModelReroute(reroute) = reroute else {
-        panic!("expected model reroute event");
-    };
-    assert_eq!(reroute.from_model, REQUESTED_MODEL);
-    assert_eq!(reroute.to_model, SERVER_MODEL);
-    assert_eq!(reroute.reason, ModelRerouteReason::HighRiskCyberActivity);
-
-    let warning = wait_for_event(&test.codex, |event| matches!(event, EventMsg::Warning(_))).await;
-    let EventMsg::Warning(warning) = warning else {
-        panic!("expected warning event");
-    };
-    assert!(warning.message.contains(REQUESTED_MODEL));
-    assert!(warning.message.contains(SERVER_MODEL));
-
-    let _ = wait_for_event(&test.codex, |event| {
-        matches!(event, EventMsg::TurnComplete(_))
-    })
-    .await;
+    let mut recorded_identity = false;
+    loop {
+        match wait_for_event(&test.codex, |_| true).await {
+            EventMsg::ModelResponseCompleted(event) => {
+                assert_eq!(event.model, SERVER_MODEL);
+                assert_eq!(event.model_provider_id, "openai");
+                recorded_identity = true;
+            }
+            EventMsg::ModelReroute(event) => {
+                panic!("a model string mismatch is not reroute evidence: {event:?}")
+            }
+            EventMsg::Warning(warning) if warning.message.contains("cyber") => {
+                panic!("a model string mismatch is not cyber evidence: {warning:?}")
+            }
+            EventMsg::TurnComplete(_) => break,
+            _ => {}
+        }
+    }
+    assert!(recorded_identity);
 
     Ok(())
 }
@@ -141,7 +138,7 @@ async fn cyber_policy_response_emits_typed_error_without_retry() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn response_model_field_mismatch_emits_warning_when_header_matches_requested() -> Result<()> {
+async fn response_model_field_mismatch_is_recorded_without_false_warning() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
@@ -167,43 +164,28 @@ async fn response_model_field_mismatch_emits_warning_when_header_matches_request
         .submit(disabled_text_turn(&test, "trigger response model check"))
         .await?;
 
-    let reroute = wait_for_event(&test.codex, |event| {
-        matches!(event, EventMsg::ModelReroute(_))
-    })
-    .await;
-    let EventMsg::ModelReroute(reroute) = reroute else {
-        panic!("expected model reroute event");
-    };
-    assert_eq!(reroute.from_model, REQUESTED_MODEL);
-    assert_eq!(reroute.to_model, SERVER_MODEL);
-    assert_eq!(reroute.reason, ModelRerouteReason::HighRiskCyberActivity);
-
-    let warning = wait_for_event(&test.codex, |event| {
-        matches!(
-            event,
-            EventMsg::Warning(warning)
-                if warning
-                    .message
-                    .contains("flagged for potentially high-risk cyber activity")
-        )
-    })
-    .await;
-    let EventMsg::Warning(warning) = warning else {
-        panic!("expected warning event");
-    };
-    assert!(warning.message.contains(REQUESTED_MODEL));
-    assert!(warning.message.contains(SERVER_MODEL));
-
-    let _ = wait_for_event(&test.codex, |event| {
-        matches!(event, EventMsg::TurnComplete(_))
-    })
-    .await;
+    let mut recorded_identity = false;
+    loop {
+        match wait_for_event(&test.codex, |_| true).await {
+            EventMsg::ModelResponseCompleted(event) => {
+                assert_eq!(event.model, SERVER_MODEL);
+                recorded_identity = true;
+            }
+            EventMsg::ModelReroute(event) => panic!("unexpected reroute: {event:?}"),
+            EventMsg::Warning(warning) if warning.message.contains("cyber") => {
+                panic!("unexpected cyber warning: {warning:?}")
+            }
+            EventMsg::TurnComplete(_) => break,
+            _ => {}
+        }
+    }
+    assert!(recorded_identity);
 
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn openai_model_header_mismatch_only_emits_one_warning_per_turn() -> Result<()> {
+async fn repeated_model_header_aliases_never_emit_inferred_cyber_warnings() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
@@ -253,7 +235,7 @@ async fn openai_model_header_mismatch_only_emits_one_warning_per_turn() -> Resul
         }
     }
 
-    assert_eq!(warning_count, 1);
+    assert_eq!(warning_count, 0);
 
     Ok(())
 }

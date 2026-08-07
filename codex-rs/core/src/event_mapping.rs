@@ -191,15 +191,6 @@ pub fn parse_turn_item(item: &ResponseItem) -> Option<TurnItem> {
             "system" => None,
             _ => None,
         },
-        ResponseItem::AgentMessage { id, content, .. } => plaintext_agent_message_content(content)
-            .map(|text| {
-                TurnItem::AgentMessage(AgentMessageItem {
-                    id: id.clone().unwrap_or_else(|| Uuid::new_v4().to_string()),
-                    content: vec![AgentMessageContent::Text { text }],
-                    phase: Some(MessagePhase::Commentary),
-                    memory_citation: None,
-                })
-            }),
         ResponseItem::Reasoning {
             id,
             summary,

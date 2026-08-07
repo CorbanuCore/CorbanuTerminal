@@ -17,7 +17,6 @@ use codex_app_server_protocol::SkillsConfigWriteParams;
 use codex_app_server_protocol::SkillsConfigWriteResponse;
 use codex_config::loader::project_trust_key;
 use codex_features::FEATURES;
-use codex_model_provider_info::resolve_model_for_provider;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::config_types::TrustLevel;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -61,7 +60,6 @@ fn trusted_project_edit(project_path: &Path) -> ConfigEdit {
 
 pub(crate) fn build_model_selection_edits(
     model: &str,
-    provider: Option<&str>,
     effort: Option<impl ToString>,
 ) -> Vec<ConfigEdit> {
     let effort_edit = effort.map_or_else(
@@ -73,26 +71,10 @@ pub(crate) fn build_model_selection_edits(
             )
         },
     );
-    let mut edits = vec![
+    vec![
         replace_config_value("model", serde_json::json!(model)),
         effort_edit,
-    ];
-    if let Some(provider) = provider {
-        edits.push(replace_config_value(
-            "model_provider",
-            serde_json::json!(provider),
-        ));
-    }
-    edits
-}
-
-pub(crate) fn build_onboarding_provider_selection_edits(
-    current_model: Option<&str>,
-    provider: &str,
-) -> Vec<ConfigEdit> {
-    let model = resolve_model_for_provider(current_model.map(str::to_string), provider)
-        .unwrap_or_else(|| current_model.unwrap_or_default().to_string());
-    build_model_selection_edits(&model, Some(provider), None::<String>)
+    ]
 }
 
 pub(crate) fn build_service_tier_selection_edits(service_tier: Option<&str>) -> Vec<ConfigEdit> {

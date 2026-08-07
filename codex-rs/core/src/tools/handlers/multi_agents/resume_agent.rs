@@ -201,7 +201,6 @@ async fn try_resume_closed_agent(
             child_depth,
             /*agent_role*/ None,
             /*task_name*/ None,
-            Some(format!("resume:{receiver_thread_id}")),
         )?,
     ))
     .await

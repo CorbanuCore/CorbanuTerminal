@@ -110,11 +110,11 @@ impl ToolExecutor<ToolInvocation> for McpHandler {
                 .map(str::to_string),
         });
 
-        let mut search_info = ToolSearchInfo::from_tool_spec(self.spec(), source_info)?;
-        // MCP metadata already includes the namespace, tool description, and parameter names.
-        // Keep it authoritative instead of appending the generic spec text a second time.
-        search_info.entry.search_text = build_mcp_search_text(&self.tool_info);
-        Some(search_info)
+        ToolSearchInfo::from_spec(
+            build_mcp_search_text(&self.tool_info),
+            self.spec(),
+            source_info,
+        )
     }
 
     fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {

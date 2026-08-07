@@ -149,7 +149,9 @@ async fn spawned_subagents_apply_configured_developer_instruction_precedence(
             );
     }
     let codex_home = TempDir::new()?;
-    let mut config = MockResponsesConfig::new(&server.uri()).with_model("gpt-5.4");
+    let mut config = MockResponsesConfig::new(&server.uri())
+        .with_builtin_openai_provider()
+        .with_model("gpt-5.6-sol");
     if role_has_instructions {
         config =
             config.with_root_config(&format!("developer_instructions = {ROLE_INSTRUCTIONS:?}"));
@@ -164,7 +166,7 @@ async fn spawned_subagents_apply_configured_developer_instruction_precedence(
         .await?;
     let ThreadStartResponse { thread, .. } = app_server
         .start_thread(ThreadStartParams {
-            model: Some("gpt-5.4".to_string()),
+            model: Some("gpt-5.6-sol".to_string()),
             developer_instructions: parent.map(str::to_string),
             ..Default::default()
         })
@@ -252,12 +254,17 @@ async fn compacted_full_history_fork_replaces_parent_developer_instructions() ->
                 responses::ev_function_call(SETUP_CALL_ID, "unsupported_tool", "{}"),
                 responses::ev_completed_with_tokens(
                     "parent-before-compaction",
-                    /*total_tokens*/ 96,
+                    /*total_tokens*/ 1_900,
                 ),
             ]),
             responses::sse(vec![
-                responses::ev_response_created("parent-compaction"),
-                responses::ev_assistant_message("parent-summary", COMPACTED_SUMMARY),
+                json!({
+                    "type": "response.output_item.done",
+                    "item": {
+                        "type": "compaction",
+                        "encrypted_content": COMPACTED_SUMMARY,
+                    }
+                }),
                 responses::ev_completed_with_tokens("parent-compaction", /*total_tokens*/ 10),
             ]),
             responses::sse(vec![
@@ -317,9 +324,10 @@ async fn compacted_full_history_fork_replaces_parent_developer_instructions() ->
 
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
-        .with_model("gpt-5.4")
+        .with_builtin_openai_provider()
+        .with_model("gpt-5.6-sol")
         .with_root_config(&format!(
-            "developer_instructions = {PARENT_INSTRUCTIONS:?}\nmodel_context_window = 100\nmodel_auto_compact_token_limit = 90\ncompact_prompt = {COMPACT_PROMPT:?}"
+            "developer_instructions = {PARENT_INSTRUCTIONS:?}\nmodel_context_window = 2000\nmodel_auto_compact_token_limit = 1800\ncompact_prompt = {COMPACT_PROMPT:?}"
         ))
         .with_extra_config(&format!(
             "[features.multi_agent_v2]\nenabled = true\nsubagent_developer_instructions = {CHILD_INSTRUCTIONS:?}"
@@ -333,7 +341,7 @@ async fn compacted_full_history_fork_replaces_parent_developer_instructions() ->
         .await?;
     let ThreadStartResponse { thread, .. } = app_server
         .start_thread(ThreadStartParams {
-            model: Some("gpt-5.4".to_string()),
+            model: Some("gpt-5.6-sol".to_string()),
             ..Default::default()
         })
         .await?;
@@ -353,8 +361,18 @@ async fn compacted_full_history_fork_replaces_parent_developer_instructions() ->
     let compaction_requests = compaction_requests.requests();
     assert_eq!(compaction_requests.len(), 3);
     assert!(
-        compaction_requests[1].body_contains_text(COMPACT_PROMPT),
-        "the setup turn should perform actual mid-turn compaction"
+        compaction_requests[1]
+            .body_json()
+            .to_string()
+            .contains("\"type\":\"compaction_trigger\""),
+        "the setup turn should send the remote-v2 mid-turn compaction trigger"
+    );
+    assert!(
+        compaction_requests[2]
+            .body_json()
+            .to_string()
+            .contains(COMPACTED_SUMMARY),
+        "the post-compaction continuation should preserve the returned compaction item"
     );
     assert!(
         compaction_requests[2]
@@ -516,7 +534,8 @@ async fn cold_resume_preserves_effective_developer_instructions_for_roleless_wor
     };
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
-        .with_model("gpt-5.4")
+        .with_builtin_openai_provider()
+        .with_model("gpt-5.6-sol")
         .with_root_config(&format!("developer_instructions = {PARENT_INSTRUCTIONS:?}"))
         .with_extra_config(&feature_config)
         .write(codex_home.path())?;
@@ -529,7 +548,7 @@ async fn cold_resume_preserves_effective_developer_instructions_for_roleless_wor
             .await?;
         let ThreadStartResponse { thread, .. } = app_server
             .start_thread(ThreadStartParams {
-                model: Some("gpt-5.4".to_string()),
+                model: Some("gpt-5.6-sol".to_string()),
                 ..Default::default()
             })
             .await?;

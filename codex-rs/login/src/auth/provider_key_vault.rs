@@ -135,7 +135,13 @@ fn write_provider_key_with_vault(
     };
 
     // Overwrite if a credential for this provider already exists (key rotation); otherwise add.
-    let stored = match vault.update(&label, Some(api_key.to_string()), None, None, None) {
+    let stored = match vault.update(
+        &label,
+        Some(api_key.to_string()),
+        /*provider*/ None,
+        /*notes*/ None,
+        /*revocation_notes*/ None,
+    ) {
         Ok(_) => true,
         Err(codex_vault::VaultError::NotFound { .. }) => match vault.add(entry) {
             Ok(()) => true,

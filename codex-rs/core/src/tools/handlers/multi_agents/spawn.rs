@@ -7,6 +7,7 @@ use crate::agent::next_thread_spawn_depth;
 use crate::agent::role::DEFAULT_ROLE_NAME;
 use crate::tools::handlers::multi_agents_spec::SpawnAgentToolOptions;
 use crate::tools::handlers::multi_agents_spec::create_spawn_agent_tool_v1;
+use codex_protocol::protocol::RuntimeSelectionSource;
 use codex_tools::ToolSpec;
 
 #[derive(Default)]
@@ -115,6 +116,17 @@ async fn handle_spawn_agent(
     apply_spawn_agent_runtime_overrides(&mut config, turn.as_ref())?;
     ensure_spawn_provider_authorized(&config, &config.model_provider_id)?;
     ensure_spawn_runtime_eligible(&session, &config).await?;
+    let selection_source = if role_name.is_some() {
+        RuntimeSelectionSource::AgentRole
+    } else if args.model.is_some() {
+        RuntimeSelectionSource::ExplicitRequest
+    } else if turn.config.agent_default_subagent_model.is_some() {
+        RuntimeSelectionSource::OperatorDefault
+    } else {
+        RuntimeSelectionSource::InheritedRuntime
+    };
+    config.runtime_selection = Some(selection_source);
+    let runtime = spawn_runtime_report(&session, &config, selection_source).await?;
 
     let result = Box::pin(session.services.agent_control.spawn_agent_with_metadata(
         config,
@@ -125,7 +137,6 @@ async fn handle_spawn_agent(
             child_depth,
             role_name,
             /*task_name*/ None,
-            Some(call_id.clone()),
         )?),
         SpawnAgentOptions {
             fork_parent_spawn_call_id: args.fork_context.then(|| call_id.clone()),
@@ -218,6 +229,7 @@ async fn handle_spawn_agent(
     Ok(SpawnAgentResult {
         agent_id: new_thread_id.to_string(),
         nickname,
+        runtime,
     })
 }
 
@@ -243,6 +255,8 @@ struct SpawnAgentArgs {
 pub(crate) struct SpawnAgentResult {
     agent_id: String,
     nickname: Option<String>,
+    #[serde(flatten)]
+    runtime: SpawnRuntimeReport,
 }
 
 impl ToolOutput for SpawnAgentResult {

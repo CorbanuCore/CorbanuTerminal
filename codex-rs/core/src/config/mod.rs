@@ -82,35 +82,15 @@ use codex_mcp::McpProtocolMode;
 use codex_mcp::McpServerRegistration;
 use codex_mcp::ResolvedMcpCatalog;
 use codex_memories_read::memory_root;
-use codex_model_provider_info::AMBIENT_PROVIDER_ID;
-use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::BASETEN_PROVIDER_ID;
-use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
-use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OLLAMA_CHAT_PROVIDER_REMOVED_ERROR;
-use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
-use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
-use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
-use codex_model_provider_info::VERCEL_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::VERCEL_PROVIDER_ID;
-use codex_model_provider_info::WireApi;
-use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_model_provider_info::built_in_model_providers;
-use codex_model_provider_info::corrected_catalog_provider;
-use codex_model_provider_info::create_oss_provider_with_base_url;
-use codex_model_provider_info::default_model_context_window_for_provider;
 use codex_model_provider_info::merge_configured_model_providers;
-use codex_model_provider_info::resolve_model_for_provider;
 use codex_models_manager::ModelsManagerConfig;
 use codex_protocol::config_types::AltScreenMode;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
 use codex_protocol::config_types::ForcedLoginMethod;
-use codex_protocol::config_types::ModelProviderAuthInfo;
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
@@ -131,6 +111,7 @@ use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::MultiAgentVersion;
+use codex_protocol::protocol::RuntimeSelectionSource;
 use codex_protocol::protocol::SandboxPolicy;
 pub use codex_thread_store::ExtraConfig;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -145,7 +126,6 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::ErrorKind;
-use std::num::NonZeroU64;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -227,10 +207,7 @@ impl Default for GhostSnapshotConfig {
 /// the context window.
 pub(crate) const AGENTS_MD_MAX_BYTES: usize = DEFAULT_PROJECT_DOC_MAX_BYTES; // 32 KiB
 pub(crate) const DEFAULT_AGENT_MAX_THREADS: Option<usize> = Some(6);
-// Root + Nazgul + Troll + three Orcs is the canonical hierarchy. Nazgul turns are exempt from the
-// worker execution limiter so the human control path cannot be starved, while five resident child
-// slots keep the entire hierarchy addressable without unload/reload churn.
-pub(crate) const DEFAULT_MULTI_AGENT_V2_MAX_CONCURRENT_THREADS_PER_SESSION: usize = 6;
+pub(crate) const DEFAULT_MULTI_AGENT_V2_MAX_CONCURRENT_THREADS_PER_SESSION: usize = 4;
 pub(crate) const DEFAULT_MULTI_AGENT_V2_MIN_WAIT_TIMEOUT_MS: i64 = 10_000;
 pub(crate) const DEFAULT_MULTI_AGENT_V2_MAX_WAIT_TIMEOUT_MS: i64 = 3600 * 1000;
 pub(crate) const DEFAULT_MULTI_AGENT_V2_DEFAULT_WAIT_TIMEOUT_MS: i64 = 30_000;
@@ -313,10 +290,11 @@ fn resolve_cli_auth_credentials_store_mode(
     configured: AuthCredentialsStoreMode,
     package_version: &str,
 ) -> AuthCredentialsStoreMode {
-    match (is_local_or_debug_build(package_version), configured) {
-        (true, AuthCredentialsStoreMode::Keyring | AuthCredentialsStoreMode::Auto) => {
-            AuthCredentialsStoreMode::File
-        }
+    match (package_version, configured) {
+        (
+            LOCAL_DEV_BUILD_VERSION,
+            AuthCredentialsStoreMode::Keyring | AuthCredentialsStoreMode::Auto,
+        ) => AuthCredentialsStoreMode::File,
         (_, mode) => mode,
     }
 }
@@ -325,10 +303,11 @@ fn resolve_mcp_oauth_credentials_store_mode(
     configured: OAuthCredentialsStoreMode,
     package_version: &str,
 ) -> OAuthCredentialsStoreMode {
-    match (is_local_or_debug_build(package_version), configured) {
-        (true, OAuthCredentialsStoreMode::Keyring | OAuthCredentialsStoreMode::Auto) => {
-            OAuthCredentialsStoreMode::File
-        }
+    match (package_version, configured) {
+        (
+            LOCAL_DEV_BUILD_VERSION,
+            OAuthCredentialsStoreMode::Keyring | OAuthCredentialsStoreMode::Auto,
+        ) => OAuthCredentialsStoreMode::File,
         (_, mode) => mode,
     }
 }
@@ -338,7 +317,7 @@ pub(crate) async fn test_config() -> Config {
     let codex_home = tempfile::tempdir().expect("create temp dir");
     Config::load_from_base_config_with_overrides(
         ConfigToml {
-            model: Some("gpt-5.5".to_string()),
+            model: Some("gpt-5.6-sol".to_string()),
             ..Default::default()
         },
         ConfigOverrides::default(),
@@ -640,6 +619,10 @@ pub struct Config {
     /// Optional override of model selection.
     pub model: Option<String>,
 
+    /// Runtime-only provenance for a spawned thread's initial model route.
+    /// Persisted in session metadata; never accepted as a user configuration knob.
+    pub runtime_selection: Option<RuntimeSelectionSource>,
+
     /// Effective service tier request id preference for new turns.
     /// `default` means the user explicitly selected standard routing.
     pub service_tier: Option<String>,
@@ -738,7 +721,7 @@ pub struct Config {
     /// appends one extra argument containing a JSON payload describing the
     /// event.
     ///
-    /// Example `~/.pfterminal/config.toml` snippet:
+    /// Example `~/.codex/config.toml` snippet:
     ///
     /// ```toml
     /// notify = ["notify-send", "Codex"]
@@ -894,6 +877,13 @@ pub struct Config {
     /// Default reasoning effort for spawned subagents when the spawn call does not select one.
     pub agent_default_subagent_reasoning_effort: Option<ReasoningEffort>,
 
+    /// Operator-authorized provider IDs for spawned agents.
+    ///
+    /// `None` means every configured provider is eligible. When present, this is an
+    /// authorization ceiling shared by inherited, role-selected, and explicitly selected
+    /// child runtimes.
+    pub agent_provider_allowlist: Option<Vec<String>>,
+
     /// Whether to record a model-visible message when an agent turn is interrupted.
     pub agent_interrupt_message_enabled: bool,
 
@@ -974,7 +964,7 @@ pub struct Config {
     /// Optional Plan-mode-specific reasoning effort override used by the TUI.
     ///
     /// When unset, Plan mode uses the built-in Plan preset default (currently
-    /// `xhigh`). When explicitly set (including `none`), this overrides the
+    /// `medium`). When explicitly set (including `none`), this overrides the
     /// Plan preset. The `none` value means "no reasoning" (not "inherit the
     /// global default").
     pub plan_mode_reasoning_effort: Option<ReasoningEffort>,
@@ -1264,7 +1254,6 @@ impl Default for CurrentTimeReminderConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct MultiAgentV2Config {
     pub max_concurrent_threads_per_session: usize,
-    pub max_subagent_model_requests_per_turn: usize,
     pub min_wait_timeout_ms: i64,
     pub max_wait_timeout_ms: i64,
     pub default_wait_timeout_ms: i64,
@@ -1284,7 +1273,6 @@ impl MultiAgentV2Config {
     fn defaults_for_max_concurrency(max_concurrent_threads_per_session: usize) -> Self {
         Self {
             max_concurrent_threads_per_session,
-            max_subagent_model_requests_per_turn: 24,
             min_wait_timeout_ms: DEFAULT_MULTI_AGENT_V2_MIN_WAIT_TIMEOUT_MS,
             max_wait_timeout_ms: DEFAULT_MULTI_AGENT_V2_MAX_WAIT_TIMEOUT_MS,
             default_wait_timeout_ms: DEFAULT_MULTI_AGENT_V2_DEFAULT_WAIT_TIMEOUT_MS,
@@ -1300,7 +1288,7 @@ impl MultiAgentV2Config {
             subagent_developer_instructions: None,
             multi_agent_mode_hint_text: None,
             tool_namespace: Some(DEFAULT_MULTI_AGENT_V2_TOOL_NAMESPACE.to_string()),
-            hide_spawn_agent_metadata: true,
+            hide_spawn_agent_metadata: false,
             expose_spawn_agent_model_overrides: true,
             wait_agent_enabled: true,
             non_code_mode_only: true,
@@ -1534,108 +1522,6 @@ impl ConfigBuilder {
     }
 }
 
-pub fn gpu_runtime_model_provider(
-    record: codex_state::GpuRuntimeProvider,
-    codex_home: &AbsolutePathBuf,
-) -> Option<(String, ModelProviderInfo)> {
-    if record.health != "ready" {
-        return None;
-    }
-    if !record.provider_id.starts_with("gpu-") {
-        tracing::warn!(
-            provider_id = %record.provider_id,
-            "ignoring invalid GPU runtime provider id"
-        );
-        return None;
-    }
-    let wire_api = match record.wire_api.as_str() {
-        "chat" => WireApi::Chat,
-        "responses" => WireApi::Responses,
-        protocol => {
-            tracing::warn!(
-                provider_id = %record.provider_id,
-                %protocol,
-                "ignoring GPU runtime provider with unsupported wire API"
-            );
-            return None;
-        }
-    };
-    let mut provider = create_oss_provider_with_base_url(record.base_url.as_str(), wire_api);
-    provider.name = format!("Rented GPU · {}", record.model_id);
-    provider.auth = Some(ModelProviderAuthInfo {
-        command: current_pfterminal_auth_helper(),
-        args: vec!["internal-gpu-endpoint-token".to_string(), record.rental_id],
-        // Vault access may briefly serialize with the rental controller in another process.
-        // Leave enough startup time for that lock handoff instead of rejecting a healthy
-        // runtime provider at the generic five-second auth-helper default.
-        timeout_ms: match NonZeroU64::new(30_000) {
-            Some(timeout_ms) => timeout_ms,
-            None => NonZeroU64::MIN,
-        },
-        refresh_interval_ms: 60_000,
-        cwd: codex_home.clone(),
-    });
-    Some((record.provider_id, provider))
-}
-
-fn current_pfterminal_auth_helper() -> String {
-    std::env::current_exe()
-        .ok()
-        .and_then(pfterminal_auth_helper_from_executable)
-        .unwrap_or_else(|| "pfterminal".to_string())
-}
-
-fn pfterminal_auth_helper_from_executable(path: PathBuf) -> Option<String> {
-    let file_name = path.file_name()?.to_str()?;
-    if file_name == "pfterminal" {
-        return Some(path.to_string_lossy().into_owned());
-    }
-    // Linux marks the procfs target of a running executable as deleted when an update or
-    // development rebuild atomically replaces it. `/proc/self/exe` still resolves the live
-    // executable and can safely self-invoke hidden helper modes for that process.
-    #[cfg(target_os = "linux")]
-    if file_name == "pfterminal (deleted)" {
-        return Some("/proc/self/exe".to_string());
-    }
-    None
-}
-
-pub async fn load_gpu_runtime_model_providers(
-    sqlite_home: &Path,
-    codex_home: &AbsolutePathBuf,
-) -> HashMap<String, ModelProviderInfo> {
-    load_gpu_runtime_model_provider_records(sqlite_home)
-        .await
-        .into_iter()
-        .filter_map(|record| gpu_runtime_model_provider(record, codex_home))
-        .collect()
-}
-
-pub async fn load_gpu_runtime_model_provider_records(
-    sqlite_home: &Path,
-) -> Vec<codex_state::GpuRuntimeProvider> {
-    let runtime = match codex_state::StateRuntime::init(
-        sqlite_home.to_path_buf(),
-        "gpu-runtime-overlay".to_string(),
-    )
-    .await
-    {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            tracing::warn!(%error, "failed to open GPU runtime provider overlay");
-            return Vec::new();
-        }
-    };
-
-    match runtime.list_gpu_runtime_providers().await {
-        Ok(records) => records,
-        Err(error) => {
-            tracing::warn!(%error, "failed to read GPU runtime provider overlay");
-            Vec::new()
-        }
-    }
-}
-
 impl Config {
     pub fn sqlite_config(&self) -> &codex_state::SqliteConfig {
         &self.sqlite
@@ -1712,17 +1598,8 @@ impl Config {
     }
 
     pub fn to_models_manager_config(&self) -> ModelsManagerConfig {
-        self.to_models_manager_config_for_model(self.model.as_deref())
-    }
-
-    pub fn to_models_manager_config_for_model(&self, model: Option<&str>) -> ModelsManagerConfig {
-        let model_context_window = self.model_context_window.or_else(|| {
-            model.and_then(|model| {
-                default_model_context_window_for_provider(&self.model_provider_id, model)
-            })
-        });
         ModelsManagerConfig {
-            model_context_window,
+            model_context_window: self.model_context_window,
             model_auto_compact_token_limit: self.model_auto_compact_token_limit,
             tool_output_token_limit: self.tool_output_token_limit,
             base_instructions: self.base_instructions.clone(),
@@ -2755,37 +2632,6 @@ fn resolve_web_search_config(config_toml: &ConfigToml) -> Option<WebSearchConfig
         .map(Into::into)
 }
 
-fn openrouter_provider_body_provider(
-    openrouter_provider: Option<serde_json::Value>,
-) -> std::io::Result<Option<serde_json::Value>> {
-    let Some(openrouter_provider) = openrouter_provider else {
-        return Ok(None);
-    };
-    if openrouter_provider.is_object() {
-        Ok(Some(openrouter_provider))
-    } else {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "openrouter_provider must be a TOML inline table/object",
-        ))
-    }
-}
-
-fn normalize_ambient_reasoning_effort(effort: ReasoningEffort) -> ReasoningEffort {
-    match effort {
-        ReasoningEffort::High | ReasoningEffort::XHigh => ReasoningEffort::XHigh,
-        ReasoningEffort::Custom(value)
-            if matches!(
-                value.as_str(),
-                "deep" | "max" | "xhigh" | "extra_high" | "extra-high"
-            ) =>
-        {
-            ReasoningEffort::Custom(value)
-        }
-        _ => ReasoningEffort::XHigh,
-    }
-}
-
 fn resolve_experimental_request_user_input_enabled(config_toml: &ConfigToml) -> bool {
     config_toml
         .tools
@@ -2848,9 +2694,6 @@ fn resolve_multi_agent_v2_config(config_toml: &ConfigToml) -> MultiAgentV2Config
         .unwrap_or(DEFAULT_MULTI_AGENT_V2_MAX_CONCURRENT_THREADS_PER_SESSION);
     let default =
         MultiAgentV2Config::defaults_for_max_concurrency(max_concurrent_threads_per_session);
-    let max_subagent_model_requests_per_turn = base
-        .and_then(|config| config.max_subagent_model_requests_per_turn)
-        .unwrap_or(default.max_subagent_model_requests_per_turn);
     let min_wait_timeout_ms = base
         .and_then(|config| config.min_wait_timeout_ms)
         .unwrap_or(default.min_wait_timeout_ms);
@@ -2910,7 +2753,6 @@ fn resolve_multi_agent_v2_config(config_toml: &ConfigToml) -> MultiAgentV2Config
 
     MultiAgentV2Config {
         max_concurrent_threads_per_session,
-        max_subagent_model_requests_per_turn,
         min_wait_timeout_ms,
         max_wait_timeout_ms,
         default_wait_timeout_ms,
@@ -3800,7 +3642,8 @@ impl Config {
             );
             approvals_reviewer = constrained_approvals_reviewer.value();
         }
-        let configured_web_search_mode = resolve_web_search_mode(&cfg, &features);
+        let web_search_mode =
+            resolve_web_search_mode(&cfg, &features).unwrap_or(WebSearchMode::Cached);
         let web_search_config = resolve_web_search_config(&cfg);
         let experimental_request_user_input_enabled =
             resolve_experimental_request_user_input_enabled(&cfg);
@@ -3821,46 +3664,13 @@ impl Config {
             .clone()
             .filter(|value| !value.is_empty());
 
-        let sqlite_home = cfg
-            .sqlite_home
-            .as_ref()
-            .map(AbsolutePathBuf::to_path_buf)
-            .or_else(|| resolve_sqlite_home_env(&resolved_cwd))
-            .unwrap_or_else(|| codex_home.to_path_buf());
-
-        let mut built_in_model_providers = built_in_model_providers(openai_base_url);
-        built_in_model_providers
-            .extend(load_gpu_runtime_model_providers(&sqlite_home, &codex_home).await);
-        if let Some(openrouter_provider) =
-            openrouter_provider_body_provider(cfg.openrouter_provider.clone())?
-            && let Some(provider) = built_in_model_providers.get_mut(OPENROUTER_PROVIDER_ID)
-        {
-            provider.chat_completions_provider = Some(openrouter_provider);
-        }
-
         let model_providers =
-            merge_configured_model_providers(built_in_model_providers, cfg.model_providers)
+            merge_configured_model_providers(built_in_model_providers(openai_base_url), cfg.model_providers)
                 .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
 
-        let requested_provider_was_explicit =
-            model_provider.is_some() || cfg.model_provider.is_some();
-        let requested_model_provider_id = model_provider
+        let model_provider_id = model_provider
             .or(cfg.model_provider)
-            .unwrap_or_else(|| AMBIENT_PROVIDER_ID.to_string());
-        let stale_runtime_provider = requested_model_provider_id.starts_with("gpu-")
-            && !model_providers.contains_key(&requested_model_provider_id);
-        if stale_runtime_provider {
-            startup_warnings.push(format!(
-                "Rented GPU provider `{requested_model_provider_id}` is no longer active; using the default provider."
-            ));
-        }
-        let model_provider_was_explicit =
-            requested_provider_was_explicit && !stale_runtime_provider;
-        let model_provider_id = if stale_runtime_provider {
-            AMBIENT_PROVIDER_ID.to_string()
-        } else {
-            requested_model_provider_id
-        };
+            .unwrap_or_else(|| "openai".to_string());
         let model_provider = model_providers
             .get(&model_provider_id)
             .ok_or_else(|| {
@@ -3873,38 +3683,6 @@ impl Config {
             })?
             .clone();
 
-        let model_without_explicit_provider = !model_provider_was_explicit && cfg.model.is_some();
-        let model = match model {
-            Some(model_override) => Some(model_override),
-            None if stale_runtime_provider => resolve_model_for_provider(None, &model_provider_id),
-            None if model_without_explicit_provider => cfg.model,
-            None => resolve_model_for_provider(cfg.model, &model_provider_id),
-        };
-        // Final pair validation: a stored or inherited provider that cannot serve the resolved
-        // model (stale thread metadata, dropped spawn override, config default recorded next to
-        // a role-derived model) would 400/404 at the remote with "Unknown model". Correct the
-        // unambiguous cases; see corrected_catalog_provider for what qualifies.
-        let corrected_provider = (!model_provider_was_explicit)
-            .then_some(model.as_deref())
-            .flatten()
-            .and_then(|value| corrected_catalog_provider(value, &model_provider_id));
-        let (model_provider_id, model_provider) = match corrected_provider
-            .and_then(|corrected| {
-                model_providers
-                    .get(corrected)
-                    .map(|info| (corrected, info.clone()))
-            }) {
-            Some((corrected, info)) => {
-                tracing::warn!(
-                    model = model.as_deref().unwrap_or_default(),
-                    stored_provider = %model_provider_id,
-                    corrected_provider = corrected,
-                    "correcting impossible model/provider pair during config derivation"
-                );
-                (corrected.to_string(), info)
-            }
-            None => (model_provider_id, model_provider),
-        };
         let shell_environment_policy = cfg.shell_environment_policy.into();
         let allow_login_shell = cfg.allow_login_shell.unwrap_or(true);
 
@@ -3962,6 +3740,19 @@ impl Config {
                 "agents.max_concurrent_threads_per_session must be at least 1",
             ));
         }
+        let agent_max_depth = cfg
+            .agents
+            .as_ref()
+            .and_then(|agents| agents.max_depth)
+            .unwrap_or(DEFAULT_AGENT_MAX_DEPTH);
+        let agent_default_subagent_model = cfg
+            .agents
+            .as_ref()
+            .and_then(|agents| agents.default_subagent_model.clone());
+        let agent_default_subagent_reasoning_effort = cfg
+            .agents
+            .as_ref()
+            .and_then(|agents| agents.default_subagent_reasoning_effort.clone());
         let agent_provider_allowlist = cfg
             .agents
             .as_ref()
@@ -3979,22 +3770,9 @@ impl Config {
         {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "agents.provider_allowlist must name at least one provider when set",
+                "agents.provider_allowlist must contain at least one provider",
             ));
         }
-        let agent_max_depth = cfg
-            .agents
-            .as_ref()
-            .and_then(|agents| agents.max_depth)
-            .unwrap_or(DEFAULT_AGENT_MAX_DEPTH);
-        let agent_default_subagent_model = cfg
-            .agents
-            .as_ref()
-            .and_then(|agents| agents.default_subagent_model.clone());
-        let agent_default_subagent_reasoning_effort = cfg
-            .agents
-            .as_ref()
-            .and_then(|agents| agents.default_subagent_reasoning_effort.clone());
         let agent_interrupt_message_enabled = cfg
             .agents
             .as_ref()
@@ -4045,57 +3823,9 @@ impl Config {
             })
             .filter(|values| !values.is_empty());
 
-        let ambient_provider_selected = matches!(
-            model_provider_id.as_str(),
-            AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID
-        );
-        let kimi_code_provider_selected = model_provider_id == KIMI_CODE_PROVIDER_ID;
-        let anthropic_provider_selected = model_provider_id == ANTHROPIC_PROVIDER_ID;
-        let meta_provider_selected = model_provider_id == META_PROVIDER_ID;
-        let baseten_provider_selected =
-            matches!(model_provider_id.as_str(), BASETEN_PROVIDER_ID | BASETEN_ANTHROPIC_PROVIDER_ID);
-        let openrouter_provider_selected = matches!(
-            model_provider_id.as_str(),
-            OPENROUTER_PROVIDER_ID | OPENROUTER_ANTHROPIC_PROVIDER_ID
-        );
-        // OpenRouter's hosted web plugin rewrites the upstream prompt and
-        // prevents provider-side prefix caching even when no search occurs.
-        // Keep it available through an explicit `web_search` setting, but do
-        // not attach it to every default coding turn.
-        let web_search_mode = configured_web_search_mode.unwrap_or(if openrouter_provider_selected {
-            WebSearchMode::Disabled
-        } else {
-            WebSearchMode::Cached
-        });
-        let vercel_provider_selected = matches!(
-            model_provider_id.as_str(),
-            VERCEL_PROVIDER_ID | VERCEL_ANTHROPIC_PROVIDER_ID | VERCEL_ANTHROPIC_FAST_PROVIDER_ID
-        );
-        let zai_chat_provider_selected = model_provider_id == ZAI_PROVIDER_ID;
-        let zai_provider_selected =
-            matches!(model_provider_id.as_str(), ZAI_PROVIDER_ID | ZAI_ANTHROPIC_PROVIDER_ID);
-        let forced_login_method = cfg
-            .forced_login_method
-            .or_else(|| {
-                (ambient_provider_selected
-                    || kimi_code_provider_selected
-                    || anthropic_provider_selected
-                    || meta_provider_selected
-                    || baseten_provider_selected
-                    || openrouter_provider_selected
-                    || vercel_provider_selected
-                    || zai_provider_selected)
-                    .then_some(ForcedLoginMethod::Api)
-            });
+        let forced_login_method = cfg.forced_login_method;
 
-        let model_reasoning_effort = if (ambient_provider_selected && !model_without_explicit_provider)
-            || zai_chat_provider_selected
-        {
-            cfg.model_reasoning_effort
-                .map(normalize_ambient_reasoning_effort)
-        } else {
-            cfg.model_reasoning_effort
-        };
+        let model = model.or(cfg.model);
         let notices = cfg.notice.unwrap_or_default();
         let service_tier = match service_tier_override {
             Some(Some(service_tier)) => Some(service_tier),
@@ -4311,6 +4041,7 @@ impl Config {
         let otel = otel::resolve_config(cfg.otel.unwrap_or_default(), &mut startup_warnings);
         let config = Self {
             model,
+            runtime_selection: None,
             service_tier,
             review_model,
             model_context_window: cfg.model_context_window,
@@ -4386,6 +4117,7 @@ impl Config {
             agent_max_threads,
             agent_default_subagent_model,
             agent_default_subagent_reasoning_effort,
+            agent_provider_allowlist,
             agent_max_depth,
             agent_roles,
             memories: memories_config,
@@ -4428,7 +4160,7 @@ impl Config {
                 .or(show_raw_agent_reasoning)
                 .unwrap_or(false),
             guardian_policy_config,
-            model_reasoning_effort,
+            model_reasoning_effort: cfg.model_reasoning_effort,
             plan_mode_reasoning_effort: cfg.plan_mode_reasoning_effort,
             model_reasoning_summary: cfg.model_reasoning_summary,
             model_catalog,
@@ -4499,11 +4231,7 @@ impl Config {
                 .map(|t| t.notification_settings.clone())
                 .unwrap_or_default(),
             animations: cfg.tui.as_ref().map(|t| t.animations).unwrap_or(true),
-            show_tooltips: cfg
-                .tui
-                .as_ref()
-                .map(|t| t.show_tooltips)
-                .unwrap_or(false),
+            show_tooltips: cfg.tui.as_ref().map(|t| t.show_tooltips).unwrap_or(true),
             model_availability_nux: cfg
                 .tui
                 .as_ref()
@@ -4873,9 +4601,9 @@ fn normalize_guardian_policy_config(value: Option<&str>) -> Option<String> {
     })
 }
 
-/// Returns the path to the PFTerminal configuration directory, which can be
+/// Returns the path to the Codex configuration directory, which can be
 /// specified by the `CODEX_HOME` environment variable. If not set, defaults to
-/// `~/.pfterminal`.
+/// `~/.codex`.
 ///
 /// - If `CODEX_HOME` is set, the value must exist and be a directory. The
 ///   value will be canonicalized and this function will Err otherwise.

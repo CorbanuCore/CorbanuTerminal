@@ -740,6 +740,9 @@ impl TestCodexBuilder {
         };
         // Keep generic tests stable when the bundled catalog default changes. Tests that need a
         // specific model can still override this with a config mutator.
+        // This is a frozen wiremock fixture, not a user-visible or spawn-eligible runtime.
+        // Keep it aligned with upstream so generic protocol tests do not inherit semantic
+        // changes from PF Terminal's production default model.
         config.model = Some("gpt-5.5".to_string());
         config.cwd = cwd_override;
         config.model_provider = model_provider;

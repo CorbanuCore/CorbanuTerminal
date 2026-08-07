@@ -51,11 +51,11 @@ impl ChatWidget {
             Ok(true) => self.add_info_message(
                 "PfTerminal Plan disconnected from this device. The paid period and wallet were not changed."
                     .to_string(),
-                None,
+                /*hint*/ None,
             ),
             Ok(false) => self.add_info_message(
                 "PfTerminal Plan was already disconnected on this device.".to_string(),
-                None,
+                /*hint*/ None,
             ),
             Err(error) => {
                 self.add_error_message(format!("Unable to disconnect PfTerminal Plan: {error}"));
@@ -165,7 +165,7 @@ impl ChatWidget {
             Ok(()) => self.add_info_message(
                 "Wallet and PfTerminal Plan credential removed from this device. On-chain funds and the paid period were not changed."
                     .to_string(),
-                None,
+                /*hint*/ None,
             ),
             Err(error) => {
                 self.add_error_message(format!("Unable to remove wallet cleanly: {error}"));
@@ -181,7 +181,7 @@ impl ChatWidget {
         if self.config.model_provider_id == PFTERMINAL_PLAN_PROVIDER_ID {
             self.add_info_message(
                 "Choose another provider before starting the next turn.".to_string(),
-                None,
+                /*hint*/ None,
             );
             self.open_model_popup();
         }

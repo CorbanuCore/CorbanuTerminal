@@ -95,7 +95,7 @@ impl WidgetRef for &WelcomeWidget {
             "  ".into(),
             "Welcome to ".into(),
             "PFTerminal".bold(),
-            ", your crypto-native AI terminal".into(),
+            ", your multi-model coding terminal".into(),
         ]));
 
         Paragraph::new(lines)

@@ -609,10 +609,10 @@ impl BridgeRuntime {
     async fn handle_event(&mut self, event: InProcessServerEvent) -> anyhow::Result<()> {
         match event {
             InProcessServerEvent::ServerRequest(request) => {
-                self.handle_server_request(request).await
+                self.handle_server_request(*request).await
             }
             InProcessServerEvent::ServerNotification(notification) => {
-                self.handle_notification(notification).await
+                self.handle_notification(*notification).await
             }
             InProcessServerEvent::Lagged { skipped } => self.handle_lagged(skipped as u64).await,
         }

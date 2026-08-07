@@ -473,7 +473,13 @@ impl GpuProvider for VastProvider {
                 Value::String(token.expose().to_string()),
             );
         }
-        let onstart = vast_onstart_command(&request.launch_command);
+        let container_command = request
+            .container_entrypoint
+            .iter()
+            .chain(request.launch_command.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+        let onstart = vast_onstart_command(&container_command);
         let body = serde_json::json!({
             "client_id": "me",
             "image": request.image,

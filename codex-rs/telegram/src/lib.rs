@@ -156,9 +156,12 @@ pub async fn run(run_config: RunConfig) -> anyhow::Result<()> {
         arg0_paths.codex_self_exe.clone(),
         arg0_paths.codex_linux_sandbox_exe.clone(),
     )?;
-    let environment_manager =
-        EnvironmentManager::from_codex_home(core_config.codex_home.clone(), Some(runtime_paths))
-            .await?;
+    let environment_manager = EnvironmentManager::from_codex_home(
+        core_config.codex_home.clone(),
+        Some(runtime_paths),
+        core_config.http_client_factory(),
+    )
+    .await?;
     let start_args = InProcessClientStartArgs {
         arg0_paths,
         config: Arc::new(core_config.clone()),

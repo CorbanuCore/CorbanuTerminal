@@ -451,11 +451,13 @@ fn offer() -> GpuOffer {
 
 fn recipe_catalog() -> RecipeCatalog {
     RecipeCatalog::new(vec![GpuRecipe {
-        id: "deepseek-flash-2xh200".to_string(),
+        id: "deepseek-flash-0731-2xh200".to_string(),
         revision: "test-revision".to_string(),
-        model_id: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
-        served_model_id: "deepseek-v4-flash".to_string(),
-        wire_api: "responses".to_string(),
+        model_family: "deepseek".to_string(),
+        recommendation_priority: None,
+        model_id: "deepseek-ai/DeepSeek-V4-Flash-0731".to_string(),
+        served_model_id: "deepseek-ai/DeepSeek-V4-Flash-0731".to_string(),
+        wire_api: "chat".to_string(),
         model_revision: "1111111111111111111111111111111111111111".to_string(),
         image:
             "vllm/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -475,9 +477,10 @@ fn recipe_catalog() -> RecipeCatalog {
         model_weight_bytes: 180_000_000_000,
         kv_cache_reserve_bytes: 40_000_000_000,
         workspace_reserve_bytes: 20_000_000_000,
+        container_entrypoint: Vec::new(),
         launch_command: vec![
             "server".to_string(),
-            "deepseek-ai/DeepSeek-V4-Flash".to_string(),
+            "deepseek-ai/DeepSeek-V4-Flash-0731".to_string(),
             "1111111111111111111111111111111111111111".to_string(),
             "nvidia-smi topo -m; printf PFTERMINAL_RUNTIME_GATE=nvlink-ok".to_string(),
             "--api-key".to_string(),
@@ -502,7 +505,7 @@ fn rental_params(operation_id: &str) -> GpuRentalCreateParams {
         installation_id: "installation-1".to_string(),
         client_operation_id: operation_id.to_string(),
         provider: "fake".to_string(),
-        recipe_id: "deepseek-flash-2xh200".to_string(),
+        recipe_id: "deepseek-flash-0731-2xh200".to_string(),
         recipe_revision: "test-revision".to_string(),
         offer_snapshot_json: serde_json::to_string(&offer()).expect("serialize offer"),
         quote_expires_at_ms: Some(NOW_MS + 60_000),
@@ -516,7 +519,10 @@ fn rental_params(operation_id: &str) -> GpuRentalCreateParams {
 
 async fn state_runtime() -> Arc<StateRuntime> {
     let path = std::env::temp_dir().join(format!("gpu-controller-test-{}", uuid::Uuid::new_v4()));
-    StateRuntime::init(path, "test-provider".to_string())
+    let sqlite = codex_state::SqliteConfig::from_sqlite_home(
+        path.try_into().expect("temporary path is absolute"),
+    );
+    StateRuntime::init(sqlite, "test-provider".to_string())
         .await
         .expect("initialize state")
 }
@@ -603,7 +609,9 @@ async fn transient_endpoint_store_failure_retries_before_provider_create() {
     let controller = controller_with_dependencies(
         state.clone(),
         provider.clone(),
-        Arc::new(TransientEndpointCredentials::unavailable_on_call(1)),
+        Arc::new(TransientEndpointCredentials::unavailable_on_call(
+            /*fail_on_call*/ 1,
+        )),
         Arc::new(FakeReadiness),
     );
 
@@ -643,7 +651,9 @@ async fn transient_endpoint_store_failure_during_readiness_preserves_live_instan
     let controller = controller_with_dependencies(
         state.clone(),
         provider.clone(),
-        Arc::new(TransientEndpointCredentials::unavailable_on_call(2)),
+        Arc::new(TransientEndpointCredentials::unavailable_on_call(
+            /*fail_on_call*/ 2,
+        )),
         Arc::new(FakeReadiness),
     );
     create_authorized_rental(&state, "readiness-credential-retry").await;
@@ -751,8 +761,8 @@ async fn provider_native_bootstrap_reaches_ready_and_registers_runtime_once() {
         .await
         .expect("runtime providers");
     assert_eq!(providers.len(), 1);
-    assert_eq!(providers[0].model_id, "deepseek-v4-flash");
-    assert_eq!(providers[0].wire_api, "responses");
+    assert_eq!(providers[0].model_id, "deepseek-ai/DeepSeek-V4-Flash-0731");
+    assert_eq!(providers[0].wire_api, "chat");
     assert_eq!(providers[0].health, "ready");
     assert_eq!(providers[0].display_hourly_microusd, 2_500_000);
 
@@ -907,7 +917,7 @@ async fn retryable_secure_endpoint_discovery_does_not_destroy_a_live_rental() {
 async fn readiness_loss_disables_runtime_until_the_full_contract_recovers() {
     let state = state_runtime().await;
     let provider = FakeProvider::new(CreateBehavior::Success);
-    let readiness = Arc::new(SwitchableReadiness::new(true));
+    let readiness = Arc::new(SwitchableReadiness::new(/*ready*/ true));
     let controller = controller_with_readiness(state.clone(), provider.clone(), readiness.clone());
     create_authorized_rental(&state, "health").await;
     controller.reconcile_due(NOW_MS).await.expect("create");
@@ -940,7 +950,7 @@ async fn readiness_loss_disables_runtime_until_the_full_contract_recovers() {
         .await
         .expect("seed stale runtime price");
 
-    readiness.set(false);
+    readiness.set(/*ready*/ false);
     let degraded = controller.reconcile_due(NOW_MS + 4).await.expect("degrade");
     assert_eq!(
         degraded,
@@ -958,7 +968,7 @@ async fn readiness_loss_disables_runtime_until_the_full_contract_recovers() {
         2_500_000
     );
 
-    readiness.set(true);
+    readiness.set(/*ready*/ true);
     let recovered = controller
         .reconcile_due(NOW_MS + 60_004)
         .await
@@ -1151,7 +1161,7 @@ async fn termination_is_confirmed_only_after_inventory_absence() {
                 rental_id: "rental-terminate".to_string(),
                 provider_id: "gpu-rental-terminate".to_string(),
                 base_url: "https://rental-terminate.example/v1".to_string(),
-                model_id: "deepseek-ai/DeepSeek-V4-Flash".to_string(),
+                model_id: "deepseek-ai/DeepSeek-V4-Flash-0731".to_string(),
                 wire_api: "chat".to_string(),
                 health: "ready".to_string(),
                 display_hourly_microusd: 2_500_000,
@@ -1415,8 +1425,8 @@ async fn retry_backoff_is_stable_jittered_and_honors_retry_after() {
         .expect("load rental")
         .expect("rental exists");
 
-    let first = controller.retry_delay_ms(&rental, None);
-    let replay = controller.retry_delay_ms(&rental, None);
+    let first = controller.retry_delay_ms(&rental, /*retry_after_ms*/ None);
+    let replay = controller.retry_delay_ms(&rental, /*retry_after_ms*/ None);
     assert_eq!(first, replay);
     assert!((750..=1_250).contains(&first));
     assert_eq!(controller.retry_delay_ms(&rental, Some(7_777)), 7_777);

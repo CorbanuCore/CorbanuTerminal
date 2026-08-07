@@ -9,11 +9,8 @@ use codex_app_server_protocol::ThreadItem;
 use codex_app_server_protocol::ThreadTokenUsage;
 use codex_app_server_protocol::TurnStatus;
 use codex_core::config::Config;
-use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
-use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::WireApi;
 use codex_protocol::num_format::format_with_separators;
-use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::SessionConfiguredEvent;
 use codex_utils_sandbox_summary::summarize_permission_profile;
 use owo_colors::OwoColorize;
@@ -218,7 +215,7 @@ impl EventProcessor for EventProcessorWithHumanOutput {
         session_configured_event: &SessionConfiguredEvent,
     ) {
         const VERSION: &str = env!("CARGO_PKG_VERSION");
-        eprintln!("PFTerminal v{VERSION}\n--------");
+        eprintln!("OpenAI Codex v{VERSION}\n--------");
         for (key, value) in config_summary_entries(config, session_configured_event) {
             eprintln!("{} {}", format!("{key}:").style(self.bold), value);
         }
@@ -447,7 +444,11 @@ fn config_summary_entries(
     if config.model_provider.wire_api == WireApi::Responses {
         entries.push((
             "reasoning effort",
-            reasoning_effort_label(config, session_configured_event),
+            config
+                .model_reasoning_effort
+                .as_ref()
+                .map(std::string::ToString::to_string)
+                .unwrap_or_else(|| "none".to_string()),
         ));
         entries.push((
             "reasoning summaries",
@@ -462,34 +463,6 @@ fn config_summary_entries(
         session_configured_event.session_id.to_string(),
     ));
     entries
-}
-
-fn reasoning_effort_label(
-    config: &Config,
-    session_configured_event: &SessionConfiguredEvent,
-) -> String {
-    if session_configured_event.model_provider_id == AMBIENT_PROVIDER_ID
-        && session_configured_event.model == AMBIENT_DEFAULT_MODEL
-    {
-        return match config.model_reasoning_effort.as_ref() {
-            Some(ReasoningEffort::High | ReasoningEffort::XHigh) => "deep".to_string(),
-            Some(ReasoningEffort::Custom(value))
-                if matches!(
-                    value.as_str(),
-                    "deep" | "max" | "xhigh" | "extra_high" | "extra-high"
-                ) =>
-            {
-                "deep".to_string()
-            }
-            _ => "standard".to_string(),
-        };
-    }
-
-    config
-        .model_reasoning_effort
-        .as_ref()
-        .map(std::string::ToString::to_string)
-        .unwrap_or_else(|| "none".to_string())
 }
 
 fn reasoning_text(

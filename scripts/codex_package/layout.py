@@ -52,6 +52,8 @@ def build_package_dir(
         bin_dir / entrypoint_name,
         is_windows=spec.is_windows,
     )
+    for extra_name, extra_bin in sorted(inputs.extra_bins.items()):
+        copy_executable(extra_bin, bin_dir / extra_name, is_windows=spec.is_windows)
     copy_executable(
         inputs.code_mode_host_bin,
         bin_dir / f"codex-code-mode-host{spec.exe_suffix}",
@@ -149,6 +151,10 @@ def validate_package_dir(
 
     required_files = [
         Path("bin") / variant.entrypoint_name(spec),
+        *[
+            Path("bin") / extra.entrypoint_name(spec)
+            for extra in variant.extra_binaries
+        ],
         Path("bin") / f"codex-code-mode-host{spec.exe_suffix}",
         Path("codex-path") / spec.rg_name,
     ]

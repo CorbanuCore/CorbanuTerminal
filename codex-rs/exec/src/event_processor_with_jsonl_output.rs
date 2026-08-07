@@ -260,11 +260,9 @@ impl EventProcessorWithJsonOutput {
                                 thread_id,
                                 CollabAgentState {
                                     status: match state.status {
-                                        codex_app_server_protocol::CollabAgentStatus::PendingInit => {
+                                        codex_app_server_protocol::CollabAgentStatus::PendingInit
+                                        | codex_app_server_protocol::CollabAgentStatus::Unloaded => {
                                             CollabAgentStatus::PendingInit
-                                        }
-                                        codex_app_server_protocol::CollabAgentStatus::Unloaded => {
-                                            CollabAgentStatus::Unloaded
                                         }
                                         codex_app_server_protocol::CollabAgentStatus::Running => {
                                             CollabAgentStatus::Running

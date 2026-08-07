@@ -5,8 +5,6 @@
 //! history-facing `/status` surface.
 
 use super::*;
-use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
-use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 
 impl ChatWidget {
     /// Update the status indicator header and details.
@@ -74,14 +72,6 @@ impl ChatWidget {
         self.bottom_pane.set_status_line(status_line);
     }
 
-    pub(crate) fn set_gpu_spend_status(&mut self, status: Option<String>) {
-        if self.gpu_spend_status == status {
-            return;
-        }
-        self.gpu_spend_status = status;
-        self.refresh_status_line();
-    }
-
     /// Sets the terminal hyperlink target for the currently rendered footer status line.
     pub(crate) fn set_status_line_hyperlink(&mut self, url: Option<String>) {
         self.bottom_pane.set_status_line_hyperlink(url);
@@ -93,14 +83,6 @@ impl ChatWidget {
     /// user actually looking at?" and the footer stack remains a pure renderer of that decision.
     pub(crate) fn set_active_agent_label(&mut self, active_agent_label: Option<String>) {
         self.bottom_pane.set_active_agent_label(active_agent_label);
-    }
-
-    pub(crate) fn set_active_external_model_display(&mut self, model_display: Option<String>) {
-        if self.active_external_model_display == model_display {
-            return;
-        }
-        self.active_external_model_display = model_display;
-        self.refresh_status_surfaces();
     }
 
     /// Recomputes footer status-line content from config and current runtime state.
@@ -243,7 +225,6 @@ impl ChatWidget {
             .collect();
         let agents_summary =
             crate::status::compose_agents_summary(&self.config, &self.instruction_source_paths);
-        let model_display_name = self.model_display_name();
         let (cell, handle) = crate::status::new_status_output_with_rate_limits_handle(
             &self.config,
             self.runtime_model_provider_base_url.as_deref(),
@@ -257,7 +238,7 @@ impl ChatWidget {
             rate_limit_snapshots.as_slice(),
             self.plan_type,
             Local::now(),
-            &model_display_name,
+            self.model_display_name(),
             collaboration_mode,
             reasoning_effort_override,
             agents_summary,
@@ -422,29 +403,5 @@ impl ChatWidget {
             None | Some(ReasoningEffortConfig::None) => "default".to_string(),
             Some(effort) => effort.as_str().to_string(),
         }
-    }
-
-    pub(crate) fn status_line_reasoning_effort_label_for_model(
-        model: &str,
-        effort: Option<&ReasoningEffortConfig>,
-    ) -> String {
-        if model == AMBIENT_DEFAULT_MODEL || model == ZAI_DEFAULT_MODEL {
-            return match effort {
-                Some(ReasoningEffortConfig::High | ReasoningEffortConfig::XHigh) => {
-                    "deep".to_string()
-                }
-                Some(ReasoningEffortConfig::Custom(value))
-                    if matches!(
-                        value.as_str(),
-                        "deep" | "max" | "xhigh" | "extra_high" | "extra-high"
-                    ) =>
-                {
-                    "deep".to_string()
-                }
-                _ => "standard".to_string(),
-            };
-        }
-
-        Self::status_line_reasoning_effort_label(effort)
     }
 }

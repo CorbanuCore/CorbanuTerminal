@@ -273,6 +273,7 @@ fn session_lifecycle_avoids_redundant_subagent_metadata_reads() -> Result<()> {
                             ),
                             agent_nickname: Some("worker".to_string()),
                             agent_role: Some("worker".to_string()),
+                            agent_class: None,
                         }),
                         root_thread_id.into(),
                         root_thread_id,
@@ -415,6 +416,8 @@ fn session_lifecycle_avoids_redundant_subagent_metadata_reads() -> Result<()> {
                         agent_nickname: Some("worker".to_string()),
                         agent_role: Some("worker".to_string()),
                         agent_path: Some("/root/worker".to_string()),
+                        runtime_route: None,
+                        catalogue_summary: None,
                         is_running: false,
                         is_closed: false,
                     })
@@ -438,8 +441,13 @@ fn session_lifecycle_avoids_redundant_subagent_metadata_reads() -> Result<()> {
                       Subagents
                       Select an agent to watch. ⌥ + ← previous, ⌥ + → next.
 
-                    › 1. • Main [default] (current)  [root]
-                      2. • /root/worker              [child]
+                    › 1. • Main [default] (current)  [root] ·
+                                                     openai/gpt-5.6-sol · effort provider default
+                                                     · default tier · capability frontier ·
+                                                     billing auth-dependent (plan 1× burn or API
+                                                     $5/M input / $30/M output) · vision
+                      2. • /root/worker              [child] ·
+                                                     runtime route unavailable
 
                       Press enter to confirm or esc to go back
                     "###

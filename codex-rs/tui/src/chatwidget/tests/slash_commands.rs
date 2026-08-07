@@ -1,7 +1,5 @@
 use super::*;
 use crate::bottom_pane::slash_commands::ServiceTierCommand;
-use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
-use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 use pretty_assertions::assert_eq;
 use serial_test::serial;
 
@@ -426,11 +424,14 @@ async fn queued_settings_selection_applies_before_next_input() {
     assert_matches!(op_rx.try_recv(), Err(TryRecvError::Empty));
     while let Ok(event) = rx.try_recv() {
         match event {
-            AppEvent::OpenReasoningPopup { model, purpose } => {
-                chat.open_reasoning_popup_for_purpose(model, purpose)
+            AppEvent::OpenReasoningPopup { model } => chat.open_reasoning_popup(model),
+            AppEvent::SelectModelAndReasoning { model, effort } => {
+                // Simulate the running thread's settings acknowledgement. The app owns this
+                // transition in production; this widget test only verifies queued-input order.
+                chat.set_model(&model);
+                chat.set_reasoning_effort(effort);
             }
             AppEvent::UpdateModel(model) => chat.set_model(&model),
-            AppEvent::UpdateModelSelection { model, .. } => chat.set_model(&model),
             AppEvent::UpdateReasoningEffort(effort) => chat.set_reasoning_effort(effort),
             AppEvent::SettingsSelectionClosed => {
                 chat.app_event_tx.send(AppEvent::SettingsSelectionSettled);
@@ -466,7 +467,7 @@ async fn queued_bare_rename_drains_next_input_after_name_update() {
     complete_turn_with_message(&mut chat, "turn-1", Some("done"));
 
     assert_eq!(chat.input_queue.queued_user_messages.len(), 1);
-    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("Name pane"));
+    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("Name thread"));
     assert_matches!(op_rx.try_recv(), Err(TryRecvError::Empty));
 
     chat.handle_paste("Queued rename".to_string());
@@ -476,9 +477,9 @@ async fn queued_bare_rename_drains_next_input_after_name_update() {
     assert!(
         events.iter().any(|event| matches!(
             event,
-            AppEvent::RenameCurrentPane { name } if name == "Queued rename"
+            AppEvent::CodexOp(Op::SetThreadName { name }) if name == "Queued rename"
         )),
-        "expected rename prompt to submit pane name; events: {events:?}"
+        "expected rename prompt to submit thread name; events: {events:?}"
     );
 
     chat.handle_server_notification(
@@ -521,9 +522,9 @@ async fn queued_inline_rename_does_not_drain_again_before_turn_started() {
     assert!(
         events.iter().any(|event| matches!(
             event,
-            AppEvent::RenameCurrentPane { name } if name == "Queued rename"
+            AppEvent::CodexOp(Op::SetThreadName { name }) if name == "Queued rename"
         )),
-        "expected queued /rename to submit pane name; events: {events:?}"
+        "expected queued /rename to submit thread name; events: {events:?}"
     );
 
     match next_submit_op(&mut op_rx) {
@@ -1204,7 +1205,7 @@ async fn slash_rename_prefills_existing_thread_name() {
 
     assert_matches!(
         rx.try_recv(),
-        Ok(AppEvent::RenameCurrentPane { name }) if name == "Current project title"
+        Ok(AppEvent::CodexOp(Op::SetThreadName { name })) if name == "Current project title"
     );
 }
 
@@ -1215,100 +1216,12 @@ async fn slash_rename_without_existing_thread_name_starts_empty() {
     chat.dispatch_command(SlashCommand::Rename);
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
-    assert!(popup.contains("Name pane"));
+    assert!(popup.contains("Name thread"));
     assert!(popup.contains("Type a name and press Enter"));
 
     chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert_matches!(rx.try_recv(), Err(TryRecvError::Empty));
-}
-
-#[tokio::test]
-async fn slash_spawn_opens_role_picker() {
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    chat.dispatch_command(SlashCommand::Spawn);
-
-    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenSpawnRolePicker));
-}
-
-#[tokio::test]
-async fn slash_spawn_status_opens_status_picker() {
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    chat.dispatch_command_with_args(SlashCommand::Spawn, "status".to_string(), Vec::new());
-
-    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenSpawnStatus));
-}
-
-#[tokio::test]
-async fn slash_orchestrate_routes_to_app_event() {
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    chat.dispatch_command(SlashCommand::Orchestrate);
-
-    assert_matches!(
-        rx.try_recv(),
-        Ok(AppEvent::HandleOrchestrateCommand { args }) if args.is_empty()
-    );
-}
-
-#[tokio::test]
-async fn slash_orchestrate_with_args_routes_to_app_event() {
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    chat.dispatch_command_with_args(
-        SlashCommand::Orchestrate,
-        "attach Krimp quant --mode auto".to_string(),
-        Vec::new(),
-    );
-
-    assert_matches!(
-        rx.try_recv(),
-        Ok(AppEvent::HandleOrchestrateCommand { args })
-            if args == "attach Krimp quant --mode auto"
-    );
-}
-
-#[tokio::test]
-async fn slash_spawn_role_without_task_opens_parent_picker() {
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    chat.dispatch_command_with_args(SlashCommand::Spawn, "troll".to_string(), Vec::new());
-
-    assert_matches!(
-        rx.try_recv(),
-        Ok(AppEvent::OpenSpawnParentPicker {
-            role: crate::spawn_orchestration::SpawnRole::Troll
-        })
-    );
-}
-
-#[tokio::test]
-async fn slash_spawn_nazgul_opens_nazgul_picker() {
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    chat.dispatch_command_with_args(SlashCommand::Spawn, "nazgul".to_string(), Vec::new());
-
-    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenSpawnNazgulPicker));
-}
-
-#[tokio::test]
-async fn slash_spawn_role_with_extra_text_still_opens_parent_picker() {
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    chat.dispatch_command_with_args(
-        SlashCommand::Spawn,
-        "orc run the benchmark".to_string(),
-        Vec::new(),
-    );
-
-    assert_matches!(
-        rx.try_recv(),
-        Ok(AppEvent::OpenSpawnParentPicker {
-            role: crate::spawn_orchestration::SpawnRole::Orc
-        })
-    );
 }
 
 #[tokio::test]
@@ -1364,7 +1277,7 @@ async fn signed_out_usage_command_with_args_reports_chatgpt_login_requirement() 
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        rendered.contains("Sign in with ChatGPT to view OpenAI usage with /usage."),
+        rendered.contains("Sign in with ChatGPT to use /usage."),
         "expected ChatGPT login requirement, got: {rendered:?}"
     );
     assert_eq!(recall_latest_after_clearing(&mut chat), "/usage weekly");
@@ -1690,7 +1603,7 @@ async fn pending_token_activity_refresh_keeps_composer_visible_in_short_viewport
             .vt100()
             .screen()
             .contents()
-            .contains("Ask PFTerminal to do anything")
+            .contains("Ask Codex to do anything")
     );
 }
 
@@ -3012,73 +2925,6 @@ async fn raw_slash_command_reports_usage_for_invalid_arg() {
     assert!(
         rendered.contains("Usage: /raw [on|off]"),
         "expected raw usage error, got {rendered:?}"
-    );
-}
-
-#[tokio::test]
-async fn bare_vault_opens_action_menu_without_history_spam() {
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    chat.handle_slash_command_dispatch(SlashCommand::Vault);
-
-    assert_eq!(chat.bottom_pane.active_view_id(), Some("vault-menu"));
-    let cells = drain_insert_history(&mut rx);
-    assert!(
-        cells.is_empty(),
-        "bare /vault should open the menu, not insert status history: {cells:?}"
-    );
-}
-
-#[tokio::test]
-async fn gpu_commands_emit_durable_control_events() {
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-
-    chat.handle_slash_command_dispatch(SlashCommand::Gpu);
-    assert!(matches!(rx.try_recv(), Ok(AppEvent::OpenGpuMenu)));
-
-    chat.dispatch_command_with_args(SlashCommand::Gpu, "stop rental-1".to_string(), Vec::new());
-    assert!(matches!(
-        rx.try_recv(),
-        Ok(AppEvent::DisableGpuServing { rental_id }) if rental_id == "rental-1"
-    ));
-
-    chat.dispatch_command_with_args(
-        SlashCommand::Gpu,
-        "terminate rental-2".to_string(),
-        Vec::new(),
-    );
-    assert!(matches!(
-        rx.try_recv(),
-        Ok(AppEvent::TerminateGpuRental { rental_id }) if rental_id == "rental-2"
-    ));
-}
-
-#[tokio::test]
-async fn vault_credential_add_rejects_inline_secret_without_recall_leak() {
-    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    let secret = "sk-inline-secret";
-
-    submit_composer_text(&mut chat, &format!("/vault credential add {secret}"));
-
-    let cells = drain_insert_history(&mut rx);
-    let rendered = cells
-        .iter()
-        .map(|lines| lines_to_single_string(lines))
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert!(
-        rendered.contains("Do not type vault secrets inline"),
-        "expected inline-secret rejection, got {rendered:?}"
-    );
-    assert!(
-        !rendered.contains(secret),
-        "error history must not echo the secret"
-    );
-
-    let recalled = recall_latest_after_clearing(&mut chat);
-    assert!(
-        !recalled.contains(secret),
-        "inline vault secret must not be stored in local recall; recalled {recalled:?}"
     );
 }
 

@@ -3,20 +3,24 @@ source: tui/src/chatwidget/tests/popups_and_settings.rs
 expression: popup
 ---
   Select Model and Effort
-  Ambient coding plan
+  Access legacy models by running pfterminal -m <model_name> or in your config
 
-  1. gpt-5.6-sol (default)  Latest frontier agentic coding model.
-  2. gpt-5.6-terra          Balanced agentic coding model for everyday work.
-  3. gpt-5.6-luna           Fast and affordable agentic coding model.
-  4. gpt-5.5                Frontier model for complex coding, research, and
-                            real-world work.
-› 5. gpt-5.2 (current)      Optimized for professional work and long-running
-                            agents.
+› 1. z-ai/glm-5.2 (default)     Ambient: GLM 5.2 - $0.76/M input, $0.14/M
+                                cached input, $2.42/M output.
+  2. moonshotai/kimi-k2.7-code  Ambient: Kimi K2.7 Code - $0.73/M input,
+                                $0.15/M cached input, $3.50/M output.
+  3. glm-5.2                    GLM 5.2 through the Z.AI Coding Plan: 3x burn
+                                during 06:00-10:00 UTC, normally 2x off-peak,
+                                with promotional 1x off-peak burn through
+                                September 30, 2026.
+  4. claude-opus-5-plan         Claude Opus 5 through Claude Code subscription
+                                auth in the Codex harness.
+  5. claude-fable-5-plan        Claude Fable 5 through Claude Code
+                                subscription auth in the Codex harness.
+  6. claude-opus-5              Claude Opus 5 through the Anthropic Messages
+                                API.
+  7. claude-fable-5             Claude Fable 5 through the Anthropic Messages
+                                API.
+  8. gpt-5.6-sol                Latest frontier agentic coding model.
 
-› 1. Ambient GLM 5.2 (current)  Model: z-ai/glm-5.2. Ambient: GLM 5.2 - $0.76/
-                                M input, $0.14/M cached input, $2.42/M output.
-  2. Ambient Kimi K2.7 Code     Model: moonshotai/kimi-k2.7-code. Ambient:
-                                Kimi K2.7 Code - $0.73/M input, $0.15/M cached
-                                input, $3.50/M output.
-
-  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back
+  Press enter to confirm or esc to go back

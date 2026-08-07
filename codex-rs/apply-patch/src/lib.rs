@@ -1111,7 +1111,7 @@ mod tests {
         let mut stderr = Vec::new();
         apply_patch(
             &patch,
-            &PathUri::from_path(dir.path()).expect("absolute test path"),
+            &PathUri::from_host_native_path(dir.path()).expect("absolute test path"),
             &mut stdout,
             &mut stderr,
             LOCAL_FS.as_ref(),

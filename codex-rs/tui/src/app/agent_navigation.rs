@@ -124,9 +124,8 @@ impl AgentNavigationState {
         }
         let (
             previous_agent_path,
-            previous_model,
-            previous_last_task_message,
-            previous_last_result_message,
+            previous_runtime_route,
+            previous_catalogue_summary,
             previous_is_running,
         ) = self
             .threads
@@ -134,22 +133,20 @@ impl AgentNavigationState {
             .map(|entry| {
                 (
                     entry.agent_path.clone(),
-                    entry.model.clone(),
-                    entry.last_task_message.clone(),
-                    entry.last_result_message.clone(),
+                    entry.runtime_route.clone(),
+                    entry.catalogue_summary.clone(),
                     entry.is_running,
                 )
             })
-            .unwrap_or((None, None, None, None, false));
+            .unwrap_or((None, None, None, false));
         self.threads.insert(
             thread_id,
             AgentPickerThreadEntry {
                 agent_nickname,
                 agent_role,
                 agent_path: previous_agent_path,
-                model: previous_model,
-                last_task_message: previous_last_task_message,
-                last_result_message: previous_last_result_message,
+                runtime_route: previous_runtime_route,
+                catalogue_summary: previous_catalogue_summary,
                 is_running: previous_is_running && !is_closed,
                 is_closed,
             },
@@ -167,9 +164,8 @@ impl AgentNavigationState {
                     agent_nickname: None,
                     agent_role: None,
                     agent_path: None,
-                    model: None,
-                    last_task_message: None,
-                    last_result_message: None,
+                    runtime_route: None,
+                    catalogue_summary: None,
                     is_running: false,
                     is_closed: false,
                 });
@@ -202,26 +198,6 @@ impl AgentNavigationState {
         self.set_running(thread_id, /*is_running*/ false);
     }
 
-    pub(crate) fn set_last_task_message(
-        &mut self,
-        thread_id: ThreadId,
-        task_preview: Option<String>,
-    ) {
-        if let Some(entry) = self.threads.get_mut(&thread_id) {
-            entry.last_task_message = task_preview;
-        }
-    }
-
-    pub(crate) fn set_last_result_message(
-        &mut self,
-        thread_id: ThreadId,
-        result_preview: Option<String>,
-    ) {
-        if let Some(entry) = self.threads.get_mut(&thread_id) {
-            entry.last_result_message = result_preview;
-        }
-    }
-
     pub(crate) fn set_running(&mut self, thread_id: ThreadId, is_running: bool) {
         if let Some(entry) = self.threads.get_mut(&thread_id) {
             entry.is_running = is_running;
@@ -236,24 +212,18 @@ impl AgentNavigationState {
         }
     }
 
-    pub(crate) fn set_model(&mut self, thread_id: ThreadId, model: Option<String>) {
-        if let Some(model) = model.filter(|model| !model.trim().is_empty())
-            && let Some(entry) = self.threads.get_mut(&thread_id)
-        {
-            entry.model = Some(model);
-        }
-    }
-
-    pub(crate) fn set_agent_nickname(
+    pub(crate) fn set_runtime_route(
         &mut self,
         thread_id: ThreadId,
-        agent_nickname: Option<String>,
-    ) -> bool {
-        let Some(entry) = self.threads.get_mut(&thread_id) else {
-            return false;
-        };
-        entry.agent_nickname = agent_nickname;
-        true
+        runtime_route: Option<codex_app_server_protocol::ThreadRuntimeRoute>,
+        catalogue_summary: Option<String>,
+    ) {
+        if let Some(runtime_route) = runtime_route
+            && let Some(entry) = self.threads.get_mut(&thread_id)
+        {
+            entry.runtime_route = Some(runtime_route);
+            entry.catalogue_summary = catalogue_summary;
+        }
     }
 
     /// Marks a thread as closed without removing it from the traversal cache.
@@ -399,19 +369,38 @@ impl AgentNavigationState {
             self.threads
                 .get(&thread_id)
                 .map(|entry| {
-                    if !is_primary
+                    let base_label = if !is_primary
                         && let Some(agent_path) = entry
                             .agent_path
                             .as_deref()
                             .filter(|agent_path| !agent_path.trim().is_empty())
                     {
-                        return format!("`{agent_path}`");
+                        format!("`{agent_path}`")
+                    } else {
+                        format_agent_picker_item_name(
+                            entry.agent_nickname.as_deref(),
+                            entry.agent_role.as_deref(),
+                            is_primary,
+                        )
+                    };
+                    if !is_primary
+                        && let Some(route) = entry.runtime_route.as_ref()
+                    {
+                        let effort = route
+                            .reasoning_effort
+                            .as_ref()
+                            .map(ToString::to_string)
+                            .unwrap_or_else(|| "provider default".to_string());
+                        let billing = entry
+                            .catalogue_summary
+                            .as_deref()
+                            .unwrap_or("catalogue evidence unavailable");
+                        return format!(
+                            "{base_label} · {thread_id} · {}/{} {effort} · {billing}",
+                            route.model_provider, route.model
+                        );
                     }
-                    format_agent_picker_item_name(
-                        entry.agent_nickname.as_deref(),
-                        entry.agent_role.as_deref(),
-                        is_primary,
-                    )
+                    base_label
                 })
                 .unwrap_or_else(|| {
                     format_agent_picker_item_name(
@@ -451,64 +440,6 @@ impl AgentNavigationState {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-
-    #[test]
-    fn sub_agent_activity_records_latest_task_preview() {
-        let mut state = AgentNavigationState::default();
-        let thread_id = ThreadId::new();
-
-        state.record_sub_agent_activity(SubAgentActivityDisplay {
-            thread_id,
-            agent_path: "/root/troll_burzum/orc_snaga".to_string(),
-            agent_nickname: None,
-            agent_role: None,
-            task_preview: Some("build the animated website shell".to_string()),
-            is_running_hint: true,
-        });
-
-        let entry = state.get(&thread_id).expect("agent should be cached");
-        assert_eq!(
-            entry.agent_path.as_deref(),
-            Some("/root/troll_burzum/orc_snaga")
-        );
-        assert_eq!(
-            entry.last_task_message.as_deref(),
-            Some("build the animated website shell")
-        );
-        assert!(entry.is_running);
-    }
-
-    #[test]
-    fn encrypted_activity_without_preview_preserves_dispatch_task_text() {
-        let mut state = AgentNavigationState::default();
-        let thread_id = ThreadId::new();
-        state.upsert(
-            thread_id,
-            Some("Snaga".to_string()),
-            Some("orc".to_string()),
-            /*is_closed*/ false,
-        );
-        state.set_last_task_message(
-            thread_id,
-            Some("verify the route-stall regression".to_string()),
-        );
-
-        state.record_sub_agent_activity(SubAgentActivityDisplay {
-            thread_id,
-            agent_path: "/root/troll_burzum/orc_snaga".to_string(),
-            agent_nickname: Some("Snaga".to_string()),
-            agent_role: Some("orc".to_string()),
-            task_preview: None,
-            is_running_hint: true,
-        });
-
-        let entry = state.get(&thread_id).expect("agent should remain cached");
-        assert_eq!(
-            entry.last_task_message.as_deref(),
-            Some("verify the route-stall regression")
-        );
-        assert!(entry.is_running);
-    }
 
     fn populated_state() -> (AgentNavigationState, ThreadId, ThreadId, ThreadId) {
         let mut state = AgentNavigationState::default();
@@ -620,7 +551,7 @@ mod tests {
 
     #[test]
     fn active_agent_label_tracks_current_thread() {
-        let (state, main_thread_id, first_agent_id, _) = populated_state();
+        let (mut state, main_thread_id, first_agent_id, _) = populated_state();
 
         assert_eq!(
             state.active_agent_label(Some(first_agent_id), Some(main_thread_id)),
@@ -629,6 +560,26 @@ mod tests {
         assert_eq!(
             state.active_agent_label(Some(main_thread_id), Some(main_thread_id)),
             Some("Main [default]".to_string())
+        );
+
+        state.set_runtime_route(
+            first_agent_id,
+            Some(codex_app_server_protocol::ThreadRuntimeRoute {
+                model_provider: "claude-plan".to_string(),
+                model: "claude-opus-5-plan".to_string(),
+                reasoning_effort: Some(
+                    codex_protocol::openai_models::ReasoningEffort::XHigh,
+                ),
+                service_tier: None,
+                selection_source: None,
+            }),
+            Some("capability frontier · billing plan (1× burn) · vision".to_string()),
+        );
+        assert_eq!(
+            state.active_agent_label(Some(first_agent_id), Some(main_thread_id)),
+            Some(format!(
+                "Robie [explorer] · {first_agent_id} · claude-plan/claude-opus-5-plan xhigh · capability frontier · billing plan (1× burn) · vision"
+            ))
         );
     }
 }

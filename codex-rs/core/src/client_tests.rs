@@ -1,3 +1,4 @@
+use super::ANTHROPIC_WEB_SEARCH_TOOL_TYPE;
 use super::AuthRequestTelemetryContext;
 use super::CompactConversationRequestSettings;
 use super::ModelClient;
@@ -9,6 +10,7 @@ use super::X_CODEX_PARENT_THREAD_ID_HEADER;
 use super::X_CODEX_TURN_METADATA_HEADER;
 use super::X_CODEX_WINDOW_ID_HEADER;
 use super::X_OPENAI_SUBAGENT_HEADER;
+use super::anthropic_web_search_tool_with_type;
 use crate::AttestationContext;
 use crate::AttestationProvider;
 use crate::GenerateAttestationFuture;
@@ -30,14 +32,7 @@ use codex_model_provider::BearerAuthProvider;
 use codex_model_provider::SharedModelProvider;
 use codex_model_provider::create_model_provider;
 use codex_model_provider_info::CHATGPT_CODEX_BASE_URL;
-use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
-use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
-use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::WireApi;
 use codex_model_provider_info::create_oss_provider_with_base_url;
 use codex_otel::SessionTelemetry;
@@ -45,13 +40,9 @@ use codex_protocol::ThreadId;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
-use codex_protocol::models::FunctionCallOutputPayload;
-use codex_protocol::models::ReasoningItemContent;
-use codex_protocol::models::ReasoningItemReasoningSummary;
 use codex_protocol::models::ResponseItem;
-use codex_protocol::models::WebSearchAction;
-use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::ModelInfo;
+use codex_protocol::openai_models::ChatReasoningEffortProtocol;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::InternalSessionSource;
 use codex_protocol::protocol::SessionSource;
@@ -64,11 +55,6 @@ use codex_rollout_trace::RawTraceEventPayload;
 use codex_rollout_trace::RolloutTrace;
 use codex_rollout_trace::TraceWriter;
 use codex_rollout_trace::replay_bundle;
-use codex_tools::FreeformTool;
-use codex_tools::FreeformToolFormat;
-use codex_tools::JsonSchema;
-use codex_tools::ResponsesApiTool;
-use codex_tools::ToolSpec;
 use futures::StreamExt;
 use pretty_assertions::assert_eq;
 use serde_json::json;
@@ -100,506 +86,6 @@ use wiremock::matchers::path;
 
 const TEST_CHATGPT_ID_TOKEN: &str = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJlbWFpbCI6InVzZXJAZXhhbXBsZS5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9hdXRoIjp7ImNoYXRncHRfdXNlcl9pZCI6InVzZXItMTIzNDUiLCJ1c2VyX2lkIjoidXNlci0xMjM0NSIsImNoYXRncHRfcGxhbl90eXBlIjoicHJvIiwiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjb3VudC0xMjMifX0.c2ln";
 const TEST_INSTALLATION_ID: &str = "11111111-1111-4111-8111-111111111111";
-
-#[test]
-fn responses_input_normalizes_accidental_assistant_prefill_without_changing_user_turns() {
-    let message = |role: &str, text: &str| ResponseItem::Message {
-        id: None,
-        role: role.to_string(),
-        content: vec![ContentItem::InputText {
-            text: text.to_string(),
-        }],
-        phase: None,
-        metadata: None,
-    };
-    let child_message = |text: &str| ResponseItem::AgentMessage {
-        id: None,
-        author: "/root/nazgul/troll".to_string(),
-        recipient: "/root/nazgul".to_string(),
-        content: vec![AgentMessageInputContent::InputText {
-            text: text.to_string(),
-        }],
-        metadata: None,
-    };
-    let cases = [
-        (
-            vec![
-                message("user", "Dispatch the work."),
-                message("assistant", "The work is queued."),
-                ResponseItem::Other,
-            ],
-            vec![
-                message("user", "Dispatch the work."),
-                message("assistant", "The work is queued."),
-                ResponseItem::Other,
-                message("user", "Continue."),
-            ],
-        ),
-        (
-            vec![
-                message("assistant", "Earlier result."),
-                message("user", "Review the current changes."),
-            ],
-            vec![
-                message("assistant", "Earlier result."),
-                message("user", "Review the current changes."),
-            ],
-        ),
-        (
-            vec![
-                message("user", "Review child reports."),
-                message("assistant", "The first report is accepted."),
-                child_message("Message Type: FINAL_ANSWER\nPayload:\nWork complete."),
-            ],
-            vec![
-                message("user", "Review child reports."),
-                message("assistant", "The first report is accepted."),
-                child_message("Message Type: FINAL_ANSWER\nPayload:\nWork complete."),
-                message("user", "Continue."),
-            ],
-        ),
-        (
-            vec![
-                message("user", "Review child reports."),
-                child_message("A child checkpoint arrived."),
-                ResponseItem::Other,
-            ],
-            vec![
-                message("user", "Review child reports."),
-                child_message("A child checkpoint arrived."),
-                ResponseItem::Other,
-                message("user", "Continue."),
-            ],
-        ),
-        (
-            vec![
-                child_message("Earlier child report."),
-                message("user", "This human message is already terminal."),
-            ],
-            vec![
-                child_message("Earlier child report."),
-                message("user", "This human message is already terminal."),
-            ],
-        ),
-        (
-            vec![
-                message("user", "Compact this conversation."),
-                message("assistant", "Earlier result."),
-                ResponseItem::CompactionTrigger { metadata: None },
-            ],
-            vec![
-                message("user", "Compact this conversation."),
-                message("assistant", "Earlier result."),
-                ResponseItem::CompactionTrigger { metadata: None },
-            ],
-        ),
-    ];
-
-    for (mut input, expected) in cases {
-        super::ensure_responses_input_ends_with_user_turn(&mut input);
-        assert_eq!(input, expected);
-    }
-}
-
-#[test]
-fn claude_plan_request_maps_typed_child_mail_to_user_input() {
-    let message = |role: &str, text: &str| ResponseItem::Message {
-        id: None,
-        role: role.to_string(),
-        content: vec![ContentItem::InputText {
-            text: text.to_string(),
-        }],
-        phase: None,
-        metadata: None,
-    };
-    let child_message = ResponseItem::AgentMessage {
-        id: None,
-        author: "/root/nazgul/troll".to_string(),
-        recipient: "/root/nazgul".to_string(),
-        content: vec![AgentMessageInputContent::InputText {
-            text: concat!(
-                "Message Type: FINAL_ANSWER\n",
-                "Task name: /root/nazgul\n",
-                "Payload:\nWork complete."
-            )
-            .to_string(),
-        }],
-        metadata: None,
-    };
-    let prompt = super::Prompt {
-        input: vec![
-            message("user", "Review child reports."),
-            message("assistant", "The delivery is accepted."),
-            child_message,
-        ],
-        ..Default::default()
-    };
-
-    let request = test_model_client(SessionSource::Cli)
-        .build_anthropic_messages_request(&prompt, &test_claude_fable_plan_model_info(), None)
-        .expect("Claude Fable Plan request");
-
-    assert_eq!(
-        request.messages.last(),
-        Some(&json!({
-            "role": "user",
-            "content": [{
-                "type": "text",
-                "text": concat!(
-                    "<inter_agent_message sender=\"/root/nazgul/troll\" ",
-                    "recipient=\"/root/nazgul\">\n",
-                    "Message Type: FINAL_ANSWER\n",
-                    "Task name: /root/nazgul\n",
-                    "Payload:\nWork complete.\n",
-                    "</inter_agent_message>"
-                ),
-                "cache_control": {
-                    "type": "ephemeral",
-                    "ttl": "1h",
-                },
-            }],
-        }))
-    );
-    assert_eq!(
-        request
-            .messages
-            .iter()
-            .filter(
-                |message| message.get("role").and_then(serde_json::Value::as_str) == Some("user")
-            )
-            .count(),
-        2,
-        "typed child mail is the second user message"
-    );
-}
-
-#[test]
-fn anthropic_request_normalizes_tool_result_after_trailing_assistant_text() {
-    let mut messages = vec![
-        json!({"role": "user", "content": [{"type": "text", "text": "Inspect the game."}]}),
-        json!({
-            "role": "assistant",
-            "content": [
-                {
-                    "type": "thinking",
-                    "thinking": "Inspect the renderer.",
-                    "signature": "signed-thinking"
-                },
-                {
-                    "type": "tool_use",
-                    "id": "toolu_probe",
-                    "name": "exec_command",
-                    "input": {"cmd": "rg debugTint"}
-                },
-                {
-                    "type": "text",
-                    "text": "I will inspect the result next."
-                }
-            ],
-        }),
-        json!({
-            "role": "user",
-            "content": [{
-                "type": "tool_result",
-                "tool_use_id": "toolu_probe",
-                "content": "renderer.ts:42"
-            }],
-        }),
-    ];
-
-    super::ensure_anthropic_messages_end_with_user_turn(&mut messages);
-
-    assert_eq!(
-        messages.last(),
-        Some(&json!({
-            "role": "user",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": "toolu_probe",
-                    "content": "renderer.ts:42"
-                },
-                {
-                    "type": "text",
-                    "text": "Continue."
-                }
-            ],
-        }))
-    );
-}
-
-#[test]
-fn anthropic_request_leaves_normal_tool_result_continuations_unchanged() {
-    let cases = [
-        vec![
-            json!({"role": "user", "content": [{"type": "text", "text": "Inspect the game."}]}),
-            json!({
-                "role": "assistant",
-                "content": [
-                    {"type": "text", "text": "I will inspect it."},
-                    {
-                        "type": "tool_use",
-                        "id": "toolu_probe",
-                        "name": "exec_command",
-                        "input": {"cmd": "rg debugTint"}
-                    }
-                ],
-            }),
-            json!({
-                "role": "user",
-                "content": [{
-                    "type": "tool_result",
-                    "tool_use_id": "toolu_probe",
-                    "content": "renderer.ts:42"
-                }],
-            }),
-        ],
-        vec![
-            json!({"role": "user", "content": [{"type": "text", "text": "Inspect the game."}]}),
-            json!({
-                "role": "assistant",
-                "content": [
-                    {
-                        "type": "tool_use",
-                        "id": "toolu_probe",
-                        "name": "exec_command",
-                        "input": {"cmd": "rg debugTint"}
-                    },
-                    {"type": "text", "text": "I will inspect the result next."}
-                ],
-            }),
-            json!({
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": "toolu_probe",
-                        "content": "renderer.ts:42"
-                    },
-                    {"type": "text", "text": "Focus on the foreground layer."}
-                ],
-            }),
-        ],
-    ];
-
-    for mut messages in cases {
-        let original = messages.clone();
-        super::ensure_anthropic_messages_end_with_user_turn(&mut messages);
-        assert_eq!(messages, original);
-    }
-}
-
-#[test]
-fn anthropic_api_request_repairs_tool_result_after_trailing_assistant_text() {
-    let mut messages = vec![
-        json!({
-            "role": "assistant",
-            "content": [
-                {
-                    "type": "tool_use",
-                    "id": "toolu_probe",
-                    "name": "exec_command",
-                    "input": {"cmd": "rg debugTint"}
-                },
-                {"type": "text", "text": "I will inspect the result next."}
-            ],
-        }),
-        json!({
-            "role": "user",
-            "content": [{
-                "type": "tool_result",
-                "tool_use_id": "toolu_probe",
-                "content": "renderer.ts:42"
-            }],
-        }),
-    ];
-    super::ensure_anthropic_messages_end_with_user_turn(&mut messages);
-
-    assert_eq!(
-        messages.last(),
-        Some(&json!({
-            "role": "user",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": "toolu_probe",
-                    "content": "renderer.ts:42"
-                },
-                {
-                    "type": "text",
-                    "text": "Continue."
-                }
-            ],
-        }))
-    );
-}
-
-#[test]
-fn anthropic_fable_request_repairs_live_tool_then_commentary_history_shape() {
-    let prompt = super::Prompt {
-        input: vec![
-            ResponseItem::Message {
-                id: None,
-                role: "user".to_string(),
-                content: vec![ContentItem::InputText {
-                    text: "Inspect the accessibility gate.".to_string(),
-                }],
-                phase: None,
-                metadata: None,
-            },
-            ResponseItem::FunctionCall {
-                id: None,
-                name: "exec_command".to_string(),
-                namespace: None,
-                arguments: r#"{"cmd":"node test/accessibility.test.mjs"}"#.to_string(),
-                call_id: "toolu_live_fable".to_string(),
-                metadata: None,
-            },
-            ResponseItem::Message {
-                id: None,
-                role: "assistant".to_string(),
-                content: vec![ContentItem::OutputText {
-                    text: "I am checking the result now.".to_string(),
-                }],
-                phase: None,
-                metadata: None,
-            },
-            ResponseItem::FunctionCallOutput {
-                id: None,
-                call_id: "toolu_live_fable".to_string(),
-                output: FunctionCallOutputPayload::from_text("accessibility: ok".to_string()),
-                metadata: None,
-            },
-        ],
-        ..Default::default()
-    };
-
-    let request = test_model_client(SessionSource::Cli)
-        .build_anthropic_messages_request(&prompt, &test_claude_fable_model_info(), None)
-        .expect("Anthropic API-key Fable request");
-    let last_content = request
-        .messages
-        .last()
-        .and_then(|message| message.get("content"))
-        .and_then(serde_json::Value::as_array)
-        .expect("terminal user content");
-
-    assert_eq!(
-        last_content
-            .iter()
-            .filter_map(|block| block.get("type").and_then(serde_json::Value::as_str))
-            .collect::<Vec<_>>(),
-        vec!["tool_result", "text"],
-        "the request must end in explicit user continuation, not an assistant-prefill shape"
-    );
-    assert_eq!(
-        last_content
-            .last()
-            .and_then(|block| block.get("text"))
-            .and_then(serde_json::Value::as_str),
-        Some("Continue.")
-    );
-}
-
-#[test]
-fn anthropic_history_repair_removes_only_latest_incomplete_signed_response() {
-    let older_assistant = json!({
-        "role": "assistant",
-        "content": [
-            {"type": "thinking", "thinking": "complete", "signature": "older-signature"},
-            {"type": "text", "text": "older answer"},
-        ],
-    });
-    let mut messages = vec![
-        json!({"role": "user", "content": [{"type": "text", "text": "first task"}]}),
-        older_assistant.clone(),
-        json!({"role": "user", "content": [{"type": "text", "text": "next task"}]}),
-        json!({
-            "role": "assistant",
-            "content": [
-                {"type": "thinking", "thinking": "partial", "signature": "latest-signature"},
-                {"type": "text", "text": "partial answer"},
-                {"type": "tool_use", "id": "toolu_partial", "name": "shell", "input": {}},
-            ],
-        }),
-        json!({
-            "role": "user",
-            "content": [
-                {"type": "tool_result", "tool_use_id": "toolu_partial", "content": "discard"},
-                {"type": "text", "text": "new child report"},
-                {"type": "tool_result", "tool_use_id": "toolu_unrelated", "content": "keep"},
-            ],
-        }),
-    ];
-
-    assert!(super::remove_latest_signed_thinking_assistant_message(
-        &mut messages
-    ));
-    assert_eq!(
-        messages,
-        vec![
-            json!({"role": "user", "content": [{"type": "text", "text": "first task"}]}),
-            older_assistant,
-            json!({
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "next task"},
-                    {"type": "text", "text": "new child report"},
-                    {"type": "tool_result", "tool_use_id": "toolu_unrelated", "content": "keep"},
-                ],
-            }),
-        ]
-    );
-}
-
-#[test]
-fn anthropic_history_repair_does_not_remove_a_valid_latest_assistant_response() {
-    let mut messages = vec![
-        json!({"role": "user", "content": [{"type": "text", "text": "first task"}]}),
-        json!({
-            "role": "assistant",
-            "content": [{"type": "thinking", "thinking": "older", "signature": "signature"}],
-        }),
-        json!({"role": "user", "content": [{"type": "text", "text": "next task"}]}),
-        json!({"role": "assistant", "content": [{"type": "text", "text": "valid answer"}]}),
-        json!({"role": "user", "content": [{"type": "text", "text": "current task"}]}),
-    ];
-    let original = messages.clone();
-
-    assert!(!super::remove_latest_signed_thinking_assistant_message(
-        &mut messages
-    ));
-    assert_eq!(messages, original);
-}
-
-#[test]
-fn anthropic_history_rejection_classifier_is_narrow_and_structured() {
-    let matching = ApiError::Transport(codex_api::TransportError::Http {
-        status: http::StatusCode::BAD_REQUEST,
-        url: None,
-        headers: None,
-        body: Some(
-            json!({
-                "type": "error",
-                "error": {
-                    "type": "invalid_request_error",
-                    "message": "messages.49.content.1: `thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified."
-                }
-            })
-            .to_string(),
-        ),
-    });
-    let unrelated = ApiError::InvalidRequest {
-        message: "The latest assistant message has invalid tool input.".to_string(),
-    };
-
-    assert!(super::is_anthropic_signed_thinking_history_rejection(
-        &matching
-    ));
-    assert!(!super::is_anthropic_signed_thinking_history_rejection(
-        &unrelated
-    ));
-}
 
 fn test_model_client(session_source: SessionSource) -> ModelClient {
     test_model_client_with_thread_id(ThreadId::new(), session_source)
@@ -790,178 +276,6 @@ fn test_model_info() -> ModelInfo {
     .expect("deserialize test model info")
 }
 
-fn test_ambient_model_info() -> ModelInfo {
-    serde_json::from_value(json!({
-        "slug": AMBIENT_DEFAULT_MODEL,
-        "display_name": "Ambient GLM 5.2",
-        "description": "Ambient GLM 5.2",
-        "default_reasoning_level": "medium",
-        "supported_reasoning_levels": [
-            {"effort": "medium", "description": "Standard"},
-            {"effort": "xhigh", "description": "Deep"}
-        ],
-        "shell_type": "shell_command",
-        "visibility": "list",
-        "supported_in_api": true,
-        "priority": 1,
-        "upgrade": null,
-        "base_instructions": "base instructions",
-        "model_messages": null,
-        "supports_reasoning_summaries": false,
-        "support_verbosity": false,
-        "default_verbosity": null,
-        "apply_patch_tool_type": null,
-        "truncation_policy": {"mode": "tokens", "limit": 10000},
-        "supports_parallel_tool_calls": true,
-        "supports_image_detail_original": false,
-        "context_window": 202752,
-        "auto_compact_token_limit": null,
-        "experimental_supported_tools": []
-    }))
-    .expect("deserialize Ambient test model info")
-}
-
-fn test_anthropic_opus_model_info() -> ModelInfo {
-    serde_json::from_value(json!({
-        "slug": ANTHROPIC_DEFAULT_MODEL,
-        "display_name": "Claude Opus 5",
-        "description": "Claude Opus 5",
-        "default_reasoning_level": "high",
-        "supported_reasoning_levels": [
-            {"effort": "low", "description": "Low"},
-            {"effort": "medium", "description": "Medium"},
-            {"effort": "high", "description": "High"},
-            {"effort": "xhigh", "description": "XHigh"},
-            {"effort": "max", "description": "Max"}
-        ],
-        "shell_type": "shell_command",
-        "visibility": "list",
-        "supported_in_api": true,
-        "priority": 1,
-        "upgrade": null,
-        "base_instructions": "base instructions",
-        "model_messages": null,
-        "supports_reasoning_summaries": false,
-        "support_verbosity": false,
-        "default_verbosity": null,
-        "apply_patch_tool_type": null,
-        "truncation_policy": {"mode": "tokens", "limit": 10000},
-        "supports_parallel_tool_calls": true,
-        "supports_image_detail_original": false,
-        "context_window": 1000000,
-        "auto_compact_token_limit": null,
-        "experimental_supported_tools": []
-    }))
-    .expect("deserialize Anthropic Opus test model info")
-}
-
-fn test_claude_plan_model_info() -> ModelInfo {
-    let mut model = test_anthropic_opus_model_info();
-    model.slug = CLAUDE_PLAN_MODEL.to_string();
-    model.display_name = "Claude Opus 5 Plan".to_string();
-    model
-}
-
-fn test_claude_fable_model_info() -> ModelInfo {
-    let mut model = test_anthropic_opus_model_info();
-    model.slug = CLAUDE_FABLE_5_MODEL.to_string();
-    model.display_name = "Claude Fable 5".to_string();
-    model
-}
-
-fn test_claude_fable_plan_model_info() -> ModelInfo {
-    let mut model = test_claude_fable_model_info();
-    model.slug = CLAUDE_FABLE_5_PLAN_MODEL.to_string();
-    model.display_name = "Claude Fable 5 Plan".to_string();
-    model
-}
-
-fn count_cache_control_markers(value: &serde_json::Value) -> usize {
-    match value {
-        serde_json::Value::Array(values) => values.iter().map(count_cache_control_markers).sum(),
-        serde_json::Value::Object(object) => {
-            usize::from(object.contains_key("cache_control"))
-                + object
-                    .values()
-                    .map(count_cache_control_markers)
-                    .sum::<usize>()
-        }
-        _ => 0,
-    }
-}
-
-fn test_vercel_model_info() -> ModelInfo {
-    serde_json::from_value(json!({
-        "slug": VERCEL_DEFAULT_MODEL,
-        "display_name": "Vercel GLM 5.2",
-        "description": "Vercel GLM 5.2",
-        "default_reasoning_level": "medium",
-        "supported_reasoning_levels": [
-            {"effort": "medium", "description": "Standard"},
-            {"effort": "xhigh", "description": "Deep"}
-        ],
-        "shell_type": "shell_command",
-        "visibility": "list",
-        "supported_in_api": true,
-        "priority": 3,
-        "upgrade": null,
-        "base_instructions": "base instructions",
-        "model_messages": null,
-        "supports_reasoning_summaries": false,
-        "support_verbosity": false,
-        "default_verbosity": null,
-        "apply_patch_tool_type": null,
-        "truncation_policy": {"mode": "tokens", "limit": 10000},
-        "supports_parallel_tool_calls": true,
-        "supports_image_detail_original": false,
-        "context_window": 1048576,
-        "auto_compact_token_limit": null,
-        "experimental_supported_tools": []
-    }))
-    .expect("deserialize Vercel test model info")
-}
-
-fn test_openrouter_gemini_model_info() -> ModelInfo {
-    serde_json::from_value(json!({
-        "slug": "google/gemini-3.5-flash",
-        "display_name": "OpenRouter Gemini 3.5 Flash",
-        "description": "OpenRouter Gemini 3.5 Flash",
-        "default_reasoning_level": null,
-        "supported_reasoning_levels": [
-            {"effort": "minimal", "description": "Minimal"},
-            {"effort": "low", "description": "Low"},
-            {"effort": "medium", "description": "Medium"},
-            {"effort": "high", "description": "High"}
-        ],
-        "shell_type": "shell_command",
-        "visibility": "list",
-        "supported_in_api": true,
-        "priority": 1,
-        "upgrade": null,
-        "base_instructions": "base instructions",
-        "model_messages": null,
-        "supports_reasoning_summaries": false,
-        "support_verbosity": false,
-        "default_verbosity": null,
-        "apply_patch_tool_type": null,
-        "truncation_policy": {"mode": "tokens", "limit": 10000},
-        "supports_parallel_tool_calls": true,
-        "supports_image_detail_original": false,
-        "context_window": 1048576,
-        "auto_compact_token_limit": null,
-        "experimental_supported_tools": []
-    }))
-    .expect("deserialize OpenRouter Gemini test model info")
-}
-
-fn test_openrouter_anthropic_model_info() -> ModelInfo {
-    let mut model_info = test_openrouter_gemini_model_info();
-    model_info.slug = "anthropic/claude-sonnet-4.6".to_string();
-    model_info.display_name = "OpenRouter Claude Sonnet 4.6".to_string();
-    model_info.description = Some("OpenRouter Claude Sonnet 4.6".to_string());
-    model_info
-}
-
 fn test_session_telemetry() -> SessionTelemetry {
     SessionTelemetry::new(
         ThreadId::new(),
@@ -985,6 +299,73 @@ fn ultra_reasoning_uses_max_for_requests() {
             super::reasoning_effort_for_request(ReasoningEffort::High),
         ),
         (ReasoningEffort::Max, ReasoningEffort::High,)
+    );
+}
+
+#[test]
+fn chat_reasoning_effort_is_selected_by_catalogue_protocol() {
+    let map = |protocol, effort: Option<ReasoningEffort>| {
+        ModelClient::chat_reasoning_effort(protocol, effort.as_ref())
+    };
+
+    assert_eq!(
+        map(
+            ChatReasoningEffortProtocol::ProviderDefault,
+            Some(ReasoningEffort::XHigh),
+        )
+        .expect("provider default mapping"),
+        None
+    );
+    assert_eq!(
+        map(
+            ChatReasoningEffortProtocol::NoneHighMaxDefaultHigh,
+            None,
+        )
+        .expect("default high mapping")
+        .as_deref(),
+        Some("high")
+    );
+    assert_eq!(
+        map(
+            ChatReasoningEffortProtocol::NoneHighMaxDefaultHigh,
+            Some(ReasoningEffort::None),
+        )
+        .expect("explicit disabled mapping")
+        .as_deref(),
+        Some("none")
+    );
+    assert_eq!(
+        map(
+            ChatReasoningEffortProtocol::NoneHighMaxDefaultHigh,
+            Some(ReasoningEffort::XHigh),
+        )
+        .expect("deep mapping")
+        .as_deref(),
+        Some("max")
+    );
+    assert_eq!(
+        map(
+            ChatReasoningEffortProtocol::LowHighMaxRequiredDefaultMax,
+            Some(ReasoningEffort::Medium),
+        )
+        .expect("required reasoning mapping")
+        .as_deref(),
+        Some("high")
+    );
+    assert!(
+        map(
+            ChatReasoningEffortProtocol::LowHighMaxRequiredDefaultMax,
+            Some(ReasoningEffort::None),
+        )
+        .is_err()
+    );
+    assert_eq!(
+        map(
+            ChatReasoningEffortProtocol::HighMaxDefaultHigh,
+            Some(ReasoningEffort::None),
+        )
+        .expect("optional reasoning mapping"),
+        None
     );
 }
 
@@ -1579,4 +960,28 @@ async fn non_chatgpt_codex_endpoints_omit_attestation_generation() {
         None,
     );
     assert_eq!(attestation_calls.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn anthropic_web_search_limit_is_absent_by_default_and_operator_configurable() {
+    let tool = codex_tools::ToolSpec::WebSearch {
+        external_web_access: Some(true),
+        indexed_web_access: None,
+        filters: None,
+        user_location: None,
+        search_context_size: None,
+        search_content_types: Some(vec!["text".to_string()]),
+    };
+
+    let provider_default =
+        anthropic_web_search_tool_with_type(
+            &tool,
+            ANTHROPIC_WEB_SEARCH_TOOL_TYPE,
+            /*web_search_max_uses*/ None,
+        );
+    assert_eq!(provider_default.get("max_uses"), None);
+
+    let configured =
+        anthropic_web_search_tool_with_type(&tool, ANTHROPIC_WEB_SEARCH_TOOL_TYPE, Some(5));
+    assert_eq!(configured.get("max_uses"), Some(&serde_json::json!(5)));
 }

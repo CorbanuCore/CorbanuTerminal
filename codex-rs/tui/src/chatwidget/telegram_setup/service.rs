@@ -158,7 +158,7 @@ pub(crate) fn disconnect(codex_home: &Path) -> Result<String, String> {
                 .delete(TOKEN_LABEL)
                 .map_err(|_| "Could not delete the Telegram token from the vault.".to_string())?;
         }
-        write_telegram_config(codex_home, None)?;
+        write_telegram_config(codex_home, /*connection*/ None)?;
         Ok("Telegram disconnected. Its token and local authorization were removed.".to_string())
     })
 }
@@ -276,7 +276,7 @@ pub(super) fn store_token(codex_home: &Path, token: String) -> Result<(), String
     let vault = Vault::new(codex_home.to_path_buf());
     if vault.exists(TOKEN_LABEL).unwrap_or(false) {
         vault
-            .update(TOKEN_LABEL, Some(token), None, None, None)
+            .update(TOKEN_LABEL, Some(token), /*provider*/ None, /*notes*/ None, /*revocation_notes*/ None)
             .map_err(|_| "Could not update the Telegram token in the vault.".to_string())?;
     } else {
         vault

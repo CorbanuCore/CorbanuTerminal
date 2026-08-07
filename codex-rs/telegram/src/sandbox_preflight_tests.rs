@@ -40,7 +40,7 @@ fn sandboxed_policy_is_quiet_when_host_signals_pass() {
 fn missing_optional_unprivileged_userns_clone_file_is_quiet() {
     let issue = preflight_issue_for_policy(
         &read_only_policy(),
-        signals(/*bwrap_on_path*/ true, Some("1024\n"), None, None),
+        signals(/*bwrap_on_path*/ true, Some("1024\n"), /*apparmor_restrict_unprivileged_userns*/ None, /*unprivileged_userns_clone*/ None),
     );
 
     assert_eq!(issue, None);

@@ -4,7 +4,6 @@ use std::sync::Arc;
 use crate::config::Config;
 use crate::session::step_context::StepContext;
 use crate::session::tests::make_session_and_context;
-use crate::session::turn_context::TurnContext;
 use crate::tools::context::ToolPayload;
 use crate::tools::handlers::McpHandler;
 use crate::tools::registry::CoreToolRuntime;
@@ -20,10 +19,6 @@ use codex_extension_api::ExtensionRegistryBuilder;
 use codex_extension_api::ResponsesApiTool;
 use codex_extension_api::ToolCall as ExtensionToolCall;
 use codex_extension_api::ToolExecutor;
-use codex_model_provider::create_model_provider;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::OPENAI_PROVIDER_ID;
-use codex_models_manager::model_info;
 use codex_protocol::dynamic_tools::DynamicToolFunctionSpec;
 use codex_protocol::dynamic_tools::DynamicToolNamespaceSpec;
 use codex_protocol::dynamic_tools::DynamicToolNamespaceTool;
@@ -46,16 +41,6 @@ use super::ToolCall;
 use super::ToolCallSource;
 use super::ToolRouter;
 use super::tool_log_payload;
-
-fn use_openai_provider(turn: &mut TurnContext) {
-    let provider_info = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
-    let mut config = (*turn.config).clone();
-    config.model_provider_id = OPENAI_PROVIDER_ID.to_string();
-    config.model_provider = provider_info.clone();
-    turn.config = Arc::new(config);
-    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
-    turn.model_info = model_info::model_info_from_slug("gpt-5.4");
-}
 
 struct ExtensionEchoContributor;
 
@@ -251,33 +236,6 @@ async fn build_tool_call_uses_namespace_for_registry_name() -> anyhow::Result<()
     }
 
     Ok(())
-}
-
-#[test]
-fn truncated_structured_write_returns_structured_diagnostic() {
-    let arguments = format!(
-        "{{\"path\":\"dashboard/shielded-navswap-flow-rail-mock.html\",\"mode\":\"overwrite\",\"content\":\"{}",
-        "x".repeat(8192)
-    );
-
-    let result = ToolRouter::build_tool_call(ResponseItem::FunctionCall {
-        id: None,
-        name: "structured_write".to_string(),
-        namespace: None,
-        arguments,
-        call_id: "call-truncated-structured-write".to_string(),
-        metadata: None,
-    });
-
-    let Err(FunctionCallError::MalformedToolCall { message, .. }) = result else {
-        panic!("expected retriable malformed tool call error, got {result:?}");
-    };
-
-    assert!(message.contains("malformed tool call arguments for `structured_write`"));
-    assert!(message.contains("category=Eof"));
-    assert!(message.contains("Re-issue this tool call"));
-    // The full 8KiB+ argument blob must not be echoed back into model context.
-    assert!(message.len() < 2048);
 }
 
 #[tokio::test]
@@ -483,8 +441,7 @@ fn mcp_runtime(tool_info: codex_mcp::ToolInfo) -> Arc<dyn CoreToolRuntime> {
 
 #[tokio::test]
 async fn extension_tool_executors_are_model_visible_and_dispatchable() -> anyhow::Result<()> {
-    let (mut session, mut turn) = make_session_and_context().await;
-    use_openai_provider(&mut turn);
+    let (mut session, turn) = make_session_and_context().await;
     session.services.extensions = extension_tool_test_registry();
     let turn = Arc::new(turn);
     let step_context = StepContext::for_test(Arc::clone(&turn));

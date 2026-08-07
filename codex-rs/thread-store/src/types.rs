@@ -15,6 +15,7 @@ use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::GitInfo;
 use codex_protocol::protocol::HistoryPosition;
 use codex_protocol::protocol::MultiAgentVersion;
+use codex_protocol::protocol::RuntimeSelectionSource;
 use codex_protocol::protocol::RolloutItem;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::ThreadHistoryMode;
@@ -83,6 +84,8 @@ pub struct CreateThreadParams {
     pub source: SessionSource,
     /// Optional analytics source classification for this thread.
     pub thread_source: Option<ThreadSource>,
+    /// Durable provenance for the initial runtime route selected for this thread.
+    pub runtime_selection: Option<RuntimeSelectionSource>,
     /// Effective originator used for this thread's Responses requests and analytics events.
     pub originator: String,
     /// Base instructions persisted in session metadata.

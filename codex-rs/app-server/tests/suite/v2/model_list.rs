@@ -16,10 +16,6 @@ use codex_app_server_protocol::ModelUpgradeInfo;
 use codex_app_server_protocol::ReasoningEffortOption;
 use codex_app_server_protocol::RequestId;
 use codex_config::types::AuthCredentialsStoreMode;
-use codex_login::OPENAI_API_KEY_ENV_VAR;
-use codex_model_provider_info::AMBIENT_API_KEY_ENV_VAR;
-use codex_model_provider_info::OPENAI_PROVIDER_ID;
-use codex_model_provider_info::ZAI_API_KEY_ENV_VAR;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ModelsResponse;
@@ -32,20 +28,6 @@ use wiremock::MockServer;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const INVALID_REQUEST_ERROR_CODE: i64 = -32600;
-const SOL_DEFAULT_MODEL: &str = "gpt-5.6-sol";
-
-fn mark_expected_default(presets: &mut [ModelPreset]) {
-    ModelPreset::mark_default_by_picker_visibility(presets);
-    if let Some(sol_index) = presets
-        .iter()
-        .position(|preset| preset.model == SOL_DEFAULT_MODEL && preset.show_in_picker)
-    {
-        for preset in presets.iter_mut() {
-            preset.is_default = false;
-        }
-        presets[sol_index].is_default = true;
-    }
-}
 
 fn model_from_preset(preset: &ModelPreset) -> Model {
     Model {
@@ -61,7 +43,6 @@ fn model_from_preset(preset: &ModelPreset) -> Model {
         availability_nux: preset.availability_nux.clone().map(Into::into),
         display_name: preset.display_name.clone(),
         description: preset.description.clone(),
-        orchestration: preset.orchestration.clone(),
         hidden: !preset.show_in_picker,
         supported_reasoning_efforts: preset
             .supported_reasoning_efforts
@@ -73,7 +54,11 @@ fn model_from_preset(preset: &ModelPreset) -> Model {
             .collect(),
         default_reasoning_effort: preset.default_reasoning_effort.clone(),
         input_modalities: preset.input_modalities.clone(),
-        supports_personality: preset.supports_personality,
+        // `write_models_cache()` round-trips through a simplified ModelInfo fixture that does not
+        // preserve personality placeholders in base instructions, so app-server list results from
+        // cache report `supports_personality = false`.
+        // todo(sayan): fix, maybe make roundtrip use ModelInfo only
+        supports_personality: false,
         additional_speed_tiers: preset.additional_speed_tiers.clone(),
         service_tiers: preset
             .service_tiers
@@ -85,51 +70,27 @@ fn model_from_preset(preset: &ModelPreset) -> Model {
             })
             .collect(),
         default_service_tier: preset.default_service_tier.clone(),
+        orchestration: preset.orchestration.clone(),
         is_default: preset.is_default,
     }
 }
 
-fn cached_model_from_preset(preset: &ModelPreset) -> Model {
-    let mut model = model_from_preset(preset);
-    // `write_models_cache()` round-trips through a simplified ModelInfo fixture that does not
-    // preserve personality placeholders in base instructions, so app-server list results from
-    // cache report `supports_personality = false`.
-    // todo(sayan): fix, maybe make roundtrip use ModelInfo only
-    model.supports_personality = false;
-    model
-}
-
 fn expected_visible_models() -> Vec<Model> {
+    const EXPECTED_DEFAULT_MODEL: &str = "gpt-5.6-sol";
+    let all_presets = codex_core::test_support::all_model_presets().clone();
     // Filter by supported_in_api to support testing with both ChatGPT and non-ChatGPT auth modes.
     let mut presets = ModelPreset::filter_by_auth(
-        codex_core::test_support::all_model_presets().clone(),
+        all_presets,
         /*chatgpt_mode*/ false,
     );
-
-    // Mirror `ModelsManager::build_available_models()` default selection after auth filtering.
-    mark_expected_default(&mut presets);
+    for preset in &mut presets {
+        preset.is_default = preset.model == EXPECTED_DEFAULT_MODEL;
+    }
 
     presets
         .iter()
         .filter(|preset| preset.show_in_picker)
         .map(model_from_preset)
-        .collect()
-}
-
-fn expected_cached_visible_models() -> Vec<Model> {
-    // Filter by supported_in_api to support testing with both ChatGPT and non-ChatGPT auth modes.
-    let mut presets = ModelPreset::filter_by_auth(
-        codex_core::test_support::all_model_presets().clone(),
-        /*chatgpt_mode*/ false,
-    );
-
-    // Mirror `ModelsManager::build_available_models()` default selection after auth filtering.
-    mark_expected_default(&mut presets);
-
-    presets
-        .iter()
-        .filter(|preset| preset.show_in_picker)
-        .map(cached_model_from_preset)
         .collect()
 }
 
@@ -156,55 +117,8 @@ async fn list_models_returns_all_models_with_large_limit() -> Result<()> {
         })
         .await?;
 
-    let expected_models = expected_cached_visible_models();
-
-    assert_eq!(items, expected_models);
-    assert!(next_cursor.is_none());
-    Ok(())
-}
-
-#[tokio::test]
-async fn list_models_returns_ambient_default_catalog() -> Result<()> {
-    let codex_home = TempDir::new()?;
-    let mut mcp = TestAppServer::new_with_env(
-        codex_home.path(),
-        &[
-            (OPENAI_API_KEY_ENV_VAR, None),
-            (AMBIENT_API_KEY_ENV_VAR, None),
-            (ZAI_API_KEY_ENV_VAR, None),
-        ],
-    )
-    .await?;
-
-    timeout(DEFAULT_TIMEOUT, mcp.initialize()).await??;
-
-    let request_id = mcp
-        .send_list_models_request(ModelListParams {
-            limit: Some(100),
-            cursor: None,
-            include_hidden: None,
-        })
-        .await?;
-
-    let response: JSONRPCResponse = timeout(
-        DEFAULT_TIMEOUT,
-        mcp.read_stream_until_response_message(RequestId::Integer(request_id)),
-    )
-    .await??;
-
-    let ModelListResponse {
-        data: items,
-        next_cursor,
-    } = to_response::<ModelListResponse>(response)?;
-
-    let default_model_ids = items
-        .iter()
-        .filter(|model| model.is_default)
-        .map(|model| model.id.as_str())
-        .collect::<Vec<_>>();
-    assert_eq!(default_model_ids, vec![SOL_DEFAULT_MODEL]);
-
     let expected_models = expected_visible_models();
+
     assert_eq!(items, expected_models);
     assert!(next_cursor.is_none());
     Ok(())
@@ -239,7 +153,7 @@ async fn list_models_includes_hidden_models() -> Result<()> {
 }
 
 #[tokio::test]
-async fn list_models_uses_chatgpt_remote_catalog_as_source_of_truth() -> Result<()> {
+async fn list_models_merges_chatgpt_remote_catalog_without_dropping_pf_routes() -> Result<()> {
     let server = MockServer::start().await;
     let remote_model: ModelInfo = serde_json::from_value(json!({
         "slug": "chatgpt-remote-only",
@@ -278,14 +192,11 @@ async fn list_models_uses_chatgpt_remote_catalog_as_source_of_truth() -> Result<
 
     let codex_home = TempDir::new()?;
     let server_uri = server.uri();
-    // Route the `/models` call to this test's OpenAI-compatible mock. The model
-    // catalog itself remains global and non-exclusive.
     std::fs::write(
         codex_home.path().join("config.toml"),
         format!(
             r#"
 model = "mock-model"
-model_provider = "{OPENAI_PROVIDER_ID}"
 approval_policy = "never"
 sandbox_mode = "read-only"
 openai_base_url = "{server_uri}/v1"
@@ -317,13 +228,9 @@ openai_base_url = "{server_uri}/v1"
             },
         })
         .await?;
-    let mut expected_presets: Vec<ModelPreset> = vec![remote_model.into()];
-    ModelPreset::mark_default_by_picker_visibility(&mut expected_presets);
-    let mut expected_items = expected_presets
-        .iter()
-        .map(model_from_preset)
-        .collect::<Vec<_>>();
-    expected_items[0].supported_reasoning_efforts = vec![
+    let remote_preset: ModelPreset = remote_model.into();
+    let mut expected_remote = model_from_preset(&remote_preset);
+    expected_remote.supported_reasoning_efforts = vec![
         ReasoningEffortOption {
             reasoning_effort: "max".parse().map_err(Error::msg)?,
             description: "Maximum".to_string(),
@@ -338,10 +245,22 @@ openai_base_url = "{server_uri}/v1"
         },
     ];
 
-    // The models manager uses a global bundled catalog as its base and merges the
-    // remote `/models` response into it, so this test pins remote presence and
-    // endpoint usage rather than asserting that the remote catalog is exclusive.
-    assert!(items.contains(&expected_remote_item));
+    assert_eq!(
+        items.iter().find(|item| item.id == "chatgpt-remote-only"),
+        Some(&expected_remote),
+    );
+    assert!(
+        items.iter().any(|item| item.id == "claude-opus-5-plan"),
+        "the ChatGPT remote catalogue must not erase PF Terminal provider routes"
+    );
+    assert_eq!(
+        items
+            .iter()
+            .filter(|item| item.is_default)
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["gpt-5.6-sol"],
+    );
     assert!(next_cursor.is_none());
     assert_eq!(
         models_mock.requests().len(),
@@ -361,7 +280,7 @@ async fn list_models_pagination_works() -> Result<()> {
         .build_initialized()
         .await?;
 
-    let expected_models = expected_cached_visible_models();
+    let expected_models = expected_visible_models();
     let mut cursor = None;
     let mut items = Vec::new();
 

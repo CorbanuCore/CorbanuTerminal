@@ -53,7 +53,7 @@ impl ChatWidget {
             .and_then(|session| session.as_ref())
             .is_some_and(|session| session.terminal_token.is_some());
         self.show_or_replace_tasknode_selection(TASKNODE_MENU_VIEW_ID, || {
-            tasknode_menu_params(state, counts.as_ref(), None)
+            tasknode_menu_params(state, counts.as_ref(), /*refresh_error*/ None)
         });
         if should_refresh_counts {
             self.tasknode_menu_poll_generation = self.tasknode_menu_poll_generation.wrapping_add(1);
@@ -68,7 +68,7 @@ impl ChatWidget {
                 self.tasknode_menu_counts
                     .get_or_insert_with(TaskNodeMenuCountsCache::default)
                     .update_from_status(&status);
-                self.refresh_active_tasknode_menu(None);
+                self.refresh_active_tasknode_menu(/*refresh_error*/ None);
             }
             Err(err) => self.refresh_active_tasknode_menu(Some(err)),
         }
@@ -91,7 +91,7 @@ impl ChatWidget {
                 self.tasknode_menu_counts
                     .get_or_insert_with(TaskNodeMenuCountsCache::default)
                     .request_count = Some(requests.items.len());
-                self.refresh_active_tasknode_menu(None);
+                self.refresh_active_tasknode_menu(/*refresh_error*/ None);
             }
             Err(err) => self.refresh_active_tasknode_menu(Some(err)),
         }
@@ -130,7 +130,7 @@ impl ChatWidget {
     }
 
     pub(crate) fn open_tasknode_status(&mut self) {
-        self.add_info_message("Loading Task Node status...".to_string(), None);
+        self.add_info_message("Loading Task Node status...".to_string(), /*hint*/ None);
         self.spawn_tasknode_value_request(
             "status",
             |client| client.status(),
@@ -397,7 +397,7 @@ impl ChatWidget {
                 });
             }),
         );
-        self.show_custom_prompt_view(view);
+        self.bottom_pane.show_view(Box::new(view));
     }
 
     pub(crate) fn submit_tasknode_evidence(&mut self, task_id: String, summary: String) {
@@ -436,7 +436,7 @@ impl ChatWidget {
                 tx.send(AppEvent::SubmitTaskNodeTaskRequest { detail });
             }),
         );
-        self.show_custom_prompt_view(view);
+        self.bottom_pane.show_view(Box::new(view));
     }
 
     pub(crate) fn submit_tasknode_task_request(&mut self, detail: String) {
@@ -445,7 +445,7 @@ impl ChatWidget {
             self.add_error_message("Task request text is required.".to_string());
             return;
         }
-        self.add_info_message("Submitting Task Node task request...".to_string(), None);
+        self.add_info_message("Submitting Task Node task request...".to_string(), /*hint*/ None);
         self.spawn_tasknode_value_request(
             "task-request",
             move |client| client.request_task(&detail),
@@ -530,7 +530,7 @@ impl ChatWidget {
             }),
         )
         .with_submit_mode(CustomPromptSubmitMode::CtrlD);
-        self.show_custom_prompt_view(view);
+        self.bottom_pane.show_view(Box::new(view));
     }
 
     pub(crate) fn submit_tasknode_context_edit(
@@ -543,7 +543,7 @@ impl ChatWidget {
             self.add_error_message("Task Node context body is required.".to_string());
             return;
         }
-        self.add_info_message("Saving Task Node context...".to_string(), None);
+        self.add_info_message("Saving Task Node context...".to_string(), /*hint*/ None);
         self.spawn_tasknode_value_request(
             "save-context",
             move |client| client.save_context(&title, &body, revision),
@@ -561,7 +561,7 @@ impl ChatWidget {
                     response
                         .message
                         .unwrap_or_else(|| "Task Node context saved.".to_string()),
-                    None,
+                    /*hint*/ None,
                 );
                 self.add_plain_history_lines(tasknode_context_lines(&response.context));
                 let header = tasknode_context_header(&response.context);
@@ -633,7 +633,7 @@ impl ChatWidget {
     }
 
     pub(crate) fn open_tasknode_balance(&mut self) {
-        self.add_info_message("Loading Task Node balance...".to_string(), None);
+        self.add_info_message("Loading Task Node balance...".to_string(), /*hint*/ None);
         self.spawn_tasknode_value_request(
             "balance",
             |client| client.balance(),
@@ -651,7 +651,7 @@ impl ChatWidget {
     }
 
     pub(crate) fn open_tasknode_rewards(&mut self) {
-        self.add_info_message("Loading Task Node rewards...".to_string(), None);
+        self.add_info_message("Loading Task Node rewards...".to_string(), /*hint*/ None);
         self.spawn_tasknode_value_request(
             "rewards",
             |client| client.rewards(),
@@ -806,7 +806,7 @@ impl ChatWidget {
             }),
         )
         .with_submit_mode(CustomPromptSubmitMode::CtrlD);
-        self.show_custom_prompt_view(view);
+        self.bottom_pane.show_view(Box::new(view));
     }
 
     pub(crate) fn submit_tasknode_chat(
@@ -824,7 +824,7 @@ impl ChatWidget {
         self.tasknode_active_chat_stream_id = Some(stream_id.clone());
         self.add_plain_history_lines(tasknode_chat_user_message_lines(&title, &message));
         self.show_or_replace_tasknode_selection(TASKNODE_CHAT_VIEW_ID, || {
-            tasknode_chat_stream_params(&title, &conversation_id, "Waiting for Task Node...", false)
+            tasknode_chat_stream_params(&title, &conversation_id, "Waiting for Task Node...", /*done*/ false)
         });
         self.spawn_tasknode_chat_stream(stream_id, conversation_id, title, message);
     }
@@ -840,7 +840,7 @@ impl ChatWidget {
             return;
         }
         self.show_or_replace_tasknode_selection(TASKNODE_CHAT_VIEW_ID, || {
-            tasknode_chat_stream_params(&title, &conversation_id, &text, false)
+            tasknode_chat_stream_params(&title, &conversation_id, &text, /*done*/ false)
         });
     }
 
@@ -899,7 +899,7 @@ impl ChatWidget {
         self.tasknode_menu_counts = None;
         self.tasknode_menu_poll_generation = self.tasknode_menu_poll_generation.wrapping_add(1);
         match Vault::new(codex_home).delete(TASKNODE_SESSION_LABEL) {
-            Ok(_) => self.add_info_message("Task Node session removed.".to_string(), None),
+            Ok(_) => self.add_info_message("Task Node session removed.".to_string(), /*hint*/ None),
             Err(err) => {
                 self.add_error_message(format!("Failed to remove Task Node session: {err}"))
             }
@@ -2036,7 +2036,7 @@ fn tasknode_context_lines(context: &TaskNodeContextDocument) -> Vec<Line<'static
             lines.push(Line::from(""));
             continue;
         }
-        for wrapped in tasknode_soft_wrap_line(source_line, 100) {
+        for wrapped in tasknode_soft_wrap_line(source_line, /*width*/ 100) {
             lines.push(Line::from(wrapped));
         }
     }
@@ -2395,7 +2395,7 @@ fn tasknode_chat_history_lines(
                 lines.push(Line::from(""));
                 continue;
             }
-            for wrapped in tasknode_soft_wrap_line(source_line, 100) {
+            for wrapped in tasknode_soft_wrap_line(source_line, /*width*/ 100) {
                 lines.push(Line::from(format!("  {wrapped}")));
             }
         }
@@ -2410,7 +2410,7 @@ fn tasknode_chat_user_message_lines(title: &str, message: &str) -> Vec<Line<'sta
         Line::from("You".bold()),
     ];
     for source_line in message.lines() {
-        for wrapped in tasknode_soft_wrap_line(source_line, 100) {
+        for wrapped in tasknode_soft_wrap_line(source_line, /*width*/ 100) {
             lines.push(Line::from(format!("  {wrapped}")));
         }
     }
@@ -2507,7 +2507,7 @@ fn tasknode_chat_stream_result_lines(response: &TaskNodeChatStreamResponse) -> V
             lines.push(Line::from(""));
             continue;
         }
-        for wrapped in tasknode_soft_wrap_line(source_line, 100) {
+        for wrapped in tasknode_soft_wrap_line(source_line, /*width*/ 100) {
             lines.push(Line::from(format!("  {wrapped}")));
         }
     }
@@ -2609,8 +2609,8 @@ impl TaskNodeLocalSession {
                     TASKNODE_SESSION_LABEL,
                     Some(secret),
                     Some(Some("tasknode".to_string())),
-                    None,
-                    None,
+                    /*notes*/ None,
+                    /*revocation_notes*/ None,
                 )
                 .map(|_| ())
                 .map_err(|err| TaskNodeLocalError::Vault(err.to_string())),

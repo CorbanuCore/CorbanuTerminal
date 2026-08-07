@@ -9,6 +9,7 @@ use crate::tools::handlers::multi_agents_spec::SpawnAgentToolOptions;
 use crate::tools::handlers::multi_agents_spec::create_spawn_agent_tool_v2;
 use crate::tools::handlers::multi_agents_v2::message_tool::message_content;
 use codex_protocol::AgentPath;
+use codex_protocol::protocol::RuntimeSelectionSource;
 use codex_tools::ToolSpec;
 
 #[derive(Default)]
@@ -69,10 +70,11 @@ async fn handle_spawn_agent(
     if is_full_history_fork {
         reject_full_fork_agent_type_override(role_name)?;
     }
-    apply_requested_spawn_agent_model_overrides(
+    apply_requested_spawn_agent_runtime_overrides(
         &session,
         turn.as_ref(),
         &mut config,
+        args.model_provider.as_deref(),
         args.model.as_deref(),
         args.reasoning_effort.clone(),
     )
@@ -90,13 +92,17 @@ async fn handle_spawn_agent(
     apply_spawn_agent_runtime_overrides(&mut config, turn.as_ref())?;
     ensure_spawn_provider_authorized(&config, &config.model_provider_id)?;
     ensure_spawn_runtime_eligible(&session, &config).await?;
-    let resolved_model_provider = config.model_provider_id.clone();
-    let resolved_model = config
-        .model
-        .clone()
-        .unwrap_or_else(|| turn.model_info.slug.clone());
-    let resolved_reasoning_effort = config.model_reasoning_effort.clone();
-    let resolved_service_tier = config.service_tier.clone();
+    let selection_source = if role_name.is_some() {
+        RuntimeSelectionSource::AgentRole
+    } else if args.model_provider.is_some() || args.model.is_some() {
+        RuntimeSelectionSource::ExplicitRequest
+    } else if turn.config.agent_default_subagent_model.is_some() {
+        RuntimeSelectionSource::OperatorDefault
+    } else {
+        RuntimeSelectionSource::InheritedRuntime
+    };
+    config.runtime_selection = Some(selection_source);
+    let runtime = spawn_runtime_report(&session, &config, selection_source).await?;
 
     let spawn_source = thread_spawn_source(
         session.thread_id,
@@ -104,7 +110,6 @@ async fn handle_spawn_agent(
         child_depth,
         role_name,
         Some(args.task_name.clone()),
-        Some(call_id.clone()),
     )?;
     let new_agent_path = spawn_source.get_agent_path().ok_or_else(|| {
         FunctionCallError::RespondToModel(
@@ -179,10 +184,7 @@ async fn handle_spawn_agent(
         Ok(SpawnAgentResult::WithNickname {
             task_name,
             nickname,
-            model_provider: resolved_model_provider,
-            model: resolved_model,
-            reasoning_effort: resolved_reasoning_effort,
-            service_tier: resolved_service_tier,
+            runtime,
         })
     }
 }
@@ -250,10 +252,8 @@ pub(crate) enum SpawnAgentResult {
     WithNickname {
         task_name: String,
         nickname: Option<String>,
-        model_provider: String,
-        model: String,
-        reasoning_effort: Option<ReasoningEffort>,
-        service_tier: Option<String>,
+        #[serde(flatten)]
+        runtime: SpawnRuntimeReport,
     },
     HiddenMetadata {
         task_name: String,

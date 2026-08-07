@@ -71,39 +71,9 @@ use codex_core_plugins::PluginsManager;
 use codex_exec_server::LOCAL_FS;
 use codex_features::Feature;
 use codex_features::FeaturesToml;
-use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
-use codex_model_provider_info::AMBIENT_GLM_5_2_CONTEXT_WINDOW;
-use codex_model_provider_info::AMBIENT_KIMI_K2_7_CODE_MODEL;
-use codex_model_provider_info::AMBIENT_LEGACY_GLM_5_2_FP8_MODEL;
-use codex_model_provider_info::AMBIENT_PROVIDER_ID;
-use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
-use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
-use codex_model_provider_info::BASETEN_PROVIDER_ID;
-use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
-use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_MODEL;
-use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
-use codex_model_provider_info::KIMI_CODE_K3_MODEL;
-use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
-use codex_model_provider_info::META_DEFAULT_MODEL;
-use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
-use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
-use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
-use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
-use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
-use codex_model_provider_info::VERCEL_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
-use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
-use codex_model_provider_info::VERCEL_PROVIDER_ID;
 use codex_model_provider_info::WireApi;
-use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::ZAI_DEFAULT_MODEL;
-use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_models_manager::bundled_models_response;
 use codex_network_proxy::NetworkMode;
 use codex_protocol::config_types::ModelProviderAuthInfo;
@@ -145,7 +115,6 @@ use codex_config::test_support::CloudConfigBundleFixture;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::Path;
-use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::TempDir;
 
@@ -1058,7 +1027,7 @@ fn config_toml_deserializes_model_availability_nux() {
         Tui {
             notification_settings: TuiNotificationSettings::default(),
             animations: true,
-            show_tooltips: false,
+            show_tooltips: true,
             vim_mode_default: false,
             raw_output_mode: false,
             alternate_screen: AltScreenMode::default(),
@@ -3950,7 +3919,7 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
         Tui {
             notification_settings: TuiNotificationSettings::default(),
             animations: true,
-            show_tooltips: false,
+            show_tooltips: true,
             vim_mode_default: false,
             raw_output_mode: false,
             alternate_screen: AltScreenMode::Auto,
@@ -5650,7 +5619,7 @@ async fn memory_tool_makes_memories_root_readable_without_creating_or_widening_w
 }
 
 #[tokio::test]
-async fn config_defaults_to_resolved_cli_auth_store_mode() -> std::io::Result<()> {
+async fn config_defaults_to_version_appropriate_cli_auth_store_mode() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml::default();
 
@@ -5722,18 +5691,7 @@ async fn config_resolves_default_oauth_store_mode() -> std::io::Result<()> {
 }
 
 #[test]
-fn local_debug_builds_force_file_for_keyring_backed_cli_auth_store_modes() {
-    let non_local_keyring_mode = if cfg!(debug_assertions) {
-        AuthCredentialsStoreMode::File
-    } else {
-        AuthCredentialsStoreMode::Keyring
-    };
-    let non_local_auto_mode = if cfg!(debug_assertions) {
-        AuthCredentialsStoreMode::File
-    } else {
-        AuthCredentialsStoreMode::Auto
-    };
-
+fn local_dev_builds_force_file_cli_auth_store_modes() {
     assert_eq!(
         resolve_cli_auth_credentials_store_mode(
             AuthCredentialsStoreMode::Keyring,
@@ -5757,27 +5715,12 @@ fn local_debug_builds_force_file_for_keyring_backed_cli_auth_store_modes() {
     );
     assert_eq!(
         resolve_cli_auth_credentials_store_mode(AuthCredentialsStoreMode::Keyring, "1.2.3"),
-        non_local_keyring_mode,
-    );
-    assert_eq!(
-        resolve_cli_auth_credentials_store_mode(AuthCredentialsStoreMode::Auto, "1.2.3"),
-        non_local_auto_mode,
+        AuthCredentialsStoreMode::Keyring,
     );
 }
 
 #[test]
-fn local_debug_builds_force_file_mcp_oauth_store_modes() {
-    let non_local_keyring_mode = if cfg!(debug_assertions) {
-        OAuthCredentialsStoreMode::File
-    } else {
-        OAuthCredentialsStoreMode::Keyring
-    };
-    let non_local_auto_mode = if cfg!(debug_assertions) {
-        OAuthCredentialsStoreMode::File
-    } else {
-        OAuthCredentialsStoreMode::Auto
-    };
-
+fn local_dev_builds_force_file_mcp_oauth_store_modes() {
     assert_eq!(
         resolve_mcp_oauth_credentials_store_mode(
             OAuthCredentialsStoreMode::Keyring,
@@ -5794,11 +5737,7 @@ fn local_debug_builds_force_file_mcp_oauth_store_modes() {
     );
     assert_eq!(
         resolve_mcp_oauth_credentials_store_mode(OAuthCredentialsStoreMode::Keyring, "1.2.3"),
-        non_local_keyring_mode,
-    );
-    assert_eq!(
-        resolve_mcp_oauth_credentials_store_mode(OAuthCredentialsStoreMode::Auto, "1.2.3"),
-        non_local_auto_mode,
+        OAuthCredentialsStoreMode::Keyring,
     );
 }
 
@@ -5974,10 +5913,7 @@ model = "gpt-project-local"
         .build()
         .await?;
 
-    // The Ambient provider always resolves to a default model even when no
-    // model is explicitly configured, so the ignored project-local profile
-    // does not leave the model as `None`.
-    assert_eq!(config.model.as_deref(), Some(AMBIENT_DEFAULT_MODEL));
+    assert_eq!(config.model, None);
     assert!(
         config.startup_warnings.iter().any(|warning| {
             warning.contains("profile")
@@ -6055,7 +5991,7 @@ async fn responses_websocket_features_do_not_change_wire_api() -> std::io::Resul
         )
         .await?;
 
-        assert_eq!(config.model_provider.wire_api, WireApi::Chat);
+        assert_eq!(config.model_provider.wire_api, WireApi::Responses);
     }
 
     Ok(())
@@ -7734,13 +7670,13 @@ async fn load_config_rejects_missing_agent_role_config_file() -> std::io::Result
     let cfg = ConfigToml {
         agents: Some(AgentsToml {
             enabled: None,
+            provider_allowlist: None,
             max_concurrent_threads_per_session: None,
             max_depth: None,
             default_subagent_model: None,
             default_subagent_reasoning_effort: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
-            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {
@@ -8685,8 +8621,8 @@ async fn load_config_resolves_agent_controls() -> std::io::Result<()> {
             max_depth: Some(2),
             default_subagent_model: Some("gpt-5.6-terra".to_string()),
             default_subagent_reasoning_effort: Some(ReasoningEffort::High),
+            provider_allowlist: Some(vec![" claude-plan ".to_string(), "openai".to_string()]),
             interrupt_message: Some(false),
-            provider_allowlist: None,
             ..Default::default()
         }),
         ..Default::default()
@@ -8705,6 +8641,7 @@ async fn load_config_resolves_agent_controls() -> std::io::Result<()> {
             config.agent_max_depth,
             config.agent_default_subagent_model.as_deref(),
             config.agent_default_subagent_reasoning_effort,
+            config.agent_provider_allowlist.as_deref(),
             config.agent_interrupt_message_enabled,
         ),
         (
@@ -8712,6 +8649,7 @@ async fn load_config_resolves_agent_controls() -> std::io::Result<()> {
             2,
             Some("gpt-5.6-terra"),
             Some(ReasoningEffort::High),
+            Some(["claude-plan".to_string(), "openai".to_string()].as_slice()),
             false,
         )
     );
@@ -8746,13 +8684,13 @@ async fn load_config_normalizes_agent_role_nickname_candidates() -> std::io::Res
     let cfg = ConfigToml {
         agents: Some(AgentsToml {
             enabled: None,
+            provider_allowlist: None,
             max_concurrent_threads_per_session: None,
             max_depth: None,
             default_subagent_model: None,
             default_subagent_reasoning_effort: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
-            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {
@@ -8793,13 +8731,13 @@ async fn load_config_rejects_empty_agent_role_nickname_candidates() -> std::io::
     let cfg = ConfigToml {
         agents: Some(AgentsToml {
             enabled: None,
+            provider_allowlist: None,
             max_concurrent_threads_per_session: None,
             max_depth: None,
             default_subagent_model: None,
             default_subagent_reasoning_effort: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
-            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {
@@ -8834,13 +8772,13 @@ async fn load_config_rejects_duplicate_agent_role_nickname_candidates() -> std::
     let cfg = ConfigToml {
         agents: Some(AgentsToml {
             enabled: None,
+            provider_allowlist: None,
             max_concurrent_threads_per_session: None,
             max_depth: None,
             default_subagent_model: None,
             default_subagent_reasoning_effort: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
-            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {
@@ -8875,13 +8813,13 @@ async fn load_config_rejects_unsafe_agent_role_nickname_candidates() -> std::io:
     let cfg = ConfigToml {
         agents: Some(AgentsToml {
             enabled: None,
+            provider_allowlist: None,
             max_concurrent_threads_per_session: None,
             max_depth: None,
             default_subagent_model: None,
             default_subagent_reasoning_effort: None,
             job_max_runtime_seconds: None,
             interrupt_message: None,
-            provider_allowlist: None,
             roles: BTreeMap::from([(
                 "researcher".to_string(),
                 AgentRoleToml {
@@ -10852,7 +10790,6 @@ async fn multi_agent_v2_config_from_feature_table() -> std::io::Result<()> {
         r#"[features.multi_agent_v2]
 enabled = true
 max_concurrent_threads_per_session = 5
-max_subagent_model_requests_per_turn = 18
 min_wait_timeout_ms = 2500
 max_wait_timeout_ms = 120000
 default_wait_timeout_ms = 30000
@@ -10880,10 +10817,6 @@ max_concurrent_threads_per_session = 9
 
     assert!(config.features.enabled(Feature::MultiAgentV2));
     assert_eq!(config.multi_agent_v2.max_concurrent_threads_per_session, 5);
-    assert_eq!(
-        config.multi_agent_v2.max_subagent_model_requests_per_turn,
-        18
-    );
     assert_eq!(config.multi_agent_v2.min_wait_timeout_ms, 2500);
     assert_eq!(config.multi_agent_v2.max_wait_timeout_ms, 120000);
     assert_eq!(config.multi_agent_v2.default_wait_timeout_ms, 30000);
@@ -10954,7 +10887,7 @@ enabled = true
             config.agent_max_threads,
             config.effective_agent_max_threads(MultiAgentVersion::V2)
         ),
-        (None, Some(5))
+        (None, Some(3))
     );
 
     Ok(())
@@ -11085,32 +11018,6 @@ subagent_developer_instructions = "  \t  "
         ..resolve_multi_agent_v2_config(&ConfigToml::default())
     };
     assert_eq!(resolve_multi_agent_v2_config(&config_toml), expected);
-}
-
-#[tokio::test]
-async fn multi_agent_v2_rejects_subagent_model_request_limit_below_two() -> std::io::Result<()> {
-    let codex_home = TempDir::new()?;
-    std::fs::write(
-        codex_home.path().join(CONFIG_TOML_FILE),
-        r#"[features.multi_agent_v2]
-enabled = true
-max_subagent_model_requests_per_turn = 1
-"#,
-    )?;
-
-    let config = ConfigBuilder::without_managed_config_for_tests()
-        .codex_home(codex_home.path().to_path_buf())
-        .fallback_cwd(Some(codex_home.path().to_path_buf()))
-        .build()
-        .await?;
-    let error = config
-        .validate_multi_agent_v2_config()
-        .expect_err("a one-request cap cannot provide a finalization request");
-    assert_eq!(
-        error.to_string(),
-        "features.multi_agent_v2.max_subagent_model_requests_per_turn must be at least 2"
-    );
-    Ok(())
 }
 
 #[tokio::test]

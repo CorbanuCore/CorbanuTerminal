@@ -317,7 +317,6 @@ async fn reasoning_selection_in_plan_mode_opens_scope_prompt_event() {
         event,
         AppEvent::OpenPlanReasoningScopePrompt {
             model,
-            provider: _,
             effort: Some(_)
         } if model == "gpt-5.4"
     );
@@ -344,16 +343,10 @@ async fn reasoning_selection_in_plan_mode_without_effort_change_does_not_open_sc
     assert!(
         events.iter().any(|event| matches!(
             event,
-            AppEvent::UpdateModelSelection { model, provider }
-                if model == "gpt-5.4" && provider.as_deref() == Some("openai")
+            AppEvent::SelectModelAndReasoning { model, effort: Some(_) }
+                if model == "gpt-5.4"
         )),
-        "expected model update event; events: {events:?}"
-    );
-    assert!(
-        events
-            .iter()
-            .any(|event| matches!(event, AppEvent::UpdateReasoningEffort(Some(_)))),
-        "expected reasoning update event; events: {events:?}"
+        "expected acknowledged model and reasoning selection; events: {events:?}"
     );
 }
 
@@ -383,7 +376,6 @@ async fn reasoning_selection_in_plan_mode_matching_plan_effort_but_different_glo
         event,
         AppEvent::OpenPlanReasoningScopePrompt {
             model,
-            provider: _,
             effort: Some(ReasoningEffortConfig::Medium)
         } if model == "gpt-5.4"
     );
@@ -524,27 +516,17 @@ async fn reasoning_selection_in_plan_mode_model_switch_does_not_open_scope_promp
     assert!(
         events.iter().any(|event| matches!(
             event,
-            AppEvent::UpdateModelSelection { model, provider }
-                if model == "gpt-5.2" && provider.as_deref() == Some("openai")
+            AppEvent::SelectModelAndReasoning { model, effort: Some(_) }
+                if model == "gpt-5.2"
         )),
-        "expected model update event; events: {events:?}"
-    );
-    assert!(
-        events
-            .iter()
-            .any(|event| matches!(event, AppEvent::UpdateReasoningEffort(Some(_)))),
-        "expected reasoning update event; events: {events:?}"
+        "expected acknowledged model and reasoning selection; events: {events:?}"
     );
 }
 
 #[tokio::test]
 async fn plan_reasoning_scope_popup_all_modes_persists_global_and_plan_override() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
-    chat.open_plan_reasoning_scope_prompt(
-        "gpt-5.4".to_string(),
-        Some("openai".to_string()),
-        Some(ReasoningEffortConfig::High),
-    );
+    chat.open_plan_reasoning_scope_prompt("gpt-5.4".to_string(), Some(ReasoningEffortConfig::High));
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Down));
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
@@ -564,14 +546,16 @@ async fn plan_reasoning_scope_popup_all_modes_persists_global_and_plan_override(
         )),
         "expected updated plan override to be persisted; events: {events:?}"
     );
-    assert!(
-        events.iter().any(|event| matches!(
-            event,
-            AppEvent::PersistModelSelection { model, effort: Some(ReasoningEffortConfig::High), .. }
-                if model == "gpt-5.4"
-        )),
-        "expected global model reasoning selection persistence; events: {events:?}"
-    );
+    assert!(events.iter().any(|event| matches!(
+        event,
+        AppEvent::SelectModelAndReasoning {
+            model,
+            effort: Some(ReasoningEffortConfig::High),
+        } if model == "gpt-5.4"
+    )));
+    assert!(events
+        .iter()
+        .all(|event| !matches!(event, AppEvent::PersistModelSelection { .. })));
 }
 
 #[test]
@@ -612,11 +596,7 @@ async fn open_plan_reasoning_scope_prompt_sets_pending_notification() {
     chat.config.tui_notifications.notifications =
         Notifications::Custom(vec!["plan-mode-prompt".to_string()]);
 
-    chat.open_plan_reasoning_scope_prompt(
-        "gpt-5.4".to_string(),
-        Some("openai".to_string()),
-        Some(ReasoningEffortConfig::High),
-    );
+    chat.open_plan_reasoning_scope_prompt("gpt-5.4".to_string(), Some(ReasoningEffortConfig::High));
 
     assert_matches!(
         chat.pending_notification,
@@ -706,7 +686,6 @@ async fn plan_reasoning_scope_popup_mentions_selected_reasoning() {
     chat.set_plan_mode_reasoning_effort(Some(ReasoningEffortConfig::Low));
     chat.open_plan_reasoning_scope_prompt(
         "gpt-5.4".to_string(),
-        Some("openai".to_string()),
         Some(ReasoningEffortConfig::Medium),
     );
 
@@ -723,22 +702,17 @@ async fn plan_reasoning_scope_popup_mentions_built_in_plan_default_when_no_overr
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
     chat.open_plan_reasoning_scope_prompt(
         "gpt-5.4".to_string(),
-        Some("openai".to_string()),
         Some(ReasoningEffortConfig::Medium),
     );
 
     let popup = render_bottom_popup(&chat, /*width*/ 100);
-    assert!(popup.contains("built-in Plan default"));
+    assert!(popup.contains("built-in Plan default (medium)"));
 }
 
 #[tokio::test]
 async fn plan_reasoning_scope_popup_plan_only_does_not_update_all_modes_reasoning() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
-    chat.open_plan_reasoning_scope_prompt(
-        "gpt-5.4".to_string(),
-        Some("openai".to_string()),
-        Some(ReasoningEffortConfig::High),
-    );
+    chat.open_plan_reasoning_scope_prompt("gpt-5.4".to_string(), Some(ReasoningEffortConfig::High));
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
 
@@ -1159,8 +1133,12 @@ async fn plan_implementation_popup_skips_when_rate_limit_prompt_pending() {
 
     let popup = render_bottom_popup(&chat, /*width*/ 80);
     assert!(
-        !popup.contains("Approaching rate limits"),
-        "hidden GPT rate limit nudge should not open, got {popup:?}"
+        popup.contains("Approaching rate limits"),
+        "expected rate limit popup, got {popup:?}"
+    );
+    assert!(
+        !popup.contains(PLAN_IMPLEMENTATION_TITLE),
+        "expected plan popup to be skipped, got {popup:?}"
     );
 }
 
@@ -1374,7 +1352,10 @@ async fn enter_submits_when_plan_stream_is_not_active() {
 
     assert!(chat.input_queue.queued_user_messages.is_empty());
     match next_submit_op(&mut op_rx) {
-        Op::UserTurn { .. } => {}
+        Op::UserTurn {
+            personality: Some(Personality::Pragmatic),
+            ..
+        } => {}
         other => panic!("expected Op::UserTurn, got {other:?}"),
     }
 }
@@ -1402,7 +1383,7 @@ async fn collab_mode_shift_tab_cycles_only_when_idle() {
 async fn mode_switch_surfaces_model_change_notification_when_effective_model_changes() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5")).await;
     chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
-    let default_model_label = chat.model_display_name();
+    let default_model = chat.current_model().to_string();
 
     let mut plan_mask =
         collaboration_modes::mask_for_kind(chat.model_catalog.as_ref(), ModeKind::Plan)
@@ -1416,7 +1397,7 @@ async fn mode_switch_surfaces_model_change_notification_when_effective_model_cha
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        plan_messages.contains("Model changed to GPT-5.4-Mini medium for Plan mode."),
+        plan_messages.contains("Model changed to gpt-5.4-mini medium for Plan mode."),
         "expected Plan-mode model switch notice, got: {plan_messages:?}"
     );
 
@@ -1430,7 +1411,7 @@ async fn mode_switch_surfaces_model_change_notification_when_effective_model_cha
         .collect::<Vec<_>>()
         .join("\n");
     let expected_default_message =
-        format!("Model changed to {default_model_label} default for Default mode.");
+        format!("Model changed to {default_model} default for Default mode.");
     assert!(
         default_messages.contains(&expected_default_message),
         "expected Default-mode model switch notice, got: {default_messages:?}"
@@ -1661,6 +1642,7 @@ async fn collab_mode_is_sent_after_enabling() {
                     mode: ModeKind::Default,
                     ..
                 }),
+            personality: Some(Personality::Pragmatic),
             ..
         } => {}
         other => {
@@ -1684,6 +1666,7 @@ async fn collab_mode_applies_default_preset() {
                     mode: ModeKind::Default,
                     ..
                 }),
+            personality: Some(Personality::Pragmatic),
             ..
         } => {}
         other => {

@@ -26,7 +26,6 @@ pub(crate) mod request_user_input_spec;
 mod shell;
 pub(crate) mod shell_spec;
 mod sleep;
-mod structured_edit;
 mod test_sync;
 pub(crate) mod test_sync_spec;
 mod tool_search;
@@ -44,7 +43,6 @@ use codex_utils_absolute_path::AbsolutePathBufGuard;
 use serde::Deserialize;
 use serde_json::Map;
 use serde_json::Value;
-use serde_json::error::Category;
 use std::path::Path;
 
 use crate::environment_selection::TurnEnvironmentSnapshot;
@@ -73,13 +71,6 @@ pub use request_user_input::RequestUserInputHandler;
 pub use shell::ShellCommandHandler;
 pub(crate) use shell::ShellCommandHandlerOptions;
 pub use sleep::SleepHandler;
-pub(crate) use structured_edit::StructuredEditHandler;
-pub(crate) use structured_edit::StructuredWriteHandler;
-pub(crate) use structured_edit::emit_model_edit_compat_metric;
-pub(crate) use structured_edit::emit_model_edit_fallback_activated_metric;
-pub(crate) use structured_edit::native_structured_edit_protocol_enabled;
-pub(crate) use structured_edit::reject_source_write_heredoc_when_structured_edit_enabled;
-pub(crate) use structured_edit::validate_structured_write_arguments;
 pub use test_sync::TestSyncHandler;
 pub(crate) use tool_search::ToolSearchHandlerCache;
 pub use unified_exec::ExecCommandHandler;
@@ -93,61 +84,9 @@ pub(crate) fn parse_arguments<T>(arguments: &str) -> Result<T, FunctionCallError
 where
     T: for<'de> Deserialize<'de>,
 {
-    parse_arguments_for_tool("unknown", arguments)
-}
-
-pub(crate) fn parse_arguments_for_tool<T>(
-    tool_name: &str,
-    arguments: &str,
-) -> Result<T, FunctionCallError>
-where
-    T: for<'de> Deserialize<'de>,
-{
-    serde_json::from_str(arguments)
-        .map_err(|err| malformed_tool_call_error(tool_name, arguments, err.classify(), None, &err))
-}
-
-const MALFORMED_TOOL_ARGUMENT_EXCERPT_CHARS: usize = 240;
-
-fn malformed_tool_call_error(
-    tool_name: &str,
-    arguments: &str,
-    category: Category,
-    finish_reason: Option<String>,
-    err: &serde_json::Error,
-) -> FunctionCallError {
-    let diagnostic = codex_tools::MalformedToolCallDiagnostic {
-        tool: tool_name.to_string(),
-        byte_len: arguments.len(),
-        category: serde_json_category_name(category).to_string(),
-        excerpt: safe_argument_excerpt(arguments),
-        finish_reason,
-    };
-    let message = format!(
-        "{diagnostic} parse_error={err}. The arguments were not valid JSON for the `{tool_name}` schema. \
-         Re-issue this tool call once with complete, corrected JSON arguments (no unknown fields, all required fields present). \
-         If the payload is large, double-check string escaping and that the JSON object is closed."
-    );
-    FunctionCallError::MalformedToolCall {
-        diagnostic,
-        message,
-    }
-}
-
-fn serde_json_category_name(category: Category) -> &'static str {
-    match category {
-        Category::Io => "Io",
-        Category::Syntax => "Syntax",
-        Category::Data => "Data",
-        Category::Eof => "Eof",
-    }
-}
-
-fn safe_argument_excerpt(arguments: &str) -> String {
-    arguments
-        .chars()
-        .take(MALFORMED_TOOL_ARGUMENT_EXCERPT_CHARS)
-        .collect()
+    serde_json::from_str(arguments).map_err(|err| {
+        FunctionCallError::RespondToModel(format!("failed to parse function arguments: {err}"))
+    })
 }
 
 fn updated_hook_command(updated_input: &Value) -> Result<&str, FunctionCallError> {

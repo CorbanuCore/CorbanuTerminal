@@ -7,17 +7,9 @@ use codex_login::CodexAuth;
 use codex_mcp::ToolInfo;
 use codex_model_provider::create_model_provider;
 use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
-use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::OPENAI_PROVIDER_ID;
-use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
-use codex_model_provider_info::ZAI_PROVIDER_ID;
-use codex_models_manager::model_info;
-use codex_protocol::AgentPath;
-use codex_protocol::ThreadId;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
-use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ApplyPatchToolType;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::InputModality;
@@ -195,7 +187,6 @@ async fn probe_with(
     inputs: ToolPlanInputs,
 ) -> ToolPlanProbe {
     let (_session, mut turn) = make_session_and_context().await;
-    use_openai_provider(&mut turn);
     configure_turn(&mut turn);
     let turn = Arc::new(turn);
     let step_context = StepContext::for_test(Arc::clone(&turn));
@@ -280,7 +271,6 @@ fn set_web_search_mode(turn: &mut TurnContext, mode: WebSearchMode) {
 }
 
 fn use_chatgpt_auth(turn: &mut TurnContext) {
-    use_openai_provider(turn);
     turn.auth_manager = Some(AuthManager::from_auth_for_testing(
         CodexAuth::create_dummy_chatgpt_auth_for_testing(),
     ));
@@ -288,16 +278,6 @@ fn use_chatgpt_auth(turn: &mut TurnContext) {
         turn.config.model_provider.clone(),
         turn.auth_manager.clone(),
     );
-}
-
-fn use_openai_provider(turn: &mut TurnContext) {
-    let provider_info = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
-    update_config(turn, |config| {
-        config.model_provider_id = OPENAI_PROVIDER_ID.to_string();
-        config.model_provider = provider_info.clone();
-    });
-    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
-    turn.model_info = model_info::model_info_from_slug("gpt-5.4");
 }
 
 fn use_bedrock_provider(turn: &mut TurnContext) {
@@ -1211,7 +1191,6 @@ async fn tool_search_cache_rebuilds_when_deferred_sources_change() {
     let cache = ToolSearchHandlerCache::default();
 
     let (_session, mut first_turn) = make_session_and_context().await;
-    use_openai_provider(&mut first_turn);
     first_turn.model_info.supports_search_tool = true;
     let first_turn = Arc::new(first_turn);
     let first_step_context = StepContext::for_test(Arc::clone(&first_turn));
@@ -1237,7 +1216,6 @@ async fn tool_search_cache_rebuilds_when_deferred_sources_change() {
     let first_plan = ToolPlanProbe::from_router(first_router);
 
     let (_session, mut second_turn) = make_session_and_context().await;
-    use_openai_provider(&mut second_turn);
     second_turn.model_info.supports_search_tool = true;
     let second_turn = Arc::new(second_turn);
     let second_step_context = StepContext::for_test(Arc::clone(&second_turn));
@@ -1602,7 +1580,6 @@ async fn excluded_deferred_namespaces_do_not_enable_nested_tool_guidance() {
 #[tokio::test]
 async fn multi_agent_feature_selects_one_agent_tool_family() {
     let v1 = probe(|turn| {
-        use_openai_provider(turn);
         set_feature(turn, Feature::Collab, /*enabled*/ true);
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
     })
@@ -1709,12 +1686,10 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
         .properties
         .as_ref()
         .expect("spawn_agent should use object params");
-    for property in ["model", "reasoning_effort"] {
+    for property in ["model_provider", "model", "reasoning_effort", "service_tier"] {
         assert!(spawn_agent_properties.contains_key(property));
     }
-    for property in ["agent_type", "service_tier"] {
-        assert!(!spawn_agent_properties.contains_key(property));
-    }
+    assert!(!spawn_agent_properties.contains_key("agent_type"));
     let spawn_agent_description = spawn_agent.description.as_str();
     assert!(!spawn_agent_description.contains("max_concurrent_threads_per_session"));
     assert!(spawn_agent_description.contains(
@@ -1745,51 +1720,7 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
 }
 
 #[tokio::test]
-async fn multi_agent_v2_advertises_cross_provider_catalog_from_third_party_parent() {
-    let v2 = probe(|turn| {
-        use_openrouter_provider(turn);
-        turn.available_models = crate::test_support::all_model_presets().clone();
-        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
-        update_config(turn, |config| {
-            config.agent_provider_allowlist = Some(vec![
-                OPENROUTER_PROVIDER_ID.to_string(),
-                OPENAI_PROVIDER_ID.to_string(),
-            ]);
-        });
-    })
-    .await;
-    let v2_description = match v2.visible_spec("spawn_agent") {
-        ToolSpec::Function(tool) => tool.description.as_str(),
-        other => panic!("expected v2 spawn_agent function spec, got {other:?}"),
-    };
-    assert!(
-        v2_description.contains("`openai` / `gpt-5.6-sol`"),
-        "v2 managers on third-party providers need the authorized cross-provider catalog"
-    );
-    assert!(
-        !v2_description.contains("`openai` / `gpt-5.5`"),
-        "catalogue-disabled models must not be advertised for spawned work"
-    );
-
-    let v1 = probe(|turn| {
-        use_openrouter_provider(turn);
-        turn.available_models = crate::test_support::all_model_presets().clone();
-        set_feature(turn, Feature::Collab, /*enabled*/ true);
-        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
-    })
-    .await;
-    let v1_description = match v1.visible_spec("spawn_agent_v1") {
-        ToolSpec::Function(tool) => tool.description.as_str(),
-        other => panic!("expected flattened v1 spawn_agent function spec, got {other:?}"),
-    };
-    assert!(
-        !v1_description.contains("`openai` / `gpt-5.6-sol`"),
-        "v1 must not advertise provider/model pairs its model-only schema cannot select"
-    );
-}
-
-#[tokio::test]
-async fn multi_agent_v2_message_schemas_are_provider_neutral_plaintext() {
+async fn multi_agent_v2_message_schemas_are_encrypted() {
     let plan = probe(|turn| {
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
     })
@@ -1815,7 +1746,7 @@ async fn multi_agent_v2_message_schemas_are_provider_neutral_plaintext() {
             properties
                 .get("message")
                 .and_then(|schema| schema.encrypted),
-            None
+            Some(true)
         );
     }
 }
@@ -1860,7 +1791,6 @@ async fn tool_mode_selector_overrides_feature_flags() {
 #[tokio::test]
 async fn v1_multi_agent_tools_defer_when_tool_search_available() {
     let plan = probe(|turn| {
-        use_openai_provider(turn);
         turn.model_info.supports_search_tool = true;
         set_feature(turn, Feature::Collab, /*enabled*/ true);
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
@@ -1904,50 +1834,8 @@ async fn v1_multi_agent_tools_defer_when_tool_search_available() {
 }
 
 #[tokio::test]
-async fn v1_multi_agent_tools_flatten_for_openrouter_without_namespace_tools() {
-    let plan = probe(|turn| {
-        use_openrouter_provider(turn);
-        set_feature(turn, Feature::Collab, /*enabled*/ true);
-        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
-    })
-    .await;
-
-    plan.assert_visible_contains(&[
-        "spawn_agent_v1",
-        "send_input_v1",
-        "wait_agent_v1",
-        "close_agent_v1",
-    ]);
-    plan.assert_visible_lacks(&[MULTI_AGENT_V1_NAMESPACE, "spawn_agent"]);
-    plan.assert_registered_contains(&[
-        "spawn_agent_v1",
-        "send_input_v1",
-        "wait_agent_v1",
-        "close_agent_v1",
-        &ToolName::namespaced(MULTI_AGENT_V1_NAMESPACE, "spawn_agent").to_string(),
-    ]);
-    for tool_name in [
-        "spawn_agent_v1",
-        "send_input_v1",
-        "wait_agent_v1",
-        "close_agent_v1",
-    ] {
-        assert_eq!(plan.exposure(tool_name), ToolExposure::Direct);
-        let ToolSpec::Function(tool) = plan.visible_spec(tool_name) else {
-            panic!("expected {tool_name} to be exposed as a plain function");
-        };
-        assert_eq!(tool.name, tool_name);
-        assert!(
-            tool.description
-                .contains("Compatibility alias for V1 subagent support")
-        );
-    }
-}
-
-#[tokio::test]
 async fn multi_agent_v2_can_use_configured_tool_namespace() {
     let namespaced = probe(|turn| {
-        use_openai_provider(turn);
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
         update_config(turn, |config| {
             config.multi_agent_v2.tool_namespace = Some("agents".to_string());
@@ -2168,7 +2056,6 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
     unsupported_provider.assert_visible_lacks(&["image_gen"]);
 
     let live_web_search = probe(|turn| {
-        use_openai_provider(turn);
         set_web_search_mode(turn, WebSearchMode::Live);
         turn.model_info.web_search_tool_type = WebSearchToolType::TextAndImage;
     })
@@ -2184,32 +2071,6 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
             search_content_types: Some(vec!["text".to_string(), "image".to_string()]),
         }
     );
-
-    let zai_native_web_search = probe(|turn| {
-        use_zai_provider(turn);
-        set_web_search_mode(turn, WebSearchMode::Live);
-        turn.model_info.supports_search_tool = false;
-    })
-    .await;
-    zai_native_web_search.assert_visible_contains(&["web_search"]);
-
-    let zai_native_web_search_for_responses_lite = probe(|turn| {
-        use_zai_provider(turn);
-        set_web_search_mode(turn, WebSearchMode::Live);
-        turn.model_info.supports_search_tool = false;
-        turn.model_info.use_responses_lite = true;
-    })
-    .await;
-    zai_native_web_search_for_responses_lite.assert_visible_contains(&["web_search"]);
-
-    let openrouter_server_web_search_for_chat = probe(|turn| {
-        use_openrouter_provider(turn);
-        set_web_search_mode(turn, WebSearchMode::Live);
-        turn.model_info.supports_search_tool = false;
-        turn.model_info.use_responses_lite = true;
-    })
-    .await;
-    openrouter_server_web_search_for_chat.assert_visible_contains(&["web_search"]);
 
     let code_mode_only = probe(|turn| {
         use_chatgpt_auth(turn);
@@ -2233,7 +2094,6 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
     );
 
     let standalone_web_search_without_web_run = probe(|turn| {
-        use_openai_provider(turn);
         set_feature(turn, Feature::StandaloneWebSearch, /*enabled*/ true);
         set_web_search_mode(turn, WebSearchMode::Live);
     })
@@ -2277,7 +2137,6 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
 
     let standalone_web_search = probe_with(
         |turn| {
-            use_openai_provider(turn);
             set_feature(turn, Feature::StandaloneWebSearch, /*enabled*/ true);
             set_web_search_mode(turn, WebSearchMode::Live);
         },

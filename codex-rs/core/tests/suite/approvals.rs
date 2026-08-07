@@ -41,7 +41,6 @@ use core_test_support::responses::mount_sse_once_match;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::skip_if_sandbox;
 use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::local_selections;
 use core_test_support::test_codex::test_codex;
@@ -1813,12 +1812,6 @@ async fn approval_matrix_covers_group(group: ScenarioGroup) -> Result<()> {
 
 async fn run_scenario_group(group: ScenarioGroup) -> Result<()> {
     skip_if_no_network!(Ok(()));
-    if matches!(
-        group,
-        ScenarioGroup::ReadOnly | ScenarioGroup::WorkspaceWrite
-    ) {
-        skip_if_sandbox!(Ok(()));
-    }
 
     let scenarios = scenarios()
         .into_iter()
@@ -2326,16 +2319,18 @@ async fn spawned_subagent_execpolicy_amendment_propagates_to_parent_session() ->
     let approval_policy = AskForApproval::UnlessTrusted;
     let sandbox_policy = SandboxPolicy::new_read_only_policy();
     let sandbox_policy_for_config = sandbox_policy.clone();
-    let mut builder = test_codex().with_config(move |config| {
-        config.permissions.approval_policy = Constrained::allow_any(approval_policy);
-        config
-            .set_legacy_sandbox_policy(sandbox_policy_for_config)
-            .expect("set sandbox policy");
-        config
-            .features
-            .enable(Feature::Collab)
-            .expect("test config should allow feature update");
-    });
+    let mut builder = test_codex()
+        .with_model("gpt-5.6-luna")
+        .with_config(move |config| {
+            config.permissions.approval_policy = Constrained::allow_any(approval_policy);
+            config
+                .set_legacy_sandbox_policy(sandbox_policy_for_config)
+                .expect("set sandbox policy");
+            config
+                .features
+                .enable(Feature::Collab)
+                .expect("test config should allow feature update");
+        });
     let test = builder.build(&server).await?;
 
     const PARENT_PROMPT: &str = "spawn a child that repeats a command";
@@ -3548,7 +3543,6 @@ allow_local_binding = true
 #[tokio::test(flavor = "current_thread")]
 async fn network_approval_retry_keeps_deny_read_sandbox_for_escalated_command() -> Result<()> {
     skip_if_no_network!(Ok(()));
-    skip_if_sandbox!(Ok(()));
 
     let server = start_mock_server().await;
     let home = Arc::new(TempDir::new()?);

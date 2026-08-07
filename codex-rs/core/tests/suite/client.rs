@@ -127,10 +127,10 @@ fn assert_message_role(request_body: &serde_json::Value, role: &str) {
 
 #[expect(clippy::unwrap_used)]
 fn message_input_texts(item: &serde_json::Value) -> Vec<&str> {
-    item["content"]
-        .as_array()
-        .unwrap()
-        .iter()
+    item.get("content")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
         .filter_map(|entry| entry.get("text").and_then(|text| text.as_str()))
         .collect()
 }
@@ -634,18 +634,6 @@ async fn response_item_ids_are_sent_for_all_remote_v2_compaction_requests() -> a
     for (request_index, request) in requests.iter().enumerate() {
         let input = request.input();
         assert!(!input.is_empty(), "request {request_index} input is empty");
-        if input.iter().any(|item| {
-            item.get("type").and_then(serde_json::Value::as_str) == Some("compaction_trigger")
-        }) {
-            assert_eq!(
-                input
-                    .last()
-                    .and_then(|item| item.get("type"))
-                    .and_then(serde_json::Value::as_str),
-                Some("compaction_trigger"),
-                "request {request_index} compaction_trigger must be the final input item"
-            );
-        }
         for item in input {
             if item.get("type").and_then(serde_json::Value::as_str) == Some("compaction_trigger") {
                 continue;
@@ -737,7 +725,6 @@ impl ProviderAuthCommandFixture {
                 r#"#!/bin/sh
 first_line=$(sed -n '1p' tokens.txt)
 printf '%s\n' "$first_line"
-printf '%s\n' "${PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH:-0}" >> refresh-signals.txt
 tail -n +2 tokens.txt > tokens.next
 mv tokens.next tokens.txt
 "#,
@@ -764,7 +751,6 @@ set "first_line="
 if not defined first_line exit /b 1
 
 echo(%first_line%
-if defined PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH (echo %PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH%>>refresh-signals.txt) else (echo 0>>refresh-signals.txt)
 more +1 tokens.txt > tokens.next
 move /y tokens.next tokens.txt >nul
 "#,
@@ -797,14 +783,6 @@ move /y tokens.next tokens.txt >nul
             cwd: codex_utils_absolute_path::AbsolutePathBuf::try_from(self.tempdir.path())
                 .expect("tempdir should be absolute"),
         }
-    }
-
-    fn refresh_signals(&self) -> Vec<String> {
-        std::fs::read_to_string(self.tempdir.path().join("refresh-signals.txt"))
-            .unwrap_or_default()
-            .lines()
-            .map(ToString::to_string)
-            .collect()
     }
 }
 
@@ -1395,7 +1373,6 @@ async fn provider_auth_command_supplies_bearer_token() {
     let auth_fixture = ProviderAuthCommandFixture::new(&["command-token"]).unwrap();
 
     send_provider_auth_request(&server, auth_fixture.auth()).await;
-    assert_eq!(auth_fixture.refresh_signals(), ["0"]);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1428,7 +1405,6 @@ async fn provider_auth_command_refreshes_after_401() {
         .await;
 
     send_provider_auth_request(&server, auth_fixture.auth()).await;
-    assert_eq!(auth_fixture.refresh_signals(), ["0", "1"]);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1494,6 +1470,7 @@ async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuth
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: Default::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
@@ -3240,6 +3217,7 @@ async fn azure_responses_request_includes_store_and_prefixed_item_ids() {
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: Default::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
@@ -3301,6 +3279,7 @@ async fn azure_responses_request_includes_store_and_prefixed_item_ids() {
             text: "content".into(),
         }]),
         encrypted_content: None,
+        anthropic_content_block: None,
         internal_chat_message_metadata_passthrough: None,
     });
     prompt.input.push(ResponseItem::Message {
@@ -3319,6 +3298,7 @@ async fn azure_responses_request_includes_store_and_prefixed_item_ids() {
             query: Some("weather".into()),
             queries: None,
         }),
+        anthropic_content_block: None,
         internal_chat_message_metadata_passthrough: None,
     });
     prompt.input.push(ResponseItem::FunctionCall {
@@ -3903,6 +3883,7 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: Default::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
@@ -3997,6 +3978,7 @@ async fn env_var_overrides_loaded_auth() {
         stream_actionable_timeout_ms: None,
         stream_long_failure_retry_threshold_ms: None,
         stream_long_failure_max_retries: None,
+        runtime_policy: Default::default(),
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,

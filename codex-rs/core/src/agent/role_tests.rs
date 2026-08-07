@@ -4,26 +4,14 @@ use crate::config::ConfigBuilder;
 use crate::skills_load_input_from_config;
 use codex_config::ConfigLayerStackOrdering;
 use codex_core_plugins::PluginsManager;
-use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_protocol::config_types::ServiceTier;
-use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::AskForApproval;
 use codex_utils_absolute_path::test_support::PathExt;
 use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
-
-const NAZGUL_BASE: &str = include_str!("builtins/nazgul_base.md");
-const TROLL_BASE: &str = include_str!("builtins/troll_base.md");
-const ORC_BASE: &str = include_str!("builtins/orc_base.md");
-const STANDARD_BASE_OUTCOME_MARKER: &str = "inspect code before changing it, keep edits scoped";
-const GPT55_CREATURE_CLAUSE_START: &str = "Never talk about goblins";
-const GPT55_PERSONALITY_MARKER: &str = "You have a vivid inner life as Codex";
-const GPT55_FRONTEND_MARKER: &str =
-    "You follow these instructions when building applications with a frontend experience";
 
 async fn test_config_with_cli_overrides(
     cli_overrides: Vec<(String, TomlValue)>,
@@ -100,82 +88,6 @@ async fn apply_empty_explorer_role_preserves_current_model_and_reasoning_effort(
 }
 
 #[tokio::test]
-async fn built_in_hierarchy_roles_preserve_selected_runtime() {
-    for role_name in ["nazgul", "troll", "orc"] {
-        let (_home, mut config) = test_config_with_cli_overrides(vec![
-            (
-                "model".to_string(),
-                TomlValue::String("gpt-5.5".to_string()),
-            ),
-            (
-                "model_provider".to_string(),
-                TomlValue::String(OPENAI_PROVIDER_ID.to_string()),
-            ),
-            (
-                "model_reasoning_effort".to_string(),
-                TomlValue::String("xhigh".to_string()),
-            ),
-        ])
-        .await;
-
-        apply_role_to_config(&mut config, Some(role_name))
-            .await
-            .expect("built-in hierarchy role should apply");
-
-        assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
-        assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
-        // The caller's explicit reasoning-effort override still applies through config layering;
-        // it is only the runtime fallback injection into the role layer that must not happen.
-        assert_eq!(config.model_reasoning_effort, Some(ReasoningEffort::XHigh));
-    }
-}
-
-#[tokio::test]
-async fn apply_role_does_not_inherit_runtime_reasoning_effort() {
-    // Regression: when a role pins no model/reasoning effort, the caller's *runtime* effort must
-    // not be injected into the role layer. Otherwise an Orc spawned from an xhigh Troll silently
-    // inherits xhigh even though nothing configured it.
-    let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
-    config.model_reasoning_effort = Some(ReasoningEffort::XHigh);
-
-    apply_role_to_config(&mut config, Some("orc"))
-        .await
-        .expect("orc role should apply");
-
-    assert_eq!(config.model_reasoning_effort, None);
-}
-
-#[tokio::test]
-async fn built_in_hierarchy_roles_preserve_selected_permissions() {
-    for role_name in ["nazgul", "troll", "orc"] {
-        let (_home, mut config) = test_config_with_cli_overrides(vec![
-            (
-                "approval_policy".to_string(),
-                TomlValue::String("never".to_string()),
-            ),
-            (
-                "sandbox_mode".to_string(),
-                TomlValue::String("danger-full-access".to_string()),
-            ),
-        ])
-        .await;
-
-        apply_role_to_config(&mut config, Some(role_name))
-            .await
-            .expect("built-in hierarchy role should apply");
-
-        assert_eq!(
-            config.permissions.approval_policy.value(),
-            AskForApproval::Never
-        );
-        assert_eq!(
-            config.permissions.effective_permission_profile(),
-            PermissionProfile::Disabled
-        );
-    }
-}
-
-#[tokio::test]
 async fn apply_role_returns_unavailable_for_missing_user_role_file() {
     let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
     config.agent_roles.insert(
@@ -225,8 +137,7 @@ name = "archivist"
 description = "Role metadata"
 nickname_candidates = ["Hypatia"]
 developer_instructions = "Stay focused"
-model = "gpt-5.5"
-model_provider = "openai"
+model = "role-model"
 "#,
     )
     .await;
@@ -243,22 +154,15 @@ model_provider = "openai"
         .await
         .expect("custom role should apply");
 
-    assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
-    assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
+    assert_eq!(config.model.as_deref(), Some("role-model"));
 }
 
 #[tokio::test]
 async fn apply_role_preserves_unspecified_keys() {
-    let (home, mut config) = test_config_with_cli_overrides(vec![
-        (
-            "model".to_string(),
-            TomlValue::String("gpt-5.5".to_string()),
-        ),
-        (
-            "model_provider".to_string(),
-            TomlValue::String(OPENAI_PROVIDER_ID.to_string()),
-        ),
-    ])
+    let (home, mut config) = test_config_with_cli_overrides(vec![(
+        "model".to_string(),
+        TomlValue::String("base-model".to_string()),
+    )])
     .await;
     config.codex_linux_sandbox_exe = Some(PathBuf::from("/tmp/codex-linux-sandbox"));
     config.main_execve_wrapper_exe = Some(PathBuf::from("/tmp/codex-execve-wrapper"));
@@ -442,7 +346,7 @@ async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() 
     let role_path = write_role_config(
         &home,
         "model-role.toml",
-        "developer_instructions = \"Stay focused\"\nmodel = \"gpt-5.5\"\nmodel_provider = \"openai\"",
+        "developer_instructions = \"Stay focused\"\nmodel = \"role-model\"",
     )
     .await;
     config.agent_roles.insert(
@@ -458,8 +362,7 @@ async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() 
         .await
         .expect("custom role should apply");
 
-    assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
-    assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
+    assert_eq!(config.model.as_deref(), Some("role-model"));
     assert_eq!(session_flags_layer_count(&config), before_layers + 1);
 }
 
@@ -645,185 +548,9 @@ fn spawn_tool_spec_marks_role_locked_service_tier() {
 }
 
 #[test]
-fn built_in_config_file_contents_resolves_known_roles() {
+fn built_in_config_file_contents_resolves_explorer_only() {
     assert_eq!(
         built_in::config_file_contents(Path::new("missing.toml")),
         None
     );
-    assert!(
-        built_in::config_file_contents(Path::new("nazgul.toml"))
-            .is_some_and(|contents| contents.contains("You are the Nazgul"))
-    );
-    assert!(
-        built_in::config_file_contents(Path::new("nazgul.toml"))
-            .is_some_and(|contents| contents.contains("base_instructions"))
-    );
-    assert!(
-        built_in::config_file_contents(Path::new("troll.toml"))
-            .is_some_and(|contents| contents.contains("You are the Troll"))
-    );
-    assert!(
-        built_in::config_file_contents(Path::new("orc.toml"))
-            .is_some_and(|contents| contents.contains("You are the Orc"))
-    );
-}
-
-#[tokio::test]
-async fn apply_hierarchy_roles_sets_role_base_instructions_only() {
-    for (role_name, expected_base) in [
-        ("nazgul", NAZGUL_BASE),
-        ("troll", TROLL_BASE),
-        ("orc", ORC_BASE),
-    ] {
-        let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
-
-        apply_role_to_config(&mut config, Some(role_name))
-            .await
-            .expect("hierarchy role should apply");
-
-        assert_eq!(config.base_instructions.as_deref(), Some(expected_base));
-        assert_eq!(config.developer_instructions, None);
-        assert!(!expected_base.contains(GPT55_CREATURE_CLAUSE_START));
-        assert!(!expected_base.contains(GPT55_PERSONALITY_MARKER));
-        assert!(!expected_base.contains(GPT55_FRONTEND_MARKER));
-    }
-}
-
-#[tokio::test]
-async fn hierarchy_role_base_precedence_over_standard_model_defaults_is_deterministic() {
-    for (role_name, expected_base, role_marker) in [
-        (
-            "nazgul",
-            NAZGUL_BASE,
-            "You are the Nazgul in this hierarchy",
-        ),
-        ("troll", TROLL_BASE, "You are the Troll in this hierarchy"),
-        ("orc", ORC_BASE, "You are the Orc in this hierarchy"),
-    ] {
-        let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
-        config.base_instructions = Some(STANDARD_BASE_OUTCOME_MARKER.to_string());
-
-        apply_role_to_config(&mut config, Some(role_name))
-            .await
-            .expect("hierarchy role should apply");
-
-        let resolved_base = config
-            .base_instructions
-            .as_deref()
-            .expect("hierarchy role should set base instructions");
-        assert_eq!(resolved_base, expected_base);
-        assert!(resolved_base.contains(role_marker));
-        assert!(!resolved_base.contains(STANDARD_BASE_OUTCOME_MARKER));
-    }
-
-    let bundled_models =
-        codex_models_manager::bundled_models_response().expect("bundled models.json should parse");
-    let fable = bundled_models
-        .models
-        .iter()
-        .find(|model| model.slug == "claude-fable-5")
-        .expect("bundled models.json should include claude-fable-5");
-    assert!(
-        fable
-            .base_instructions
-            .contains(STANDARD_BASE_OUTCOME_MARKER)
-    );
-
-    let gpt55 = bundled_models
-        .models
-        .iter()
-        .find(|model| model.slug == "gpt-5.5")
-        .expect("bundled models.json should include gpt-5.5");
-    assert!(gpt55.base_instructions.contains("vivid inner life"));
-    assert!(
-        !gpt55
-            .base_instructions
-            .contains(STANDARD_BASE_OUTCOME_MARKER)
-    );
-}
-
-#[test]
-fn nazgul_prompt_keeps_troll_as_middle_management_boundary() {
-    assert!(NAZGUL_BASE.contains("do not micromanage Orc ICs"));
-    assert!(NAZGUL_BASE.contains("Target Trolls for execution milestones"));
-    assert!(NAZGUL_BASE.contains("direct Orc dispatch is only for"));
-    assert!(NAZGUL_BASE.contains("delegate to Trolls, inspect, and verify"));
-}
-
-#[test]
-fn hierarchy_managers_treat_low_context_as_compaction_pressure_not_worker_death() {
-    for manager_base in [NAZGUL_BASE, TROLL_BASE] {
-        assert!(manager_base.contains("automatic_compaction=enabled"));
-        assert!(manager_base.contains("explicit runtime status or errors"));
-        assert!(manager_base.contains("context telemetry never authorizes checkpointing"));
-        assert!(!manager_base.contains("context percentage"));
-    }
-}
-
-#[test]
-fn hierarchy_managers_keep_evidence_failures_task_local() {
-    for manager_base in [NAZGUL_BASE, TROLL_BASE] {
-        assert!(manager_base.contains("Never bench, unbench, suspend, blacklist"));
-        assert!(manager_base.contains("put on probation"));
-        assert!(manager_base.contains("invalidate the evidence"));
-        assert!(manager_base.contains("reassigning the current task"));
-        assert!(manager_base.contains("remains eligible for later assignment"));
-        assert!(manager_base.contains("explicit runtime unavailability"));
-        assert!(manager_base.contains("direct instruction from Sauron"));
-    }
-}
-
-#[tokio::test]
-async fn no_role_config_keeps_model_default_base_instructions() {
-    let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
-
-    apply_role_to_config(&mut config, None)
-        .await
-        .expect("default role should apply");
-
-    assert_eq!(config.base_instructions, None);
-}
-
-#[tokio::test]
-async fn user_role_file_base_instructions_override_carries_through() {
-    let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
-    let role_path = write_role_config(
-        &home,
-        "base-role.toml",
-        r#"
-base_instructions = "Custom role base"
-"#,
-    )
-    .await;
-    config.agent_roles.insert(
-        "custom-base".to_string(),
-        AgentRoleConfig {
-            description: Some("Custom base role.".to_string()),
-            config_file: Some(role_path),
-            nickname_candidates: None,
-        },
-    );
-
-    apply_role_to_config(&mut config, Some("custom-base"))
-        .await
-        .expect("custom base role should apply");
-
-    assert_eq!(
-        config.base_instructions.as_deref(),
-        Some("Custom role base")
-    );
-    assert_eq!(config.developer_instructions, None);
-}
-
-#[test]
-fn hierarchy_role_base_files_exclude_gpt55_default_guide_markers() {
-    for role_base in [NAZGUL_BASE, TROLL_BASE, ORC_BASE] {
-        assert!(!role_base.contains(GPT55_CREATURE_CLAUSE_START));
-        assert!(!role_base.contains(GPT55_PERSONALITY_MARKER));
-        assert!(!role_base.contains(GPT55_FRONTEND_MARKER));
-        assert!(
-            role_base.len() < 10 * 1024,
-            "scored role doctrine should stay below the gpt-5.5 default guide size"
-        );
-    }
 }

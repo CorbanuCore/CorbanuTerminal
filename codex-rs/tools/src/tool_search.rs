@@ -32,8 +32,8 @@ impl ToolSearchInfo {
         spec: ToolSpec,
         source_info: Option<ToolSearchSourceInfo>,
     ) -> Option<Self> {
-        let spec_search_text = default_tool_search_text(&spec);
-        let search_text = combine_search_text(search_text, spec_search_text);
+        let spec_search_parts = default_tool_search_parts(&spec);
+        let search_text = combine_search_text(search_text, &spec_search_parts);
         let output = match spec {
             ToolSpec::Function(mut tool) => {
                 tool.defer_loading = Some(true);
@@ -66,21 +66,38 @@ impl ToolSearchInfo {
     }
 }
 
-fn combine_search_text(primary: String, fallback: String) -> String {
-    let primary = primary.trim();
-    let fallback = fallback.trim();
-    if primary == fallback {
-        return primary.to_string();
+fn combine_search_text(primary: String, fallback_parts: &[String]) -> String {
+    let mut combined = primary.trim().to_string();
+    let mut normalized = normalize_search_text(&combined);
+    for part in fallback_parts {
+        let normalized_part = normalize_search_text(part);
+        if normalized_part.is_empty() || normalized.contains(&normalized_part) {
+            continue;
+        }
+        if !combined.is_empty() {
+            combined.push(' ');
+        }
+        combined.push_str(part);
+        normalized = normalize_search_text(&combined);
     }
-    match (primary.is_empty(), fallback.is_empty()) {
-        (true, true) => String::new(),
-        (true, false) => fallback.to_string(),
-        (false, true) => primary.to_string(),
-        (false, false) => format!("{primary} {fallback}"),
-    }
+    combined
+}
+
+fn normalize_search_text(text: &str) -> String {
+    text.chars()
+        .flat_map(char::to_lowercase)
+        .map(|ch| if ch.is_alphanumeric() { ch } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn default_tool_search_text(spec: &ToolSpec) -> String {
+    default_tool_search_parts(spec).join(" ")
+}
+
+fn default_tool_search_parts(spec: &ToolSpec) -> Vec<String> {
     let mut parts = Vec::new();
 
     match spec {
@@ -106,7 +123,7 @@ fn default_tool_search_text(spec: &ToolSpec) -> String {
         }
     }
 
-    parts.join(" ")
+    parts
 }
 
 fn append_function_search_text(tool: &ResponsesApiTool, parts: &mut Vec<String>) {

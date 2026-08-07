@@ -57,4 +57,24 @@ if ($source -match "\]::OSArchitecture") {
     throw "install.ps1 must not directly access RuntimeInformation.OSArchitecture under StrictMode."
 }
 
+$forbiddenReleaseSources = @(
+    "github.com/openai/codex",
+    "api.github.com/repos/openai/codex",
+    "releases.openai.com"
+)
+foreach ($forbiddenReleaseSource in $forbiddenReleaseSources) {
+    if ($source.Contains($forbiddenReleaseSource)) {
+        throw "install.ps1 must not download stock Codex release assets: $forbiddenReleaseSource"
+    }
+}
+if (-not $source.Contains('Join-Path $env:USERPROFILE ".pfterminal"')) {
+    throw "install.ps1 must default to the isolated .pfterminal home."
+}
+if ($source.Contains('Join-Path $env:USERPROFILE ".codex"')) {
+    throw "install.ps1 must not default to the stock .codex home."
+}
+if (-not $source.Contains('"bin\pfterminal.exe"')) {
+    throw "install.ps1 must validate the packaged PFTerminal executable."
+}
+
 Write-Host "install.ps1 architecture tests passed."

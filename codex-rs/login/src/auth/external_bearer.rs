@@ -42,7 +42,8 @@ impl BearerTokenRefresher {
                 }
             }
 
-            let access_token = run_provider_auth_command(&self.state.config, false).await?;
+            let access_token =
+                run_provider_auth_command(&self.state.config, /*force_refresh*/ false).await?;
             *cached = Some(CachedExternalBearerToken {
                 access_token: access_token.clone(),
                 fetched_at: Instant::now(),
@@ -53,7 +54,8 @@ impl BearerTokenRefresher {
     }
 
     async fn refresh(&self, _context: ExternalAuthRefreshContext) -> io::Result<CodexAuth> {
-        let access_token = run_provider_auth_command(&self.state.config).await?;
+        let access_token =
+            run_provider_auth_command(&self.state.config, /*force_refresh*/ true).await?;
         let mut cached = self.state.cached_token.lock().await;
         *cached = Some(CachedExternalBearerToken {
             access_token: access_token.clone(),
@@ -168,7 +170,9 @@ async fn run_provider_auth_command(
 /// Verifies that a provider's external bearer-token command can currently
 /// produce a usable token without exposing that token to the caller.
 pub async fn validate_provider_auth_command(config: &ModelProviderAuthInfo) -> io::Result<()> {
-    run_provider_auth_command(config, false).await.map(drop)
+    run_provider_auth_command(config, /*force_refresh*/ false)
+        .await
+        .map(drop)
 }
 
 fn resolve_provider_auth_program(command: &str, cwd: &Path) -> io::Result<PathBuf> {

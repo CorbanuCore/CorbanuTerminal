@@ -621,11 +621,12 @@ fn create_config_toml(
     mode: ImagegenTestMode,
 ) -> std::io::Result<()> {
     let mut config = MockResponsesConfig::new(server_uri)
-        .with_model_provider("openai-custom")
-        .with_provider_name("OpenAI")
+        .with_model_provider("mock-chatgpt-responses")
+        .with_provider_name("Mock ChatGPT Responses")
         .with_provider_base_url(&format!("{server_uri}/api/codex"))
         .with_root_config(&format!("chatgpt_base_url = \"{server_uri}\""))
-        .with_provider_config("supports_websockets = false\nrequires_openai_auth = true");
+        .with_provider_config("supports_websockets = false\nrequires_openai_auth = true")
+        .disable_feature(Feature::EnableRequestCompression);
     if matches!(mode, ImagegenTestMode::CodeModeOnly) {
         config = config.enable_feature(Feature::CodeModeOnly);
     }

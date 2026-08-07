@@ -29,27 +29,17 @@ impl AppEventSender {
         Self { app_event_tx }
     }
 
-    /// Send an event to the app event channel. If it fails, log it and return
-    /// false so callers that own retry state can keep it.
-    pub(crate) fn send_checked(&self, event: AppEvent) -> bool {
-        // Record inbound events for high-fidelity session replay.
-        // Avoid double-logging Ops; those are logged at the point of submission.
-        if !matches!(event, AppEvent::CodexOp(_) | AppEvent::WhipSweepTick) {
-            session_log::log_inbound_app_event(&event);
-        }
-        match self.app_event_tx.send(event) {
-            Ok(()) => true,
-            Err(e) => {
-                tracing::error!("failed to send event: {e}");
-                false
-            }
-        }
-    }
-
     /// Send an event to the app event channel. If it fails, we swallow the
     /// error and log it.
     pub(crate) fn send(&self, event: AppEvent) {
-        let _ = self.send_checked(event);
+        // Record inbound events for high-fidelity session replay.
+        // Avoid double-logging Ops; those are logged at the point of submission.
+        if !matches!(event, AppEvent::CodexOp(_)) {
+            session_log::log_inbound_app_event(&event);
+        }
+        if let Err(e) = self.app_event_tx.send(event) {
+            tracing::error!("failed to send event: {e}");
+        }
     }
 
     pub(crate) fn interrupt(&self) {
@@ -60,8 +50,8 @@ impl AppEventSender {
         self.send(AppEvent::CodexOp(AppCommand::compact()));
     }
 
-    pub(crate) fn rename_current_pane(&self, name: String) {
-        self.send(AppEvent::RenameCurrentPane { name });
+    pub(crate) fn set_thread_name(&self, name: String) {
+        self.send(AppEvent::CodexOp(AppCommand::set_thread_name(name)));
     }
 
     pub(crate) fn review(&self, target: ReviewTarget) {

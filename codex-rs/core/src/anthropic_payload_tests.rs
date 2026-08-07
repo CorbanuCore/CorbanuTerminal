@@ -1,10 +1,11 @@
-use super::ANTHROPIC_MESSAGES_REQUEST_BUDGET_BYTES;
 use super::PayloadBudgetReport;
 use super::enforce_anthropic_payload_budget;
 use codex_api::AnthropicMessagesRequest;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
+
+const TEST_REQUEST_BUDGET_BYTES: usize = 30_000_000;
 
 fn request(messages: Vec<Value>) -> AnthropicMessagesRequest {
     AnthropicMessagesRequest {
@@ -56,9 +57,8 @@ fn request_under_budget_is_unchanged() {
     })];
     let mut request = request(original_messages.clone());
 
-    let report =
-        enforce_anthropic_payload_budget(&mut request, ANTHROPIC_MESSAGES_REQUEST_BUDGET_BYTES)
-            .expect("request should fit");
+    let report = enforce_anthropic_payload_budget(&mut request, TEST_REQUEST_BUDGET_BYTES)
+        .expect("request should fit");
 
     assert_eq!(
         report,
@@ -145,7 +145,8 @@ fn omission_preserves_cache_control_marker() {
     })]);
 
     let report =
-        enforce_anthropic_payload_budget(&mut request, 1_000).expect("request should be pruned");
+        enforce_anthropic_payload_budget(&mut request, /*max_bytes*/ 1_000)
+            .expect("request should be pruned");
     let body = serde_json::to_value(&request).expect("serialize request");
 
     assert_eq!(report.omitted_images, 1);
@@ -162,7 +163,7 @@ fn request_that_cannot_fit_without_images_returns_actionable_error() {
         "content": [{"type": "text", "text": "x".repeat(2_000)}],
     })]);
 
-    let error = enforce_anthropic_payload_budget(&mut request, 500)
+    let error = enforce_anthropic_payload_budget(&mut request, /*max_bytes*/ 500)
         .expect_err("text-only request cannot be reduced");
 
     assert!(error.to_string().contains("compact the conversation"));
@@ -184,13 +185,12 @@ fn fifteen_visual_turns_stay_below_anthropic_messages_limit() {
         .collect();
     let mut request = request(messages);
 
-    let report =
-        enforce_anthropic_payload_budget(&mut request, ANTHROPIC_MESSAGES_REQUEST_BUDGET_BYTES)
-            .expect("accumulated visual history should be pruned");
+    let report = enforce_anthropic_payload_budget(&mut request, TEST_REQUEST_BUDGET_BYTES)
+        .expect("accumulated visual history should be pruned");
     let body = serde_json::to_value(&request).expect("serialize request");
 
     assert!(report.original_bytes > 32_000_000);
-    assert!(report.final_bytes <= ANTHROPIC_MESSAGES_REQUEST_BUDGET_BYTES);
+    assert!(report.final_bytes <= TEST_REQUEST_BUDGET_BYTES);
     assert!(report.omitted_images > 0);
     assert!(count_base64_images(&body) > 0);
     assert_eq!(

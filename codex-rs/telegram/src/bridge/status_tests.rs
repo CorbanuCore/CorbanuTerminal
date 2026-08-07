@@ -4,15 +4,15 @@ use super::runtime_state;
 #[test]
 fn status_priority_preserves_actionable_state() {
     assert_eq!(
-        runtime_state(1, true, 1, true),
+        runtime_state(/*approvals*/ 1, /*active_turn*/ true, /*queued*/ 1, /*has_error*/ true),
         RuntimeState::AwaitingApproval
     );
-    assert_eq!(runtime_state(0, true, 1, true), RuntimeState::WorkingQueued);
-    assert_eq!(runtime_state(0, true, 0, true), RuntimeState::Working);
-    assert_eq!(runtime_state(0, false, 1, true), RuntimeState::Blocked);
-    assert_eq!(runtime_state(0, false, 1, false), RuntimeState::Recovering);
-    assert_eq!(runtime_state(0, false, 0, true), RuntimeState::Blocked);
-    assert_eq!(runtime_state(0, false, 0, false), RuntimeState::Idle);
+    assert_eq!(runtime_state(/*approvals*/ 0, /*active_turn*/ true, /*queued*/ 1, /*has_error*/ true), RuntimeState::WorkingQueued);
+    assert_eq!(runtime_state(/*approvals*/ 0, /*active_turn*/ true, /*queued*/ 0, /*has_error*/ true), RuntimeState::Working);
+    assert_eq!(runtime_state(/*approvals*/ 0, /*active_turn*/ false, /*queued*/ 1, /*has_error*/ true), RuntimeState::Blocked);
+    assert_eq!(runtime_state(/*approvals*/ 0, /*active_turn*/ false, /*queued*/ 1, /*has_error*/ false), RuntimeState::Recovering);
+    assert_eq!(runtime_state(/*approvals*/ 0, /*active_turn*/ false, /*queued*/ 0, /*has_error*/ true), RuntimeState::Blocked);
+    assert_eq!(runtime_state(/*approvals*/ 0, /*active_turn*/ false, /*queued*/ 0, /*has_error*/ false), RuntimeState::Idle);
 }
 
 #[test]

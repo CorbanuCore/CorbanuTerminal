@@ -160,7 +160,7 @@ fn push_usage_summary(header: &mut ColumnRenderable, overview: &WalletPlanUsageO
         push_wrapped(
             header,
             &format!("Spend: {price} USDC prepaid for this period · no recurring wallet charge"),
-            false,
+            /*dimmed*/ false,
         );
     }
     push_wrapped(
@@ -169,7 +169,7 @@ fn push_usage_summary(header: &mut ColumnRenderable, overview: &WalletPlanUsageO
             "Active {} to {}",
             status.period.starts_at, status.period.ends_at
         ),
-        true,
+        /*dimmed*/ true,
     );
     push_window(
         header,
@@ -210,13 +210,13 @@ fn push_usage_summary(header: &mut ColumnRenderable, overview: &WalletPlanUsageO
                 next.starts_at,
                 next.ends_at
             ),
-            true,
+            /*dimmed*/ true,
         );
     }
     push_wrapped(
         header,
         &format!("Refreshed {}", overview.refreshed_at),
-        true,
+        /*dimmed*/ true,
     );
 }
 
@@ -250,8 +250,8 @@ fn push_window(
     reset: &str,
 ) {
     let (usage_line, remaining_line) = window_lines(label, used, reserved, limit, remaining, reset);
-    push_wrapped(header, &usage_line, false);
-    push_wrapped(header, &remaining_line, true);
+    push_wrapped(header, &usage_line, /*dimmed*/ false);
+    push_wrapped(header, &remaining_line, /*dimmed*/ true);
 }
 
 fn push_wrapped(header: &mut ColumnRenderable, text: &str, dimmed: bool) {
@@ -386,10 +386,10 @@ mod tests {
 
     #[test]
     fn comma_format_is_exact() {
-        assert_eq!(commas(0), "0");
-        assert_eq!(commas(999), "999");
-        assert_eq!(commas(1_000), "1,000");
-        assert_eq!(commas(12_345_678), "12,345,678");
+        assert_eq!(commas(/*value*/ 0), "0");
+        assert_eq!(commas(/*value*/ 999), "999");
+        assert_eq!(commas(/*value*/ 1_000), "1,000");
+        assert_eq!(commas(/*value*/ 12_345_678), "12,345,678");
     }
 
     #[test]

@@ -34,11 +34,13 @@ codex-install-context = { workspace = true }
 codex-cloud-config = { workspace = true }
 codex-config = { workspace = true }
 codex-connectors = { workspace = true }
+codex-core-api = { workspace = true }
 codex-core-plugins = { workspace = true }
 codex-exec-server = { workspace = true }
 codex-features = { workspace = true }
 codex-feedback = { workspace = true }
 codex-file-search = { workspace = true }
+codex-gpu-market = { workspace = true }
 codex-git-utils = { workspace = true }
 codex-http-client = { workspace = true }
 codex-login = { workspace = true }
@@ -89,6 +91,7 @@ ratatui = { workspace = true, features = [
     "unstable-widget-ref",
 ] }
 ratatui-macros = { workspace = true }
+reqwest = { workspace = true, features = ["blocking", "json"] }
 regex-lite = { workspace = true }
 rmcp = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

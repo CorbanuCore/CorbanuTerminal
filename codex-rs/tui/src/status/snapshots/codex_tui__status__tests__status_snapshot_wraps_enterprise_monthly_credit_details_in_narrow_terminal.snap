@@ -5,10 +5,14 @@ expression: sanitized
 /status
 
 ╭────────────────────────────────────────────╮
-│  >_ PFTerminal (v0.1.9)                    │
+│  >_ PFTerminal (v0.1.27)                   │
+│                                            │
+│ Visit                                      │
+│ https://chatgpt.com/codex/settings/usage   │
+│ for up-to-date                             │
+│ information on rate limits and credits     │
 │                                            │
 │  Model:                  gpt-5.1-codex-max │
-│  Model provider:         Ambient           │
 │  Directory: [[workspace]]                  │
 │  Permissions:            Custom (workspace │
 │  Agents.md:              <none>            │

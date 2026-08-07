@@ -259,6 +259,7 @@ fn thread_resume_response_round_trips_initial_turns_page() {
             section_entered_at: Some(1),
             history_mode: Default::default(),
             model_provider: "openai".to_string(),
+            runtime_route: None,
             created_at: 1,
             updated_at: 1,
             recency_at: Some(1),
@@ -3084,6 +3085,9 @@ fn core_turn_item_into_thread_item_converts_supported_variants() {
             kind: SubAgentActivityKind::Interrupted,
             agent_thread_id: receiver_thread_id.to_string(),
             agent_path: "/root/worker".to_string(),
+            agent_nickname: None,
+            agent_role: None,
+            task_preview: None,
         }
     );
 

@@ -1,7 +1,9 @@
 use anyhow::Result;
 use codex_core::config::AgentRoleConfig;
 use codex_features::Feature;
+use codex_models_manager::bundled_models_response;
 use codex_protocol::models::PermissionProfile;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::AgentStatus;
 use codex_protocol::protocol::EventMsg;
@@ -47,7 +49,7 @@ const SIBLING_FOLLOWUP_TASK: &str = "verify the surviving worker";
 const INTERRUPT_PROMPT: &str = "release the interrupted worker";
 const SIBLING_NAME: &str = "survivor";
 const ROLE_NAME: &str = "durable_worker";
-const ROLE_MODEL: &str = "gpt-5.4";
+const ROLE_MODEL: &str = "gpt-5.6-terra";
 const ROLE_MODEL_PROVIDER_ID: &str = "mock";
 const ROLE_DEVELOPER_INSTRUCTIONS: &str = "Keep the durable worker role configuration.";
 const SUBAGENT_DEVELOPER_INSTRUCTIONS: &str = "Use the default durable worker instructions.";
@@ -144,11 +146,29 @@ fn configure_multi_agent_v2_with_role(
     config.multi_agent_v2.subagent_developer_instructions =
         Some(SUBAGENT_DEVELOPER_INSTRUCTIONS.to_string());
     config.multi_agent_v2.max_concurrent_threads_per_session = 3;
+    let model_catalog = config
+        .model_catalog
+        .get_or_insert_with(|| bundled_models_response().expect("bundled models.json should parse"));
+    let role_model = model_catalog
+        .models
+        .iter_mut()
+        .find(|model| model.slug == ROLE_MODEL)
+        .expect("role model should exist in bundled models.json");
+    match role_model
+        .orchestration
+        .as_mut()
+        .expect("role model should have orchestration metadata")
+    {
+        ModelOrchestrationMetadata::Eligible { provider_id, .. }
+        | ModelOrchestrationMetadata::Disabled { provider_id, .. } => {
+            *provider_id = ROLE_MODEL_PROVIDER_ID.to_string();
+        }
+    }
     let role_path = config.codex_home.join("durable-worker-role.toml");
     std::fs::write(
         &role_path,
         format!(
-            "model = \"{ROLE_MODEL}\"\nmodel_reasoning_effort = \"high\"\ndeveloper_instructions = \"{ROLE_DEVELOPER_INSTRUCTIONS}\"\nsandbox_mode = \"read-only\"\nmodel_provider = \"mock\"\n\n[model_providers.mock]\nname = \"mock\"\nbase_url = \"{model_provider_base_url}\"\nenv_key = \"PATH\"\nwire_api = \"responses\"\n"
+            "model = \"{ROLE_MODEL}\"\nmodel_reasoning_effort = \"high\"\ndeveloper_instructions = \"{ROLE_DEVELOPER_INSTRUCTIONS}\"\nsandbox_mode = \"read-only\"\nmodel_provider = \"{ROLE_MODEL_PROVIDER_ID}\"\n\n[model_providers.{ROLE_MODEL_PROVIDER_ID}]\nname = \"mock\"\nbase_url = \"{model_provider_base_url}\"\nenv_key = \"PATH\"\nwire_api = \"responses\"\n"
         ),
     )
     .expect("write durable worker role config");

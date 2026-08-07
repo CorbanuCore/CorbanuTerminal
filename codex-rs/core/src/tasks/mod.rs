@@ -22,7 +22,6 @@ use tracing::trace;
 use tracing::trace_span;
 use tracing::warn;
 
-use crate::agent::control::AgentExecutionGuard;
 use crate::codex_thread::BackgroundTerminalInfo;
 use crate::config::Config;
 use crate::context::ContextualUserFragment;
@@ -48,7 +47,6 @@ use codex_otel::TURN_TOOL_CALL_METRIC;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::Op;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TurnAbortReason;
 use codex_protocol::protocol::TurnAbortedEvent;
@@ -282,7 +280,7 @@ pub(crate) trait AnySessionTask: Send + Sync + 'static {
 
 impl<T> AnySessionTask for T
 where
-    T: SessionTask + Send + Sync + 'static,
+    T: SessionTask,
 {
     fn kind(&self) -> TaskKind {
         SessionTask::kind(self)
@@ -318,7 +316,7 @@ where
 }
 
 impl Session {
-    pub async fn spawn_task<T: SessionTask + Send + Sync + 'static>(
+    pub async fn spawn_task<T: SessionTask>(
         self: &Arc<Self>,
         turn_context: Arc<TurnContext>,
         input: Vec<TurnInput>,
@@ -330,27 +328,12 @@ impl Session {
             .await;
     }
 
-    pub(crate) async fn start_task<T: SessionTask + Send + Sync + 'static>(
+    pub(crate) async fn start_task<T: SessionTask>(
         self: &Arc<Self>,
         turn_context: Arc<TurnContext>,
         input: Vec<TurnInput>,
         task: T,
         mailbox_parent_provenance: MailboxParentProvenance,
-    ) {
-        let agent_execution_guard = self.services.agent_control.execution_guard(
-            turn_context.multi_agent_version,
-            &turn_context.session_source,
-        );
-        self.start_task_with_execution_guard(turn_context, input, task, agent_execution_guard)
-            .await;
-    }
-
-    async fn start_task_with_execution_guard<T: SessionTask + Send + Sync + 'static>(
-        self: &Arc<Self>,
-        turn_context: Arc<TurnContext>,
-        input: Vec<TurnInput>,
-        task: T,
-        agent_execution_guard: Option<AgentExecutionGuard>,
     ) {
         let task: Arc<dyn AnySessionTask> = Arc::new(task);
         let task_kind = task.kind();
@@ -398,6 +381,10 @@ impl Session {
         let mut active = self.active_turn.lock().await;
         let turn = active.get_or_insert_with(ActiveTurn::default);
         debug_assert!(turn.task.is_none());
+        let agent_execution_guard = self.services.agent_control.execution_guard(
+            turn_context.multi_agent_version,
+            &turn_context.session_source,
+        );
         let done_clone = Arc::clone(&done);
         let session_ctx = Arc::new(SessionTaskContext::new(
             Arc::clone(self),
@@ -517,33 +504,6 @@ impl Session {
             return;
         }
 
-        let turn_context = self.new_default_turn_with_sub_id(sub_id).await;
-        let agent_execution_guard = match self.services.agent_control.try_execution_guard(
-            turn_context.multi_agent_version,
-            &turn_context.session_source,
-        ) {
-            Ok(guard) => guard,
-            Err(CodexErr::AgentLimitReached { .. }) => {
-                if self.input_queue.try_schedule_capacity_wait() {
-                    let session = Arc::clone(self);
-                    tokio::spawn(async move {
-                        session
-                            .services
-                            .agent_control
-                            .wait_for_execution_capacity()
-                            .await;
-                        session.input_queue.finish_capacity_wait();
-                        session.submit_pending_work_wake().await;
-                    });
-                }
-                return;
-            }
-            Err(err) => {
-                warn!(%err, "failed to reserve execution capacity for pending mailbox work");
-                return;
-            }
-        };
-
         {
             let mut active_turn = self.active_turn.lock().await;
             if active_turn.is_some() {
@@ -585,11 +545,6 @@ impl Session {
                 .await;
         }
         if let Some(active_turn) = active_turn_to_clear {
-            self.finish_turn_mailbox_messages(
-                active_turn.turn_state.as_ref(),
-                /*completed_naturally*/ false,
-            )
-            .await;
             // Let interrupted tasks observe cancellation before dropping pending approvals, or an
             // in-flight approval wait can surface as a model-visible rejection before TurnAborted.
             self.input_queue.clear_pending(&active_turn).await;
@@ -629,11 +584,6 @@ impl Session {
             self.emit_turn_abort_lifecycle(reason.clone(), turn_context.extension_data.as_ref())
                 .await;
         }
-        self.finish_turn_mailbox_messages(
-            active_turn.turn_state.as_ref(),
-            /*completed_naturally*/ false,
-        )
-        .await;
         // Let interrupted tasks observe cancellation before dropping pending approvals, or an
         // in-flight approval wait can surface as a model-visible rejection before TurnAborted.
         self.input_queue.clear_pending(&active_turn).await;
@@ -698,32 +648,25 @@ impl Session {
                 ts.token_usage_at_turn_start.clone(),
             )
         };
-        self.finish_turn_mailbox_messages(turn_state.as_ref(), completed_naturally)
-            .await;
-        let mut follow_up_input = Vec::new();
         if !pending_input.is_empty() {
             for pending_input_item in pending_input {
-                if completed_naturally && pending_input_seeds_follow_up(&pending_input_item) {
-                    follow_up_input.push(pending_input_item);
+                let hook_outcome =
+                    inspect_pending_input(self, &turn_context, &pending_input_item).await;
+                if hook_outcome.should_stop {
+                    record_additional_contexts(
+                        self,
+                        &turn_context,
+                        hook_outcome.additional_contexts,
+                    )
+                    .await;
                 } else {
-                    let hook_outcome =
-                        inspect_pending_input(self, &turn_context, &pending_input_item).await;
-                    if hook_outcome.should_stop {
-                        record_additional_contexts(
-                            self,
-                            &turn_context,
-                            hook_outcome.additional_contexts,
-                        )
-                        .await;
-                    } else {
-                        record_pending_input(
-                            self,
-                            &turn_context,
-                            pending_input_item,
-                            hook_outcome.additional_contexts,
-                        )
-                        .await;
-                    }
+                    record_pending_input(
+                        self,
+                        &turn_context,
+                        pending_input_item,
+                        hook_outcome.additional_contexts,
+                    )
+                    .await;
                 }
             }
         }
@@ -928,47 +871,6 @@ impl Session {
         }
     }
 
-    async fn finish_turn_mailbox_messages(
-        &self,
-        turn_state: &tokio::sync::Mutex<crate::state::TurnState>,
-        completed_naturally: bool,
-    ) {
-        let message_ids = turn_state.lock().await.take_mailbox_message_ids();
-        if message_ids.is_empty() {
-            return;
-        }
-        let Some(state_db) = self.state_db() else {
-            return;
-        };
-        for message_id in message_ids {
-            let result = if completed_naturally {
-                state_db
-                    .mark_agent_message_completed(
-                        &message_id,
-                        crate::turn_timing::now_unix_timestamp_ms(),
-                    )
-                    .await
-            } else {
-                state_db
-                    .transition_agent_message(
-                        &message_id,
-                        codex_state::AgentMailboxPhase::ProviderRunning,
-                        codex_state::AgentMailboxPhase::UnknownOutcome,
-                        crate::turn_timing::now_unix_timestamp_ms(),
-                    )
-                    .await
-            };
-            if let Err(err) = result {
-                warn!(
-                    %err,
-                    %message_id,
-                    completed_naturally,
-                    "failed to finalize agent mailbox message with its turn"
-                );
-            }
-        }
-    }
-
     async fn take_active_turn(&self) -> Option<ActiveTurn> {
         let mut active = self.active_turn.lock().await;
         active.take()
@@ -990,50 +892,6 @@ impl Session {
             .unified_exec_manager
             .terminate_process(process_id)
             .await
-    }
-
-    async fn submit_follow_up_input(&self, follow_up_input: Vec<TurnInput>) {
-        for input in follow_up_input {
-            let (op, client_user_message_id) = match input {
-                TurnInput::UserInput { content, client_id } => (
-                    Op::UserInput {
-                        items: content,
-                        final_output_json_schema: None,
-                        responsesapi_client_metadata: None,
-                        additional_context: Default::default(),
-                        thread_settings: Default::default(),
-                    },
-                    client_id,
-                ),
-                TurnInput::InterAgentCommunication(mut communication) => {
-                    communication.trigger_turn = true;
-                    (
-                        Op::InterAgentCommunication { communication },
-                        /*client_user_message_id*/ None,
-                    )
-                }
-                TurnInput::ResponseItem(_) => continue,
-            };
-            if let Err(err) = self
-                .submit_internal_follow_up(op, client_user_message_id)
-                .await
-            {
-                warn!(%err, "failed to submit follow-up input after task finished");
-                continue;
-            }
-        }
-    }
-
-    async fn submit_pending_work_wake(&self) {
-        if !self.input_queue.has_trigger_turn_mailbox_items().await {
-            return;
-        }
-        if let Err(err) = self
-            .submit_internal_follow_up(Op::WakePendingWork, /*client_user_message_id*/ None)
-            .await
-        {
-            warn!(%err, "failed to submit pending-work wake after task finished");
-        }
     }
 
     async fn handle_task_abort(self: &Arc<Self>, task: RunningTask, reason: TurnAbortReason) {
@@ -1121,14 +979,6 @@ impl Session {
         if let Err(err) = self.flush_rollout().await {
             warn!("failed to flush rollout after emitting terminal turn event: {err}");
         }
-    }
-}
-
-fn pending_input_seeds_follow_up(input: &TurnInput) -> bool {
-    match input {
-        TurnInput::UserInput { content, .. } => !content.is_empty(),
-        TurnInput::InterAgentCommunication(_) => true,
-        TurnInput::ResponseItem(_) => false,
     }
 }
 

@@ -13,107 +13,6 @@ use codex_app_server_protocol::TurnInterruptResponse;
 use codex_app_server_protocol::WarningNotification;
 
 impl App {
-    pub(super) async fn surface_turn_start_failure(
-        &mut self,
-        thread_id: ThreadId,
-        details: String,
-        will_retry: bool,
-    ) {
-        let label = self.thread_label(thread_id);
-        let message = if will_retry {
-            format!("turn/start failed for {label}; recovered after bounded retry")
-        } else {
-            format!("turn/start failed for {label}; retry limit reached, pane remains available")
-        };
-        if self.active_thread_id == Some(thread_id) {
-            self.chat_widget
-                .add_error_message(format!("{message}. Cause: {details}"));
-            return;
-        }
-        let notification = if will_retry {
-            // A retryable Error notification is intentionally transient in ChatWidget and is
-            // cleared by the following turn/started event. Buffer a targeted warning instead so
-            // an inactive affected pane retains visible recovery evidence when selected.
-            ServerNotification::Warning(codex_app_server_protocol::WarningNotification {
-                thread_id: Some(thread_id.to_string()),
-                message: format!("ERROR — {message}. Cause: {details}"),
-            })
-        } else {
-            ServerNotification::Error(ErrorNotification {
-                error: AppServerTurnError {
-                    message,
-                    codex_error_info: None,
-                    additional_details: Some(details.clone()),
-                },
-                will_retry,
-                thread_id: thread_id.to_string(),
-                turn_id: "turn-start-recovery".to_string(),
-            })
-        };
-        if let Err(error) = self
-            .enqueue_thread_notification(thread_id, notification)
-            .await
-        {
-            tracing::error!(
-                %thread_id,
-                error = ?error,
-                error_chain = %format!("{error:#}"),
-                "failed to enqueue pane-local turn/start error banner"
-            );
-            self.chat_widget.add_error_message(format!(
-                "turn/start failed for {label}: {details}. The pane remains available."
-            ));
-        }
-    }
-
-    pub(crate) fn native_thread_loaded_for_orchestrate(&self, thread_id: ThreadId) -> bool {
-        match self.agent_navigation.get(&thread_id) {
-            Some(entry) => !entry.is_closed,
-            None => self.thread_event_channels.contains_key(&thread_id),
-        }
-    }
-
-    pub(crate) fn native_thread_idle_for_orchestrate(&self, thread_id: ThreadId) -> bool {
-        self.thread_event_channels
-            .get(&thread_id)
-            .and_then(|channel| channel.store.try_lock().ok())
-            .is_some_and(|store| store.active_turn_id().is_none())
-    }
-
-    pub(super) fn note_thread_interrupt_failure(
-        &mut self,
-        thread_id: ThreadId,
-        error: TypedRequestError,
-    ) {
-        let label = self.thread_label(thread_id);
-        tracing::warn!(
-            %thread_id,
-            %error,
-            "thread interrupt failed in TUI; keeping the app alive"
-        );
-        self.chat_widget.add_error_message(format!(
-            "Failed to interrupt {label}: {error}. The pane remains open."
-        ));
-    }
-
-    pub(super) fn note_thread_steer_failure(
-        &mut self,
-        thread_id: ThreadId,
-        error: TypedRequestError,
-    ) {
-        let label = self.thread_label(thread_id);
-        tracing::error!(
-            %thread_id,
-            error = ?error,
-            "turn/steer failed in TUI; queueing the user input and keeping the pane alive"
-        );
-        if !self.chat_widget.enqueue_rejected_steer() {
-            self.chat_widget.add_error_message(format!(
-                "Failed to steer {label}: {error}. The pane remains open."
-            ));
-        }
-    }
-
     pub(super) async fn shutdown_current_thread(&mut self, app_server: &mut AppServerSession) {
         let side_thread_ids: Vec<ThreadId> = self.side_threads.keys().copied().collect();
         for side_thread_id in side_thread_ids {
@@ -143,37 +42,10 @@ impl App {
         }
     }
 
-    pub(crate) fn ensure_thread_channel(&mut self, thread_id: ThreadId) -> &mut ThreadEventChannel {
+    pub(super) fn ensure_thread_channel(&mut self, thread_id: ThreadId) -> &mut ThreadEventChannel {
         self.thread_event_channels
             .entry(thread_id)
             .or_insert_with(|| ThreadEventChannel::new(THREAD_EVENT_CHANNEL_CAPACITY))
-    }
-
-    pub(crate) fn thread_has_loaded_session(&self, thread_id: ThreadId) -> bool {
-        self.primary_thread_id == Some(thread_id)
-            || self.thread_event_channels.contains_key(&thread_id)
-    }
-
-    pub(crate) async fn loaded_thread_rollout_paths(&self) -> Vec<PathBuf> {
-        let mut rollout_paths = Vec::new();
-        if let Some(path) = self
-            .primary_session_configured
-            .as_ref()
-            .and_then(|session| session.rollout_path.clone())
-        {
-            rollout_paths.push(path);
-        }
-        for channel in self.thread_event_channels.values() {
-            let store = channel.store.lock().await;
-            if let Some(path) = store
-                .session
-                .as_ref()
-                .and_then(|session| session.rollout_path.clone())
-            {
-                rollout_paths.push(path);
-            }
-        }
-        rollout_paths
     }
 
     pub(super) async fn set_thread_active(&mut self, thread_id: ThreadId, active: bool) {
@@ -198,7 +70,7 @@ impl App {
         self.refresh_pending_thread_approvals().await;
     }
 
-    pub(crate) async fn store_active_thread_receiver(&mut self) {
+    pub(super) async fn store_active_thread_receiver(&mut self) {
         let Some(active_id) = self.active_thread_id else {
             return;
         };
@@ -212,13 +84,6 @@ impl App {
                 channel.receiver = Some(receiver);
             }
         }
-    }
-
-    pub(crate) async fn detach_active_thread_for_external_pane(&mut self) {
-        self.store_active_thread_receiver().await;
-        self.active_thread_id = None;
-        self.active_thread_rx = None;
-        self.refresh_pending_thread_approvals().await;
     }
 
     pub(super) async fn activate_thread_for_replay(
@@ -265,27 +130,7 @@ impl App {
         store.active_turn_id().map(ToOwned::to_owned)
     }
 
-    pub(super) async fn active_turn_id_for_submission(
-        &mut self,
-        thread_id: ThreadId,
-    ) -> Option<String> {
-        let active_turn_id = self.active_turn_id_for_thread(thread_id).await?;
-        if self.active_thread_id == Some(thread_id) && !self.chat_widget.visible_task_running() {
-            tracing::warn!(
-                thread_id = %thread_id,
-                turn_id = active_turn_id,
-                "clearing stale active turn id for visibly idle thread"
-            );
-            if let Some(channel) = self.thread_event_channels.get(&thread_id) {
-                let mut store = channel.store.lock().await;
-                store.clear_active_turn_id();
-            }
-            return None;
-        }
-        Some(active_turn_id)
-    }
-
-    pub(crate) fn thread_label(&self, thread_id: ThreadId) -> String {
+    pub(super) fn thread_label(&self, thread_id: ThreadId) -> String {
         let is_primary = self.primary_thread_id == Some(thread_id);
         let fallback_label = if is_primary {
             "Main [default]".to_string()
@@ -343,16 +188,10 @@ impl App {
     /// sessions, that contextual row includes the currently viewed agent label. The label is
     /// intentionally hidden until there is more than one known thread so single-thread sessions do
     /// not spend footer space restating that the user is already on the main conversation.
-    pub(crate) fn sync_active_agent_label(&mut self) {
-        let active_claude_title = self.claude_panes.active_claude_pane_title();
-        let label = active_claude_title
-            .map(|title| format!("{title} pane"))
-            .or_else(|| {
-                self.agent_navigation
-                    .active_agent_label(self.current_displayed_thread_id(), self.primary_thread_id)
-            });
-        self.chat_widget
-            .set_active_external_model_display(self.claude_panes.active_claude_pane_model_label());
+    pub(super) fn sync_active_agent_label(&mut self) {
+        let label = self
+            .agent_navigation
+            .active_agent_label(self.current_displayed_thread_id(), self.primary_thread_id);
         self.chat_widget.set_active_agent_label(label);
         self.sync_side_thread_ui();
     }
@@ -822,17 +661,12 @@ impl App {
                 personality,
             } => {
                 let mut should_start_turn = true;
-                if let Some(turn_id) = self.active_turn_id_for_submission(thread_id).await {
+                if let Some(turn_id) = self.active_turn_id_for_thread(thread_id).await {
                     let mut steer_turn_id = turn_id;
                     let mut retried_after_turn_mismatch = false;
                     loop {
                         match app_server
-                            .turn_steer(
-                                thread_id,
-                                steer_turn_id.clone(),
-                                items.to_vec(),
-                                /*client_user_message_id*/ None,
-                            )
+                            .turn_steer(thread_id, steer_turn_id.clone(), items.to_vec())
                             .await
                         {
                             Ok(_) => return Ok(true),
@@ -883,13 +717,9 @@ impl App {
                                             let mut store = channel.store.lock().await;
                                             store.active_turn_id = Some(actual_turn_id);
                                         }
-                                        self.note_thread_steer_failure(thread_id, error);
-                                        return Ok(true);
+                                        return Err(error.into());
                                     }
-                                    None => {
-                                        self.note_thread_steer_failure(thread_id, error);
-                                        return Ok(true);
-                                    }
+                                    None => return Err(error.into()),
                                 }
                             }
                         }
@@ -922,8 +752,6 @@ impl App {
                             collaboration_mode.clone(),
                             *personality,
                             final_output_json_schema.clone(),
-                            self.spawn_additional_context_for_thread(thread_id),
-                            /*client_user_message_id*/ None,
                         )
                         .await?;
                     if self.active_thread_id == Some(thread_id)
@@ -1139,9 +967,11 @@ impl App {
         if let ServerNotification::ThreadSettingsUpdated(notification) = &notification {
             self.apply_thread_settings_to_cached_session(thread_id, &notification.thread_settings)
                 .await;
+            self.commit_pending_model_selection_after_ack(
+                thread_id,
+                &notification.thread_settings,
+            );
         }
-        self.cache_collab_receiver_threads_for_notification(&notification);
-        self.update_spawn_status_for_thread_notification(&notification);
         let inferred_session = self
             .infer_session_for_thread_notification(thread_id, &notification)
             .await;
@@ -1226,12 +1056,10 @@ impl App {
             return;
         }
 
-        let sender_thread_id = collab_sender_thread_id(notification);
         let Some(receiver_thread_ids) = collab_receiver_thread_ids(notification) else {
             return;
         };
 
-        let mut parent_map_changed = false;
         for receiver_thread_id in receiver_thread_ids {
             if collab_receiver_is_not_found(notification, receiver_thread_id) {
                 continue;
@@ -1245,34 +1073,6 @@ impl App {
                 continue;
             };
 
-            if let Some(sender_thread_id) = sender_thread_id {
-                self.spawn_parent_by_thread
-                    .insert(thread_id, sender_thread_id);
-                self.spawn_parent_by_node.insert(
-                    crate::spawn_orchestration::thread_node_id(thread_id),
-                    crate::spawn_orchestration::thread_node_id(sender_thread_id),
-                );
-                parent_map_changed = true;
-            }
-
-            if let Some(status) = collab_receiver_status(notification, receiver_thread_id)
-                && should_apply_collab_receiver_status(
-                    self.spawn_status_by_thread.get(&thread_id),
-                    status,
-                )
-            {
-                let is_running = matches!(
-                    status.status,
-                    codex_app_server_protocol::CollabAgentStatus::PendingInit
-                        | codex_app_server_protocol::CollabAgentStatus::Running
-                );
-                self.spawn_status_by_thread
-                    .insert(thread_id, status.clone());
-                self.agent_navigation.set_running(thread_id, is_running);
-                self.agent_navigation
-                    .set_last_result_message(thread_id, status.message.clone());
-            }
-
             if self.agent_navigation.get(&thread_id).is_some() {
                 continue;
             }
@@ -1281,9 +1081,6 @@ impl App {
                 thread_id, /*agent_nickname*/ None, /*agent_role*/ None,
                 /*is_closed*/ false,
             );
-        }
-        if parent_map_changed {
-            self.persist_pane_state();
         }
     }
 
@@ -1302,7 +1099,12 @@ impl App {
         session
             .set_cwd_retargeting_implicit_runtime_workspace_root(notification.thread.cwd.clone());
         let rollout_path = notification.thread.path.clone();
-        if let Some(model) =
+        if let Some(runtime_route) = notification.thread.runtime_route.as_ref() {
+            session.model = runtime_route.model.clone();
+            session.model_provider_id = runtime_route.model_provider.clone();
+            session.reasoning_effort = runtime_route.reasoning_effort.clone();
+            session.service_tier = runtime_route.service_tier.clone();
+        } else if let Some(model) =
             read_session_model(self.state_db.as_deref(), thread_id, rollout_path.as_deref()).await
         {
             session.model = model;
@@ -1317,8 +1119,7 @@ impl App {
             notification.thread.agent_role.clone(),
             /*is_closed*/ false,
         );
-        self.agent_navigation
-            .set_model(thread_id, Some(session.model.clone()));
+        self.set_agent_picker_session_route(&session);
         Some(session)
     }
 
@@ -1447,6 +1248,7 @@ impl App {
             thread_id, /*agent_nickname*/ None, /*agent_role*/ None,
             /*is_closed*/ false,
         );
+        self.set_agent_picker_session_route(&session);
         let channel = self.ensure_thread_channel(thread_id);
         {
             let mut store = channel.store.lock().await;
@@ -1580,6 +1382,7 @@ impl App {
             self.agent_navigation.mark_parent_owned(thread_id);
         }
         let AppServerStartedThread { session, turns, .. } = started;
+        self.set_agent_picker_session_route(&session);
         if let Some(channel) = self.thread_event_channels.get(&thread_id) {
             let mut store = channel.store.lock().await;
             store.set_session(session.clone(), turns.clone());
@@ -1715,9 +1518,7 @@ impl App {
     pub(super) fn should_wait_for_initial_session(session_selection: &SessionSelection) -> bool {
         matches!(
             session_selection,
-            SessionSelection::StartFresh
-                | SessionSelection::ResumePanesOnly { .. }
-                | SessionSelection::Exit
+            SessionSelection::StartFresh | SessionSelection::Exit
         )
     }
 
@@ -1789,259 +1590,6 @@ impl App {
         if needs_refresh {
             self.refresh_status_line();
         }
-    }
-
-    pub(super) fn update_spawn_status_for_thread_notification(
-        &mut self,
-        notification: &ServerNotification,
-    ) {
-        match notification {
-            ServerNotification::ItemStarted(notification) => {
-                if let codex_app_server_protocol::ThreadItem::CollabAgentToolCall {
-                    id,
-                    tool: codex_app_server_protocol::CollabAgentTool::Wait,
-                    status: codex_app_server_protocol::CollabAgentToolCallStatus::InProgress,
-                    ..
-                } = &notification.item
-                    && let Ok(thread_id) = ThreadId::from_string(&notification.thread_id)
-                    && self.is_spawn_orchestration_thread(thread_id)
-                {
-                    self.spawn_waiting_for_agents_by_thread
-                        .insert(thread_id, (notification.turn_id.clone(), id.clone()));
-                }
-            }
-            ServerNotification::ItemCompleted(notification) => {
-                if let codex_app_server_protocol::ThreadItem::CollabAgentToolCall {
-                    id,
-                    tool: codex_app_server_protocol::CollabAgentTool::Wait,
-                    ..
-                } = &notification.item
-                    && let Ok(thread_id) = ThreadId::from_string(&notification.thread_id)
-                    && self
-                        .spawn_waiting_for_agents_by_thread
-                        .get(&thread_id)
-                        .is_some_and(|(turn_id, call_id)| {
-                            turn_id == &notification.turn_id && call_id == id
-                        })
-                {
-                    self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
-                }
-            }
-            ServerNotification::TurnStarted(notification) => {
-                if let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) {
-                    self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
-                }
-            }
-            ServerNotification::TurnCompleted(notification) => {
-                if let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) {
-                    self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
-                }
-            }
-            ServerNotification::ThreadClosed(notification) => {
-                if let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) {
-                    self.spawn_waiting_for_agents_by_thread.remove(&thread_id);
-                }
-            }
-            _ => {}
-        }
-        if let ServerNotification::ThreadClosed(notification) = notification {
-            let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
-                return;
-            };
-            self.note_assignment_node_gone(&crate::spawn_orchestration::thread_node_id(thread_id));
-            if !self.is_spawn_orchestration_thread(thread_id) {
-                return;
-            }
-            self.spawn_status_by_thread.insert(
-                thread_id,
-                codex_app_server_protocol::CollabAgentState {
-                    status: codex_app_server_protocol::CollabAgentStatus::Shutdown,
-                    message: Some("thread closed".to_string()),
-                },
-            );
-            self.agent_navigation.mark_closed(thread_id);
-            self.persist_pane_state();
-            return;
-        }
-
-        let (thread_id, status, message, should_process_terminal_side_effects) = match notification
-        {
-            ServerNotification::TurnStarted(notification) => {
-                let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
-                    return;
-                };
-                // Loop breaker: a turn we auto-triggered (child-report processing) transitions
-                // pending -> running; any other turn is fresh work and resets the auto chain.
-                let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
-                self.note_spawn_turn_started_for_auto_loop(&node_key);
-                self.note_whip_target_started(&node_key);
-                (
-                    thread_id,
-                    codex_app_server_protocol::CollabAgentStatus::Running,
-                    None,
-                    true,
-                )
-            }
-            ServerNotification::TurnCompleted(notification) => {
-                let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
-                    return;
-                };
-                self.process_native_completed_turn_for_orchestration(thread_id, &notification.turn);
-                // Loop breaker: finalize AFTER the dispatch call above so a dispatch emitted by
-                // this turn is attributed to it before the auto-turn flags clear.
-                if notification.turn.status != TurnStatus::InProgress {
-                    let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
-                    self.note_spawn_turn_completed_for_auto_loop(&node_key);
-                }
-                let status = match notification.turn.status {
-                    TurnStatus::Completed => {
-                        codex_app_server_protocol::CollabAgentStatus::Completed
-                    }
-                    TurnStatus::Interrupted => {
-                        codex_app_server_protocol::CollabAgentStatus::Interrupted
-                    }
-                    TurnStatus::Failed => codex_app_server_protocol::CollabAgentStatus::Errored,
-                    TurnStatus::InProgress => codex_app_server_protocol::CollabAgentStatus::Running,
-                };
-                let terminal_key = (thread_id, notification.turn.id.clone());
-                let should_process_terminal_side_effects = self
-                    .spawn_processed_terminal_turns
-                    .insert(terminal_key.clone());
-                const PROCESSED_TERMINAL_TURN_LIMIT: usize = 4_096;
-                if self.spawn_processed_terminal_turns.len() > PROCESSED_TERMINAL_TURN_LIMIT {
-                    self.spawn_processed_terminal_turns.clear();
-                    self.spawn_processed_terminal_turns.insert(terminal_key);
-                }
-                (
-                    thread_id,
-                    status,
-                    spawn_turn_result_message(&notification.turn),
-                    should_process_terminal_side_effects,
-                )
-            }
-            ServerNotification::ItemCompleted(notification) => {
-                let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
-                    return;
-                };
-                // Streaming deltas still never dispatch. A completed assistant message can
-                // dispatch immediately so dispatch-then-wait works; interrupted/truncated turns
-                // never emit ItemCompleted for that message, and TurnCompleted remains a deduped
-                // catch-all for completed turns.
-                if let codex_app_server_protocol::ThreadItem::AgentMessage {
-                    id, text, phase, ..
-                } = &notification.item
-                    && !matches!(
-                        phase,
-                        Some(codex_protocol::models::MessagePhase::Commentary)
-                    )
-                {
-                    let source_node_id = self.spawn_auto_loop_node_for_thread(thread_id);
-                    self.dispatch_orchestrate_blocks_from_text(&source_node_id, text);
-                    self.dispatch_native_spawn_task_blocks_from_item(
-                        thread_id,
-                        &notification.turn_id,
-                        id,
-                        text,
-                    );
-                }
-                return;
-            }
-            // Deliberately NOT AgentMessageDelta: spawn task blocks must never dispatch from a
-            ServerNotification::ThreadTokenUsageUpdated(notification) => {
-                let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) else {
-                    return;
-                };
-                self.update_spawn_context_pressure_for_thread(thread_id, &notification.token_usage);
-                return;
-            }
-            // Deliberately NOT AgentMessageDelta: spawn task blocks must never dispatch from a
-            // streaming turn. Dispatch happens only from completed assistant-message items or from
-            // TurnCompleted with a clean Completed status, so an interrupted or failed turn can
-            // never fire a truncated pfterminal_send_task block.
-            _ => return,
-        };
-
-        if !self.is_spawn_orchestration_thread(thread_id) {
-            return;
-        }
-
-        let is_running = matches!(
-            status,
-            codex_app_server_protocol::CollabAgentStatus::PendingInit
-                | codex_app_server_protocol::CollabAgentStatus::Running
-        );
-        // Preserve what this turn actually emitted for orchestration decisions. The synthetic
-        // status text below is useful in the picker and child reports, but it must not make an
-        // empty Manager completion look like visible provider output.
-        let current_turn_message = message.clone();
-        let message = if !is_running && message.as_deref().is_none_or(|text| text.trim().is_empty())
-        {
-            match &status {
-                codex_app_server_protocol::CollabAgentStatus::Completed => {
-                    Some("Turn completed without visible output.".to_string())
-                }
-                codex_app_server_protocol::CollabAgentStatus::Interrupted => {
-                    Some("Turn interrupted without visible output.".to_string())
-                }
-                codex_app_server_protocol::CollabAgentStatus::Errored => {
-                    Some("Turn failed without visible output.".to_string())
-                }
-                _ => message,
-            }
-        } else {
-            message
-        };
-        self.spawn_status_by_thread.insert(
-            thread_id,
-            codex_app_server_protocol::CollabAgentState {
-                status: status.clone(),
-                message: message.clone(),
-            },
-        );
-        self.agent_navigation.set_running(thread_id, is_running);
-        if message.is_some() {
-            self.agent_navigation
-                .set_last_result_message(thread_id, message);
-        }
-        if !is_running {
-            if matches!(
-                status,
-                codex_app_server_protocol::CollabAgentStatus::Shutdown
-                    | codex_app_server_protocol::CollabAgentStatus::NotFound
-            ) {
-                self.note_assignment_node_gone(&crate::spawn_orchestration::thread_node_id(
-                    thread_id,
-                ));
-            }
-            let turn_succeeded = matches!(
-                status,
-                codex_app_server_protocol::CollabAgentStatus::Completed
-            );
-            let node_key = self.spawn_auto_loop_node_for_thread(thread_id);
-            if should_process_terminal_side_effects {
-                self.note_whip_target_idle_with_fire_control(
-                    &node_key,
-                    current_turn_message.as_deref(),
-                    true,
-                    turn_succeeded,
-                );
-            }
-        }
-    }
-
-    fn update_spawn_context_pressure_for_thread(
-        &mut self,
-        thread_id: ThreadId,
-        token_usage: &codex_app_server_protocol::ThreadTokenUsage,
-    ) {
-        if !self.is_spawn_orchestration_thread(thread_id) {
-            return;
-        }
-        let Some(context_left) = context_left_percent_from_token_usage(token_usage) else {
-            return;
-        };
-        self.spawn_context_left_by_thread
-            .insert(thread_id, context_left);
     }
 
     pub(super) fn handle_thread_event_replay(&mut self, event: ThreadBufferedEvent) {
@@ -2129,88 +1677,6 @@ impl App {
         }
         Ok(())
     }
-}
-
-fn spawn_turn_result_message(turn: &codex_app_server_protocol::Turn) -> Option<String> {
-    let agent_text = turn.items.iter().rev().find_map(|item| match item {
-        codex_app_server_protocol::ThreadItem::AgentMessage { text, phase, .. }
-            if !matches!(
-                phase,
-                Some(codex_protocol::models::MessagePhase::Commentary)
-            ) =>
-        {
-            let trimmed = text.trim();
-            (!trimmed.is_empty()).then_some(trimmed)
-        }
-        _ => None,
-    });
-
-    let error_text = matches!(turn.status, TurnStatus::Failed | TurnStatus::Interrupted)
-        .then(|| turn.error.as_ref())
-        .flatten()
-        .map(format_turn_error_for_spawn_report);
-
-    let text = match (error_text, agent_text) {
-        (Some(error), Some(agent_text)) => format!("{error}; result={agent_text}"),
-        (Some(error), None) => error,
-        (None, Some(agent_text)) => agent_text.to_string(),
-        (None, None) => return None,
-    };
-
-    Some(crate::spawn_orchestration::bounded_spawn_report_value(
-        &text,
-    ))
-}
-
-fn format_turn_error_for_spawn_report(error: &AppServerTurnError) -> String {
-    let mut text = format!("turn_error={}", error.message.trim());
-    if let Some(info) = &error.codex_error_info {
-        let _ = write!(text, "; info={info:?}");
-    }
-    if let Some(details) = error
-        .additional_details
-        .as_deref()
-        .map(str::trim)
-        .filter(|details| !details.is_empty())
-    {
-        let _ = write!(text, "; details={details}");
-    }
-    text
-}
-
-fn context_left_percent_from_token_usage(
-    token_usage: &codex_app_server_protocol::ThreadTokenUsage,
-) -> Option<i64> {
-    let context_window = token_usage.model_context_window?;
-    Some(
-        TokenUsage {
-            total_tokens: token_usage.last.total_tokens,
-            input_tokens: token_usage.last.input_tokens,
-            cached_input_tokens: token_usage.last.cached_input_tokens,
-            output_tokens: token_usage.last.output_tokens,
-            reasoning_output_tokens: token_usage.last.reasoning_output_tokens,
-        }
-        .percent_of_context_window_remaining(context_window),
-    )
-}
-
-fn should_apply_collab_receiver_status(
-    current: Option<&codex_app_server_protocol::CollabAgentState>,
-    incoming: &codex_app_server_protocol::CollabAgentState,
-) -> bool {
-    let Some(current) = current else {
-        return true;
-    };
-    !collab_agent_status_is_running(&incoming.status)
-        || collab_agent_status_is_running(&current.status)
-}
-
-fn collab_agent_status_is_running(status: &codex_app_server_protocol::CollabAgentStatus) -> bool {
-    matches!(
-        status,
-        codex_app_server_protocol::CollabAgentStatus::PendingInit
-            | codex_app_server_protocol::CollabAgentStatus::Running
-    )
 }
 
 #[cfg(test)]

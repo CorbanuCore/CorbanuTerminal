@@ -12,16 +12,18 @@ use crate::tools::context::ToolPayload;
 use codex_models_manager::manager::RefreshStrategy;
 use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
-use codex_protocol::crew::AgentClass;
-use codex_protocol::crew::RetentionPolicy;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ResponseInputItem;
+use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::ModelBilling;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_protocol::protocol::MultiAgentVersion;
+use codex_protocol::protocol::RuntimeSelectionSource;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::user_input::UserInput;
@@ -32,7 +34,7 @@ use serde_json::Value as JsonValue;
 pub(crate) const MIN_WAIT_TIMEOUT_MS: i64 = DEFAULT_MULTI_AGENT_V2_MIN_WAIT_TIMEOUT_MS;
 pub(crate) const DEFAULT_WAIT_TIMEOUT_MS: i64 = 30_000;
 pub(crate) const MAX_WAIT_TIMEOUT_MS: i64 = HARD_MAX_MULTI_AGENT_V2_TIMEOUT_MS;
-pub(crate) const MAX_SPAWN_AGENT_MODEL_OVERRIDES: usize = 5;
+pub(crate) const MAX_SPAWN_AGENT_MODEL_OVERRIDES: usize = 32;
 
 pub(crate) fn model_supports_multi_agent_backend(
     model: &ModelPreset,
@@ -116,7 +118,6 @@ pub(crate) fn thread_spawn_source(
     depth: i32,
     agent_role: Option<&str>,
     task_name: Option<String>,
-    assignment_id: Option<String>,
 ) -> Result<SessionSource, FunctionCallError> {
     let agent_path = task_name
         .as_deref()
@@ -134,11 +135,7 @@ pub(crate) fn thread_spawn_source(
         agent_path,
         agent_nickname: None,
         agent_role: agent_role.map(str::to_string),
-        agent_class: Some(AgentClass::EphemeralTask {
-            assignment_id: assignment_id
-                .unwrap_or_else(|| format!("thread-spawn:{}", ThreadId::new())),
-            retention: RetentionPolicy::Retain,
-        }),
+        agent_class: None,
     }))
 }
 
@@ -262,12 +259,10 @@ pub(crate) fn apply_spawn_agent_runtime_overrides(
     Ok(())
 }
 
-/// Operator spend policy for model-driven agent creation.
+/// Enforce the operator's provider authorization at the core spawn boundary.
 ///
-/// `agents.provider_allowlist` is authorization, not preference. A model selects a
-/// runtime; only the operator authorizes one. This is enforced in core because the
-/// model-facing spawn path never crosses the TUI, and it is neutral to provider,
-/// model, and role name.
+/// This runs after every inherited, role-selected, default, and explicit runtime has been
+/// resolved. A refused explicit runtime is never silently replaced with another provider.
 pub(crate) fn ensure_spawn_provider_authorized(
     config: &Config,
     provider_id: &str,
@@ -279,19 +274,73 @@ pub(crate) fn ensure_spawn_provider_authorized(
         return Ok(());
     }
     Err(FunctionCallError::RespondToModel(format!(
-        "Provider `{provider_id}` is not authorized for spawned agents. \
-Authorized providers: {}. This is operator policy set in `agents.provider_allowlist`; \
-it cannot be changed from a task and must not be worked around by selecting a different \
-model that routes to an unauthorized provider. Do not spawn a substitute runtime in this \
-turn; report the refusal and obtain the user's explicit consent before trying a fallback.",
+        "Provider `{provider_id}` is not authorized for spawned agents. Authorized providers: {}. \
+This is operator policy from `agents.provider_allowlist`. Do not substitute another runtime \
+without the user's explicit consent.",
         allowlist.join(", ")
     )))
 }
 
-/// Catalogue lifecycle policy for newly spawned work.
-///
-/// This runs on the fully resolved child config so inherited runtimes, role overrides,
-/// model-only switches, and explicit provider/model pairs all cross the same boundary.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct SpawnRuntimeReport {
+    pub(crate) model_provider: String,
+    pub(crate) model: String,
+    pub(crate) reasoning_effort: Option<ReasoningEffort>,
+    pub(crate) service_tier: Option<String>,
+    pub(crate) capability: String,
+    pub(crate) billing: String,
+    pub(crate) vision: bool,
+    pub(crate) selection_rationale: String,
+}
+
+pub(crate) fn spawn_billing_class(
+    metadata: &ModelOrchestrationMetadata,
+) -> &'static str {
+    match metadata.billing() {
+        Some(ModelBilling::Plan { .. }) => "plan",
+        Some(ModelBilling::PlanSchedule { .. }) => "plan_schedule",
+        Some(ModelBilling::Metered { .. }) => "metered",
+        Some(ModelBilling::AuthDependent { .. }) => "auth_dependent",
+        Some(ModelBilling::Local) => "local",
+        None => "disabled",
+    }
+}
+
+pub(crate) async fn spawn_runtime_report(
+    session: &Session,
+    config: &Config,
+    selection_source: RuntimeSelectionSource,
+) -> Result<SpawnRuntimeReport, FunctionCallError> {
+    let model = config.model.clone().ok_or_else(|| {
+        FunctionCallError::RespondToModel(
+            "spawn_agent could not resolve the child model for runtime reporting".to_string(),
+        )
+    })?;
+    let model_info = session
+        .services
+        .models_manager
+        .get_model_info(&model, &config.to_models_manager_config())
+        .await;
+    let metadata = model_info.orchestration.as_ref().ok_or_else(|| {
+        FunctionCallError::RespondToModel(format!(
+            "Runtime `{}` / `{model}` has no orchestration metadata.",
+            config.model_provider_id
+        ))
+    })?;
+    let billing = spawn_billing_class(metadata);
+    Ok(SpawnRuntimeReport {
+        model_provider: config.model_provider_id.clone(),
+        model,
+        reasoning_effort: config.model_reasoning_effort.clone(),
+        service_tier: config.service_tier.clone(),
+        capability: metadata.capability().to_string(),
+        billing: billing.to_string(),
+        vision: model_info.input_modalities.contains(&InputModality::Image),
+        selection_rationale: selection_source.description().to_string(),
+    })
+}
+
+/// Require every spawned runtime to resolve to one exact, eligible catalogue record.
 pub(crate) async fn ensure_spawn_runtime_eligible(
     session: &Session,
     config: &Config,
@@ -306,33 +355,22 @@ pub(crate) async fn ensure_spawn_runtime_eligible(
         .models_manager
         .get_model_info(model, &config.to_models_manager_config())
         .await;
-    // GPU rental routes are dynamic runtime records, not static vendor catalogue rows. Their
-    // reserved provider id is created only from a ready state-db rental record, and local billing
-    // means no additional per-token spend. Keep this dynamic trust source separate from the
-    // bundled provider/model catalogue instead of inventing one row per rental.
-    if config.model_provider_id.starts_with("gpu-")
-        && config
-            .model_providers
-            .contains_key(&config.model_provider_id)
-    {
-        return Ok(());
-    }
     let metadata = model_info.orchestration.as_ref().ok_or_else(|| {
         FunctionCallError::RespondToModel(format!(
-            "Runtime `{}` / `{model}` has no orchestration metadata in the active model catalogue and cannot receive spawned work.",
+            "Runtime `{}` / `{model}` has no billing and capability contract in the active model catalogue and cannot receive automatically spawned work.",
             config.model_provider_id
         ))
     })?;
     if metadata.provider_id() != config.model_provider_id {
         return Err(FunctionCallError::RespondToModel(format!(
-            "Runtime `{}` / `{model}` does not match its model catalogue provider `{}` and cannot receive spawned work. In MultiAgentV2, pass the exact catalogue `model_provider` together with `model`; legacy V1 cannot express a cross-provider override.",
+            "Runtime `{}` / `{model}` conflicts with catalogue provider `{}` and cannot receive spawned work.",
             config.model_provider_id,
             metadata.provider_id()
         )));
     }
-    if let Some(reason) = metadata.disabled_reason() {
+    if let ModelOrchestrationMetadata::Disabled { reason, .. } = metadata {
         return Err(FunctionCallError::RespondToModel(format!(
-            "Runtime `{}` / `{model}` is disabled for spawned agents by model catalogue policy: {reason}.",
+            "Runtime `{}` / `{model}` is disabled for spawned work: {reason}.",
             config.model_provider_id
         )));
     }
@@ -354,18 +392,6 @@ pub(crate) async fn apply_requested_spawn_agent_model_overrides(
     }
 
     if let Some(requested_model) = requested_model {
-        if requested_model == turn.model_info.slug {
-            if let Some(reasoning_effort) = requested_reasoning_effort {
-                validate_spawn_agent_reasoning_effort(
-                    &turn.model_info.slug,
-                    &turn.model_info.supported_reasoning_levels,
-                    &reasoning_effort,
-                )?;
-                config.model_reasoning_effort = Some(reasoning_effort);
-            }
-            return Ok(());
-        }
-        reject_spawn_agent_model_switch_for_third_party_provider(turn, config, requested_model)?;
         let available_models = session
             .services
             .models_manager
@@ -382,28 +408,30 @@ pub(crate) async fn apply_requested_spawn_agent_model_overrides(
             .get_model_info(&selected_model_name, &config.to_models_manager_config())
             .await;
 
-        config.model = Some(selected_model_name.clone());
-        // A model switch must not silently keep the parent's provider when that provider cannot
-        // serve the selected model — the child's first turn would 400/404 with "Unknown model".
-        if let Some(corrected) = codex_model_provider_info::corrected_catalog_provider(
-            &selected_model_name,
-            &config.model_provider_id,
-        ) && let Some(info) = config.model_providers.get(corrected)
-        {
-            // A model switch can re-route the child onto another provider. That is still
-            // a provider selection and must clear the same operator policy as an explicit
-            // one. Authorize before mutating, so a refused switch cannot leave the child
-            // pointed at an unauthorized provider.
-            ensure_spawn_provider_authorized(config, corrected)?;
-            tracing::warn!(
-                model = %selected_model_name,
-                parent_provider = %config.model_provider_id,
-                corrected_provider = corrected,
-                "correcting inherited provider for spawn_agent model switch"
-            );
-            config.model_provider_id = corrected.to_string();
-            config.model_provider = info.clone();
+        let selected_provider = selected_model_info
+            .orchestration
+            .as_ref()
+            .map(ModelOrchestrationMetadata::provider_id)
+            .ok_or_else(|| {
+                FunctionCallError::RespondToModel(format!(
+                    "Model `{selected_model_name}` has no exact provider route in the active catalogue."
+                ))
+            })?;
+        if selected_provider != config.model_provider_id {
+            ensure_spawn_provider_authorized(config, selected_provider)?;
+            let provider = config
+                .model_providers
+                .get(selected_provider)
+                .cloned()
+                .ok_or_else(|| {
+                    FunctionCallError::RespondToModel(format!(
+                        "Catalogue runtime `{selected_provider}` / `{selected_model_name}` is not configured."
+                    ))
+                })?;
+            config.model_provider_id = selected_provider.to_string();
+            config.model_provider = provider;
         }
+        config.model = Some(selected_model_name.clone());
         if let Some(reasoning_effort) = requested_reasoning_effort {
             validate_spawn_agent_reasoning_effort(
                 &selected_model_name,
@@ -441,7 +469,7 @@ pub(crate) async fn apply_requested_spawn_agent_runtime_overrides(
     let requested_provider = requested_provider
         .map(str::trim)
         .filter(|provider| !provider.is_empty());
-    if requested_provider.is_none() {
+    let Some(requested_provider) = requested_provider else {
         return apply_requested_spawn_agent_model_overrides(
             session,
             turn,
@@ -450,19 +478,16 @@ pub(crate) async fn apply_requested_spawn_agent_runtime_overrides(
             requested_reasoning_effort,
         )
         .await;
-    }
-
-    let Some(requested_provider) = requested_provider else {
-        return Ok(());
     };
     let requested_model = requested_model
         .map(str::trim)
         .filter(|model| !model.is_empty())
         .ok_or_else(|| {
             FunctionCallError::RespondToModel(
-                "spawn_agent requires `model` when `model_provider` is set; set both fields or omit both to inherit the parent runtime.".to_string(),
+                "spawn_agent requires `model` when `model_provider` is set; set both fields or omit both to inherit the current runtime.".to_string(),
             )
         })?;
+    ensure_spawn_provider_authorized(config, requested_provider)?;
     let provider = config
         .model_providers
         .get(requested_provider)
@@ -472,21 +497,39 @@ pub(crate) async fn apply_requested_spawn_agent_runtime_overrides(
                 "Unknown model provider `{requested_provider}` for spawn_agent."
             ))
         })?;
-    ensure_spawn_provider_authorized(config, requested_provider)?;
-    let resolved_model = codex_model_provider_info::resolve_model_for_provider(
-        Some(requested_model.to_string()),
-        requested_provider,
-    );
-    if resolved_model.as_deref() != Some(requested_model) {
+
+    let available_models = session
+        .services
+        .models_manager
+        .list_models(RefreshStrategy::Offline, config.http_client_factory())
+        .await;
+    let selected = available_models
+        .iter()
+        .find(|model| {
+            model.model == requested_model
+                && model.provider_id.as_deref() == Some(requested_provider)
+                && model_supports_multi_agent_backend(model, turn.multi_agent_version)
+        })
+        .ok_or_else(|| {
+            FunctionCallError::RespondToModel(format!(
+                "Runtime `{requested_provider}` / `{requested_model}` is not an available catalogue pair for spawn_agent."
+            ))
+        })?;
+    let metadata = selected.orchestration.as_ref().ok_or_else(|| {
+        FunctionCallError::RespondToModel(format!(
+            "Runtime `{requested_provider}` / `{requested_model}` has no orchestration metadata."
+        ))
+    })?;
+    if !metadata.is_spawn_eligible() {
         return Err(FunctionCallError::RespondToModel(format!(
-            "Model `{requested_model}` is not valid for provider `{requested_provider}`."
+            "Runtime `{requested_provider}` / `{requested_model}` is disabled for spawned work: {}.",
+            metadata.disabled_reason().unwrap_or("catalogue policy")
         )));
     }
 
     config.model_provider_id = requested_provider.to_string();
     config.model_provider = provider;
     config.model = Some(requested_model.to_string());
-
     let selected_model_info = session
         .services
         .models_manager
@@ -502,7 +545,6 @@ pub(crate) async fn apply_requested_spawn_agent_runtime_overrides(
     } else {
         config.model_reasoning_effort = selected_model_info.default_reasoning_level;
     }
-
     Ok(())
 }
 
@@ -612,14 +654,19 @@ fn find_spawn_agent_model_name(
     requested_model: &str,
     multi_agent_version: MultiAgentVersion,
 ) -> Result<String, FunctionCallError> {
-    available_models
+    let requested = available_models
         .iter()
-        .find(|model| {
-            model.model == requested_model
-                && model_supports_multi_agent_backend(model, multi_agent_version)
-        })
-        .map(|model| model.model.clone())
-        .ok_or_else(|| {
+        .find(|model| model.model == requested_model);
+    if let Some(model) = requested {
+        if model_supports_multi_agent_backend(model, multi_agent_version) {
+            return Ok(model.model.clone());
+        }
+        return Err(FunctionCallError::RespondToModel(format!(
+            "Model `{requested_model}` is incompatible with this session's multi-agent backend. Choose one of the models advertised by spawn_agent."
+        )));
+    }
+
+    Err({
             let available = available_models
                 .iter()
                 .filter(|model| model.show_in_picker)
@@ -632,35 +679,6 @@ fn find_spawn_agent_model_name(
                 "Unknown model `{requested_model}` for spawn_agent. Available models: {available}"
             ))
         })
-}
-
-fn reject_spawn_agent_model_switch_for_third_party_provider(
-    turn: &TurnContext,
-    child_config: &Config,
-    requested_model: &str,
-) -> Result<(), FunctionCallError> {
-    let provider_info = turn.provider.info();
-    if !(provider_info.is_ambient()
-        || provider_info.is_kimi_code()
-        || provider_info.is_zai()
-        || provider_info.is_openrouter()
-        || provider_info.is_baseten()
-        || provider_info.is_vercel())
-    {
-        return Ok(());
-    }
-    if let Some(corrected) = codex_model_provider_info::corrected_catalog_provider(
-        requested_model,
-        &turn.config.model_provider_id,
-    ) && child_config.model_providers.contains_key(corrected)
-    {
-        return Ok(());
-    }
-
-    Err(FunctionCallError::RespondToModel(format!(
-        "spawn_agent cannot switch from provider `{}` model `{}` to model `{requested_model}`. Subagents inherit the parent provider; omit model to inherit `{}`, or switch the parent session provider/model before spawning.",
-        turn.config.model_provider_id, turn.model_info.slug, turn.model_info.slug
-    )))
 }
 
 fn validate_spawn_agent_reasoning_effort(

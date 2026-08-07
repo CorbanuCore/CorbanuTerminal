@@ -18,6 +18,7 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::McpInvocation;
+use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use core_test_support::apps_test_server::AppsTestServer;
@@ -831,7 +832,7 @@ async fn tool_search_returns_deferred_v1_multi_agent_tools() -> Result<()> {
                     call_id,
                     &json!({
                         "query": "spawn agent",
-                        "limit": 1,
+                        "limit": 5,
                     }),
                 ),
                 ev_completed("resp-1"),
@@ -845,7 +846,20 @@ async fn tool_search_returns_deferred_v1_multi_agent_tools() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex().with_config(configure_search_capable_model);
+    let mut builder = test_codex().with_config(|config| {
+        configure_search_capable_model(config);
+        config
+            .model_catalog
+            .as_mut()
+            .and_then(|catalog| {
+                catalog
+                    .models
+                    .iter_mut()
+                    .find(|model| model.slug == "gpt-5.4")
+            })
+            .expect("gpt-5.4 should exist in the test catalogue")
+            .multi_agent_version = Some(MultiAgentVersion::V1);
+    });
     let test = builder.build(&server).await?;
     test.submit_turn_with_approval_and_permission_profile(
         "Find the spawn agent tool",
@@ -901,7 +915,7 @@ async fn tool_search_returns_deferred_v1_multi_agent_tools() -> Result<()> {
     );
     let output = tool_search_output_item(&requests[1], call_id);
     let spawn_agent = namespace_child_tool(&output, "multi_agent_v1", "spawn_agent")
-        .expect("tool_search should return multi_agent_v1.spawn_agent");
+        .unwrap_or_else(|| panic!("tool_search should return multi_agent_v1.spawn_agent: {output}"));
     assert_eq!(
         spawn_agent.get("defer_loading").and_then(Value::as_bool),
         Some(true)

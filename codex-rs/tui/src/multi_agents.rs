@@ -5,6 +5,7 @@
 //! which thread becomes active or when a thread closes, stays in [`crate::app::App`].
 
 use crate::history_cell::PlainHistoryCell;
+use crate::model_catalog::ModelCatalog;
 use crate::render::line_utils::prefix_lines;
 use crate::text_formatting::truncate_text;
 use codex_app_server_protocol::CollabAgentState;
@@ -13,8 +14,12 @@ use codex_app_server_protocol::CollabAgentTool;
 use codex_app_server_protocol::CollabAgentToolCallStatus;
 use codex_app_server_protocol::SubAgentActivityKind;
 use codex_app_server_protocol::ThreadItem;
+use codex_app_server_protocol::ThreadRuntimeRoute;
 use codex_protocol::ThreadId;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
+use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::ModelBilling;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 #[cfg(target_os = "macos")]
@@ -38,12 +43,10 @@ pub(crate) struct AgentPickerThreadEntry {
     pub(crate) agent_role: Option<String>,
     /// Canonical v2 agent path, when the thread was observed through v2 activity.
     pub(crate) agent_path: Option<String>,
-    /// Model selected for this thread, cached for pane-picker status rendering.
-    pub(crate) model: Option<String>,
-    /// Latest task sent to this agent, if one was observed locally.
-    pub(crate) last_task_message: Option<String>,
-    /// Latest final result or terminal error preview, if one was observed locally.
-    pub(crate) last_result_message: Option<String>,
+    /// Authoritative runtime route from the loaded child thread. Never inferred from the parent.
+    pub(crate) runtime_route: Option<ThreadRuntimeRoute>,
+    /// Capability and billing evidence resolved from the canonical catalogue for `runtime_route`.
+    pub(crate) catalogue_summary: Option<String>,
     /// Whether the latest liveness refresh says the agent thread is actively working.
     pub(crate) is_running: bool,
     /// Whether the thread has emitted a close event and should render dimmed.
@@ -54,9 +57,6 @@ pub(crate) struct AgentPickerThreadEntry {
 pub(crate) struct SubAgentActivityDisplay {
     pub(crate) thread_id: ThreadId,
     pub(crate) agent_path: String,
-    pub(crate) agent_nickname: Option<String>,
-    pub(crate) agent_role: Option<String>,
-    pub(crate) task_preview: Option<String>,
     pub(crate) is_running_hint: bool,
 }
 
@@ -79,6 +79,121 @@ struct AgentLabel<'a> {
 pub(crate) struct SpawnRequestSummary {
     pub(crate) model: String,
     pub(crate) reasoning_effort: ReasoningEffortConfig,
+}
+
+pub(crate) fn runtime_route_summary(
+    route: &ThreadRuntimeRoute,
+    model_catalog: &ModelCatalog,
+) -> String {
+    let models = model_catalog.try_list_models().unwrap_or_default();
+    let preset = models.iter().find(|preset| {
+        preset.model == route.model
+            && preset
+                .provider_id
+                .as_deref()
+                .or_else(|| {
+                    preset
+                        .orchestration
+                        .as_ref()
+                        .map(ModelOrchestrationMetadata::provider_id)
+                })
+                == Some(route.model_provider.as_str())
+    });
+    let mut summary = match preset {
+        Some(preset) => {
+            let vision = if preset.input_modalities.contains(&InputModality::Image) {
+                "vision"
+            } else {
+                "text-only"
+            };
+            match preset.orchestration.as_ref() {
+                Some(ModelOrchestrationMetadata::Eligible {
+                    capability,
+                    billing,
+                    ..
+                }) => format!(
+                    "capability {capability} · billing {} · {vision}",
+                    billing_cost_basis(billing)
+                ),
+                Some(ModelOrchestrationMetadata::Disabled {
+                    capability, reason, ..
+                }) => format!("capability {capability} · disabled: {reason} · {vision}"),
+                None => "catalogue route lacks orchestration metadata".to_string(),
+            }
+        }
+        None => "catalogue evidence unavailable for this exact route".to_string(),
+    };
+    if let Some(selection_source) = route.selection_source {
+        summary.push_str(" · selected by ");
+        summary.push_str(selection_source.description());
+    }
+    summary
+}
+
+fn billing_cost_basis(billing: &ModelBilling) -> String {
+    match billing {
+        ModelBilling::Plan {
+            relative_burn_millis,
+        } => format!("plan ({} burn)", format_ratio(*relative_burn_millis)),
+        ModelBilling::PlanSchedule {
+            off_peak_relative_burn_millis,
+            peak_relative_burn_millis,
+            peak_start_utc_hour,
+            peak_end_utc_hour,
+            ..
+        } => format!(
+            "plan ({} off-peak, {} peak {peak_start_utc_hour:02}:00–{peak_end_utc_hour:02}:00 UTC)",
+            format_ratio(*off_peak_relative_burn_millis),
+            format_ratio(*peak_relative_burn_millis)
+        ),
+        ModelBilling::Metered {
+            input_milli_usd_per_million_tokens,
+            output_milli_usd_per_million_tokens,
+            cached_input_milli_usd_per_million_tokens,
+        } => {
+            let cached = cached_input_milli_usd_per_million_tokens.map_or_else(
+                String::new,
+                |value| format!(", {} cached input", format_usd_per_million(value)),
+            );
+            format!(
+                "metered ({} input, {} output{cached})",
+                format_usd_per_million(*input_milli_usd_per_million_tokens),
+                format_usd_per_million(*output_milli_usd_per_million_tokens)
+            )
+        }
+        ModelBilling::AuthDependent {
+            plan_relative_burn_millis,
+            api_key_input_milli_usd_per_million_tokens,
+            api_key_output_milli_usd_per_million_tokens,
+            ..
+        } => format!(
+            "auth-dependent (plan {} burn or API {} input / {} output)",
+            format_ratio(*plan_relative_burn_millis),
+            format_usd_per_million(*api_key_input_milli_usd_per_million_tokens),
+            format_usd_per_million(*api_key_output_milli_usd_per_million_tokens)
+        ),
+        ModelBilling::Local => "local".to_string(),
+    }
+}
+
+fn format_ratio(millis: u32) -> String {
+    format_decimal(millis, "×")
+}
+
+fn format_usd_per_million(milli_usd: u32) -> String {
+    format!("${}/M", format_decimal(milli_usd, ""))
+}
+
+fn format_decimal(value: u32, suffix: &str) -> String {
+    let whole = value / 1000;
+    let fraction = value % 1000;
+    if fraction == 0 {
+        return format!("{whole}{suffix}");
+    }
+    let fraction = format!("{fraction:03}")
+        .trim_end_matches('0')
+        .to_string();
+    format!("{whole}.{fraction}{suffix}")
 }
 
 pub(crate) fn agent_picker_status_dot_spans(is_closed: bool) -> Vec<Span<'static>> {
@@ -292,9 +407,6 @@ pub(crate) fn sub_agent_activity_display(item: &ThreadItem) -> Option<SubAgentAc
         kind,
         agent_thread_id,
         agent_path,
-        agent_nickname,
-        agent_role,
-        task_preview,
         ..
     } = item
     else {
@@ -314,46 +426,15 @@ pub(crate) fn sub_agent_activity_display(item: &ThreadItem) -> Option<SubAgentAc
 
 pub(crate) fn sub_agent_activity_history_cell(item: &ThreadItem) -> Option<PlainHistoryCell> {
     let ThreadItem::SubAgentActivity {
-        kind,
-        agent_path,
-        agent_nickname,
-        agent_role,
-        task_preview,
-        ..
+        kind, agent_path, ..
     } = item
     else {
         return None;
     };
-    let identity = activity_identity(agent_path, agent_nickname.as_deref(), agent_role.as_deref());
-    let detail = task_preview
-        .as_deref()
-        .filter(|preview| !preview.trim().is_empty())
-        .map(|preview| {
-            Line::from(vec![
-                "  Instruction: ".dim(),
-                truncate_text(preview, COLLAB_PROMPT_PREVIEW_GRAPHEMES).into(),
-            ])
-        })
-        .into_iter()
-        .collect();
     Some(collab_event(
-        sub_agent_activity_title(*kind, &identity),
-        detail,
+        sub_agent_activity_title(*kind, agent_path),
+        Vec::new(),
     ))
-}
-
-fn activity_identity(
-    agent_path: &str,
-    agent_nickname: Option<&str>,
-    agent_role: Option<&str>,
-) -> String {
-    let label =
-        format_agent_picker_item_name(agent_nickname, agent_role, /*is_primary*/ false);
-    if label == "Agent" {
-        agent_path.to_string()
-    } else {
-        format!("{label} · {agent_path}")
-    }
 }
 
 pub(crate) fn sub_agent_activity_summary(kind: SubAgentActivityKind, agent_path: &str) -> String {
@@ -432,11 +513,11 @@ fn waiting_begin(
             agent_label(*thread_id, metadata),
             /*spawn_request*/ None,
         ),
-        [] => title_text("Waiting for child-agent mailbox activity"),
+        [] => title_text("Waiting for agents"),
         _ => title_text(format!("Waiting for {} agents", receiver_agents.len())),
     };
 
-    let mut details = if receiver_agents.len() > 1 {
+    let details = if receiver_agents.len() > 1 {
         receiver_agents
             .iter()
             .map(|(thread_id, metadata)| agent_label_line(agent_label(*thread_id, metadata)))
@@ -444,9 +525,6 @@ fn waiting_begin(
     } else {
         Vec::new()
     };
-    details.push(Line::from(
-        "Wakes on a child report/message, follow-up task, human steering, or timeout.",
-    ));
 
     collab_event(title, details)
 }
@@ -456,18 +534,8 @@ fn waiting_end(
     agents_states: &std::collections::HashMap<String, CollabAgentState>,
     agent_metadata: &mut impl FnMut(ThreadId) -> AgentMetadata,
 ) -> PlainHistoryCell {
-    let mut details = wait_complete_lines(receiver_thread_ids, agents_states, agent_metadata);
-    let title = if details.is_empty() {
-        title_text("Wait ended — no child completion reported")
-    } else {
-        title_text("Wait ended — child status update")
-    };
-    if details.is_empty() {
-        details.push(Line::from(
-            "Ended by mailbox activity, steering, or timeout; no child completion was attached.",
-        ));
-    }
-    collab_event(title, details)
+    let details = wait_complete_lines(receiver_thread_ids, agents_states, agent_metadata);
+    collab_event(title_text("Finished waiting"), details)
 }
 
 fn close_end(
@@ -643,7 +711,7 @@ fn wait_complete_lines(
     entries.extend(extras);
 
     if entries.is_empty() {
-        Vec::new()
+        vec![Line::from(Span::from("No agents completed yet"))]
     } else {
         entries
             .into_iter()
@@ -732,6 +800,49 @@ mod tests {
     use crossterm::event::KeyModifiers;
     use insta::assert_snapshot;
     use pretty_assertions::assert_eq;
+
+    #[test]
+    fn runtime_route_summary_uses_exact_catalogue_billing_and_capability() {
+        let preset = crate::test_support::TEST_MODEL_PRESETS
+            .iter()
+            .find(|preset| preset.orchestration.as_ref().is_some_and(|metadata| {
+                metadata.is_spawn_eligible()
+                    && preset
+                        .provider_id
+                        .as_deref()
+                        .or_else(|| Some(metadata.provider_id()))
+                        .is_some()
+            }))
+            .expect("eligible catalogue route")
+            .clone();
+        let provider = preset
+            .provider_id
+            .clone()
+            .or_else(|| {
+                preset
+                    .orchestration
+                    .as_ref()
+                    .map(|metadata| metadata.provider_id().to_string())
+            })
+            .expect("provider");
+        let summary = runtime_route_summary(
+            &ThreadRuntimeRoute {
+                model_provider: provider,
+                model: preset.model.clone(),
+                reasoning_effort: Some(preset.default_reasoning_effort.clone()),
+                service_tier: preset.default_service_tier.clone(),
+                selection_source: Some(
+                    codex_protocol::protocol::RuntimeSelectionSource::ExplicitRequest,
+                ),
+            },
+            &ModelCatalog::new(vec![preset]),
+        );
+
+        assert!(summary.contains("capability "));
+        assert!(summary.contains("billing "));
+        assert!(summary.contains("selected by explicit spawn request"));
+        assert!(!summary.contains("unavailable"));
+    }
     use ratatui::style::Color;
     use ratatui::style::Modifier;
     use std::collections::HashMap;
@@ -743,6 +854,9 @@ mod tests {
             kind: SubAgentActivityKind::Interacted,
             agent_thread_id: ThreadId::new().to_string(),
             agent_path: "/root/child".to_string(),
+            agent_nickname: None,
+            agent_role: None,
+            task_preview: None,
         };
 
         assert_eq!(sub_agent_activity_display(&item), None);
@@ -984,26 +1098,6 @@ mod tests {
         .expect("resume item renders");
 
         assert_snapshot!("collab_resume_interrupted", cell_to_text(&cell));
-    }
-
-    #[test]
-    fn named_sub_agent_activity_snapshot() {
-        let thread_id =
-            ThreadId::from_string("00000000-0000-0000-0000-000000000002").expect("valid thread id");
-        let cell = sub_agent_activity_history_cell(&ThreadItem::SubAgentActivity {
-            id: "call-send".to_string(),
-            kind: SubAgentActivityKind::Interacted,
-            agent_thread_id: thread_id.to_string(),
-            agent_path: "/root/troll_burzum".to_string(),
-            agent_nickname: Some("Burzum".to_string()),
-            agent_role: Some("troll".to_string()),
-            task_preview: Some(
-                "Close the M2 verification gap from committed SHA 6a78c394.".to_string(),
-            ),
-        })
-        .expect("activity item renders");
-
-        assert_snapshot!("named_sub_agent_activity", cell_to_text(&cell));
     }
 
     fn agent_state(status: CollabAgentStatus, message: Option<&str>) -> CollabAgentState {

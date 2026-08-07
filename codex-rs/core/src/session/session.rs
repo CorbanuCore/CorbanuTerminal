@@ -19,6 +19,7 @@ use codex_protocol::config_types::ServiceTier;
 use codex_protocol::permissions::FileSystemPath;
 use codex_protocol::permissions::FileSystemSpecialPath;
 use codex_protocol::protocol::MultiAgentVersion;
+use codex_protocol::protocol::RuntimeSelectionSource;
 use codex_protocol::protocol::ThreadHistoryMode;
 use codex_protocol::protocol::ThreadSource;
 use codex_protocol::protocol::TurnEnvironmentSelections;
@@ -31,7 +32,6 @@ use tokio::sync::Semaphore;
 pub(crate) struct Session {
     pub(crate) thread_id: ThreadId,
     pub(crate) installation_id: String,
-    pub(super) tx_sub: Sender<Submission>,
     pub(super) tx_event: Sender<Event>,
     pub(super) agent_status: watch::Sender<AgentStatus>,
     pub(super) state: Mutex<SessionState>,
@@ -54,11 +54,6 @@ pub(crate) struct Session {
     pub(crate) conversation: Arc<RealtimeConversationManager>,
     pub(crate) active_turn: Mutex<Option<ActiveTurn>>,
     pub(crate) input_queue: InputQueue,
-    /// Stable mailbox IDs already materialized into this thread's model-visible history.
-    ///
-    /// This is seeded from persisted rollout items on resume so a crash between rollout flush
-    /// and mailbox acknowledgement cannot apply the same message to local history twice.
-    pub(crate) applied_agent_message_ids: Mutex<HashSet<String>>,
     pub(crate) guardian_review_session: GuardianReviewSessionManager,
     pub(crate) services: SessionServices,
     pub(super) git_enrichment_policy: GitEnrichmentPolicy,
@@ -74,8 +69,6 @@ pub(crate) struct SessionConfiguration {
     pub(super) collaboration_mode: CollaborationMode,
     pub(super) model_reasoning_summary: Option<ReasoningSummaryConfig>,
     pub(super) service_tier: Option<String>,
-    /// Endpoint-specific context cap for an ephemeral runtime provider.
-    pub(super) runtime_model_context_window: Option<i64>,
 
     /// Developer instructions that supplement the base instructions.
     pub(super) developer_instructions: Option<String>,
@@ -114,6 +107,8 @@ pub(crate) struct SessionConfiguration {
     pub(super) app_server_client_version: Option<String>,
     /// Source of the session (cli, vscode, exec, mcp, ...)
     pub(super) session_source: SessionSource,
+    /// Durable provenance for the initial runtime route selected for this thread.
+    pub(super) runtime_selection: Option<RuntimeSelectionSource>,
     /// Persisted thread history contract selected when this thread was created.
     pub(super) history_mode: ThreadHistoryMode,
     /// Immediate history source copied into this thread, when this thread was forked.
@@ -236,6 +231,7 @@ impl SessionConfiguration {
             personality: self.personality,
             collaboration_mode: self.collaboration_mode.clone(),
             session_source: self.session_source.clone(),
+            runtime_selection: self.runtime_selection,
             history_mode: self.history_mode,
             forked_from_thread_id: self.forked_from_thread_id,
             parent_thread_id: self.parent_thread_id,
@@ -246,6 +242,26 @@ impl SessionConfiguration {
 
     pub(crate) fn apply(&self, updates: &SessionSettingsUpdate) -> ConstraintResult<Self> {
         let mut next_configuration = self.clone();
+        if let Some(model_provider_id) = updates.model_provider.as_ref() {
+            let Some(model_provider) = self
+                .original_config_do_not_use
+                .model_providers
+                .get(model_provider_id)
+                .cloned()
+            else {
+                return Err(ConstraintError::InvalidValue {
+                    field_name: "model_provider",
+                    candidate: model_provider_id.clone(),
+                    allowed: "a configured model provider".to_string(),
+                    requirement_source: codex_config::RequirementSource::Unknown,
+                });
+            };
+            let mut config = (*next_configuration.original_config_do_not_use).clone();
+            config.model_provider_id = model_provider_id.clone();
+            config.model_provider = model_provider.clone();
+            next_configuration.provider = model_provider;
+            next_configuration.original_config_do_not_use = Arc::new(config);
+        }
         let current_sandbox_policy = self.sandbox_policy();
         let current_file_system_sandbox_policy = self.file_system_sandbox_policy();
         let current_network_sandbox_policy = self.network_sandbox_policy();
@@ -448,6 +464,7 @@ pub(crate) struct SessionSettingsUpdate {
     pub(crate) permission_profile: Option<PermissionProfile>,
     pub(crate) active_permission_profile: Option<ActivePermissionProfile>,
     pub(crate) windows_sandbox_level: Option<WindowsSandboxLevel>,
+    pub(crate) model_provider: Option<String>,
     pub(crate) collaboration_mode: Option<CollaborationMode>,
     pub(crate) reasoning_summary: Option<ReasoningSummaryConfig>,
     pub(crate) service_tier: Option<Option<String>>,
@@ -509,7 +526,6 @@ impl Session {
         auth_manager: Arc<AuthManager>,
         models_manager: SharedModelsManager,
         exec_policy: Arc<ExecPolicyManager>,
-        tx_sub: Sender<Submission>,
         tx_event: Sender<Event>,
         agent_status: watch::Sender<AgentStatus>,
         mut initial_history: InitialHistory,
@@ -547,6 +563,9 @@ impl Session {
             .parent_thread_id
             .or_else(|| initial_history.get_resumed_parent_thread_id());
         session_configuration.parent_thread_id = parent_thread_id;
+        session_configuration.runtime_selection = initial_history
+            .get_resumed_runtime_selection()
+            .or(session_configuration.runtime_selection);
         let is_paginated_subagent = matches!(
             session_configuration.history_mode,
             ThreadHistoryMode::Paginated
@@ -636,6 +655,7 @@ impl Session {
                             parent_thread_id,
                             source: session_source,
                             thread_source: session_configuration.thread_source.clone(),
+                            runtime_selection: session_configuration.runtime_selection,
                             originator: session_configuration.originator.clone(),
                             base_instructions: BaseInstructions {
                                 text: session_configuration.base_instructions.clone(),
@@ -1141,7 +1161,7 @@ impl Session {
                 thread_store: Arc::clone(&thread_store),
                 attestation_provider: attestation_provider.clone(),
                 time_provider,
-                model_client: arc_swap::ArcSwap::from_pointee(ModelClient::new(
+                model_client: ModelClient::new(
                     Some(Arc::clone(&auth_manager)),
                     if config.features.enabled(Feature::UseAgentIdentity) {
                         AgentIdentityAuthPolicy::ChatGptAuth
@@ -1180,7 +1200,6 @@ impl Session {
             let sess = Arc::new(Session {
                 thread_id,
                 installation_id,
-                tx_sub,
                 tx_event: tx_event.clone(),
                 agent_status,
                 state: Mutex::new(state),
@@ -1197,7 +1216,6 @@ impl Session {
                 conversation: Arc::new(RealtimeConversationManager::new()),
                 active_turn: Mutex::new(None),
                 input_queue: InputQueue::new(),
-                applied_agent_message_ids: Mutex::new(applied_agent_message_ids),
                 guardian_review_session: GuardianReviewSessionManager::default(),
                 services,
                 git_enrichment_policy,

@@ -12,6 +12,51 @@ use codex_protocol::config_types::ModeKind;
 use codex_protocol::models::PermissionProfile;
 
 impl App {
+    pub(super) fn commit_pending_model_selection_after_ack(
+        &mut self,
+        thread_id: ThreadId,
+        settings: &ThreadSettings,
+    ) {
+        let matches = match self.pending_model_selection.as_ref() {
+            Some(super::PendingModelSelection::Catalog {
+                thread_id: pending_thread_id,
+                model,
+                effort,
+            }) => {
+                *pending_thread_id == thread_id
+                    && settings.model == *model
+                    && settings.effort == *effort
+            }
+            Some(super::PendingModelSelection::Provider {
+                thread_id: pending_thread_id,
+                model,
+                provider,
+            }) => {
+                *pending_thread_id == thread_id
+                    && settings.model == *model
+                    && settings.model_provider == *provider
+            }
+            None => false,
+        };
+        if !matches {
+            return;
+        }
+        match self.pending_model_selection.take() {
+            Some(super::PendingModelSelection::Catalog { model, effort, .. }) => {
+                self.app_event_tx
+                    .send(crate::app_event::AppEvent::PersistModelSelection { model, effort });
+            }
+            Some(super::PendingModelSelection::Provider {
+                model, provider, ..
+            }) => {
+                self.app_event_tx.send(
+                    crate::app_event::AppEvent::PersistProviderModelSelection { model, provider },
+                );
+            }
+            None => {}
+        }
+    }
+
     pub(super) async fn sync_active_thread_model_setting(
         &mut self,
         app_server: &mut AppServerSession,
@@ -27,32 +72,30 @@ impl App {
         &self,
         model: String,
     ) -> Option<ThreadSettingsUpdateParams> {
+        self.active_thread_model_and_reasoning_setting_update_params(model, /*effort*/ None)
+    }
+
+    pub(super) fn active_thread_model_and_reasoning_setting_update_params(
+        &self,
+        model: String,
+        effort: Option<codex_protocol::openai_models::ReasoningEffort>,
+    ) -> Option<ThreadSettingsUpdateParams> {
         let thread_id = self.active_thread_id?;
+        let collaboration_mode = self
+            .chat_widget
+            .effective_collaboration_mode()
+            .with_updates(
+                Some(model.clone()),
+                Some(effort.clone()),
+                /*developer_instructions*/ None,
+            );
         Some(ThreadSettingsUpdateParams {
             thread_id: thread_id.to_string(),
             model: Some(model),
-            collaboration_mode: Some(self.chat_widget.effective_collaboration_mode()),
+            effort,
+            collaboration_mode: Some(collaboration_mode),
             ..ThreadSettingsUpdateParams::default()
         })
-    }
-
-    pub(super) async fn sync_active_thread_model_selection(
-        &mut self,
-        app_server: &mut AppServerSession,
-        model: String,
-        model_provider: Option<String>,
-    ) {
-        let Some(thread_id) = self.active_thread_id else {
-            return;
-        };
-        let params = ThreadSettingsUpdateParams {
-            thread_id: thread_id.to_string(),
-            model: Some(model),
-            model_provider,
-            collaboration_mode: Some(self.chat_widget.effective_collaboration_mode()),
-            ..ThreadSettingsUpdateParams::default()
-        };
-        self.send_thread_settings_update(app_server, params).await;
     }
 
     pub(super) async fn sync_active_thread_reasoning_setting(
@@ -71,10 +114,15 @@ impl App {
         effort: Option<codex_protocol::openai_models::ReasoningEffort>,
     ) -> Option<ThreadSettingsUpdateParams> {
         let thread_id = self.active_thread_id?;
+        let collaboration_mode = self.chat_widget.current_collaboration_mode().with_updates(
+            /*model*/ None,
+            Some(effort.clone()),
+            /*developer_instructions*/ None,
+        );
         Some(ThreadSettingsUpdateParams {
             thread_id: thread_id.to_string(),
             effort,
-            collaboration_mode: Some(self.chat_widget.current_collaboration_mode().clone()),
+            collaboration_mode: Some(collaboration_mode),
             ..ThreadSettingsUpdateParams::default()
         })
     }
@@ -176,15 +224,17 @@ impl App {
         &mut self,
         app_server: &mut AppServerSession,
         params: ThreadSettingsUpdateParams,
-    ) {
+    ) -> bool {
         if !thread_settings_update_has_changes(&params) {
-            return;
+            return true;
         }
         if let Err(err) = app_server.thread_settings_update(params).await {
             tracing::warn!("failed to update app-server thread settings from TUI: {err}");
             self.chat_widget
                 .add_error_message(format!("Failed to update thread settings: {err}"));
+            return false;
         }
+        true
     }
 }
 

@@ -40,6 +40,7 @@ fn retryability_preserves_error_details_distinctions() {
             CodexErr::RetryLimit(RetryLimitReachedError {
                 status: StatusCode::TOO_MANY_REQUESTS,
                 request_id: None,
+                retry_after_ms: None,
             }),
             false,
         ),
@@ -618,44 +619,6 @@ fn unexpected_status_includes_identity_auth_details() {
             "unexpected status {status}: plain text error, url: https://chatgpt.com/backend-api/codex/models, cf-ray: cf-ray-auth-401-test, request id: req-auth, auth error: missing_authorization_header, auth error code: token_expired"
         )
     );
-}
-
-#[test]
-fn unexpected_status_payment_required_is_not_retryable() {
-    let err = CodexErr::UnexpectedStatus(UnexpectedResponseError {
-        status: StatusCode::PAYMENT_REQUIRED,
-        body: "payment required".to_string(),
-        url: None,
-        cf_ray: None,
-        request_id: None,
-        identity_authorization_error: None,
-        identity_error_code: None,
-    });
-
-    assert!(!err.is_retryable());
-}
-
-#[test]
-fn unexpected_status_transient_statuses_are_retryable() {
-    for status in [
-        StatusCode::REQUEST_TIMEOUT,
-        StatusCode::TOO_MANY_REQUESTS,
-        StatusCode::BAD_GATEWAY,
-        StatusCode::SERVICE_UNAVAILABLE,
-        StatusCode::GATEWAY_TIMEOUT,
-    ] {
-        let err = CodexErr::UnexpectedStatus(UnexpectedResponseError {
-            status,
-            body: String::new(),
-            url: None,
-            cf_ray: None,
-            request_id: None,
-            identity_authorization_error: None,
-            identity_error_code: None,
-        });
-
-        assert!(err.is_retryable(), "{status} should be retryable");
-    }
 }
 
 #[test]

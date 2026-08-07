@@ -113,8 +113,8 @@ fn update_changes_secret_and_metadata() {
             "k1",
             Some("new-secret".to_string()),
             Some(Some("openrouter".to_string())),
-            None,
-            None,
+            /*notes*/ None,
+            /*revocation_notes*/ None,
         )
         .unwrap();
     assert_eq!(vault.reveal("k1").unwrap(), "new-secret");
@@ -128,7 +128,13 @@ fn update_changes_secret_and_metadata() {
 fn update_missing_label_errors() {
     let (_dir, _keyring, vault) = test_vault();
     let err = vault
-        .update("nope", Some("x".to_string()), None, None, None)
+        .update(
+            "nope",
+            Some("x".to_string()),
+            /*provider*/ None,
+            /*notes*/ None,
+            /*revocation_notes*/ None,
+        )
         .expect_err("missing label should error");
     assert!(
         matches!(err, VaultError::NotFound { ref label } if label == "nope"),
