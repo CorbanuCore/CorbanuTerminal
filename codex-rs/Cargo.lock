@@ -2471,6 +2471,7 @@ dependencies = [
  "codex-sandboxing",
  "codex-state",
  "codex-stdio-to-uds",
+ "codex-tasknode-session",
  "codex-telegram",
  "codex-terminal-detection",
  "codex-tui",
@@ -4263,6 +4264,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-tasknode-session"
+version = "0.1.27"
+dependencies = [
+ "codex-keyring-store",
+ "codex-vault",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "codex-telegram"
 version = "0.1.27"
 dependencies = [
@@ -4416,6 +4430,7 @@ dependencies = [
  "codex-sandboxing",
  "codex-shell-command",
  "codex-state",
+ "codex-tasknode-session",
  "codex-terminal-detection",
  "codex-utils-absolute-path",
  "codex-utils-approval-presets",
