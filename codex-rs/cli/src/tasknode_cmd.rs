@@ -4,7 +4,6 @@ use clap::Parser;
 use clap::Subcommand;
 use codex_core::config::ConfigBuilder;
 use codex_utils_cli::CliConfigOverrides;
-use serde::Deserialize;
 use serde_json::Map;
 use serde_json::Value;
 use serde_json::json;
@@ -899,8 +898,7 @@ async fn run_link_start(
         return emit_response(response);
     }
     let started: codex_tasknode_session::TerminalAuthStart =
-        serde_json::from_value(response.body.clone())
-            .context("invalid terminal auth start response")?;
+        serde_json::from_value(response.body).context("invalid terminal auth start response")?;
     let pending = codex_tasknode_session::PendingLink {
         origin: origin.to_string(),
         request_id: started.request_id.clone(),
@@ -966,10 +964,8 @@ async fn run_link_poll(
                 let issued: codex_tasknode_session::TerminalSessionIssued =
                     serde_json::from_value(response.body.clone())
                         .context("invalid terminal session response")?;
-                let candidate = codex_tasknode_session::ActiveSession::from_issued(
-                    origin.to_string(),
-                    issued,
-                );
+                let candidate =
+                    codex_tasknode_session::ActiveSession::from_issued(origin.to_string(), issued);
                 // Validate before promoting: the issued token must prove itself
                 // against the server before it replaces any stored session.
                 let status_url = format!("{origin}/api/terminal/tasknode/status");

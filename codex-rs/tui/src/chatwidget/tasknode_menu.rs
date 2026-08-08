@@ -915,7 +915,9 @@ impl ChatWidget {
         let spawn_result = std::thread::Builder::new()
             .name("tasknode-logout".to_string())
             .spawn(move || {
-                let state = load_tasknode_local_state(&codex_home).ok().unwrap_or_default();
+                let state = load_tasknode_local_state(&codex_home)
+                    .ok()
+                    .unwrap_or_default();
                 let revoke_error = state
                     .active
                     .as_ref()
@@ -2615,8 +2617,7 @@ fn ensure_tasknode_session(
             None => Err(TaskNodeLocalError::NoSession),
         };
     };
-    match TaskNodeClient::new_without_token()
-        .poll_session(&pending.request_id, &pending.poll_token)
+    match TaskNodeClient::new_without_token().poll_session(&pending.request_id, &pending.poll_token)
     {
         Ok(issued) => {
             let candidate =
