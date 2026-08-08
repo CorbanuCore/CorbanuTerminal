@@ -253,7 +253,7 @@ pub struct TerminalSessionIssued {
 impl ActiveSession {
     /// Whether the server-provided expiry has passed at `now`.
     ///
-    /// A missing or unparseable expiry counts as "not expired": the server is
+    /// A missing or unparsable expiry counts as "not expired": the server is
     /// the authority, and guessing a session dead when the metadata is absent
     /// would lock users out of a working session.
     pub fn is_expired_at(&self, now: chrono::DateTime<chrono::Utc>) -> bool {
