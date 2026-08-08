@@ -966,10 +966,8 @@ async fn run_link_poll(
                 let issued: codex_tasknode_session::TerminalSessionIssued =
                     serde_json::from_value(response.body.clone())
                         .context("invalid terminal session response")?;
-                let candidate = codex_tasknode_session::ActiveSession::from_issued(
-                    origin.to_string(),
-                    issued,
-                );
+                let candidate =
+                    codex_tasknode_session::ActiveSession::from_issued(origin.to_string(), issued);
                 // Validate before promoting: the issued token must prove itself
                 // against the server before it replaces any stored session.
                 let status_url = format!("{origin}/api/terminal/tasknode/status");

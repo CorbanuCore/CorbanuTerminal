@@ -85,7 +85,10 @@ fn promotion_replaces_active_and_clears_pending() {
         state.active.map(|s| s.terminal_token),
         Some("tok-new".to_string())
     );
-    assert_eq!(state.pending, None, "promotion consumes the pending attempt");
+    assert_eq!(
+        state.pending, None,
+        "promotion consumes the pending attempt"
+    );
 }
 
 /// Pre-split blobs with a token load as an active session unchanged.
