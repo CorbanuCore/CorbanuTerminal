@@ -77,12 +77,40 @@ not introduced by this release:
 - cargo shear: unlinked test files in `codex-core` / `codex-telegram`
 - Bazel: build failures present on main's own runs
 
+## Windows evidence (postfiat1, Windows 11 26200, x64, 2026-08-08)
+
+From-source verification on real Windows (MSVC 14.44, stable-msvc
+toolchain, clean clone of `release/0.1.28` on D:):
+
+- `cargo test -p codex-tasknode-session`: 10 passed, 0 failed
+  (native Windows paths; includes migration, expiry, promotion cases)
+- `cargo test -p codex-cli --bin pfterminal tasknode`: 6 passed
+- `cargo build -p codex-cli --bins`: success;
+  `pfterminal.exe --version` reports `pfterminal 0.1.28`
+- Unlinked `tasknode status` returns the state machine's correct
+  guidance ("not linked → run pfterminal tasknode link") with proper
+  Windows path rendering
+- `codex-utils-pty` (Windows pseudo-console, includes this release's
+  string fix) compiles into the shipped binaries
+- Cross-check from Linux: `cargo check --target x86_64-pc-windows-msvc
+  -p codex-utils-pty` clean
+
+Observations (neither introduced by this release):
+
+- `pfterminal-debug` does not auto-create its state home on first run;
+  it errors clearly until the directory exists. First-run UX nit.
+- OS-keyring vault operations fail under SSH sessions
+  (`ERROR_NO_SUCH_LOGON_SESSION`) because Windows secure storage
+  requires an interactive logon. Interactive-session linking was
+  therefore not exercised remotely.
+
 ## Open cells (operator acceptance required)
 
-1. Hands-on install/upgrade matrix on macOS and Windows: NOT run
-   (preparer host is Linux-only). Linux packaged-binary behavior is
-   exercised daily on this host, including the debug-home isolation
-   this release fixes.
+1. Hands-on matrix: macOS NOT run; Windows covered from source as
+   above, but packaged-ZIP install and interactive TUI/link on Windows
+   remain unexercised (SSH keyring limitation). Linux packaged-binary
+   behavior is exercised daily on this host, including the debug-home
+   isolation this release fixes.
 2. Full workspace `cargo test`: NOT run (multi-hour; focused suites and
    production field evidence stand in). 
 3. Pre-existing red CI jobs on main, listed above, ride along
