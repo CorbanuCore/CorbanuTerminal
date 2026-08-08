@@ -125,3 +125,12 @@ acceptance in the release PR before merge.
 - [ ] Unpublished workflow run (`publish_release=false`) hashes
       reconciled against this ledger
 - [ ] Operator authorizes tag push and publication
+## Post-release verification (2026-08-08)
+
+Release 0.1.28 published from tag rust-v0.1.28 = 0f01128d77 (merge of
+PR #95), marked Latest, not draft, not prerelease. All 11 assets
+present. Both SHA256 manifests (copied into this directory) verified
+against downloaded assets from the published release, and match the
+qualification-run artifact bundle from run 31264209533. The packaged
+Windows ZIP from qualification was additionally smoke-tested on
+postfiat1 (reports pfterminal 0.1.28).
