@@ -1,0 +1,20 @@
+{
+  "accepted_difference_count": 0,
+  "accepted_differences": [],
+  "baseline_source": {
+    "commit": "827ad686965042a474fe4146471cf71b54ab440d",
+    "requested_ref": "rust-v0.1.27",
+    "tree": "5a66b123cc815b08ca2fcc657cdf28ce25c6a138"
+  },
+  "candidate_source": {
+    "commit": "5944b53654f0dbf5df4618287dcf1b163d14e976",
+    "requested_ref": "HEAD",
+    "tree": "09e283648e86f301ba11e37b3f7b611c4278e70b"
+  },
+  "difference_count": 0,
+  "invalid_allowlist_entries": [],
+  "invalid_allowlist_entry_count": 0,
+  "schema_version": 1,
+  "unresolved_difference_count": 0,
+  "unresolved_differences": []
+}
