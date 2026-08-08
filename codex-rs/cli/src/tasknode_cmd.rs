@@ -4,7 +4,6 @@ use clap::Parser;
 use clap::Subcommand;
 use codex_core::config::ConfigBuilder;
 use codex_utils_cli::CliConfigOverrides;
-use serde::Deserialize;
 use serde_json::Map;
 use serde_json::Value;
 use serde_json::json;
@@ -899,8 +898,7 @@ async fn run_link_start(
         return emit_response(response);
     }
     let started: codex_tasknode_session::TerminalAuthStart =
-        serde_json::from_value(response.body.clone())
-            .context("invalid terminal auth start response")?;
+        serde_json::from_value(response.body).context("invalid terminal auth start response")?;
     let pending = codex_tasknode_session::PendingLink {
         origin: origin.to_string(),
         request_id: started.request_id.clone(),
