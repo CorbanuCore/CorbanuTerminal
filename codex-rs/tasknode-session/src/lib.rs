@@ -112,15 +112,19 @@ impl From<VaultError> for SessionStoreError {
 /// attempt already exists) and the active label is cleared, because that blob
 /// never contained usable authority in the first place.
 pub fn load(vault: &Vault) -> Result<LocalState, SessionStoreError> {
+    load_from_store(vault)
+}
+
+fn load_from_store<S: SessionStore + ?Sized>(store: &S) -> Result<LocalState, SessionStoreError> {
     let mut state = LocalState::default();
 
-    if let Some(raw) = reveal_optional(vault, TASKNODE_PENDING_LINK_LABEL)? {
+    if let Some(raw) = store.reveal_optional(TASKNODE_PENDING_LINK_LABEL)? {
         let pending: PendingLink = serde_json::from_str(&raw)
             .map_err(|err| SessionStoreError::Corrupt(format!("pending link: {err}")))?;
         state.pending = Some(pending);
     }
 
-    if let Some(raw) = reveal_optional(vault, TASKNODE_ACTIVE_SESSION_LABEL)? {
+    if let Some(raw) = store.reveal_optional(TASKNODE_ACTIVE_SESSION_LABEL)? {
         let record: LegacyRecord = serde_json::from_str(&raw)
             .map_err(|err| SessionStoreError::Corrupt(format!("active session: {err}")))?;
         let origin = record.origin.unwrap_or_default();
@@ -147,12 +151,12 @@ pub fn load(vault: &Vault) -> Result<LocalState, SessionStoreError> {
                         verification_url: record.pending_verification_url.unwrap_or_default(),
                         started_at: None,
                     };
-                    save_pending(vault, &pending)?;
+                    save_pending_to_store(store, &pending)?;
                     state.pending = Some(pending);
                 }
                 // Either way the active label holds no authority; clear it so
                 // a real session can be written cleanly later.
-                let _ = vault.delete(TASKNODE_ACTIVE_SESSION_LABEL);
+                let _ = store.delete(TASKNODE_ACTIVE_SESSION_LABEL);
             }
         }
     }
@@ -162,10 +166,16 @@ pub fn load(vault: &Vault) -> Result<LocalState, SessionStoreError> {
 
 /// Record a new link attempt. Never touches the active session.
 pub fn save_pending(vault: &Vault, pending: &PendingLink) -> Result<(), SessionStoreError> {
+    save_pending_to_store(vault, pending)
+}
+
+fn save_pending_to_store<S: SessionStore + ?Sized>(
+    store: &S,
+    pending: &PendingLink,
+) -> Result<(), SessionStoreError> {
     let secret = serde_json::to_string(pending)
         .map_err(|err| SessionStoreError::Corrupt(format!("serialize pending link: {err}")))?;
-    upsert(
-        vault,
+    store.upsert(
         TASKNODE_PENDING_LINK_LABEL,
         secret,
         "Task Node link attempt in progress; holds no usable token.",
@@ -178,10 +188,16 @@ pub fn save_pending(vault: &Vault, pending: &PendingLink) -> Result<(), SessionS
 /// successful authenticated `status` call); this function is the only writer
 /// of the active label.
 pub fn promote_active(vault: &Vault, session: &ActiveSession) -> Result<(), SessionStoreError> {
+    promote_active_to_store(vault, session)
+}
+
+fn promote_active_to_store<S: SessionStore + ?Sized>(
+    store: &S,
+    session: &ActiveSession,
+) -> Result<(), SessionStoreError> {
     let secret = serde_json::to_string(session)
         .map_err(|err| SessionStoreError::Corrupt(format!("serialize session: {err}")))?;
-    upsert(
-        vault,
+    store.upsert(
         TASKNODE_ACTIVE_SESSION_LABEL,
         secret,
         "Task Node terminal session; token is not printed to chat.",
@@ -189,19 +205,29 @@ pub fn promote_active(vault: &Vault, session: &ActiveSession) -> Result<(), Sess
     )?;
     // Best-effort: a leftover pending record cannot shadow the active session
     // (load prefers active), so a failed delete here is not fatal.
-    let _ = vault.delete(TASKNODE_PENDING_LINK_LABEL);
+    let _ = store.delete(TASKNODE_PENDING_LINK_LABEL);
     Ok(())
 }
 
 /// Abandon an in-flight link attempt. The active session is untouched.
 pub fn clear_pending(vault: &Vault) -> Result<bool, SessionStoreError> {
-    Ok(vault.delete(TASKNODE_PENDING_LINK_LABEL)?)
+    clear_pending_from_store(vault)
+}
+
+fn clear_pending_from_store<S: SessionStore + ?Sized>(
+    store: &S,
+) -> Result<bool, SessionStoreError> {
+    store.delete(TASKNODE_PENDING_LINK_LABEL)
 }
 
 /// Remove all Task Node authentication state (unlink).
 pub fn clear_all(vault: &Vault) -> Result<(), SessionStoreError> {
-    let _ = vault.delete(TASKNODE_PENDING_LINK_LABEL);
-    let _ = vault.delete(TASKNODE_ACTIVE_SESSION_LABEL);
+    clear_all_from_store(vault)
+}
+
+fn clear_all_from_store<S: SessionStore + ?Sized>(store: &S) -> Result<(), SessionStoreError> {
+    let _ = store.delete(TASKNODE_PENDING_LINK_LABEL);
+    let _ = store.delete(TASKNODE_ACTIVE_SESSION_LABEL);
     Ok(())
 }
 
@@ -278,41 +304,59 @@ impl ActiveSession {
     }
 }
 
-fn reveal_optional(vault: &Vault, label: &str) -> Result<Option<String>, SessionStoreError> {
-    match vault.reveal(label) {
-        Ok(secret) => Ok(Some(secret)),
-        Err(VaultError::NotFound { .. }) => Ok(None),
-        Err(err) => Err(err.into()),
-    }
+trait SessionStore {
+    fn reveal_optional(&self, label: &str) -> Result<Option<String>, SessionStoreError>;
+    fn upsert(
+        &self,
+        label: &str,
+        secret: String,
+        notes: &str,
+        origin: &str,
+    ) -> Result<(), SessionStoreError>;
+    fn delete(&self, label: &str) -> Result<bool, SessionStoreError>;
 }
 
-fn upsert(
-    vault: &Vault,
-    label: &str,
-    secret: String,
-    notes: &str,
-    origin: &str,
-) -> Result<(), SessionStoreError> {
-    match vault.add(AddCredential {
-        label: label.to_string(),
-        credential_type: CredentialType::BearerToken,
-        provider: Some("tasknode".to_string()),
-        notes: Some(notes.to_string()),
-        revocation_notes: Some(format!("{origin}/settings/accounts")),
-        secret: secret.clone(),
-    }) {
-        Ok(()) => Ok(()),
-        Err(VaultError::CredentialExists { .. }) => vault
-            .update(
-                label,
-                Some(secret),
-                Some(Some("tasknode".to_string())),
-                None,
-                None,
-            )
-            .map(|_| ())
-            .map_err(Into::into),
-        Err(err) => Err(err.into()),
+impl SessionStore for Vault {
+    fn reveal_optional(&self, label: &str) -> Result<Option<String>, SessionStoreError> {
+        match self.reveal(label) {
+            Ok(secret) => Ok(Some(secret)),
+            Err(VaultError::NotFound { .. }) => Ok(None),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    fn upsert(
+        &self,
+        label: &str,
+        secret: String,
+        notes: &str,
+        origin: &str,
+    ) -> Result<(), SessionStoreError> {
+        match self.add(AddCredential {
+            label: label.to_string(),
+            credential_type: CredentialType::BearerToken,
+            provider: Some("tasknode".to_string()),
+            notes: Some(notes.to_string()),
+            revocation_notes: Some(format!("{origin}/settings/accounts")),
+            secret: secret.clone(),
+        }) {
+            Ok(()) => Ok(()),
+            Err(VaultError::CredentialExists { .. }) => self
+                .update(
+                    label,
+                    Some(secret),
+                    Some(Some("tasknode".to_string())),
+                    None,
+                    None,
+                )
+                .map(|_| ())
+                .map_err(Into::into),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    fn delete(&self, label: &str) -> Result<bool, SessionStoreError> {
+        Vault::delete(self, label).map_err(Into::into)
     }
 }
 

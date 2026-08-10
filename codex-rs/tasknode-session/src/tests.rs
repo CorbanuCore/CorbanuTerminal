@@ -1,18 +1,56 @@
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
-use codex_keyring_store::tests::MockKeyringStore;
-use codex_vault::Vault;
 use pretty_assertions::assert_eq;
 
 use super::*;
 
-fn test_vault() -> (tempfile::TempDir, Vault) {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let vault = Vault::new_with_keyring_store(
-        dir.path().to_path_buf(),
-        Arc::new(MockKeyringStore::default()),
-    );
-    (dir, vault)
+#[derive(Default)]
+struct MemoryStore {
+    entries: Mutex<HashMap<String, String>>,
+}
+
+impl MemoryStore {
+    fn seed_raw(&self, label: &str, secret: String) {
+        self.entries
+            .lock()
+            .expect("memory store lock")
+            .insert(label.to_string(), secret);
+    }
+}
+
+impl SessionStore for MemoryStore {
+    fn reveal_optional(&self, label: &str) -> Result<Option<String>, SessionStoreError> {
+        Ok(self
+            .entries
+            .lock()
+            .expect("memory store lock")
+            .get(label)
+            .cloned())
+    }
+
+    fn upsert(
+        &self,
+        label: &str,
+        secret: String,
+        _notes: &str,
+        _origin: &str,
+    ) -> Result<(), SessionStoreError> {
+        self.entries
+            .lock()
+            .expect("memory store lock")
+            .insert(label.to_string(), secret);
+        Ok(())
+    }
+
+    fn delete(&self, label: &str) -> Result<bool, SessionStoreError> {
+        Ok(self
+            .entries
+            .lock()
+            .expect("memory store lock")
+            .remove(label)
+            .is_some())
+    }
 }
 
 fn active(token: &str) -> ActiveSession {
@@ -39,12 +77,12 @@ fn pending(request_id: &str) -> PendingLink {
 /// replacement link must not destroy the currently usable credential.
 #[test]
 fn active_session_survives_link_start() {
-    let (_dir, vault) = test_vault();
-    promote_active(&vault, &active("tok-live")).expect("seed active");
+    let store = MemoryStore::default();
+    promote_active_to_store(&store, &active("tok-live")).expect("seed active");
 
-    save_pending(&vault, &pending("req-1")).expect("start link");
+    save_pending_to_store(&store, &pending("req-1")).expect("start link");
 
-    let state = load(&vault).expect("load");
+    let state = load_from_store(&store).expect("load");
     assert_eq!(
         state.active.as_ref().map(|s| s.terminal_token.as_str()),
         Some("tok-live"),
@@ -58,13 +96,13 @@ fn active_session_survives_link_start() {
 
 #[test]
 fn abandoned_link_is_non_destructive() {
-    let (_dir, vault) = test_vault();
-    promote_active(&vault, &active("tok-live")).expect("seed active");
-    save_pending(&vault, &pending("req-1")).expect("start link");
+    let store = MemoryStore::default();
+    promote_active_to_store(&store, &active("tok-live")).expect("seed active");
+    save_pending_to_store(&store, &pending("req-1")).expect("start link");
 
-    assert!(clear_pending(&vault).expect("clear pending"));
+    assert!(clear_pending_from_store(&store).expect("clear pending"));
 
-    let state = load(&vault).expect("load");
+    let state = load_from_store(&store).expect("load");
     assert_eq!(
         state.active.map(|s| s.terminal_token),
         Some("tok-live".to_string())
@@ -74,13 +112,13 @@ fn abandoned_link_is_non_destructive() {
 
 #[test]
 fn promotion_replaces_active_and_clears_pending() {
-    let (_dir, vault) = test_vault();
-    promote_active(&vault, &active("tok-old")).expect("seed active");
-    save_pending(&vault, &pending("req-2")).expect("start link");
+    let store = MemoryStore::default();
+    promote_active_to_store(&store, &active("tok-old")).expect("seed active");
+    save_pending_to_store(&store, &pending("req-2")).expect("start link");
 
-    promote_active(&vault, &active("tok-new")).expect("promote");
+    promote_active_to_store(&store, &active("tok-new")).expect("promote");
 
-    let state = load(&vault).expect("load");
+    let state = load_from_store(&store).expect("load");
     assert_eq!(
         state.active.map(|s| s.terminal_token),
         Some("tok-new".to_string())
@@ -94,7 +132,7 @@ fn promotion_replaces_active_and_clears_pending() {
 /// Pre-split blobs with a token load as an active session unchanged.
 #[test]
 fn legacy_active_record_loads() {
-    let (_dir, vault) = test_vault();
+    let store = MemoryStore::default();
     let legacy = serde_json::json!({
         "origin": "https://tasknode.example",
         "account_id": "acct_9",
@@ -105,18 +143,9 @@ fn legacy_active_record_loads() {
         "pending_poll_token": null,
         "pending_verification_url": null,
     });
-    vault
-        .add(codex_vault::AddCredential {
-            label: TASKNODE_ACTIVE_SESSION_LABEL.to_string(),
-            credential_type: codex_vault::CredentialType::BearerToken,
-            provider: Some("tasknode".to_string()),
-            notes: None,
-            revocation_notes: None,
-            secret: legacy.to_string(),
-        })
-        .expect("seed legacy");
+    store.seed_raw(TASKNODE_ACTIVE_SESSION_LABEL, legacy.to_string());
 
-    let state = load(&vault).expect("load");
+    let state = load_from_store(&store).expect("load");
     assert_eq!(
         state.active.map(|s| (s.terminal_token, s.account_id)),
         Some(("tok-legacy".to_string(), Some("acct_9".to_string())))
@@ -128,7 +157,7 @@ fn legacy_active_record_loads() {
 /// migrates to the pending label and stops occupying the active label.
 #[test]
 fn legacy_pending_only_record_migrates() {
-    let (_dir, vault) = test_vault();
+    let store = MemoryStore::default();
     let legacy = serde_json::json!({
         "origin": "https://tasknode.example",
         "terminal_token": null,
@@ -136,18 +165,9 @@ fn legacy_pending_only_record_migrates() {
         "pending_poll_token": "poll-legacy",
         "pending_verification_url": "https://tasknode.example/auth/req-legacy",
     });
-    vault
-        .add(codex_vault::AddCredential {
-            label: TASKNODE_ACTIVE_SESSION_LABEL.to_string(),
-            credential_type: codex_vault::CredentialType::BearerToken,
-            provider: Some("tasknode".to_string()),
-            notes: None,
-            revocation_notes: None,
-            secret: legacy.to_string(),
-        })
-        .expect("seed legacy");
+    store.seed_raw(TASKNODE_ACTIVE_SESSION_LABEL, legacy.to_string());
 
-    let state = load(&vault).expect("load");
+    let state = load_from_store(&store).expect("load");
     assert_eq!(state.active, None);
     assert_eq!(
         state.pending.map(|p| (p.request_id, p.poll_token)),
@@ -155,8 +175,8 @@ fn legacy_pending_only_record_migrates() {
     );
 
     // A new active session can now be installed cleanly.
-    promote_active(&vault, &active("tok-fresh")).expect("promote");
-    let state = load(&vault).expect("reload");
+    promote_active_to_store(&store, &active("tok-fresh")).expect("promote");
+    let state = load_from_store(&store).expect("reload");
     assert_eq!(
         state.active.map(|s| s.terminal_token),
         Some("tok-fresh".to_string())
@@ -166,22 +186,25 @@ fn legacy_pending_only_record_migrates() {
 
 #[test]
 fn clear_all_unlinks_everything() {
-    let (_dir, vault) = test_vault();
-    promote_active(&vault, &active("tok")).expect("seed");
-    save_pending(&vault, &pending("req")).expect("pending");
+    let store = MemoryStore::default();
+    promote_active_to_store(&store, &active("tok")).expect("seed");
+    save_pending_to_store(&store, &pending("req")).expect("pending");
 
-    clear_all(&vault).expect("clear");
+    clear_all_from_store(&store).expect("clear");
 
-    assert_eq!(load(&vault).expect("load"), LocalState::default());
+    assert_eq!(
+        load_from_store(&store).expect("load"),
+        LocalState::default()
+    );
 }
 
 #[test]
 fn state_summary_never_contains_secrets() {
-    let (_dir, vault) = test_vault();
-    promote_active(&vault, &active("tok-secret-value")).expect("seed");
-    save_pending(&vault, &pending("req-1")).expect("pending");
+    let store = MemoryStore::default();
+    promote_active_to_store(&store, &active("tok-secret-value")).expect("seed");
+    save_pending_to_store(&store, &pending("req-1")).expect("pending");
 
-    let summary = state_summary(&load(&vault).expect("load")).to_string();
+    let summary = state_summary(&load_from_store(&store).expect("load")).to_string();
     assert!(!summary.contains("tok-secret-value"));
     assert!(!summary.contains("poll-secret"));
     assert!(summary.contains("req-1"));
@@ -216,11 +239,11 @@ fn absent_or_invalid_expiry_counts_as_fresh() {
 
 #[test]
 fn state_summary_reports_expiry() {
-    let (_dir, vault) = test_vault();
+    let store = MemoryStore::default();
     let mut session = active("tok");
     session.expires_at = Some("2000-01-01T00:00:00Z".to_string());
-    promote_active(&vault, &session).expect("seed");
-    let summary = state_summary(&load(&vault).expect("load"));
+    promote_active_to_store(&store, &session).expect("seed");
+    let summary = state_summary(&load_from_store(&store).expect("load"));
     assert_eq!(
         summary
             .get("activeSession")
