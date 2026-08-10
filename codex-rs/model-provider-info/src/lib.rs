@@ -195,6 +195,21 @@ const VERCEL_FAMILY_PROVIDERS: [&str; 3] = [
     VERCEL_ANTHROPIC_FAST_PROVIDER_ID,
 ];
 
+/// Providers that legitimately route a bare `claude-*` slug.
+///
+/// Deliberately short. An `-anthropic` provider id denotes the Anthropic *wire
+/// format*, not Anthropic models: [`resolve_model_for_provider`] rewrites any
+/// `claude-*` slug sent to `zai-anthropic`, `baseten-anthropic`, or the Vercel
+/// Anthropic routes into that gateway's own default model, so those pairs do
+/// not serve Claude either. Amazon Bedrock is exempt because its model ids are
+/// vendor-prefixed (`openai.gpt-5.5`, `anthropic.claude-...`), so a bare slug
+/// never denotes a Bedrock route in the first place.
+const CLAUDE_CAPABLE_PROVIDERS: [&str; 3] = [
+    ANTHROPIC_PROVIDER_ID,
+    CLAUDE_PLAN_PROVIDER_ID,
+    AMAZON_BEDROCK_PROVIDER_ID,
+];
+
 /// Return the canonical built-in provider for a picker-visible model.
 ///
 /// This is a catalog ownership mapping, not an exclusivity claim: gateways and
@@ -303,6 +318,14 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     ) && provider != CLAUDE_PLAN_PROVIDER_ID
     {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
+    }
+    // Mirrors the `gpt-` rule below, and runs after the `-plan` rule above so
+    // plan slugs are already routed to the plan provider. Without this, a bare
+    // `claude-*` slug kept whatever provider was active -- `openai` being the
+    // common case, since that is the default -- and the pair passed every
+    // credential check before failing on the first turn at the wrong vendor.
+    if model.starts_with("claude-") && !CLAUDE_CAPABLE_PROVIDERS.contains(&provider) {
+        return Some(ANTHROPIC_PROVIDER_ID);
     }
     if model.starts_with("glm-")
         && provider != ZAI_PROVIDER_ID
