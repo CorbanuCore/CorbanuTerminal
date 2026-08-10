@@ -32,16 +32,23 @@ Follow the TUI footer for exact keybindings. Multiline prompts may use a submit 
 Prefer the JSON helper for agent work.
 
 **Resolve the helper binary first.** PFTerminal entrypoints pin isolated state
-homes: `pfterminal` always uses `~/.pfterminal`, and `pfterminal-debug` always
-uses `~/.pfterminal-debug`, regardless of the shell's `CODEX_HOME`. Calling the
-wrong entrypoint queries a different vault than the running session and reports
-"not linked" even when the session is linked. Pick the binary that matches the
-session's home before any Task Node call:
+homes: `pfterminal` uses `${PFTERMINAL_HOME:-$HOME/.pfterminal}`, and
+`pfterminal-debug` uses
+`${PFTERMINAL_DEBUG_HOME:-$HOME/.pfterminal-debug}`. Calling the wrong entrypoint
+queries a different vault than the running session and reports "not linked"
+even when the session is linked. Pick the binary that exactly matches the
+session's `CODEX_HOME`; fail closed when it matches neither home:
 
 ```bash
-PF_BIN=pfterminal
+PF_STABLE_HOME="${PFTERMINAL_HOME:-$HOME/.pfterminal}"
+PF_DEBUG_HOME="${PFTERMINAL_DEBUG_HOME:-$HOME/.pfterminal-debug}"
 case "${CODEX_HOME:-}" in
-  *.pfterminal-debug) PF_BIN=pfterminal-debug ;;
+  "$PF_STABLE_HOME") PF_BIN=pfterminal ;;
+  "$PF_DEBUG_HOME") PF_BIN=pfterminal-debug ;;
+  *)
+    echo "CODEX_HOME does not match the stable or debug PFTerminal state home" >&2
+    return 1 2>/dev/null || exit 1
+    ;;
 esac
 "$PF_BIN" tasknode status --json
 ```
