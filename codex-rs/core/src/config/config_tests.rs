@@ -12218,3 +12218,77 @@ async fn absent_gpu_runtime_overlay_does_not_create_state_db() -> std::io::Resul
 
     Ok(())
 }
+
+#[tokio::test]
+async fn explicit_incompatible_model_provider_pair_fails_closed() -> std::io::Result<()> {
+    use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
+    use codex_model_provider_info::VERCEL_ANTHROPIC_PROVIDER_ID;
+
+    let cfg = toml::from_str::<ConfigToml>(&format!(
+        "model_provider = {VERCEL_ANTHROPIC_PROVIDER_ID:?}\nmodel = {CLAUDE_FABLE_5_MODEL:?}\n"
+    ))
+    .expect("config should deserialize");
+
+    let error = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await
+    .err()
+    .expect("incompatible explicit pair must fail before a request is sent");
+
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    let message = error.to_string();
+    assert!(message.contains(CLAUDE_FABLE_5_MODEL));
+    assert!(message.contains(VERCEL_ANTHROPIC_PROVIDER_ID));
+    assert!(message.contains("provider selection was preserved"));
+    assert!(message.contains("claude-plan"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn inferred_bare_claude_uses_claude_plan_without_direct_api_spend() -> std::io::Result<()> {
+    use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
+    use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+
+    let cfg = toml::from_str::<ConfigToml>(&format!("model = {CLAUDE_FABLE_5_MODEL:?}\n"))
+        .expect("config should deserialize");
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.model_provider_id, CLAUDE_PLAN_PROVIDER_ID);
+    assert_eq!(config.model.as_deref(), Some(CLAUDE_FABLE_5_PLAN_MODEL));
+    assert!(config.model_provider.is_claude_plan());
+    Ok(())
+}
+
+#[tokio::test]
+async fn explicit_claude_plan_normalizes_bare_claude_alias() -> std::io::Result<()> {
+    use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
+    use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+
+    let cfg = toml::from_str::<ConfigToml>(&format!(
+        "model_provider = {CLAUDE_PLAN_PROVIDER_ID:?}\nmodel = {CLAUDE_FABLE_5_MODEL:?}\n"
+    ))
+    .expect("config should deserialize");
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.model_provider_id, CLAUDE_PLAN_PROVIDER_ID);
+    assert_eq!(config.model.as_deref(), Some(CLAUDE_FABLE_5_PLAN_MODEL));
+    assert!(config.model_provider.is_claude_plan());
+    Ok(())
+}

@@ -225,6 +225,7 @@ struct ExecRunArgs {
     oss: bool,
     output_schema_path: Option<PathBuf>,
     prompt: Option<String>,
+    resume_model_override_requested: bool,
     skip_git_repo_check: bool,
     stderr_with_ansi: bool,
 }
@@ -311,6 +312,11 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
             std::process::exit(1);
         }
     };
+    let resume_model_override_requested = model_cli_arg.is_some()
+        || oss
+        || cli_kv_overrides
+            .iter()
+            .any(|(key, _)| matches!(key.as_str(), "model" | "model_provider"));
 
     let resolved_cwd = cwd.clone();
     let config_cwd = match resolved_cwd.as_deref() {
@@ -608,6 +614,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         oss,
         output_schema_path,
         prompt,
+        resume_model_override_requested,
         skip_git_repo_check,
         stderr_with_ansi,
     })
@@ -709,6 +716,7 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
         oss,
         output_schema_path,
         prompt,
+        resume_model_override_requested,
         skip_git_repo_check,
         stderr_with_ansi,
     } = args;
@@ -829,8 +837,14 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
         command.as_ref()
     {
         trace_exec_timing("before_resolve_resume_thread_id", exec_session_started_at);
-        if let Some(thread_id) =
-            resolve_resume_thread_id(&client, &config, state_db.as_ref(), args).await?
+        if let Some(thread_id) = resolve_resume_thread_id(
+            &client,
+            &config,
+            state_db.as_ref(),
+            args,
+            resume_model_override_requested,
+        )
+        .await?
         {
             trace_exec_timing("after_resolve_resume_thread_id", exec_session_started_at);
             let response: ThreadResumeResponse = send_request_with_response(
@@ -841,6 +855,7 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
                         &config,
                         thread_id,
                         resume_approvals_reviewer_override,
+                        resume_model_override_requested,
                     ),
                 },
                 "thread/resume",
@@ -1125,6 +1140,7 @@ fn thread_resume_params_from_config(
     config: &Config,
     thread_id: String,
     approvals_reviewer_override: Option<codex_app_server_protocol::ApprovalsReviewer>,
+    model_override_requested: bool,
 ) -> ThreadResumeParams {
     let permissions = permissions_selection_from_config(config);
     let sandbox = permissions.is_none().then(|| {
@@ -1135,8 +1151,10 @@ fn thread_resume_params_from_config(
     });
     ThreadResumeParams {
         thread_id,
-        model: config.model.clone(),
-        model_provider: Some(config.model_provider_id.clone()),
+        model: model_override_requested
+            .then(|| config.model.clone())
+            .flatten(),
+        model_provider: model_override_requested.then(|| config.model_provider_id.clone()),
         cwd: Some(config.cwd.to_string_lossy().to_string()),
         runtime_workspace_roots: Some(config.workspace_roots.clone()),
         approval_policy: Some(config.permissions.approval_policy.value().into()),
@@ -1496,8 +1514,9 @@ async fn resolve_resume_thread_id(
     config: &Config,
     state_db: Option<&StateDbHandle>,
     args: &crate::cli::ResumeArgs,
+    model_override_requested: bool,
 ) -> anyhow::Result<Option<String>> {
-    let model_providers = resume_lookup_model_providers(config, args);
+    let model_providers = resume_lookup_model_providers(config, args, model_override_requested);
 
     if args.last {
         let mut cursor = None;
@@ -1613,8 +1632,9 @@ async fn resolve_resume_thread_id(
 fn resume_lookup_model_providers(
     config: &Config,
     args: &crate::cli::ResumeArgs,
+    model_override_requested: bool,
 ) -> Option<Vec<String>> {
-    if args.last {
+    if args.last && model_override_requested {
         Some(vec![config.model_provider_id.clone()])
     } else {
         None

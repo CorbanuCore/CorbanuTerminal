@@ -228,8 +228,8 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     ) {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
-    if model == ANTHROPIC_DEFAULT_MODEL || model.starts_with("claude-") {
-        return Some(ANTHROPIC_PROVIDER_ID);
+    if model == ANTHROPIC_DEFAULT_MODEL || model == CLAUDE_FABLE_5_MODEL {
+        return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
     if model == META_DEFAULT_MODEL {
         return Some(META_PROVIDER_ID);
@@ -278,6 +278,8 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
 /// Only unambiguous families are corrected:
 /// - `zai/…` slugs (Vercel gateway GLM ids) off the Vercel provider family;
 /// - the Claude plan models off `claude-plan`;
+/// - bare Claude models off unrelated providers and onto the authenticated
+///   `claude-plan` route (never implicitly onto metered direct Anthropic);
 /// - bare `glm-…` slugs (Z.AI-direct ids) off either Z.AI dialect;
 /// - the bare `k3` subscription model off Kimi Code;
 /// - the bare DeepSeek Responses model off the direct DeepSeek provider;
@@ -301,6 +303,12 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
         model,
         CLAUDE_PLAN_MODEL | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL | CLAUDE_FABLE_5_PLAN_MODEL
     ) && provider != CLAUDE_PLAN_PROVIDER_ID
+    {
+        return Some(CLAUDE_PLAN_PROVIDER_ID);
+    }
+    if model.starts_with("claude-")
+        && provider != ANTHROPIC_PROVIDER_ID
+        && provider != CLAUDE_PLAN_PROVIDER_ID
     {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
@@ -362,6 +370,15 @@ pub fn resolve_model_for_provider(
             _ => Some(ANTHROPIC_DEFAULT_MODEL.to_string()),
         },
         CLAUDE_PLAN_PROVIDER_ID => match model {
+            Some(model) if model.trim() == ANTHROPIC_DEFAULT_MODEL => {
+                Some(CLAUDE_PLAN_MODEL.to_string())
+            }
+            Some(model) if model.trim() == ANTHROPIC_LEGACY_OPUS_4_8_MODEL => {
+                Some(CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL.to_string())
+            }
+            Some(model) if model.trim() == CLAUDE_FABLE_5_MODEL => {
+                Some(CLAUDE_FABLE_5_PLAN_MODEL.to_string())
+            }
             Some(model)
                 if matches!(
                     model.trim(),

@@ -1242,6 +1242,14 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         Some(CLAUDE_PLAN_PROVIDER_ID)
     );
     assert_eq!(
+        corrected_catalog_provider(CLAUDE_FABLE_5_MODEL, AMBIENT_PROVIDER_ID),
+        Some(CLAUDE_PLAN_PROVIDER_ID)
+    );
+    assert_eq!(
+        corrected_catalog_provider(CLAUDE_FABLE_5_MODEL, ANTHROPIC_PROVIDER_ID),
+        None
+    );
+    assert_eq!(
         corrected_catalog_provider(ZAI_DEFAULT_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         Some(ZAI_PROVIDER_ID)
     );
@@ -1334,8 +1342,8 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (ZAI_DEFAULT_MODEL, ZAI_PROVIDER_ID),
         (CLAUDE_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
-        (ANTHROPIC_DEFAULT_MODEL, ANTHROPIC_PROVIDER_ID),
-        (CLAUDE_FABLE_5_MODEL, ANTHROPIC_PROVIDER_ID),
+        (ANTHROPIC_DEFAULT_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+        (CLAUDE_FABLE_5_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         ("x-ai/grok-4.5", OPENROUTER_PROVIDER_ID),
         ("moonshotai/kimi-k3", OPENROUTER_PROVIDER_ID),
         (DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROVIDER_ID),

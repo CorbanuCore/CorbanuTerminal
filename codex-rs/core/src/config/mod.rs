@@ -3905,6 +3905,23 @@ impl Config {
             })?
             .clone();
 
+        let requested_model_for_pair_validation = model.clone().or_else(|| cfg.model.clone());
+        let incompatible_explicit_provider = model_provider_was_explicit
+            .then_some(requested_model_for_pair_validation.as_deref())
+            .flatten()
+            .and_then(|value| corrected_catalog_provider(value, &model_provider_id));
+        if let Some(supported_provider) = incompatible_explicit_provider {
+            let requested_model = requested_model_for_pair_validation
+                .as_deref()
+                .unwrap_or_default();
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "explicit model/provider pair `{requested_model}` + `{model_provider_id}` is incompatible; provider selection was preserved and no request was sent. Use `{supported_provider}` or choose a model supported by `{model_provider_id}`"
+                ),
+            ));
+        }
+
         let model_without_explicit_provider = !model_provider_was_explicit && cfg.model.is_some();
         let model = match model {
             Some(model_override) => Some(model_override),
@@ -3917,10 +3934,10 @@ impl Config {
         // a role-derived model) would 400/404 at the remote with "Unknown model". Correct the
         // unambiguous cases; see corrected_catalog_provider for what qualifies.
         let corrected_provider = (!model_provider_was_explicit)
-            .then_some(model.as_deref())
+            .then_some(requested_model_for_pair_validation.as_deref())
             .flatten()
             .and_then(|value| corrected_catalog_provider(value, &model_provider_id));
-        let (model_provider_id, model_provider) = match corrected_provider
+        let (model_provider_id, model_provider, model) = match corrected_provider
             .and_then(|corrected| {
                 model_providers
                     .get(corrected)
@@ -3933,9 +3950,13 @@ impl Config {
                     corrected_provider = corrected,
                     "correcting impossible model/provider pair during config derivation"
                 );
-                (corrected.to_string(), info)
+                let corrected_model = resolve_model_for_provider(
+                    requested_model_for_pair_validation,
+                    corrected,
+                );
+                (corrected.to_string(), info, corrected_model)
             }
-            None => (model_provider_id, model_provider),
+            None => (model_provider_id, model_provider, model),
         };
         let shell_environment_policy = cfg.shell_environment_policy.into();
         let allow_login_shell = cfg.allow_login_shell.unwrap_or(true);

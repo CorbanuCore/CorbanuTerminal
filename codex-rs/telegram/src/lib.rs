@@ -42,6 +42,7 @@ use codex_config::CloudConfigBundleLoader;
 use codex_config::LoaderOverrides;
 use codex_feedback::CodexFeedback;
 use codex_login::AuthManager;
+use codex_model_provider_info::canonical_catalog_provider;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::SessionSource;
@@ -350,6 +351,10 @@ async fn build_core_config(
 ) -> anyhow::Result<codex_core::config::Config> {
     let overrides = codex_core::config::ConfigOverrides {
         model: telegram_config.default_model.clone(),
+        // `[telegram].default_model` is a scoped model selection, so pair it
+        // with its canonical provider instead of inheriting an unrelated
+        // top-level provider. Unknown/custom models continue to inherit.
+        model_provider: telegram_default_model_provider(telegram_config),
         cwd: telegram_config.default_cwd.clone(),
         approval_policy: telegram_config.approval_policy,
         sandbox_mode: telegram_config.sandbox_mode,
@@ -366,4 +371,32 @@ async fn build_core_config(
         .build()
         .await
         .context("failed to build PFTerminal config for Telegram")
+}
+
+fn telegram_default_model_provider(config: &TelegramConfig) -> Option<String> {
+    config
+        .default_model
+        .as_deref()
+        .and_then(canonical_catalog_provider)
+        .map(str::to_owned)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn telegram_default_model_uses_its_canonical_provider() {
+        let mut config = TelegramConfig {
+            default_model: Some(codex_model_provider_info::KIMI_CODE_K3_MODEL.to_string()),
+            ..TelegramConfig::default()
+        };
+        assert_eq!(
+            telegram_default_model_provider(&config).as_deref(),
+            Some(codex_model_provider_info::KIMI_CODE_PROVIDER_ID)
+        );
+
+        config.default_model = Some("custom-model".to_string());
+        assert_eq!(telegram_default_model_provider(&config), None);
+    }
 }

@@ -292,7 +292,7 @@ fn runtime_warnings_are_filtered_to_the_primary_thread() {
 }
 
 #[tokio::test]
-async fn resume_lookup_model_providers_filters_only_last_lookup() {
+async fn resume_lookup_model_providers_filters_last_only_for_an_explicit_override() {
     let codex_home = tempdir().expect("create temp codex home");
     let cwd = tempdir().expect("create temp cwd");
     let mut config = ConfigBuilder::default()
@@ -319,10 +319,17 @@ async fn resume_lookup_model_providers_filters_only_last_lookup() {
     };
 
     assert_eq!(
-        resume_lookup_model_providers(&config, &last_args),
+        resume_lookup_model_providers(&config, &last_args, /*model_override_requested*/ true),
         Some(vec!["test-provider".to_string()])
     );
-    assert_eq!(resume_lookup_model_providers(&config, &named_args), None);
+    assert_eq!(
+        resume_lookup_model_providers(&config, &last_args, /*model_override_requested*/ false),
+        None
+    );
+    assert_eq!(
+        resume_lookup_model_providers(&config, &named_args, /*model_override_requested*/ true),
+        None
+    );
 }
 
 #[test]
@@ -512,17 +519,56 @@ async fn thread_resume_params_only_include_explicit_review_policy_override() {
         &config,
         "thread-id".to_string(),
         /*approvals_reviewer_override*/ None,
+        /*model_override_requested*/ false,
     );
     let params_with_override = thread_resume_params_from_config(
         &config,
         "thread-id".to_string(),
         Some(codex_app_server_protocol::ApprovalsReviewer::AutoReview),
+        /*model_override_requested*/ false,
     );
 
     assert_eq!(params_without_override.approvals_reviewer, None);
     assert_eq!(
         params_with_override.approvals_reviewer,
         Some(codex_app_server_protocol::ApprovalsReviewer::AutoReview)
+    );
+}
+
+#[tokio::test]
+async fn thread_resume_restores_saved_model_pair_unless_cli_explicitly_overrides_it() {
+    let codex_home = tempdir().expect("create temp codex home");
+    let cwd = tempdir().expect("create temp cwd");
+    let config = ConfigBuilder::default()
+        .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(ConfigOverrides {
+            model: Some("current-config-model".to_string()),
+            ..Default::default()
+        })
+        .fallback_cwd(Some(cwd.path().to_path_buf()))
+        .build()
+        .await
+        .expect("build config");
+
+    let restore = thread_resume_params_from_config(
+        &config,
+        "thread-id".to_string(),
+        /*approvals_reviewer_override*/ None,
+        /*model_override_requested*/ false,
+    );
+    assert_eq!(restore.model, None);
+    assert_eq!(restore.model_provider, None);
+
+    let override_from_cli = thread_resume_params_from_config(
+        &config,
+        "thread-id".to_string(),
+        /*approvals_reviewer_override*/ None,
+        /*model_override_requested*/ true,
+    );
+    assert_eq!(override_from_cli.model, config.model);
+    assert_eq!(
+        override_from_cli.model_provider,
+        Some(config.model_provider_id)
     );
 }
 
@@ -655,6 +701,7 @@ async fn thread_lifecycle_params_preserve_hook_trust_bypass() {
         &config,
         "thread-id".to_string(),
         /*approvals_reviewer_override*/ None,
+        /*model_override_requested*/ false,
     );
 
     assert_eq!(start_params.config, expected_config);
@@ -691,6 +738,7 @@ async fn thread_lifecycle_params_include_legacy_sandbox_when_no_active_profile()
         &config,
         "thread-id".to_string(),
         /*approvals_reviewer_override*/ None,
+        /*model_override_requested*/ false,
     );
 
     assert_eq!(config.permissions.active_permission_profile(), None);
