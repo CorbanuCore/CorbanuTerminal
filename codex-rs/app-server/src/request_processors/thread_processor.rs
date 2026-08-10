@@ -4,6 +4,7 @@ use super::turn_processor::can_accept_direct_input;
 use super::*;
 use crate::error_code::method_not_found;
 use codex_app_server_protocol::SelectedCapabilityRoot;
+use codex_app_server_protocol::THREAD_UNMATERIALIZED_ERROR_CODE;
 use codex_app_server_protocol::THREAD_UNMATERIALIZED_INCLUDE_TURNS_MESSAGE;
 use codex_app_server_protocol::ThreadSection;
 use codex_app_server_protocol::ThreadSectionListParams;
@@ -5328,6 +5329,7 @@ pub(super) fn normalize_thread_turns_status(
 
 enum ThreadReadViewError {
     InvalidRequest(String),
+    Unmaterialized { thread_id: ThreadId },
     Unsupported(&'static str),
     Internal(String),
 }
@@ -5335,6 +5337,16 @@ enum ThreadReadViewError {
 fn thread_read_view_error(err: ThreadReadViewError) -> JSONRPCErrorError {
     match err {
         ThreadReadViewError::InvalidRequest(message) => invalid_request(message),
+        ThreadReadViewError::Unmaterialized { thread_id } => {
+            let mut error = invalid_request(format!(
+                "thread {thread_id} {THREAD_UNMATERIALIZED_INCLUDE_TURNS_MESSAGE}"
+            ));
+            error.data = Some(serde_json::json!({
+                "code": THREAD_UNMATERIALIZED_ERROR_CODE,
+                "threadId": thread_id,
+            }));
+            error
+        }
         ThreadReadViewError::Unsupported(operation) => {
             unsupported_thread_store_operation(operation)
         }
@@ -5455,15 +5467,11 @@ fn thread_read_history_load_error(
         ThreadStoreError::InvalidRequest { message }
             if message.starts_with("failed to resolve rollout path `") =>
         {
-            ThreadReadViewError::InvalidRequest(format!(
-                "thread {thread_id} {THREAD_UNMATERIALIZED_INCLUDE_TURNS_MESSAGE}"
-            ))
+            ThreadReadViewError::Unmaterialized { thread_id }
         }
         ThreadStoreError::ThreadNotFound {
             thread_id: missing_thread_id,
-        } if missing_thread_id == thread_id => ThreadReadViewError::InvalidRequest(format!(
-            "thread {thread_id} {THREAD_UNMATERIALIZED_INCLUDE_TURNS_MESSAGE}"
-        )),
+        } if missing_thread_id == thread_id => ThreadReadViewError::Unmaterialized { thread_id },
         ThreadStoreError::InvalidRequest { message } => {
             ThreadReadViewError::InvalidRequest(message)
         }

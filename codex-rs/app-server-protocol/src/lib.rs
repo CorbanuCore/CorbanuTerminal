@@ -73,6 +73,9 @@ pub use schema_fixtures::write_schema_fixtures_with_options;
 /// than a prefix.
 pub const THREAD_UNMATERIALIZED_INCLUDE_TURNS_MESSAGE: &str =
     "is not materialized yet; includeTurns is unavailable before first user message";
+/// Stable machine-readable JSON-RPC error-data code for the same condition.
+/// Clients must match this value rather than English error text.
+pub const THREAD_UNMATERIALIZED_ERROR_CODE: &str = "thread_unmaterialized";
 
 #[cfg(not(test))]
 pub(crate) use codex_app_server_protocol_noop_macros::JsonSchema;

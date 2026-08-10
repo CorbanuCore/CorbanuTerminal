@@ -5,7 +5,7 @@ use super::turn_input;
 use super::turn_items_contain_client_message;
 use codex_app_server_client::TypedRequestError;
 use codex_app_server_protocol::JSONRPCErrorError;
-use codex_app_server_protocol::THREAD_UNMATERIALIZED_INCLUDE_TURNS_MESSAGE;
+use codex_app_server_protocol::THREAD_UNMATERIALIZED_ERROR_CODE;
 use codex_app_server_protocol::ThreadItem;
 
 #[test]
@@ -70,8 +70,11 @@ fn replay_reconciliation_finds_only_the_matching_client_message() {
 fn unmaterialized_thread_read_error() -> JSONRPCErrorError {
     JSONRPCErrorError {
         code: -32600,
-        message: format!("thread abc {THREAD_UNMATERIALIZED_INCLUDE_TURNS_MESSAGE}"),
-        data: None,
+        message: "human-readable wording may change".to_string(),
+        data: Some(serde_json::json!({
+            "code": THREAD_UNMATERIALIZED_ERROR_CODE,
+            "threadId": "abc",
+        })),
     }
 }
 
@@ -83,15 +86,11 @@ fn unmaterialized_thread_read_is_treated_as_an_empty_reconciliation_source() {
     ));
 }
 
-/// Regression test for the shipped bug: the helper was matching text that only
-/// exists after formatting, so it returned false for every real response and
-/// the first message after `/new` blocked the conversation. Both forms must be
-/// tolerated, but only the raw one ever reaches the helper.
+/// Regression test for the shipped bug: formatting must have no effect on the
+/// structured recovery signal.
 #[test]
 fn the_formatted_prefix_is_absent_from_the_message_the_helper_receives() {
     let raw = unmaterialized_thread_read_error();
-    assert!(!raw.message.starts_with("thread/read failed:"));
-
     let formatted = TypedRequestError::Server {
         method: "thread/read".into(),
         source: raw.clone(),
@@ -103,22 +102,11 @@ fn the_formatted_prefix_is_absent_from_the_message_the_helper_receives() {
         "thread/read",
         &raw
     ));
-    assert!(thread_read_unavailable_before_first_message(
-        "thread/read",
-        &JSONRPCErrorError {
-            message: formatted,
-            ..raw
-        }
-    ));
 }
 
 #[test]
 fn unrelated_invalid_requests_are_not_suppressed_during_reconciliation() {
-    for message in [
-        "thread abc does not exist",
-        "includeTurns is unavailable for archived threads",
-        "thread abc is not materialized yet; thread/turns/list is unavailable before first user message",
-    ] {
+    for message in ["thread abc does not exist", "is not materialized yet"] {
         let error = JSONRPCErrorError {
             code: -32600,
             message: message.into(),

@@ -1500,6 +1500,15 @@ async fn thread_read_include_turns_rejects_unmaterialized_loaded_thread() -> Res
             thread.id
         )
     );
+    assert_eq!(
+        read_err
+            .error
+            .data
+            .as_ref()
+            .and_then(|data| data.get("code"))
+            .and_then(serde_json::Value::as_str),
+        Some("thread_unmaterialized")
+    );
 
     Ok(())
 }
