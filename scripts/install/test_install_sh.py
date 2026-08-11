@@ -29,10 +29,10 @@ class InstallShTest(unittest.TestCase):
             ],
         )
         self.assertIn(
-            f"Could not fetch GitHub release metadata for Codex {VERSION}",
+            f"Could not fetch GitHub release metadata for PFTerminal {VERSION}",
             result.stderr,
         )
-        self.assertNotIn("Could not find Codex package", result.stderr)
+        self.assertNotIn("Could not find PFTerminal package", result.stderr)
 
     def test_exact_release_opt_out_uses_github_metadata_once(self) -> None:
         result, requests = run_installer(VERSION, use_mirror=False)
@@ -504,7 +504,7 @@ class InstallShTest(unittest.TestCase):
                     f"rust-v{VERSION}",
                 ],
             )
-            self.assertNotIn("Downloading Codex CLI", second_result.stdout)
+            self.assertNotIn("Downloading PFTerminal CLI", second_result.stdout)
 
 
 def run_installer(

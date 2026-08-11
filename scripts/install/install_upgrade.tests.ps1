@@ -19,7 +19,9 @@ $functionNames = @(
     "Set-JunctionTarget",
     "Test-IsJunction",
     "Ensure-Junction",
+    "Find-ReleaseAssetMetadata",
     "Get-WindowsPackageAssetName",
+    "Resolve-ReleaseAssetSelection",
     "Expand-WindowsPackageArchive"
 )
 foreach ($functionName in $functionNames) {
@@ -35,6 +37,40 @@ foreach ($functionName in $functionNames) {
         throw "Could not find $functionName in install.ps1."
     }
     Invoke-Expression $definition.Extent.Text
+}
+
+if ($source -notmatch '\$packageAsset\s*=\s*Get-WindowsPackageAssetName\s+-Target\s+\$target') {
+    throw "Windows installer entrypoint must select the published PFTerminal ZIP asset."
+}
+if ($source -notmatch '\$checksumAsset\s*=\s*"pfterminal-package_SHA256SUMS"') {
+    throw "Windows installer entrypoint must select the published PFTerminal checksum manifest."
+}
+
+$digest = "sha256:" + ("a" * 64)
+$target = "x86_64-pc-windows-msvc"
+$release = [PSCustomObject]@{
+    Version = "9.8.7"
+    Source = "GitHub"
+    Metadata = [PSCustomObject]@{
+        assets = @(
+            [PSCustomObject]@{
+                name = "pfterminal-package-$target.zip"
+                digest = $digest
+                browser_download_url = "https://example.invalid/pfterminal-package-$target.zip"
+            },
+            [PSCustomObject]@{
+                name = "pfterminal-package_SHA256SUMS"
+                digest = $digest
+                browser_download_url = "https://example.invalid/pfterminal-package_SHA256SUMS"
+            }
+        )
+    }
+}
+$selection = Resolve-ReleaseAssetSelection -ResolvedRelease $release -Target $target -NpmTag "win32-x64"
+if ($selection.PackageAsset -ne "pfterminal-package-$target.zip" -or
+    $selection.ChecksumAsset -ne "pfterminal-package_SHA256SUMS" -or
+    $selection.InstallLayout -ne "Package") {
+    throw "Windows installer did not select the PFTerminal release asset family."
 }
 
 # Windows executables cannot be deleted while a running process holds them.
