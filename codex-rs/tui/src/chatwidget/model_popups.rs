@@ -1342,7 +1342,7 @@ mod tests {
         );
         assert_eq!(
             ChatWidget::model_provider_for_selection(ANTHROPIC_DEFAULT_MODEL).as_deref(),
-            Some(ANTHROPIC_PROVIDER_ID)
+            Some(CLAUDE_PLAN_PROVIDER_ID)
         );
         assert_eq!(
             ChatWidget::model_provider_for_selection(BASETEN_DEFAULT_MODEL).as_deref(),

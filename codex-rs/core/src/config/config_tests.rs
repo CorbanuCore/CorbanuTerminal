@@ -12235,8 +12235,7 @@ async fn explicit_incompatible_model_provider_pair_fails_closed() -> std::io::Re
         tempdir()?.abs(),
     )
     .await
-    .err()
-    .expect("incompatible explicit pair must fail before a request is sent");
+    .expect_err("incompatible explicit pair must fail before a request is sent");
 
     assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
     let message = error.to_string();

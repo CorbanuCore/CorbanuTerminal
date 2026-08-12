@@ -1,6 +1,6 @@
 # Core Integrations
 
-Status: current v0.1.27 repository state as of 2026-08-02.
+Status: current v0.1.29 repository state as of 2026-08-12.
 
 PFTerminal is a Codex CLI fork with product-specific model provider,
 onboarding, packaging, and branding changes.
