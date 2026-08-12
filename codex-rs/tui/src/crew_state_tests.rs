@@ -137,7 +137,7 @@ fn adding_a_member_cannot_broaden_the_crew_provider_allowlist() {
     for (member_id, provider, model, node) in [
         ("orc-1", "kimi-code", "k3", "thread:kimi"),
         ("orc-2", "anthropic", "claude-opus-5", "thread:opus"),
-        ("orc-3", "openrouter", "x-ai/grok-4.5", "thread:grok"),
+        ("orc-3", "openrouter", "x-ai/grok-4.6", "thread:grok"),
     ] {
         let error = state
             .add_ready_member(

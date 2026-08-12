@@ -7,6 +7,7 @@ use codex_model_provider_info::KIMI_CODE_K3_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
+use codex_model_provider_info::OPENROUTER_GROK_4_6_MODEL;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_protocol::crew::CURRENT_CREW_SCHEMA_VERSION;
 use codex_protocol::crew::CrewMemberSpec;
@@ -20,7 +21,7 @@ pub(crate) const STANDARD_NAZGUL_MODEL: &str = CLAUDE_FABLE_5_PLAN_MODEL;
 pub(crate) const STANDARD_TROLL_MODEL: &str = "gpt-5.6-sol";
 pub(crate) const STANDARD_ORC_MODEL: &str = "gpt-5.6-luna";
 pub(crate) const STANDARD_ORC_2_MODEL: &str = "gpt-5.6-terra";
-pub(crate) const STANDARD_ORC_3_MODEL: &str = "x-ai/grok-4.5";
+pub(crate) const STANDARD_ORC_3_MODEL: &str = OPENROUTER_GROK_4_6_MODEL;
 
 pub(crate) fn standard_crew_spec() -> CrewSpec {
     CrewSpec {
@@ -115,7 +116,7 @@ pub(crate) fn multimodel_qualification_crew_spec() -> CrewSpec {
             "Grok reviewer",
             "orc",
             Some("manager"),
-            RuntimeRequest::exact(OPENROUTER_PROVIDER_ID, "x-ai/grok-4.5", None),
+            RuntimeRequest::exact(OPENROUTER_PROVIDER_ID, OPENROUTER_GROK_4_6_MODEL, None),
         ),
         member(
             "kimi-reviewer",

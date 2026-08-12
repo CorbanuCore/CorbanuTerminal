@@ -29,6 +29,8 @@ use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 #[cfg(test)]
 use codex_model_provider_info::DEEPSEEK_DEFAULT_MODEL;
+#[cfg(test)]
+use codex_model_provider_info::DEEPSEEK_PRO_MODEL;
 use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 #[cfg(test)]
@@ -36,6 +38,10 @@ use codex_model_provider_info::META_DEFAULT_MODEL;
 use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID;
+#[cfg(test)]
+use codex_model_provider_info::OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL;
+#[cfg(test)]
+use codex_model_provider_info::OPENROUTER_GROK_4_6_MODEL;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
@@ -1303,6 +1309,10 @@ mod tests {
             Some(DEEPSEEK_PROVIDER_ID)
         );
         assert_eq!(
+            ChatWidget::model_provider_for_selection(DEEPSEEK_PRO_MODEL).as_deref(),
+            Some(DEEPSEEK_PROVIDER_ID)
+        );
+        assert_eq!(
             ChatWidget::model_provider_for_selection(META_DEFAULT_MODEL).as_deref(),
             Some(META_PROVIDER_ID)
         );
@@ -1343,7 +1353,9 @@ mod tests {
             Some(OPENROUTER_PROVIDER_ID)
         );
         for model in [
+            OPENROUTER_GROK_4_6_MODEL,
             OPENROUTER_GROK_4_5_MODEL,
+            OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL,
             OPENROUTER_DEEPSEEK_V4_PRO_MODEL,
             OPENROUTER_DEEPSEEK_V4_FLASH_0731_MODEL,
             OPENROUTER_TENCENT_HY3_FREE_MODEL,

@@ -1474,7 +1474,9 @@ fn bundled_models_json_tracks_verified_image_capabilities() {
     for slug in [
         "z-ai/glm-5.2",
         "zai/glm-5.2",
+        "deepseek-v4-pro",
         "deepseek/deepseek-v4-pro",
+        "deepseek/deepseek-v4-pro-0813",
         "deepseek/deepseek-v4-flash-0731",
         "tencent/hy3:free",
         "openrouter/owl-alpha",
@@ -1956,8 +1958,29 @@ fn bundled_models_json_contains_openrouter_models() {
             .unwrap_or_else(|| panic!("bundled models.json should include {slug}"))
     };
 
-    let grok = openrouter_model("x-ai/grok-4.5");
-    assert_eq!(grok.display_name, "OpenRouter Grok 4.5");
+    let direct_deepseek_pro = response
+        .models
+        .iter()
+        .find(|model| model.slug == "deepseek-v4-pro")
+        .expect("bundled models.json should include direct DeepSeek V4 Pro");
+    assert_eq!(direct_deepseek_pro.display_name, "DeepSeek V4 Pro (Direct)");
+    assert_eq!(direct_deepseek_pro.context_window, Some(1_048_576));
+    assert_eq!(direct_deepseek_pro.max_output_tokens, Some(384_000));
+    assert_eq!(
+        direct_deepseek_pro.default_reasoning_level,
+        Some(ReasoningEffort::High)
+    );
+    assert_eq!(
+        direct_deepseek_pro
+            .supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![ReasoningEffort::High, ReasoningEffort::Max]
+    );
+
+    let grok = openrouter_model("x-ai/grok-4.6");
+    assert_eq!(grok.display_name, "OpenRouter Grok 4.6");
     assert_eq!(grok.context_window, Some(500_000));
     assert_eq!(grok.default_reasoning_level, Some(ReasoningEffort::High));
     assert_eq!(
@@ -1969,7 +1992,13 @@ fn bundled_models_json_contains_openrouter_models() {
             ReasoningEffort::Low,
             ReasoningEffort::Medium,
             ReasoningEffort::High,
+            ReasoningEffort::XHigh,
         ]
+    );
+
+    assert_eq!(
+        openrouter_model("x-ai/grok-4.5").display_name,
+        "OpenRouter Grok 4.5"
     );
 
     let deepseek_pro = openrouter_model("deepseek/deepseek-v4-pro");
@@ -1986,6 +2015,30 @@ fn bundled_models_json_contains_openrouter_models() {
             .map(|level| level.effort.clone())
             .collect::<Vec<_>>(),
         vec![ReasoningEffort::High, ReasoningEffort::XHigh]
+    );
+
+    let deepseek_pro_0813 = openrouter_model("deepseek/deepseek-v4-pro-0813");
+    assert_eq!(
+        deepseek_pro_0813.display_name,
+        "OpenRouter DeepSeek V4 Pro 0813"
+    );
+    assert_eq!(deepseek_pro_0813.context_window, Some(1_048_576));
+    assert_eq!(deepseek_pro_0813.max_output_tokens, Some(384_000));
+    assert_eq!(
+        deepseek_pro_0813.default_reasoning_level,
+        Some(ReasoningEffort::High)
+    );
+    assert_eq!(
+        deepseek_pro_0813
+            .supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            ReasoningEffort::Low,
+            ReasoningEffort::High,
+            ReasoningEffort::Max,
+        ]
     );
 
     let deepseek_flash = openrouter_model("deepseek/deepseek-v4-flash-0731");

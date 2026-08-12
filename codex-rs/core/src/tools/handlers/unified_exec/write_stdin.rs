@@ -2,7 +2,7 @@ use crate::function_tool::FunctionCallError;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
 use crate::tools::context::boxed_tool_output;
-use crate::tools::handlers::parse_arguments;
+use crate::tools::handlers::parse_arguments_for_tool;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::PostToolUsePayload;
 use crate::tools::registry::PreToolUsePayload;
@@ -19,12 +19,19 @@ use super::post_unified_exec_tool_use_payload;
 #[derive(Debug, Deserialize)]
 struct WriteStdinArgs {
     // The model is trained on `session_id`.
+    #[serde(deserialize_with = "super::deserialize_integral_i32")]
     session_id: i32,
     #[serde(default)]
     chars: String,
-    #[serde(default = "super::default_write_stdin_yield_time_ms")]
+    #[serde(
+        default = "super::default_write_stdin_yield_time_ms",
+        deserialize_with = "super::deserialize_integral_u64"
+    )]
     yield_time_ms: u64,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "super::deserialize_optional_integral_usize"
+    )]
     max_output_tokens: Option<usize>,
 }
 
@@ -69,7 +76,7 @@ impl WriteStdinHandler {
             }
         };
 
-        let args: WriteStdinArgs = parse_arguments(&arguments)?;
+        let args: WriteStdinArgs = parse_arguments_for_tool("write_stdin", &arguments)?;
         let response = session
             .services
             .unified_exec_manager
@@ -90,6 +97,60 @@ impl WriteStdinHandler {
             })?;
 
         Ok(boxed_tool_output(response))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_integral_float_arguments_from_model_tool_calls() {
+        let args: WriteStdinArgs = parse_arguments_for_tool(
+            "write_stdin",
+            r#"{"session_id":29757.0,"chars":"","yield_time_ms":120000.0,"max_output_tokens":3000.0}"#,
+        )
+        .expect("integral JSON floats should be compatible with integer tool fields");
+
+        assert_eq!(args.session_id, 29_757);
+        assert_eq!(args.yield_time_ms, 120_000);
+        assert_eq!(args.max_output_tokens, Some(3_000));
+    }
+
+    #[test]
+    fn retains_integer_arguments_and_defaults() {
+        let args: WriteStdinArgs =
+            parse_arguments_for_tool("write_stdin", r#"{"session_id":42,"chars":"continue"}"#)
+                .expect("ordinary integer arguments should remain valid");
+
+        assert_eq!(args.session_id, 42);
+        assert_eq!(
+            args.yield_time_ms,
+            super::super::default_write_stdin_yield_time_ms()
+        );
+        assert_eq!(args.max_output_tokens, None);
+    }
+
+    #[test]
+    fn rejects_fractional_integer_fields() {
+        let error = parse_arguments_for_tool::<WriteStdinArgs>(
+            "write_stdin",
+            r#"{"session_id":42.5,"yield_time_ms":1000}"#,
+        )
+        .expect_err("fractional process ids must not be rounded");
+
+        assert!(error.to_string().contains("exactly represented integer"));
+    }
+
+    #[test]
+    fn rejects_negative_unsigned_fields() {
+        let error = parse_arguments_for_tool::<WriteStdinArgs>(
+            "write_stdin",
+            r#"{"session_id":42,"yield_time_ms":-1.0}"#,
+        )
+        .expect_err("negative yield times must remain invalid");
+
+        assert!(error.to_string().contains("non-negative integer"));
     }
 }
 

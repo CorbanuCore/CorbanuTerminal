@@ -30,7 +30,9 @@ Visible OpenRouter models are bundled in
 
 | Slug | Display name | Listed pricing text |
 | --- | --- | --- |
+| `x-ai/grok-4.6` | OpenRouter Grok 4.6 | `$2.00/M input`, `$0.50/M cached input`, `$6.00/M output` |
 | `deepseek/deepseek-v4-flash-0731` | OpenRouter DeepSeek V4 Flash 0731 | `$0.14/M input`, `$0.0028/M cached input`, `$0.28/M output` |
+| `deepseek/deepseek-v4-pro-0813` | OpenRouter DeepSeek V4 Pro 0813 | `$0.435/M input`, `$0.003625/M cached input`, `$0.87/M output` |
 | `deepseek/deepseek-v4-pro` | OpenRouter DeepSeek V4 Pro | `$0.435/M input`, `$0.87/M output` |
 | `moonshotai/kimi-k3` | OpenRouter Kimi K3 | `$3.00/M input`, `$0.30/M cached input`, `$15.00/M output` |
 | `x-ai/grok-4.5` | OpenRouter Grok 4.5 | `$2.00/M input`, `$6.00/M output` |
@@ -38,6 +40,8 @@ Visible OpenRouter models are bundled in
 | `openrouter/owl-alpha` | OpenRouter Owl Alpha | `$0/M input`, `$0/M output` |
 | `google/gemini-3.5-flash` | OpenRouter Gemini 3.5 Flash | `$1.50/M input`, `$9.00/M output` |
 | `tencent/hy3:free` | OpenRouter Tencent Hy3 Free | `$0/M input`, `$0/M output` |
+
+Grok 4.6's listed rates double when the prompt exceeds 200,000 tokens.
 
 DeepSeek V4 Flash is intentionally pinned to the exact
 `deepseek/deepseek-v4-flash-0731` slug. Direct DeepSeek uses provider
@@ -53,8 +57,10 @@ Examples:
 
 ```bash
 pfterminal -m deepseek/deepseek-v4-flash-0731
+pfterminal -m deepseek/deepseek-v4-pro-0813
 pfterminal -m deepseek/deepseek-v4-pro
 pfterminal -m moonshotai/kimi-k3
+pfterminal -m x-ai/grok-4.6
 pfterminal -m x-ai/grok-4.5
 pfterminal -m minimax/minimax-m3
 pfterminal -m openrouter/owl-alpha

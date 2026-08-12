@@ -119,11 +119,14 @@ pub const OPENROUTER_BASE_URL: &str = "https://openrouter.ai/api/v1";
 const OPENROUTER_ANTHROPIC_PROVIDER_NAME: &str = "OpenRouter Anthropic";
 pub const OPENROUTER_ANTHROPIC_PROVIDER_ID: &str = "openrouter-anthropic";
 pub const OPENROUTER_DEFAULT_MODEL: &str = "z-ai/glm-5.2";
+pub const OPENROUTER_GROK_4_6_MODEL: &str = "x-ai/grok-4.6";
 pub const OPENROUTER_API_KEY_ENV_VAR: &str = "OPENROUTER_API_KEY";
 const DEEPSEEK_PROVIDER_NAME: &str = "DeepSeek";
 pub const DEEPSEEK_PROVIDER_ID: &str = "deepseek";
 pub const DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com";
 pub const DEEPSEEK_DEFAULT_MODEL: &str = "deepseek-v4-flash";
+pub const DEEPSEEK_PRO_MODEL: &str = "deepseek-v4-pro";
+pub const OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL: &str = "deepseek/deepseek-v4-pro-0813";
 pub const DEEPSEEK_API_KEY_ENV_VAR: &str = "DEEPSEEK_API_KEY";
 const META_PROVIDER_NAME: &str = "Meta";
 pub const META_PROVIDER_ID: &str = "meta";
@@ -234,7 +237,7 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     if model == META_DEFAULT_MODEL {
         return Some(META_PROVIDER_ID);
     }
-    if model == DEEPSEEK_DEFAULT_MODEL {
+    if matches!(model, DEEPSEEK_DEFAULT_MODEL | DEEPSEEK_PRO_MODEL) {
         return Some(DEEPSEEK_PROVIDER_ID);
     }
     if matches!(
@@ -243,7 +246,9 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
             | "minimax/minimax-m3"
             | "openrouter/owl-alpha"
             | "google/gemini-3.5-flash"
+            | OPENROUTER_GROK_4_6_MODEL
             | "x-ai/grok-4.5"
+            | OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL
             | "deepseek/deepseek-v4-pro"
             | "deepseek/deepseek-v4-flash-0731"
             | "tencent/hy3:free"
@@ -321,7 +326,9 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     if model == KIMI_CODE_K3_MODEL && provider != KIMI_CODE_PROVIDER_ID {
         return Some(KIMI_CODE_PROVIDER_ID);
     }
-    if model == DEEPSEEK_DEFAULT_MODEL && provider != DEEPSEEK_PROVIDER_ID {
+    if matches!(model, DEEPSEEK_DEFAULT_MODEL | DEEPSEEK_PRO_MODEL)
+        && provider != DEEPSEEK_PROVIDER_ID
+    {
         return Some(DEEPSEEK_PROVIDER_ID);
     }
     if model.starts_with("gpt-") && provider != OPENAI_PROVIDER_ID {
@@ -396,7 +403,9 @@ pub fn resolve_model_for_provider(
             _ => Some(OPENROUTER_DEFAULT_MODEL.to_string()),
         },
         DEEPSEEK_PROVIDER_ID => match model {
-            Some(model) if model.trim() == DEEPSEEK_DEFAULT_MODEL => Some(model),
+            Some(model) if matches!(model.trim(), DEEPSEEK_DEFAULT_MODEL | DEEPSEEK_PRO_MODEL) => {
+                Some(model)
+            }
             _ => Some(DEEPSEEK_DEFAULT_MODEL.to_string()),
         },
         META_PROVIDER_ID => match model {

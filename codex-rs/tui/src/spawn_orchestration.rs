@@ -175,7 +175,7 @@ impl App {
             SelectionItem {
                 name: "Create standard crew: Nazgul + Troll + 3 Orcs".to_string(),
                 description: Some(
-                    "Create persistent named panes (Nazgul Claude Fable Plan, Troll GPT-5.6-Sol xhigh, Orcs GPT-5.6-Luna xhigh, GPT-5.6-Terra xhigh, and OpenRouter Grok 4.5). No task is started."
+                    "Create persistent named panes (Nazgul Claude Fable Plan, Troll GPT-5.6-Sol xhigh, Orcs GPT-5.6-Luna xhigh, GPT-5.6-Terra xhigh, and OpenRouter Grok 4.6). No task is started."
                         .to_string(),
                 ),
                 actions: vec![Box::new(|tx| {
@@ -2222,7 +2222,7 @@ impl App {
     ///   Troll: GPT-5.6-Sol (OpenAI) @ xhigh
     ///   Orc 1: GPT-5.6-Luna (OpenAI) @ xhigh
     ///   Orc 2: GPT-5.6-Terra (OpenAI) @ xhigh
-    ///   Orc 3: Grok 4.5 (OpenRouter) @ provider default
+    ///   Orc 3: Grok 4.6 (OpenRouter) @ provider default
     #[cfg(test)]
     pub(crate) const STANDARD_NAZGUL_MODEL: &'static str = crew_presets::STANDARD_NAZGUL_MODEL;
     #[cfg(test)]

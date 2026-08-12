@@ -39,12 +39,15 @@ Billing class:
 | k3 | kimi-code | metered | 3.00 | 15.00 | 0.30 | yes | 262K |
 | moonshotai/kimi-k3 | openrouter | metered | 3.00 | 15.00 | 0.30 | yes | 1.05M |
 | moonshotai/kimi-k2.7-code | ambient | metered | 0.73 | 3.50 | 0.15 | yes | 262K |
+| x-ai/grok-4.6 | openrouter | metered | 2.00 | 6.00 | 0.50 | yes | 500K |
 | x-ai/grok-4.5 | openrouter | metered | 2.00 | 6.00 | 0.50 | yes | 500K |
 | glm-5.2 | zai | plan schedule: 3x peak / 2x normal off-peak / 1x promotional off-peak through 2026-09-30 | — | — | — | no | 1.0M |
 | z-ai/glm-5.2 | ambient | metered | 0.76 | 2.42 | 0.14 | no | 101K |
 | zai/glm-5.2 | vercel | metered | 1.40 | 4.40 | 0.26 | no | 1.04M |
 | zai/glm-5.2-fast | vercel | metered | 2.10 | 6.60 | 0.21 | no | 1.0M |
 | zai-org/GLM-5.2 | baseten | metered | 1.40 | 4.40 | 0.14 | no | 1.05M |
+| deepseek-v4-pro | deepseek | metered | 0.435 | 0.87 | 0.003625 | no | 1.05M |
+| deepseek/deepseek-v4-pro-0813 | openrouter | metered | 0.435 | 0.87 | 0.003625 | no | 1.05M |
 | deepseek/deepseek-v4-pro | openrouter | metered | 0.435 | 0.87 | — | no | 1.05M |
 | minimax/minimax-m3 | openrouter | metered | 0.60 | 2.40 | — | yes | 1.05M |
 | tencent/hy3:free | openrouter | metered | 0.00 | 0.00 | — | no | 262K |
@@ -59,18 +62,19 @@ Billing class:
 - `plan`    — drawn from subscription capacity. Preferred, but finite; burn
   weight still matters. Local GPU is the only genuinely free tier.
 - `low`     — under $1/M input: deepseek-v4-pro, minimax-m3, hy3
-- `medium`  — $1-3/M input: glm-5.2, grok-4.5, k3, gpt-5.6-terra/luna API
+- `medium`  — $1-3/M input: glm-5.2, grok-4.6, grok-4.5, k3, gpt-5.6-terra/luna API
 - `high`    — $5+/M input: claude-opus-5, gpt-5.6-sol API, gpt-5.5
 - `premium` — $10+/M input: claude-fable-5
 
 ## Notes that matter for allocation
 
-- Output dominates agent cost. Claude Fable 5 output is $50/M; Grok 4.5 is $6/M.
+- Output dominates agent cost. Claude Fable 5 output is $50/M; Grok 4.6 is $6/M.
+- Grok 4.6 input, cached-input, and output rates double above 200K prompt tokens.
 - Kimi K3 always reasons at max effort; every reasoning token bills at $15/M.
 - Cached input is 10x cheaper on most providers. Long-lived agents with stable
   system prompts are much cheaper than the list rate implies.
 - Vision is NOT universal: the GLM-5.2 family and DeepSeek V4 Pro are text-only.
-  Kimi K3, Grok 4.5, MiniMax M3, all GPT-5.x, and all Claude models accept images.
+  Kimi K3, Grok 4.6, Grok 4.5, MiniMax M3, all GPT-5.x, and all Claude models accept images.
 - `-plan` model slugs route through `claude-plan` (subscription). The identical
   model without the suffix routes through `anthropic` (metered). This is the
   single most expensive naming footgun in the catalog.

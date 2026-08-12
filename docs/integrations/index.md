@@ -20,7 +20,7 @@ Meta, Baseten, Vercel, and PFTerminal Plan as first-class provider choices.
 | Ambient default model | Bundled model `z-ai/glm-5.2`, displayed as `Ambient GLM 5.2`, plus Ambient Kimi K2.7 Code. | `codex-rs/models-manager/models.json` |
 | Kimi Code provider | Built-in provider `kimi-code` using `KIMI_API_KEY` and current model `k3`. | `codex-rs/model-provider-info/src/lib.rs` |
 | Z.AI provider | Built-in provider named `zai`, using `ZAI_API_KEY` and the Z.AI coding plan API base URL. | `codex-rs/model-provider-info/src/lib.rs` |
-| DeepSeek provider | Direct Responses route `deepseek-v4-flash`, backed by `DEEPSEEK_API_KEY`. | `codex-rs/model-provider-info/src/lib.rs` |
+| DeepSeek provider | Direct Responses routes `deepseek-v4-flash` and `deepseek-v4-pro`, backed by `DEEPSEEK_API_KEY`. | `codex-rs/model-provider-info/src/lib.rs` |
 | OpenRouter provider | Built-in metered provider including pinned `deepseek/deepseek-v4-flash-0731`, DeepSeek Pro, Kimi K3, Grok, MiniMax, Gemini, Owl, and Tencent routes. | `codex-rs/model-provider-info/src/lib.rs`, `codex-rs/models-manager/models.json` |
 | Meta provider | Built-in `meta` route using `MODEL_API_KEY` and Muse Spark 1.1. | `codex-rs/model-provider-info/src/lib.rs` |
 | Baseten provider | Built-in provider named `baseten`, using `BASETEN_API_KEY` and Baseten GLM 5.2. | `codex-rs/model-provider-info/src/lib.rs` |

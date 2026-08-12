@@ -22,6 +22,26 @@ use tokio::sync::Mutex;
 
 const TEST_TRUNCATION_POLICY: TruncationPolicy = TruncationPolicy::Tokens(10_000);
 
+#[test]
+fn exec_command_accepts_integral_float_arguments_from_model_tool_calls() -> anyhow::Result<()> {
+    let args: ExecCommandArgs = parse_arguments(
+        r#"{"cmd":"echo ready","yield_time_ms":180000.0,"max_output_tokens":3000.0}"#,
+    )?;
+
+    assert_eq!(args.yield_time_ms, 180_000);
+    assert_eq!(args.max_output_tokens, Some(3_000));
+    Ok(())
+}
+
+#[test]
+fn exec_command_rejects_fractional_integer_fields() {
+    let error =
+        parse_arguments::<ExecCommandArgs>(r#"{"cmd":"echo ready","yield_time_ms":1000.5}"#)
+            .expect_err("fractional yield times must not be rounded");
+
+    assert!(error.to_string().contains("exactly represented integer"));
+}
+
 async fn invocation_for_payload(
     tool_name: &str,
     call_id: &str,

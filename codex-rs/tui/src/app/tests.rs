@@ -7477,7 +7477,7 @@ async fn standard_crew_quick_start_uses_the_expected_role_picker_label() {
     assert_eq!(App::STANDARD_TROLL_MODEL, "gpt-5.6-sol");
     assert_eq!(App::STANDARD_ORC_MODEL, "gpt-5.6-luna");
     assert_eq!(App::STANDARD_ORC_2_MODEL, "gpt-5.6-terra");
-    assert_eq!(App::STANDARD_ORC_3_MODEL, "x-ai/grok-4.5");
+    assert_eq!(App::STANDARD_ORC_3_MODEL, "x-ai/grok-4.6");
     let orc_runtimes = App::standard_orc_runtimes();
     assert_eq!(
         orc_runtimes
@@ -7493,7 +7493,7 @@ async fn standard_crew_quick_start_uses_the_expected_role_picker_label() {
         vec![
             ("gpt-5.6-luna", OPENAI_PROVIDER_ID, Some("xhigh")),
             ("gpt-5.6-terra", OPENAI_PROVIDER_ID, Some("xhigh")),
-            ("x-ai/grok-4.5", OPENROUTER_PROVIDER_ID, None),
+            ("x-ai/grok-4.6", OPENROUTER_PROVIDER_ID, None),
         ]
     );
     // Provider resolution for each crew model.

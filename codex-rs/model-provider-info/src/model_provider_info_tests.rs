@@ -764,10 +764,10 @@ fn test_built_in_model_providers_include_deepseek_flash_responses() {
         Some(DEEPSEEK_DEFAULT_MODEL)
     );
     assert_eq!(
-        resolve_model_for_provider(Some("deepseek-v4-pro".to_string()), DEEPSEEK_PROVIDER_ID,)
+        resolve_model_for_provider(Some(DEEPSEEK_PRO_MODEL.to_string()), DEEPSEEK_PROVIDER_ID,)
             .as_deref(),
-        Some(DEEPSEEK_DEFAULT_MODEL),
-        "DeepSeek Responses must stay on Flash until Pro is supported"
+        Some(DEEPSEEK_PRO_MODEL),
+        "DeepSeek Pro should remain on the authenticated direct provider"
     );
 }
 
@@ -833,7 +833,9 @@ fn openrouter_preserves_nonempty_model_slugs() {
         for model in [
             "minimax/minimax-m3",
             "google/gemini-3.5-flash",
+            OPENROUTER_GROK_4_6_MODEL,
             "x-ai/grok-4.5",
+            OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL,
             "deepseek/deepseek-v4-pro",
             "deepseek/deepseek-v4-flash-0731",
             "tencent/hy3:free",
@@ -1311,6 +1313,10 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider(DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROVIDER_ID),
         None
     );
+    assert_eq!(
+        corrected_catalog_provider(DEEPSEEK_PRO_MODEL, OPENROUTER_PROVIDER_ID),
+        Some(DEEPSEEK_PROVIDER_ID)
+    );
 
     // Servable cross-provider pairs, unknown models, user-defined providers: untouched.
     assert_eq!(
@@ -1344,9 +1350,15 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (ANTHROPIC_DEFAULT_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+        (OPENROUTER_GROK_4_6_MODEL, OPENROUTER_PROVIDER_ID),
         ("x-ai/grok-4.5", OPENROUTER_PROVIDER_ID),
         ("moonshotai/kimi-k3", OPENROUTER_PROVIDER_ID),
         (DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROVIDER_ID),
+        (DEEPSEEK_PRO_MODEL, DEEPSEEK_PROVIDER_ID),
+        (
+            OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL,
+            OPENROUTER_PROVIDER_ID,
+        ),
         (META_DEFAULT_MODEL, META_PROVIDER_ID),
         (VERCEL_DEFAULT_MODEL, VERCEL_PROVIDER_ID),
         (VERCEL_GLM_5_2_FAST_MODEL, VERCEL_ANTHROPIC_FAST_PROVIDER_ID),
