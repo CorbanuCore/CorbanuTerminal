@@ -2584,11 +2584,8 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
         .session
         .rollout_path
         .as_ref()
-        .expect("Corbanu Terminal Main should have a local rollout path");
-    assert!(
-        main_rollout_path.is_file(),
-        "a no-task Corbanu Terminal Main must be durable before panes reference its layout"
-    );
+        .expect("Main rollout path");
+    assert!(main_rollout_path.is_file(), "Main rollout must be durable");
     app.primary_thread_id = Some(main_thread_id);
     app.active_thread_id = Some(main_thread_id);
     app.primary_session_configured = Some(main.session.clone());
@@ -3063,7 +3060,7 @@ async fn pane_picker_separates_user_panes_from_managed_spawn_crew() {
     assert!(names.contains(&"Corbanu Terminal - Codex worker"));
     assert!(
         !names.contains(&"Corbanu Terminal - Task-only subagent"),
-        "parent-controlled Core workers are not operator-owned user panes"
+        "managed workers stay out of user panes"
     );
 
     let user_index = names
@@ -3121,24 +3118,18 @@ async fn pane_picker_marks_exactly_the_active_native_thread_current() {
     let main = items
         .iter()
         .find(|item| item.name == "Corbanu Terminal - Main")
-        .expect("Main pane row");
+        .expect("Main pane");
     let user = items
         .iter()
         .find(|item| item.name == "Corbanu Terminal - Matrix Twin")
-        .expect("operator pane row");
+        .expect("operator pane");
 
-    assert!(
-        !main.is_current,
-        "inactive Main must not be labelled current"
-    );
-    assert!(
-        user.is_current,
-        "active native pane must be labelled current"
-    );
+    assert!(!main.is_current, "inactive Main marked current");
+    assert!(user.is_current, "active pane not current");
     assert_eq!(
         items.iter().filter(|item| item.is_current).count(),
         1,
-        "the pane picker must project one current pane"
+        "expected one current pane"
     );
     assert_snapshot!(
         format!(
@@ -7188,10 +7179,10 @@ async fn codex_user_pane_remains_interactive_after_liveness_refresh_impl() -> Re
         .session
         .rollout_path
         .as_ref()
-        .expect("Corbanu Terminal user pane should have a local rollout path");
+        .expect("user-pane rollout path");
     assert!(
         pane_rollout_path.is_file(),
-        "a no-task operator pane must be durable immediately after thread/start"
+        "user-pane rollout must be durable"
     );
     let pane_thread_id = started.session.thread_id;
     app.register_codex_user_pane(
@@ -7208,7 +7199,7 @@ async fn codex_user_pane_remains_interactive_after_liveness_refresh_impl() -> Re
     assert_eq!(
         persisted_pane.name.as_deref(),
         Some("Interactive"),
-        "operator-pane creation must persist its friendly name through the app-server authority"
+        "user-pane name must persist"
     );
 
     let mut tui = crate::tui::test_support::make_test_tui()?;

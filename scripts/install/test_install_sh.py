@@ -29,10 +29,10 @@ class InstallShTest(unittest.TestCase):
             ],
         )
         self.assertIn(
-            f"Could not fetch GitHub release metadata for PFTerminal {VERSION}",
+            f"Could not fetch GitHub release metadata for Corbanu Terminal {VERSION}",
             result.stderr,
         )
-        self.assertNotIn("Could not find PFTerminal package", result.stderr)
+        self.assertNotIn("Could not find Corbanu Terminal package", result.stderr)
 
     def test_exact_release_opt_out_uses_github_metadata_once(self) -> None:
         result, requests = run_installer(VERSION, use_mirror=False)
