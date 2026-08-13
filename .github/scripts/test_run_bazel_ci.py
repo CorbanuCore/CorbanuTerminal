@@ -9,6 +9,42 @@ from tempfile import TemporaryDirectory
 
 
 class RunBazelCiTest(unittest.TestCase):
+    def test_explicit_bazel_wrapper_job_timeouts_allow_cold_local_builds(self) -> None:
+        workflows_dir = Path(__file__).parents[1] / "workflows"
+
+        for workflow_path in workflows_dir.glob("*.yml"):
+            lines = workflow_path.read_text(encoding="utf-8").splitlines()
+            for line_number, line in enumerate(lines):
+                if "run-bazel-ci.sh" not in line:
+                    continue
+
+                job_start = line_number
+                while job_start >= 0:
+                    candidate = lines[job_start]
+                    if candidate.startswith("  ") and not candidate.startswith("    "):
+                        break
+                    job_start -= 1
+
+                job_end = line_number + 1
+                while job_end < len(lines):
+                    candidate = lines[job_end]
+                    if candidate.startswith("  ") and not candidate.startswith("    "):
+                        break
+                    job_end += 1
+
+                timeout_lines = [
+                    candidate.strip()
+                    for candidate in lines[job_start:job_end]
+                    if candidate.strip().startswith("timeout-minutes:")
+                ]
+                for timeout_line in timeout_lines:
+                    timeout = int(timeout_line.split(":", 1)[1].strip())
+                    self.assertGreaterEqual(
+                        timeout,
+                        30,
+                        f"{workflow_path.name} Bazel wrapper job needs cold-build headroom",
+                    )
+
     def test_keyless_windows_cross_compile_fails_closed(self) -> None:
         script = Path(__file__).with_name("run-bazel-ci.sh")
 

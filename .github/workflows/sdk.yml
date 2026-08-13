@@ -43,7 +43,11 @@ jobs:
 
   sdks:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    # Fork and secretless PRs build locally instead of using BuildBuddy remote
+    # execution. A cold local Bazel build can exceed ten minutes before the SDK
+    # tests begin, so this job needs the same practical headroom as other Bazel
+    # validation jobs.
+    timeout-minutes: 30
     environment:
       name: bazel
       deployment: false
