@@ -387,7 +387,10 @@ jobs:
   build-windows:
     needs: validate
     name: Build Windows package - ${{ matrix.target }}
-    runs-on: windows-latest
+    # Keep release bytes on the same VS17 generation qualified by repository
+    # CI. `windows-latest` currently resolves to a VS18 image that is not yet
+    # compatible with the pinned Bazel/LLVM toolchain used by this workspace.
+    runs-on: windows-2022
     # A cold release build of every packaged binary plus archive qualification
     # can exceed 150 minutes on GitHub-hosted Windows runners. Match the macOS
     # budget so qualification fails on an actual build/smoke error, not an

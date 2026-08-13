@@ -128,7 +128,10 @@ across the recovery branch. The candidate repairs the affected boundaries:
   all-repository `pnpm run format` gate without changing their content; and
 - Windows CI treats Dev Drive support as a performance capability rather than
   a correctness prerequisite, falling back to an existing runner volume on
-  hosted images that cannot provision Dev Drive VHDs.
+  hosted images that cannot provision Dev Drive VHDs; and
+- the production Windows package workflow is pinned to the same
+  `windows-2022`/VS17 generation as repository CI instead of inheriting a
+  moving `windows-latest` toolchain.
 
 ## Linux production artifact
 
