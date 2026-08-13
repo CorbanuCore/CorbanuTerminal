@@ -12,6 +12,148 @@ use core_test_support::responses::sse_completed;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
 
+#[tokio::test]
+async fn operator_assignment_birth_brief_routes_as_normal_user_pane_turn() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(
+        &app,
+        "operator-birth-brief",
+        "Manager must coordinate the operator-owned Worker pane.",
+    );
+    let manager_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000463").expect("manager id");
+    let worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000464").expect("worker id");
+    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
+    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
+    let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
+
+    app.handle_orchestrate_command(format!(
+        "attach {worker_node} operator-birth-brief --mode review --holder {manager_node} --for 1h"
+    ));
+
+    let mut manager_tasks = Vec::new();
+    while let Ok(event) = app_event_rx.try_recv() {
+        match event {
+            AppEvent::SubmitCodexUserPaneTask { thread_id, task }
+                if thread_id == manager_thread_id =>
+            {
+                manager_tasks.push(task);
+            }
+            AppEvent::SubmitSpawnAgentTask { thread_id, .. } if thread_id == manager_thread_id => {
+                panic!("operator-owned Manager must never receive a collaboration mailbox task");
+            }
+            _ => {}
+        }
+    }
+    pretty_assertions::assert_eq!(manager_tasks.len(), 1);
+    assert!(manager_tasks[0].contains("Worker"));
+}
+
+#[tokio::test]
+async fn native_manager_host_adapter_dispatches_only_from_completed_assignment_turn() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(
+        &app,
+        "native-manager-dispatch",
+        "Manager must dispatch the implementation to Worker.",
+    );
+    let manager_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000465").expect("manager id");
+    let worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000466").expect("worker id");
+    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
+    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
+    let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
+    app.handle_orchestrate_command(format!(
+        "attach {worker_node} native-manager-dispatch --mode review --holder {manager_node} --for 1h"
+    ));
+    while app_event_rx.try_recv().is_ok() {}
+
+    let dispatch = format!(
+        "```pfterminal-send-task\n{{\"target\":\"{worker_node}\",\"task\":\"Review the branch and report concrete defects.\"}}\n```"
+    );
+    let ServerNotification::ItemCompleted(mut injected_instruction) = item_completed_notification(
+        manager_thread_id,
+        "manager-dispatch-1",
+        "injected-manager-brief",
+        &dispatch,
+    ) else {
+        unreachable!("helper returns ItemCompleted");
+    };
+    let ThreadItem::AgentMessage { phase, .. } = &mut injected_instruction.item else {
+        unreachable!("helper returns AgentMessage");
+    };
+    *phase = Some(codex_protocol::models::MessagePhase::Commentary);
+    app.enqueue_thread_notification(
+        manager_thread_id,
+        ServerNotification::ItemCompleted(injected_instruction),
+    )
+    .await
+    .expect("enqueue injected Manager instruction");
+    assert!(
+        drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id).is_none(),
+        "an injected inter-agent instruction must never execute its example host block"
+    );
+    assert!(matches!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Drafting,
+            ..
+        })
+    ));
+
+    app.enqueue_thread_notification(
+        manager_thread_id,
+        item_completed_notification(
+            manager_thread_id,
+            "manager-dispatch-1",
+            "agent-message-1",
+            &dispatch,
+        ),
+    )
+    .await
+    .expect("enqueue inactive Manager message completion");
+    assert!(
+        drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id).is_none(),
+        "native Manager output is display text, never an inter-agent transport"
+    );
+
+    let completed = turn_completed_with_agent_message(
+        manager_thread_id,
+        "manager-dispatch-1",
+        TurnStatus::Completed,
+        &dispatch,
+    );
+    app.enqueue_thread_notification(manager_thread_id, completed.clone())
+        .await
+        .expect("enqueue inactive Manager completion");
+    let worker_task = drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id)
+        .expect("completed Manager output should dispatch through the assignment host adapter");
+    assert!(worker_task.contains("Review the branch and report concrete defects."));
+    assert!(matches!(
+        app.orchestrate_whips
+            .get("assignment-1")
+            .map(|whip| &whip.kind),
+        Some(crate::orchestrate::WhipKind::Assignment {
+            phase: crate::orchestrate::AssignmentPhase::Executing,
+            ..
+        })
+    ));
+
+    app.enqueue_thread_notification(manager_thread_id, completed)
+        .await
+        .expect("replay inactive Manager completion");
+    assert!(
+        drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id).is_none(),
+        "terminal notification replay must not dispatch the same host task twice"
+    );
+}
+
 struct RealDispatchFixture {
     app: App,
     app_events: tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
