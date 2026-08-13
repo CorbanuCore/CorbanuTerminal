@@ -325,7 +325,9 @@ constant_time_eq = "0.3.1"
 crossbeam-channel = "0.5.15"
 crypto_box = { version = "0.9.1", features = ["seal"] }
 crossterm = "0.29.0"
-ctor = "0.6.3"
+# The default feature set also enables `dtor`, which we do not use and whose
+# proc-macro cannot be loaded by the native-Windows Bazel gnullvm target.
+ctor = { version = "0.6.3", default-features = false, features = ["proc_macro"] }
 deno_core_icudata = "0.77.0"
 derive_more = "2"
 diffy = "0.4.2"
