@@ -632,19 +632,35 @@ fn test_built_in_model_providers_include_ambient() {
 }
 
 #[test]
-fn test_built_in_model_providers_include_pfterminal_plan() {
+fn test_built_in_model_providers_keep_legacy_plan_id_with_corbanu_name() {
     let providers = built_in_model_providers(/*openai_base_url*/ None);
     let provider = providers
         .get(PFTERMINAL_PLAN_PROVIDER_ID)
-        .expect("PfTerminal Plan provider");
+        .expect("Corbanu Terminal Plan provider");
 
     assert!(provider.is_pfterminal_plan());
+    assert_eq!(provider.name, PLAN_NAME);
     assert_eq!(
         provider.env_key.as_deref(),
         Some(PFTERMINAL_PLAN_API_KEY_ENV_VAR)
     );
     assert_eq!(provider.wire_api, WireApi::Chat);
     assert!(!provider.requires_openai_auth);
+    assert_eq!(
+        provider.api_key_env_vars(),
+        vec![
+            CORBANU_PLAN_API_KEY_ENV_VAR,
+            PFTERMINAL_PLAN_API_KEY_ENV_VAR
+        ]
+    );
+    assert_eq!(
+        canonical_provider_id(CORBANU_PLAN_PROVIDER_ID),
+        PFTERMINAL_PLAN_PROVIDER_ID
+    );
+    assert_eq!(
+        canonical_provider_id(PFTERMINAL_PLAN_PROVIDER_ID),
+        PFTERMINAL_PLAN_PROVIDER_ID
+    );
 }
 
 #[test]

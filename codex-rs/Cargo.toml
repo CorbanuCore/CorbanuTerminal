@@ -80,6 +80,7 @@ members = [
     "network-proxy",
     "ollama",
     "process-hardening",
+    "product-brand",
     "protocol",
     "prompts",
     "rollout",
@@ -232,6 +233,7 @@ codex-plugin = { path = "plugin" }
 codex-model-provider = { path = "model-provider" }
 codex-process-hardening = { path = "process-hardening" }
 codex-protocol = { path = "protocol" }
+codex-product-brand = { path = "product-brand" }
 codex-prompts = { path = "prompts" }
 codex-responses-api-proxy = { path = "responses-api-proxy" }
 codex-response-debug-context = { path = "response-debug-context" }

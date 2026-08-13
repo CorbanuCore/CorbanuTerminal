@@ -1,4 +1,4 @@
-#![cfg(not(debug_assertions))]
+#![cfg(any(not(debug_assertions), test))]
 
 use crate::legacy_core::config::Config;
 use crate::npm_registry;
@@ -21,8 +21,6 @@ use serde::Deserialize;
 use std::path::Path;
 
 use crate::version::CODEX_CLI_VERSION;
-
-pub(crate) use crate::updates_cache::dismiss_version;
 
 pub fn get_upgrade_version(config: &Config) -> Option<String> {
     if !config.check_for_update_on_startup || is_source_build_version(CODEX_CLI_VERSION) {
@@ -57,9 +55,13 @@ pub fn get_upgrade_version(config: &Config) -> Option<String> {
     })
 }
 
-const PFTERMINAL_LATEST_RELEASE_URL: &str =
+const CORBANU_LATEST_RELEASE_URL: &str =
+    "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/latest";
+const CORBANU_RELEASE_BY_TAG_URL: &str =
+    "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/tags";
+const LEGACY_PFTERMINAL_LATEST_RELEASE_URL: &str =
     "https://api.github.com/repos/agtico/PfTerminal/releases/latest";
-const PFTERMINAL_RELEASE_BY_TAG_URL: &str =
+const LEGACY_PFTERMINAL_RELEASE_BY_TAG_URL: &str =
     "https://api.github.com/repos/agtico/PfTerminal/releases/tags";
 const HOMEBREW_CASK_API_URL: &str = "https://formulae.brew.sh/api/cask/codex.json";
 const RELEASE_VALIDATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
@@ -84,9 +86,13 @@ async fn check_for_update(
         ClientRouteClass::Other,
     )
     .with_legacy_custom_ca_fallback();
-    let latest_version =
-        fetch_latest_version_for_action(action, &client_pool, PFTERMINAL_LATEST_RELEASE_URL)
-            .await?;
+    let latest_version = fetch_latest_version_for_action_with_fallback(
+        action,
+        &client_pool,
+        CORBANU_LATEST_RELEASE_URL,
+        Some(LEGACY_PFTERMINAL_LATEST_RELEASE_URL),
+    )
+    .await?;
 
     persist_version_info(version_file, latest_version).await
 }
@@ -126,6 +132,27 @@ async fn fetch_latest_version_for_action(
         }
         Some(UpdateAction::StandaloneUnix) | Some(UpdateAction::StandaloneWindows) | None => {
             fetch_latest_github_release_version(client_pool, github_latest_release_url).await
+        }
+    }
+}
+
+async fn fetch_latest_version_for_action_with_fallback(
+    action: Option<UpdateAction>,
+    client_pool: &RouteAwareClientPool,
+    primary_url: &str,
+    fallback_url: Option<&str>,
+) -> anyhow::Result<String> {
+    match fetch_latest_version_for_action(action, client_pool, primary_url).await {
+        Ok(version) => Ok(version),
+        Err(primary_error) => {
+            let Some(fallback_url) = fallback_url else {
+                return Err(primary_error);
+            };
+            tracing::warn!(
+                %primary_error,
+                "canonical Corbanu release endpoint failed; trying the legacy PFTerminal redirect"
+            );
+            fetch_latest_version_for_action(action, client_pool, fallback_url).await
         }
     }
 }
@@ -178,8 +205,12 @@ pub async fn get_upgrade_version_for_popup(config: &Config) -> Option<String> {
             config,
             action,
             CODEX_CLI_VERSION,
-            PFTERMINAL_LATEST_RELEASE_URL,
-            PFTERMINAL_RELEASE_BY_TAG_URL,
+            CORBANU_LATEST_RELEASE_URL,
+            CORBANU_RELEASE_BY_TAG_URL,
+            Some((
+                LEGACY_PFTERMINAL_LATEST_RELEASE_URL,
+                LEGACY_PFTERMINAL_RELEASE_BY_TAG_URL,
+            )),
         ),
     )
     .await
@@ -210,13 +241,20 @@ async fn revalidated_upgrade_version(
     current_version: &str,
     latest_release_url: &str,
     release_by_tag_url: &str,
+    fallback_urls: Option<(&str, &str)>,
 ) -> anyhow::Result<Option<String>> {
     let client_pool = RouteAwareClientPool::with_chatgpt_cloudflare_cookies(
         config.http_client_factory(),
         ClientRouteClass::Other,
     )
     .with_legacy_custom_ca_fallback();
-    let latest = fetch_latest_version_for_action(action, &client_pool, latest_release_url).await?;
+    let latest = fetch_latest_version_for_action_with_fallback(
+        action,
+        &client_pool,
+        latest_release_url,
+        fallback_urls.map(|urls| urls.0),
+    )
+    .await?;
     let version_file = version_filepath(config);
     persist_version_info(&version_file, latest.clone()).await?;
 
@@ -227,9 +265,10 @@ async fn revalidated_upgrade_version(
         return Ok(None);
     }
 
-    let installed_exists = github_release_exists(
+    let installed_exists = github_release_exists_with_fallback(
         &client_pool,
         &format!("{release_by_tag_url}/rust-v{current_version}"),
+        fallback_urls.map(|urls| format!("{}/rust-v{current_version}", urls.1)),
     )
     .await?;
     if installed_exists {
@@ -255,6 +294,26 @@ async fn github_release_exists(
     }
     response.error_for_status()?;
     Ok(true)
+}
+
+async fn github_release_exists_with_fallback(
+    client_pool: &RouteAwareClientPool,
+    primary_url: &str,
+    fallback_url: Option<String>,
+) -> anyhow::Result<bool> {
+    match github_release_exists(client_pool, primary_url).await {
+        Ok(exists) => Ok(exists),
+        Err(primary_error) => {
+            let Some(fallback_url) = fallback_url else {
+                return Err(primary_error);
+            };
+            tracing::warn!(
+                %primary_error,
+                "canonical Corbanu tag endpoint failed; trying the legacy PFTerminal redirect"
+            );
+            github_release_exists(client_pool, &fallback_url).await
+        }
+    }
 }
 
 #[cfg(test)]
@@ -299,6 +358,7 @@ mod tests {
             "1.0.0",
             &format!("{}/releases/latest", server.uri()),
             &format!("{}/releases/tags", server.uri()),
+            None,
         )
         .await
         .expect("revalidate");
@@ -337,6 +397,7 @@ mod tests {
             "1.2.0",
             &format!("{}/releases/latest", server.uri()),
             &format!("{}/releases/tags", server.uri()),
+            None,
         )
         .await
         .expect("revalidate");
@@ -367,10 +428,47 @@ mod tests {
             "1.2.0",
             &format!("{}/releases/latest", server.uri()),
             &format!("{}/releases/tags", server.uri()),
+            None,
         )
         .await
         .expect("revalidate");
 
         assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn canonical_release_failure_uses_legacy_redirect_fallback() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/canonical/releases/latest"))
+            .respond_with(ResponseTemplate::new(503))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/legacy/releases/latest"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "tag_name": "rust-v1.3.0"
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let (_home, config) = test_config().await;
+
+        let result = revalidated_upgrade_version(
+            &config,
+            None,
+            "1.2.0",
+            &format!("{}/canonical/releases/latest", server.uri()),
+            &format!("{}/canonical/releases/tags", server.uri()),
+            Some((
+                &format!("{}/legacy/releases/latest", server.uri()),
+                &format!("{}/legacy/releases/tags", server.uri()),
+            )),
+        )
+        .await
+        .expect("fallback revalidation");
+
+        assert_eq!(result.as_deref(), Some("1.3.0"));
     }
 }

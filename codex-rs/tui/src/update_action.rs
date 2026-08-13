@@ -19,7 +19,7 @@ pub enum UpdateAction {
     BrewUpgrade,
     /// Update via `curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh`.
     StandaloneUnix,
-    /// Update via `$env:PFTERMINAL_NON_INTERACTIVE=1; irm https://github.com/agtico/PfTerminal/releases/latest/download/install.ps1 | iex`.
+    /// Update via the canonical Corbanu Terminal PowerShell installer.
     StandaloneWindows,
 }
 
@@ -50,7 +50,7 @@ impl UpdateAction {
                 "sh",
                 &[
                     "-c",
-                    "curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install.sh | PFTERMINAL_NON_INTERACTIVE=1 sh",
+                    "curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.sh | CORBANU_NON_INTERACTIVE=1 sh",
                 ],
             ),
             UpdateAction::StandaloneWindows => (
@@ -59,7 +59,7 @@ impl UpdateAction {
                     "-ExecutionPolicy",
                     "Bypass",
                     "-c",
-                    "$env:PFTERMINAL_NON_INTERACTIVE=1; irm https://github.com/agtico/PfTerminal/releases/latest/download/install.ps1 | iex",
+                    "$env:CORBANU_NON_INTERACTIVE=1; irm https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.ps1 | iex",
                 ],
             ),
         }
@@ -73,7 +73,7 @@ impl UpdateAction {
     }
 }
 
-#[cfg(not(debug_assertions))]
+#[cfg(any(not(debug_assertions), test))]
 pub fn get_update_action() -> Option<UpdateAction> {
     UpdateAction::from_install_context(InstallContext::current())
 }
@@ -157,7 +157,7 @@ mod tests {
                 "sh",
                 &[
                     "-c",
-                    "curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install.sh | PFTERMINAL_NON_INTERACTIVE=1 sh"
+                    "curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.sh | CORBANU_NON_INTERACTIVE=1 sh"
                 ][..],
             )
         );
@@ -169,7 +169,7 @@ mod tests {
                     "-ExecutionPolicy",
                     "Bypass",
                     "-c",
-                    "$env:PFTERMINAL_NON_INTERACTIVE=1; irm https://github.com/agtico/PfTerminal/releases/latest/download/install.ps1 | iex"
+                    "$env:CORBANU_NON_INTERACTIVE=1; irm https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.ps1 | iex"
                 ][..],
             )
         );

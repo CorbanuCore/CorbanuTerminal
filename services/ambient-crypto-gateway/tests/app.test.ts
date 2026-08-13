@@ -145,6 +145,7 @@ describe("Ambient crypto gateway", () => {
     const response = await request(app)
       .post("/v1/chat/completions")
       .set("Authorization", `Bearer ${issued.key}`)
+      .set("X-Corbanu-Request-Id", "corbanu-client-request-1")
       .send({ model: "z-ai/glm-5.2", messages: [{ role: "user", content: "hello" }] })
       .expect(200);
 
@@ -153,6 +154,10 @@ describe("Ambient crypto gateway", () => {
     assert.equal(response.headers["x-request-id"], "upstream-request-1");
     assert.equal(response.headers["x-pfterminal-plan"], "starter");
     assert.equal(Number(response.headers["x-pfterminal-weekly-remaining-tokens"]), 249_983);
+    assert.equal(response.headers["x-corbanu-plan"], "starter");
+    assert.equal(Number(response.headers["x-corbanu-weekly-remaining-tokens"]), 249_983);
+    assert.equal(response.headers["x-corbanu-request-id"], "corbanu-client-request-1");
+    assert.equal(response.headers["x-pfterminal-request-id"], "corbanu-client-request-1");
     assert.deepEqual(response.body, {
       ok: true,
       usage: { prompt_tokens: 12, completion_tokens: 5 },
@@ -183,6 +188,11 @@ describe("Ambient crypto gateway", () => {
     assert.equal(limited.body.error.window, "weekly");
     assert.equal(limited.headers["x-codex-active-limit"], "pfterminal");
     assert.equal(limited.headers["x-pfterminal-limit-name"], "PfTerminal Plan weekly tokens");
+    assert.equal(limited.headers["x-corbanu-limit-name"], "Corbanu Terminal Plan weekly tokens");
+    assert.equal(
+      limited.headers["x-corbanu-primary-used-percent"],
+      limited.headers["x-pfterminal-primary-used-percent"],
+    );
     assert.ok(Number(limited.headers["retry-after"]) > 0);
     assert.equal(upstreamCalls, 7);
   });

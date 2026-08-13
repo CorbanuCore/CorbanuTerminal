@@ -22,7 +22,9 @@ use super::npm_global_root_check;
 use super::run_command;
 
 const VERSION_FILE_NAME: &str = "version.json";
-const PFTERMINAL_LATEST_RELEASE_URL: &str =
+const CORBANU_LATEST_RELEASE_URL: &str =
+    "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/latest";
+const LEGACY_PFTERMINAL_LATEST_RELEASE_URL: &str =
     "https://api.github.com/repos/agtico/PfTerminal/releases/latest";
 const HOMEBREW_CASK_API_URL: &str = "https://formulae.brew.sh/api/cask/codex.json";
 
@@ -149,7 +151,15 @@ fn fetch_latest_version(context: &InstallContext) -> Result<String, String> {
         | InstallMethod::Pnpm
         | InstallMethod::Standalone { .. }
         | InstallMethod::Other => {
-            fetch_latest_github_release_version(PFTERMINAL_LATEST_RELEASE_URL)
+            fetch_latest_github_release_version(CORBANU_LATEST_RELEASE_URL).or_else(|primary_error| {
+                fetch_latest_github_release_version(LEGACY_PFTERMINAL_LATEST_RELEASE_URL).map_err(
+                    |fallback_error| {
+                        format!(
+                            "canonical endpoint failed ({primary_error}); legacy redirect fallback failed ({fallback_error})"
+                        )
+                    },
+                )
+            })
         }
     }
 }

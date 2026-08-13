@@ -1,6 +1,8 @@
 //! Informational, warning, update, and policy notice history cells.
 
 use super::*;
+use codex_product_brand::GITHUB_LATEST_RELEASE_URL;
+use codex_product_brand::GITHUB_REPOSITORY_URL;
 
 #[cfg_attr(debug_assertions, allow(dead_code))]
 #[derive(Debug)]
@@ -28,7 +30,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
         } else {
             line![
                 "See ",
-                "https://github.com/agtico/PfTerminal".cyan().underlined(),
+                GITHUB_REPOSITORY_URL.cyan().underlined(),
                 " for installation options."
             ]
         };
@@ -43,9 +45,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
             update_instruction,
             "",
             "See full release notes:",
-            "https://github.com/agtico/PfTerminal/releases/latest"
-                .cyan()
-                .underlined(),
+            GITHUB_LATEST_RELEASE_URL.cyan().underlined(),
         ];
 
         let inner_width = content
@@ -60,7 +60,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
         let update_instruction = if let Some(update_action) = self.update_action {
             format!("Run {} to update.", update_action.command_str())
         } else {
-            "See https://github.com/agtico/PfTerminal for installation options.".to_string()
+            format!("See {GITHUB_REPOSITORY_URL} for installation options.")
         };
         vec![
             Line::from("Update available!"),
@@ -68,7 +68,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
             Line::from(update_instruction),
             Line::from(""),
             Line::from("See full release notes:"),
-            Line::from("https://github.com/agtico/PfTerminal/releases/latest"),
+            Line::from(GITHUB_LATEST_RELEASE_URL),
         ]
     }
 

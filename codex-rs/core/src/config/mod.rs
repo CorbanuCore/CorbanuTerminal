@@ -101,6 +101,7 @@ use codex_model_provider_info::WireApi;
 use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_model_provider_info::built_in_model_providers;
+use codex_model_provider_info::canonical_provider_id;
 use codex_model_provider_info::corrected_catalog_provider;
 use codex_model_provider_info::create_oss_provider_with_base_url;
 use codex_model_provider_info::default_model_context_window_for_provider;
@@ -3885,6 +3886,8 @@ impl Config {
         let requested_model_provider_id = model_provider
             .or(cfg.model_provider)
             .unwrap_or_else(|| AMBIENT_PROVIDER_ID.to_string());
+        let requested_model_provider_id =
+            canonical_provider_id(&requested_model_provider_id).to_string();
         let stale_runtime_provider = requested_model_provider_id.starts_with("gpu-")
             && !model_providers.contains_key(&requested_model_provider_id);
         if stale_runtime_provider {

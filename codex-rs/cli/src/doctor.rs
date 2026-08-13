@@ -192,6 +192,7 @@ struct DoctorReport {
     schema_version: u32,
     generated_at: String,
     overall_status: CheckStatus,
+    corbanu_terminal_version: String,
     #[serde(rename = "pfterminalVersion")]
     codex_version: String,
     checks: Vec<DoctorCheck>,
@@ -491,6 +492,7 @@ async fn build_report(
         schema_version: 1,
         generated_at: generated_at(),
         overall_status,
+        corbanu_terminal_version: env!("CARGO_PKG_VERSION").to_string(),
         codex_version: env!("CARGO_PKG_VERSION").to_string(),
         checks,
     }
@@ -568,6 +570,7 @@ struct JsonDoctorReport {
     schema_version: u32,
     generated_at: String,
     overall_status: CheckStatus,
+    corbanu_terminal_version: String,
     #[serde(rename = "pfterminalVersion")]
     codex_version: String,
     checks: BTreeMap<String, JsonDoctorCheck>,
@@ -634,6 +637,7 @@ fn redacted_json_report(report: &DoctorReport) -> JsonDoctorReport {
         schema_version: report.schema_version,
         generated_at: report.generated_at.clone(),
         overall_status: report.overall_status,
+        corbanu_terminal_version: report.corbanu_terminal_version.clone(),
         codex_version: report.codex_version.clone(),
         checks,
     }
@@ -3357,6 +3361,7 @@ mod tests {
             schema_version: 1,
             generated_at: "0s since unix epoch".to_string(),
             overall_status: CheckStatus::Warning,
+            corbanu_terminal_version: "0.0.0".to_string(),
             codex_version: "0.0.0".to_string(),
             checks: vec![
                 DoctorCheck::new(
@@ -3410,6 +3415,7 @@ mod tests {
         assert!(!redacted.contains("code --wait"));
         assert!(redacted.contains("https://example.com/mcp"));
         assert_eq!(json["pfterminalVersion"], "0.0.0");
+        assert_eq!(json["corbanuTerminalVersion"], "0.0.0");
         assert!(json.get("codexVersion").is_none());
         assert_eq!(json["checks"].is_object(), true);
         assert_eq!(

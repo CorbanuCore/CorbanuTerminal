@@ -12291,3 +12291,24 @@ async fn explicit_claude_plan_normalizes_bare_claude_alias() -> std::io::Result<
     assert!(config.model_provider.is_claude_plan());
     Ok(())
 }
+
+#[tokio::test]
+async fn corbanu_plan_provider_alias_normalizes_to_legacy_persisted_id() -> std::io::Result<()> {
+    use codex_model_provider_info::CORBANU_PLAN_PROVIDER_ID;
+    use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
+
+    let cfg =
+        toml::from_str::<ConfigToml>(&format!("model_provider = {CORBANU_PLAN_PROVIDER_ID:?}\n"))
+            .expect("config should deserialize");
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.model_provider_id, PFTERMINAL_PLAN_PROVIDER_ID);
+    assert!(config.model_provider.is_pfterminal_plan());
+    Ok(())
+}

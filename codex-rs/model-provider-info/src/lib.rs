@@ -8,6 +8,7 @@
 use codex_api::Provider as ApiProvider;
 use codex_api::RetryConfig as ApiRetryConfig;
 use codex_api::is_azure_responses_provider;
+use codex_product_brand::PLAN_NAME;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::ModelProviderAuthInfo;
 use codex_protocol::error::CodexErr;
@@ -95,11 +96,25 @@ pub const AMBIENT_GLM_5_2_CONTEXT_WINDOW: i64 = 101_376;
 pub const AMBIENT_LEGACY_GLM_5_2_FP8_MODEL: &str = "zai-org/GLM-5.2-FP8";
 pub const AMBIENT_KIMI_K2_7_CODE_MODEL: &str = "moonshotai/kimi-k2.7-code";
 pub const AMBIENT_API_KEY_ENV_VAR: &str = "AMBIENT_API_KEY";
-const PFTERMINAL_PLAN_PROVIDER_NAME: &str = "PfTerminal Plan";
+/// Public provider identifier accepted by Corbanu Terminal 0.1.30+.
+///
+/// The legacy identifier remains canonical in persisted state for the 0.1.30
+/// compatibility window.
+pub const CORBANU_PLAN_PROVIDER_ID: &str = "corbanu-terminal-plan";
+pub const CORBANU_PLAN_API_KEY_ENV_VAR: &str = "CORBANU_PLAN_API_KEY";
 pub const PFTERMINAL_PLAN_PROVIDER_ID: &str = "pfterminal-plan";
 pub const PFTERMINAL_PLAN_GATEWAY_ORIGIN: &str = "https://pfterminal-plan-gateway.fly.dev";
 pub const PFTERMINAL_PLAN_DEFAULT_BASE_URL: &str = "https://pfterminal-plan-gateway.fly.dev/v1";
 pub const PFTERMINAL_PLAN_API_KEY_ENV_VAR: &str = "PFTERMINAL_PLAN_API_KEY";
+
+/// Normalize public provider aliases to the stable identifier used by existing
+/// configuration and credential storage.
+pub fn canonical_provider_id(provider_id: &str) -> &str {
+    match provider_id {
+        CORBANU_PLAN_PROVIDER_ID => PFTERMINAL_PLAN_PROVIDER_ID,
+        _ => provider_id,
+    }
+}
 const KIMI_CODE_PROVIDER_NAME: &str = "Kimi Code";
 pub const KIMI_CODE_PROVIDER_ID: &str = "kimi-code";
 pub const KIMI_CODE_BASE_URL: &str = "https://api.kimi.com/coding/v1";
@@ -822,9 +837,10 @@ impl ModelProviderInfo {
     pub fn api_key(&self) -> CodexResult<Option<String>> {
         match &self.env_key {
             Some(env_key) => {
-                let api_key = std::env::var(env_key)
-                    .ok()
-                    .filter(|v| !v.trim().is_empty())
+                let api_key = self
+                    .api_key_env_vars()
+                    .into_iter()
+                    .find_map(|name| std::env::var(name).ok().filter(|v| !v.trim().is_empty()))
                     .ok_or_else(|| {
                         CodexErr::EnvVar(EnvVarError {
                             var: env_key.clone(),
@@ -834,6 +850,19 @@ impl ModelProviderInfo {
                 Ok(Some(api_key))
             }
             None => Ok(None),
+        }
+    }
+
+    /// Environment variables accepted for this provider, ordered from the
+    /// current public name to compatibility fallbacks.
+    pub fn api_key_env_vars(&self) -> Vec<&str> {
+        match self.env_key.as_deref() {
+            Some(PFTERMINAL_PLAN_API_KEY_ENV_VAR) => vec![
+                CORBANU_PLAN_API_KEY_ENV_VAR,
+                PFTERMINAL_PLAN_API_KEY_ENV_VAR,
+            ],
+            Some(env_key) => vec![env_key],
+            None => Vec::new(),
         }
     }
 
@@ -1033,7 +1062,7 @@ impl ModelProviderInfo {
 
     pub fn create_pfterminal_plan_provider() -> ModelProviderInfo {
         ModelProviderInfo {
-            name: PFTERMINAL_PLAN_PROVIDER_NAME.into(),
+            name: PLAN_NAME.into(),
             base_url: Some(
                 std::env::var("PFTERMINAL_PLAN_BASE_URL")
                     .unwrap_or_else(|_| PFTERMINAL_PLAN_DEFAULT_BASE_URL.to_string()),
@@ -1460,7 +1489,7 @@ impl ModelProviderInfo {
     }
 
     pub fn is_pfterminal_plan(&self) -> bool {
-        self.name == PFTERMINAL_PLAN_PROVIDER_NAME
+        self.name == PLAN_NAME
     }
 
     pub fn is_kimi_code(&self) -> bool {

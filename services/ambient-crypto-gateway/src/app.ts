@@ -223,6 +223,7 @@ export function createGatewayApp(options: GatewayAppOptions): express.Express {
         return;
       }
       writePlanHeaders(response, authorization.reservation);
+      response.setHeader("X-Corbanu-Request-Id", requestId);
       response.setHeader("X-PfTerminal-Request-Id", requestId);
       await proxyAmbientRequest(
         request,
@@ -305,7 +306,7 @@ async function proxyAmbientRequest(
     settled = true;
     const result = await store.settleApiKeyUsage(reservation.id, disposition, usage, now());
     if ((result?.chargedTokens ?? 0) > reservation.reservedTokens) {
-      console.warn("PfTerminal Plan usage exceeded its reservation; subsequent requests will remain exhausted until reset");
+      console.warn("Corbanu Terminal Plan usage exceeded its reservation; subsequent requests will remain exhausted until reset");
     }
     if (result && !response.headersSent) writePlanHeaders(response, result);
   };
@@ -399,7 +400,10 @@ function waitForDownstreamDrain(response: Response, signal: AbortSignal): Promis
 }
 
 function clientRequestId(request: Request): string {
-  const supplied = request.header("x-pfterminal-request-id")?.trim();
+  const supplied = (
+    request.header("x-corbanu-request-id")
+    ?? request.header("x-pfterminal-request-id")
+  )?.trim();
   if (supplied && supplied.length <= 128 && /^[A-Za-z0-9_.:-]+$/.test(supplied)) return supplied;
   return randomUUID();
 }
@@ -410,6 +414,9 @@ function writeLimitResponse(response: Response, limit: PlanLimitReached): void {
   const usedPercent = Math.min(100, Math.max(0, (limit.usedTokens / limit.limitTokens) * 100));
   response.setHeader("Retry-After", String(retryAfterSeconds));
   response.setHeader("X-Codex-Active-Limit", "pfterminal");
+  response.setHeader("X-Corbanu-Limit-Name", `Corbanu Terminal Plan ${limit.window} tokens`);
+  response.setHeader("X-Corbanu-Primary-Used-Percent", usedPercent.toFixed(2));
+  response.setHeader("X-Corbanu-Primary-Reset-At", String(resetSeconds));
   response.setHeader("X-PfTerminal-Limit-Name", `PfTerminal Plan ${limit.window} tokens`);
   response.setHeader("X-PfTerminal-Primary-Used-Percent", usedPercent.toFixed(2));
   response.setHeader("X-PfTerminal-Primary-Reset-At", String(resetSeconds));
@@ -424,7 +431,7 @@ function writeLimitResponse(response: Response, limit: PlanLimitReached): void {
       reservedTokens: limit.reservedTokens,
       remainingTokens: limit.remainingTokens,
       resetsAt: limit.resetsAt.toISOString(),
-      action: "Open /wallet to review or upgrade the PfTerminal Plan.",
+      action: "Open /wallet to review or upgrade the Corbanu Terminal Plan.",
     },
   });
 }
@@ -480,6 +487,11 @@ function authFailureSubject(request: Request): string {
 }
 
 function writePlanHeaders(response: Response, usage: UsageReservation): void {
+  response.setHeader("X-Corbanu-Plan", usage.period.planId);
+  response.setHeader("X-Corbanu-Weekly-Remaining-Tokens", String(usage.weeklyRemainingTokens));
+  response.setHeader("X-Corbanu-Weekly-Resets-At", usage.weekly.endsAt.toISOString());
+  response.setHeader("X-Corbanu-Monthly-Remaining-Tokens", String(usage.monthlyRemainingTokens));
+  response.setHeader("X-Corbanu-Monthly-Resets-At", usage.period.endsAt.toISOString());
   response.setHeader("X-PfTerminal-Plan", usage.period.planId);
   response.setHeader("X-PfTerminal-Weekly-Remaining-Tokens", String(usage.weeklyRemainingTokens));
   response.setHeader("X-PfTerminal-Weekly-Resets-At", usage.weekly.endsAt.toISOString());

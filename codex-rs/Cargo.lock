@@ -3787,6 +3787,7 @@ name = "codex-model-provider-info"
 version = "0.1.30"
 dependencies = [
  "codex-api",
+ "codex-product-brand",
  "codex-protocol",
  "codex-utils-absolute-path",
  "http 1.4.0",
@@ -3928,6 +3929,10 @@ dependencies = [
  "libc",
  "pretty_assertions",
 ]
+
+[[package]]
+name = "codex-product-brand"
+version = "0.1.30"
 
 [[package]]
 name = "codex-prompts"
@@ -4416,6 +4421,7 @@ dependencies = [
  "codex-models-manager",
  "codex-otel",
  "codex-plugin",
+ "codex-product-brand",
  "codex-protocol",
  "codex-rollout",
  "codex-sandboxing",

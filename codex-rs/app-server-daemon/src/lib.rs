@@ -33,8 +33,7 @@ const UPDATE_PID_FILE_NAME: &str = "app-server-updater.pid";
 const OPERATION_LOCK_FILE_NAME: &str = "daemon.lock";
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const STATE_DIR_NAME: &str = "app-server-daemon";
-const PFTERMINAL_INSTALLER_COMMAND: &str =
-    "curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install.sh | sh";
+const PFTERMINAL_INSTALLER_COMMAND: &str = "curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.sh | CORBANU_NON_INTERACTIVE=1 sh";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LifecycleCommand {

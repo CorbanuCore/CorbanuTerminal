@@ -1231,6 +1231,7 @@ mod tests {
             schema_version: 1,
             generated_at: "0s since unix epoch".to_string(),
             overall_status: CheckStatus::Fail,
+            corbanu_terminal_version: "0.0.0".to_string(),
             codex_version: "0.0.0".to_string(),
             checks,
         }
@@ -1382,6 +1383,7 @@ Run pfterminal doctor without --summary for detailed diagnostics.
             schema_version: 1,
             generated_at: "0s since unix epoch".to_string(),
             overall_status: CheckStatus::Ok,
+            corbanu_terminal_version: "0.0.0".to_string(),
             codex_version: "0.0.0".to_string(),
             checks: vec![
                 DoctorCheck::new(
@@ -1482,6 +1484,7 @@ Run pfterminal doctor without --summary for detailed diagnostics.
             schema_version: 1,
             generated_at: "0s since unix epoch".to_string(),
             overall_status: CheckStatus::Warning,
+            corbanu_terminal_version: "0.0.0".to_string(),
             codex_version: "0.0.0".to_string(),
             checks: vec![
                 DoctorCheck::new(
@@ -1521,6 +1524,7 @@ Run pfterminal doctor without --summary for detailed diagnostics.
             schema_version: 1,
             generated_at: "0s since unix epoch".to_string(),
             overall_status: CheckStatus::Warning,
+            corbanu_terminal_version: "0.0.0".to_string(),
             codex_version: "0.0.0".to_string(),
             checks: vec![
                 DoctorCheck::new(
@@ -1599,6 +1603,7 @@ Run pfterminal doctor without --summary for detailed diagnostics.
             schema_version: 1,
             generated_at: "0s since unix epoch".to_string(),
             overall_status: CheckStatus::Ok,
+            corbanu_terminal_version: "0.0.0".to_string(),
             codex_version: "0.0.0".to_string(),
             checks: vec![
                 DoctorCheck::new("config.load", "config", CheckStatus::Ok, "config loaded")

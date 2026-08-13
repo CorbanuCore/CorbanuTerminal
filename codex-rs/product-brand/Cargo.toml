@@ -1,0 +1,13 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "codex-product-brand"
+version.workspace = true
+
+[lib]
+doctest = false
+name = "codex_product_brand"
+path = "src/lib.rs"
+
+[lints]
+workspace = true

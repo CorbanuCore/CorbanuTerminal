@@ -12,6 +12,7 @@ use crate::tui::Tui;
 use crate::tui::TuiEvent;
 use crate::update_action::UpdateAction;
 use crate::updates;
+use codex_product_brand::GITHUB_LATEST_RELEASE_URL;
 use color_eyre::Result;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
@@ -26,7 +27,7 @@ use ratatui::widgets::Clear;
 use ratatui::widgets::WidgetRef;
 use tokio_stream::StreamExt;
 
-const RELEASE_NOTES_URL: &str = "https://github.com/agtico/PfTerminal/releases/latest";
+const RELEASE_NOTES_URL: &str = GITHUB_LATEST_RELEASE_URL;
 
 pub(crate) enum UpdatePromptOutcome {
     Continue,
