@@ -128,7 +128,7 @@ mod tests {
             Some(missing_str),
             /*user_home*/ None,
         )
-            .expect_err("missing CODEX_HOME");
+        .expect_err("missing CODEX_HOME");
         assert_eq!(err.kind(), ErrorKind::NotFound);
         assert!(
             err.to_string().contains("CODEX_HOME"),
@@ -151,7 +151,7 @@ mod tests {
             Some(file_str),
             /*user_home*/ None,
         )
-            .expect_err("file CODEX_HOME");
+        .expect_err("file CODEX_HOME");
         assert_eq!(err.kind(), ErrorKind::InvalidInput);
         assert!(
             err.to_string().contains("not a directory"),

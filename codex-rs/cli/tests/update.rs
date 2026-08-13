@@ -19,7 +19,7 @@ async fn update_does_not_start_interactive_prompt() -> Result<()> {
         .assert()
         .failure()
         .stderr(contains(
-            "`pfterminal update` is not available in debug builds",
+            "`corbanu update` is not available in debug builds",
         ));
 
     Ok(())
