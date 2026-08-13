@@ -16,7 +16,7 @@ from codex_package.targets import TARGET_SPECS
 
 class PackageLayoutTest(unittest.TestCase):
     def test_macos_package_preserves_prebuilt_resource_binaries(self) -> None:
-        for variant_name in ("pfterminal", "codex", "codex-app-server"):
+        for variant_name in ("corbanu", "pfterminal", "codex", "codex-app-server"):
             for target in ("aarch64-apple-darwin", "x86_64-apple-darwin"):
                 with self.subTest(variant=variant_name, target=target):
                     with tempfile.TemporaryDirectory() as temp_dir:
@@ -70,6 +70,47 @@ class PackageLayoutTest(unittest.TestCase):
                                 "zsh": b"signed zsh binary",
                             },
                         )
+
+    def test_terminal_packages_include_telegram_resources(self) -> None:
+        for variant_name in ("corbanu", "pfterminal"):
+            with self.subTest(variant=variant_name):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    root = Path(temp_dir)
+                    package_dir = root / "package"
+                    package_dir.mkdir()
+                    variant = PACKAGE_VARIANTS[variant_name]
+                    spec = TARGET_SPECS["x86_64-unknown-linux-musl"]
+                    inputs = PackageInputs(
+                        entrypoint_bin=touch_executable(root / variant.executable_stem),
+                        code_mode_host_bin=touch_executable(
+                            root / "codex-code-mode-host"
+                        ),
+                        extra_bins={
+                            extra.entrypoint_name(spec): touch_executable(
+                                root / extra.entrypoint_name(spec)
+                            )
+                            for extra in variant.extra_binaries
+                        },
+                        rg_bin=touch_executable(root / "rg"),
+                        zsh_bin=None,
+                        bwrap_bin=touch_executable(root / "bwrap"),
+                        codex_command_runner_bin=None,
+                        codex_windows_sandbox_setup_bin=None,
+                    )
+
+                    build_package_dir(package_dir, "1.2.3", variant, spec, inputs)
+                    validate_package_dir(
+                        package_dir, variant, spec, include_zsh=False
+                    )
+
+                    self.assertTrue(
+                        (
+                            package_dir
+                            / "codex-resources"
+                            / "telegram"
+                            / "setup-telegram.sh"
+                        ).is_file()
+                    )
 
     def test_app_server_package_places_code_mode_host_beside_entrypoint(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -13,6 +13,7 @@ from .zsh import ZSH_RESOURCE_PATH
 
 
 LAYOUT_VERSION = 1
+TERMINAL_PACKAGE_VARIANTS = frozenset(("corbanu", "pfterminal"))
 
 
 def prepare_package_dir(package_dir: Path, *, force: bool) -> None:
@@ -90,7 +91,7 @@ def build_package_dir(
             is_windows=True,
         )
 
-    if variant.name == "pfterminal":
+    if variant.name in TERMINAL_PACKAGE_VARIANTS:
         copy_telegram_resources(resources_dir / "telegram", spec)
 
     metadata = {
@@ -105,7 +106,7 @@ def build_package_dir(
         "resourcesDir": "codex-resources",
         "pathDir": "codex-path",
     }
-    if variant.name == "pfterminal":
+    if variant.name in TERMINAL_PACKAGE_VARIANTS:
         metadata["telegramResourcesDir"] = "codex-resources/telegram"
     write_json(package_dir / "codex-package.json", metadata)
 
@@ -145,7 +146,7 @@ def validate_package_dir(
         "resourcesDir": "codex-resources",
         "pathDir": "codex-path",
     }
-    if variant.name == "pfterminal":
+    if variant.name in TERMINAL_PACKAGE_VARIANTS:
         expected_metadata["telegramResourcesDir"] = "codex-resources/telegram"
     for key, expected in expected_metadata.items():
         actual = metadata.get(key)
@@ -182,7 +183,7 @@ def validate_package_dir(
             ]
         )
 
-    if variant.name == "pfterminal":
+    if variant.name in TERMINAL_PACKAGE_VARIANTS:
         telegram_dir = Path("codex-resources") / "telegram"
         required_files.extend(
             [
