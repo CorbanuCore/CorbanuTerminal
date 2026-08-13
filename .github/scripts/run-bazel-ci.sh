@@ -256,12 +256,12 @@ if [[ ${#bazel_args[@]} -eq 0 || ${#bazel_targets[@]} -eq 0 ]]; then
 fi
 
 if [[ "${RUNNER_OS:-}" == "Windows" && $windows_cross_compile -eq 1 && -z "${BUILDBUDDY_API_KEY:-}" ]]; then
-  # Windows cross-compilation depends on authenticated RBE. Preserve the local
-  # Windows GNU/Clang build shape when credentials are unavailable. The
-  # `common:windows` Bazel config already selects `//:local_windows`; forcing
-  # the MSVC host platform here would mix MSVC Rust linker arguments with the
-  # GNU-targeting Clang C++ toolchain.
+  # Windows cross-compilation depends on authenticated RBE. When credentials
+  # are unavailable, keep the gnullvm application target but use the MSVC
+  # execution host. Proc-macro DLLs must match the rustc host ABI; the explicit
+  # target platform below still selects gnullvm for application artifacts.
   ci_config=ci-windows
+  windows_msvc_host_platform=1
 fi
 
 post_config_bazel_args=()

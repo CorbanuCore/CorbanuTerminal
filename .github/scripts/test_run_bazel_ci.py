@@ -9,7 +9,7 @@ from tempfile import TemporaryDirectory
 
 
 class RunBazelCiTest(unittest.TestCase):
-    def test_keyless_windows_cross_compile_keeps_gnullvm_host(self) -> None:
+    def test_keyless_windows_cross_compile_uses_msvc_execution_host(self) -> None:
         script = Path(__file__).with_name("run-bazel-ci.sh")
 
         with TemporaryDirectory() as temp_dir:
@@ -62,7 +62,7 @@ Path(os.environ["BAZEL_ARGS_CAPTURE"]).write_text(
 
             self.assertEqual(result.returncode, 0, result.stderr)
             args = json.loads(capture_path.read_text(encoding="utf-8"))
-            self.assertNotIn("--host_platform=//:local_windows_msvc", args)
+            self.assertIn("--host_platform=//:local_windows_msvc", args)
             self.assertIn("--jobs=8", args)
             self.assertIn("--remote_download_toplevel", args)
             self.assertIn("//codex-rs/cli:codex", args)
