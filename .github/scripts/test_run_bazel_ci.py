@@ -9,7 +9,7 @@ from tempfile import TemporaryDirectory
 
 
 class RunBazelCiTest(unittest.TestCase):
-    def test_keyless_windows_cross_compile_uses_msvc_execution_host(self) -> None:
+    def test_keyless_windows_cross_compile_fails_closed(self) -> None:
         script = Path(__file__).with_name("run-bazel-ci.sh")
 
         with TemporaryDirectory() as temp_dir:
@@ -60,12 +60,9 @@ Path(os.environ["BAZEL_ARGS_CAPTURE"]).write_text(
                 text=True,
             )
 
-            self.assertEqual(result.returncode, 0, result.stderr)
-            args = json.loads(capture_path.read_text(encoding="utf-8"))
-            self.assertIn("--host_platform=//:local_windows_msvc", args)
-            self.assertIn("--jobs=8", args)
-            self.assertIn("--remote_download_toplevel", args)
-            self.assertIn("//codex-rs/cli:codex", args)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("requires authenticated remote execution", result.stderr)
+            self.assertFalse(capture_path.exists(), "Bazel must not run with a false local fallback")
 
 
 if __name__ == "__main__":

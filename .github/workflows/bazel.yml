@@ -142,12 +142,26 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
+      - name: Detect authenticated Windows gnullvm execution
+        id: windows_gnullvm
+        shell: bash
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: |
+          if [[ -n "${BUILDBUDDY_API_KEY:-}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping Windows gnullvm Bazel shard because authenticated remote execution is unavailable; the native MSVC validation job remains mandatory."
+          fi
+
       - name: Test BuildBuddy Bazel wrapper
-        if: matrix.shard == 1
+        if: matrix.shard == 1 && steps.windows_gnullvm.outputs.enabled == 'true'
         shell: pwsh
         run: python .github/scripts/test_run_bazel_with_buildbuddy.py
 
       - name: Prepare Bazel CI
+        if: steps.windows_gnullvm.outputs.enabled == 'true'
         id: prepare_bazel
         uses: ./.github/actions/prepare-bazel-ci
         with:
@@ -158,6 +172,7 @@ jobs:
           cache-scope: bazel-test
 
       - name: bazel test shard
+        if: steps.windows_gnullvm.outputs.enabled == 'true'
         env:
           BAZEL_TEST_SHARD: ${{ matrix.shard }}
           BAZEL_TEST_SHARD_COUNT: 4
@@ -211,7 +226,7 @@ jobs:
             "${selected_targets[@]}"
 
       - name: Upload Bazel execution logs
-        if: always() && !cancelled()
+        if: always() && !cancelled() && steps.windows_gnullvm.outputs.enabled == 'true'
         continue-on-error: true
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
@@ -223,18 +238,59 @@ jobs:
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree
 
+  test-windows-native-msvc:
+    timeout-minutes: 30
+    runs-on: windows-2022
+    name: Native Windows MSVC product build
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+
+      - name: Build and smoke-test product binaries
+        shell: pwsh
+        run: |
+          cargo build `
+            --locked `
+            --manifest-path codex-rs/Cargo.toml `
+            --profile dev-small `
+            --bin codex `
+            --bin pfterminal `
+            --bin pfterminal-walletd
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          codex-rs/target/dev-small/pfterminal.exe --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          codex-rs/target/dev-small/pfterminal-walletd.exe --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Check for a clean worktree
+        if: always() && !cancelled()
+        uses: ./.github/actions/check-clean-worktree
+
   test-windows:
-    # Preserve the existing required-check surface while the real work happens
-    # in the sharded Windows jobs above.
+    # Preserve the existing required-check surface. Authenticated repositories
+    # get gnullvm Bazel shards; every repository gets a native MSVC product
+    # build, so missing remote-execution credentials never trigger a false
+    # local cross-build or remove Windows product coverage.
     if: always()
-    needs: test-windows-shard
+    needs:
+      - test-windows-native-msvc
+      - test-windows-shard
     runs-on: ubuntu-24.04
     name: Bazel test on windows-latest for x86_64-pc-windows-gnullvm
 
     steps:
-      - name: Confirm Windows Bazel test shards passed
+      - name: Confirm Windows validation passed
         shell: bash
         run: |
+          if [[ "${{ needs.test-windows-native-msvc.result }}" != "success" ]]; then
+            echo "Native Windows MSVC validation finished with result: ${{ needs.test-windows-native-msvc.result }}" >&2
+            exit 1
+          fi
           if [[ "${{ needs.test-windows-shard.result }}" != "success" ]]; then
             echo "Windows Bazel test shards finished with result: ${{ needs.test-windows-shard.result }}" >&2
             exit 1
