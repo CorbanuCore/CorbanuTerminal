@@ -22,27 +22,27 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: windows-2025
+          - runner: windows-2022
             target: x86_64-pc-windows-msvc
             bundle: primary
             binaries: "codex codex-code-mode-host codex-responses-api-proxy"
-          - runner: windows-2025
+          - runner: windows-2022
             target: aarch64-pc-windows-msvc
             bundle: primary
             binaries: "codex codex-code-mode-host codex-responses-api-proxy"
-          - runner: windows-2025
+          - runner: windows-2022
             target: x86_64-pc-windows-msvc
             bundle: helpers
             binaries: "codex-windows-sandbox-setup codex-command-runner"
-          - runner: windows-2025
+          - runner: windows-2022
             target: aarch64-pc-windows-msvc
             bundle: helpers
             binaries: "codex-windows-sandbox-setup codex-command-runner"
-          - runner: windows-2025
+          - runner: windows-2022
             target: x86_64-pc-windows-msvc
             bundle: app-server
             binaries: "codex-app-server codex-code-mode-host"
-          - runner: windows-2025
+          - runner: windows-2022
             target: aarch64-pc-windows-msvc
             bundle: app-server
             binaries: "codex-app-server codex-code-mode-host"
@@ -186,9 +186,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: windows-2025
+          - runner: windows-2022
             target: x86_64-pc-windows-msvc
-          - runner: windows-2025
+          - runner: windows-2022
             target: aarch64-pc-windows-msvc
 
     steps:
