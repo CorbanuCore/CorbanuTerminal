@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import re
 import tomllib
 import unittest
 from pathlib import Path
@@ -18,35 +17,23 @@ class CrossPlatformDependencyPolicyTest(unittest.TestCase):
         self.assertNotIn('name = "ctor-proc-macro"', lockfile)
         self.assertNotIn('name = "dtor-proc-macro"', lockfile)
 
-    def test_bazel_proc_macros_are_partitioned_into_exec_dependencies(self) -> None:
+    def test_bazel_uses_upstream_proc_macro_exec_routing(self) -> None:
         root = Path(__file__).parents[2]
-        resolver_patch = (root / "patches" / "rules_rs_proc_macro_deps.patch").read_text(
-            encoding="utf-8"
-        )
-        manifest_patch = (
-            root / "patches" / "rules_rs_proc_macro_manifest.patch"
-        ).read_text(encoding="utf-8")
         module = (root / "MODULE.bazel").read_text(encoding="utf-8")
 
-        self.assertIn("def _split_proc_macro_deps", resolver_patch)
-        self.assertIn("proc_macro_deps_select", resolver_patch)
-        self.assertIn("proc_macro_deps = proc_macro_deps", resolver_patch)
+        self.assertIn('bazel_dep(name = "rules_rs", version = "0.0.102")', module)
+        self.assertIn('module_name = "rules_rs"', module)
+        self.assertIn('version = "0.0.102"', module)
+        self.assertNotIn("rules_rs_proc_macro_deps.patch", module)
+        self.assertNotIn("rules_rs_proc_macro_manifest.patch", module)
+        self.assertNotIn("rules_rust_build_script_tools_transition.patch", module)
 
-        declared = re.findall(r'^\+    "([^"]+)": True,$', manifest_patch, re.MULTILINE)
-        self.assertEqual(len(declared), len(set(declared)))
-        self.assertGreaterEqual(len(declared), 90)
-        for crate in (
-            "include_dir_macros",
-            "linktime-proc-macro",
-            "serde_derive",
-            "thiserror-impl",
-            "tokio-macros",
+        for obsolete_patch in (
+            "rules_rs_proc_macro_deps.patch",
+            "rules_rs_proc_macro_manifest.patch",
+            "rules_rust_build_script_tools_transition.patch",
         ):
-            self.assertIn(crate, declared)
-
-        resolver_index = module.index('"//patches:rules_rs_proc_macro_deps.patch"')
-        manifest_index = module.index('"//patches:rules_rs_proc_macro_manifest.patch"')
-        self.assertLess(resolver_index, manifest_index)
+            self.assertFalse((root / "patches" / obsolete_patch).exists())
 
 
 if __name__ == "__main__":

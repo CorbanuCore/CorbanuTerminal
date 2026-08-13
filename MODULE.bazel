@@ -90,24 +90,21 @@ single_version_override(
 
 bazel_dep(name = "rules_platform", version = "0.1.0")
 bazel_dep(name = "aws-lc", version = "5.1.0.bcr.1")
-bazel_dep(name = "rules_rs", version = "0.0.96")
+bazel_dep(name = "rules_rs", version = "0.0.102")
 single_version_override(
     module_name = "rules_rs",
     patch_strip = 1,
     patches = [
         "//patches:rules_rs_build_script_deps_annotation.patch",
-        "//patches:rules_rs_proc_macro_deps.patch",
-        "//patches:rules_rs_proc_macro_manifest.patch",
     ],
-    version = "0.0.96",
+    version = "0.0.102",
 )
 
 rules_rust = use_extension("@rules_rs//rs:rules_rust.bzl", "rules_rust")
 rules_rust.patch(
     patches = [
-        # Carry the OpenAI setup fix that makes build-script tools available
-        # through their runfiles after the rules_rs upgrade.
-        "//patches:rules_rust_build_script_tools_transition.patch",
+        # rules_rs 0.0.102 carries the upstream build-script tools transition
+        # and routes proc macros through rules_rust's exec configuration.
         # Keep direct Windows/MSVC links compatible with hermetic LLVM's
         # non-.lib runtime artifacts.
         "//patches:rules_rust_windows_msvc_direct_link_args.patch",
