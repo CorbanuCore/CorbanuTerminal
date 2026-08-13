@@ -23,9 +23,9 @@ All paths relative to `codex-rs/`. Primary module: `tui/src/orchestrate.rs`.
    `kind` field:
    - `WhipKind::LegacyNudge` (default; today's auto/review behavior).
    - `WhipKind::Assignment { phase: Drafting|Executing|Blocked{reason}|Done,
-     execution_started_utc: Option<DateTime<Utc>>, last_user_turn_utc: Option<DateTime<Utc>>,
-     failure_backoff_level: u8 }`.
-   Manager = existing `holder` (required for assignments), Worker = existing `target`.
+execution_started_utc: Option<DateTime<Utc>>, last_user_turn_utc: Option<DateTime<Utc>>,
+failure_backoff_level: u8 }`.
+     Manager = existing `holder` (required for assignments), Worker = existing `target`.
 3. Persistence: fields flow through the existing pane-layout snapshot
    (`claude_panes/pane.rs:157`, `app_integration.rs:352`, restore in `app.rs:1305`). Old
    layouts deserialize as `LegacyNudge` (serde default).
@@ -37,7 +37,7 @@ All paths relative to `codex-rs/`. Primary module: `tui/src/orchestrate.rs`.
   layout JSON (fixture from current format) restores as `LegacyNudge` with unchanged behavior.
 - Clock injection test: a whip expiry decision responds to the test clock, not wall time.
 - Full existing orchestrate/whip suites pass unchanged (`cargo test -p codex-tui --lib
-  orchestrate_`, `whip`); zero snapshot diffs. Clippy + fmt clean.
+orchestrate_`, `whip`); zero snapshot diffs. Clippy + fmt clean.
 
 ---
 
@@ -134,7 +134,7 @@ All paths relative to `codex-rs/`. Primary module: `tui/src/orchestrate.rs`.
 3. **Status UX (spec §6):** status rows, detail view (talk-to-manager focus action, start
    execution during Drafting, mandate now, pause/resume, extend, test, detach), pane suffixes
    (`whip_suffix_for_target`, `orchestrate.rs:638`: `managed-by <M>` / `managing <W>; <phase>;
-   next mandate <t>`). No whip/holder/target/review strings anywhere user-visible in the
+next mandate <t>`). No whip/holder/target/review strings anywhere user-visible in the
    guided flow or status.
 
 ### Tests (gate)

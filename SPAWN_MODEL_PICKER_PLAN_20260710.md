@@ -61,8 +61,8 @@ All paths relative to `codex-rs/`.
 3. In `open_reasoning_popup` for `SpawnAgent`:
    - Highlight `spawn_reasoning_effort_for_role(role, &preset)` (`spawn_orchestration.rs:5476`).
    - On confirm (and on the ≤1-effort direct path), send `AppEvent::CreateSpawnAgent { role,
-     parent_node_id, agent_nickname: None, model, provider:
-     model_provider_for_selection(&model), effort }` and dismiss the stack
+parent_node_id, agent_nickname: None, model, provider:
+model_provider_for_selection(&model), effort }` and dismiss the stack
      (`dismiss_parent_on_child_accept` like the /model flow).
    - Never call `apply_model_and_effort`; never trigger
      `should_prompt_plan_mode_reasoning_scope`.
@@ -101,7 +101,7 @@ Add beside the existing tests in `model_popups.rs` / `spawn_orchestration.rs` / 
 ### Steps
 
 1. `cargo test -p codex-tui --lib` (full TUI lib suite), `cargo clippy -p codex-tui -- -D
-   warnings` on touched code, `just fmt` check, `git diff --check`.
+warnings` on touched code, `just fmt` check, `git diff --check`.
 2. Real-PTY manual pass (tmux), recorded in the PR description:
    - `/spawn nazgul` → Create Nazgul pane → tabs render, Left/Right responsive, Enter-Enter
      creates a Nazgul with the default model/effort; pane appears and accepts a task.

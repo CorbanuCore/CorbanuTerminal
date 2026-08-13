@@ -173,7 +173,7 @@ eyeballs. The matrix, minimum rows:
     lesson; assert bounded latency via timestamped captures).
 
 Plus the full unit/integration gates: focused suites, `cargo fmt --check`, `git diff
---check`, no pending snapshots, no *new* clippy findings, and the restart-lifecycle +
+--check`, no pending snapshots, no _new_ clippy findings, and the restart-lifecycle +
 persistence-failure-injection tests still owed from the original plan.
 
 ## 6. Definition of Done (machine-checkable, in order)

@@ -11,26 +11,26 @@ has been integrated.
 
 ## What Exists Now
 
-| Area          | Current State                                                                                                           | Where To Read                                 |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| OpenAI/Claude | OpenAI Codex login, Claude Plan login, and direct Anthropic API-key routes.                                              | [Authentication And Vault](authentication.md) |
-| DeepSeek      | Direct Responses API route for `deepseek-v4-flash` plus pinned OpenRouter `deepseek/deepseek-v4-flash-0731`.            | [Getting Started](getting-started.md)          |
-| Kimi/Meta     | Kimi Code `k3`, OpenRouter Kimi K3, and Meta Muse Spark 1.1 provider routes.                                             | [Getting Started](getting-started.md)          |
-| Ambient       | Built-in provider, API-key onboarding, Ambient GLM 5.2 default model, encrypted vault storage, and GLM request shaping. | [Ambient](integrations/ambient.md)            |
-| Z.AI GLM 5.2  | Built-in Z.AI coding-plan provider, direct `glm-5.2` model selection, and vault-backed provider keys.                   | [Z.AI GLM 5.2](integrations/zai-glm-52.md)    |
-| OpenRouter    | Built-in metered provider for GLM 5.2, MiniMax M3, Owl Alpha, and Gemini 3.5 Flash.                                     | [OpenRouter](integrations/openrouter.md)      |
-| Baseten       | Built-in metered provider for GLM 5.2 through Baseten.                                                                  | [Baseten](integrations/baseten.md)            |
-| Vercel        | Built-in metered provider for GLM 5.2 and GLM 5.2 Fast through Vercel AI Gateway.                                       | [Vercel](integrations/vercel.md)              |
-| Vault         | Encrypted credential store for provider keys and manually-added secrets.                                                | [Authentication And Vault](authentication.md) |
+| Area          | Current State                                                                                                           | Where To Read                                              |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| OpenAI/Claude | OpenAI Codex login, Claude Plan login, and direct Anthropic API-key routes.                                             | [Authentication And Vault](authentication.md)              |
+| DeepSeek      | Direct Responses API route for `deepseek-v4-flash` plus pinned OpenRouter `deepseek/deepseek-v4-flash-0731`.            | [Getting Started](getting-started.md)                      |
+| Kimi/Meta     | Kimi Code `k3`, OpenRouter Kimi K3, and Meta Muse Spark 1.1 provider routes.                                            | [Getting Started](getting-started.md)                      |
+| Ambient       | Built-in provider, API-key onboarding, Ambient GLM 5.2 default model, encrypted vault storage, and GLM request shaping. | [Ambient](integrations/ambient.md)                         |
+| Z.AI GLM 5.2  | Built-in Z.AI coding-plan provider, direct `glm-5.2` model selection, and vault-backed provider keys.                   | [Z.AI GLM 5.2](integrations/zai-glm-52.md)                 |
+| OpenRouter    | Built-in metered provider for GLM 5.2, MiniMax M3, Owl Alpha, and Gemini 3.5 Flash.                                     | [OpenRouter](integrations/openrouter.md)                   |
+| Baseten       | Built-in metered provider for GLM 5.2 through Baseten.                                                                  | [Baseten](integrations/baseten.md)                         |
+| Vercel        | Built-in metered provider for GLM 5.2 and GLM 5.2 Fast through Vercel AI Gateway.                                       | [Vercel](integrations/vercel.md)                           |
+| Vault         | Encrypted credential store for provider keys and manually-added secrets.                                                | [Authentication And Vault](authentication.md)              |
 | Panes         | User panes and Claude Code headless panes with provider-backed profiles and turn artifacts.                             | [Claude Headless Panes](features/claude-headless-panes.md) |
-| Spawn         | Managed Nazgul/Troll/Orc orchestration through `/spawn` and `/spawn status`.                                            | [Spawn Orchestration](features/spawn-orchestration.md) |
-| `/tasknode`   | Slash command for Task Node task views, actions, evidence, task requests, rewards, and account status.                  | [`/tasknode` Slash Command](features/tasknode.md) |
-| Wallet/plan   | SOL/USDC wallet lifecycle, backup/restore, balance, and PFTerminal plan purchase/recovery workflows.                    | [Slash Commands](slash_commands.md)            |
-| GPU           | Qualified and experimental GPU recipes with pre-charge review, status, stop, and terminate workflows.                  | [Slash Commands](slash_commands.md)            |
-| Telegram      | Local connector configuration, authorization, start/stop/status, and disconnect workflows.                             | [Slash Commands](slash_commands.md)            |
-| Codex fork    | Product command aliases, npm packages, installer names, TUI branding, and model picker behavior.                        | [Codex Fork](integrations/codex-fork.md)      |
-| Runtime       | Codex-derived local coding agent with tools, approvals, sandboxing, MCP, exec, and review modes.                        | [Runtime](exec.md)                            |
-| Configuration | Provider and model defaults normalize Ambient/Z.AI sessions onto compatible GLM models.                                 | [Configuration](config.md)                    |
+| Spawn         | Managed Nazgul/Troll/Orc orchestration through `/spawn` and `/spawn status`.                                            | [Spawn Orchestration](features/spawn-orchestration.md)     |
+| `/tasknode`   | Slash command for Task Node task views, actions, evidence, task requests, rewards, and account status.                  | [`/tasknode` Slash Command](features/tasknode.md)          |
+| Wallet/plan   | SOL/USDC wallet lifecycle, backup/restore, balance, and PFTerminal plan purchase/recovery workflows.                    | [Slash Commands](slash_commands.md)                        |
+| GPU           | Qualified and experimental GPU recipes with pre-charge review, status, stop, and terminate workflows.                   | [Slash Commands](slash_commands.md)                        |
+| Telegram      | Local connector configuration, authorization, start/stop/status, and disconnect workflows.                              | [Slash Commands](slash_commands.md)                        |
+| Codex fork    | Product command aliases, npm packages, installer names, TUI branding, and model picker behavior.                        | [Codex Fork](integrations/codex-fork.md)                   |
+| Runtime       | Codex-derived local coding agent with tools, approvals, sandboxing, MCP, exec, and review modes.                        | [Runtime](exec.md)                                         |
+| Configuration | Provider and model defaults normalize Ambient/Z.AI sessions onto compatible GLM models.                                 | [Configuration](config.md)                                 |
 
 ## Fast Reading Path
 

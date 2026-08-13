@@ -16,7 +16,7 @@ PFTerminal is **not a web chat**. It lives in the user's repository, shell, and 
 A single human working one-on-one with a single coding agent hits two persistent failure modes:
 
 1. The agent **misrepresents completion** — it reports work is done without proving it.
-2. The agent does what you *said*, not what you *meant* — literal compliance without intent alignment.
+2. The agent does what you _said_, not what you _meant_ — literal compliance without intent alignment.
 
 PFTerminal's thesis is that a **hierarchy** of specialized agents — planning, execution, adversarial review, research, documentation — separated into distinct roles under a chain of command produces more reliable, verifiable engineering work than a single monolithic assistant. The human stops juggling dozens of terminal tabs and talks to **one orchestrator**, which deploys and supervises everything.
 
@@ -41,15 +41,15 @@ PFTerminal's thesis is that a **hierarchy** of specialized agents — planning, 
 
 PFTerminal inherits the Codex CLI Rust workspace under `codex-rs/` and preserves its major subsystems:
 
-| Subsystem | Inherited from Codex |
-| --- | --- |
-| TUI and slash commands | `codex-rs/tui/` |
-| Model/provider client runtime | `codex-rs/core/src/client.rs`, `codex-rs/codex-api/` |
-| Tool registry and execution | `codex-rs/core/src/tools/` |
-| Sandbox and approval flows | `codex-rs/core/`, `codex-rs/exec/` |
-| MCP support | `codex-rs/codex-mcp/` |
-| Session, rollout, and thread storage | `codex-rs/core/`, `codex-rs/login/` |
-| Exec and review modes | inherited |
+| Subsystem                            | Inherited from Codex                                 |
+| ------------------------------------ | ---------------------------------------------------- |
+| TUI and slash commands               | `codex-rs/tui/`                                      |
+| Model/provider client runtime        | `codex-rs/core/src/client.rs`, `codex-rs/codex-api/` |
+| Tool registry and execution          | `codex-rs/core/src/tools/`                           |
+| Sandbox and approval flows           | `codex-rs/core/`, `codex-rs/exec/`                   |
+| MCP support                          | `codex-rs/codex-mcp/`                                |
+| Session, rollout, and thread storage | `codex-rs/core/`, `codex-rs/login/`                  |
+| Exec and review modes                | inherited                                            |
 
 The product changes are code-level: provider definitions, model metadata, request-shaping, onboarding, credential storage, packaging, branding, and orchestration — not just prompt text.
 
@@ -88,14 +88,14 @@ PFTerminal ships built-in providers. Users do not need to define providers manua
 
 ### 4.1 Built-in providers
 
-| Provider id  | Display name | Base URL                                | Env key              | Wire API         | Default model            |
-| ------------ | ------------ | --------------------------------------- | -------------------- | ---------------- | ------------------------ |
-| `openai`     | OpenAI       | `https://chatgpt.com/backend-api/codex` | Codex account login  | Responses        | `gpt-5.5`                |
-| `ambient`    | Ambient      | `https://api.ambient.xyz/v1`            | `AMBIENT_API_KEY`    | Chat Completions | `zai-org/GLM-5.2-FP8`    |
-| `zai`        | Z.AI         | `https://api.z.ai/api/coding/paas/v4`   | `ZAI_API_KEY`        | Chat Completions | `glm-5.2`                |
-| `openrouter` | OpenRouter   | `https://openrouter.ai/api/v1`          | `OPENROUTER_API_KEY` | Chat Completions | `z-ai/glm-5.2`           |
-| `baseten`    | Baseten      | `https://inference.baseten.co/v1`       | `BASETEN_API_KEY`    | Chat Completions | `zai-org/GLM-5.2`        |
-| `vercel`     | Vercel       | `https://ai-gateway.vercel.sh/v1`       | `AI_GATEWAY_API_KEY` | Responses        | `zai/glm-5.2`            |
+| Provider id  | Display name | Base URL                                | Env key              | Wire API         | Default model         |
+| ------------ | ------------ | --------------------------------------- | -------------------- | ---------------- | --------------------- |
+| `openai`     | OpenAI       | `https://chatgpt.com/backend-api/codex` | Codex account login  | Responses        | `gpt-5.5`             |
+| `ambient`    | Ambient      | `https://api.ambient.xyz/v1`            | `AMBIENT_API_KEY`    | Chat Completions | `zai-org/GLM-5.2-FP8` |
+| `zai`        | Z.AI         | `https://api.z.ai/api/coding/paas/v4`   | `ZAI_API_KEY`        | Chat Completions | `glm-5.2`             |
+| `openrouter` | OpenRouter   | `https://openrouter.ai/api/v1`          | `OPENROUTER_API_KEY` | Chat Completions | `z-ai/glm-5.2`        |
+| `baseten`    | Baseten      | `https://inference.baseten.co/v1`       | `BASETEN_API_KEY`    | Chat Completions | `zai-org/GLM-5.2`     |
+| `vercel`     | Vercel       | `https://ai-gateway.vercel.sh/v1`       | `AI_GATEWAY_API_KEY` | Responses        | `zai/glm-5.2`         |
 
 ### 4.2 Model catalog
 
@@ -103,23 +103,23 @@ The `/model` picker groups models into two sections:
 
 **Coding Plans** (OpenAI Codex, Ambient, Z.AI):
 
-| Model | Provider | Notes |
-| --- | --- | --- |
-| `gpt-5.2` | OpenAI | Codex account model |
-| `zai-org/GLM-5.2-FP8` | Ambient | Ambient default GLM 5.2 coding model |
-| `glm-5.2` | Z.AI | Z.AI coding-plan GLM 5.2 |
+| Model                 | Provider | Notes                                |
+| --------------------- | -------- | ------------------------------------ |
+| `gpt-5.2`             | OpenAI   | Codex account model                  |
+| `zai-org/GLM-5.2-FP8` | Ambient  | Ambient default GLM 5.2 coding model |
+| `glm-5.2`             | Z.AI     | Z.AI coding-plan GLM 5.2             |
 
 **Pay Per API Call** (OpenRouter, Baseten, Vercel):
 
-| Model | Provider | Pricing |
-| --- | --- | --- |
-| `z-ai/glm-5.2` | OpenRouter | $0.98/M input, $3.08/M output |
-| `minimax/minimax-m3` | OpenRouter | $0.30/M input, $1.20/M output |
-| `openrouter/owl-alpha` | OpenRouter | $0/M |
-| `google/gemini-3.5-flash` | OpenRouter | $1.50/M input, $9.00/M output |
-| `zai-org/GLM-5.2` | Baseten | $1.50/M input, $4.50/M output |
-| `zai/glm-5.2` | Vercel | $1.40/M input, $4.40/M output |
-| `zai/glm-5.2-fast` | Vercel | $3.00/M input, $10.25/M output |
+| Model                     | Provider   | Pricing                        |
+| ------------------------- | ---------- | ------------------------------ |
+| `z-ai/glm-5.2`            | OpenRouter | $0.98/M input, $3.08/M output  |
+| `minimax/minimax-m3`      | OpenRouter | $0.30/M input, $1.20/M output  |
+| `openrouter/owl-alpha`    | OpenRouter | $0/M                           |
+| `google/gemini-3.5-flash` | OpenRouter | $1.50/M input, $9.00/M output  |
+| `zai-org/GLM-5.2`         | Baseten    | $1.50/M input, $4.50/M output  |
+| `zai/glm-5.2`             | Vercel     | $1.40/M input, $4.40/M output  |
+| `zai/glm-5.2-fast`        | Vercel     | $3.00/M input, $10.25/M output |
 
 ### 4.3 Model selection
 
@@ -211,12 +211,12 @@ PFTerminal runs a multi-agent hierarchy with a clear chain of command. Intent fl
 
 ### 6.1 Roles
 
-| Role   | Level                   | Responsibility                                                                 |
-| ------ | ----------------------- | ----------------------------------------------------------------------------- |
-| Sauron | Human — Final Authority | Sets the mission, approves sensitive actions, resolves tradeoffs, ships.       |
+| Role   | Level                   | Responsibility                                                                                       |
+| ------ | ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| Sauron | Human — Final Authority | Sets the mission, approves sensitive actions, resolves tradeoffs, ships.                             |
 | Nazgul | CTO — Orchestrator      | Translates mission into a plan, chooses workstream owners, dispatches to Trolls, integrates reports. |
-| Troll  | VP-Eng — Supervisor     | Owns a domain, supervises Orc executors, reviews progress, escalates conflicts. |
-| Orc    | IC — Executor           | Takes scoped tasks, edits code, runs checks, sends evidence-rich reports up.   |
+| Troll  | VP-Eng — Supervisor     | Owns a domain, supervises Orc executors, reviews progress, escalates conflicts.                      |
+| Orc    | IC — Executor           | Takes scoped tasks, edits code, runs checks, sends evidence-rich reports up.                         |
 
 A PFTerminal terminal and a Nazgul are a unified entity: **at most one Nazgul per PFTerminal terminal**. Direct human↔Nazgul communication happens in the TUI. Trolls report up to the Nazgul. Orcs report up to Trolls. Agents must not exist as isolated tabs with no visible chain of command.
 
@@ -272,9 +272,9 @@ The multi-agent depth configuration allows depth 2 (depth 0: Nazgul/root, depth 
 
 ### 6.4 Harnesses
 
-| Harness | Status | Description |
-| --- | --- | --- |
-| PFTerminal Agent | P0 (enabled) | Uses the existing Codex/PFTerminal multi-agent runtime with parent/child graph, role metadata, status subscriptions, and `wait_agent`. |
+| Harness              | Status            | Description                                                                                                                                            |
+| -------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| PFTerminal Agent     | P0 (enabled)      | Uses the existing Codex/PFTerminal multi-agent runtime with parent/child graph, role metadata, status subscriptions, and `wait_agent`.                 |
 | Claude Code Headless | P1 (experimental) | Claude Code panes exist under `/panes` but need to emit the same `SpawnNode` status and completion events as native agents before treated as complete. |
 
 ### 6.5 Completion semantics
@@ -335,11 +335,11 @@ PFTerminal inherits Codex skills and ships bundled system skills.
 
 ### Skill loading paths
 
-| Scope | Path |
-| --- | --- |
+| Scope                 | Path                                                                     |
+| --------------------- | ------------------------------------------------------------------------ |
 | Bundled system skills | `$CODEX_HOME/skills/.system/` (i.e. `$HOME/.pfterminal/skills/.system/`) |
-| User global skills | `$HOME/.agents/skills/` |
-| Repo-scoped skills | `<repo>/.agents/skills/` |
+| User global skills    | `$HOME/.agents/skills/`                                                  |
+| Repo-scoped skills    | `<repo>/.agents/skills/`                                                 |
 
 ### Current bundled skills
 
@@ -463,14 +463,14 @@ Subagent tool visibility is gated by the `namespace_tools` provider capability. 
 
 ### 11.1 System requirements
 
-| Requirement  | Details                                                     |
-| ------------ | ---------------------------------------------------------- |
-| OS           | macOS 12+, Ubuntu 20.04+/Debian 10+, or Windows 11 via WSL2 |
-| Git          | 2.23+ recommended                                           |
-| RAM          | 4 GB minimum, 8 GB recommended                              |
-| Rust         | Required only for source builds                             |
-| Node.js      | Required only for npm/package development                    |
-| Linux sandbox | `bubblewrap` recommended                                   |
+| Requirement   | Details                                                     |
+| ------------- | ----------------------------------------------------------- |
+| OS            | macOS 12+, Ubuntu 20.04+/Debian 10+, or Windows 11 via WSL2 |
+| Git           | 2.23+ recommended                                           |
+| RAM           | 4 GB minimum, 8 GB recommended                              |
+| Rust          | Required only for source builds                             |
+| Node.js       | Required only for npm/package development                   |
+| Linux sandbox | `bubblewrap` recommended                                    |
 | Linux keyring | A Secret Service provider such as GNOME Keyring recommended |
 
 ### 11.2 Release installer (preferred)
@@ -511,19 +511,19 @@ The current `/spawn` slice is intentionally smaller than the full orchestration 
 
 ### 12.1 Full bestiary
 
-| Entity | Role | Default model |
-| --- | --- | --- |
-| **Sauron** | Human user; the will/intent | (human) |
-| **The Eye** | Interface that conveys intent to the Nazgul | Task node / automation |
-| **Nazgul** | Orchestrator the user talks to; lives in one PFTerminal | Planning-tier |
-| **Balrog** | Planner; configures & spawns creatures; runs the harness; owns the Grimoire | Planning-tier |
-| **Troll** | Adversarial QA / foreman over Orcs | Strong reviewer |
-| **Orc** | Executor; does the work | Per-instance |
-| **Goblin** | Fast sanity checks (quick review, bug sweep) | Fast model |
-| **Wyvern** | Researcher / web + academic search | Claude Deep Research |
-| **Golem** | Always-on background daemon | Free OpenRouter model |
-| **Sorcerer/Scribe** | Records campaign results to MkDocs | Configurable |
-| **Carrion-eater** | Campaign-completion QA / cleanup | Configurable |
+| Entity              | Role                                                                        | Default model          |
+| ------------------- | --------------------------------------------------------------------------- | ---------------------- |
+| **Sauron**          | Human user; the will/intent                                                 | (human)                |
+| **The Eye**         | Interface that conveys intent to the Nazgul                                 | Task node / automation |
+| **Nazgul**          | Orchestrator the user talks to; lives in one PFTerminal                     | Planning-tier          |
+| **Balrog**          | Planner; configures & spawns creatures; runs the harness; owns the Grimoire | Planning-tier          |
+| **Troll**           | Adversarial QA / foreman over Orcs                                          | Strong reviewer        |
+| **Orc**             | Executor; does the work                                                     | Per-instance           |
+| **Goblin**          | Fast sanity checks (quick review, bug sweep)                                | Fast model             |
+| **Wyvern**          | Researcher / web + academic search                                          | Claude Deep Research   |
+| **Golem**           | Always-on background daemon                                                 | Free OpenRouter model  |
+| **Sorcerer/Scribe** | Records campaign results to MkDocs                                          | Configurable           |
+| **Carrion-eater**   | Campaign-completion QA / cleanup                                            | Configurable           |
 
 ### 12.2 Creature configuration
 

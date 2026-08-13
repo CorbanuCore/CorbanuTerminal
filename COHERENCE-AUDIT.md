@@ -17,18 +17,18 @@ action. It is finite. It does not require a live session to check.
 
 Prior resets, restated as ownership conflicts:
 
-| Reset | Fact with two owners |
-| --- | --- |
-| 8A | what history reaches the provider (native transport vs. chat adapter) |
-| 8C | who is in a crew (CrewSpec vs. recovery role inference) |
-| 8D | what runtime a thread uses (CrewSpec vs. resuming parent pane) |
-| 8E | whether a turn may run (execution limiter had no control-plane tier) |
-| 8I | what the model may request (tool schema vs. validator) |
-| 8L | provider request shape (repair gated to one transport, not the class) |
-| 8O | what runtimes exist (picker catalog vs. tool contract vs. validator) |
-| 8S | whether a completion was delivered (native mailbox vs. TUI report queue) |
-| 8U | recovery scope (children reconciled, roots not) |
-| lease | whether a turn may run (execution admission vs. provider lease) |
+| Reset | Fact with two owners                                                     |
+| ----- | ------------------------------------------------------------------------ |
+| 8A    | what history reaches the provider (native transport vs. chat adapter)    |
+| 8C    | who is in a crew (CrewSpec vs. recovery role inference)                  |
+| 8D    | what runtime a thread uses (CrewSpec vs. resuming parent pane)           |
+| 8E    | whether a turn may run (execution limiter had no control-plane tier)     |
+| 8I    | what the model may request (tool schema vs. validator)                   |
+| 8L    | provider request shape (repair gated to one transport, not the class)    |
+| 8O    | what runtimes exist (picker catalog vs. tool contract vs. validator)     |
+| 8S    | whether a completion was delivered (native mailbox vs. TUI report queue) |
+| 8U    | recovery scope (children reconciled, roots not)                          |
+| lease | whether a turn may run (execution admission vs. provider lease)          |
 
 ---
 
@@ -37,13 +37,13 @@ Prior resets, restated as ownership conflicts:
 **Should have one owner. Currently has five independent gates, none aware of the
 others.**
 
-| Gate | Location | Scope | Knows who is asking? |
-| --- | --- | --- | --- |
-| Execution limiter | `core/src/agent/control/execution.rs:53` | active turns vs `max_threads` | yes — sub-agent only |
-| Residency limiter | `core/src/agent/control/residency.rs:97` | resident threads, LRU unload | no |
-| Spawn registry cap | `core/src/agent/registry.rs:87` | total threads per session | no |
-| Provider lease | `core/src/session/turn.rs:2414` | one large request per provider key | yes, as of `a23ee3aa7` |
-| Provider cooldown | `core/src/session/turn.rs:2222` | post-429 backoff per key | no |
+| Gate               | Location                                 | Scope                              | Knows who is asking?   |
+| ------------------ | ---------------------------------------- | ---------------------------------- | ---------------------- |
+| Execution limiter  | `core/src/agent/control/execution.rs:53` | active turns vs `max_threads`      | yes — sub-agent only   |
+| Residency limiter  | `core/src/agent/control/residency.rs:97` | resident threads, LRU unload       | no                     |
+| Spawn registry cap | `core/src/agent/registry.rs:87`          | total threads per session          | no                     |
+| Provider lease     | `core/src/session/turn.rs:2414`          | one large request per provider key | yes, as of `a23ee3aa7` |
+| Provider cooldown  | `core/src/session/turn.rs:2222`          | post-429 backoff per key           | no                     |
 
 Three of the five raise the same `CodexErr::AgentLimitReached`, so the user
 cannot tell which limit was hit.
@@ -71,20 +71,20 @@ what a single admission decision can express and five scattered ones cannot.
 
 **Should have one owner. Currently written in five places.**
 
-| Owner | Location |
-| --- | --- |
-| `CrewSpec` member runtime request | `protocol/src/crew.rs` |
-| TUI map `spawn_native_runtime_by_node` | `tui/src/app.rs:762` |
+| Owner                                  | Location                             |
+| -------------------------------------- | ------------------------------------ |
+| `CrewSpec` member runtime request      | `protocol/src/crew.rs`               |
+| TUI map `spawn_native_runtime_by_node` | `tui/src/app.rs:762`                 |
 | `SpawnThreadStateMetadata` to state DB | `tui/src/spawn_orchestration.rs:111` |
-| Rollout session metadata | per-thread `.jsonl` |
-| Live `TurnContext` | `core/src/session/turn.rs` |
+| Rollout session metadata               | per-thread `.jsonl`                  |
+| Live `TurnContext`                     | `core/src/session/turn.rs`           |
 
 Phase 8D fixed one disagreement between these (bind/resume overwrote the crew
 runtime with the focused parent pane's). Phase 6C fixed another. Both were
 symptoms of five writers.
 
 **Action.** The persisted thread record is the single owner. `CrewSpec` states
-*intent* at creation; it must not be read back as the live answer.
+_intent_ at creation; it must not be read back as the live answer.
 `spawn_native_runtime_by_node` becomes a read-through cache or is deleted —
 23 production references.
 
@@ -94,12 +94,12 @@ symptoms of five writers.
 
 **Should have one owner. Currently four.**
 
-| Owner | Location |
-| --- | --- |
-| `CrewInstanceState` logical-to-native mapping | `tui/src/crew_state.rs` |
-| TUI maps `spawn_parent_by_node` / `spawn_parent_by_thread` | `tui/src/app.rs:760-761` |
-| TUI map `spawn_native_endpoint_by_node` | `tui/src/app.rs:764` |
-| Native registry `AgentMetadata.agent_path` | `core/src/agent/registry.rs:36` |
+| Owner                                                      | Location                        |
+| ---------------------------------------------------------- | ------------------------------- |
+| `CrewInstanceState` logical-to-native mapping              | `tui/src/crew_state.rs`         |
+| TUI maps `spawn_parent_by_node` / `spawn_parent_by_thread` | `tui/src/app.rs:760-761`        |
+| TUI map `spawn_native_endpoint_by_node`                    | `tui/src/app.rs:764`            |
+| Native registry `AgentMetadata.agent_path`                 | `core/src/agent/registry.rs:36` |
 
 `agent_path` already encodes parentage canonically. `spawn_parent_by_node` has
 74 production references restating it. Phase 8C's leak — an unrelated native
@@ -120,14 +120,14 @@ derive them if a lookup index is still wanted.
 
 Residual TUI bookkeeping still exists and should be confirmed dead or deleted:
 
-| Field | Production refs |
-| --- | --- |
-| `spawn_dispatch_acks_by_target_task` | 7 |
-| `spawn_next_dispatch_seq` | 15 |
-| `spawn_processed_dispatch_seq_ids` | 23 |
-| `spawn_processed_dispatch_origins` | 8 |
-| `spawn_processed_terminal_turns` | 7 |
-| `spawn_parent_reports_by_node` | 11 |
+| Field                                | Production refs |
+| ------------------------------------ | --------------- |
+| `spawn_dispatch_acks_by_target_task` | 7               |
+| `spawn_next_dispatch_seq`            | 15              |
+| `spawn_processed_dispatch_seq_ids`   | 23              |
+| `spawn_processed_dispatch_origins`   | 8               |
+| `spawn_processed_terminal_turns`     | 7               |
+| `spawn_parent_reports_by_node`       | 11              |
 
 Phase 7C deleted the pump; `tui/src/dispatch_queue.rs` survives at 247 lines and
 is still imported by `spawn_orchestration.rs`, `claude_panes/`, and `app.rs`.
@@ -173,7 +173,7 @@ No action.
 ## Fact 7 — What may be spent
 
 **Owner: `agents.provider_allowlist`, as of commit `3996f17a9`.** Partially
-closed; the spend *cap* remains unowned.
+closed; the spend _cap_ remains unowned.
 
 What was repaired:
 

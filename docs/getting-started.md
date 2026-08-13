@@ -26,19 +26,19 @@ in the encrypted vault, not in the chat transcript.
 
 PFTerminal currently ships these provider paths:
 
-| Use case                    | Provider        | Current release-visible model examples                                      |
-| --------------------------- | --------------- | --------------------------------------------------------------------------- |
-| OpenAI Codex account        | OpenAI          | `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`                              |
-| Claude subscription         | Claude Plan     | `claude-opus-5-plan`, `claude-fable-5-plan`                                 |
-| Direct Claude API           | Anthropic       | `claude-opus-5`, `claude-fable-5`                                           |
-| Ambient coding plan         | Ambient         | `z-ai/glm-5.2`, `moonshotai/kimi-k2.7-code`                                 |
-| Kimi coding plan            | Kimi Code       | `k3`                                                                        |
-| Z.AI coding plan            | Z.AI            | `glm-5.2`                                                                   |
-| Direct DeepSeek Responses   | DeepSeek        | `deepseek-v4-flash` (DeepSeek V4 Flash 0731)                                |
-| Metered model gateway       | OpenRouter      | `deepseek/deepseek-v4-flash-0731`, `deepseek/deepseek-v4-pro`, `moonshotai/kimi-k3`, and other catalogued routes |
-| Meta API                    | Meta            | `muse-spark-1.1`                                                            |
-| Metered GLM                 | Baseten         | `zai-org/GLM-5.2`                                                           |
-| Metered GLM gateway         | Vercel          | `zai/glm-5.2`, `zai/glm-5.2-fast`                                           |
+| Use case                  | Provider    | Current release-visible model examples                                                                           |
+| ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| OpenAI Codex account      | OpenAI      | `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`                                                                   |
+| Claude subscription       | Claude Plan | `claude-opus-5-plan`, `claude-fable-5-plan`                                                                      |
+| Direct Claude API         | Anthropic   | `claude-opus-5`, `claude-fable-5`                                                                                |
+| Ambient coding plan       | Ambient     | `z-ai/glm-5.2`, `moonshotai/kimi-k2.7-code`                                                                      |
+| Kimi coding plan          | Kimi Code   | `k3`                                                                                                             |
+| Z.AI coding plan          | Z.AI        | `glm-5.2`                                                                                                        |
+| Direct DeepSeek Responses | DeepSeek    | `deepseek-v4-flash` (DeepSeek V4 Flash 0731)                                                                     |
+| Metered model gateway     | OpenRouter  | `deepseek/deepseek-v4-flash-0731`, `deepseek/deepseek-v4-pro`, `moonshotai/kimi-k3`, and other catalogued routes |
+| Meta API                  | Meta        | `muse-spark-1.1`                                                                                                 |
+| Metered GLM               | Baseten     | `zai-org/GLM-5.2`                                                                                                |
+| Metered GLM gateway       | Vercel      | `zai/glm-5.2`, `zai/glm-5.2-fast`                                                                                |
 
 Open `/model` to switch models. You can also start with a specific model:
 
@@ -79,12 +79,12 @@ Provider API keys stored through onboarding use labels such as
 | `/model`     | Select provider model and reasoning/effort mode                          |
 | `/providers` | Add or replace provider credentials and manage account routes            |
 | `/vault`     | Add, inspect, or delete credentials without exposing raw secrets to chat |
-| `/panes`     | Create or switch persistent PFTerminal and Claude headless panes          |
+| `/panes`     | Create or switch persistent PFTerminal and Claude headless panes         |
 | `/spawn`     | Manage retained Nazgul/Troll/Orc agents                                  |
 | `/wallet`    | Manage the local SOL/USDC wallet and PFTerminal plans                    |
 | `/gpu`       | Inspect, rent, stop, or terminate supported GPU capacity                 |
 | `/telegram`  | Configure and control the Telegram connector                             |
-| `/tasknode`  | Link and use Task Node tasks, context, chat, balances, and rewards        |
+| `/tasknode`  | Link and use Task Node tasks, context, chat, balances, and rewards       |
 | `/docs`      | Open these packaged docs inside any advertised pane                      |
 | `/status`    | Inspect current model/provider/session state                             |
 

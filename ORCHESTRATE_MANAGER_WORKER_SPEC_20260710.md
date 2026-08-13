@@ -34,7 +34,7 @@ All paths relative to `codex-rs/`. Line numbers at `0420104aa`.
   the Manager audits and re-tasks the Worker all night and can answer "what happened?" in the
   morning from its own context. Every design decision below is subordinate to this scenario:
   when user-attention rules and continuity conflict, unattended continuity wins by default and
-  user activity only *adds* precedence while the user is actually present.
+  user activity only _adds_ precedence while the user is actually present.
 
 ## 2. Assignment lifecycle
 
@@ -80,14 +80,14 @@ All paths relative to `codex-rs/`. Line numbers at `0420104aa`.
 
 ### Terminal / paused
 
-| Condition | Behavior |
-| --- | --- |
-| Manager emits stop marker (`WHIP_DONE`) | `Done`; notify; panes remain |
-| Execution duration expires | `Expired`; notify; user may extend |
-| User pause/detach | Existing semantics; detach deletes (fix 3) |
-| Worker pane closes | Paused + notify ("Worker gone") |
-| Manager pane closes | Paused + notify ("Manager gone") |
-| Manager turn failures | **Backoff, not pause** (§4.1) — a transient 2am API outage must not end the night. Notify after 3 consecutive failures; hard-pause never happens on failures alone before expiry |
+| Condition                               | Behavior                                                                                                                                                                         |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Manager emits stop marker (`WHIP_DONE`) | `Done`; notify; panes remain                                                                                                                                                     |
+| Execution duration expires              | `Expired`; notify; user may extend                                                                                                                                               |
+| User pause/detach                       | Existing semantics; detach deletes (fix 3)                                                                                                                                       |
+| Worker pane closes                      | Paused + notify ("Worker gone")                                                                                                                                                  |
+| Manager pane closes                     | Paused + notify ("Manager gone")                                                                                                                                                 |
+| Manager turn failures                   | **Backoff, not pause** (§4.1) — a transient 2am API outage must not end the night. Notify after 3 consecutive failures; hard-pause never happens on failures alone before expiry |
 
 Worker-side empty-output/failed-turn auto-pauses are removed for assignments: judging a silent
 or failing Worker is the Manager's job.
@@ -171,7 +171,7 @@ Failed Manager turns (errors, not "reviewed without dispatching") do not pause t
 - User-facing vocabulary: **assignment / Manager / Worker / mandate / spec**. No
   whip/holder/target/review strings in guided flow or status views.
 - Status row: `Manager <M> -> Worker <W>; drafting|executing|blocked(<reason>)|paused|done;
-  next mandate in 9m; ends 18:40Z; spec <name>`.
+next mandate in 9m; ends 18:40Z; spec <name>`.
 - Detail view actions: talk to manager (focus pane), start execution (drafting only),
   mandate now, pause/resume, extend, test, detach.
 - Pane suffixes (`whip_suffix_for_target`, `orchestrate.rs:638`): Worker shows
@@ -218,7 +218,7 @@ Failed Manager turns (errors, not "reviewed without dispatching") do not pause t
    mandates; user reply auto-resumes Executing.
 6. **End conditions:** one test per row of the §2 table, including failure-backoff cadence
    doubling, cap, notification after 3 failures, and reset on success — with no pause.
-6a. **Overnight simulation (flagship):** deterministic-clock run of an 8h Executing assignment
+   6a. **Overnight simulation (flagship):** deterministic-clock run of an 8h Executing assignment
    with zero user activity: ≥ 15 mandate/dispatch cycles complete; two injected transient
    Manager failures mid-run cause backoff then recovery, not a stall; at "morning," a user
    status question is answered without disturbing the loop, and the assignment reaches Done or

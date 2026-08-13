@@ -122,7 +122,10 @@ across the recovery branch. The candidate repairs the affected boundaries:
   the workspace manifest warning-free under the CI `cargo shear
   --deny-warnings` policy; and
 - the README's agent-hierarchy notation now follows the repository's enforced
-  ASCII-only policy.
+  ASCII-only policy; and
+- the repository's own pinned Prettier formatter was applied to the 32 tracked
+  Markdown files that had accumulated formatting drift, restoring the
+  all-repository `pnpm run format` gate without changing their content.
 
 ## Linux production artifact
 

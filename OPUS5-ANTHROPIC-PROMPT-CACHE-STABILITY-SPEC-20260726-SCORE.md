@@ -22,10 +22,10 @@ Scoring method:
 
 ## Results
 
-| Revision | Document SHA-256 | GPT-5.6-sol | Fable 5 | GLM-5.2 | Overall |
-|---|---|---:|---:|---:|---:|
-| Initial | `63984a71d2ed82bffbf70b1cddb54e1a6f16c45799f6718e074f6be1883fdc58` | 95.60 | 91.40 | 91.00 | **92.67** |
-| Critique-driven revision | `11a25acca0b6adc8634848d5ffa0dd1864e20f12771315a55b9beed18a6fdf23` | 95.60 | 91.60 | 89.40 | **92.20** |
+| Revision                 | Document SHA-256                                                   | GPT-5.6-sol | Fable 5 | GLM-5.2 |   Overall |
+| ------------------------ | ------------------------------------------------------------------ | ----------: | ------: | ------: | --------: |
+| Initial                  | `63984a71d2ed82bffbf70b1cddb54e1a6f16c45799f6718e074f6be1883fdc58` |       95.60 |   91.40 |   91.00 | **92.67** |
+| Critique-driven revision | `11a25acca0b6adc8634848d5ffa0dd1864e20f12771315a55b9beed18a6fdf23` |       95.60 |   91.60 |   89.40 | **92.20** |
 
 The final full-gate score is **92.20/100**. The 0.47-point decrease from the
 initial score is within the spread of the individual judgments; it came from GLM's
@@ -34,22 +34,22 @@ technical defect. GPT remained unchanged and Fable increased by 0.20.
 
 ### Initial runs
 
-| Judge | Scores | Average | Range |
-|---|---|---:|---:|
-| GPT-5.6-sol | 95, 96, 95, 96, 96 | 95.60 | 95–96 |
-| Claude Fable 5 | 91, 92, 92, 91, 91 | 91.40 | 91–92 |
-| GLM-5.2 | 92, 89, 92, 93, 89 | 91.00 | 89–93 |
+| Judge          | Scores             | Average | Range |
+| -------------- | ------------------ | ------: | ----: |
+| GPT-5.6-sol    | 95, 96, 95, 96, 96 |   95.60 | 95–96 |
+| Claude Fable 5 | 91, 92, 92, 91, 91 |   91.40 | 91–92 |
+| GLM-5.2        | 92, 89, 92, 93, 89 |   91.00 | 89–93 |
 
 Run group:
 `round-20260726-cache-stability-spec-initial`
 
 ### Critique-driven revision runs
 
-| Judge | Scores | Average | Range |
-|---|---|---:|---:|
-| GPT-5.6-sol | 95, 95, 96, 96, 96 | 95.60 | 95–96 |
-| Claude Fable 5 | 90, 93, 91, 91, 93 | 91.60 | 90–93 |
-| GLM-5.2 | 93, 89, 88, 89, 88 | 89.40 | 88–93 |
+| Judge          | Scores             | Average | Range |
+| -------------- | ------------------ | ------: | ----: |
+| GPT-5.6-sol    | 95, 95, 96, 96, 96 |   95.60 | 95–96 |
+| Claude Fable 5 | 90, 93, 91, 91, 93 |   91.60 | 90–93 |
+| GLM-5.2        | 93, 89, 88, 89, 88 |   89.40 | 88–93 |
 
 Run group:
 `round-20260726-cache-stability-spec-final`

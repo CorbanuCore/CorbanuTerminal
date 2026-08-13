@@ -41,7 +41,7 @@ when Codex Main is bound as Manager (F3).
 - **Why tests miss it:** `assignment_overnight_loop_survives_cycles_backoff_and_manager_markers`
   and the blocked-reason unit test feed clean, intentional marker strings; no test feeds a
   contract-restating Manager reply, and none scans during Drafting.
-- **Repair:** anchor detection to a line that *is* the marker (trimmed line == `WHIP_DONE`;
+- **Repair:** anchor detection to a line that _is_ the marker (trimmed line == `WHIP_DONE`;
   trimmed line starts with `ASSIGNMENT_BLOCKED:`), restrict Done/Blocked transitions to
   `Executing` (Drafting acknowledgments are the highest-risk turn), and amend the brief to say
   "place the marker alone on its own line". Legacy nudges have the same substring behavior, but
@@ -54,7 +54,7 @@ reports"; "missing pane detected at restart"):
 
 1. `fire_destination_for_node` (`orchestrate.rs:2682`) returns `Ok(Native(thread_id))` for any
    `thread:` node **without checking the thread exists**. Therefore
-   `audit_restored_assignments` (`:1760`) can never flag a missing *native* Manager or Worker
+   `audit_restored_assignments` (`:1760`) can never flag a missing _native_ Manager or Worker
    after restart — only Claude panes are validated.
 2. If a native Worker fails to restore into `agent_navigation`, `target_node_is_idle` (`:2716`)
    returns `false` forever; sweep-planning errors are swallowed (`evaluate_whips_for_target`
@@ -63,6 +63,7 @@ reports"; "missing pane detected at restart"):
    calls `note_assignment_node_gone`; the new hook only fires on collab `Shutdown`/`NotFound`
    status changes (`thread_routing.rs:1714`). A worker closed via `ThreadClosed` leaves the
    assignment armed and silently stalled (`is_closed` ⇒ never idle ⇒ never mandated).
+
 - **Trigger:** 8h overnight run; native Worker thread is closed or the app restarts and the
   Worker thread does not re-attach. The loop stops with zero user-visible signal — the exact
   failure the feature exists to prevent.
@@ -111,7 +112,7 @@ reports"; "missing pane detected at restart"):
 - **Expected (request invariants):** replacement must not discard the old assignment before the
   new Manager is valid; Manager spawn failure leaves no partial state.
 - **Why tests miss it:** no failure injection between spawn/attach/brief steps.
-- **Repair:** resolve and validate the Manager destination *before* mutating the registry;
+- **Repair:** resolve and validate the Manager destination _before_ mutating the registry;
   on brief-injection failure, roll back the insert (and restore the replaced assignment) or
   mark the new assignment Paused with an explicit "brief not delivered" reason.
 
@@ -168,7 +169,7 @@ reports"; "missing pane detected at restart"):
   `f20a13186`**, passes with `RUST_MIN_STACK=16MiB`). Clippy: 1 pre-existing `redundant clone`
   **error** (`claude_panes/app_integration.rs:149`, blame `cbf00bcaa`, ancestor of base) plus 3
   pre-existing warnings — note the request described this as "three warnings"; it is actually a
-  clippy *failure*, pre-existing, tracked separately.
+  clippy _failure_, pre-existing, tracked separately.
 - Left no artifacts: generated `.snap.new` files deleted; no implementation files touched.
 
 ### Real PTY evidence
@@ -179,7 +180,7 @@ reports"; "missing pane detected at restart"):
   pane, selectable) → Duration (15m) → Spec (`Draft with Manager` default) → Manager (create;
   Codex Main correctly absent from bind list) → assignment `whip-1` created in Drafting; brief
   sent exactly once ("Task sent to Manager"); status and detail views show phase and `Start
-  execution`; keyboard responsive at every popup; detach cleans the registry ("No assignments").
+execution`; keyboard responsive at every popup; detach cleans the registry ("No assignments").
 - Observed defects during the run: F5 ("unlimited" for a 15m assignment), F6 ("Whip whip-1
   detached.", Test-in-Drafting error).
 - Not observed live: a real Executing mandate cycle (would require locking a spec and waiting a

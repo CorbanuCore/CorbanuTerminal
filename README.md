@@ -106,21 +106,21 @@ rm -rf "${PFTERMINAL_HOME:-$HOME/.pfterminal}"
 
 PFTerminal ships provider adapters for the following routes:
 
-| Provider or route | Access |
-| --- | --- |
-| OpenAI | Codex account authentication or an API-backed configuration |
-| Anthropic | Direct Anthropic API keys and Claude Code plan-backed panes |
-| PFTerminal Plan | Prepaid inference plans purchased with USDC through `/wallet` |
-| Kimi Code | Direct Kimi Code access, including Kimi K3 |
-| Z.AI | Direct Z.AI access, including GLM models and an Anthropic-compatible route |
-| OpenRouter | OpenRouter's model catalogue, including Kimi, GLM, Grok, and other models |
-| Ambient | Hosted GLM and Kimi routes |
-| Meta | Meta-hosted model access |
-| Baseten | Baseten routes, including an Anthropic-compatible adapter |
-| Vercel AI Gateway | Responses, Anthropic-compatible, and fast Anthropic routes |
-| Amazon Bedrock | AWS-authenticated Bedrock models |
-| Ollama and LM Studio | Local model servers |
-| Custom providers | Additional provider endpoints configured in `config.toml` |
+| Provider or route    | Access                                                                     |
+| -------------------- | -------------------------------------------------------------------------- |
+| OpenAI               | Codex account authentication or an API-backed configuration                |
+| Anthropic            | Direct Anthropic API keys and Claude Code plan-backed panes                |
+| PFTerminal Plan      | Prepaid inference plans purchased with USDC through `/wallet`              |
+| Kimi Code            | Direct Kimi Code access, including Kimi K3                                 |
+| Z.AI                 | Direct Z.AI access, including GLM models and an Anthropic-compatible route |
+| OpenRouter           | OpenRouter's model catalogue, including Kimi, GLM, Grok, and other models  |
+| Ambient              | Hosted GLM and Kimi routes                                                 |
+| Meta                 | Meta-hosted model access                                                   |
+| Baseten              | Baseten routes, including an Anthropic-compatible adapter                  |
+| Vercel AI Gateway    | Responses, Anthropic-compatible, and fast Anthropic routes                 |
+| Amazon Bedrock       | AWS-authenticated Bedrock models                                           |
+| Ollama and LM Studio | Local model servers                                                        |
+| Custom providers     | Additional provider endpoints configured in `config.toml`                  |
 
 Use `/providers` for interactive account and API-key setup. Amazon Bedrock,
 local servers, and custom providers use their normal environment or

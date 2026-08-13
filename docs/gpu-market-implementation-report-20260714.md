@@ -37,14 +37,14 @@ minutes from argument initialization to READY.
 
 Measured live results after warm-up:
 
-| Workload | Result |
-| --- | --- |
-| Single request, 256 output tokens (three runs) | 204.28, 214.50, and 214.71 output tok/s; 0.55–0.59 s TTFT |
-| Two simultaneous 384-token requests | Both completed in 3.40 s or less; 143.43 and 186.44 output tok/s per stream |
-| Eight simultaneous 256-token requests | All completed in 3.27–4.12 s; no rejection, queue failure, or retry loop |
-| 21,191-token repeated prefix | TTFT 4.73 s cold, 1.26 s cached; 195–202 output tok/s |
-| 84,709-token repeated prefix | TTFT 6.08 s cold, 1.72 s cached; 198–209 output tok/s |
-| Protocol seams | Wrong token rejected with HTTP 401; forced structured tool call passed; client cancellation followed by immediate successful recovery |
+| Workload                                       | Result                                                                                                                                |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Single request, 256 output tokens (three runs) | 204.28, 214.50, and 214.71 output tok/s; 0.55–0.59 s TTFT                                                                             |
+| Two simultaneous 384-token requests            | Both completed in 3.40 s or less; 143.43 and 186.44 output tok/s per stream                                                           |
+| Eight simultaneous 256-token requests          | All completed in 3.27–4.12 s; no rejection, queue failure, or retry loop                                                              |
+| 21,191-token repeated prefix                   | TTFT 4.73 s cold, 1.26 s cached; 195–202 output tok/s                                                                                 |
+| 84,709-token repeated prefix                   | TTFT 6.08 s cold, 1.72 s cached; 198–209 output tok/s                                                                                 |
+| Protocol seams                                 | Wrong token rejected with HTTP 401; forced structured tool call passed; client cancellation followed by immediate successful recovery |
 
 The published community vLLM W4A16-MTP TP2 result was not promoted: its
 reported H200 batch-one result is 88.35 output tok/s and it requires four
@@ -177,18 +177,18 @@ did not expose. Each was fixed generally and covered by regression tests:
 
 ## Invariant matrix
 
-| Invariant | Automated evidence | Live evidence |
-| --- | --- | --- |
-| One authorization creates at most one resource | Durable client operation IDs, ownership tags, controller leases, replay/concurrency and ambiguous-create tests | Each product rental had at most one Vast resource; failed cleanup did not duplicate creation |
-| Potentially billable resources remain discoverable | Owned-inventory adoption and unrelated-resource rejection tests | RunPod and Vast resources reconciled by provider inventory and durable rental IDs |
-| Termination requires provider proof | Termination timeout, ambiguous-delete, inventory-absence, and atomic-overlay tests | Final product rental reached `terminated_confirmed`; Vast inventory returned zero active instances |
-| No unauthenticated public inference | HTTPS-only runtime overlay plus no-token/wrong-token readiness probes | RunPod and Vast endpoints rejected wrong credentials and accepted scoped credentials |
-| Secrets stay out of ordinary state and logs | Redacted secret types, narrow vault labels, sanitized adapter errors | Qualification logs contained no endpoint or provider credential |
-| Price is authorization | Expired quote, price drift, exact-offer, hourly/total/TTL tests | Final rental recorded `$7.4358/h`, `$15` cap, and TTL |
-| Rental control is process-independent | Durable controller leases and two-runtime serialization tests | Two TUIs and one controller used the same ready rental concurrently |
-| READY means PfTerminal-compatible | Full authenticated readiness-contract tests | Real chat, stream, tool, cancellation, recovery, model identity, and post-compaction continuation passed |
-| Runtime rentals never mutate static config | Runtime-selection and stale-config regressions | Static provider remained Ambient while two sessions used rented DeepSeek |
-| Retries are bounded and persisted | Backoff, retry-after, step-digest, notification-dedup tests | Provider host loss converged to cleanup; no flood or invisible retry loop occurred |
+| Invariant                                          | Automated evidence                                                                                             | Live evidence                                                                                            |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| One authorization creates at most one resource     | Durable client operation IDs, ownership tags, controller leases, replay/concurrency and ambiguous-create tests | Each product rental had at most one Vast resource; failed cleanup did not duplicate creation             |
+| Potentially billable resources remain discoverable | Owned-inventory adoption and unrelated-resource rejection tests                                                | RunPod and Vast resources reconciled by provider inventory and durable rental IDs                        |
+| Termination requires provider proof                | Termination timeout, ambiguous-delete, inventory-absence, and atomic-overlay tests                             | Final product rental reached `terminated_confirmed`; Vast inventory returned zero active instances       |
+| No unauthenticated public inference                | HTTPS-only runtime overlay plus no-token/wrong-token readiness probes                                          | RunPod and Vast endpoints rejected wrong credentials and accepted scoped credentials                     |
+| Secrets stay out of ordinary state and logs        | Redacted secret types, narrow vault labels, sanitized adapter errors                                           | Qualification logs contained no endpoint or provider credential                                          |
+| Price is authorization                             | Expired quote, price drift, exact-offer, hourly/total/TTL tests                                                | Final rental recorded `$7.4358/h`, `$15` cap, and TTL                                                    |
+| Rental control is process-independent              | Durable controller leases and two-runtime serialization tests                                                  | Two TUIs and one controller used the same ready rental concurrently                                      |
+| READY means PfTerminal-compatible                  | Full authenticated readiness-contract tests                                                                    | Real chat, stream, tool, cancellation, recovery, model identity, and post-compaction continuation passed |
+| Runtime rentals never mutate static config         | Runtime-selection and stale-config regressions                                                                 | Static provider remained Ambient while two sessions used rented DeepSeek                                 |
+| Retries are bounded and persisted                  | Backoff, retry-after, step-digest, notification-dedup tests                                                    | Provider host loss converged to cleanup; no flood or invisible retry loop occurred                       |
 
 ## Automated qualification
 

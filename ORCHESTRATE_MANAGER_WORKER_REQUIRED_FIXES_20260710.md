@@ -122,14 +122,14 @@ never scanned, failed-turn backoff never applies, and `is_running` is never main
 ## Fix 4 (P2, same PR): No orphaned state on partial attach/create failure
 
 **Problem.** `attach_whip` deletes replaced assignments and inserts+persists the new whip
-*before* `inject_assignment_birth_brief(&id)?` can fail (`tui/src/orchestrate.rs:1993` and the
+_before_ `inject_assignment_birth_brief(&id)?` can fail (`tui/src/orchestrate.rs:1993` and the
 function tail), leaving a brief-less assignment presented as ready and the old assignment
 destroyed. `CreateOrchestrateManager` (`tui/src/app/event_dispatch.rs`, handler added in this
 commit) can spawn a Manager pane and then fail attach, leaving a phantom pane.
 
 **Required behavior.**
 
-1. Validate the Manager destination (`fire_destination_for_node`) and read the spec *before*
+1. Validate the Manager destination (`fire_destination_for_node`) and read the spec _before_
    mutating the registry; only then remove replaced assignments, insert, persist, and inject.
 2. If brief injection still fails, roll back the insert and restore the replaced assignments,
    or mark the new assignment `Paused` with reason "brief not delivered" — never silent

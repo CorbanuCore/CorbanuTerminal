@@ -9,12 +9,14 @@ The branch has real, valuable isolation and provider work (home isolation, Meta 
 ## Coverage
 
 ### Range
+
 - Repo: `/home/pfrpc/repos/PfTerminal-triage-clean`
 - Branch: `integrate/pfterminal-20260707` @ `43d33461e`
 - Baseline: `origin/main`
 - Stats: **29 commits**, **146 files**, **+10473 / -1061** lines; `git diff --check` clean
 
 ### Commits reviewed (line-level for latest critical)
+
 - `43d33461e` Keep provider API keys out of ChatGPT refresh
 - `483680f06` Preserve Meta response item IDs
 - `bc3aa019b` Fix vision input across model providers
@@ -28,16 +30,18 @@ The branch has real, valuable isolation and provider work (home isolation, Meta 
 - Orchestration surface size audit (`orchestrate.rs` 2416 LOC, `spawn_orchestration.rs` large)
 
 ### Subsystems / clusters
-| Cluster | Evidence |
-|---|---|
-| A Home / DB / installers | `home-dir`, `state/runtime` migrate+foreign-checksum, install.sh/ps1 remove `codex`, package targets |
-| B Model picker / catalog | `model_popups.rs` provider tabs, models.json, manager_tests image-capability list |
-| C Auth / 401 | `ModelClient::unauthorized_recovery` env_key gate + unit test |
-| D Serialization / vision | Chat+Anthropic request builders; multipath structural inspection of tool+image continuation |
-| E Session / resume / server state | Meta ID assignment paths; vercel_server_state integration tests |
-| F Orchestration / roles | spawn crew builders, dispatch on busy, Nazgul→Troll prompt, module size |
+
+| Cluster                           | Evidence                                                                                             |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| A Home / DB / installers          | `home-dir`, `state/runtime` migrate+foreign-checksum, install.sh/ps1 remove `codex`, package targets |
+| B Model picker / catalog          | `model_popups.rs` provider tabs, models.json, manager_tests image-capability list                    |
+| C Auth / 401                      | `ModelClient::unauthorized_recovery` env_key gate + unit test                                        |
+| D Serialization / vision          | Chat+Anthropic request builders; multipath structural inspection of tool+image continuation          |
+| E Session / resume / server state | Meta ID assignment paths; vercel_server_state integration tests                                      |
+| F Orchestration / roles           | spawn crew builders, dispatch on busy, Nazgul→Troll prompt, module size                              |
 
 ### Commands actually run
+
 ```text
 git status --short --branch
 git log --oneline --decorate origin/main..HEAD
@@ -47,9 +51,11 @@ just test -p codex-protocol response_item_assigns  → 1 passed
 just test -p codex-core meta_repairs provider_api_keys chat_replay_preserves anthropic_messages_request_preserves → 4 passed
 just test -p codex-utils-home-dir → 5 passed
 ```
+
 Skipped / not completed: full `just test -p codex-tui`, full workspace suite, `codex-model-provider` package run (still compiling/long), live API probes (no dispatcher authorization for paid network, vault not used).
 
 ### Live probes
+
 Not run (credentials not consumed; plan Phase 4 unauthorized without explicit spend approval).
 
 ## Findings
@@ -59,17 +65,20 @@ Not run (credentials not consumed; plan Phase 4 unauthorized without explicit sp
 **Title:** OpenRouter Chat path double-emits vision tool results (JSON dump + user image parts)
 
 **Where:**
+
 - `codex-rs/core/src/client.rs:2965-2978` (`append_chat_messages_for_response_item` for Function/Custom tool outputs)
 - `codex-rs/core/src/tools/handlers/view_image.rs:247-258` (image-only ContentItems payload)
 - `codex-rs/protocol/src/models.rs:1764-1785` + `2074-2082` (`to_text` drops images; `Display` emits full JSON of content items)
 - Triggered for every Chat-wire provider, including OpenRouter (`model-provider-info` `create_openrouter_provider` → `WireApi::Chat`)
 
 **Trigger / repro:**
+
 1. Select OpenRouter provider + vision model (`x-ai/grok-4.5`, `minimax/minimax-m3`, or Gemini Flash on OpenRouter).
 2. Turn that issues `view_image` on a local PNG/JPEG.
 3. Observe the next Chat Completions request built for the continuation (or dump via `PFTERMINAL_DUMP_CHAT_REQUEST`).
 
 **Actual:**
+
 1. `ViewImageOutput` records `FunctionCallOutputBody::ContentItems([InputImage{data URL, detail}])` only — no text item.
 2. Chat serializer does `output.body.to_text().unwrap_or_else(|| output.to_string())`.
 3. `to_text` is `None` for image-only payloads, so `Display` serializes the content items as a JSON string that **includes the entire base64 data URL**.
@@ -77,6 +86,7 @@ Not run (credentials not consumed; plan Phase 4 unauthorized without explicit sp
 5. Separately, `chat_tool_result_image_parts` builds a second `role=user` message with the same image as `image_url` content parts.
 
 Request shape (structurally enforced by code):
+
 ```json
 [
   {"role":"assistant","tool_calls":[{"id":"call_image","function":{"name":"view_image",...}}]},
@@ -87,11 +97,13 @@ Request shape (structurally enforced by code):
 ```
 
 **Expected:**
+
 - Tool message carries only a short, non-image textual acknowledgment (or structured multimodal tool content if the provider supports it).
 - Image bytes appear **once**, in a provider-valid content shape.
 - Context window should not grow by ~2× image payload per `view_image` call.
 
 **Why tests miss it:**
+
 - `chat_replay_preserves_user_and_tool_result_images` only asserts:
   - the **user** image part
   - that message index 2 is `tool` and index 3 is `user`
@@ -101,6 +113,7 @@ Request shape (structurally enforced by code):
 
 **Repair direction:**
 In Chat mapping for `FunctionCallOutput` / `CustomToolCallOutput`:
+
 1. Prefer `to_text()` for the tool role message text; if `None`, use a fixed short placeholder such as `"(image)"` or empty string — never `Display` JSON of content items.
 2. Prefer attaching images only via `user` parts **or** only via native multimodal tool content if/when the wire format supports arrays, not both silently.
 3. Unit-test an **image-only** `view_image`-shaped payload and assert tool content contains no `data:image`.
@@ -109,9 +122,10 @@ In Chat mapping for `FunctionCallOutput` / `CustomToolCallOutput`:
 
 ### 2. P1 — Parallel tool bag with an image result can produce illegal Chat Completions ordering (`tool` after a synthetic `user`)
 
-**Title:** Image tool-result injection breaks assistant → tool* → (next assistant) ordering under parallel tools
+**Title:** Image tool-result injection breaks assistant → tool\* → (next assistant) ordering under parallel tools
 
 **Where:**
+
 - `codex-rs/core/src/client.rs:2971-2978` (inserts synthetic `user` immediately after each image-bearing tool result)
 - `codex-rs/core/src/tools/handlers/view_image.rs:79-81` (`supports_parallel_tool_calls = true`)
 - OpenRouter Chat wire + models advertising `supports_parallel_tool_calls: true` (e.g. MiniMax M3 in models.json)
@@ -121,6 +135,7 @@ Model issues one turn with concurrent tools, e.g. `view_image` + `exec_command`/
 `FunctionCall(view_image)`, `FunctionCall(shell)`, `FunctionCallOutput(view_image images)`, `FunctionCallOutput(shell text)`.
 
 Serialized Chat messages become:
+
 1. assistant with tool_calls (possibly one-at-a-time per FC — still sequential assistants if unbatched)
 2. tool (image call, polluted content from Finding 1)
 3. **user** (synthetic image parts)
@@ -143,12 +158,14 @@ Buffer image parts until **all** tool results for the current assistant tool bag
 **Title:** Isolation contract incomplete on the published npm launcher
 
 **Where:**
+
 - `codex-cli/package.json:6-9` — `"bin": { "pfterminal": "bin/codex.js", "codex": "bin/codex.js" }`
 - Contrast with deliberate isolation in this branch:
   - `scripts/codex_package/targets.py:60-65` removed extra `codex` binary on the **pfterminal** package variant
   - `scripts/install/install.sh` and `install.ps1` delete staged/stale `bin/codex` artifacts and only expose `pfterminal`
 
 **Trigger:**
+
 1. Install `@agticorp/pfterminal` via npm/pnpm (or keep existing package that creates a `codex` shim).
 2. Invoke `codex` on PATH (or have an older global npm `codex` also present).
 3. Launcher still defaults `CODEX_HOME` to `~/.pfterminal` (good) **but** the public command name collides with stock OpenAI Codex and with residual packages already present on machines (QA evidence still records `/usr/bin/codex` and npm-global `codex`).
@@ -230,4 +247,4 @@ If base64 parse fails and the URL is not `http(s)`, return an error (or drop the
 
 ---
 
-*Reviewer note: Treat this as adversarial verification, nottest-green endorsement. Passing unit selections above confirm the happy-path guards stakeable for those crates; they do not clear Findings 1–3.*
+_Reviewer note: Treat this as adversarial verification, nottest-green endorsement. Passing unit selections above confirm the happy-path guards stakeable for those crates; they do not clear Findings 1–3._

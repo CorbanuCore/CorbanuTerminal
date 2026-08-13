@@ -241,10 +241,10 @@ pub enum ChatStopSemantics {
 
 The initial capability assignment is:
 
-| Provider | Stop semantics |
-| --- | --- |
-| Kimi Code | `AmbiguousForActionTurns` |
-| Existing providers without reproduced evidence | `ReliableTerminal` |
+| Provider                                       | Stop semantics            |
+| ---------------------------------------------- | ------------------------- |
+| Kimi Code                                      | `AmbiguousForActionTurns` |
+| Existing providers without reproduced evidence | `ReliableTerminal`        |
 
 This is a provider capability, not a hard-coded model slug check. A gateway or
 custom provider may opt into the same behavior later without copying Kimi
@@ -299,13 +299,13 @@ Definitions:
 
 Mapping:
 
-| Classifier state | Core decision |
-| --- | --- |
-| `complete` | `Accept` |
-| `incomplete` | `Continue` |
-| `awaiting_user` | `AwaitUser` |
-| `blocked` | `AwaitUser` |
-| `uncertain` | Fallback in Section 7 |
+| Classifier state | Core decision         |
+| ---------------- | --------------------- |
+| `complete`       | `Accept`              |
+| `incomplete`     | `Continue`            |
+| `awaiting_user`  | `AwaitUser`           |
+| `blocked`        | `AwaitUser`           |
+| `uncertain`      | Fallback in Section 7 |
 
 Constraints:
 
@@ -375,14 +375,14 @@ remains unchanged and separate.
 
 The TUI must distinguish these states:
 
-| Core state | TUI behavior |
-| --- | --- |
-| Primary provider sample | Existing `Working` state |
-| Semantic completion decision | `Checking whether the action is complete…` |
-| Automatic continuation | `Continuing unfinished action…` |
-| Accepted final response | Spinner removed; input prompt active |
-| Stalled | One warning; spinner removed; input prompt active |
-| Failed | Existing error surface; spinner removed |
+| Core state                   | TUI behavior                                      |
+| ---------------------------- | ------------------------------------------------- |
+| Primary provider sample      | Existing `Working` state                          |
+| Semantic completion decision | `Checking whether the action is complete…`        |
+| Automatic continuation       | `Continuing unfinished action…`                   |
+| Accepted final response      | Spinner removed; input prompt active              |
+| Stalled                      | One warning; spinner removed; input prompt active |
+| Failed                       | Existing error surface; spinner removed           |
 
 The semantic check state must only render while a check is actually in
 flight. A completed conversational response must never sit under `Working`.
@@ -415,24 +415,29 @@ impossible, split transport from decision logic rather than growing
 ### Existing files to change
 
 1. [`codex-rs/model-provider-info/src/lib.rs`](codex-rs/model-provider-info/src/lib.rs)
+
    - Add `ChatStopSemantics`.
    - Add the capability to `ModelProviderInfo`.
    - Assign Kimi the ambiguous capability.
    - Test built-in provider assignments.
 
 2. [`codex-rs/core/src/session/turn.rs`](codex-rs/core/src/session/turn.rs)
+
    - Create turn-local progress state.
    - Invoke the arbiter after a provider text stop and before stop hooks.
    - Respect pending input and cancellation.
    - Keep the integration thin; no classifier prompt or phrase list here.
 
 3. [`codex-rs/core/src/session/mod.rs`](codex-rs/core/src/session/mod.rs)
+
    - Register the new module.
 
 4. `codex-rs/core/src/context/turn_completion_continuation.rs`
+
    - Define the typed, request-local continuation fragment.
 
 5. [`codex-rs/core/tests/suite/chat_provider_turn_lifecycle.rs`](codex-rs/core/tests/suite/chat_provider_turn_lifecycle.rs)
+
    - Delete or invert
      `kimi_text_stop_is_terminal_without_extra_inference`.
    - Retain the tool-call lifecycle coverage.
@@ -507,17 +512,17 @@ Test the arbiter without HTTP:
 
 Replace the current broken expectation with scripted provider sequences:
 
-| Scenario | Provider sequence | Expected requests |
-| --- | --- | --- |
-| Informational answer | complete text stop | 1 primary + completion check only if provider capability requires it |
-| Premature action stop | progress text stop, tool call, final text stop | automatic continuation; one `TurnComplete` at the end |
-| Tool then final | tool call, final result | no redundant work continuation |
-| Explicit blocker | blocker text stop | prompt returned to user |
-| Repeated checkpoint | same incomplete stop twice | bounded stop and one warning |
-| Productive long action | 10 distinct progress/tool cycles, final result | completes without a fixed-attempt failure |
-| User steer race | incomplete stop while user input arrives | user input wins; no stale continuation |
-| Classifier timeout | ambiguous stop, classifier timeout | fallback behavior and terminal lifecycle event |
-| Non-Kimi provider | text stop | byte-for-behavior current lifecycle; no classifier request |
+| Scenario               | Provider sequence                              | Expected requests                                                    |
+| ---------------------- | ---------------------------------------------- | -------------------------------------------------------------------- |
+| Informational answer   | complete text stop                             | 1 primary + completion check only if provider capability requires it |
+| Premature action stop  | progress text stop, tool call, final text stop | automatic continuation; one `TurnComplete` at the end                |
+| Tool then final        | tool call, final result                        | no redundant work continuation                                       |
+| Explicit blocker       | blocker text stop                              | prompt returned to user                                              |
+| Repeated checkpoint    | same incomplete stop twice                     | bounded stop and one warning                                         |
+| Productive long action | 10 distinct progress/tool cycles, final result | completes without a fixed-attempt failure                            |
+| User steer race        | incomplete stop while user input arrives       | user input wins; no stale continuation                               |
+| Classifier timeout     | ambiguous stop, classifier timeout             | fallback behavior and terminal lifecycle event                       |
+| Non-Kimi provider      | text stop                                      | byte-for-behavior current lifecycle; no classifier request           |
 
 Tests must assert:
 

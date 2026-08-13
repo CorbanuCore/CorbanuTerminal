@@ -112,6 +112,7 @@ Remaining distinction:
 - This proves durable crew metadata and idempotent creation decisions. Kill-and-resume against
   live native threads, strict stale-layout rejection, and legacy read-only fallback remain Phase 5
   requirements and are not claimed complete here.
+
 ## Phase 3A — Target-runtime-safe native reload
 
 - Fixed `AgentControl::ensure_v2_agent_loaded` so an unloaded agent is resumed with the provider,
@@ -323,7 +324,7 @@ Changes:
 Passing evidence:
 
 - `RUST_MIN_STACK=33554432 cargo test -p codex-core --lib multi_agent_v2 --
-  --test-threads=1`: 66 passed, 0 failed.
+--test-threads=1`: 66 passed, 0 failed.
 
 Product boundary:
 
@@ -495,7 +496,7 @@ Discovery:
 
 - During the real isometric-game objective, Fable twice failed immediately after a tool call with
   `This model does not support assistant message prefill. The conversation must end with a user
-  message.`
+message.`
 - Capturing the actual outbound request proved that it already ended in a user message. The
   rejected shape was narrower:
   `assistant[thinking, tool_use, text] -> user[tool_result]`.
@@ -1301,7 +1302,7 @@ Observed failure:
 - After Fable emitted a tool call followed by assistant commentary, the tool result was persisted
   and the same native agent received a follow-up. Anthropic API rejected the request twice with
   `invalid_request_error: This model does not support assistant message prefill. The conversation
-  must end with a user message.`
+must end with a user message.`
 - This was not an injected fault or provider outage. Durable history was converted into a request
   shape the Anthropic API rejected, making the same native Fable identity unable to continue.
   Section 6 lifecycle/delivery and Section 15.3 therefore require a fix and a full count reset.
@@ -2159,7 +2160,7 @@ Timestamp: 2026-07-25T22:55Z
 Candidate:
 
 - Source commit: `2f6eb1e48` (`fix: preflight external provider auth before native worker
-  creation`).
+creation`).
 - Binary: `/tmp/pft-2f6eb1e48`, SHA-256
   `167328531a2d2251e3603bcb87e5f69f3513d0403818e8a80ee1052844bc8b43`.
 

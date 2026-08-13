@@ -275,21 +275,27 @@ Write `GROK_CODE_REVIEW_FINDINGS.md` with this exact top-level structure:
 # Grok Code Review Findings
 
 ## Verdict
+
 Ship / Do not ship, with a concise reason.
 
 ## Coverage
+
 Commits, subsystems, commands, and live probes actually reviewed.
 
 ## Findings
+
 Ordered P0 -> P3. Each finding follows the required seven-part standard.
 
 ## Test Gaps
+
 Only concrete gaps tied to a plausible regression.
 
 ## Clean Areas
+
 High-risk areas reviewed where no defect was found, including evidence.
 
 ## Residual Risk
+
 What could not be verified and why.
 ```
 

@@ -22,10 +22,10 @@ Three independent live `claude-opus-5` waves exercised the exact failure
 sequence against a 123K-token prefix. The first request after activation read:
 
 | Wave | Transition input | Cached input | Hit rate | Uncached suffix |
-|---:|---:|---:|---:|---:|
-| 1 | 124,268 | 124,072 | 99.8423% | 196 |
-| 2 | 124,265 | 124,069 | 99.8423% | 196 |
-| 3 | 124,264 | 124,068 | 99.8423% | 196 |
+| ---: | ---------------: | -----------: | -------: | --------------: |
+|    1 |          124,268 |      124,072 | 99.8423% |             196 |
+|    2 |          124,265 |      124,069 | 99.8423% |             196 |
+|    3 |          124,264 |      124,068 | 99.8423% |             196 |
 
 There was no zero-cache transition in any wave. All three waves used identical
 prompt and tool-schema hashes, emitted exactly one activation metric, completed
@@ -33,12 +33,12 @@ the structured edit, and left the locally rejected strict-patch target absent.
 
 This directly reverses the incident behavior:
 
-| Evidence | Before | After |
-|---|---:|---:|
-| Transition cache hit | 0 / 118,536 and 0 / 110,177 | at least 124,068 / 124,264 |
-| Two incident transition writes | 228,713 tokens | 392 suffix tokens for two comparable transitions |
-| Three post-fix transition writes | not applicable | 588 suffix tokens total |
-| Transition schema mutation | yes | no |
+| Evidence                         |                      Before |                                            After |
+| -------------------------------- | --------------------------: | -----------------------------------------------: |
+| Transition cache hit             | 0 / 118,536 and 0 / 110,177 |                       at least 124,068 / 124,264 |
+| Two incident transition writes   |              228,713 tokens | 392 suffix tokens for two comparable transitions |
+| Three post-fix transition writes |              not applicable |                          588 suffix tokens total |
+| Transition schema mutation       |                         yes |                                               no |
 
 ## 2. Implementation
 
@@ -123,14 +123,14 @@ control placement.
 
 All test commands were run through `just test`, never direct `cargo test`.
 
-| Command/scope | Result |
-|---|---:|
-| Seven named state, planning, integration, and Anthropic request tests | 7 / 7 passed |
-| `test(=suite::prompt_caching::prompt_tools_are_consistent_across_requests)` | 1 / 1 passed |
-| `test(/(structured_edit\|apply_patch\|prompt_caching)/)` with 8 threads | 108 / 108 passed |
-| `git diff --check` | passed |
-| `just fix -p codex-core` | completed; one task-local test cleanup applied |
-| `just fmt` | passed |
+| Command/scope                                                               |                                         Result |
+| --------------------------------------------------------------------------- | ---------------------------------------------: |
+| Seven named state, planning, integration, and Anthropic request tests       |                                   7 / 7 passed |
+| `test(=suite::prompt_caching::prompt_tools_are_consistent_across_requests)` |                                   1 / 1 passed |
+| `test(/(structured_edit\|apply_patch\|prompt_caching)/)` with 8 threads     |                               108 / 108 passed |
+| `git diff --check`                                                          |                                         passed |
+| `just fix -p codex-core`                                                    | completed; one task-local test cleanup applied |
+| `just fmt`                                                                  |                                         passed |
 
 The full `codex-core` crate suite was also attempted twice:
 
@@ -179,11 +179,11 @@ and was followed by a successful `structured_edit`.
 
 Settled Anthropic Admin Usage:
 
-| Key ID | 5m cache creation | Cache read | Output | Uncached input | Cost |
-|---|---:|---:|---:|---:|---:|
-| `apikey_01ETPF8aNWXS17BDVpWkzPQD` | 244,234 | 1,373,162 | 1,950 | 26 | $2.2619235 |
-| `apikey_01SkUWKM1VvMXAt2CR4H3Mk6` | 124,888 | 620,834 | 793 | 12 | $1.1108520 |
-| **Campaign** | **369,122** | **1,993,996** | **2,743** | **38** | **$3.3727755** |
+| Key ID                            | 5m cache creation |    Cache read |    Output | Uncached input |           Cost |
+| --------------------------------- | ----------------: | ------------: | --------: | -------------: | -------------: |
+| `apikey_01ETPF8aNWXS17BDVpWkzPQD` |           244,234 |     1,373,162 |     1,950 |             26 |     $2.2619235 |
+| `apikey_01SkUWKM1VvMXAt2CR4H3Mk6` |           124,888 |       620,834 |       793 |             12 |     $1.1108520 |
+| **Campaign**                      |       **369,122** | **1,993,996** | **2,743** |         **38** | **$3.3727755** |
 
 The preflight Admin window contained zero organization traffic. The settled
 rows contain only the two known dedicated IDs and reconcile to the campaign
@@ -200,10 +200,10 @@ a Kimi failure or paid call.
 The noninteractive core route then completed two real turns on the same Kimi
 thread:
 
-| Kimi request | Input | Cached | Hit rate |
-|---|---:|---:|---:|
-| First primary | 7,156 | 1,024 | 14.31% |
-| Resumed primary | 7,326 | 6,912 | **94.35%** |
+| Kimi request    | Input | Cached |   Hit rate |
+| --------------- | ----: | -----: | ---------: |
+| First primary   | 7,156 |  1,024 |     14.31% |
+| Resumed primary | 7,326 |  6,912 | **94.35%** |
 
 Kimi therefore exposes measurable cache reuse on the plan-backed K3 route; no
 OpenRouter substitute was needed for that claim.
@@ -253,13 +253,13 @@ six-figure-token rewrite whenever fallback activates in a long turn.
 
 Metered qualification spend:
 
-| Service | Spend |
-|---|---:|
-| Anthropic three-wave campaign | $3.3727755 |
-| OpenRouter PFTerminal Grok capture | $0.0195880 |
-| OpenRouter Grok controlled pair | $0.0301208 |
-| OpenRouter Llama controlled pair | $0.0021270 |
-| **Known metered total** | **$3.4246113** |
+| Service                            |          Spend |
+| ---------------------------------- | -------------: |
+| Anthropic three-wave campaign      |     $3.3727755 |
+| OpenRouter PFTerminal Grok capture |     $0.0195880 |
+| OpenRouter Grok controlled pair    |     $0.0301208 |
+| OpenRouter Llama controlled pair   |     $0.0021270 |
+| **Known metered total**            | **$3.4246113** |
 
 Kimi used the existing plan and had no separately attributed marginal API bill.
 The campaign stayed far below the authorized $200 ceiling.
@@ -323,11 +323,11 @@ the specification, tests, requests, rollouts, scripts, or benchmark artifacts.
 - [x] First-request schema delta is measured on Opus and an uncached model.
 - [x] Exact-key scan is clean.
 - [!] Gross Rust churn is 621 additions/136 deletions (net +485), above the
-      500-line target because both strict entry paths and concurrency required
-      generalized tests; production code is 239 added lines.
+  500-line target because both strict entry paths and concurrency required
+  generalized tests; production code is 239 added lines.
 - [!] Full `codex-core` remains red for documented unrelated
-      baseline/environment fixtures; no cache-stability test is among the
-      failures.
+  baseline/environment fixtures; no cache-stability test is among the
+  failures.
 
 ## 9. Release assessment
 

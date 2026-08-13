@@ -231,18 +231,18 @@ Recommended follow-up architecture:
 
 ## Prioritized Quality Findings
 
-| Priority | Finding | Current state | Required action |
-| --- | --- | --- | --- |
-| P1 | No end-to-end orchestrate lifecycle test across restart, cancellation, pane loss, and both dispatch backends | Open | Add deterministic lifecycle integration coverage and persistence-failure injection |
-| P1 | Exact-head full workspace/platform release matrix is not attached | Open | Run the complete approved matrix and archive results by commit SHA |
-| P1 | Fresh-machine stock Codex coexistence gate has not been executed | Open | Run renamed PFTerminal, stock Codex install/doctor, upgrade, uninstall, and filesystem audit |
-| P1 | Windows installer and state isolation are code-reviewed but not executed | Open | Run Windows VM install/upgrade/uninstall and verify no `codex` launcher or `.codex` mutation |
-| P2 | Malformed/non-base64 Anthropic `data:` image URLs fall back to URL-shaped source data | Open | Reject malformed non-HTTP image sources before sending the request |
-| P2 | Vercel continuation regression coverage is network-gated | Open | Add a deterministic local protocol mock for server-state continuation and self-heal |
-| P2 | Orchestrate state mutation and persistence are distributed across a 2.4k-line module and `App` | Open debt | Extract a registry/state machine after release gating, or before release if lifecycle tests expose defects |
-| P2 | Provider and model behavior depend on multiple truth sources | Open debt | Introduce a resolved model/provider capability record |
-| P2 | TUI responsiveness was not part of the original provider-screen acceptance test | Corrected locally | Add a durable PTY responsiveness regression to CI |
-| P3 | Several existing Clippy warnings remain outside this branch's changes | Pre-existing | Track separately; do not mix cleanup into release fixes |
+| Priority | Finding                                                                                                      | Current state     | Required action                                                                                            |
+| -------- | ------------------------------------------------------------------------------------------------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| P1       | No end-to-end orchestrate lifecycle test across restart, cancellation, pane loss, and both dispatch backends | Open              | Add deterministic lifecycle integration coverage and persistence-failure injection                         |
+| P1       | Exact-head full workspace/platform release matrix is not attached                                            | Open              | Run the complete approved matrix and archive results by commit SHA                                         |
+| P1       | Fresh-machine stock Codex coexistence gate has not been executed                                             | Open              | Run renamed PFTerminal, stock Codex install/doctor, upgrade, uninstall, and filesystem audit               |
+| P1       | Windows installer and state isolation are code-reviewed but not executed                                     | Open              | Run Windows VM install/upgrade/uninstall and verify no `codex` launcher or `.codex` mutation               |
+| P2       | Malformed/non-base64 Anthropic `data:` image URLs fall back to URL-shaped source data                        | Open              | Reject malformed non-HTTP image sources before sending the request                                         |
+| P2       | Vercel continuation regression coverage is network-gated                                                     | Open              | Add a deterministic local protocol mock for server-state continuation and self-heal                        |
+| P2       | Orchestrate state mutation and persistence are distributed across a 2.4k-line module and `App`               | Open debt         | Extract a registry/state machine after release gating, or before release if lifecycle tests expose defects |
+| P2       | Provider and model behavior depend on multiple truth sources                                                 | Open debt         | Introduce a resolved model/provider capability record                                                      |
+| P2       | TUI responsiveness was not part of the original provider-screen acceptance test                              | Corrected locally | Add a durable PTY responsiveness regression to CI                                                          |
+| P3       | Several existing Clippy warnings remain outside this branch's changes                                        | Pre-existing      | Track separately; do not mix cleanup into release fixes                                                    |
 
 ## Confirmed Repairs from Adversarial Review
 
@@ -327,7 +327,7 @@ The following previously reported high-priority findings are repaired at this he
 ### RR3 - Provider and model acceptance
 
 - [ ] For every exposed provider/model: plain turn, tool turn, continuation, invalid auth, corrected
-  auth, provider switch, resume, and advertised image capability.
+      auth, provider switch, resume, and advertised image capability.
 - [ ] Verify no provider API key triggers ChatGPT refresh.
 - [ ] Verify every vision model receives actual image content through its configured transport.
 - [ ] Verify remote catalog overlays cannot expose unsupported capabilities without a passing probe.

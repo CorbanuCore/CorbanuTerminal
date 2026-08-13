@@ -90,17 +90,17 @@ and implementation report are stored beside this incident report.
 
 Focused release gates:
 
-| Gate | Result |
-|---|---:|
-| `codex-api` provider adapters | 164 / 164 passed |
-| Assignment lifecycle | 13 / 13 passed |
-| Spawn, hierarchy, runtime, and economics | 45 / 45 passed |
-| Prompt caching | 8 / 8 passed |
-| Structured edit/write fallback | 2 / 2 passed |
-| Concurrent fallback activation | 1 / 1 passed |
-| Workspace clippy/fix compile | passed with existing warnings |
-| Formatting and `git diff --check` | passed |
-| Debug candidate build | passed |
+| Gate                                     |                        Result |
+| ---------------------------------------- | ----------------------------: |
+| `codex-api` provider adapters            |              164 / 164 passed |
+| Assignment lifecycle                     |                13 / 13 passed |
+| Spawn, hierarchy, runtime, and economics |                45 / 45 passed |
+| Prompt caching                           |                  8 / 8 passed |
+| Structured edit/write fallback           |                  2 / 2 passed |
+| Concurrent fallback activation           |                  1 / 1 passed |
+| Workspace clippy/fix compile             | passed with existing warnings |
+| Formatting and `git diff --check`        |                        passed |
+| Debug candidate build                    |                        passed |
 
 The broad `codex-core` suite attempted earlier on this host was not a usable
 release gate: extreme parallelism produced unrelated helper-binary, migration,

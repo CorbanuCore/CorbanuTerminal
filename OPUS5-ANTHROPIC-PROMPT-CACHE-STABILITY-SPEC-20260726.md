@@ -68,10 +68,10 @@ independent functional verifier.
 PFTerminal remained 11.376% faster across the campaign, but its Anthropic contestant
 cost was 12.496% higher:
 
-| Campaign total | PFTerminal | Claude Code | PFTerminal delta |
-|---|---:|---:|---:|
-| Wall time | 2,871.687s | 3,240.303s | −368.616s |
-| Opus cost | $15.4337685 | $13.7194425 | +$1.7143260 |
+| Campaign total |  PFTerminal | Claude Code | PFTerminal delta |
+| -------------- | ----------: | ----------: | ---------------: |
+| Wall time      |  2,871.687s |  3,240.303s |        −368.616s |
+| Opus cost      | $15.4337685 | $13.7194425 |      +$1.7143260 |
 
 The cost reversal was not an API-key or billing-attribution error. Anthropic Admin
 Usage was grouped by dedicated key ID, initial and settled snapshots were identical,
@@ -143,11 +143,11 @@ the `/home/pfrpc` path itself is not a portable product dependency.
 
 Dedicated key attribution:
 
-| Lane | Anthropic key ID | Waves 2–3 settled cost |
-|---|---|---:|
-| PFTerminal | `apikey_01ETPF8aNWXS17BDVpWkzPQD` | $10.647866 |
-| Claude Code | `apikey_01SkUWKM1VvMXAt2CR4H3Mk6` | $9.509051 |
-| Excluded concurrent traffic | `apikey_01FFAau6V4hVFuycmEoXmRKp` | not attributed |
+| Lane                        | Anthropic key ID                  | Waves 2–3 settled cost |
+| --------------------------- | --------------------------------- | ---------------------: |
+| PFTerminal                  | `apikey_01ETPF8aNWXS17BDVpWkzPQD` |             $10.647866 |
+| Claude Code                 | `apikey_01SkUWKM1VvMXAt2CR4H3Mk6` |              $9.509051 |
+| Excluded concurrent traffic | `apikey_01FFAau6V4hVFuycmEoXmRKp` |         not attributed |
 
 Key IDs are non-secret billing identifiers. No raw credentials belong in this spec,
 tests, fixtures, logs, snapshots, or commits.
@@ -156,12 +156,12 @@ tests, fixtures, logs, snapshots, or commits.
 
 ### 4.1 Wave 2
 
-| UTC timestamp | Event | Input | Cached input | Hit rate |
-|---|---|---:|---:|---:|
-| 02:09:29.961 | successful `apply_patch` call | 114,601 | 112,439 | 98.11% |
-| 02:09:40.452 | malformed `apply_patch`; cumulative failure becomes 2 | 116,832 | 114,599 | 98.08% |
-| 02:09:46.116 | first `structured_edit` after tool-plan replacement | 118,536 | 0 | **0.00%** |
-| 02:09:50.113 | second `structured_edit` | 118,691 | 118,534 | 99.86% |
+| UTC timestamp | Event                                                 |   Input | Cached input |  Hit rate |
+| ------------- | ----------------------------------------------------- | ------: | -----------: | --------: |
+| 02:09:29.961  | successful `apply_patch` call                         | 114,601 |      112,439 |    98.11% |
+| 02:09:40.452  | malformed `apply_patch`; cumulative failure becomes 2 | 116,832 |      114,599 |    98.08% |
+| 02:09:46.116  | first `structured_edit` after tool-plan replacement   | 118,536 |            0 | **0.00%** |
+| 02:09:50.113  | second `structured_edit`                              | 118,691 |      118,534 |    99.86% |
 
 The failed patch omitted the required `*** Begin Patch` line. PFTerminal then emitted:
 
@@ -176,12 +176,12 @@ PFTerminal's next-request warning recorded that the previous large request had
 
 ### 4.2 Wave 3
 
-| UTC timestamp | Event | Input | Cached input | Hit rate |
-|---|---|---:|---:|---:|
-| 02:26:06.936 | successful `view_image` continuation | 106,748 | 106,318 | 99.60% |
-| 02:26:23.438 | empty `apply_patch` hunk; cumulative failure becomes 2 | 108,756 | 106,746 | 98.15% |
-| 02:26:32.274 | first `structured_edit` after tool-plan replacement | 110,177 | 0 | **0.00%** |
-| 02:26:42.719 | second `structured_edit` | 110,790 | 110,175 | 99.44% |
+| UTC timestamp | Event                                                  |   Input | Cached input |  Hit rate |
+| ------------- | ------------------------------------------------------ | ------: | -----------: | --------: |
+| 02:26:06.936  | successful `view_image` continuation                   | 106,748 |      106,318 |    99.60% |
+| 02:26:23.438  | empty `apply_patch` hunk; cumulative failure becomes 2 | 108,756 |      106,746 |    98.15% |
+| 02:26:32.274  | first `structured_edit` after tool-plan replacement    | 110,177 |            0 | **0.00%** |
+| 02:26:42.719  | second `structured_edit`                               | 110,790 |      110,175 |    99.44% |
 
 PFTerminal's next-request warning recorded that the previous large request had
 `cached_input=0/110177`.
@@ -511,26 +511,26 @@ metric.
 
 ### 8.7 Alternatives considered
 
-| Alternative | Decision | Reason |
-|---|---|---|
-| Pre-register all three existing edit tools and switch local policy | **Chosen** | Smallest change that preserves current tool APIs, rollouts, and cache-keyed schemas |
-| One immutable `edit` gateway with a local strict/structured dispatcher | Reserve as fallback design | Strong cache boundary, but materially larger tool API and model-behavior change |
-| Reset the failure counter but retain dynamic tool replacement | Rejected | Reduces frequency but every eventual fallback still invalidates the full prefix |
-| Use a one-hour Anthropic TTL | Rejected | A changed tool prefix misses regardless of TTL and one-hour writes cost more |
-| Remove explicit tool cache control | Rejected | Eliminates the savings being protected and raises cost on every later request |
-| Compact or start a fresh thread at fallback | Rejected | Disrupts the user workflow and hides rather than repairs the schema boundary |
+| Alternative                                                            | Decision                   | Reason                                                                              |
+| ---------------------------------------------------------------------- | -------------------------- | ----------------------------------------------------------------------------------- |
+| Pre-register all three existing edit tools and switch local policy     | **Chosen**                 | Smallest change that preserves current tool APIs, rollouts, and cache-keyed schemas |
+| One immutable `edit` gateway with a local strict/structured dispatcher | Reserve as fallback design | Strong cache boundary, but materially larger tool API and model-behavior change     |
+| Reset the failure counter but retain dynamic tool replacement          | Rejected                   | Reduces frequency but every eventual fallback still invalidates the full prefix     |
+| Use a one-hour Anthropic TTL                                           | Rejected                   | A changed tool prefix misses regardless of TTL and one-hour writes cost more        |
+| Remove explicit tool cache control                                     | Rejected                   | Eliminates the savings being protected and raises cost on every later request       |
+| Compact or start a fresh thread at fallback                            | Rejected                   | Disrupts the user workflow and hides rather than repairs the schema boundary        |
 
 ### 8.8 Effort and change budget
 
 Expected implementation effort:
 
-| Work | Estimate |
-|---|---:|
-| State machine and handler enforcement | 0.5 engineering day |
-| Stable tool planning and request-byte tests | 0.5–1 engineering day |
-| Provider regression tests and scoped cleanup | 0.5 engineering day |
-| Bounded live qualification and evidence report | 0.5 engineering day plus provider settlement |
-| Three-wave economic requalification | approximately 1 hour wall time plus declared API spend |
+| Work                                           |                                               Estimate |
+| ---------------------------------------------- | -----------------------------------------------------: |
+| State machine and handler enforcement          |                                    0.5 engineering day |
+| Stable tool planning and request-byte tests    |                                  0.5–1 engineering day |
+| Provider regression tests and scoped cleanup   |                                    0.5 engineering day |
+| Bounded live qualification and evidence report |           0.5 engineering day plus provider settlement |
+| Three-wave economic requalification            | approximately 1 hour wall time plus declared API spend |
 
 Target fewer than 500 non-mechanical changed lines. If stable tool planning requires a
 broader tool API refactor, split that refactor from the behavior change and rescore

@@ -33,7 +33,7 @@ All paths relative to `codex-rs/`. Line numbers at `0420104aa`.
   (`spawn_orchestration.rs:5476`, prefers XHigh) with no user input; the effort only appears as a
   suffix in the item label.
 - Selecting an item immediately sends `AppEvent::CreateSpawnAgent { role, parent_node_id,
-  agent_nickname: None, model, provider, effort }` (`spawn_orchestration.rs:5461-5470`).
+agent_nickname: None, model, provider, effort }` (`spawn_orchestration.rs:5461-5470`).
 - Entry points that land here (all inherit the new picker automatically):
   - Nazgul → "Create Nazgul pane" (`spawn_orchestration.rs:3487`).
   - Troll/Orc → harness picker → "Harness: Codex" (`spawn_orchestration.rs:980`).
@@ -55,7 +55,7 @@ All paths relative to `codex-rs/`. Line numbers at `0420104aa`.
      current auto-pick), so Enter-Enter reproduces today's one-shot behavior.
    - Models with ≤1 supported effort skip the effort step (existing `direct_select` behavior).
    - Confirming effort sends `AppEvent::CreateSpawnAgent { role, parent_node_id,
-     agent_nickname: None, model, provider, effort }` and dismisses the whole picker stack
+agent_nickname: None, model, provider, effort }` and dismisses the whole picker stack
      (`dismiss_parent_on_child_accept`, as the /model flow already does).
 5. Spawn selection must NOT mutate the session: no `apply_model_and_effort`, no config persist,
    and the plan-mode reasoning-scope prompt (`should_prompt_plan_mode_reasoning_scope`,
