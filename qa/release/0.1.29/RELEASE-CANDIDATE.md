@@ -117,7 +117,10 @@ across the recovery branch. The candidate repairs the affected boundaries:
 - CI no longer targets repository-scoped Windows runners or paid macOS runner
   labels that are not provisioned for this repository. Windows validation now
   uses `windows-2025` and macOS validation uses `macos-15`, so the checks remain
-  runnable after the planned repository transfer and rename.
+  runnable after the planned repository transfer and rename; and
+- the GPU market library explicitly disables an empty doctest target, keeping
+  the workspace manifest warning-free under the CI `cargo shear
+  --deny-warnings` policy.
 
 ## Linux production artifact
 
