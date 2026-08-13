@@ -81,6 +81,8 @@ All Rust tests used the repository's `just test` recipe.
 | `just test -p codex-utils-cache -p codex-mcp` | PASS, 145/145 |
 | `just test -p codex-utils-home-dir` | PASS, 5/5 |
 | PFTerminal runtime-entrypoint home isolation regressions | PASS, 9/9 across all three CLI binaries |
+| TUI/core dependency-boundary verifier | PASS; GPU runtime access is behind the app-server-client legacy seam |
+| TUI GPU runtime catalog regression | PASS, 1/1 |
 | `just bazel-lock-check` | PASS |
 | `bazel build //codex-rs/tasknode-session:tasknode-session //codex-rs/cli:codex` | PASS |
 | `just fix -p` for core, provider info, models manager, and TUI | PASS |
@@ -102,6 +104,8 @@ across the recovery branch. The candidate repairs the affected boundaries:
   lock is current;
 - the CLI derives its entrypoint from runtime argv rather than a Cargo-only
   compile-time variable, preserving state isolation in Bazel builds;
+- the TUI no longer imports `codex-core` directly; its remaining embedded GPU
+  startup uses are isolated behind the app-server-client legacy seam;
 - stale unlinked quarantine test residue and unused dependencies were removed;
   and
 - newly disclosed `webbrowser` and `lru` advisories were resolved by upgrading

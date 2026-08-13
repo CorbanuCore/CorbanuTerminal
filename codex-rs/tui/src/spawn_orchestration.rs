@@ -3079,7 +3079,7 @@ impl App {
         &self,
         saved_runtime: Option<&crate::dispatch_queue::SavedNativeSpawnRuntime>,
     ) -> (
-        codex_core::config::Config,
+        crate::legacy_core::config::Config,
         Option<ResumeModelOverride>,
         crate::app_server_session::ResumePermissionSettings,
     ) {

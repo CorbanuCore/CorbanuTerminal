@@ -80,7 +80,10 @@ impl App {
         let runtime_providers = providers
             .into_iter()
             .filter_map(|provider| {
-                codex_core::config::gpu_runtime_model_provider(provider, &self.config.codex_home)
+                crate::legacy_core::config::gpu_runtime_model_provider(
+                    provider,
+                    &self.config.codex_home,
+                )
             })
             .collect::<std::collections::HashMap<_, _>>();
         self.model_catalog.replace_gpu_models(models);
@@ -1777,9 +1780,10 @@ impl App {
                 );
                 tokio::spawn(async move {
                     let result = async {
-                        let installation_id = codex_core::resolve_installation_id(&codex_home)
-                            .await
-                            .map_err(|error| error.to_string())?;
+                        let installation_id =
+                            crate::legacy_core::resolve_installation_id(&codex_home)
+                                .await
+                                .map_err(|error| error.to_string())?;
                         let credentials =
                             Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
                                 codex_vault::Vault::new(codex_home.to_path_buf()),
@@ -1840,9 +1844,10 @@ impl App {
                 let codex_home = self.config.codex_home.clone();
                 tokio::spawn(async move {
                     let result = async {
-                        let installation_id = codex_core::resolve_installation_id(&codex_home)
-                            .await
-                            .map_err(|error| error.to_string())?;
+                        let installation_id =
+                            crate::legacy_core::resolve_installation_id(&codex_home)
+                                .await
+                                .map_err(|error| error.to_string())?;
                         let credentials =
                             Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
                                 codex_vault::Vault::new(codex_home.to_path_buf()),
