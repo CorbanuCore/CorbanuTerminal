@@ -113,7 +113,11 @@ across the recovery branch. The candidate repairs the affected boundaries:
   to fixed versions, with the direct-HTTP migration debt explicitly enumerated
   in the existing dependency-policy ratchet; and
 - the workspace pnpm lock was regenerated to restore the complete frozen
-  dependency graph used by repository and SDK CI.
+  dependency graph used by repository and SDK CI; and
+- CI no longer targets repository-scoped Windows runners or paid macOS runner
+  labels that are not provisioned for this repository. Windows validation now
+  uses `windows-2025` and macOS validation uses `macos-15`, so the checks remain
+  runnable after the planned repository transfer and rename.
 
 ## Linux production artifact
 
@@ -186,8 +190,7 @@ remain visible evidence rather than being hidden or converted to skips.
 This is not yet a publish recommendation:
 
 1. The release CI matrix must pass against the final post-remediation candidate
-   SHA; the earlier non-publishing matrix remains in progress and cannot qualify
-   a later SHA.
+   SHA; earlier non-publishing matrices cannot qualify a later SHA.
 2. PowerShell installer tests were not run because `pwsh` is unavailable on this
    Linux host.
 3. No tag, GitHub release, installer target, package pointer, or production
