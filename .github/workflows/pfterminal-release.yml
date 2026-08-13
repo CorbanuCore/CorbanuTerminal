@@ -249,7 +249,10 @@ jobs:
     needs: validate
     name: Build Linux package - ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    # A cold Corbanu x86 GNU build now takes about 58 minutes before archive
+    # creation because the package includes primary and compatibility binaries.
+    # Leave enough time for archive creation, runtime smoke tests, and upload.
+    timeout-minutes: 120
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
