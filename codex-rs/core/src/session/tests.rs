@@ -5922,10 +5922,9 @@ pub(crate) async fn build_world_state_from_turn_context(
 }
 
 // todo: use online model info
-async fn make_session_and_context_for_home(codex_home: &Path) -> (Session, TurnContext) {
+async fn make_session_and_context_for_config(config: Config) -> (Session, TurnContext) {
     let (tx_sub, _rx_sub) = async_channel::bounded(16);
     let (tx_event, _rx_event) = async_channel::unbounded();
-    let config = build_test_config(codex_home).await;
     let config = Arc::new(config);
     let thread_id = ThreadId::default();
     let auth_manager = AuthManager::from_auth_for_testing_with_home(
@@ -6184,7 +6183,8 @@ async fn make_session_and_context_for_home(codex_home: &Path) -> (Session, TurnC
 
 pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    make_session_and_context_for_home(codex_home.path()).await
+    let config = build_test_config(codex_home.path()).await;
+    make_session_and_context_for_config(config).await
 }
 
 pub(crate) type ProviderAuthSessionContext = (Session, TurnContext, tempfile::TempDir);
@@ -6192,7 +6192,17 @@ pub(crate) type ProviderAuthSessionContext = (Session, TurnContext, tempfile::Te
 pub(crate) async fn make_session_and_context_with_provider_auth() -> ProviderAuthSessionContext {
     let codex_home = tempfile::tempdir().expect("create temp dir");
     write_test_provider_auth(codex_home.path());
-    let (session, turn_context) = make_session_and_context_for_home(codex_home.path()).await;
+    let config = ConfigBuilder::without_managed_config_for_tests()
+        .codex_home(codex_home.path().to_path_buf())
+        .harness_overrides(ConfigOverrides {
+            model: Some(AMBIENT_DEFAULT_MODEL.to_string()),
+            model_provider: Some(AMBIENT_PROVIDER_ID.to_string()),
+            ..Default::default()
+        })
+        .build()
+        .await
+        .expect("load Ambient provider test config");
+    let (session, turn_context) = make_session_and_context_for_config(config).await;
     (session, turn_context, codex_home)
 }
 

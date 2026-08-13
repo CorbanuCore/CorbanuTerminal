@@ -1294,14 +1294,8 @@ async fn responses_websocket_external_provider_synthetic_turn_does_not_poison_re
     stream_until_complete(&mut client_session, &harness, &prompt_two).await;
     stream_until_complete(&mut client_session, &harness, &prompt_three).await;
 
-    let expected_second_input = vec![
-        function_call_output_item("call-1"),
-        message_item("Continue."),
-    ];
-    let expected_third_input = vec![
-        function_call_output_item("call-2"),
-        message_item("Continue."),
-    ];
+    let expected_second_input = vec![function_call_output_item("call-1")];
+    let expected_third_input = vec![function_call_output_item("call-2")];
     let connection = server.single_connection();
     assert_eq!(connection.len(), 3);
     let second = connection

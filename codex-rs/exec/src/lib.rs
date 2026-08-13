@@ -433,6 +433,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
 
     let overrides = ConfigOverrides {
         model,
+        allow_provider_model_fallback: false,
         review_model: None,
         // Default to never ask for approvals in headless mode. Rebuild below if
         // the fully resolved reviewer is AutoReview.

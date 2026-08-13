@@ -1,12 +1,11 @@
 ---
 source: tui/src/status/tests.rs
-assertion_line: 1600
 expression: sanitized
 ---
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────────╮
-│  >_ PFTerminal (v0.1.27)                                                        │
+│  >_ PFTerminal (v0.1.29)                                                        │
 │                                                                                 │
 │  Model:                claude-opus-5-plan                                       │
 │  Model provider:       Claude Plan                                              │

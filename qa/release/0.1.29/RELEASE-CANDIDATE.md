@@ -113,26 +113,47 @@ benchmark reruns.
 |---|---|---|
 | `openrouter` + `x-ai/grok-4.6` | PASS, exit 0, exact `PFTERMINAL_129_GROK_OK` | `be2faca8cf2c714176743622deb677feaaa4fdeba50424726e7c563f4ad16914` |
 | `deepseek` + `deepseek-v4-pro` | PASS, exit 0, exact `PFTERMINAL_129_DEEPSEEK_OK` | `e2442135f446b2ff7a6ee06a0efc488dc73c25701508d0369cb53a709b405a41` |
-| `claude-plan` + `claude-fable-5-plan` | EXTERNAL RED: two attempts reached Claude Plan but Anthropic returned `overloaded_error` before completion | `1336671063fc06542963dee589f59ef307ae75af36b55795b8accb15b2e23c95`, `c22a2cf7efbfbfc7b8d99fee8a5a146d231b117e0bd893ca003126702b77923a` |
+| `claude-plan` + `claude-fable-5-plan` | PASS, exit 0, exact `PFTERMINAL_129_FABLE_FINAL_OK` in 4 seconds | `d9b85a67f5a0d32d6b704ef6f5dbac4770148e70fd2895ef0d14ba496df30bd4` |
 | `vercel-anthropic` + `claude-fable-5` | PASS fail-closed behavior, exit 1, no model output and message confirms no request was sent | `d63c6809654b27d4ffb180402489e183c18600c9c5dc0ef8f0613e5c5e0093d3` |
 
-The Fable result is provider capacity, not silent fallback: the candidate kept
-the authenticated `claude-plan` route on both attempts. The remediation evidence
-also contains a prior successful exact-marker Claude Plan turn. Raw live output
-is intentionally uncommitted and remains under
-`/tmp/pfterminal-0.1.29-live.bQSorB` on this host.
+The earlier Fable overloads were provider capacity, not silent fallback: the
+candidate kept the authenticated `claude-plan` route on every attempt and the
+later packaged-binary marker completed successfully. Raw live output is
+intentionally uncommitted and remains under the recorded `/tmp` evidence paths
+on this host.
+
+## Workspace-wide regression run
+
+The approved complete workspace run used isolated state under `/var/tmp`, two
+Cargo build jobs, and two nextest threads. It ran 15,202 tests: 15,169 passed,
+one flaky prompt-caching test passed on retry, 31 failed, two timed out, and 28
+were skipped. The run exposed and led to fixes for:
+
+- app-server provider/model fallback now remains explicitly opt-in while the
+  documented fallback request selects the provider's own catalog default;
+- OpenAI-specific stream fixtures no longer inherit PFTerminal's Ambient
+  product default;
+- provider-specific remote model tests assert the OpenAI default rather than
+  the product-wide Ambient default;
+- websocket retry tests now return a retryable handshake status instead of an
+  implicit non-retryable 404; and
+- external-provider websocket tests follow the current no-synthetic-`Continue`
+  protocol contract.
+
+Focused reruns for these corrections passed, including all four provider/model
+fallback cases and seven remote-model/websocket regressions. The remaining full
+run failures reproduce in untouched upstream-derived areas (multi-agent timing,
+Guardian/network approval fixtures, skill prompt accounting, and vault timing)
+and are not changes introduced by the 0.1.29 provider/model release diff. They
+remain visible evidence rather than being hidden or converted to skips.
 
 ## Remaining release gates
 
 This is not yet a publish recommendation:
 
-1. Repository policy requires explicit user approval before the complete
-   workspace-wide `just test`; that approval is pending.
-2. Linux ARM64, macOS, and Windows packaging still require the release CI matrix.
-3. Claude Plan should receive one successful release-candidate marker when the
-   upstream overload clears.
-4. PowerShell installer tests were not run because `pwsh` is unavailable on this
+1. Linux ARM64, macOS, and Windows packaging still require the release CI matrix.
+2. PowerShell installer tests were not run because `pwsh` is unavailable on this
    Linux host.
-5. No tag, GitHub release, installer target, package pointer, or production
+3. No tag, GitHub release, installer target, package pointer, or production
    installation should move until the remaining gates are green and publishing
    is explicitly authorized.

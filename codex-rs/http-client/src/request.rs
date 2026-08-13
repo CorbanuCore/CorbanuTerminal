@@ -114,19 +114,6 @@ impl Request {
             self.body,
             Some(RequestBody::Json(_) | RequestBody::EncodedJson(_))
         );
-        let trace_bytes = if self.compression != RequestCompression::None
-            && tracing::enabled!(target: "codex_http_client::transport", tracing::Level::TRACE)
-        {
-            match self.body.as_ref() {
-                Some(RequestBody::Json(body)) => Some(Bytes::from(
-                    serde_json::to_vec(body).map_err(|err| err.to_string())?,
-                )),
-                Some(RequestBody::EncodedJson(body)) => Some(body.bytes.clone()),
-                Some(RequestBody::Raw(_)) | None => None,
-            }
-        } else {
-            None
-        };
         let prepared = self.prepare_body_for_send()?;
         self.headers = prepared.headers;
         self.body = match (is_json, prepared.body) {

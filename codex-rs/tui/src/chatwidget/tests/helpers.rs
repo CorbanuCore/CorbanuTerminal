@@ -28,6 +28,17 @@ pub(super) fn test_project_path() -> PathBuf {
     PathBuf::from(test_path_display("/tmp/project"))
 }
 
+pub(super) fn cache_test_project_root(chat: &mut ChatWidget, root_name: Option<&str>) {
+    let cwd = chat
+        .current_cwd
+        .clone()
+        .expect("test chat widget should have a current working directory");
+    chat.status_line_project_root_name_cache = Some(CachedProjectRootName {
+        cwd,
+        root_name: root_name.map(str::to_string),
+    });
+}
+
 pub(super) fn truncated_path_variants(path: &str) -> Vec<String> {
     let chars: Vec<char> = path.chars().collect();
     (1..chars.len())

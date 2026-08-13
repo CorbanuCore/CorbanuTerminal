@@ -108,35 +108,6 @@ fn request_body_for_trace(req: &Request) -> String {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn trace_summary_never_contains_request_content() {
-        let secret = "prompt-and-credential-must-not-appear";
-        let json_request = Request::new(Method::POST, "https://example.test".to_string())
-            .with_json(&json!({ "prompt": secret }));
-        let encoded_request = json_request
-            .clone()
-            .into_prepared()
-            .expect("encode request");
-        let raw_request = Request::new(Method::POST, "https://example.test".to_string())
-            .with_raw_body(secret.as_bytes().to_vec());
-
-        for summary in [
-            request_body_for_trace(&json_request),
-            request_body_for_trace(&encoded_request),
-            request_body_for_trace(&raw_request),
-        ] {
-            assert!(!summary.contains(secret));
-            assert!(summary.contains("body:"));
-            assert!(summary.contains("bytes"));
-        }
-    }
-}
-
 impl HttpTransport for ReqwestTransport {
     async fn execute(&self, req: Request) -> Result<Response, TransportError> {
         self.trace_request(&req);

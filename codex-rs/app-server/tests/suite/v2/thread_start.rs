@@ -243,21 +243,51 @@ async fn thread_start_provider_model_fallback_uses_bedrock_static_catalog() -> R
         /*allow_provider_model_fallback*/ true,
     )
     .await?;
-    let unsupported_without_fallback = start_thread_with_model(
-        &mut mcp,
-        "gpt-5.4-mini",
-        /*allow_provider_model_fallback*/ false,
-    )
-    .await?;
-
     assert_eq!(
         vec![
             unsupported_with_fallback.model,
             supported_with_fallback.model,
-            unsupported_without_fallback.model,
         ],
-        vec!["openai.gpt-5.6-sol", "openai.gpt-5.4", "gpt-5.4-mini"]
+        vec!["openai.gpt-5.6-sol", "openai.gpt-5.4"]
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn thread_start_provider_model_fallback_remains_opt_in() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    std::fs::write(
+        codex_home.path().join("config.toml"),
+        r#"model_provider = "amazon-bedrock"
+"#,
+    )?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .build_initialized()
+        .await?;
+
+    let request_id = mcp
+        .send_thread_start_request_with_auto_env(ThreadStartParams {
+            model: Some("gpt-5.4-mini".to_string()),
+            allow_provider_model_fallback: false,
+            ..Default::default()
+        })
+        .await?;
+    let error = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_error_message(RequestId::Integer(request_id)),
+    )
+    .await??;
+
+    assert_eq!(error.error.code, INVALID_REQUEST_ERROR_CODE);
+    assert!(
+        error
+            .error
+            .message
+            .contains("provider selection was preserved")
+    );
+    assert!(error.error.message.contains("gpt-5.4-mini"));
+    assert!(error.error.message.contains("amazon-bedrock"));
     Ok(())
 }
 

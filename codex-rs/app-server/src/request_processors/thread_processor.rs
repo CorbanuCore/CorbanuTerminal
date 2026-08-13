@@ -1311,6 +1311,7 @@ impl ThreadRequestProcessor {
             personality,
         );
         typesafe_overrides.ephemeral = ephemeral;
+        typesafe_overrides.allow_provider_model_fallback = allow_provider_model_fallback;
         let listener_task_context = ListenerTaskContext {
             thread_manager: Arc::clone(&self.thread_manager),
             thread_state_manager: self.thread_state_manager.clone(),

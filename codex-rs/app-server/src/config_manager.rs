@@ -144,10 +144,17 @@ impl ConfigManager {
         &self,
         fallback_cwd: Option<PathBuf>,
     ) -> std::io::Result<Config> {
+        // Bootstrap configuration must retain an explicitly selected provider
+        // even when its configured model needs the per-thread catalog fallback.
+        // A thread/start request that does not opt into fallback still reloads
+        // with the default (fail-closed) override below.
         self.load_with_cli_overrides(
             &self.current_cli_overrides(),
             /*request_overrides*/ None,
-            ConfigOverrides::default(),
+            ConfigOverrides {
+                allow_provider_model_fallback: true,
+                ..Default::default()
+            },
             fallback_cwd,
         )
         .await

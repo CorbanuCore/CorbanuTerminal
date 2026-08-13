@@ -1,12 +1,11 @@
 ---
 source: tui/src/status/tests.rs
-assertion_line: 1665
 expression: sanitized
 ---
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│  >_ PFTerminal (v0.1.27)                                                    │
+│  >_ PFTerminal (v0.1.29)                                                    │
 │                                                                             │
 │  Remote:           unix:///tmp/codex-home/app-server-control/app-server-    │
 │                    control.sock (v0.133.0)                                  │

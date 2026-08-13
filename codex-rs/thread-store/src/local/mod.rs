@@ -786,7 +786,7 @@ mod tests {
         let mut params = create_thread_params(thread_id);
         params.history_mode = ThreadHistoryMode::Paginated;
         let cwd = std::env::current_dir().expect("current directory");
-        let turn_context = |model: &str, approval_policy| {
+        let turn_context = |model: &str, model_provider: &str, approval_policy| {
             RolloutItem::TurnContext(TurnContextItem {
                 turn_id: Some("turn-1".to_string()),
                 cwd: serde_json::from_value(serde_json::json!(cwd)).expect("absolute cwd"),
@@ -800,6 +800,7 @@ mod tests {
                 network: None,
                 file_system_sandbox_policy: None,
                 model: model.to_string(),
+                model_provider: Some(model_provider.to_string()),
                 comp_hash: None,
                 personality: None,
                 collaboration_mode: None,
@@ -814,7 +815,11 @@ mod tests {
         let live_thread = LiveThread::create_with_inherited_model_context(
             store,
             params,
-            &[turn_context("parent-model", AskForApproval::Never)],
+            &[turn_context(
+                "parent-model",
+                "parent-provider",
+                AskForApproval::Never,
+            )],
         )
         .await
         .expect("create live thread with inherited context");
@@ -825,9 +830,14 @@ mod tests {
             .expect("sqlite metadata read")
             .expect("sqlite metadata");
         assert_eq!(inherited_metadata.model, None);
+        assert_eq!(inherited_metadata.model_provider, "test-provider");
 
         live_thread
-            .append_items(&[turn_context("child-model", AskForApproval::OnRequest)])
+            .append_items(&[turn_context(
+                "child-model",
+                "child-provider",
+                AskForApproval::OnRequest,
+            )])
             .await
             .expect("append child context");
         let child_metadata = runtime
@@ -836,6 +846,7 @@ mod tests {
             .expect("sqlite metadata read")
             .expect("sqlite metadata");
         assert_eq!(child_metadata.model.as_deref(), Some("child-model"));
+        assert_eq!(child_metadata.model_provider, "test-provider");
         assert_eq!(child_metadata.approval_mode, "on-request");
     }
 

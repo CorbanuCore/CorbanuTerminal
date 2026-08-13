@@ -2714,6 +2714,11 @@ fn apply_managed_filesystem_constraints(
 #[derive(Default, Debug, Clone)]
 pub struct ConfigOverrides {
     pub model: Option<String>,
+    /// Permit an explicitly selected provider to replace an incompatible model
+    /// with its catalog default. App-server clients opt into this behavior with
+    /// `allow_provider_model_fallback`; other config-loading paths remain
+    /// fail-closed by default.
+    pub allow_provider_model_fallback: bool,
     pub review_model: Option<String>,
     pub cwd: Option<PathBuf>,
     pub approval_policy: Option<AskForApproval>,
@@ -3405,6 +3410,7 @@ impl Config {
         // Destructure ConfigOverrides fully to ensure all overrides are applied.
         let ConfigOverrides {
             model,
+            allow_provider_model_fallback,
             review_model: override_review_model,
             cwd,
             approval_policy: approval_policy_override,
@@ -3910,7 +3916,9 @@ impl Config {
             .then_some(requested_model_for_pair_validation.as_deref())
             .flatten()
             .and_then(|value| corrected_catalog_provider(value, &model_provider_id));
-        if let Some(supported_provider) = incompatible_explicit_provider {
+        if let Some(supported_provider) = incompatible_explicit_provider
+            && !allow_provider_model_fallback
+        {
             let requested_model = requested_model_for_pair_validation
                 .as_deref()
                 .unwrap_or_default();
@@ -3923,11 +3931,20 @@ impl Config {
         }
 
         let model_without_explicit_provider = !model_provider_was_explicit && cfg.model.is_some();
-        let model = match model {
+        let model = if incompatible_explicit_provider.is_some()
+            && allow_provider_model_fallback
+        {
+            // Leave model selection to the provider-specific ModelsManager. In
+            // particular, Bedrock's catalog default is not represented by the
+            // shared resolve_model_for_provider mapping.
+            None
+        } else {
+            match model {
             Some(model_override) => Some(model_override),
             None if stale_runtime_provider => resolve_model_for_provider(None, &model_provider_id),
             None if model_without_explicit_provider => cfg.model,
             None => resolve_model_for_provider(cfg.model, &model_provider_id),
+            }
         };
         // Final pair validation: a stored or inherited provider that cannot serve the resolved
         // model (stale thread metadata, dropped spawn override, config default recorded next to

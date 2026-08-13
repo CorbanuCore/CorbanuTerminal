@@ -7,13 +7,38 @@ use std::time::Duration;
 use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 
+#[test]
+fn trace_summary_never_contains_request_content() {
+    let secret = "prompt-and-credential-must-not-appear";
+    let json_request = Request::new(Method::POST, "https://example.test".to_string())
+        .with_json(&json!({ "prompt": secret }));
+    let encoded_request = json_request
+        .clone()
+        .into_prepared()
+        .expect("encode request");
+    let raw_request = Request::new(Method::POST, "https://example.test".to_string())
+        .with_raw_body(secret.as_bytes().to_vec());
+
+    for summary in [
+        request_body_for_trace(&json_request),
+        request_body_for_trace(&encoded_request),
+        request_body_for_trace(&raw_request),
+    ] {
+        assert!(!summary.contains(secret));
+        assert!(summary.contains("body:"));
+        assert!(summary.contains("bytes"));
+    }
+}
+
 #[tokio::test]
-async fn enabled_request_logging_emits_transport_url_and_body() {
+async fn enabled_request_logging_emits_transport_url_but_redacts_body() {
     let logs = capture_transport_logs(HttpClient::new(test_reqwest_client())).await;
 
     assert!(logs.contains("log capture sentinel"));
     assert!(logs.contains("url-secret"));
-    assert!(logs.contains("body-secret"));
+    assert!(!logs.contains("body-secret"));
+    assert!(logs.contains("json body:"));
+    assert!(logs.contains("bytes"));
 }
 
 #[tokio::test]

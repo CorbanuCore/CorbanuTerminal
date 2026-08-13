@@ -1,6 +1,5 @@
 ---
 source: tui/src/status/tests.rs
-assertion_line: 1812
 expression: "format!(\"before:\\n{before}\\n\\nafter:\\n{after}\")"
 ---
 before:
@@ -8,7 +7,7 @@ before:
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│  >_ PFTerminal (v0.1.27)                                                    │
+│  >_ PFTerminal (v0.1.29)                                                    │
 │                                                                             │
 │  Model:            gpt-5.1-codex-max                                        │
 │  Model provider:   Ambient                                                  │
@@ -40,7 +39,7 @@ after:
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│  >_ PFTerminal (v0.1.27)                                                    │
+│  >_ PFTerminal (v0.1.29)                                                    │
 │                                                                             │
 │  Model:            gpt-5.1-codex-max                                        │
 │  Model provider:   Ambient                                                  │

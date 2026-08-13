@@ -73,6 +73,8 @@ fn personal_access_token_exec_command(server: &MockServer, home: &TempDir) -> Co
     cmd.arg("exec")
         .arg("--skip-git-repo-check")
         .arg("-c")
+        .arg("model_provider=\"openai\"")
+        .arg("-c")
         .arg(format!("openai_base_url=\"{}/api/codex\"", server.uri()))
         .arg("-c")
         .arg(format!("chatgpt_base_url=\"{}/backend-api\"", server.uri()))
@@ -274,6 +276,8 @@ async fn responses_mode_stream_cli_supports_openai_base_url_config_override() {
     cmd.arg("exec")
         .arg("--skip-git-repo-check")
         .arg("-c")
+        .arg("model_provider=\"openai\"")
+        .arg("-c")
         .arg(format!("openai_base_url=\"{}/v1\"", server.uri()))
         .arg("-C")
         .arg(&repo_root)
@@ -445,6 +449,8 @@ async fn responses_api_stream_cli() {
     cmd.arg("exec")
         .arg("--skip-git-repo-check")
         .arg("-c")
+        .arg("model_provider=\"openai\"")
+        .arg("-c")
         .arg(format!("openai_base_url=\"{}/v1\"", server.uri()))
         .arg("-C")
         .arg(&repo_root)
@@ -453,7 +459,11 @@ async fn responses_api_stream_cli() {
         .env("OPENAI_API_KEY", "dummy");
 
     let output = run_cli_command(&mut cmd).unwrap();
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "codex-cli exec failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("fixture hello"));
 
