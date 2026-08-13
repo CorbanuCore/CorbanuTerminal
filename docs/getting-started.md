@@ -81,9 +81,9 @@ Provider API keys stored through onboarding use labels such as
 | `/model`     | Select provider model and reasoning/effort mode                          |
 | `/providers` | Add or replace provider credentials and manage account routes            |
 | `/vault`     | Add, inspect, or delete credentials without exposing raw secrets to chat |
-| `/panes`     | Create or switch persistent Corbanu Terminal and Claude headless panes         |
+| `/panes`     | Create or switch persistent Corbanu Terminal and Claude headless panes   |
 | `/spawn`     | Manage retained Nazgul/Troll/Orc agents                                  |
-| `/wallet`    | Manage the local SOL/USDC wallet and Corbanu Terminal plans                    |
+| `/wallet`    | Manage the local SOL/USDC wallet and Corbanu Terminal plans              |
 | `/gpu`       | Inspect, rent, stop, or terminate supported GPU capacity                 |
 | `/telegram`  | Configure and control the Telegram connector                             |
 | `/tasknode`  | Link and use Task Node tasks, context, chat, balances, and rewards       |

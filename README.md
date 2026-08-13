@@ -105,19 +105,19 @@ Useful commands include:
 
 ## Providers
 
-| Provider or route | Access |
-| --- | --- |
-| OpenAI | Codex account authentication or API-backed configuration |
-| Anthropic | Direct API keys and Claude Code plan-backed panes |
-| Corbanu Terminal Plan | Prepaid inference purchased with USDC through `/wallet` |
-| Kimi Code | Direct Kimi Code access |
-| Z.AI | Direct Z.AI access, including GLM models |
-| OpenRouter | OpenRouter's catalogue, including Kimi, GLM, and Grok |
-| Ambient Inference | Hosted inference routes |
-| Meta, Baseten, and Vercel | Hosted provider and gateway routes |
-| Amazon Bedrock | AWS-authenticated Bedrock models |
-| Ollama and LM Studio | Local model servers |
-| Custom providers | Additional endpoints configured in `config.toml` |
+| Provider or route         | Access                                                   |
+| ------------------------- | -------------------------------------------------------- |
+| OpenAI                    | Codex account authentication or API-backed configuration |
+| Anthropic                 | Direct API keys and Claude Code plan-backed panes        |
+| Corbanu Terminal Plan     | Prepaid inference purchased with USDC through `/wallet`  |
+| Kimi Code                 | Direct Kimi Code access                                  |
+| Z.AI                      | Direct Z.AI access, including GLM models                 |
+| OpenRouter                | OpenRouter's catalogue, including Kimi, GLM, and Grok    |
+| Ambient Inference         | Hosted inference routes                                  |
+| Meta, Baseten, and Vercel | Hosted provider and gateway routes                       |
+| Amazon Bedrock            | AWS-authenticated Bedrock models                         |
+| Ollama and LM Studio      | Local model servers                                      |
+| Custom providers          | Additional endpoints configured in `config.toml`         |
 
 Use `/providers` for interactive setup. The public provider alias is
 `corbanu-terminal-plan`; the legacy `pfterminal-plan` identifier remains

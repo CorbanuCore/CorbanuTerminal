@@ -273,10 +273,10 @@ The multi-agent depth configuration allows depth 2 (depth 0: Nazgul/root, depth 
 
 ### 6.4 Harnesses
 
-| Harness              | Status            | Description                                                                                                                                            |
-| -------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Corbanu Terminal Agent     | P0 (enabled)      | Uses the existing Codex/Corbanu Terminal multi-agent runtime with parent/child graph, role metadata, status subscriptions, and `wait_agent`.                 |
-| Claude Code Headless | P1 (experimental) | Claude Code panes exist under `/panes` but need to emit the same `SpawnNode` status and completion events as native agents before treated as complete. |
+| Harness                | Status            | Description                                                                                                                                            |
+| ---------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Corbanu Terminal Agent | P0 (enabled)      | Uses the existing Codex/Corbanu Terminal multi-agent runtime with parent/child graph, role metadata, status subscriptions, and `wait_agent`.           |
+| Claude Code Headless   | P1 (experimental) | Claude Code panes exist under `/panes` but need to emit the same `SpawnNode` status and completion events as native agents before treated as complete. |
 
 ### 6.5 Completion semantics
 
@@ -336,11 +336,11 @@ Corbanu Terminal inherits Codex skills and ships bundled system skills.
 
 ### Skill loading paths
 
-| Scope                 | Path                                                                     |
-| --------------------- | ------------------------------------------------------------------------ |
+| Scope                 | Path                                                                  |
+| --------------------- | --------------------------------------------------------------------- |
 | Bundled system skills | `$CODEX_HOME/skills/.system/` (i.e. `$HOME/.corbanu/skills/.system/`) |
-| User global skills    | `$HOME/.agents/skills/`                                                  |
-| Repo-scoped skills    | `<repo>/.agents/skills/`                                                 |
+| User global skills    | `$HOME/.agents/skills/`                                               |
+| Repo-scoped skills    | `<repo>/.agents/skills/`                                              |
 
 ### Current bundled skills
 
@@ -516,7 +516,7 @@ The current `/spawn` slice is intentionally smaller than the full orchestration 
 | ------------------- | --------------------------------------------------------------------------- | ---------------------- |
 | **Sauron**          | Human user; the will/intent                                                 | (human)                |
 | **The Eye**         | Interface that conveys intent to the Nazgul                                 | Task node / automation |
-| **Nazgul**          | Orchestrator the user talks to; lives in one Corbanu Terminal                     | Planning-tier          |
+| **Nazgul**          | Orchestrator the user talks to; lives in one Corbanu Terminal               | Planning-tier          |
 | **Balrog**          | Planner; configures & spawns creatures; runs the harness; owns the Grimoire | Planning-tier          |
 | **Troll**           | Adversarial QA / foreman over Orcs                                          | Strong reviewer        |
 | **Orc**             | Executor; does the work                                                     | Per-instance           |

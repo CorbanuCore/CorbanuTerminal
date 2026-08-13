@@ -25,7 +25,7 @@ has been integrated.
 | Panes         | User panes and Claude Code headless panes with provider-backed profiles and turn artifacts.                             | [Claude Headless Panes](features/claude-headless-panes.md) |
 | Spawn         | Managed Nazgul/Troll/Orc orchestration through `/spawn` and `/spawn status`.                                            | [Spawn Orchestration](features/spawn-orchestration.md)     |
 | `/tasknode`   | Slash command for Task Node task views, actions, evidence, task requests, rewards, and account status.                  | [`/tasknode` Slash Command](features/tasknode.md)          |
-| Wallet/plan   | SOL/USDC wallet lifecycle, backup/restore, balance, and Corbanu Terminal plan purchase/recovery workflows.                    | [Slash Commands](slash_commands.md)                        |
+| Wallet/plan   | SOL/USDC wallet lifecycle, backup/restore, balance, and Corbanu Terminal plan purchase/recovery workflows.              | [Slash Commands](slash_commands.md)                        |
 | GPU           | Qualified and experimental GPU recipes with pre-charge review, status, stop, and terminate workflows.                   | [Slash Commands](slash_commands.md)                        |
 | Telegram      | Local connector configuration, authorization, start/stop/status, and disconnect workflows.                              | [Slash Commands](slash_commands.md)                        |
 | Codex fork    | Product command aliases, npm packages, installer names, TUI branding, and model picker behavior.                        | [Codex Fork](integrations/codex-fork.md)                   |
