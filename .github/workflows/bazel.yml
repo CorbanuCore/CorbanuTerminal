@@ -17,7 +17,9 @@ jobs:
   test:
     # Non-Linux Bazel coverage is disabled until working runners are available.
     # See docs/ci.md for the restoration plan.
-    timeout-minutes: 30
+    # Cold local builds can exceed the former 30-minute ceiling before tests
+    # finish, especially when remote execution is unavailable.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -375,7 +377,7 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   clippy:
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -470,7 +472,7 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   verify-release-build:
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
