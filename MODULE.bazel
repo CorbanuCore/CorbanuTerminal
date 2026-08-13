@@ -96,6 +96,8 @@ single_version_override(
     patch_strip = 1,
     patches = [
         "//patches:rules_rs_build_script_deps_annotation.patch",
+        "//patches:rules_rs_proc_macro_deps.patch",
+        "//patches:rules_rs_proc_macro_manifest.patch",
     ],
     version = "0.0.96",
 )

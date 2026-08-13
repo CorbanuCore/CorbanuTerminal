@@ -1,0 +1,127 @@
+# What: keep Cargo proc-macro dependencies in rules_rust's exec configuration.
+# Scope: rules_rs crate-universe generation and generated crate wrapper only.
+
+diff --git a/rs/extensions.bzl b/rs/extensions.bzl
+--- a/rs/extensions.bzl
++++ b/rs/extensions.bzl
+@@ -74,6 +74,24 @@ def _additive_build_file_content(mctx, annotation):
+     content += annotation.additive_build_file_content
+     return content
+ 
++def _split_proc_macro_deps(deps_by_triple, proc_macro_fq_crates):
++    """Partitions resolved Cargo deps so proc macros use cfg=exec."""
++    normal = {}
++    proc_macros = {}
++    for triple, deps in deps_by_triple.items():
++        normal[triple] = set()
++        proc_macros[triple] = set()
++        for dep in deps:
++            target_name = dep.rsplit(":", 1)[-1]
++            if target_name in proc_macro_fq_crates:
++                proc_macros[triple].add(dep)
++            else:
++                normal[triple].add(dep)
++    return struct(
++        normal = normal,
++        proc_macros = proc_macros,
++    )
++
+ def _generate_hub_and_spokes(
+         mctx,
+         hub_name,
+@@ -279,6 +297,14 @@ def _generate_hub_and_spokes(
+ 
+     use_home_cargo_credentials = bool(cargo_credentials)
+ 
++    proc_macro_fq_crates = set()
++    for metadata_package in cargo_metadata["packages"]:
++        if any([
++            "proc-macro" in target.get("kind", [])
++            for target in metadata_package.get("targets", [])
++        ]):
++            proc_macro_fq_crates.add(_fq_crate(metadata_package["name"], metadata_package["version"]))
++
+     for package in packages:
+         crate_name = package["name"]
+         version = package["version"]
+@@ -318,6 +344,7 @@ WARNING: A well-known crate annotation exists for {crate}! Apply the following
+                 formatted_well_known_annotation = suggested_annotation,
+             ))
+ 
++        split_deps = _split_proc_macro_deps(feature_resolutions.deps, proc_macro_fq_crates)
+         kwargs = dict(
+             hub_name = hub_name,
+             gen_build_script = annotation.gen_build_script,
+@@ -337,7 +364,8 @@ WARNING: A well-known crate annotation exists for {crate}! Apply the following
+             data = annotation.data,
+             deps = annotation.deps,
+             crate_tags = annotation.tags,
+-            deps_select = _select(feature_resolutions.deps),
++            deps_select = _select(split_deps.normal),
++            proc_macro_deps_select = _select(split_deps.proc_macros),
+             aliases = feature_resolutions.aliases,
+             crate_features = annotation.crate_features,
+             crate_features_select = _select(feature_resolutions.features_enabled),
+diff --git a/rs/private/repository_utils.bzl b/rs/private/repository_utils.bzl
+--- a/rs/private/repository_utils.bzl
++++ b/rs/private/repository_utils.bzl
+@@ -166,6 +166,9 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
+ {indent}    deps = [
+ {indent}        {deps}
+ {indent}    ]{extra_deps}{conditional_deps},
++{indent}    proc_macro_deps = [
++{indent}        {proc_macro_deps}
++{indent}    ]{conditional_proc_macro_deps},
+ {indent}    data = [
+ {indent}        {data}
+ {indent}    ],
+@@ -211,6 +214,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "",
+     rustc_flags, conditional_rustc_flags = render_select(attr.rustc_flags, attr.rustc_flags_select, use_legacy_rules_rust_platforms)
+     deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select, use_legacy_rules_rust_platforms)
++    proc_macro_deps, conditional_proc_macro_deps = render_select([], attr.proc_macro_deps_select, use_legacy_rules_rust_platforms)
+ 
+     conditional_build_script_env = render_select_build_script_env(attr.build_script_env_select, use_legacy_rules_rust_platforms)
+ 
+@@ -247,6 +251,8 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "",
+         extra_deps = extra_deps,
+         conditional_deps = " + " + conditional_deps if conditional_deps else "",
++        proc_macro_deps = list_indent.join(['"%s"' % d for d in sorted(proc_macro_deps)]),
++        conditional_proc_macro_deps = " + " + conditional_proc_macro_deps if conditional_proc_macro_deps else "",
+         data = list_indent.join(['"%s"' % str(d) for d in attr.data]),
+         extra_compile_data_attr = extra_compile_data_attr,
+         crate_features = repr(sorted(crate_features)),
+@@ -306,6 +312,7 @@ rust_crate_attrs = {
+     "data": attr.label_list(),
+     "deps": attr.label_list(),
+     "deps_select": _label_list_dict(),
++    "proc_macro_deps_select": _label_list_dict(),
+     "aliases": attr.string_dict(),
+     "crate_features": attr.string_list(),
+     "crate_features_select": attr.string_list_dict(),
+diff --git a/rs/rust_crate.bzl b/rs/rust_crate.bzl
+--- a/rs/rust_crate.bzl
++++ b/rs/rust_crate.bzl
+@@ -22,6 +22,7 @@ def rust_crate(
+         version,
+         aliases,
+         deps,
++        proc_macro_deps,
+         data,
+         crate_features,
+         triples,
+@@ -129,6 +130,7 @@ def rust_crate(
+             compile_data = compile_data,
+             aliases = aliases,
+             deps = deps,
++            proc_macro_deps = proc_macro_deps,
+             data = data,
+             crate_features = crate_features + select(
+                 {_platform(k, use_legacy_rules_rust_platforms): v for k, v in conditional_crate_features.items()} |
+@@ -167,6 +169,7 @@ def rust_crate(
+             compile_data = compile_data,
+             aliases = aliases,
+             deps = binary_lib_dep + deps,
++            proc_macro_deps = proc_macro_deps,
+             data = data,
+             crate_features = crate_features,
+             crate_root = crate_root,
