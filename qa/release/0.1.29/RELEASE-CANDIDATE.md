@@ -125,7 +125,10 @@ across the recovery branch. The candidate repairs the affected boundaries:
   ASCII-only policy; and
 - the repository's own pinned Prettier formatter was applied to the 32 tracked
   Markdown files that had accumulated formatting drift, restoring the
-  all-repository `pnpm run format` gate without changing their content.
+  all-repository `pnpm run format` gate without changing their content; and
+- Windows CI treats Dev Drive support as a performance capability rather than
+  a correctness prerequisite, falling back to an existing runner volume on
+  hosted images that cannot provision Dev Drive VHDs.
 
 ## Linux production artifact
 
