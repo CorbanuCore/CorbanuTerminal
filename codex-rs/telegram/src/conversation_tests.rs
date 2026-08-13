@@ -7,7 +7,7 @@ use super::ConversationKey;
 
 #[test]
 fn storage_key_round_trips_private_chat() {
-    let key = ConversationKey::new(ChatId(42), None);
+    let key = ConversationKey::new(ChatId(42), /*thread_id*/ None);
 
     assert_eq!(key.storage_key(), "42");
     assert_eq!(key.storage_key().parse::<ConversationKey>().unwrap(), key);
@@ -25,13 +25,13 @@ fn storage_key_round_trips_group_topic() {
 fn old_chat_only_storage_keys_remain_compatible() {
     assert_eq!(
         "-1002".parse::<ConversationKey>().unwrap(),
-        ConversationKey::new(ChatId(-1002), None)
+        ConversationKey::new(ChatId(-1002), /*thread_id*/ None)
     );
 }
 
 #[test]
 fn redacted_identity_is_stable_without_exposing_chat_id() {
-    let key = ConversationKey::new(ChatId(42), None);
+    let key = ConversationKey::new(ChatId(42), /*thread_id*/ None);
     assert_eq!(key.redacted_id(), key.redacted_id());
     assert_eq!(key.redacted_id().len(), 12);
     assert_ne!(key.redacted_id(), key.storage_key());

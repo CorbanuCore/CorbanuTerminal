@@ -387,7 +387,7 @@ async fn terminal_title_setup_popup_rate_limits_snapshot() {
 #[tokio::test]
 async fn missing_project_root_uses_different_status_and_title_preview_sources() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    cache_test_project_root(&mut chat, None);
+    cache_test_project_root(&mut chat, /*root_name*/ None);
 
     let status_preview = status_preview_line(&mut chat, &[StatusLineItem::ProjectRoot]);
     let title_preview = title_preview_line(&mut chat, &[TerminalTitleItem::Project]);

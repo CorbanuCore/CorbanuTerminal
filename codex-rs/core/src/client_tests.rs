@@ -350,7 +350,11 @@ fn claude_plan_request_maps_typed_child_mail_to_user_input() {
     };
 
     let request = test_model_client(SessionSource::Cli)
-        .build_anthropic_messages_request(&prompt, &test_claude_fable_plan_model_info(), None)
+        .build_anthropic_messages_request(
+            &prompt,
+            &test_claude_fable_plan_model_info(),
+            /*effort*/ None,
+        )
         .expect("Claude Fable Plan request");
 
     assert_eq!(
@@ -590,7 +594,11 @@ fn anthropic_fable_request_repairs_live_tool_then_commentary_history_shape() {
     };
 
     let request = test_model_client(SessionSource::Cli)
-        .build_anthropic_messages_request(&prompt, &test_claude_fable_model_info(), None)
+        .build_anthropic_messages_request(
+            &prompt,
+            &test_claude_fable_model_info(),
+            /*effort*/ None,
+        )
         .expect("Anthropic API-key Fable request");
     let last_content = request
         .messages
@@ -994,7 +1002,11 @@ fn anthropic_request_uses_model_limit_above_legacy_32k_cap() {
     };
 
     let request = test_model_client(SessionSource::Cli)
-        .build_anthropic_messages_request(&prompt, &test_anthropic_opus_model_info(), None)
+        .build_anthropic_messages_request(
+            &prompt,
+            &test_anthropic_opus_model_info(),
+            /*effort*/ None,
+        )
         .expect("Anthropic Opus request");
 
     assert_eq!(request.max_tokens, 128_000);

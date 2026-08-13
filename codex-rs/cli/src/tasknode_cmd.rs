@@ -430,7 +430,7 @@ async fn run_inner(command: TaskNodeCli) -> anyhow::Result<i32> {
                 client
                     .get(&format!(
                         "/api/terminal/tasknode/rewards?limit={}",
-                        limit(args.limit, 1, 50)
+                        limit(args.limit, /*min*/ 1, /*max*/ 50)
                     ))
                     .await?,
             ),
@@ -451,7 +451,7 @@ async fn run_chat_command(client: &TaskNodeClient, cli: ChatCli) -> anyhow::Resu
             client
                 .get(&format!(
                     "/api/terminal/tasknode/chat/conversations?limit={}",
-                    limit(args.limit, 1, 50)
+                    limit(args.limit, /*min*/ 1, /*max*/ 50)
                 ))
                 .await?,
         ),
@@ -460,7 +460,7 @@ async fn run_chat_command(client: &TaskNodeClient, cli: ChatCli) -> anyhow::Resu
                 .get(&format!(
                     "/api/terminal/tasknode/chat/history?conversationId={}&limit={}",
                     urlencoding::encode(&args.conversation_id),
-                    limit_u16(args.limit, 1, 200)
+                    limit_u16(args.limit, /*min*/ 1, /*max*/ 200)
                 ))
                 .await?,
         ),
@@ -469,7 +469,7 @@ async fn run_chat_command(client: &TaskNodeClient, cli: ChatCli) -> anyhow::Resu
                 .get(&format!(
                     "/api/terminal/tasknode/chat/search?q={}&limit={}",
                     urlencoding::encode(&args.query),
-                    limit(args.limit, 1, 50)
+                    limit(args.limit, /*min*/ 1, /*max*/ 50)
                 ))
                 .await?,
         ),
@@ -550,7 +550,7 @@ async fn run_requests_command(client: &TaskNodeClient, cli: RequestsCli) -> anyh
             client
                 .get(&format!(
                     "/api/terminal/tasknode/requests?limit={}",
-                    limit(args.limit, 1, 50)
+                    limit(args.limit, /*min*/ 1, /*max*/ 50)
                 ))
                 .await?,
         ),
@@ -582,14 +582,14 @@ async fn run_task_command(client: &TaskNodeClient, cli: TaskCli) -> anyhow::Resu
     match cli.action {
         TaskCommand::Show(args) => emit_response(task_detail(client, &args.task_id).await?),
         TaskCommand::Accept(args) => {
-            emit_response(task_action(client, &args.task_id, "accept", None).await?)
+            emit_response(task_action(client, &args.task_id, "accept", /*reason*/ None).await?)
         }
         TaskCommand::Refuse(args) => {
             let reason = read_optional_text_input(args.reason, args.reason_file, "refusal reason")?;
             emit_response(task_action(client, &args.task_id, "refuse", reason).await?)
         }
         TaskCommand::Cancel(args) => {
-            emit_response(task_action(client, &args.task_id, "cancel", None).await?)
+            emit_response(task_action(client, &args.task_id, "cancel", /*reason*/ None).await?)
         }
         TaskCommand::Evidence(args) => {
             emit_response(task_evidence(client, args, TaskEvidenceMode::InitialSubmission).await?)

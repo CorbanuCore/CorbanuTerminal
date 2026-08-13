@@ -378,7 +378,7 @@ where
                 .finish_gpu_provision_step(
                     lease.rental.rental_id.as_str(),
                     "01-provider-bootstrap",
-                    true,
+                    /*succeeded*/ true,
                     Some(
                         serde_json::json!({
                             "resource_id": resource_id,
@@ -393,7 +393,7 @@ where
                         .to_string()
                         .as_str(),
                     ),
-                    None,
+                    /*sanitized_error*/ None,
                     now_ms,
                 )
                 .await?;
@@ -562,7 +562,7 @@ where
             .finish_gpu_provision_step(
                 lease.rental.rental_id.as_str(),
                 "02-readiness",
-                true,
+                /*succeeded*/ true,
                 Some(&serde_json::to_string(&serde_json::json!({
                     "authenticated": report.rejects_missing_token && report.rejects_wrong_token,
                     "model_identity": report.model_identity_ok,
@@ -571,7 +571,7 @@ where
                     "cancellation": report.cancellation_ok,
                     "tool_call": report.tool_call_ok,
                 }))?),
-                None,
+                /*sanitized_error*/ None,
                 now_ms,
             )
             .await?;

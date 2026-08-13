@@ -16,7 +16,7 @@ fn subagent_activity_legacy_event_preserves_available_identity() {
         agent_path: agent_path.clone(),
     };
 
-    let EventMsg::SubAgentActivity(actual) = item.as_legacy_event(123) else {
+    let EventMsg::SubAgentActivity(actual) = item.as_legacy_event(/*occurred_at_ms*/ 123) else {
         panic!("expected sub-agent activity event");
     };
     assert_eq!(

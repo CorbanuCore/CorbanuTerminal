@@ -296,14 +296,14 @@ impl GpuProvider for RunpodProvider {
             return Ok(None);
         }
         let json = decode_json(response).await?;
-        pod_to_instance(&json, None).map(Some)
+        pod_to_instance(&json, /*fallback_tag*/ None).map(Some)
     }
 
     async fn list_owned_instances(
         &self,
         query: OwnedInstanceQuery,
     ) -> ProviderResult<Vec<GpuInstance>> {
-        let response = self.send_pod_get(None).await?;
+        let response = self.send_pod_get(/*resource_id*/ None).await?;
         let json = decode_json(response).await?;
         let pods = json.as_array().ok_or_else(|| {
             ProviderError::new(
@@ -318,7 +318,7 @@ impl GpuProvider for RunpodProvider {
                     .as_ref()
                     .is_none_or(|tag| pod.get("name").and_then(Value::as_str) == Some(tag))
             })
-            .map(|pod| pod_to_instance(pod, None))
+            .map(|pod| pod_to_instance(pod, /*fallback_tag*/ None))
             .collect()
     }
 

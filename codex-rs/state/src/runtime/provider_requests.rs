@@ -482,13 +482,25 @@ mod tests {
                 .expect("initialize runtime");
 
         let first = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-a",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 1_000,
+            )
             .await
             .expect("acquire first lease");
         assert!(matches!(first, ProviderRequestLeaseDecision::Acquired(_)));
 
         let second = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-b", 10_000, 1_500)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-b",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 1_500,
+            )
             .await
             .expect("acquire second lease");
         match second {
@@ -513,20 +525,32 @@ mod tests {
                 .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(lease) = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-a",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 1_000,
+            )
             .await
             .expect("acquire first lease")
         else {
             panic!("expected acquired lease");
         };
         let rows_affected = runtime
-            .release_provider_request_lease(&lease, 2_000)
+            .release_provider_request_lease(&lease, /*now_ms*/ 2_000)
             .await
             .expect("release lease");
         assert_eq!(rows_affected, 1);
 
         let second = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-b", 10_000, 2_100)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-b",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 2_100,
+            )
             .await
             .expect("acquire second lease");
         assert!(matches!(second, ProviderRequestLeaseDecision::Acquired(_)));
@@ -543,13 +567,19 @@ mod tests {
                 .expect("initialize runtime");
 
         let first = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-a",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 1_000,
+            )
             .await
             .expect("acquire first lease");
         assert!(matches!(first, ProviderRequestLeaseDecision::Acquired(_)));
 
         let block = runtime
-            .check_provider_request_cooldown(&key(), &small_preflight(), 1_500)
+            .check_provider_request_cooldown(&key(), &small_preflight(), /*now_ms*/ 1_500)
             .await
             .expect("check cooldown");
         assert_eq!(block, None);
@@ -566,7 +596,13 @@ mod tests {
                 .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(lease) = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-a",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 1_000,
+            )
             .await
             .expect("acquire lease")
         else {
@@ -580,14 +616,20 @@ mod tests {
                     request_id: Some("req-500".to_string()),
                     retry_after_ms: Some(60_000),
                 },
-                2_000,
+                /*now_ms*/ 2_000,
             )
             .await
             .expect("record non-rate-limit failure");
         assert_eq!(rows_affected, 1);
 
         let retry = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-b", 10_000, 2_500)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-b",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 2_500,
+            )
             .await
             .expect("retry lease");
         assert!(matches!(retry, ProviderRequestLeaseDecision::Acquired(_)));
@@ -604,14 +646,26 @@ mod tests {
                 .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(first) = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 1_000, 1_000)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-a",
+                /*lease_ttl_ms*/ 1_000,
+                /*now_ms*/ 1_000,
+            )
             .await
             .expect("acquire first lease")
         else {
             panic!("expected first lease");
         };
         let ProviderRequestLeaseDecision::Acquired(_second) = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-b", 10_000, 2_500)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-b",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 2_500,
+            )
             .await
             .expect("acquire second lease")
         else {
@@ -625,19 +679,25 @@ mod tests {
                     input_tokens: Some(1),
                     cached_input_tokens: Some(1),
                 },
-                3_000,
+                /*now_ms*/ 3_000,
             )
             .await
             .expect("record stale result");
         assert_eq!(result_rows, 0);
         let release_rows = runtime
-            .release_provider_request_lease(&first, 3_100)
+            .release_provider_request_lease(&first, /*now_ms*/ 3_100)
             .await
             .expect("release stale lease");
         assert_eq!(release_rows, 0);
 
         let blocked = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-c", 10_000, 3_200)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-c",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 3_200,
+            )
             .await
             .expect("blocked by active second lease");
         match blocked {
@@ -660,7 +720,13 @@ mod tests {
                 .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(lease) = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-a",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 1_000,
+            )
             .await
             .expect("acquire lease")
         else {
@@ -674,14 +740,20 @@ mod tests {
                     request_id: Some("req-1".to_string()),
                     retry_after_ms: None,
                 },
-                2_000,
+                /*now_ms*/ 2_000,
             )
             .await
             .expect("record 429");
         assert_eq!(rows_affected, 1);
 
         let retry = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-b", 10_000, 2_500)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-b",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 2_500,
+            )
             .await
             .expect("retry lease");
         match retry {
@@ -706,7 +778,13 @@ mod tests {
                 .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(lease) = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-a",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 1_000,
+            )
             .await
             .expect("acquire lease")
         else {
@@ -719,14 +797,20 @@ mod tests {
                     input_tokens: Some(17_136),
                     cached_input_tokens: Some(17_088),
                 },
-                2_000,
+                /*now_ms*/ 2_000,
             )
             .await
             .expect("record success");
         assert_eq!(rows_affected, 1);
 
         let ProviderRequestLeaseDecision::Acquired(second) = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-b", 10_000, 2_500)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-b",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 2_500,
+            )
             .await
             .expect("acquire second lease")
         else {
@@ -740,13 +824,19 @@ mod tests {
                     request_id: None,
                     retry_after_ms: None,
                 },
-                3_000,
+                /*now_ms*/ 3_000,
             )
             .await
             .expect("record 429");
 
         let blocked = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-c", 10_000, 3_500)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-c",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 3_500,
+            )
             .await
             .expect("blocked after cooldown");
         match blocked {
@@ -772,7 +862,13 @@ mod tests {
                 .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(first) = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-a",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 1_000,
+            )
             .await
             .expect("acquire first")
         else {
@@ -785,13 +881,19 @@ mod tests {
                     input_tokens: Some(88_303),
                     cached_input_tokens: Some(0),
                 },
-                2_000,
+                /*now_ms*/ 2_000,
             )
             .await
             .expect("record cold-cache success");
 
         let ProviderRequestLeaseDecision::Acquired(_second) = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-b", 10_000, 2_500)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-b",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 2_500,
+            )
             .await
             .expect("acquire second")
         else {
@@ -799,7 +901,13 @@ mod tests {
         };
 
         let blocked = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-c", 10_000, 3_000)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-c",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 3_000,
+            )
             .await
             .expect("blocked by active second lease");
         match blocked {
@@ -825,7 +933,13 @@ mod tests {
                 .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(first) = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-a",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 1_000,
+            )
             .await
             .expect("acquire first")
         else {
@@ -839,13 +953,19 @@ mod tests {
                     request_id: None,
                     retry_after_ms: None,
                 },
-                2_000,
+                /*now_ms*/ 2_000,
             )
             .await
             .expect("record first 429");
 
         let ProviderRequestLeaseDecision::Acquired(second) = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-b", 10_000, 33_000)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-b",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 33_000,
+            )
             .await
             .expect("acquire after first cooldown")
         else {
@@ -859,13 +979,19 @@ mod tests {
                     request_id: None,
                     retry_after_ms: None,
                 },
-                34_000,
+                /*now_ms*/ 34_000,
             )
             .await
             .expect("record second 429");
 
         let blocked = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-c", 10_000, 35_000)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-c",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 35_000,
+            )
             .await
             .expect("blocked after second cooldown");
         match blocked {
@@ -888,7 +1014,13 @@ mod tests {
                 .expect("initialize runtime");
 
         let ProviderRequestLeaseDecision::Acquired(lease) = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-a", 10_000, 1_000)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-a",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 1_000,
+            )
             .await
             .expect("acquire lease")
         else {
@@ -902,13 +1034,19 @@ mod tests {
                     request_id: None,
                     retry_after_ms: Some(12_000),
                 },
-                2_000,
+                /*now_ms*/ 2_000,
             )
             .await
             .expect("record 429");
 
         let retry = runtime
-            .try_acquire_provider_request_lease(&key(), &preflight(), "worker-b", 10_000, 2_500)
+            .try_acquire_provider_request_lease(
+                &key(),
+                &preflight(),
+                "worker-b",
+                /*lease_ttl_ms*/ 10_000,
+                /*now_ms*/ 2_500,
+            )
             .await
             .expect("retry lease");
         match retry {

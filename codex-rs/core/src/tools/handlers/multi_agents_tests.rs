@@ -268,7 +268,7 @@ async fn spawn_model_switch_cannot_route_around_the_provider_allowlist() {
             &turn,
             &mut config,
             Some(model),
-            None,
+            /*requested_reasoning_effort*/ None,
         )
         .await;
 

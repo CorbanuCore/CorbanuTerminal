@@ -198,7 +198,7 @@ pub(crate) async fn run_claude_command_plan(
                     &started_at,
                     "waiting",
                     "Claude running.",
-                    None,
+                    /*hint*/ None,
                 );
             }
         }
@@ -352,7 +352,7 @@ pub(crate) async fn run_claude_command_plan(
             format!(
                 "Claude exited with status {}: {}",
                 status,
-                truncate_for_display(stderr.trim(), 1_000)
+                truncate_for_display(stderr.trim(), /*max_chars*/ 1_000)
             ),
         );
         write_turn_audit(

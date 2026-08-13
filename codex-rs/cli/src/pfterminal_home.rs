@@ -66,8 +66,18 @@ mod tests {
     #[test]
     fn stable_and_debug_defaults_are_distinct_from_each_other_and_stock_codex() {
         let user_home = PathBuf::from("/home/tester");
-        let stable = resolve_home(None, Some(user_home.clone()), ".pfterminal").unwrap();
-        let debug = resolve_home(None, Some(user_home.clone()), ".pfterminal-debug").unwrap();
+        let stable = resolve_home(
+            /*override_home*/ None,
+            Some(user_home.clone()),
+            ".pfterminal",
+        )
+        .unwrap();
+        let debug = resolve_home(
+            /*override_home*/ None,
+            Some(user_home.clone()),
+            ".pfterminal-debug",
+        )
+        .unwrap();
 
         assert_eq!(stable, user_home.join(".pfterminal"));
         assert_eq!(debug, user_home.join(".pfterminal-debug"));

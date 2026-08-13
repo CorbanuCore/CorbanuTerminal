@@ -374,8 +374,8 @@ impl Wallet {
             created_at,
         };
         prepare_private_dir(&self.root)?;
-        atomic_json(&self.envelope_path(), &envelope, 0o600)?;
-        atomic_json(&self.manifest_path(), &manifest, 0o600)?;
+        atomic_json(&self.envelope_path(), &envelope, /*mode*/ 0o600)?;
+        atomic_json(&self.manifest_path(), &manifest, /*mode*/ 0o600)?;
         Ok(CreatedWallet {
             manifest,
             recovery_material: Zeroizing::new(bs58::encode(seed.as_ref()).into_string()),

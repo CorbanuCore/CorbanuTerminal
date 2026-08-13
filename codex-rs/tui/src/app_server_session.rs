@@ -2472,7 +2472,7 @@ mod tests {
             .wrap_err("turn/start failed in TUI");
 
         tracing::dispatcher::with_default(&dispatch, || {
-            record_turn_start_failure(thread_id, 1, &error);
+            record_turn_start_failure(thread_id, /*attempt*/ 1, &error);
         });
         log_db.flush().await;
 

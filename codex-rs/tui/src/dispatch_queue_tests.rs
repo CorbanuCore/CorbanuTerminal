@@ -22,9 +22,9 @@ fn legacy_identity_is_stable_and_target_scoped() {
     let mut same = first.clone();
     let mut other_target = first.clone();
 
-    first.migrate_legacy_identity("thread:a", 0);
-    same.migrate_legacy_identity("thread:a", 0);
-    other_target.migrate_legacy_identity("thread:b", 0);
+    first.migrate_legacy_identity("thread:a", /*ordinal*/ 0);
+    same.migrate_legacy_identity("thread:a", /*ordinal*/ 0);
+    other_target.migrate_legacy_identity("thread:b", /*ordinal*/ 0);
 
     assert_eq!(first.dispatch_id, same.dispatch_id);
     assert_eq!(first.origin, same.origin);
@@ -51,25 +51,49 @@ fn legacy_batch_reader_preserves_structural_boundaries() {
 
 #[test]
 fn model_origin_uses_turn_and_ordinal_not_task_wording() {
-    let first = model_dispatch_origin_id("thread:a", "turn-1", 0);
+    let first = model_dispatch_origin_id("thread:a", "turn-1", /*ordinal*/ 0);
 
-    assert_eq!(first, model_dispatch_origin_id("thread:a", "turn-1", 0));
-    assert_ne!(first, model_dispatch_origin_id("thread:a", "turn-1", 1));
-    assert_ne!(first, model_dispatch_origin_id("thread:a", "turn-2", 0));
+    assert_eq!(
+        first,
+        model_dispatch_origin_id("thread:a", "turn-1", /*ordinal*/ 0)
+    );
+    assert_ne!(
+        first,
+        model_dispatch_origin_id("thread:a", "turn-1", /*ordinal*/ 1)
+    );
+    assert_ne!(
+        first,
+        model_dispatch_origin_id("thread:a", "turn-2", /*ordinal*/ 0)
+    );
 }
 
 #[test]
 fn dispatch_identity_is_origin_and_pane_scoped_not_sequence_global() {
     let mut direct = PendingSpawnDispatch::new("direct".to_string(), Vec::new());
-    direct.assign_identity(4, "thread:source-a", "thread:target", None);
+    direct.assign_identity(
+        /*seq*/ 4,
+        "thread:source-a",
+        "thread:target",
+        /*origin_id*/ None,
+    );
 
     let mut model = PendingSpawnDispatch::new("model".to_string(), Vec::new());
     model.origin.origin_id = "model:source-b:turn-9:0".to_string();
-    model.assign_identity(4, "thread:source-b", "thread:target", None);
+    model.assign_identity(
+        /*seq*/ 4,
+        "thread:source-b",
+        "thread:target",
+        /*origin_id*/ None,
+    );
 
     let mut replay = PendingSpawnDispatch::new("different wording".to_string(), Vec::new());
     replay.origin.origin_id = "model:source-b:turn-9:0".to_string();
-    replay.assign_identity(4, "thread:source-b", "thread:target", None);
+    replay.assign_identity(
+        /*seq*/ 4,
+        "thread:source-b",
+        "thread:target",
+        /*origin_id*/ None,
+    );
 
     assert_ne!(direct.dispatch_id, model.dispatch_id);
     assert_eq!(model.dispatch_id, replay.dispatch_id);

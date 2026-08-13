@@ -1759,13 +1759,13 @@ impl App {
             if let Some(task) = entry.last_task_message.as_deref() {
                 description.push_str(&format!(
                     "; task: {}",
-                    truncate_for_orchestrate_display(task, 90)
+                    truncate_for_orchestrate_display(task, /*max_chars*/ 90)
                 ));
             }
             if let Some(result) = entry.last_result_message.as_deref() {
                 description.push_str(&format!(
                     "; result: {}",
-                    truncate_for_orchestrate_display(result, 90)
+                    truncate_for_orchestrate_display(result, /*max_chars*/ 90)
                 ));
             }
             entries.push(OrchestrateTargetEntry {
@@ -1794,19 +1794,19 @@ impl App {
             if let Some(usage) = pane.latest_usage_summary.as_deref() {
                 description.push_str(&format!(
                     "; usage: {}",
-                    truncate_for_orchestrate_display(usage, 80)
+                    truncate_for_orchestrate_display(usage, /*max_chars*/ 80)
                 ));
             }
             if let Some(task) = pane.latest_task_message.as_deref() {
                 description.push_str(&format!(
                     "; task: {}",
-                    truncate_for_orchestrate_display(task, 90)
+                    truncate_for_orchestrate_display(task, /*max_chars*/ 90)
                 ));
             }
             if let Some(result) = pane.latest_result_message.as_deref() {
                 description.push_str(&format!(
                     "; result: {}",
-                    truncate_for_orchestrate_display(result, 90)
+                    truncate_for_orchestrate_display(result, /*max_chars*/ 90)
                 ));
             }
             entries.push(OrchestrateTargetEntry {
@@ -2220,7 +2220,7 @@ impl App {
         for (id, role) in notices {
             self.chat_widget.add_info_message(
                 format!("Assignment {id} paused: {role} {node_label} is unavailable."),
-                None,
+                /*hint*/ None,
             );
         }
         if changed {
@@ -2272,14 +2272,14 @@ impl App {
                     format!(
                         "Assignment {id} paused after restart: {role} is unavailable ({detail})."
                     ),
-                    None,
+                    /*hint*/ None,
                 );
             } else if executing {
                 self.chat_widget.add_info_message(
                     format!(
                         "Assignment {id} restored; the next Manager mandate waits one cadence."
                     ),
-                    None,
+                    /*hint*/ None,
                 );
             }
         }
@@ -2385,8 +2385,10 @@ impl App {
             if let Some(whip) = self.orchestrate_whips.get_mut(&id) {
                 whip.state = WhipState::Paused;
             }
-            self.chat_widget
-                .add_info_message(format!("Assignment {id} paused: {role} unreachable."), None);
+            self.chat_widget.add_info_message(
+                format!("Assignment {id} paused: {role} unreachable."),
+                /*hint*/ None,
+            );
             changed = true;
         }
         if changed {
@@ -2406,7 +2408,7 @@ impl App {
         match command {
             OrchestrateCommand::Status => self.chat_widget.add_info_message(
                 format_whip_status(&self.orchestrate_whips, self.orchestrate_now()),
-                None,
+                /*hint*/ None,
             ),
             OrchestrateCommand::Attach {
                 target,
@@ -2420,7 +2422,7 @@ impl App {
                 match self.attach_whip(
                     target, whip_name, mode, expiry, max_fires, cooldown_s, holder, origin,
                 ) {
-                    Ok(message) => self.chat_widget.add_info_message(message, None),
+                    Ok(message) => self.chat_widget.add_info_message(message, /*hint*/ None),
                     Err(err) => self.chat_widget.add_error_message(err),
                 }
             }
@@ -2452,8 +2454,10 @@ impl App {
                     .map(|value| value.to_rfc3339())
                     .unwrap_or_else(|| "unlimited".to_string());
                 self.persist_pane_state();
-                self.chat_widget
-                    .add_info_message(format!("Extended {id}; expires_at={expires}."), None);
+                self.chat_widget.add_info_message(
+                    format!("Extended {id}; expires_at={expires}."),
+                    /*hint*/ None,
+                );
             }
             OrchestrateCommand::Fire(id) => match self.plan_whip_fire(&id, FireTrigger::Manual) {
                 Ok(plan) => self.execute_whip_fire(plan, FireTrigger::Manual),
@@ -2476,7 +2480,7 @@ impl App {
                         plan.destination_label,
                         plan.task
                     ),
-                    None,
+                    /*hint*/ None,
                 ),
                 Err(err) => self.chat_widget.add_error_message(err),
             },
@@ -2662,7 +2666,7 @@ impl App {
             action
         };
         self.chat_widget
-            .add_info_message(format!("{subject} {id} {action}."), None);
+            .add_info_message(format!("{subject} {id} {action}."), /*hint*/ None);
     }
 
     fn start_assignment_by_ref(&mut self, id_or_target: &str) {
@@ -2693,8 +2697,10 @@ impl App {
         }
         whip.state = WhipState::Armed;
         self.persist_pane_state();
-        self.chat_widget
-            .add_info_message(format!("Assignment {id} execution started."), None);
+        self.chat_widget.add_info_message(
+            format!("Assignment {id} execution started."),
+            /*hint*/ None,
+        );
     }
 
     fn evaluate_whips_for_target(
@@ -2759,7 +2765,7 @@ impl App {
         }
         self.chat_widget.add_info_message(
             format!("Assignment {id} started in Drafting: Manager {manager_label} -> Worker {worker_label}."),
-            None,
+            /*hint*/ None,
         );
         Ok(())
     }
@@ -3009,11 +3015,11 @@ impl App {
                 plan.whip_id, plan.destination_label, fires, max_fires
             )
         };
-        self.chat_widget.add_info_message(message, None);
+        self.chat_widget.add_info_message(message, /*hint*/ None);
         if exhausted && !matches!(trigger, FireTrigger::Test) {
             self.chat_widget.add_info_message(
                 format!("Whip {} exhausted: max fires reached.", plan.whip_id),
-                None,
+                /*hint*/ None,
             );
         }
     }
@@ -3068,8 +3074,10 @@ impl App {
                     *phase = AssignmentPhase::Done;
                     changed = true;
                 }
-                self.chat_widget
-                    .add_info_message(format!("Assignment {id} completed by its Manager."), None);
+                self.chat_widget.add_info_message(
+                    format!("Assignment {id} completed by its Manager."),
+                    /*hint*/ None,
+                );
             } else if let Some(reason) = assignment_blocked_reason(output) {
                 if let Some(whip) = self.orchestrate_whips.get_mut(&id)
                     && let WhipKind::Assignment { phase, .. } = &mut whip.kind
@@ -3079,8 +3087,10 @@ impl App {
                     };
                     changed = true;
                 }
-                self.chat_widget
-                    .add_info_message(format!("Assignment {id} blocked: {reason}"), None);
+                self.chat_widget.add_info_message(
+                    format!("Assignment {id} blocked: {reason}"),
+                    /*hint*/ None,
+                );
             }
             if changed {
                 self.persist_pane_state();
@@ -3184,7 +3194,7 @@ impl App {
                 format!(
                     "Assignment {id} Manager returned no visible response; retrying once with the existing conversation context."
                 ),
-                None,
+                /*hint*/ None,
             );
         }
         pause_ids.sort();
@@ -3256,7 +3266,7 @@ impl App {
         for id in failing_assignments {
             self.chat_widget.add_info_message(
                 format!("Assignment {id}: Manager failing, retrying with backoff."),
-                None,
+                /*hint*/ None,
             );
         }
         if assignment_changed {
@@ -3443,8 +3453,10 @@ impl App {
         whip.expiry_notified = true;
         self.persist_pane_state();
         let subject = if is_assignment { "Assignment" } else { "Whip" };
-        self.chat_widget
-            .add_info_message(format!("{subject} {id} {}: {reason}.", state.label()), None);
+        self.chat_widget.add_info_message(
+            format!("{subject} {id} {}: {reason}.", state.label()),
+            /*hint*/ None,
+        );
     }
 
     fn resolve_orchestrate_target_node(&self, target: &str) -> Result<String, String> {
@@ -4028,8 +4040,8 @@ mod tests {
             &whip,
             "Manager",
             "Worker",
-            None,
-            None,
+            /*instructions*/ None,
+            /*path*/ None,
             AssignmentDispatchProtocol::NativeFollowup,
         );
 
@@ -4071,8 +4083,8 @@ mod tests {
             &whip,
             "Manager",
             "Worker",
-            None,
-            None,
+            /*instructions*/ None,
+            /*path*/ None,
             AssignmentDispatchProtocol::HostAdapter,
         );
 

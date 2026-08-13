@@ -144,8 +144,8 @@ fn omission_preserves_cache_control_marker() {
         "content": [cached_image],
     })]);
 
-    let report =
-        enforce_anthropic_payload_budget(&mut request, 1_000).expect("request should be pruned");
+    let report = enforce_anthropic_payload_budget(&mut request, /*max_bytes*/ 1_000)
+        .expect("request should be pruned");
     let body = serde_json::to_value(&request).expect("serialize request");
 
     assert_eq!(report.omitted_images, 1);
@@ -162,7 +162,7 @@ fn request_that_cannot_fit_without_images_returns_actionable_error() {
         "content": [{"type": "text", "text": "x".repeat(2_000)}],
     })]);
 
-    let error = enforce_anthropic_payload_budget(&mut request, 500)
+    let error = enforce_anthropic_payload_budget(&mut request, /*max_bytes*/ 500)
         .expect_err("text-only request cannot be reduced");
 
     assert!(error.to_string().contains("compact the conversation"));

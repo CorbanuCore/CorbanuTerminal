@@ -1818,7 +1818,7 @@ mod tests {
             Duration::from_millis(30),
             DEFAULT_ACTIONABLE_SILENCE_TIMEOUT,
             /*telemetry*/ None,
-            None,
+            /*response_id_hint*/ None,
             /*metrics*/ None,
         )
         .await;
@@ -1867,7 +1867,7 @@ mod tests {
             Duration::from_millis(100),
             Duration::from_millis(30),
             /*telemetry*/ None,
-            None,
+            /*response_id_hint*/ None,
             /*metrics*/ None,
         )
         .await;
@@ -1936,7 +1936,7 @@ mod tests {
             Duration::from_millis(500),
             Duration::from_millis(60),
             /*telemetry*/ None,
-            None,
+            /*response_id_hint*/ None,
             /*metrics*/ None,
         )
         .await;
@@ -1967,7 +1967,7 @@ mod tests {
             Duration::from_millis(10),
             Duration::from_millis(50),
             /*telemetry*/ None,
-            None,
+            /*response_id_hint*/ None,
             /*metrics*/ None,
         )
         .await;
@@ -1995,7 +1995,7 @@ mod tests {
             Duration::from_secs(5),
             DEFAULT_ACTIONABLE_SILENCE_TIMEOUT,
             /*telemetry*/ None,
-            None,
+            /*response_id_hint*/ None,
             /*metrics*/ None,
         )
         .await;

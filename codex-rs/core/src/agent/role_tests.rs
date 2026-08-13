@@ -825,7 +825,7 @@ fn hierarchy_managers_keep_evidence_failures_task_local() {
 async fn no_role_config_keeps_model_default_base_instructions() {
     let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
 
-    apply_role_to_config(&mut config, None)
+    apply_role_to_config(&mut config, /*role_name*/ None)
         .await
         .expect("default role should apply");
 

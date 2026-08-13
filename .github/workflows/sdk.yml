@@ -47,7 +47,7 @@ jobs:
     # execution. A cold local Bazel build can exceed ten minutes before the SDK
     # tests begin. Cold builds have crossed the former 30-minute ceiling, so
     # keep enough headroom for the build plus the SDK process-spawn matrix.
-    timeout-minutes: 60
+    timeout-minutes: 90
     environment:
       name: bazel
       deployment: false

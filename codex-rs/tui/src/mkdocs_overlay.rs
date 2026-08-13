@@ -186,8 +186,8 @@ impl MkDocsOverlay {
                 self.search_query.pop();
                 self.refresh_visible_indices();
             }
-            KeyCode::Up => self.move_selection(-1),
-            KeyCode::Down => self.move_selection(1),
+            KeyCode::Up => self.move_selection(/*delta*/ -1),
+            KeyCode::Down => self.move_selection(/*delta*/ 1),
             KeyCode::Char(ch)
                 if key_event.modifiers.is_empty() || key_event.modifiers == KeyModifiers::SHIFT =>
             {
@@ -225,15 +225,15 @@ impl MkDocsOverlay {
         if self.list_keymap.cancel.is_pressed(key_event) {
             self.is_done = true;
         } else if self.list_keymap.move_up.is_pressed(key_event) {
-            self.move_selection(-1);
+            self.move_selection(/*delta*/ -1);
         } else if self.list_keymap.move_down.is_pressed(key_event) {
-            self.move_selection(1);
+            self.move_selection(/*delta*/ 1);
         } else if self.list_keymap.page_up.is_pressed(key_event) {
-            self.move_selection(-10);
+            self.move_selection(/*delta*/ -10);
         } else if self.list_keymap.page_down.is_pressed(key_event) {
-            self.move_selection(10);
+            self.move_selection(/*delta*/ 10);
         } else if self.list_keymap.jump_top.is_pressed(key_event) {
-            self.select_visible_position(0);
+            self.select_visible_position(/*position*/ 0);
         } else if self.list_keymap.jump_bottom.is_pressed(key_event) {
             self.select_visible_position(self.visible_indices.len().saturating_sub(1));
         } else if self.list_keymap.accept.is_pressed(key_event)
@@ -264,9 +264,9 @@ impl MkDocsOverlay {
         } else if key_event.code == KeyCode::Char('f') && key_event.modifiers.is_empty() {
             self.navigate_history(/*back*/ false);
         } else if self.list_keymap.move_up.is_pressed(key_event) || is_ctrl_y(key_event) {
-            self.scroll_page_by(-1);
+            self.scroll_page_by(/*amount*/ -1);
         } else if self.list_keymap.move_down.is_pressed(key_event) || is_ctrl_e(key_event) {
-            self.scroll_page_by(1);
+            self.scroll_page_by(/*amount*/ 1);
         } else if self.pager_keymap.page_up.is_pressed(key_event) {
             self.scroll_page_by(-self.page_height(tui));
         } else if self.pager_keymap.page_down.is_pressed(key_event) {

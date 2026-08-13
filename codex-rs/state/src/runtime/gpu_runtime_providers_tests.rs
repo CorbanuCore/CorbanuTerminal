@@ -33,7 +33,12 @@ fn params(rental_id: &str) -> GpuRentalCreateParams {
 
 async fn set_state(runtime: &StateRuntime, rental_id: &str, state: GpuRentalState, now_ms: i64) {
     let lease = runtime
-        .claim_due_gpu_rentals("controller", now_ms, 10_000, 1)
+        .claim_due_gpu_rentals(
+            "controller",
+            now_ms,
+            /*lease_ttl_ms*/ 10_000,
+            /*limit*/ 1,
+        )
         .await
         .expect("claim")
         .remove(0);
@@ -74,9 +79,9 @@ async fn provision_steps_are_idempotent_and_digest_bound() {
             .finish_gpu_provision_step(
                 "rental-step",
                 "01-hardware",
-                true,
+                /*succeeded*/ true,
                 Some("{\"gpu_count\":2}"),
-                None,
+                /*sanitized_error*/ None,
                 NOW_MS + 1,
             )
             .await

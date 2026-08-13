@@ -103,7 +103,7 @@ impl App {
         let Some(state_db) = self.state_db.clone() else {
             return;
         };
-        let Ok(rentals) = state_db.list_gpu_rentals(1_000).await else {
+        let Ok(rentals) = state_db.list_gpu_rentals(/*limit*/ 1_000).await else {
             return;
         };
         let now_ms = chrono::Utc::now().timestamp_millis();
@@ -121,7 +121,7 @@ impl App {
                 .await
             {
                 Ok(true) if is_error => self.chat_widget.add_error_message(message),
-                Ok(true) => self.chat_widget.add_info_message(message, None),
+                Ok(true) => self.chat_widget.add_info_message(message, /*hint*/ None),
                 Ok(false) => {}
                 Err(error) => {
                     tracing::warn!(%error, "failed to deduplicate GPU rental notification")
@@ -268,7 +268,7 @@ impl App {
                 self.sync_active_agent_label();
                 self.persist_pane_state();
                 self.chat_widget
-                    .add_info_message(format!("Renamed pane to {title}."), None);
+                    .add_info_message(format!("Renamed pane to {title}."), /*hint*/ None);
             }
             Err(err) => self
                 .chat_widget
@@ -302,7 +302,7 @@ impl App {
         self.sync_active_agent_label();
         self.persist_pane_state();
         self.chat_widget
-            .add_info_message(format!("Renamed pane to {nickname}."), None);
+            .add_info_message(format!("Renamed pane to {nickname}."), /*hint*/ None);
     }
 
     async fn persist_existing_thread_agent_nickname(
@@ -435,11 +435,11 @@ impl App {
 
     pub(super) async fn refresh_gpu_spend_indicator(&mut self) {
         let Some(state_db) = self.state_db.as_ref() else {
-            self.chat_widget.set_gpu_spend_status(None);
+            self.chat_widget.set_gpu_spend_status(/*status*/ None);
             return;
         };
         let status = state_db
-            .list_gpu_rentals(1_000)
+            .list_gpu_rentals(/*limit*/ 1_000)
             .await
             .ok()
             .and_then(|rentals| {
@@ -1670,7 +1670,7 @@ impl App {
                     );
                     return Ok(AppRunControl::Continue);
                 };
-                match state_db.list_gpu_rentals(100).await {
+                match state_db.list_gpu_rentals(/*limit*/ 100).await {
                     Ok(rentals) => self.chat_widget.open_gpu_menu(rentals),
                     Err(error) => self
                         .chat_widget
@@ -1710,7 +1710,7 @@ impl App {
                         format!(
                             "Stopped serving GPU rental {rental_id}. Provider billing may continue."
                         ),
-                        None,
+                        /*hint*/ None,
                     ),
                     Ok(false) => self.chat_widget.add_error_message(format!(
                         "GPU rental {rental_id} has no active runtime provider."
@@ -1741,7 +1741,7 @@ impl App {
                             format!(
                                 "Termination requested for GPU rental {rental_id}; billing remains unresolved until the provider confirms absence."
                             ),
-                            None,
+                            /*hint*/ None,
                         );
                         self.start_gpu_controller();
                     }
@@ -1781,7 +1781,7 @@ impl App {
                 };
                 self.chat_widget.add_info_message(
                     format!("Searching verified capacity for {recipe_id}…"),
-                    None,
+                    /*hint*/ None,
                 );
                 tokio::spawn(async move {
                     let result = async {
@@ -1920,7 +1920,7 @@ impl App {
                                 "GPU rental {} was authorized. The independent controller is starting; /gpu remains authoritative for billing state.",
                                 rental.rental_id
                             ),
-                            None,
+                            /*hint*/ None,
                         );
                         self.start_gpu_controller();
                     }
@@ -1945,7 +1945,13 @@ impl App {
                 let secret = api_key.into_inner();
                 let result = if vault.exists(label).unwrap_or(false) {
                     vault
-                        .update(label, Some(secret), None, None, None)
+                        .update(
+                            label,
+                            Some(secret),
+                            /*provider*/ None,
+                            /*notes*/ None,
+                            /*revocation_notes*/ None,
+                        )
                         .map(|_| ())
                 } else {
                     vault.add(codex_vault::AddCredential {
@@ -1963,7 +1969,7 @@ impl App {
                 match result {
                     Ok(()) => self.chat_widget.add_info_message(
                         format!("Stored {display_name} API key in the vault."),
-                        None,
+                        /*hint*/ None,
                     ),
                     Err(_) => self.chat_widget.add_error_message(format!(
                         "Could not store {display_name} API key in the vault."
@@ -2057,7 +2063,7 @@ impl App {
                 }
             },
             AppEvent::DiscoverTelegramChats => {
-                let generation = self.chat_widget.begin_telegram_discovery(None);
+                let generation = self.chat_widget.begin_telegram_discovery(/*identity*/ None);
                 self.app_event_tx
                     .send(AppEvent::PollTelegramChats { generation });
             }
@@ -2171,7 +2177,7 @@ impl App {
             }
             AppEvent::TelegramOperationFinished { result } => {
                 match result {
-                    Ok(message) => self.chat_widget.add_info_message(message, None),
+                    Ok(message) => self.chat_widget.add_info_message(message, /*hint*/ None),
                     Err(error) => self.chat_widget.add_error_message(error),
                 }
                 self.chat_widget.open_telegram_menu();
@@ -3700,7 +3706,7 @@ impl App {
                             agent_nickname.clone(),
                             agent_type,
                             started,
-                            true,
+                            /*persist_layout*/ true,
                         )
                         .await;
                         // When spawning a Nazgul pane, bind it as the visible root so subsequent
@@ -3824,7 +3830,7 @@ impl App {
                         &acks,
                         "failed",
                         "crew identity or creation state is not reconciled",
-                        true,
+                        /*notify*/ true,
                     );
                     self.chat_widget.add_error_message(
                         "This /spawn hierarchy is read-only until its crew identity and creation \
@@ -3893,7 +3899,7 @@ impl App {
                             &acks,
                             "queued",
                             "durably admitted to the native mailbox",
-                            false,
+                            /*notify*/ false,
                         );
                         self.spawn_status_by_thread.insert(
                             thread_id,
@@ -3902,7 +3908,8 @@ impl App {
                                 message: None,
                             },
                         );
-                        self.agent_navigation.set_running(thread_id, true);
+                        self.agent_navigation
+                            .set_running(thread_id, /*is_running*/ true);
                         self.agent_navigation.set_last_task_message(
                             thread_id,
                             Some(task.chars().take(240).collect()),
@@ -3946,7 +3953,7 @@ impl App {
                                             &acks,
                                             "queued",
                                             "cold-restored agent was materialized and the assignment was durably admitted to its native mailbox",
-                                            false,
+                                            /*notify*/ false,
                                         );
                                         self.spawn_status_by_thread.insert(
                                             materialized_thread_id,
@@ -3955,8 +3962,10 @@ impl App {
                                                 message: None,
                                             },
                                         );
-                                        self.agent_navigation
-                                            .set_running(materialized_thread_id, true);
+                                        self.agent_navigation.set_running(
+                                            materialized_thread_id,
+                                            /*is_running*/ true,
+                                        );
                                         self.agent_navigation.set_last_task_message(
                                             materialized_thread_id,
                                             Some(task.chars().take(240).collect()),
@@ -3971,7 +3980,7 @@ impl App {
                                             format!(
                                                 "native mailbox admission still failed after Core materialized the saved agent: {retry_error:#}"
                                             ),
-                                            true,
+                                            /*notify*/ true,
                                         );
                                         self.chat_widget.add_error_message(format!(
                                             "Could not admit task for {label}: {retry_error:#}"
@@ -3987,7 +3996,7 @@ impl App {
                                     format!(
                                         "native mailbox target was unavailable and Core could not materialize the saved agent: {materialization_error:#}"
                                     ),
-                                    true,
+                                    /*notify*/ true,
                                 );
                                 self.chat_widget.add_error_message(format!(
                                     "Could not admit task for {label}: {materialization_error:#}"
@@ -4001,7 +4010,7 @@ impl App {
                             &acks,
                             "failed",
                             format!("native mailbox admission failed: {error:#}"),
-                            true,
+                            /*notify*/ true,
                         );
                         self.chat_widget.add_error_message(format!(
                             "Could not admit task for {label}; no automatic replay was attempted: {error:#}"
@@ -4080,7 +4089,8 @@ impl App {
                 match self.submit_thread_op(app_server, thread_id, op).await {
                     Ok(()) => {
                         self.record_spawn_dispatch_delivered_for_task(&target_node_id, &task);
-                        self.agent_navigation.set_running(thread_id, true);
+                        self.agent_navigation
+                            .set_running(thread_id, /*is_running*/ true);
                         self.agent_navigation.set_last_task_message(
                             thread_id,
                             Some(task.chars().take(240).collect()),
@@ -4124,7 +4134,7 @@ impl App {
                         task.len(),
                         crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES
                     );
-                    self.record_spawn_dispatch_acks(&acks, "failed", &detail, true);
+                    self.record_spawn_dispatch_acks(&acks, "failed", &detail, /*notify*/ true);
                     self.chat_widget.add_error_message(detail);
                     return Ok(AppRunControl::Continue);
                 }
@@ -4135,7 +4145,7 @@ impl App {
                         &acks,
                         "failed",
                         "legacy external Claude pane is busy; no secondary queue or automatic retry exists",
-                        true,
+                        /*notify*/ true,
                     );
                     self.chat_widget.add_error_message(format!(
                         "Cannot send task to {pane_id}: the legacy external Claude pane is busy. \
@@ -4180,7 +4190,7 @@ impl App {
                     &manager_node_id,
                 );
                 match self.attach_guided_assignment(&args) {
-                    Ok(message) => self.chat_widget.add_info_message(message, None),
+                    Ok(message) => self.chat_widget.add_info_message(message, /*hint*/ None),
                     Err(err) => self.chat_widget.add_error_message(err),
                 }
             }
@@ -4278,7 +4288,9 @@ impl App {
                 };
                 let model = self.native_spawn_default_model();
                 let provider = crate::chatwidget::ChatWidget::model_provider_for_selection(&model);
-                let nickname = match self.unique_native_pane_nickname("Manager", None) {
+                let nickname = match self
+                    .unique_native_pane_nickname("Manager", /*exclude_thread_id*/ None)
+                {
                     Ok(nickname) => nickname,
                     Err(err) => {
                         self.chat_widget.add_error_message(err.to_string());
@@ -4293,8 +4305,8 @@ impl App {
                         Some(nickname.clone()),
                         model,
                         provider,
-                        None,
-                        None,
+                        /*reasoning_effort*/ None,
+                        /*base_instructions*/ None,
                     )
                     .await
                 {
@@ -4316,7 +4328,7 @@ impl App {
                         );
                         match self.attach_guided_assignment(&args) {
                             Ok(message) => {
-                                self.chat_widget.add_info_message(message, None);
+                                self.chat_widget.add_info_message(message, /*hint*/ None);
                                 self.chat_widget.add_info_message(
                                     format!("Created Manager {nickname}."),
                                     Some(
@@ -4374,7 +4386,9 @@ impl App {
                 };
                 let requested_name =
                     display_name.unwrap_or_else(|| self.next_codex_pane_nickname());
-                let nickname = match self.unique_native_pane_nickname(&requested_name, None) {
+                let nickname = match self
+                    .unique_native_pane_nickname(&requested_name, /*exclude_thread_id*/ None)
+                {
                     Ok(nickname) => nickname,
                     Err(err) => {
                         self.chat_widget.add_error_message(err.to_string());
@@ -4433,7 +4447,9 @@ impl App {
             } => {
                 let display_name = match display_name {
                     Some(display_name) => {
-                        match self.unique_pane_display_name(&display_name, None) {
+                        match self
+                            .unique_pane_display_name(&display_name, /*exclude_node_id*/ None)
+                        {
                             Ok(name) => Some(name),
                             Err(err) => {
                                 self.chat_widget.add_error_message(err.to_string());

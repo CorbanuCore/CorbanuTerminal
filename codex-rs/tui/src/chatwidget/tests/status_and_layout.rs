@@ -2769,7 +2769,7 @@ async fn status_line_tps_updates_during_active_streaming() {
     chat.refresh_status_line();
     chat.tps_estimator.start_turn(
         std::time::Instant::now() - std::time::Duration::from_secs(1),
-        None,
+        /*total_usage_at_start*/ None,
     );
     chat.on_agent_message_delta("12345678901234567890".to_string());
 
@@ -3309,7 +3309,7 @@ async fn status_line_model_uses_active_external_pane_model() {
 
     assert_eq!(status_line_text(&chat), Some("GLM 5.2 Z.AI".to_string()));
 
-    chat.set_active_external_model_display(None);
+    chat.set_active_external_model_display(/*model_display*/ None);
 
     assert_eq!(
         status_line_text(&chat),

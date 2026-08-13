@@ -452,7 +452,7 @@ async fn write_stdin_does_not_expose_default_pre_tool_use_payload() {
 #[tokio::test]
 async fn explicit_shell_command_budget_blocks_after_limit() -> anyhow::Result<()> {
     let (session, turn) = crate::session::tests::make_session_and_context().await;
-    turn.set_explicit_shell_command_budget(1);
+    turn.set_explicit_shell_command_budget(/*limit*/ 1);
     let session = Arc::new(session);
     let turn = Arc::new(turn);
 

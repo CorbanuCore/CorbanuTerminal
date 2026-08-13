@@ -104,8 +104,18 @@ async fn leases_serialize_two_runtime_instances() {
         .expect("request creation");
 
     let (first_claim, second_claim) = tokio::join!(
-        first.claim_due_gpu_rentals("controller-a", NOW_MS, 30_000, 1),
-        second.claim_due_gpu_rentals("controller-b", NOW_MS, 30_000, 1),
+        first.claim_due_gpu_rentals(
+            "controller-a",
+            NOW_MS,
+            /*lease_ttl_ms*/ 30_000,
+            /*limit*/ 1
+        ),
+        second.claim_due_gpu_rentals(
+            "controller-b",
+            NOW_MS,
+            /*lease_ttl_ms*/ 30_000,
+            /*limit*/ 1
+        ),
     );
     let total_claims =
         first_claim.expect("first claim").len() + second_claim.expect("second claim").len();
@@ -136,11 +146,23 @@ async fn provider_controller_only_claims_its_own_rentals() {
         .expect("request other creation");
 
     let fake_claims = runtime
-        .claim_due_gpu_rentals_for_provider("fake-controller", "fake", NOW_MS, 30_000, 10)
+        .claim_due_gpu_rentals_for_provider(
+            "fake-controller",
+            "fake",
+            NOW_MS,
+            /*lease_ttl_ms*/ 30_000,
+            /*limit*/ 10,
+        )
         .await
         .expect("claim fake rentals");
     let other_claims = runtime
-        .claim_due_gpu_rentals_for_provider("other-controller", "other", NOW_MS, 30_000, 10)
+        .claim_due_gpu_rentals_for_provider(
+            "other-controller",
+            "other",
+            NOW_MS,
+            /*lease_ttl_ms*/ 30_000,
+            /*limit*/ 10,
+        )
         .await
         .expect("claim other rentals");
     assert_eq!(fake_claims.len(), 1);
@@ -162,7 +184,12 @@ async fn state_update_is_owned_monotonic_and_releases_lease() {
         .await
         .expect("request creation");
     let lease = runtime
-        .claim_due_gpu_rentals("controller", NOW_MS, 30_000, 1)
+        .claim_due_gpu_rentals(
+            "controller",
+            NOW_MS,
+            /*lease_ttl_ms*/ 30_000,
+            /*limit*/ 1,
+        )
         .await
         .expect("claim rental")
         .pop()

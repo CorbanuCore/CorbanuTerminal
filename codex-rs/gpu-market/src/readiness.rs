@@ -144,7 +144,11 @@ impl GpuEndpointProber {
             .post(chat_url.as_str())
             .bearer_auth(token.expose())
             .timeout(self.cold_chat_timeout)
-            .json(&chat_body(model_id, "Reply with exactly READY.", false))
+            .json(&chat_body(
+                model_id,
+                "Reply with exactly READY.",
+                /*stream*/ false,
+            ))
             .send()
             .await?;
         let chat_ok = chat.status().is_success()
@@ -160,7 +164,11 @@ impl GpuEndpointProber {
             .post(chat_url.as_str())
             .bearer_auth(token.expose())
             .timeout(self.request_timeout)
-            .json(&chat_body(model_id, "Stream two short words.", true))
+            .json(&chat_body(
+                model_id,
+                "Stream two short words.",
+                /*stream*/ true,
+            ))
             .send()
             .await?;
         let streaming_ok = if streaming.status().is_success() {

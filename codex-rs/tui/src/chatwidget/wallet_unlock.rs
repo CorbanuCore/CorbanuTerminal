@@ -125,7 +125,7 @@ impl ChatWidget {
                 self.wallet_capability = Some(Zeroizing::new(unlocked.capability.into_inner()));
                 self.add_info_message(
                     unlock_confirmation(policy, unlocked.expires_in_seconds),
-                    None,
+                    /*hint*/ None,
                 );
                 match continuation {
                     WalletUnlockContinuation::WalletMenu => self.open_wallet_menu(),

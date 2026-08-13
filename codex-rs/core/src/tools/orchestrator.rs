@@ -636,23 +636,23 @@ mod tests {
     fn on_request_sandbox_startup_retry_requires_prior_approval() {
         assert!(allow_on_request_sandbox_startup_retry(
             AskForApproval::OnRequest,
-            true,
-            true,
+            /*already_approved*/ true,
+            /*sandbox_startup_failure*/ true,
         ));
         assert!(!allow_on_request_sandbox_startup_retry(
             AskForApproval::OnRequest,
-            false,
-            true,
+            /*already_approved*/ false,
+            /*sandbox_startup_failure*/ true,
         ));
         assert!(!allow_on_request_sandbox_startup_retry(
             AskForApproval::Never,
-            true,
-            true,
+            /*already_approved*/ true,
+            /*sandbox_startup_failure*/ true,
         ));
         assert!(!allow_on_request_sandbox_startup_retry(
             AskForApproval::OnRequest,
-            true,
-            false,
+            /*already_approved*/ true,
+            /*sandbox_startup_failure*/ false,
         ));
     }
 }

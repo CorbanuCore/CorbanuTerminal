@@ -2073,7 +2073,7 @@ impl App {
                 self.note_whip_target_idle_with_fire_control(
                     &node_key,
                     current_turn_message.as_deref(),
-                    true,
+                    /*allow_fire*/ true,
                     turn_succeeded,
                 );
             }

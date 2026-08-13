@@ -58,7 +58,12 @@ async fn exit_resume_hint_falls_back_to_primary_when_active_codex_pane_has_no_ro
     std::fs::write(&primary_rollout_path, "{}\n").expect("write primary rollout");
     let primary_thread_id = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174001").unwrap();
     let side_thread_id = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174002").unwrap();
-    let primary_session = test_session(&app, primary_thread_id, None, Some(primary_rollout_path));
+    let primary_session = test_session(
+        &app,
+        primary_thread_id,
+        /*thread_name*/ None,
+        Some(primary_rollout_path),
+    );
     let side_session = test_session(
         &app,
         side_thread_id,
@@ -89,7 +94,12 @@ async fn exit_resume_hint_prefers_active_codex_pane_when_it_is_resumable() {
     std::fs::write(&side_rollout_path, "{}\n").expect("write side rollout");
     let primary_thread_id = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174003").unwrap();
     let side_thread_id = ThreadId::from_string("123e4567-e89b-12d3-a456-426614174004").unwrap();
-    let primary_session = test_session(&app, primary_thread_id, None, Some(primary_rollout_path));
+    let primary_session = test_session(
+        &app,
+        primary_thread_id,
+        /*thread_name*/ None,
+        Some(primary_rollout_path),
+    );
     let side_session = test_session(
         &app,
         side_thread_id,

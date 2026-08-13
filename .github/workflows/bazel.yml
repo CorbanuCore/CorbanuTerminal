@@ -19,7 +19,7 @@ jobs:
     # See docs/ci.md for the restoration plan.
     # Cold local builds can exceed the former 30-minute ceiling before tests
     # finish, especially when remote execution is unavailable.
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -377,7 +377,7 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   clippy:
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -472,7 +472,7 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   verify-release-build:
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:

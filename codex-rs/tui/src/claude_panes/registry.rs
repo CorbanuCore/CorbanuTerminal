@@ -281,7 +281,9 @@ impl ClaudePaneRegistry {
         cwd: PathBuf,
         codex_home: &Path,
     ) -> Result<String> {
-        self.create_pane_with_role(profile, cwd, codex_home, None, None)
+        self.create_pane_with_role(
+            profile, cwd, codex_home, /*spawn_role*/ None, /*spawn_nickname*/ None,
+        )
     }
 
     pub(crate) fn create_pane_with_role(
@@ -302,7 +304,9 @@ impl ClaudePaneRegistry {
         cwd: PathBuf,
         codex_home: &Path,
     ) -> Result<String> {
-        self.push_pane(profile, cwd, codex_home, None, None)
+        self.push_pane(
+            profile, cwd, codex_home, /*spawn_role*/ None, /*spawn_nickname*/ None,
+        )
     }
 
     fn push_pane(
@@ -446,7 +450,10 @@ impl ClaudePaneRegistry {
             pane.latest_turn_status = Some(output.status);
             pane.latest_audit_path = Some(output.audit_path.clone());
             if !output.text.trim().is_empty() {
-                pane.latest_result_message = Some(compact_claude_pane_metadata(&output.text, 240));
+                pane.latest_result_message = Some(compact_claude_pane_metadata(
+                    &output.text,
+                    /*max_chars*/ 240,
+                ));
             }
             pane.next_turn_index = pane.next_turn_index.saturating_add(1);
             if let Err(err) = persist_claude_pane_metadata(pane) {
@@ -457,7 +464,8 @@ impl ClaudePaneRegistry {
 
     pub(crate) fn set_latest_task_message(&mut self, pane_id: &str, task: Option<String>) {
         if let Some(pane) = self.panes.iter_mut().find(|pane| pane.id == pane_id) {
-            pane.latest_task_message = task.map(|task| compact_claude_pane_metadata(&task, 240));
+            pane.latest_task_message =
+                task.map(|task| compact_claude_pane_metadata(&task, /*max_chars*/ 240));
             if let Err(err) = persist_claude_pane_metadata(pane) {
                 tracing::warn!(pane_id = %pane.id, error = %err, "failed to persist Claude pane task metadata");
             }

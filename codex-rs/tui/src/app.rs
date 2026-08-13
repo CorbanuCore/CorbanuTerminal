@@ -668,7 +668,7 @@ fn resume_hint_for_pane_layout_thread(
     let thread_id = thread_id?;
     let thread_id_text = thread_id.to_string();
     crate::claude_panes::load_pane_layout(codex_home, Some(&thread_id_text))?;
-    codex_utils_cli::resume_hint(None, Some(thread_id))
+    codex_utils_cli::resume_hint(/*thread_name*/ None, Some(thread_id))
 }
 
 fn rollout_path_is_resumable(rollout_path: &Path) -> bool {

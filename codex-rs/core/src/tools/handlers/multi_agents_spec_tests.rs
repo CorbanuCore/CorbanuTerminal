@@ -294,7 +294,11 @@ fn spawn_agent_tool_caps_reasoning_effort_value_length() {
         description: "Model-defined".to_string(),
     }];
 
-    let description = spawn_agent_models_description(&[model], MultiAgentVersion::V2, None);
+    let description = spawn_agent_models_description(
+        &[model],
+        MultiAgentVersion::V2,
+        /*inherited_runtime*/ None,
+    );
     let capped_effort = "é".repeat(MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION);
 
     assert!(description.contains("Current inherited runtime: unavailable."));

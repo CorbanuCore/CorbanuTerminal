@@ -1278,12 +1278,13 @@ mod tests {
     #[tokio::test]
     async fn runtime_gpu_model_selection_is_session_only() {
         let (chat, mut rx, _op_rx) =
-            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(/*model_override*/ None)
+                .await;
         let actions = chat.model_selection_actions(
             "pinned-model".to_string(),
             Some("gpu-rental-123".to_string()),
-            None,
-            false,
+            /*effort_for_action*/ None,
+            /*should_prompt_plan_mode_scope*/ false,
         );
 
         actions[0](&chat.app_event_tx);
@@ -1439,7 +1440,7 @@ mod tests {
 
     #[test]
     fn model_picker_display_label_uses_catalog_name_with_slug_in_description() {
-        let mut ambient = preset(AMBIENT_DEFAULT_MODEL, true);
+        let mut ambient = preset(AMBIENT_DEFAULT_MODEL, /*show_in_picker*/ true);
         ambient.display_name = "Ambient GLM 5.2".to_string();
         ambient.description = "Ambient-backed GLM.".to_string();
 
@@ -1454,7 +1455,7 @@ mod tests {
             ))
         );
 
-        let fallback = preset("custom-model", true);
+        let fallback = preset("custom-model", /*show_in_picker*/ true);
         assert_eq!(
             ChatWidget::model_display_label_for_preset(&fallback),
             "custom-model"
@@ -1469,41 +1470,41 @@ mod tests {
     fn pfterminal_picker_allows_curated_openai_plan_models() {
         assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
             AMBIENT_KIMI_K2_7_CODE_MODEL,
-            true
+            /*show_in_picker*/ true
         )));
         assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
             ANTHROPIC_DEFAULT_MODEL,
-            true
+            /*show_in_picker*/ true
         )));
         assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
             CLAUDE_PLAN_MODEL,
-            true
+            /*show_in_picker*/ true
         )));
         assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
             CLAUDE_FABLE_5_PLAN_MODEL,
-            true
+            /*show_in_picker*/ true
         )));
         assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
             DEEPSEEK_DEFAULT_MODEL,
-            true
+            /*show_in_picker*/ true
         )));
         assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
-            "gpt-5.5", true
+            "gpt-5.5", /*show_in_picker*/ true
         )));
         for model in ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] {
             assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
-                model, true
+                model, /*show_in_picker*/ true
             )));
         }
         assert!(!ChatWidget::show_in_pfterminal_model_picker(&preset(
-            "gpt-5.4", true
+            "gpt-5.4", /*show_in_picker*/ true
         )));
         assert!(!ChatWidget::show_in_pfterminal_model_picker(&preset(
             "codex-auto-review",
-            true
+            /*show_in_picker*/ true
         )));
         assert!(!ChatWidget::show_in_pfterminal_model_picker(&preset(
-            "gpt-5.5", false
+            "gpt-5.5", /*show_in_picker*/ false
         )));
     }
 

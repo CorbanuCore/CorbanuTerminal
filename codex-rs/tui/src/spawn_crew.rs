@@ -479,7 +479,7 @@ impl App {
                 nickname,
                 &member.role_profile,
                 started,
-                false,
+                /*persist_layout*/ false,
             )
             .await;
             let node_id = thread_node_id(thread_id);

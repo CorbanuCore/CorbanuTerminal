@@ -92,7 +92,7 @@ pub(crate) fn build_onboarding_provider_selection_edits(
 ) -> Vec<ConfigEdit> {
     let model = resolve_model_for_provider(current_model.map(str::to_string), provider)
         .unwrap_or_else(|| current_model.unwrap_or_default().to_string());
-    build_model_selection_edits(&model, Some(provider), None::<String>)
+    build_model_selection_edits(&model, Some(provider), /*effort*/ None::<String>)
 }
 
 pub(crate) fn build_service_tier_selection_edits(service_tier: Option<&str>) -> Vec<ConfigEdit> {

@@ -51,8 +51,8 @@ pub(super) async fn reconcile_plan_receipt(
         }
         Err(error) => {
             return receipt_from_status(
-                None,
-                None,
+                /*status*/ None,
+                /*balances*/ None,
                 ReceiptSeed {
                     plan_id,
                     price_usdc: Some(purchase.price_usdc),
@@ -211,7 +211,7 @@ impl ChatWidget {
         if receipt.credential_error.is_none() {
             self.select_pfterminal_plan_provider();
         }
-        self.add_info_message(receipt_history_message(&receipt), None);
+        self.add_info_message(receipt_history_message(&receipt), /*hint*/ None);
         self.open_wallet_plan_receipt(receipt);
     }
 

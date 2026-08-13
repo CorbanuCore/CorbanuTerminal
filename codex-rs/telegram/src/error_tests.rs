@@ -8,7 +8,11 @@ use codex_telegram::error::is_http_409_conflict;
 
 #[test]
 fn backoff_doubles_and_caps() {
-    let mut backoff = PollingBackoff::new(Duration::from_secs(1), Duration::from_secs(4), 10);
+    let mut backoff = PollingBackoff::new(
+        Duration::from_secs(1),
+        Duration::from_secs(4),
+        /*max_consecutive_failures*/ 10,
+    );
 
     assert_eq!(
         backoff.record_failure().expect("failure 1"),
@@ -35,7 +39,11 @@ fn backoff_doubles_and_caps() {
 
 #[test]
 fn backoff_cap_uses_failure_cap_error() {
-    let mut backoff = PollingBackoff::new(Duration::from_secs(1), Duration::from_secs(4), 2);
+    let mut backoff = PollingBackoff::new(
+        Duration::from_secs(1),
+        Duration::from_secs(4),
+        /*max_consecutive_failures*/ 2,
+    );
 
     assert_eq!(
         backoff.record_failure().expect("first failure below cap"),

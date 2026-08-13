@@ -2359,7 +2359,7 @@ impl ModelClientSession {
                         session_telemetry.clone(),
                         inference_trace_attempt,
                         Arc::clone(&self.client.state.provider),
-                        None,
+                        /*server_conversation_update*/ None,
                     );
                     return Ok(stream);
                 }
@@ -2809,7 +2809,7 @@ impl ModelClientSession {
                         session_telemetry.clone(),
                         inference_trace_attempt,
                         Arc::clone(&self.client.state.provider),
-                        None,
+                        /*server_conversation_update*/ None,
                     );
                     return Ok(stream);
                 }
@@ -3217,7 +3217,7 @@ impl ModelClientSession {
                 request_session_telemetry,
                 inference_trace_attempt,
                 Arc::clone(&self.client.state.provider),
-                None,
+                /*server_conversation_update*/ None,
             );
             self.websocket_session.last_response_rx = Some(last_request_rx);
             return Ok(WebsocketStreamOutcome::Stream(stream));
@@ -5021,7 +5021,7 @@ where
         session_telemetry,
         inference_trace_attempt,
         provider,
-        None,
+        /*server_conversation_update*/ None,
     )
 }
 

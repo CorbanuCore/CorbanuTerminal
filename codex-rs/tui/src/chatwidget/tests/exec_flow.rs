@@ -1635,7 +1635,7 @@ async fn local_apply_patch_approval_resolves_without_thread_op() {
     while let Ok(event) = rx.try_recv() {
         match event {
             AppEvent::InsertHistoryCell(cell) => {
-                let rendered = lines_to_single_string(&cell.display_lines(80));
+                let rendered = lines_to_single_string(&cell.display_lines(/*width*/ 80));
                 rendered_resolution |= rendered.contains("Local approval resolved: cancelled.");
             }
             AppEvent::SubmitThreadOp {

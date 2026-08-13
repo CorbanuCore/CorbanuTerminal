@@ -284,8 +284,12 @@ fn docs_path_options_report_a_missing_path() {
     let temp = tempfile::tempdir().expect("tempdir");
 
     for option in ["--config", "--docs-dir"] {
-        let error = resolve_mkdocs_request_with_package_root(temp.path(), Some(option), None)
-            .expect_err("missing option path");
+        let error = resolve_mkdocs_request_with_package_root(
+            temp.path(),
+            Some(option),
+            /*managed_package_root*/ None,
+        )
+        .expect_err("missing option path");
         assert_eq!(
             error.to_string(),
             format!("Expected a path after /docs {option}.")

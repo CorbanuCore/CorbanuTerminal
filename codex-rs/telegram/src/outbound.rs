@@ -201,7 +201,7 @@ mod tests {
     #[test]
     fn classifies_retry_after_with_hint() {
         assert_eq!(
-            classify_request_error(&rate_limit_error(7)),
+            classify_request_error(&rate_limit_error(/*secs*/ 7)),
             FailureClass::RateLimited {
                 retry_after_secs: 7
             }
@@ -219,27 +219,45 @@ mod tests {
     #[test]
     fn mutating_calls_are_never_retried() {
         assert_eq!(
-            retry_decision(CallSafety::Mutating, &rate_limit_error(1), 0),
+            retry_decision(
+                CallSafety::Mutating,
+                &rate_limit_error(/*secs*/ 1),
+                /*attempt*/ 0
+            ),
             None
         );
         assert_eq!(
-            retry_decision(CallSafety::Mutating, &transport_error(), 0),
+            retry_decision(CallSafety::Mutating, &transport_error(), /*attempt*/ 0),
             None
         );
     }
 
     #[test]
     fn idempotent_429_honors_retry_after_floor() {
-        let delay = retry_decision(CallSafety::Idempotent, &rate_limit_error(5), 0)
-            .expect("429 on idempotent call must be retried");
+        let delay = retry_decision(
+            CallSafety::Idempotent,
+            &rate_limit_error(/*secs*/ 5),
+            /*attempt*/ 0,
+        )
+        .expect("429 on idempotent call must be retried");
         assert!(delay >= Duration::from_secs(5));
         assert!(delay <= MAX_RETRY_DELAY);
     }
 
     #[test]
     fn idempotent_transport_uses_bounded_backoff() {
-        let first = retry_decision(CallSafety::Idempotent, &transport_error(), 0).unwrap();
-        let second = retry_decision(CallSafety::Idempotent, &transport_error(), 1).unwrap();
+        let first = retry_decision(
+            CallSafety::Idempotent,
+            &transport_error(),
+            /*attempt*/ 0,
+        )
+        .unwrap();
+        let second = retry_decision(
+            CallSafety::Idempotent,
+            &transport_error(),
+            /*attempt*/ 1,
+        )
+        .unwrap();
         assert!(second > first);
         assert!(second <= MAX_RETRY_DELAY);
     }
@@ -289,7 +307,7 @@ mod tests {
                 let attempts = Arc::clone(&attempts_clone);
                 async move {
                     attempts.fetch_add(1, Ordering::SeqCst);
-                    Err(rate_limit_error(1))
+                    Err(rate_limit_error(/*secs*/ 1))
                 }
             },
         )

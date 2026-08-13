@@ -3941,7 +3941,7 @@ impl Config {
         } else {
             match model {
             Some(model_override) => Some(model_override),
-            None if stale_runtime_provider => resolve_model_for_provider(None, &model_provider_id),
+            None if stale_runtime_provider => resolve_model_for_provider(/*model*/ None, &model_provider_id),
             None if model_without_explicit_provider => cfg.model,
             None => resolve_model_for_provider(cfg.model, &model_provider_id),
             }

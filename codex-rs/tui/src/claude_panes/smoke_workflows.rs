@@ -24,8 +24,8 @@ pub(crate) async fn run_mock_website_workflow(
             provider_name,
             Some(profile.profile().title.to_string()),
             workflow,
-            None,
-            None,
+            /*artifact_path*/ None,
+            /*audit_path*/ None,
             Some(fixture_path),
             format!("failed to create fixture: {err}"),
         );
@@ -46,8 +46,8 @@ pub(crate) async fn run_mock_website_workflow(
                 provider_name,
                 Some(profile.profile().title.to_string()),
                 workflow,
-                None,
-                None,
+                /*artifact_path*/ None,
+                /*audit_path*/ None,
                 Some(fixture_path),
                 err.to_string(),
             );
@@ -60,8 +60,8 @@ pub(crate) async fn run_mock_website_workflow(
                 provider_name,
                 Some(profile.profile().title.to_string()),
                 workflow,
-                None,
-                None,
+                /*artifact_path*/ None,
+                /*audit_path*/ None,
                 Some(fixture_path),
                 err,
             );
@@ -102,8 +102,8 @@ pub(crate) async fn run_numpy_pandas_benchmark_workflow(
             provider_name,
             Some(profile.profile().title.to_string()),
             workflow,
-            None,
-            None,
+            /*artifact_path*/ None,
+            /*audit_path*/ None,
             Some(fixture_path),
             format!("failed to create fixture: {err}"),
         );
@@ -125,8 +125,8 @@ pub(crate) async fn run_numpy_pandas_benchmark_workflow(
                 provider_name,
                 Some(profile.profile().title.to_string()),
                 workflow,
-                None,
-                None,
+                /*artifact_path*/ None,
+                /*audit_path*/ None,
                 Some(fixture_path),
                 err.to_string(),
             );
@@ -139,8 +139,8 @@ pub(crate) async fn run_numpy_pandas_benchmark_workflow(
                 provider_name,
                 Some(profile.profile().title.to_string()),
                 workflow,
-                None,
-                None,
+                /*artifact_path*/ None,
+                /*audit_path*/ None,
                 Some(fixture_path),
                 err,
             );
@@ -179,9 +179,9 @@ pub(crate) async fn run_code_review_workflow(
                 provider_name,
                 Some(profile.profile().title.to_string()),
                 workflow,
-                None,
-                None,
-                None,
+                /*artifact_path*/ None,
+                /*audit_path*/ None,
+                /*fixture_path*/ None,
                 err.to_string(),
             );
         }
@@ -206,9 +206,9 @@ pub(crate) async fn run_code_review_workflow(
                 provider_name,
                 Some(profile.profile().title.to_string()),
                 workflow,
-                None,
-                None,
-                None,
+                /*artifact_path*/ None,
+                /*audit_path*/ None,
+                /*fixture_path*/ None,
                 err,
             );
         }
@@ -225,7 +225,7 @@ pub(crate) async fn run_code_review_workflow(
             profile,
             workflow,
             first_output,
-            None,
+            /*fixture_path*/ None,
             error,
         );
     }
@@ -246,9 +246,9 @@ pub(crate) async fn run_code_review_workflow(
                     provider_name,
                     Some(profile.profile().title.to_string()),
                     workflow,
-                    None,
-                    None,
-                    None,
+                    /*artifact_path*/ None,
+                    /*audit_path*/ None,
+                    /*fixture_path*/ None,
                     err,
                 );
             }
@@ -259,14 +259,20 @@ pub(crate) async fn run_code_review_workflow(
         && has_resume_review
         && matches!(resume_output.command_mode, ClaudeCommandMode::Resume)
     {
-        workflow_entry_pass(provider_name, profile, workflow, resume_output, None)
+        workflow_entry_pass(
+            provider_name,
+            profile,
+            workflow,
+            resume_output,
+            /*fixture_path*/ None,
+        )
     } else {
         workflow_entry_from_output(
             provider_name,
             profile,
             workflow,
             resume_output,
-            None,
+            /*fixture_path*/ None,
             "resumed code review verification failed".to_string(),
         )
     }
@@ -285,8 +291,8 @@ pub(crate) async fn run_auditability_workflow(
             provider_name,
             Some(profile.profile().title.to_string()),
             workflow,
-            None,
-            None,
+            /*artifact_path*/ None,
+            /*audit_path*/ None,
             Some(fixture_path),
             format!("failed to create fixture: {err}"),
         );
@@ -299,8 +305,8 @@ pub(crate) async fn run_auditability_workflow(
                 provider_name,
                 Some(profile.profile().title.to_string()),
                 workflow,
-                None,
-                None,
+                /*artifact_path*/ None,
+                /*audit_path*/ None,
                 Some(fixture_path),
                 err.to_string(),
             );
@@ -321,8 +327,8 @@ pub(crate) async fn run_auditability_workflow(
                         provider_name,
                         Some(profile.profile().title.to_string()),
                         workflow,
-                        None,
-                        None,
+                        /*artifact_path*/ None,
+                        /*audit_path*/ None,
                         Some(fixture_path),
                         err,
                     );
@@ -345,8 +351,8 @@ pub(crate) async fn run_auditability_workflow(
             provider_name,
             Some(profile.profile().title.to_string()),
             workflow,
-            None,
-            None,
+            /*artifact_path*/ None,
+            /*audit_path*/ None,
             Some(fixture_path),
             "audit workflow did not run any turns".to_string(),
         );
@@ -424,7 +430,7 @@ pub(crate) fn workflow_entry_pass(
         audit_path: Some(output.audit_path),
         fixture_path,
         error: None,
-        output_excerpt: Some(truncate_for_display(&output.text, 1_000)),
+        output_excerpt: Some(truncate_for_display(&output.text, /*max_chars*/ 1_000)),
     }
 }
 
@@ -437,7 +443,7 @@ pub(crate) fn workflow_entry_from_output(
     error: String,
 ) -> ClaudePaneWorkflowEntry {
     let failure = output.failure_message();
-    let excerpt = truncate_for_display(&output.text, 1_000);
+    let excerpt = truncate_for_display(&output.text, /*max_chars*/ 1_000);
     ClaudePaneWorkflowEntry {
         provider,
         profile: Some(profile.profile().title.to_string()),
@@ -630,7 +636,7 @@ pub(crate) async fn run_smoke_turn(
     let prepared = registry
         .prepare_turn(pane_id, prompt, codex_home)
         .map_err(|err| err.to_string())?;
-    let result = run_prepared_claude_turn(prepared, None).await;
+    let result = run_prepared_claude_turn(prepared, /*progress_tx*/ None).await;
     registry.finish_turn(pane_id, &result);
     result
 }

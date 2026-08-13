@@ -470,7 +470,7 @@ impl ChatWidget {
                 });
             }
             SlashCommand::Docs => {
-                self.open_mkdocs_viewer(/*page_hint*/ None);
+                self.open_mkdocs_viewer(/*args*/ None);
             }
             SlashCommand::Mention => {
                 self.insert_str("@");

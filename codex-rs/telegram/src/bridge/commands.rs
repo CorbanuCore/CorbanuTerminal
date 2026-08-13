@@ -56,7 +56,7 @@ impl BridgeRuntime {
                 active_model.as_deref(),
                 &active_provider,
                 &catalog,
-                0,
+                /*page*/ 0,
             )
             .await?;
             return Ok(());

@@ -694,7 +694,7 @@ impl App {
                 nickname.clone(),
                 agent_type,
                 started,
-                false,
+                /*persist_layout*/ false,
             )
             .await;
             self.replace_saved_native_spawn_thread(old_thread_id, new_thread_id);
@@ -1362,7 +1362,7 @@ impl App {
                     &[ack],
                     "failed",
                     "ignored empty task dispatch",
-                    true,
+                    /*notify*/ true,
                 );
                 continue;
             }
@@ -1398,9 +1398,18 @@ impl App {
                         dispatch.target.trim().to_string(),
                         dispatch.seq,
                     );
-                    self.record_spawn_dispatch_acks(&[ack], "failed", &failure, true);
+                    self.record_spawn_dispatch_acks(
+                        &[ack],
+                        "failed",
+                        &failure,
+                        /*notify*/ true,
+                    );
                     if attempt == 0 {
-                        self.note_assignment_dispatch_failure(source_pane_id, &failure, true);
+                        self.note_assignment_dispatch_failure(
+                            source_pane_id,
+                            &failure,
+                            /*will_retry*/ true,
+                        );
                         pending.push_front((
                             (
                                 SpawnTaskDispatch {
@@ -1413,7 +1422,11 @@ impl App {
                             1,
                         ));
                     } else {
-                        self.note_assignment_dispatch_failure(source_pane_id, &failure, false);
+                        self.note_assignment_dispatch_failure(
+                            source_pane_id,
+                            &failure,
+                            /*will_retry*/ false,
+                        );
                     }
                     continue;
                 }
@@ -1447,7 +1460,7 @@ impl App {
                             &[ack],
                             "failed",
                             "native pane cannot dispatch a task to itself",
-                            true,
+                            /*notify*/ true,
                         );
                         continue;
                     }
@@ -1483,7 +1496,12 @@ impl App {
                         source_is_active,
                         message.clone(),
                     );
-                    self.record_spawn_dispatch_acks(&[ack], "failed", message, true);
+                    self.record_spawn_dispatch_acks(
+                        &[ack],
+                        "failed",
+                        message,
+                        /*notify*/ true,
+                    );
                 }
                 Ok(SpawnTaskTarget::ClaudePane(pane_id)) => {
                     if pane_id == source_pane_id {
@@ -1503,7 +1521,7 @@ impl App {
                             &[ack],
                             "failed",
                             "Claude pane cannot dispatch a task to itself",
-                            true,
+                            /*notify*/ true,
                         );
                         continue;
                     }
@@ -1551,7 +1569,7 @@ impl App {
                         dispatch.seq,
                     );
                     self.record_spawn_dispatch_error(source_pane_id, source_is_active, err.clone());
-                    self.record_spawn_dispatch_acks(&[ack], "failed", err, true);
+                    self.record_spawn_dispatch_acks(&[ack], "failed", err, /*notify*/ true);
                 }
             }
         }
@@ -1779,7 +1797,7 @@ impl App {
     }
 
     pub(crate) fn record_spawn_parent_report(&mut self, parent_node_id: String, report: String) {
-        self.record_spawn_parent_report_with_notify(parent_node_id, report, true);
+        self.record_spawn_parent_report_with_notify(parent_node_id, report, /*notify*/ true);
     }
 
     fn record_spawn_parent_report_with_notify(
@@ -1968,7 +1986,12 @@ impl App {
             self.note_assignment_dispatch_delivered(&ack.source_node_id, &ack.target_node_id);
         }
         self.evict_spawn_processed_dispatch_seq_ids();
-        self.record_spawn_dispatch_acks(&acks, "delivered", "target turn started", false);
+        self.record_spawn_dispatch_acks(
+            &acks,
+            "delivered",
+            "target turn started",
+            /*notify*/ false,
+        );
         self.persist_pane_state();
     }
 
@@ -1982,9 +2005,13 @@ impl App {
         let acks = self.take_spawn_dispatch_acks_for_task(target_node_id, task);
         self.release_spawn_dispatch_origins(&acks);
         for ack in &acks {
-            self.note_assignment_dispatch_failure(&ack.source_node_id, detail, false);
+            self.note_assignment_dispatch_failure(
+                &ack.source_node_id,
+                detail,
+                /*will_retry*/ false,
+            );
         }
-        self.record_spawn_dispatch_acks(&acks, "failed", detail, true);
+        self.record_spawn_dispatch_acks(&acks, "failed", detail, /*notify*/ true);
     }
 
     pub(crate) fn release_spawn_dispatch_origins(&mut self, acks: &[SpawnDispatchAck]) {
@@ -2054,7 +2081,7 @@ impl App {
     }
 
     pub(crate) fn reserve_spawn_dispatch_seq_without_persist(&mut self) -> u64 {
-        self.reserve_spawn_dispatch_seq_value_without_persist(None)
+        self.reserve_spawn_dispatch_seq_value_without_persist(/*seq*/ None)
     }
 
     fn reserve_spawn_dispatch_seq_value_without_persist(&mut self, seq: Option<u64>) -> u64 {
@@ -2085,7 +2112,7 @@ impl App {
     }
 
     fn reserve_spawn_report_seq(&mut self, node_id: &str) -> (u64, String) {
-        let seq = self.reserve_spawn_dispatch_seq(None);
+        let seq = self.reserve_spawn_dispatch_seq(/*seq*/ None);
         let as_of = Utc::now().to_rfc3339();
         self.spawn_last_report_seq_by_node
             .insert(node_id.to_string(), seq);
@@ -3449,9 +3476,18 @@ impl App {
             items.push(disabled_item("No Trolls spawned yet"));
         }
         for (troll_thread_id, troll_entry) in trolls {
-            items.push(self.spawn_agent_item(troll_thread_id, troll_entry, 0, Some(TROLL_ROLE)));
+            items.push(self.spawn_agent_item(
+                troll_thread_id,
+                troll_entry,
+                /*indent*/ 0,
+                Some(TROLL_ROLE),
+            ));
             if show_task_actions {
-                items.push(self.spawn_agent_task_item(troll_thread_id, troll_entry, 2));
+                items.push(self.spawn_agent_task_item(
+                    troll_thread_id,
+                    troll_entry,
+                    /*indent*/ 2,
+                ));
             }
             let troll_node_id = thread_node_id(troll_thread_id);
             let (orcs, claude_orcs) = self.spawn_orc_children_for_node(&troll_node_id);
@@ -3459,38 +3495,56 @@ impl App {
                 items.push(disabled_item("  No Orcs for this Troll yet"));
             }
             for (orc_thread_id, orc_entry) in orcs {
-                items.push(self.spawn_agent_item(orc_thread_id, orc_entry, 2, Some(ORC_ROLE)));
+                items.push(self.spawn_agent_item(
+                    orc_thread_id,
+                    orc_entry,
+                    /*indent*/ 2,
+                    Some(ORC_ROLE),
+                ));
                 if show_task_actions {
-                    items.push(self.spawn_agent_task_item(orc_thread_id, orc_entry, 4));
+                    items.push(self.spawn_agent_task_item(
+                        orc_thread_id,
+                        orc_entry,
+                        /*indent*/ 4,
+                    ));
                 }
             }
             for pane in claude_orcs {
-                items.push(self.claude_spawn_pane_item(pane, 2));
+                items.push(self.claude_spawn_pane_item(pane, /*indent*/ 2));
                 if show_task_actions {
-                    items.push(self.claude_spawn_pane_task_item(pane, 4));
+                    items.push(self.claude_spawn_pane_task_item(pane, /*indent*/ 4));
                 }
             }
         }
         for pane in claude_trolls {
             let troll_node_id = pane_node_id(&pane.id);
-            items.push(self.claude_spawn_pane_item(pane, 0));
+            items.push(self.claude_spawn_pane_item(pane, /*indent*/ 0));
             if show_task_actions {
-                items.push(self.claude_spawn_pane_task_item(pane, 2));
+                items.push(self.claude_spawn_pane_task_item(pane, /*indent*/ 2));
             }
             let (orcs, claude_orcs) = self.spawn_orc_children_for_node(&troll_node_id);
             if orcs.is_empty() && claude_orcs.is_empty() {
                 items.push(disabled_item("  No Orcs for this Troll yet"));
             }
             for (orc_thread_id, orc_entry) in orcs {
-                items.push(self.spawn_agent_item(orc_thread_id, orc_entry, 2, Some(ORC_ROLE)));
+                items.push(self.spawn_agent_item(
+                    orc_thread_id,
+                    orc_entry,
+                    /*indent*/ 2,
+                    Some(ORC_ROLE),
+                ));
                 if show_task_actions {
-                    items.push(self.spawn_agent_task_item(orc_thread_id, orc_entry, 4));
+                    items.push(self.spawn_agent_task_item(
+                        orc_thread_id,
+                        orc_entry,
+                        /*indent*/ 4,
+                    ));
                 }
             }
             for pane in claude_orcs {
-                items.push(self.claude_spawn_pane_item(pane, 2));
+                items.push(self.claude_spawn_pane_item(pane, /*indent*/ 2));
                 if show_task_actions {
-                    items.push(self.claude_spawn_pane_task_item(pane, 4));
+                    items.push(self.claude_spawn_pane_task_item(pane, /*indent*/ 4));
                 }
             }
         }
@@ -3498,15 +3552,20 @@ impl App {
         if !orphan_orcs.is_empty() || !claude_orcs.is_empty() {
             items.push(section_item("Unassigned Orcs"));
             for (thread_id, entry) in orphan_orcs {
-                items.push(self.spawn_agent_item(thread_id, entry, 0, Some(ORC_ROLE)));
+                items.push(self.spawn_agent_item(
+                    thread_id,
+                    entry,
+                    /*indent*/ 0,
+                    Some(ORC_ROLE),
+                ));
                 if show_task_actions {
-                    items.push(self.spawn_agent_task_item(thread_id, entry, 2));
+                    items.push(self.spawn_agent_task_item(thread_id, entry, /*indent*/ 2));
                 }
             }
             for pane in claude_orcs {
-                items.push(self.claude_spawn_pane_item(pane, 0));
+                items.push(self.claude_spawn_pane_item(pane, /*indent*/ 0));
                 if show_task_actions {
-                    items.push(self.claude_spawn_pane_task_item(pane, 2));
+                    items.push(self.claude_spawn_pane_task_item(pane, /*indent*/ 2));
                 }
             }
         }
@@ -3522,8 +3581,13 @@ impl App {
             self.agent_navigation
                 .get(&thread_id)
                 .and_then(|entry| {
-                    self.spawn_agent_item(thread_id, entry, 0, Some(NAZGUL_ROLE_NAME))
-                        .description
+                    self.spawn_agent_item(
+                        thread_id,
+                        entry,
+                        /*indent*/ 0,
+                        Some(NAZGUL_ROLE_NAME),
+                    )
+                    .description
                 })
                 .unwrap_or_else(|| {
                     if self.primary_thread_id == Some(thread_id)
@@ -3540,7 +3604,7 @@ impl App {
                 .panes()
                 .iter()
                 .find(|pane| pane.id == bound_target)
-                .and_then(|pane| self.claude_spawn_pane_item(pane, 0).description)
+                .and_then(|pane| self.claude_spawn_pane_item(pane, /*indent*/ 0).description)
                 .unwrap_or_else(|| "status unavailable".to_string())
         };
 
@@ -3808,7 +3872,7 @@ impl App {
             let name = format_agent_picker_item_name(
                 entry.agent_nickname.as_deref(),
                 entry.agent_role.as_deref().or(Some(TROLL_ROLE)),
-                false,
+                /*is_primary*/ false,
             );
             let node_id = self.logical_native_node_for_thread(thread_id);
             items.push(SelectionItem {
@@ -5269,7 +5333,7 @@ fn saved_spawn_child_identity_from_metadata(
         parent_node_id,
         metadata.and_then(|metadata| metadata.role.as_deref()),
         metadata.and_then(|metadata| metadata.nickname.as_deref()),
-        None,
+        /*agent_path*/ None,
     )
 }
 
@@ -6273,7 +6337,7 @@ Done."#;
             &troll_node_id,
             Some(ORC_ROLE),
             Some("Snaga"),
-            None,
+            /*agent_path*/ None,
         )
         .expect("identity")]);
 

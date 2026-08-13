@@ -1169,7 +1169,7 @@ async fn resumed_root_quarantines_provider_running_mail_without_replay() {
                 &message_id,
                 codex_state::AgentMailboxPhase::Ready,
                 "root-provider-attempt",
-                1_000,
+                /*now_ms*/ 1_000,
             )
             .await
             .expect("begin root submission")
@@ -1180,7 +1180,7 @@ async fn resumed_root_quarantines_provider_running_mail_without_replay() {
                 &message_id,
                 codex_state::AgentMailboxPhase::Submitting,
                 codex_state::AgentMailboxPhase::Submitted,
-                1_001,
+                /*now_ms*/ 1_001,
             )
             .await
             .expect("mark root message submitted")
@@ -1191,7 +1191,7 @@ async fn resumed_root_quarantines_provider_running_mail_without_replay() {
                 &message_id,
                 codex_state::AgentMailboxPhase::Submitted,
                 codex_state::AgentMailboxPhase::ProviderRunning,
-                1_002,
+                /*now_ms*/ 1_002,
             )
             .await
             .expect("mark root provider running")

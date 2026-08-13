@@ -179,14 +179,14 @@ pub(crate) fn summarize_tool_call_input(name: &str, input: &Value) -> String {
         "glob" => string_field(input, &["pattern"]).map(|pattern| {
             format!(
                 "matching {}",
-                truncate_for_display(&collapse_whitespace(pattern), 90)
+                truncate_for_display(&collapse_whitespace(pattern), /*max_chars*/ 90)
             )
         }),
         "webfetch" => summarize_path_tool("fetching", input),
         "websearch" => string_field(input, &["query"]).map(|query| {
             format!(
                 "searching {}",
-                truncate_for_display(&collapse_whitespace(query), 90)
+                truncate_for_display(&collapse_whitespace(query), /*max_chars*/ 90)
             )
         }),
         "todowrite" => Some("updating todo list".to_string()),
@@ -235,13 +235,13 @@ pub(crate) fn summarize_grep_input(input: &Value) -> Option<String> {
     if let Some(path) = string_field(input, &["path", "directory"]) {
         return Some(format!(
             "searching {} in {}",
-            truncate_for_display(&collapse_whitespace(pattern), 60),
+            truncate_for_display(&collapse_whitespace(pattern), /*max_chars*/ 60),
             compact_tool_path(path)
         ));
     }
     Some(format!(
         "searching {}",
-        truncate_for_display(&collapse_whitespace(pattern), 90)
+        truncate_for_display(&collapse_whitespace(pattern), /*max_chars*/ 90)
     ))
 }
 
@@ -443,7 +443,7 @@ pub(crate) fn compact_tool_path(path: &str) -> String {
         .file_name()
         .and_then(|name| name.to_str())
         .map(str::to_string)
-        .unwrap_or_else(|| truncate_for_display(&path, 90))
+        .unwrap_or_else(|| truncate_for_display(&path, /*max_chars*/ 90))
 }
 
 pub(crate) fn compact_claude_pane_metadata(text: &str, max_chars: usize) -> String {

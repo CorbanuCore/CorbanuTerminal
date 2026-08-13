@@ -653,7 +653,7 @@ impl Tui {
             /*enhanced_keys_supported*/ false,
             stderr_guard,
         );
-        tui.set_alt_screen_enabled(false);
+        tui.set_alt_screen_enabled(/*enabled*/ false);
         Ok(tui)
     }
 

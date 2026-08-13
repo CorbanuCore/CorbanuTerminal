@@ -152,7 +152,7 @@ async fn telegram_setup_polls_until_a_chat_is_discovered_and_ignores_stale_resul
     assert!(popup.contains("Alice"));
     assert!(!popup.contains("Stale chat"));
 
-    let cancelled_generation = chat.begin_telegram_discovery(None);
+    let cancelled_generation = chat.begin_telegram_discovery(/*identity*/ None);
     chat.bottom_pane
         .dismiss_active_view_if_id(crate::chatwidget::telegram_setup::TELEGRAM_DISCOVERY_VIEW_ID);
     assert!(!chat.apply_telegram_discovery(
@@ -171,7 +171,7 @@ async fn telegram_setup_polls_until_a_chat_is_discovered_and_ignores_stale_resul
 #[tokio::test]
 async fn telegram_setup_surfaces_polling_failure_with_a_retry_action() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.6-sol")).await;
-    let generation = chat.begin_telegram_discovery(None);
+    let generation = chat.begin_telegram_discovery(/*identity*/ None);
 
     chat.telegram_discovery_failed(
         generation,
@@ -3395,7 +3395,11 @@ async fn spawn_model_selection_popup_deepseek_provider_snapshot() {
         .expect("model catalog should load");
     chat.open_all_models_popup_for_purpose(
         presets,
-        spawn_model_purpose(SpawnRole::Orc, None, DEEPSEEK_DEFAULT_MODEL),
+        spawn_model_purpose(
+            SpawnRole::Orc,
+            /*parent_node_id*/ None,
+            DEEPSEEK_DEFAULT_MODEL,
+        ),
     );
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 110, /*height*/ 24);
@@ -3477,7 +3481,11 @@ async fn spawn_model_selection_popup_snapshot() {
     let presets = chat.model_catalog.try_list_models().expect("model catalog");
     chat.open_all_models_popup_for_purpose(
         presets,
-        spawn_model_purpose(SpawnRole::Nazgul, None, "gpt-5.6-sol"),
+        spawn_model_purpose(
+            SpawnRole::Nazgul,
+            /*parent_node_id*/ None,
+            "gpt-5.6-sol",
+        ),
     );
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 30);
@@ -3645,7 +3653,11 @@ async fn spawn_effort_escape_returns_to_tabs_without_creating_agent() {
     let presets = chat.model_catalog.try_list_models().expect("model catalog");
     chat.open_all_models_popup_for_purpose(
         presets,
-        spawn_model_purpose(SpawnRole::Nazgul, None, "gpt-5.6-sol"),
+        spawn_model_purpose(
+            SpawnRole::Nazgul,
+            /*parent_node_id*/ None,
+            "gpt-5.6-sol",
+        ),
     );
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
     let (model, purpose) = loop {
@@ -3658,7 +3670,7 @@ async fn spawn_effort_escape_returns_to_tabs_without_creating_agent() {
     chat.open_reasoning_popup_for_purpose(model, purpose);
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Esc));
-    assert!(render_bottom_popup(&chat, 100).contains("Select Model and Effort"));
+    assert!(render_bottom_popup(&chat, /*width*/ 100).contains("Select Model and Effort"));
     chat.handle_key_event(KeyEvent::from(KeyCode::Esc));
     assert!(chat.no_modal_or_popup_active());
     while let Ok(event) = rx.try_recv() {

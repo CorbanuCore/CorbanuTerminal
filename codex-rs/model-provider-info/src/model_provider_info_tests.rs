@@ -752,7 +752,7 @@ fn test_built_in_model_providers_include_deepseek_flash_responses() {
     assert!(!deepseek.requires_openai_auth);
     assert!(!deepseek.supports_websockets);
     assert_eq!(
-        resolve_model_for_provider(None, DEEPSEEK_PROVIDER_ID).as_deref(),
+        resolve_model_for_provider(/*model*/ None, DEEPSEEK_PROVIDER_ID).as_deref(),
         Some(DEEPSEEK_DEFAULT_MODEL)
     );
     assert_eq!(
@@ -785,7 +785,7 @@ fn test_built_in_model_providers_include_meta() {
     assert!(!meta.requires_openai_auth);
     assert!(!meta.supports_websockets);
     assert_eq!(
-        resolve_model_for_provider(None, META_PROVIDER_ID).as_deref(),
+        resolve_model_for_provider(/*model*/ None, META_PROVIDER_ID).as_deref(),
         Some(META_DEFAULT_MODEL)
     );
     assert_eq!(
@@ -814,7 +814,7 @@ fn kimi_code_provider_is_builtin_and_resolves_k3() {
     assert_eq!(kimi_code.wire_api, WireApi::Chat);
     assert!(kimi_code.is_kimi_code());
     assert_eq!(
-        resolve_model_for_provider(None, KIMI_CODE_PROVIDER_ID).as_deref(),
+        resolve_model_for_provider(/*model*/ None, KIMI_CODE_PROVIDER_ID).as_deref(),
         Some(KIMI_CODE_K3_MODEL)
     );
     assert_eq!(
@@ -852,7 +852,7 @@ fn openrouter_preserves_nonempty_model_slugs() {
             Some(OPENROUTER_DEFAULT_MODEL)
         );
         assert_eq!(
-            resolve_model_for_provider(None, provider).as_deref(),
+            resolve_model_for_provider(/*model*/ None, provider).as_deref(),
             Some(OPENROUTER_DEFAULT_MODEL)
         );
     }
@@ -869,14 +869,14 @@ fn direct_zai_retries_transient_provider_rate_limits() {
         .expect("OpenRouter provider should be built in");
 
     assert!(
-        zai.to_api_provider(None)
+        zai.to_api_provider(/*auth_mode*/ None)
             .expect("Z.AI should convert to API provider")
             .retry
             .retry_429
     );
     assert!(
         !openrouter
-            .to_api_provider(None)
+            .to_api_provider(/*auth_mode*/ None)
             .expect("OpenRouter should convert to API provider")
             .retry
             .retry_429

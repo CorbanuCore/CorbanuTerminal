@@ -24,8 +24,18 @@ async fn operator_assignment_birth_brief_routes_as_normal_user_pane_turn() {
         ThreadId::from_string("00000000-0000-0000-0000-000000000463").expect("manager id");
     let worker_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000464").expect("worker id");
-    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
-    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    app.upsert_agent_picker_thread(
+        manager_thread_id,
+        Some("Manager".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        worker_thread_id,
+        Some("Worker".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
     let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
     let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
 
@@ -63,8 +73,18 @@ async fn native_manager_host_adapter_dispatches_only_from_completed_assignment_t
         ThreadId::from_string("00000000-0000-0000-0000-000000000465").expect("manager id");
     let worker_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000466").expect("worker id");
-    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
-    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    app.upsert_agent_picker_thread(
+        manager_thread_id,
+        Some("Manager".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        worker_thread_id,
+        Some("Worker".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
     let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
     let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
     app.handle_orchestrate_command(format!(
@@ -246,7 +266,7 @@ supports_websockets = false
                     .unwrap_or_else(|| "gpt-5".to_string()),
                 Some(self.app.config.model_provider_id.clone()),
                 self.app.config.model_reasoning_effort.clone(),
-                None,
+                /*base_instructions*/ None,
             )
             .await?;
         let thread_id = started.session.thread_id;
@@ -258,7 +278,7 @@ supports_websockets = false
                 Some(nickname.to_string()),
                 role,
                 started,
-                false,
+                /*persist_layout*/ false,
             )
             .await;
         Ok(thread_id)
@@ -1029,7 +1049,7 @@ fn low_context_agent_compacts_and_continues_real_dispatch() -> Result<()> {
                     token_usage_notification_with_total(
                         target,
                         "pressure-turn",
-                        99_000,
+                        /*total_tokens*/ 99_000,
                         Some(100_000),
                     ),
                 )),

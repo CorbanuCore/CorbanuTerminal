@@ -18,7 +18,7 @@ fn catalog(count: usize) -> Vec<CatalogModel> {
 
 #[test]
 fn model_picker_marks_active_choice_and_emits_selectable_callbacks() {
-    let catalog = catalog(2);
+    let catalog = catalog(/*count*/ 2);
     let page = render_model_picker(
         Some("provider/model-1"),
         "provider",
@@ -42,8 +42,12 @@ fn model_picker_marks_active_choice_and_emits_selectable_callbacks() {
 #[test]
 fn model_picker_pages_are_bounded_and_navigable() {
     let catalog = catalog(MODELS_PER_PAGE + 2);
-    let first = render_model_picker(None, "provider", &catalog, /*requested_page*/ 0);
-    let second = render_model_picker(None, "provider", &catalog, /*requested_page*/ 1);
+    let first = render_model_picker(
+        /*active_model*/ None, "provider", &catalog, /*requested_page*/ 0,
+    );
+    let second = render_model_picker(
+        /*active_model*/ None, "provider", &catalog, /*requested_page*/ 1,
+    );
     let available_count = available_models(&catalog).len();
 
     assert_eq!(first.buttons.len(), MODELS_PER_PAGE + 1);
@@ -56,7 +60,7 @@ fn model_picker_pages_are_bounded_and_navigable() {
 #[test]
 fn model_picker_clamps_stale_pages_and_button_labels() {
     let catalog = catalog(MODELS_PER_PAGE + 1);
-    let page = render_model_picker(None, "provider", &catalog, usize::MAX);
+    let page = render_model_picker(/*active_model*/ None, "provider", &catalog, usize::MAX);
 
     assert!(page.text.contains("page 2/2"));
     assert_eq!(page.buttons[0][0].0, "Model 8");

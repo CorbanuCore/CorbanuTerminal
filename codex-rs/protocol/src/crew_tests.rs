@@ -12,7 +12,11 @@ fn valid_crew() -> CrewSpec {
                 display_name: "Manager".to_string(),
                 role_profile: "manager".to_string(),
                 parent_member_id: None,
-                runtime_request: RuntimeRequest::exact("provider-a", "model-a", None),
+                runtime_request: RuntimeRequest::exact(
+                    "provider-a",
+                    "model-a",
+                    /*reasoning_effort*/ None,
+                ),
             },
             CrewMemberSpec {
                 logical_member_id: "worker".to_string(),

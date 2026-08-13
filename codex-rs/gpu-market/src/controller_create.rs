@@ -145,9 +145,9 @@ where
                     .finish_gpu_rental_operation(
                         operation_id.as_str(),
                         "succeeded",
-                        None,
+                        /*provider_request_id*/ None,
                         Some(instance.resource_id.as_str()),
-                        None,
+                        /*sanitized_error*/ None,
                         now_ms,
                     )
                     .await?;
@@ -163,8 +163,8 @@ where
                     .finish_gpu_rental_operation(
                         operation_id.as_str(),
                         status,
-                        None,
-                        None,
+                        /*provider_request_id*/ None,
+                        /*provider_resource_id*/ None,
                         Some(error.safe_message.as_str()),
                         now_ms,
                     )

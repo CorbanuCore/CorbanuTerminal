@@ -346,8 +346,8 @@ impl SessionStore for Vault {
                     label,
                     Some(secret),
                     Some(Some("tasknode".to_string())),
-                    None,
-                    None,
+                    /*notes*/ None,
+                    /*revocation_notes*/ None,
                 )
                 .map(|_| ())
                 .map_err(Into::into),

@@ -51,7 +51,7 @@ impl ChatWidget {
             .as_ref()
             .is_ok_and(|state| state.active.as_ref().is_some_and(|a| !a.is_expired()));
         self.show_or_replace_tasknode_selection(TASKNODE_MENU_VIEW_ID, || {
-            tasknode_menu_params(state, counts.as_ref(), None)
+            tasknode_menu_params(state, counts.as_ref(), /*refresh_error*/ None)
         });
         if should_refresh_counts {
             self.tasknode_menu_poll_generation = self.tasknode_menu_poll_generation.wrapping_add(1);
@@ -66,7 +66,7 @@ impl ChatWidget {
                 self.tasknode_menu_counts
                     .get_or_insert_with(TaskNodeMenuCountsCache::default)
                     .update_from_status(&status);
-                self.refresh_active_tasknode_menu(None);
+                self.refresh_active_tasknode_menu(/*refresh_error*/ None);
             }
             Err(err) => self.refresh_active_tasknode_menu(Some(err)),
         }
@@ -89,14 +89,17 @@ impl ChatWidget {
                 self.tasknode_menu_counts
                     .get_or_insert_with(TaskNodeMenuCountsCache::default)
                     .request_count = Some(requests.items.len());
-                self.refresh_active_tasknode_menu(None);
+                self.refresh_active_tasknode_menu(/*refresh_error*/ None);
             }
             Err(err) => self.refresh_active_tasknode_menu(Some(err)),
         }
     }
 
     pub(crate) fn open_tasknode_link(&mut self) {
-        self.add_info_message("Starting Task Node GitHub link...".to_string(), None);
+        self.add_info_message(
+            "Starting Task Node GitHub link...".to_string(),
+            /*hint*/ None,
+        );
         let codex_home = self.config.codex_home.as_path().to_path_buf();
         let tx = self.app_event_tx.clone();
         let spawn_result = std::thread::Builder::new()
@@ -146,7 +149,10 @@ impl ChatWidget {
     }
 
     pub(crate) fn open_tasknode_status(&mut self) {
-        self.add_info_message("Loading Task Node status...".to_string(), None);
+        self.add_info_message(
+            "Loading Task Node status...".to_string(),
+            /*hint*/ None,
+        );
         self.spawn_tasknode_value_request(
             "status",
             |client| client.status(),
@@ -461,7 +467,10 @@ impl ChatWidget {
             self.add_error_message("Task request text is required.".to_string());
             return;
         }
-        self.add_info_message("Submitting Task Node task request...".to_string(), None);
+        self.add_info_message(
+            "Submitting Task Node task request...".to_string(),
+            /*hint*/ None,
+        );
         self.spawn_tasknode_value_request(
             "task-request",
             move |client| client.request_task(&detail),
@@ -559,7 +568,10 @@ impl ChatWidget {
             self.add_error_message("Task Node context body is required.".to_string());
             return;
         }
-        self.add_info_message("Saving Task Node context...".to_string(), None);
+        self.add_info_message(
+            "Saving Task Node context...".to_string(),
+            /*hint*/ None,
+        );
         self.spawn_tasknode_value_request(
             "save-context",
             move |client| client.save_context(&title, &body, revision),
@@ -577,7 +589,7 @@ impl ChatWidget {
                     response
                         .message
                         .unwrap_or_else(|| "Task Node context saved.".to_string()),
-                    None,
+                    /*hint*/ None,
                 );
                 self.add_plain_history_lines(tasknode_context_lines(&response.context));
                 let header = tasknode_context_header(&response.context);
@@ -649,7 +661,10 @@ impl ChatWidget {
     }
 
     pub(crate) fn open_tasknode_balance(&mut self) {
-        self.add_info_message("Loading Task Node balance...".to_string(), None);
+        self.add_info_message(
+            "Loading Task Node balance...".to_string(),
+            /*hint*/ None,
+        );
         self.spawn_tasknode_value_request(
             "balance",
             |client| client.balance(),
@@ -667,7 +682,10 @@ impl ChatWidget {
     }
 
     pub(crate) fn open_tasknode_rewards(&mut self) {
-        self.add_info_message("Loading Task Node rewards...".to_string(), None);
+        self.add_info_message(
+            "Loading Task Node rewards...".to_string(),
+            /*hint*/ None,
+        );
         self.spawn_tasknode_value_request(
             "rewards",
             |client| client.rewards(),
@@ -840,7 +858,12 @@ impl ChatWidget {
         self.tasknode_active_chat_stream_id = Some(stream_id.clone());
         self.add_plain_history_lines(tasknode_chat_user_message_lines(&title, &message));
         self.show_or_replace_tasknode_selection(TASKNODE_CHAT_VIEW_ID, || {
-            tasknode_chat_stream_params(&title, &conversation_id, "Waiting for Task Node...", false)
+            tasknode_chat_stream_params(
+                &title,
+                &conversation_id,
+                "Waiting for Task Node...",
+                /*done*/ false,
+            )
         });
         self.spawn_tasknode_chat_stream(stream_id, conversation_id, title, message);
     }
@@ -856,7 +879,7 @@ impl ChatWidget {
             return;
         }
         self.show_or_replace_tasknode_selection(TASKNODE_CHAT_VIEW_ID, || {
-            tasknode_chat_stream_params(&title, &conversation_id, &text, false)
+            tasknode_chat_stream_params(&title, &conversation_id, &text, /*done*/ false)
         });
     }
 
@@ -910,7 +933,10 @@ impl ChatWidget {
         let codex_home = self.config.codex_home.as_path().to_path_buf();
         self.tasknode_menu_counts = None;
         self.tasknode_menu_poll_generation = self.tasknode_menu_poll_generation.wrapping_add(1);
-        self.add_info_message("Removing Task Node session...".to_string(), None);
+        self.add_info_message(
+            "Removing Task Node session...".to_string(),
+            /*hint*/ None,
+        );
         let tx = self.app_event_tx.clone();
         let spawn_result = std::thread::Builder::new()
             .name("tasknode-logout".to_string())
@@ -940,7 +966,7 @@ impl ChatWidget {
 
     pub(crate) fn handle_tasknode_logout_result(&mut self, result: Result<String, String>) {
         match result {
-            Ok(message) => self.add_info_message(message, None),
+            Ok(message) => self.add_info_message(message, /*hint*/ None),
             Err(error) => self.add_error_message(error),
         }
     }
@@ -2094,7 +2120,7 @@ fn tasknode_context_lines(context: &TaskNodeContextDocument) -> Vec<Line<'static
             lines.push(Line::from(""));
             continue;
         }
-        for wrapped in tasknode_soft_wrap_line(source_line, 100) {
+        for wrapped in tasknode_soft_wrap_line(source_line, /*width*/ 100) {
             lines.push(Line::from(wrapped));
         }
     }
@@ -2453,7 +2479,7 @@ fn tasknode_chat_history_lines(
                 lines.push(Line::from(""));
                 continue;
             }
-            for wrapped in tasknode_soft_wrap_line(source_line, 100) {
+            for wrapped in tasknode_soft_wrap_line(source_line, /*width*/ 100) {
                 lines.push(Line::from(format!("  {wrapped}")));
             }
         }
@@ -2468,7 +2494,7 @@ fn tasknode_chat_user_message_lines(title: &str, message: &str) -> Vec<Line<'sta
         Line::from("You".bold()),
     ];
     for source_line in message.lines() {
-        for wrapped in tasknode_soft_wrap_line(source_line, 100) {
+        for wrapped in tasknode_soft_wrap_line(source_line, /*width*/ 100) {
             lines.push(Line::from(format!("  {wrapped}")));
         }
     }
@@ -2565,7 +2591,7 @@ fn tasknode_chat_stream_result_lines(response: &TaskNodeChatStreamResponse) -> V
             lines.push(Line::from(""));
             continue;
         }
-        for wrapped in tasknode_soft_wrap_line(source_line, 100) {
+        for wrapped in tasknode_soft_wrap_line(source_line, /*width*/ 100) {
             lines.push(Line::from(format!("  {wrapped}")));
         }
     }

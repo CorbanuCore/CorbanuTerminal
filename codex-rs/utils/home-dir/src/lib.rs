@@ -95,8 +95,8 @@ mod tests {
             .to_str()
             .expect("missing codex home path should be valid utf-8");
 
-        let err =
-            find_codex_home_from_env(None, Some(missing_str)).expect_err("missing CODEX_HOME");
+        let err = find_codex_home_from_env(/*pfterminal_home_env*/ None, Some(missing_str))
+            .expect_err("missing CODEX_HOME");
         assert_eq!(err.kind(), ErrorKind::NotFound);
         assert!(
             err.to_string().contains("CODEX_HOME"),
@@ -113,7 +113,8 @@ mod tests {
             .to_str()
             .expect("file codex home path should be valid utf-8");
 
-        let err = find_codex_home_from_env(None, Some(file_str)).expect_err("file CODEX_HOME");
+        let err = find_codex_home_from_env(/*pfterminal_home_env*/ None, Some(file_str))
+            .expect_err("file CODEX_HOME");
         assert_eq!(err.kind(), ErrorKind::InvalidInput);
         assert!(
             err.to_string().contains("not a directory"),
@@ -129,7 +130,8 @@ mod tests {
             .to_str()
             .expect("temp codex home path should be valid utf-8");
 
-        let resolved = find_codex_home_from_env(None, Some(temp_str)).expect("valid CODEX_HOME");
+        let resolved = find_codex_home_from_env(/*pfterminal_home_env*/ None, Some(temp_str))
+            .expect("valid CODEX_HOME");
         let expected = temp_home
             .path()
             .canonicalize()

@@ -255,15 +255,19 @@ fn missing_openai_auth_is_derived_from_provider_metadata_and_live_auth_state() {
     assert!(provider_is_missing_openai_auth(
         OPENAI_PROVIDER_ID,
         &map,
-        false
+        /*openai_auth_present*/ false
     ));
     assert!(!provider_is_missing_openai_auth(
         OPENAI_PROVIDER_ID,
         &map,
-        true
+        /*openai_auth_present*/ true
     ));
-    assert!(!provider_is_missing_openai_auth(ZAI, &map, false));
-    assert!(!provider_is_missing_openai_auth("unknown", &map, false));
+    assert!(!provider_is_missing_openai_auth(
+        ZAI, &map, /*openai_auth_present*/ false
+    ));
+    assert!(!provider_is_missing_openai_auth(
+        "unknown", &map, /*openai_auth_present*/ false
+    ));
 }
 
 #[test]
@@ -277,7 +281,7 @@ fn unknown_provider_is_not_reported_as_missing_a_credential() {
 /// while `ambient` and `zai` declare an `env_key` and must be caught.
 #[test]
 fn builtin_providers_split_correctly_on_credential_requirements() {
-    let builtin = built_in_model_providers(None);
+    let builtin = built_in_model_providers(/*openai_base_url*/ None);
 
     assert!(
         missing_provider_credential_with(CLAUDE_PLAN_PROVIDER_ID, &builtin, |_| false).is_none(),

@@ -438,7 +438,7 @@ pub(crate) fn latest_result_message_from_artifact(path: &Path) -> Option<String>
             && let Some(result) = value.get("result").and_then(Value::as_str)
             && !result.trim().is_empty()
         {
-            latest = Some(compact_claude_pane_metadata(result, 240));
+            latest = Some(compact_claude_pane_metadata(result, /*max_chars*/ 240));
         }
     }
     latest

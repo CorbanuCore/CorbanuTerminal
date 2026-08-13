@@ -130,7 +130,7 @@ fn registry_restores_persisted_pane_metadata() {
         .expect("pane");
     assert!(pane.artifact_dir.join(CLAUDE_PANE_METADATA_FILE).exists());
 
-    let restored = ClaudePaneRegistry::restore_from_disk(codex_home.path(), None);
+    let restored = ClaudePaneRegistry::restore_from_disk(codex_home.path(), /*layout*/ None);
     assert!(
         restored.panes().is_empty(),
         "fresh starts should not restore persisted panes without an explicit layout"
@@ -767,7 +767,7 @@ fn pane_layout_persistence_is_thread_scoped() {
     let second_restored = load_pane_layout(codex_home.path(), Some(second_thread)).expect("second");
     assert_eq!(first_restored.claude_pane_ids, vec!["claude-first"]);
     assert_eq!(second_restored.claude_pane_ids, vec!["claude-second"]);
-    assert!(load_pane_layout(codex_home.path(), None).is_none());
+    assert!(load_pane_layout(codex_home.path(), /*codex_thread_id*/ None).is_none());
 }
 
 #[test]
@@ -1125,7 +1125,12 @@ fn crash_matrix_layout(state: Option<crate::dispatch_queue::DispatchState>) -> P
             "crash matrix task".to_string(),
             Vec::new(),
         );
-        dispatch.assign_identity(1, "pane:codex-main", &target, Some("crash-matrix-origin"));
+        dispatch.assign_identity(
+            /*seq*/ 1,
+            "pane:codex-main",
+            &target,
+            Some("crash-matrix-origin"),
+        );
         dispatch.state = state;
         layout
             .spawn_processed_dispatch_origin_ids
@@ -1144,7 +1149,7 @@ fn dispatch_process_cut_child() {
     };
     let cut = std::env::var("PFTERMINAL_DISPATCH_CRASH_CUT").expect("crash cut");
     let home = PathBuf::from(home);
-    persist_pane_layout(&home, &crash_matrix_layout(None)).expect("baseline generation");
+    persist_pane_layout(&home, &crash_matrix_layout(/*state*/ None)).expect("baseline generation");
     let queued = crate::dispatch_queue::DispatchState::Queued;
     let submitting = crate::dispatch_queue::DispatchState::Submitting {
         delivery_id: "delivery-crash-matrix".to_string(),
@@ -1423,7 +1428,8 @@ fn pane_layout_v1_migrates_legacy_batch_once() {
 #[test]
 fn settings_json_uses_helper_without_secret_material() {
     let profile = ClaudeProviderProfileKind::ZaiGlm52.profile();
-    let settings = settings_json_with_base_url(profile, Some("pfterminal"), None);
+    let settings =
+        settings_json_with_base_url(profile, Some("pfterminal"), /*base_url_override*/ None);
     let rendered = settings.to_string();
 
     assert!(rendered.contains("https://api.z.ai/api/anthropic"));
@@ -2038,7 +2044,8 @@ fn top_level_new_pane_items_are_collapsed() {
 #[test]
 fn vercel_profile_settings_use_ai_gateway_anthropic_endpoint() {
     let profile = ClaudeProviderProfileKind::VercelGlm52.profile();
-    let settings = settings_json_with_base_url(profile, Some("pfterminal"), None);
+    let settings =
+        settings_json_with_base_url(profile, Some("pfterminal"), /*base_url_override*/ None);
 
     assert_eq!(
         settings.pointer("/env/ANTHROPIC_BASE_URL"),
@@ -2063,7 +2070,8 @@ fn vercel_profile_settings_use_ai_gateway_anthropic_endpoint() {
 #[test]
 fn vercel_fast_profile_uses_fast_model_for_all_claude_aliases() {
     let profile = ClaudeProviderProfileKind::VercelGlm52Fast.profile();
-    let settings = settings_json_with_base_url(profile, Some("pfterminal"), None);
+    let settings =
+        settings_json_with_base_url(profile, Some("pfterminal"), /*base_url_override*/ None);
 
     assert_eq!(
         settings.pointer("/env/ANTHROPIC_DEFAULT_OPUS_MODEL"),
@@ -2491,7 +2499,7 @@ fn timeout_pause_failure_message_is_not_provider_error() {
     let plan = build_claude_command_plan(&pane, "hello".to_string(), dir.path()).expect("plan");
     let output = failed_turn_output(
         &plan,
-        150_000,
+        /*duration_ms*/ 150_000,
         ClaudePaneTurnStatus::TimeoutPause,
         Some("timeout".to_string()),
         "local timeout".to_string(),
@@ -2651,7 +2659,11 @@ async fn cancelling_running_command_returns_interrupted_output() {
         };
     let cancel_token = CancellationToken::new();
     let cancel_handle = cancel_token.clone();
-    let runner = tokio::spawn(run_claude_command_plan(plan, cancel_token, None));
+    let runner = tokio::spawn(run_claude_command_plan(
+        plan,
+        cancel_token,
+        /*progress_tx*/ None,
+    ));
 
     tokio::time::sleep(Duration::from_millis(100)).await;
     cancel_handle.cancel();
@@ -2680,7 +2692,7 @@ fn interrupted_partial_output_keeps_planned_session_id_without_stdout_session() 
 
     let output = partial_failed_turn_output(
         &plan,
-        10,
+        /*duration_ms*/ 10,
         ClaudePaneTurnStatus::Interrupted,
         Some("interrupted".to_string()),
         "interrupted by user".to_string(),
@@ -2704,7 +2716,7 @@ fn interrupted_partial_output_prefers_stdout_session_id() {
 
     let output = partial_failed_turn_output(
         &plan,
-        10,
+        /*duration_ms*/ 10,
         ClaudePaneTurnStatus::Interrupted,
         Some("interrupted".to_string()),
         "interrupted by user".to_string(),
@@ -2770,12 +2782,16 @@ fn claude_spawn_pane_title_includes_role() {
         claude_pane_title(
             ClaudeProviderProfileKind::ZaiGlm52,
             Some(SpawnRole::Orc),
-            None
+            /*spawn_nickname*/ None
         ),
         "Claude Code Orc - GLM 5.2 Z.AI"
     );
     assert_eq!(
-        claude_pane_title(ClaudeProviderProfileKind::ClaudePlan, None, None),
+        claude_pane_title(
+            ClaudeProviderProfileKind::ClaudePlan,
+            /*spawn_role*/ None,
+            /*spawn_nickname*/ None
+        ),
         "Claude Code - Opus 5 Claude Plan"
     );
 }
@@ -2940,7 +2956,7 @@ fn interrupted_turn_with_planned_session_resumes_next_turn() {
     let planned_session_id = first.plan.command_session_id.clone();
     let output = partial_failed_turn_output(
         &first.plan,
-        10,
+        /*duration_ms*/ 10,
         ClaudePaneTurnStatus::Interrupted,
         Some("interrupted".to_string()),
         "interrupted by user".to_string(),
@@ -3068,13 +3084,20 @@ fn turn_audit_serializes_without_prompt_or_secret() {
     .expect("plan");
     let output = failed_turn_output(
         &plan,
-        5,
+        /*duration_ms*/ 5,
         ClaudePaneTurnStatus::ProviderError,
         Some("provider_error".to_string()),
         "simulated provider failure".to_string(),
     );
 
-    write_turn_audit(&plan, &output, 1, 2, Some(1)).expect("write audit");
+    write_turn_audit(
+        &plan,
+        &output,
+        /*started_at_unix_ms*/ 1,
+        /*ended_at_unix_ms*/ 2,
+        Some(1),
+    )
+    .expect("write audit");
     let audit = std::fs::read_to_string(&plan.audit_path).expect("read audit");
     assert!(audit.contains("simulated provider failure"));
     assert!(!audit.contains("this prompt must not be serialized"));
@@ -3115,7 +3138,14 @@ fn turn_audit_counts_tool_events_not_unique_tool_names() {
         command_mode: ClaudeCommandMode::NewSession,
     };
 
-    write_turn_audit(&plan, &output, 1, 2, Some(1)).expect("write audit");
+    write_turn_audit(
+        &plan,
+        &output,
+        /*started_at_unix_ms*/ 1,
+        /*ended_at_unix_ms*/ 2,
+        Some(1),
+    )
+    .expect("write audit");
     let audit = std::fs::read_to_string(&plan.audit_path).expect("read audit");
     let audit: Value = serde_json::from_str(&audit).expect("audit json");
     assert_eq!(audit.get("tool_use_count").and_then(Value::as_u64), Some(3));
@@ -3144,7 +3174,14 @@ fn turn_audit_serializes_reasoning_events() {
         command_mode: ClaudeCommandMode::NewSession,
     };
 
-    write_turn_audit(&plan, &output, 1, 2, Some(1)).expect("write audit");
+    write_turn_audit(
+        &plan,
+        &output,
+        /*started_at_unix_ms*/ 1,
+        /*ended_at_unix_ms*/ 2,
+        Some(1),
+    )
+    .expect("write audit");
     let audit = std::fs::read_to_string(&plan.audit_path).expect("read audit");
     let audit: Value = serde_json::from_str(&audit).expect("audit json");
     assert_eq!(
@@ -3453,9 +3490,13 @@ async fn live_ambient_bridge_runs_claude_headless_for_two_turns() {
         &codex_home,
     )
     .expect("first live plan");
-    let first = run_claude_command_plan(first_plan, CancellationToken::new(), None)
-        .await
-        .expect("first live Claude turn");
+    let first = run_claude_command_plan(
+        first_plan,
+        CancellationToken::new(),
+        /*progress_tx*/ None,
+    )
+    .await
+    .expect("first live Claude turn");
     assert!(
         first.text.contains("OK-PFTERMINAL-LIVE"),
         "first turn did not return the requested marker: {}",
@@ -3470,9 +3511,13 @@ async fn live_ambient_bridge_runs_claude_headless_for_two_turns() {
         &codex_home,
     )
     .expect("second live plan");
-    let second = run_claude_command_plan(second_plan, CancellationToken::new(), None)
-        .await
-        .expect("second live Claude turn");
+    let second = run_claude_command_plan(
+        second_plan,
+        CancellationToken::new(),
+        /*progress_tx*/ None,
+    )
+    .await
+    .expect("second live Claude turn");
     assert!(
         second.text.contains("OK-PFTERMINAL-LIVE"),
         "second turn did not retain session context: {}",
@@ -3495,7 +3540,7 @@ async fn live_ambient_bridge_runs_claude_tool_loop() {
             &codex_home,
         )
         .expect("tool-loop live plan");
-    let output = run_claude_command_plan(plan, CancellationToken::new(), None)
+    let output = run_claude_command_plan(plan, CancellationToken::new(), /*progress_tx*/ None)
         .await
         .expect("tool-loop live Claude turn");
     assert!(
@@ -3524,7 +3569,7 @@ async fn live_ambient_bridge_runs_substantive_code_review() {
         &codex_home,
     )
     .expect("review live plan");
-    let output = run_claude_command_plan(plan, CancellationToken::new(), None)
+    let output = run_claude_command_plan(plan, CancellationToken::new(), /*progress_tx*/ None)
         .await
         .expect("review live Claude turn");
     assert_eq!(output.status, ClaudePaneTurnStatus::Success);
@@ -3558,7 +3603,7 @@ async fn live_ambient_bridge_runs_disposable_edit_task() {
             &codex_home,
         )
         .expect("edit live plan");
-    let output = run_claude_command_plan(plan, CancellationToken::new(), None)
+    let output = run_claude_command_plan(plan, CancellationToken::new(), /*progress_tx*/ None)
         .await
         .expect("edit live Claude turn");
     assert_eq!(output.status, ClaudePaneTurnStatus::Success);

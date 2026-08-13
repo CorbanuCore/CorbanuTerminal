@@ -290,7 +290,13 @@ async fn crew_child_terminal_result_uses_one_triggering_native_mailbox_message()
     .await;
     let harness = AgentControlHarness::new_with_config(home, config).await;
     let (root_thread_id, _) = harness.start_thread().await;
-    let parent_source = crew_spawn_source(root_thread_id, 1, "/root/manager", "manager", "manager");
+    let parent_source = crew_spawn_source(
+        root_thread_id,
+        /*depth*/ 1,
+        "/root/manager",
+        "manager",
+        "manager",
+    );
     let parent = harness
         .manager
         .start_thread_with_options(StartThreadOptions {
@@ -332,7 +338,7 @@ async fn crew_child_terminal_result_uses_one_triggering_native_mailbox_message()
             initial_history: InitialHistory::New,
             session_source: Some(crew_spawn_source(
                 parent.thread_id,
-                2,
+                /*depth*/ 2,
                 "/root/manager/worker",
                 "worker",
                 "worker",
@@ -444,7 +450,7 @@ async fn crew_child_terminal_result_uses_one_triggering_native_mailbox_message()
             child.thread_id,
             followup.clone(),
             AgentCommunicationContext::new(AgentCommunicationKind::Followup, parent.thread_id),
-            None,
+            /*parent_turn_id*/ None,
         )
         .await
         .expect("completed crew worker should accept a follow-up on the same thread");
@@ -570,7 +576,7 @@ async fn spawn_agent_internal_treats_roles_as_profiles_and_enforces_structural_d
             text_input("lead the crew"),
             Some(role_spawn_source(
                 root_thread_id,
-                1,
+                /*depth*/ 1,
                 "/root/nazgul",
                 "nazgul",
             )),
@@ -589,7 +595,7 @@ async fn spawn_agent_internal_treats_roles_as_profiles_and_enforces_structural_d
             text_input("direct worker"),
             Some(role_spawn_source(
                 nazgul.thread_id,
-                2,
+                /*depth*/ 2,
                 "/root/nazgul/orc",
                 "orc",
             )),
@@ -608,7 +614,7 @@ async fn spawn_agent_internal_treats_roles_as_profiles_and_enforces_structural_d
             text_input("general worker"),
             Some(role_spawn_source(
                 root_thread_id,
-                1,
+                /*depth*/ 1,
                 "/root/worker",
                 "worker",
             )),
@@ -626,7 +632,7 @@ async fn spawn_agent_internal_treats_roles_as_profiles_and_enforces_structural_d
             text_input("nested role profile"),
             Some(role_spawn_source(
                 worker.thread_id,
-                2,
+                /*depth*/ 2,
                 "/root/worker/troll",
                 "troll",
             )),
@@ -645,7 +651,7 @@ async fn spawn_agent_internal_treats_roles_as_profiles_and_enforces_structural_d
             text_input("invalid depth"),
             Some(role_spawn_source(
                 root_thread_id,
-                2,
+                /*depth*/ 2,
                 "/root/depth_forgery",
                 "worker",
             )),
@@ -1094,7 +1100,7 @@ async fn durable_agent_mailbox_deduplicates_and_completes_after_rollout_flush() 
             thread_id,
             communication.clone(),
             AgentCommunicationContext::new(AgentCommunicationKind::Message, thread_id),
-            None,
+            /*parent_turn_id*/ None,
         )
         .await
         .expect("first mailbox submission");
@@ -1105,7 +1111,7 @@ async fn durable_agent_mailbox_deduplicates_and_completes_after_rollout_flush() 
             thread_id,
             communication.clone(),
             AgentCommunicationContext::new(AgentCommunicationKind::Message, thread_id),
-            None,
+            /*parent_turn_id*/ None,
         )
         .await
         .expect("duplicate mailbox submission");
@@ -1243,7 +1249,7 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
                 ambiguous_message_id,
                 codex_state::AgentMailboxPhase::Ready,
                 codex_state::AgentMailboxPhase::Submitting,
-                1_000,
+                /*now_ms*/ 1_000,
             )
             .await
             .expect("submitting transition")
@@ -1273,7 +1279,7 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
                 submitted_message_id,
                 codex_state::AgentMailboxPhase::Ready,
                 "submitted-attempt",
-                1_001,
+                /*now_ms*/ 1_001,
             )
             .await
             .expect("begin submitted attempt")
@@ -1287,7 +1293,7 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
                 submitted_message_id,
                 codex_state::AgentMailboxPhase::Submitting,
                 codex_state::AgentMailboxPhase::Submitted,
-                1_002,
+                /*now_ms*/ 1_002,
             )
             .await
             .expect("submitted transition")
@@ -1317,7 +1323,7 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
                 provider_running_message_id,
                 codex_state::AgentMailboxPhase::Ready,
                 "provider-running-attempt",
-                1_003,
+                /*now_ms*/ 1_003,
             )
             .await
             .expect("begin provider-running attempt")
@@ -1331,7 +1337,7 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
                 provider_running_message_id,
                 codex_state::AgentMailboxPhase::Submitting,
                 codex_state::AgentMailboxPhase::Submitted,
-                1_004,
+                /*now_ms*/ 1_004,
             )
             .await
             .expect("provider submitted transition")
@@ -1345,7 +1351,7 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
                 provider_running_message_id,
                 codex_state::AgentMailboxPhase::Submitted,
                 codex_state::AgentMailboxPhase::ProviderRunning,
-                1_005,
+                /*now_ms*/ 1_005,
             )
             .await
             .expect("provider running transition")
@@ -1375,7 +1381,7 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
                 retryable_message_id,
                 codex_state::AgentMailboxPhase::Ready,
                 codex_state::AgentMailboxPhase::RetryableFailure,
-                1_006,
+                /*now_ms*/ 1_006,
             )
             .await
             .expect("retryable transition")
@@ -1396,7 +1402,7 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
                 AgentCommunicationKind::Message,
                 spawned_agent.thread_id,
             ),
-            None,
+            /*parent_turn_id*/ None,
         )
         .await
         .expect("submit applied-crash message");
@@ -1422,7 +1428,7 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
                 applied_submitted_message_id,
                 codex_state::AgentMailboxPhase::Completed,
                 codex_state::AgentMailboxPhase::Submitted,
-                1_007,
+                /*now_ms*/ 1_007,
             )
             .await
             .expect("inject crash after local application but before provider outcome")

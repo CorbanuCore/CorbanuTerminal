@@ -92,14 +92,14 @@ impl VastSshTransport {
                 ProviderErrorKind::Retryable,
                 "Vast has not assigned the direct SSH address yet.",
             )
-            .with_retry_after_ms(5_000)
+            .with_retry_after_ms(/*retry_after_ms*/ 5_000)
         })?;
         let ssh_port = instance.ssh_port.ok_or_else(|| {
             ProviderError::new(
                 ProviderErrorKind::Retryable,
                 "Vast has not assigned the direct SSH port yet.",
             )
-            .with_retry_after_ms(5_000)
+            .with_retry_after_ms(/*retry_after_ms*/ 5_000)
         })?;
         let local_port = available_loopback_port()?;
         let endpoint = format!("http://127.0.0.1:{local_port}/v1");
@@ -154,7 +154,7 @@ impl VastSshTransport {
                     ProviderErrorKind::Retryable,
                     "The authenticated Vast SSH forward has not started yet.",
                 )
-                .with_retry_after_ms(5_000));
+                .with_retry_after_ms(/*retry_after_ms*/ 5_000));
             }
             if TcpStream::connect_timeout(
                 &SocketAddrV4::new(Ipv4Addr::LOCALHOST, local_port).into(),
@@ -171,7 +171,7 @@ impl VastSshTransport {
                     ProviderErrorKind::Retryable,
                     "The authenticated Vast SSH forward has not started yet.",
                 )
-                .with_retry_after_ms(5_000));
+                .with_retry_after_ms(/*retry_after_ms*/ 5_000));
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }

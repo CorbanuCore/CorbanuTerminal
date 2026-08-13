@@ -1614,7 +1614,7 @@ async fn native_followup_dispatch_transitions_only_the_matching_assignment() {
         app.upsert_agent_picker_thread(
             thread_id,
             Some(name.to_string()),
-            None,
+            /*agent_role*/ None,
             /*is_closed*/ false,
         );
     }
@@ -1732,7 +1732,7 @@ async fn native_direct_parent_assignment_uses_core_result_delivery_without_dupli
         app.upsert_agent_picker_thread(
             thread_id,
             Some(name.to_string()),
-            None,
+            /*agent_role*/ None,
             /*is_closed*/ false,
         );
     }
@@ -1749,8 +1749,8 @@ async fn native_direct_parent_assignment_uses_core_result_delivery_without_dupli
     app.note_whip_target_idle_with_fire_control(
         &worker_node,
         Some("NATIVE_PARENT_RESULT"),
-        true,
-        true,
+        /*allow_fire*/ true,
+        /*turn_succeeded*/ true,
     );
 
     assert!(
@@ -1764,7 +1764,12 @@ async fn native_direct_parent_assignment_uses_core_result_delivery_without_dupli
         Some("NATIVE_PARENT_RESULT")
     );
 
-    app.note_whip_target_idle_with_fire_control(&manager_node, Some("WHIP_DONE"), false, true);
+    app.note_whip_target_idle_with_fire_control(
+        &manager_node,
+        Some("WHIP_DONE"),
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ true,
+    );
     assert!(matches!(
         app.orchestrate_whips
             .get("assignment-1")
@@ -2073,8 +2078,8 @@ async fn terminal_lifecycle_scope_blocks_external_managed_and_parent_owned_panes
     app.upsert_agent_picker_thread(
         operator_thread_id,
         Some("Operator".to_string()),
-        None,
-        false,
+        /*agent_role*/ None,
+        /*is_closed*/ false,
     );
 
     assert!(
@@ -2296,7 +2301,7 @@ fn whole_crew_removal_deletes_mixed_members_and_preserves_bound_main() -> Result
             Some("Burzum".to_string()),
             "troll",
             troll,
-            true,
+            /*persist_layout*/ true,
         )
         .await;
         crew.record_member("troll", &troll_node_id)
@@ -2569,7 +2574,8 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
         ),
     )?;
     app.chat_widget.update_account_state(
-        None, None, /*has_chatgpt_account*/ true, /*has_codex_backend_auth*/ true,
+        /*status_account_display*/ None, /*plan_type*/ None,
+        /*has_chatgpt_account*/ true, /*has_codex_backend_auth*/ true,
     );
     let mut app_server = start_config_write_test_app_server(&app).await?;
     let main = app_server.start_thread(&app.config).await?;
@@ -2614,7 +2620,7 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
         Some("Angmar".to_string()),
         "nazgul",
         nazgul,
-        true,
+        /*persist_layout*/ true,
     )
     .await;
     app.set_spawn_nazgul_pane_binding(crate::spawn_orchestration::thread_node_id(nazgul_thread_id));
@@ -2645,7 +2651,7 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
         Some("Burzum".to_string()),
         "troll",
         troll,
-        true,
+        /*persist_layout*/ true,
     )
     .await;
     app.thread_event_channels
@@ -3020,13 +3026,13 @@ async fn pane_picker_separates_user_panes_from_managed_spawn_crew() {
         manager_thread,
         Some("Codex manager".to_string()),
         Some("default".to_string()),
-        false,
+        /*is_closed*/ false,
     );
     app.upsert_agent_picker_thread(
         worker_thread,
         Some("Codex worker".to_string()),
         Some("default".to_string()),
-        false,
+        /*is_closed*/ false,
     );
     app.spawn_parent_by_thread
         .insert(worker_thread, manager_thread);
@@ -3044,7 +3050,7 @@ async fn pane_picker_separates_user_panes_from_managed_spawn_crew() {
         parent_controlled_thread,
         Some("Task-only subagent".to_string()),
         Some("default".to_string()),
-        false,
+        /*is_closed*/ false,
     );
     app.agent_navigation
         .mark_parent_owned(parent_controlled_thread);
@@ -3095,13 +3101,13 @@ async fn pane_picker_marks_exactly_the_active_native_thread_current() {
         main_thread,
         Some("Main".to_string()),
         Some("default".to_string()),
-        false,
+        /*is_closed*/ false,
     );
     app.upsert_agent_picker_thread(
         user_thread,
         Some("Matrix Twin".to_string()),
         Some("default".to_string()),
-        false,
+        /*is_closed*/ false,
     );
     app.primary_session_configured = Some(ThreadSessionState {
         model: "deepseek-v4-flash".to_string(),
@@ -3231,7 +3237,7 @@ async fn restored_crew_validation_rejects_runtime_drift() {
         thread_id,
         Some("Manager".to_string()),
         Some("manager".to_string()),
-        false,
+        /*is_closed*/ false,
     );
     app.spawn_parent_by_node.insert(
         node_id.clone(),
@@ -3259,7 +3265,7 @@ async fn restored_crew_validation_rejects_runtime_drift() {
             runtime_request: codex_protocol::crew::RuntimeRequest::exact(
                 "openai",
                 "gpt-5.6-sol",
-                None,
+                /*reasoning_effort*/ None,
             ),
         }],
         policy: codex_protocol::crew::CrewPolicy {
@@ -3578,13 +3584,13 @@ async fn native_task_agent_role_does_not_make_it_a_persistent_spawn_crew_member(
         crew_orc,
         Some("Snaga".to_string()),
         Some("orc".to_string()),
-        false,
+        /*is_closed*/ false,
     );
     app.upsert_agent_picker_thread(
         task_agent,
         Some("Ephemeral reviewer".to_string()),
         Some("orc".to_string()),
-        false,
+        /*is_closed*/ false,
     );
     app.record_custom_spawn_member(
         &crate::spawn_orchestration::thread_node_id(crew_orc),
@@ -3806,7 +3812,7 @@ async fn spawn_roster_keeps_context_pressure_out_of_model_context() {
     app.update_spawn_status_for_thread_notification(&token_usage_notification_with_total(
         orc_thread_id,
         "turn-context",
-        90_000,
+        /*total_tokens*/ 90_000,
         Some(100_000),
     ));
 
@@ -3826,7 +3832,7 @@ async fn low_context_telemetry_does_not_manufacture_a_lifecycle_warning() {
     app.update_spawn_status_for_thread_notification(&token_usage_notification_with_total(
         orc_thread_id,
         "turn-low-1",
-        90_000,
+        /*total_tokens*/ 90_000,
         Some(100_000),
     ));
     let reports = app.spawn_parent_reports_by_node.get(&parent_node_id);
@@ -3920,7 +3926,7 @@ async fn replacement_transaction_migrates_runtime_waiting_and_relationships() {
         new_thread,
         Some("Snaga".to_string()),
         Some("orc".to_string()),
-        false,
+        /*is_closed*/ false,
     );
     let old_node = thread_node_id(old_thread);
     app.spawn_parent_by_node
@@ -5025,7 +5031,12 @@ async fn native_legacy_whip_target_receives_orchestration_lifecycle() {
     write_test_whip(&app, "keep-going", "# whip: keep-going\nContinue the work.");
     let worker_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000467").expect("worker id");
-    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    app.upsert_agent_picker_thread(
+        worker_thread_id,
+        Some("Worker".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
     let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
 
     app.handle_orchestrate_command(format!(
@@ -5072,8 +5083,8 @@ async fn orchestrate_stop_marker_pauses_before_fire() {
     app.note_whip_target_idle_with_fire_control(
         &target_node_id,
         Some("done\nWHIP_DONE"),
-        true,
-        true,
+        /*allow_fire*/ true,
+        /*turn_succeeded*/ true,
     );
 
     assert!(drain_claude_pane_task_events(&mut app_event_rx).is_empty());
@@ -5106,8 +5117,18 @@ async fn orchestrate_empty_output_loop_pauses_whip() {
     app.handle_orchestrate_command(format!(
         "attach {pane_id} loop-aware --mode auto --holder none --max 3 --cooldown 1s"
     ));
-    app.note_whip_target_idle_with_fire_control(&target_node_id, Some(""), true, true);
-    app.note_whip_target_idle_with_fire_control(&target_node_id, Some("   "), true, true);
+    app.note_whip_target_idle_with_fire_control(
+        &target_node_id,
+        Some(""),
+        /*allow_fire*/ true,
+        /*turn_succeeded*/ true,
+    );
+    app.note_whip_target_idle_with_fire_control(
+        &target_node_id,
+        Some("   "),
+        /*allow_fire*/ true,
+        /*turn_succeeded*/ true,
+    );
 
     let submitted_tasks = drain_claude_pane_task_events(&mut app_event_rx);
     assert_eq!(submitted_tasks.len(), 1);
@@ -5143,15 +5164,20 @@ async fn orchestrate_failed_turn_loop_pauses_and_success_resets_streak() {
     app.note_whip_target_idle_with_fire_control(
         &target_node_id,
         Some("provider error"),
-        true,
-        false,
+        /*allow_fire*/ true,
+        /*turn_succeeded*/ false,
     );
-    app.note_whip_target_idle_with_fire_control(&target_node_id, Some("recovered"), true, true);
+    app.note_whip_target_idle_with_fire_control(
+        &target_node_id,
+        Some("recovered"),
+        /*allow_fire*/ true,
+        /*turn_succeeded*/ true,
+    );
     app.note_whip_target_idle_with_fire_control(
         &target_node_id,
         Some("provider error"),
-        true,
-        false,
+        /*allow_fire*/ true,
+        /*turn_succeeded*/ false,
     );
     assert_eq!(
         app.orchestrate_whips
@@ -5163,8 +5189,8 @@ async fn orchestrate_failed_turn_loop_pauses_and_success_resets_streak() {
     app.note_whip_target_idle_with_fire_control(
         &target_node_id,
         Some("provider error"),
-        true,
-        false,
+        /*allow_fire*/ true,
+        /*turn_succeeded*/ false,
     );
     let whip = app.orchestrate_whips.get("whip-1").expect("whip");
     assert_eq!(whip.state, crate::orchestrate::WhipState::Paused);
@@ -5234,8 +5260,8 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     app.note_whip_target_idle_with_fire_control(
         &manager_node,
         Some("I will emit WHIP_DONE when complete and ASSIGNMENT_BLOCKED: <reason> if needed."),
-        false,
-        true,
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ true,
     );
     assert!(matches!(
         app.orchestrate_whips
@@ -5268,8 +5294,8 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     app.note_whip_target_idle_with_fire_control(
         &worker_node,
         Some("WORKER_AUDIT_RESULT: baseline checkout is invalid"),
-        false,
-        true,
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ true,
     );
     assert!(
         drain_claude_pane_task_events(&mut app_event_rx).is_empty(),
@@ -5305,7 +5331,7 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
         assignment,
         "Worker",
         Some("Run the audit."),
-        None,
+        /*path*/ None,
         started,
         crate::orchestrate::AssignmentDispatchProtocol::HostAdapter,
     );
@@ -5327,14 +5353,14 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     app.note_whip_target_idle_with_fire_control(
         &manager_node,
         Some("temporary provider failure"),
-        false,
-        false,
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ false,
     );
     app.note_whip_target_idle_with_fire_control(
         &manager_node,
         Some("temporary provider failure"),
-        false,
-        false,
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ false,
     );
     assert_eq!(
         app.orchestrate_whips
@@ -5355,7 +5381,12 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     }
     app.sweep_orchestrate_whips();
     assert_eq!(drain_claude_pane_task_events(&mut app_event_rx).len(), 1);
-    app.note_whip_target_idle_with_fire_control(&manager_node, Some("recovered"), false, true);
+    app.note_whip_target_idle_with_fire_control(
+        &manager_node,
+        Some("recovered"),
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ true,
+    );
     assert_eq!(
         app.orchestrate_whips
             .get("assignment-1")
@@ -5366,8 +5397,8 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     app.note_whip_target_idle_with_fire_control(
         &worker_node,
         Some("ASSIGNMENT_BLOCKED: worker said it\nWHIP_DONE"),
-        false,
-        true,
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ true,
     );
     assert!(matches!(
         app.orchestrate_whips
@@ -5381,8 +5412,8 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     app.note_whip_target_idle_with_fire_control(
         &manager_node,
         Some("I may emit WHIP_DONE later and mention ASSIGNMENT_BLOCKED: in prose."),
-        false,
-        true,
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ true,
     );
     assert!(matches!(
         app.orchestrate_whips
@@ -5396,8 +5427,8 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     app.note_whip_target_idle_with_fire_control(
         &manager_node,
         Some("ASSIGNMENT_BLOCKED:\nprogress continues"),
-        false,
-        true,
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ true,
     );
     assert!(matches!(
         app.orchestrate_whips
@@ -5411,8 +5442,8 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
     app.note_whip_target_idle_with_fire_control(
         &manager_node,
         Some("progress\nASSIGNMENT_BLOCKED: waiting for production credentials"),
-        false,
-        true,
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ true,
     );
     assert!(matches!(
         app.orchestrate_whips
@@ -5433,7 +5464,12 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
             ..
         })
     ));
-    app.note_whip_target_idle_with_fire_control(&manager_node, Some("WHIP_DONE"), false, true);
+    app.note_whip_target_idle_with_fire_control(
+        &manager_node,
+        Some("WHIP_DONE"),
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ true,
+    );
     assert!(matches!(
         app.orchestrate_whips
             .get("assignment-1")
@@ -5453,8 +5489,18 @@ async fn assignment_manager_empty_completion_retries_current_turn_once_then_paus
         ThreadId::from_string("00000000-0000-0000-0000-000000000463").expect("manager id");
     let worker_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000464").expect("worker id");
-    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
-    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    app.upsert_agent_picker_thread(
+        manager_thread_id,
+        Some("Manager".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        worker_thread_id,
+        Some("Worker".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
     let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
     let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
     app.handle_orchestrate_command(format!(
@@ -5538,8 +5584,18 @@ async fn assignment_manager_visible_paraphrase_resets_empty_completion_guard() {
         ThreadId::from_string("00000000-0000-0000-0000-000000000465").expect("manager id");
     let worker_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000466").expect("worker id");
-    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
-    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    app.upsert_agent_picker_thread(
+        manager_thread_id,
+        Some("Manager".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        worker_thread_id,
+        Some("Worker".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
     let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
     let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
     app.handle_orchestrate_command(format!(
@@ -5547,14 +5603,19 @@ async fn assignment_manager_visible_paraphrase_resets_empty_completion_guard() {
     ));
     while app_event_rx.try_recv().is_ok() {}
 
-    app.note_whip_target_idle_with_fire_control(&manager_node, None, false, true);
+    app.note_whip_target_idle_with_fire_control(
+        &manager_node,
+        /*last_output*/ None,
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ true,
+    );
     let _ = drain_spawn_agent_task_for(&mut app_event_rx, manager_thread_id)
         .expect("first empty completion should retry");
     app.note_whip_target_idle_with_fire_control(
         &manager_node,
         Some("I have enough context; drafting the acceptance criteria now."),
-        false,
-        true,
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ true,
     );
     assert_eq!(
         app.orchestrate_whips
@@ -5562,7 +5623,12 @@ async fn assignment_manager_visible_paraphrase_resets_empty_completion_guard() {
             .map(|whip| whip.empty_output_fires),
         Some(0)
     );
-    app.note_whip_target_idle_with_fire_control(&manager_node, Some("   "), false, true);
+    app.note_whip_target_idle_with_fire_control(
+        &manager_node,
+        Some("   "),
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ true,
+    );
     assert!(drain_spawn_agent_task_for(&mut app_event_rx, manager_thread_id).is_some());
     assert_eq!(
         app.orchestrate_whips
@@ -5577,7 +5643,12 @@ async fn codex_pane_description_uses_cached_model_instead_of_unknown() {
     let mut app = make_test_app().await;
     let thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000467").expect("thread id");
-    app.upsert_agent_picker_thread(thread_id, Some("Manager".to_string()), None, false);
+    app.upsert_agent_picker_thread(
+        thread_id,
+        Some("Manager".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
     app.agent_navigation
         .set_model(thread_id, Some("claude-fable-5-plan".to_string()));
     let entry = app.agent_navigation.get(&thread_id).expect("picker entry");
@@ -5599,8 +5670,18 @@ async fn assignment_bad_target_retries_durable_worker_once_then_pauses() {
         ThreadId::from_string("00000000-0000-0000-0000-000000000471").expect("manager id");
     let worker_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000472").expect("worker id");
-    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
-    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    app.upsert_agent_picker_thread(
+        manager_thread_id,
+        Some("Manager".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        worker_thread_id,
+        Some("Worker".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
     let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
     let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
     app.handle_orchestrate_command(format!(
@@ -5663,8 +5744,18 @@ async fn assignment_creation_fails_visibly_when_layout_cannot_be_persisted() {
         ThreadId::from_string("00000000-0000-0000-0000-000000000481").expect("manager id");
     let worker_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000482").expect("worker id");
-    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
-    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    app.upsert_agent_picker_thread(
+        manager_thread_id,
+        Some("Manager".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        worker_thread_id,
+        Some("Worker".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
     app.primary_thread_id = Some(ThreadId::new());
 
     let panes_path = app.config.codex_home.join("panes");
@@ -5703,8 +5794,18 @@ async fn orchestrate_fast_path_is_worker_then_manager_with_eight_hour_draft_defa
     let worker_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000493").expect("worker id");
     app.primary_thread_id = Some(main_thread_id);
-    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
-    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    app.upsert_agent_picker_thread(
+        manager_thread_id,
+        Some("Manager".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        worker_thread_id,
+        Some("Worker".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
 
     app.open_orchestrate_fast_target_picker();
     assert_app_snapshot!(
@@ -5731,7 +5832,7 @@ async fn assignment_unreachable_watchdog_pauses_after_four_cadences() {
             crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
             app.config.cwd.to_path_buf(),
             app.config.codex_home.as_ref(),
-            None,
+            /*spawn_role*/ None,
             Some("Manager".to_string()),
         )
         .expect("create manager");
@@ -5741,7 +5842,7 @@ async fn assignment_unreachable_watchdog_pauses_after_four_cadences() {
             crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
             app.config.cwd.to_path_buf(),
             app.config.codex_home.as_ref(),
-            None,
+            /*spawn_role*/ None,
             Some("Worker".to_string()),
         )
         .expect("create worker");
@@ -5787,8 +5888,18 @@ async fn assignment_restart_lifecycle_waits_one_cadence_then_continues() {
         ThreadId::from_string("00000000-0000-0000-0000-000000000501").expect("manager id");
     let worker_thread_id =
         ThreadId::from_string("00000000-0000-0000-0000-000000000502").expect("worker id");
-    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
-    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    app.upsert_agent_picker_thread(
+        manager_thread_id,
+        Some("Manager".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
+    app.upsert_agent_picker_thread(
+        worker_thread_id,
+        Some("Worker".to_string()),
+        /*agent_role*/ None,
+        /*is_closed*/ false,
+    );
     let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
     let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
     let started = chrono::DateTime::parse_from_rfc3339("2026-07-10T20:00:00Z")
@@ -5848,7 +5959,7 @@ async fn assignment_rejects_codex_main_as_manager() {
             crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
             app.config.cwd.to_path_buf(),
             app.config.codex_home.as_ref(),
-            None,
+            /*spawn_role*/ None,
             Some("Worker".to_string()),
         )
         .expect("create worker");
@@ -5895,13 +6006,18 @@ async fn orchestrate_review_holder_ignored_twice_pauses_whip() {
         .kind = crate::orchestrate::WhipKind::LegacyNudge;
     let _ = drain_claude_pane_task_events(&mut app_event_rx);
     app.handle_orchestrate_command("fire assignment-1".to_string());
-    app.note_whip_target_idle_with_fire_control(&holder_node_id, Some("no dispatch"), true, true);
+    app.note_whip_target_idle_with_fire_control(
+        &holder_node_id,
+        Some("no dispatch"),
+        /*allow_fire*/ true,
+        /*turn_succeeded*/ true,
+    );
     app.handle_orchestrate_command("fire assignment-1".to_string());
     app.note_whip_target_idle_with_fire_control(
         &holder_node_id,
         Some("still no dispatch"),
-        true,
-        true,
+        /*allow_fire*/ true,
+        /*turn_succeeded*/ true,
     );
 
     let submitted_tasks = drain_claude_pane_task_events(&mut app_event_rx);
@@ -5990,8 +6106,8 @@ async fn assignment_worker_completion_wakes_manager_without_waiting_for_watchdog
     app.note_whip_target_idle_with_fire_control(
         &worker_node,
         Some("first completed result"),
-        true,
-        true,
+        /*allow_fire*/ true,
+        /*turn_succeeded*/ true,
     );
 
     let immediate = drain_claude_pane_task_events(&mut app_event_rx);
@@ -6013,8 +6129,8 @@ async fn assignment_worker_completion_wakes_manager_without_waiting_for_watchdog
     app.note_whip_target_idle_with_fire_control(
         &worker_node,
         Some("second completed result"),
-        true,
-        true,
+        /*allow_fire*/ true,
+        /*turn_succeeded*/ true,
     );
     assert!(drain_claude_pane_task_events(&mut app_event_rx).is_empty());
 
@@ -6028,8 +6144,8 @@ async fn assignment_worker_completion_wakes_manager_without_waiting_for_watchdog
     app.note_whip_target_idle_with_fire_control(
         &manager_node,
         Some("manager finished its prior audit"),
-        false,
-        true,
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ true,
     );
 
     let pending = drain_claude_pane_task_events(&mut app_event_rx);
@@ -6043,7 +6159,12 @@ async fn assignment_worker_completion_wakes_manager_without_waiting_for_watchdog
     );
 
     app.orchestrate_now_override = Some(started + chrono::Duration::seconds(9));
-    app.note_whip_target_idle_with_fire_control(&worker_node, None, true, false);
+    app.note_whip_target_idle_with_fire_control(
+        &worker_node,
+        /*last_output*/ None,
+        /*allow_fire*/ true,
+        /*turn_succeeded*/ false,
+    );
 
     let interrupted = drain_claude_pane_task_events(&mut app_event_rx);
     assert_eq!(interrupted.len(), 1);
@@ -6090,7 +6211,12 @@ async fn orchestrate_restored_whip_waits_for_fresh_idle_edge() {
     app.sweep_orchestrate_whips();
     assert!(drain_claude_pane_task_events(&mut app_event_rx).is_empty());
 
-    app.note_whip_target_idle_with_fire_control(&target_node_id, Some("completed"), true, true);
+    app.note_whip_target_idle_with_fire_control(
+        &target_node_id,
+        Some("completed"),
+        /*allow_fire*/ true,
+        /*turn_succeeded*/ true,
+    );
     assert_eq!(drain_claude_pane_task_events(&mut app_event_rx).len(), 1);
 }
 
@@ -6141,7 +6267,12 @@ async fn orchestrate_fire_suppression_still_counts_ignored_review() {
         .kind = crate::orchestrate::WhipKind::LegacyNudge;
     let _ = drain_claude_pane_task_events(&mut app_event_rx);
     app.handle_orchestrate_command("fire assignment-1".to_string());
-    app.note_whip_target_idle_with_fire_control(&holder_node_id, Some("no dispatch"), false, true);
+    app.note_whip_target_idle_with_fire_control(
+        &holder_node_id,
+        Some("no dispatch"),
+        /*allow_fire*/ false,
+        /*turn_succeeded*/ true,
+    );
 
     let submitted_tasks = drain_claude_pane_task_events(&mut app_event_rx);
     assert_eq!(
@@ -7005,7 +7136,7 @@ async fn native_spawn_registration_persists_started_session_model_provider_pair(
         Some("Burzum".to_string()),
         "troll",
         started,
-        true,
+        /*persist_layout*/ true,
     )
     .await;
 
@@ -7168,7 +7299,7 @@ async fn human_addressable_spawn_pane_remains_interactive_after_liveness_refresh
         Some("Angmar".to_string()),
         "nazgul",
         started,
-        true,
+        /*persist_layout*/ true,
     )
     .await;
 
@@ -7653,7 +7784,10 @@ async fn native_spawn_auth_guard_uses_selected_provider_after_onboarding() -> Re
         format!(r#"{{"api_keys":{{"{OPENROUTER_API_KEY_ENV_VAR}":"test-key"}}}}"#),
     )?;
 
-    assert!(app.native_spawn_provider_auth_error(None).is_none());
+    assert!(
+        app.native_spawn_provider_auth_error(/*provider_id*/ None)
+            .is_none()
+    );
     Ok(())
 }
 
@@ -11883,7 +12017,12 @@ fn token_usage_notification(
     turn_id: &str,
     model_context_window: Option<i64>,
 ) -> ServerNotification {
-    token_usage_notification_with_total(thread_id, turn_id, 10, model_context_window)
+    token_usage_notification_with_total(
+        thread_id,
+        turn_id,
+        /*total_tokens*/ 10,
+        model_context_window,
+    )
 }
 
 fn token_usage_notification_with_total(

@@ -165,7 +165,7 @@ mod tests {
             "do the delegated work".to_string(),
             &source,
             provider_id,
-            true,
+            /*trigger_turn*/ true,
         );
 
         assert_eq!(communication.encrypted_content, None);
@@ -188,7 +188,7 @@ mod tests {
             "opaque-ciphertext".to_string(),
             &crate::tools::context::ToolCallSource::Direct,
             OPENAI_PROVIDER_ID,
-            true,
+            /*trigger_turn*/ true,
         );
 
         assert!(communication.content.is_empty());
@@ -206,7 +206,7 @@ mod tests {
             "ordinary provider report".to_string(),
             &crate::tools::context::ToolCallSource::Direct,
             "zai",
-            true,
+            /*trigger_turn*/ true,
         );
 
         assert_eq!(
@@ -279,7 +279,7 @@ mod tests {
             "opaque-ciphertext".to_string(),
             &crate::tools::context::ToolCallSource::Direct,
             OPENAI_PROVIDER_ID,
-            true,
+            /*trigger_turn*/ true,
         );
 
         assert!(communication.content.is_empty());

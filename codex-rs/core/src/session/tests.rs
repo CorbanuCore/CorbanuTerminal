@@ -4847,7 +4847,12 @@ async fn session_new_turn_refreshes_runtime_gpu_provider_endpoint_without_resele
         .await
         .expect("create rental");
     let lease = state
-        .claim_due_gpu_rentals("controller", NOW_MS, 10_000, 1)
+        .claim_due_gpu_rentals(
+            "controller",
+            NOW_MS,
+            /*lease_ttl_ms*/ 10_000,
+            /*limit*/ 1,
+        )
         .await
         .expect("claim rental")
         .remove(0);

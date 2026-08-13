@@ -234,11 +234,11 @@ pub(crate) async fn run_single_workflow(
     let Some(profile) = smoke_provider_profile(&provider_name) else {
         return workflow_entry_error(
             provider_name,
-            None,
+            /*profile*/ None,
             workflow_name,
-            None,
-            None,
-            None,
+            /*artifact_path*/ None,
+            /*audit_path*/ None,
+            /*fixture_path*/ None,
             "unknown workflow provider".to_string(),
         );
     };
@@ -259,9 +259,9 @@ pub(crate) async fn run_single_workflow(
             provider_name,
             profile_title,
             workflow_name,
-            None,
-            None,
-            None,
+            /*artifact_path*/ None,
+            /*audit_path*/ None,
+            /*fixture_path*/ None,
             "unknown workflow".to_string(),
         ),
     }

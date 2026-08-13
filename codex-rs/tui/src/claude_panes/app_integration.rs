@@ -446,7 +446,7 @@ impl App {
             "Rename PFTerminal pane".to_string(),
             "Pane display name".to_string(),
             initial_name,
-            None,
+            /*context_label*/ None,
             Box::new(move |name: String| {
                 tx.send(AppEvent::RenameCodexPane {
                     thread_id,
@@ -474,7 +474,7 @@ impl App {
             "Rename Claude pane".to_string(),
             "Pane display name".to_string(),
             initial_name,
-            None,
+            /*context_label*/ None,
             Box::new(move |name: String| {
                 tx.send(AppEvent::RenameClaudePane {
                     pane_id: pane_id.clone(),
@@ -1056,7 +1056,7 @@ impl App {
                 self.note_whip_target_idle_with_fire_control(
                     &source_node_id,
                     Some(&report_text),
-                    true,
+                    /*allow_fire*/ true,
                     output.status.is_success(),
                 );
                 if !output.text.trim().is_empty() {
@@ -1122,8 +1122,8 @@ impl App {
                 self.note_whip_target_idle_with_fire_control(
                     &source_node_id,
                     Some(&error),
-                    true,
-                    false,
+                    /*allow_fire*/ true,
+                    /*turn_succeeded*/ false,
                 );
                 if self.claude_panes.active_user_pane_id() == pane_id {
                     self.chat_widget.fail_external_pane_turn(error);
@@ -1294,13 +1294,13 @@ impl App {
         if let Some(task) = entry.last_task_message.as_deref() {
             description.push_str(&format!(
                 "; latest task: {}",
-                truncate_for_display(task, 80)
+                truncate_for_display(task, /*max_chars*/ 80)
             ));
         }
         if let Some(result) = entry.last_result_message.as_deref() {
             description.push_str(&format!(
                 "; latest result: {}",
-                truncate_for_display(result, 80)
+                truncate_for_display(result, /*max_chars*/ 80)
             ));
         }
         description

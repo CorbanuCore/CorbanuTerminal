@@ -91,7 +91,7 @@ fn ready_custom_crew_can_add_heterogeneous_members_without_changing_existing_ide
                 runtime_request: codex_protocol::crew::RuntimeRequest::exact(
                     "kimi-code",
                     "k3",
-                    None,
+                    /*reasoning_effort*/ None,
                 ),
             },
             "thread:kimi",
@@ -147,7 +147,7 @@ fn adding_a_member_cannot_broaden_the_crew_provider_allowlist() {
                     role_profile: "orc".to_string(),
                     parent_member_id: Some("nazgul".to_string()),
                     runtime_request: codex_protocol::crew::RuntimeRequest::exact(
-                        provider, model, None,
+                        provider, model, /*reasoning_effort*/ None,
                     ),
                 },
                 node,

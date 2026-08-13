@@ -33,8 +33,12 @@ pub(crate) fn standard_crew_spec() -> CrewSpec {
                 "nazgul",
                 "Nazgul",
                 "nazgul",
-                None,
-                RuntimeRequest::exact(CLAUDE_PLAN_PROVIDER_ID, STANDARD_NAZGUL_MODEL, None),
+                /*parent_member_id*/ None,
+                RuntimeRequest::exact(
+                    CLAUDE_PLAN_PROVIDER_ID,
+                    STANDARD_NAZGUL_MODEL,
+                    /*reasoning_effort*/ None,
+                ),
             ),
             member(
                 "troll",
@@ -74,7 +78,11 @@ pub(crate) fn standard_crew_spec() -> CrewSpec {
                 "Orc 3",
                 "orc",
                 Some("troll"),
-                RuntimeRequest::exact(OPENROUTER_PROVIDER_ID, STANDARD_ORC_3_MODEL, None),
+                RuntimeRequest::exact(
+                    OPENROUTER_PROVIDER_ID,
+                    STANDARD_ORC_3_MODEL,
+                    /*reasoning_effort*/ None,
+                ),
             ),
         ],
         policy: CrewPolicy {
@@ -101,29 +109,45 @@ pub(crate) fn multimodel_qualification_crew_spec() -> CrewSpec {
             "manager",
             "Manager",
             "nazgul",
-            None,
-            RuntimeRequest::exact(CLAUDE_PLAN_PROVIDER_ID, CLAUDE_FABLE_5_PLAN_MODEL, None),
+            /*parent_member_id*/ None,
+            RuntimeRequest::exact(
+                CLAUDE_PLAN_PROVIDER_ID,
+                CLAUDE_FABLE_5_PLAN_MODEL,
+                /*reasoning_effort*/ None,
+            ),
         ),
         member(
             "opus-reviewer",
             "Opus reviewer",
             "orc",
             Some("manager"),
-            RuntimeRequest::exact(CLAUDE_PLAN_PROVIDER_ID, CLAUDE_PLAN_MODEL, None),
+            RuntimeRequest::exact(
+                CLAUDE_PLAN_PROVIDER_ID,
+                CLAUDE_PLAN_MODEL,
+                /*reasoning_effort*/ None,
+            ),
         ),
         member(
             "grok-reviewer",
             "Grok reviewer",
             "orc",
             Some("manager"),
-            RuntimeRequest::exact(OPENROUTER_PROVIDER_ID, OPENROUTER_GROK_4_6_MODEL, None),
+            RuntimeRequest::exact(
+                OPENROUTER_PROVIDER_ID,
+                OPENROUTER_GROK_4_6_MODEL,
+                /*reasoning_effort*/ None,
+            ),
         ),
         member(
             "kimi-reviewer",
             "Kimi reviewer",
             "orc",
             Some("manager"),
-            RuntimeRequest::exact(KIMI_CODE_PROVIDER_ID, KIMI_CODE_K3_MODEL, None),
+            RuntimeRequest::exact(
+                KIMI_CODE_PROVIDER_ID,
+                KIMI_CODE_K3_MODEL,
+                /*reasoning_effort*/ None,
+            ),
         ),
     ];
     crew.policy.provider_allowlist = vec![

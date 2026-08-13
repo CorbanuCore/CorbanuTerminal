@@ -71,11 +71,11 @@ impl ChatWidget {
             footer_hint: Some(standard_popup_hint_line()),
             is_searchable: true,
             search_placeholder: Some("Search vault actions".to_string()),
-            items: vault_action_items(codex_home.clone(), None),
-            header: vault_header(None),
+            items: vault_action_items(codex_home.clone(), /*credential_result*/ None),
+            header: vault_header(/*credential_count*/ None),
             ..Default::default()
         });
-        self.load_vault_credentials(codex_home, true);
+        self.load_vault_credentials(codex_home, /*menu*/ true);
     }
 
     pub(crate) fn open_vault_credentials_list(&mut self) {
@@ -85,11 +85,11 @@ impl ChatWidget {
             footer_hint: Some(standard_popup_hint_line()),
             is_searchable: true,
             search_placeholder: Some("Search credentials".to_string()),
-            items: vault_credential_items(None),
-            header: vault_credentials_header(None),
+            items: vault_credential_items(/*credential_result*/ None),
+            header: vault_credentials_header(/*credential_count*/ None),
             ..Default::default()
         });
-        self.load_vault_credentials(codex_home, false);
+        self.load_vault_credentials(codex_home, /*menu*/ false);
     }
 
     pub(crate) fn open_vault_credential_actions(&mut self, label: String) {
@@ -217,7 +217,13 @@ impl ChatWidget {
                     .map_err(|error| error.to_string())
                 } else {
                     codex_vault::Vault::new(codex_home)
-                        .update(&task_label, Some(secret), None, None, None)
+                        .update(
+                            &task_label,
+                            Some(secret),
+                            /*provider*/ None,
+                            /*notes*/ None,
+                            /*revocation_notes*/ None,
+                        )
                         .map(|_| ())
                         .map_err(|error| error.to_string())
                 }
@@ -316,7 +322,10 @@ impl ChatWidget {
         result: Result<bool, String>,
     ) {
         match result {
-            Ok(true) => self.add_info_message(format!("Deleted vault credential {label:?}."), None),
+            Ok(true) => self.add_info_message(
+                format!("Deleted vault credential {label:?}."),
+                /*hint*/ None,
+            ),
             Ok(false) => self.add_error_message(format!("No vault credential labeled {label:?}.")),
             Err(error) => self.add_error_message(format!(
                 "Failed to delete vault credential {label:?}: {error}"
@@ -335,7 +344,7 @@ impl ChatWidget {
                 self.clipboard_lease = lease;
                 self.add_info_message(
                     format!("Copied vault credential {label:?} to clipboard."),
-                    None,
+                    /*hint*/ None,
                 );
             }
             Err(err) => self.add_error_message(err),
@@ -522,7 +531,7 @@ fn vault_credential_item(credential: codex_vault::VaultCredentialMeta) -> Select
 }
 
 fn credential_display_name_for_label(label: &str) -> String {
-    credential_display_name(label, None)
+    credential_display_name(label, /*provider*/ None)
 }
 
 fn credential_display_name(label: &str, provider: Option<&str>) -> String {
@@ -699,35 +708,35 @@ mod tests {
     #[test]
     fn provider_credentials_render_as_human_provider_names() {
         assert_eq!(
-            credential_display_name("provider/ambient_api_key", None),
+            credential_display_name("provider/ambient_api_key", /*provider*/ None),
             "Provider: Ambient API Key"
         );
         assert_eq!(
-            credential_display_name("provider/zai_api_key", None),
+            credential_display_name("provider/zai_api_key", /*provider*/ None),
             "Provider: Z.AI API Key"
         );
         assert_eq!(
-            credential_display_name("provider/kimi_api_key", None),
+            credential_display_name("provider/kimi_api_key", /*provider*/ None),
             "Provider: Kimi Code API Key"
         );
         assert_eq!(
-            credential_display_name("provider/deepseek_api_key", None),
+            credential_display_name("provider/deepseek_api_key", /*provider*/ None),
             "Provider: DeepSeek API Key"
         );
         assert_eq!(
-            credential_display_name("provider/openrouter_api_key", None),
+            credential_display_name("provider/openrouter_api_key", /*provider*/ None),
             "Provider: OpenRouter API Key"
         );
         assert_eq!(
-            credential_display_name("provider/model_api_key", None),
+            credential_display_name("provider/model_api_key", /*provider*/ None),
             "Provider: Meta API Key"
         );
         assert_eq!(
-            credential_display_name("provider/baseten_api_key", None),
+            credential_display_name("provider/baseten_api_key", /*provider*/ None),
             "Provider: Baseten API Key"
         );
         assert_eq!(
-            credential_display_name("provider/ai_gateway_api_key", None),
+            credential_display_name("provider/ai_gateway_api_key", /*provider*/ None),
             "Provider: Vercel API Key"
         );
     }

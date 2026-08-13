@@ -268,7 +268,7 @@ pub(crate) async fn write_json_response(
     stream: &mut tokio::net::TcpStream,
     body: Value,
 ) -> Result<()> {
-    write_json_status_response(stream, 200, body).await
+    write_json_status_response(stream, /*status*/ 200, body).await
 }
 
 pub(crate) async fn write_json_status_response(

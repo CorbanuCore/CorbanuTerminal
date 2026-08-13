@@ -217,7 +217,7 @@ WHERE rental_id = ? AND observed_state != ?
         lease_ttl_ms: i64,
         limit: usize,
     ) -> anyhow::Result<Vec<GpuRentalLease>> {
-        self.claim_due_gpu_rentals_inner(owner, None, now_ms, lease_ttl_ms, limit)
+        self.claim_due_gpu_rentals_inner(owner, /*provider*/ None, now_ms, lease_ttl_ms, limit)
             .await
     }
 

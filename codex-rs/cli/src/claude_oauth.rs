@@ -54,8 +54,13 @@ pub(crate) async fn resolve_claude_oauth_access_token() -> Result<String> {
 
     let force_refresh =
         nonempty_env("PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH").as_deref() == Some("1");
-    resolve_stored_claude_oauth_access_token(&config_dir, None, current_time_ms(), force_refresh)
-        .await
+    resolve_stored_claude_oauth_access_token(
+        &config_dir,
+        /*claude_executable*/ None,
+        current_time_ms(),
+        force_refresh,
+    )
+    .await
 }
 
 async fn resolve_stored_claude_oauth_access_token(
@@ -248,7 +253,7 @@ mod tests {
             temp_dir.path(),
             Some(Path::new("/does/not/exist")),
             now_ms,
-            false,
+            /*force_refresh*/ false,
         )
         .await
         .expect("valid token should be returned without starting Claude");
@@ -267,12 +272,21 @@ mod tests {
             "rotating-refresh",
             now_ms + 30_000,
         );
-        let claude = fake_refreshing_claude(temp_dir.path(), now_ms + 600_000, 0, 0);
+        let claude = fake_refreshing_claude(
+            temp_dir.path(),
+            now_ms + 600_000,
+            /*sleep_seconds*/ 0,
+            /*exit_code*/ 0,
+        );
 
-        let token =
-            resolve_stored_claude_oauth_access_token(temp_dir.path(), Some(&claude), now_ms, false)
-                .await
-                .expect("Claude CLI should refresh expiring credentials");
+        let token = resolve_stored_claude_oauth_access_token(
+            temp_dir.path(),
+            Some(&claude),
+            now_ms,
+            /*force_refresh*/ false,
+        )
+        .await
+        .expect("Claude CLI should refresh expiring credentials");
 
         assert_eq!(token, "refreshed-access");
         let refresh_log =
@@ -303,15 +317,30 @@ mod tests {
             "single-use-refresh",
             now_ms.saturating_sub(1),
         );
-        let claude = fake_refreshing_claude(temp_dir.path(), now_ms + 600_000, 1, 0);
+        let claude = fake_refreshing_claude(
+            temp_dir.path(),
+            now_ms + 600_000,
+            /*sleep_seconds*/ 1,
+            /*exit_code*/ 0,
+        );
         let config_a = temp_dir.path().to_path_buf();
         let config_b = config_a.clone();
         let claude_a = claude.clone();
         let claude_b = claude.clone();
 
         let (first, second) = tokio::join!(
-            resolve_stored_claude_oauth_access_token(&config_a, Some(&claude_a), now_ms, false,),
-            resolve_stored_claude_oauth_access_token(&config_b, Some(&claude_b), now_ms, false),
+            resolve_stored_claude_oauth_access_token(
+                &config_a,
+                Some(&claude_a),
+                now_ms,
+                /*force_refresh*/ false,
+            ),
+            resolve_stored_claude_oauth_access_token(
+                &config_b,
+                Some(&claude_b),
+                now_ms,
+                /*force_refresh*/ false
+            ),
         );
 
         assert_eq!(first.expect("first refresh"), "refreshed-access");
@@ -332,12 +361,21 @@ mod tests {
             "refresh-after-401",
             now_ms + 600_000,
         );
-        let claude = fake_refreshing_claude(temp_dir.path(), now_ms + 900_000, 0, 0);
+        let claude = fake_refreshing_claude(
+            temp_dir.path(),
+            now_ms + 900_000,
+            /*sleep_seconds*/ 0,
+            /*exit_code*/ 0,
+        );
 
-        let token =
-            resolve_stored_claude_oauth_access_token(temp_dir.path(), Some(&claude), now_ms, true)
-                .await
-                .expect("401 recovery should force Claude credential rotation");
+        let token = resolve_stored_claude_oauth_access_token(
+            temp_dir.path(),
+            Some(&claude),
+            now_ms,
+            /*force_refresh*/ true,
+        )
+        .await
+        .expect("401 recovery should force Claude credential rotation");
 
         assert_eq!(token, "refreshed-access");
         assert_eq!(
@@ -360,12 +398,21 @@ mod tests {
             "refresh-before-nonzero-exit",
             now_ms.saturating_sub(1),
         );
-        let claude = fake_refreshing_claude(temp_dir.path(), now_ms + 600_000, 0, 1);
+        let claude = fake_refreshing_claude(
+            temp_dir.path(),
+            now_ms + 600_000,
+            /*sleep_seconds*/ 0,
+            /*exit_code*/ 1,
+        );
 
-        let token =
-            resolve_stored_claude_oauth_access_token(temp_dir.path(), Some(&claude), now_ms, false)
-                .await
-                .expect("persisted credential rotation is the refresh authority");
+        let token = resolve_stored_claude_oauth_access_token(
+            temp_dir.path(),
+            Some(&claude),
+            now_ms,
+            /*force_refresh*/ false,
+        )
+        .await
+        .expect("persisted credential rotation is the refresh authority");
 
         assert_eq!(token, "refreshed-access");
     }
@@ -385,10 +432,14 @@ mod tests {
         let before = std::fs::read(&credentials_path).expect("credentials before refresh");
         let claude = fake_failing_claude(temp_dir.path());
 
-        let error =
-            resolve_stored_claude_oauth_access_token(temp_dir.path(), Some(&claude), now_ms, false)
-                .await
-                .expect_err("failed Claude exchange should surface");
+        let error = resolve_stored_claude_oauth_access_token(
+            temp_dir.path(),
+            Some(&claude),
+            now_ms,
+            /*force_refresh*/ false,
+        )
+        .await
+        .expect_err("failed Claude exchange should surface");
 
         assert!(error.to_string().contains("OAuth refresh failed"));
         assert!(!error.to_string().contains("never-print-this-refresh-token"));

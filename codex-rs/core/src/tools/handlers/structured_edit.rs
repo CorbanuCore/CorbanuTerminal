@@ -837,20 +837,23 @@ mod tests {
     #[test]
     fn replace_exact_requires_unique_match_by_default() {
         assert_eq!(
-            replace_exact("a b a", "b", "B", false).expect("unique replacement"),
+            replace_exact("a b a", "b", "B", /*replace_all*/ false).expect("unique replacement"),
             "a B a"
         );
         assert_model_error(
-            replace_exact("a b a", "a", "A", false),
+            replace_exact("a b a", "a", "A", /*replace_all*/ false),
             "matched 2 locations",
         );
-        assert_model_error(replace_exact("a b a", "missing", "x", false), "not found");
+        assert_model_error(
+            replace_exact("a b a", "missing", "x", /*replace_all*/ false),
+            "not found",
+        );
     }
 
     #[test]
     fn replace_exact_allows_explicit_replace_all() {
         assert_eq!(
-            replace_exact("a b a", "a", "A", true).expect("replace all"),
+            replace_exact("a b a", "a", "A", /*replace_all*/ true).expect("replace all"),
             "A b A"
         );
     }
@@ -858,8 +861,13 @@ mod tests {
     #[test]
     fn replace_structured_normalizes_line_endings_to_current_file() {
         assert_eq!(
-            replace_structured("alpha\r\nbeta\r\ngamma\r\n", "beta\n", "BETA\n", false)
-                .expect("line-ending normalized replacement"),
+            replace_structured(
+                "alpha\r\nbeta\r\ngamma\r\n",
+                "beta\n",
+                "BETA\n",
+                /*replace_all*/ false
+            )
+            .expect("line-ending normalized replacement"),
             "alpha\r\nBETA\r\ngamma\r\n"
         );
     }
@@ -880,8 +888,9 @@ mod tests {
         let command =
             "python3 - <<'PY'\nfrom pathlib import Path\nPath('src/lib.rs').write_text('x')\nPY";
         let (_session, mut turn) = crate::session::tests::make_session_and_context().await;
-        let openai_provider =
-            codex_model_provider_info::ModelProviderInfo::create_openai_provider(None);
+        let openai_provider = codex_model_provider_info::ModelProviderInfo::create_openai_provider(
+            /*base_url*/ None,
+        );
         turn.provider =
             codex_model_provider::create_model_provider(openai_provider, turn.auth_manager.clone());
         turn.model_info.slug = "gpt-5.2".to_string();
@@ -900,8 +909,9 @@ mod tests {
     #[tokio::test]
     async fn repeated_strict_patch_failures_enable_structured_edit_fallback() {
         let (_session, mut turn) = crate::session::tests::make_session_and_context().await;
-        let openai_provider =
-            codex_model_provider_info::ModelProviderInfo::create_openai_provider(None);
+        let openai_provider = codex_model_provider_info::ModelProviderInfo::create_openai_provider(
+            /*base_url*/ None,
+        );
         turn.provider =
             codex_model_provider::create_model_provider(openai_provider, turn.auth_manager.clone());
         turn.model_info.slug = "gpt-5.2".to_string();
@@ -931,8 +941,9 @@ mod tests {
     #[tokio::test]
     async fn model_edit_profile_tag_classifies_glm_and_codex_patch_profiles() {
         let (_session, mut turn) = crate::session::tests::make_session_and_context().await;
-        let openai_provider =
-            codex_model_provider_info::ModelProviderInfo::create_openai_provider(None);
+        let openai_provider = codex_model_provider_info::ModelProviderInfo::create_openai_provider(
+            /*base_url*/ None,
+        );
         turn.provider =
             codex_model_provider::create_model_provider(openai_provider, turn.auth_manager.clone());
 

@@ -2420,7 +2420,7 @@ async fn run_internal_gpu_controller(command: GpuControllerCommand) -> anyhow::R
             return Ok(());
         }
         let has_billable_work = state
-            .list_gpu_rentals(1_000)
+            .list_gpu_rentals(/*limit*/ 1_000)
             .await?
             .into_iter()
             .any(|rental| rental.may_be_billable());

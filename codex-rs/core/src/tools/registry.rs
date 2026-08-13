@@ -496,7 +496,7 @@ impl ToolRegistry {
         &self,
         invocation: ToolInvocation,
     ) -> Result<AnyToolResult, FunctionCallError> {
-        self.dispatch_any_with_terminal_outcome(invocation, None)
+        self.dispatch_any_with_terminal_outcome(invocation, /*terminal_outcome_reached*/ None)
             .await
     }
 

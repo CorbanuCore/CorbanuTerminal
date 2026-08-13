@@ -20,15 +20,54 @@ fn breakdown(total: i64, input: i64, output: i64) -> TokenUsageBreakdown {
 #[test]
 fn status_priority_preserves_actionable_state() {
     assert_eq!(
-        runtime_state(1, true, 1, true),
+        runtime_state(
+            /*approvals*/ 1, /*active_turn*/ true, /*queued*/ 1,
+            /*has_error*/ true
+        ),
         RuntimeState::AwaitingApproval
     );
-    assert_eq!(runtime_state(0, true, 1, true), RuntimeState::WorkingQueued);
-    assert_eq!(runtime_state(0, true, 0, true), RuntimeState::Working);
-    assert_eq!(runtime_state(0, false, 1, true), RuntimeState::Blocked);
-    assert_eq!(runtime_state(0, false, 1, false), RuntimeState::Recovering);
-    assert_eq!(runtime_state(0, false, 0, true), RuntimeState::Blocked);
-    assert_eq!(runtime_state(0, false, 0, false), RuntimeState::Idle);
+    assert_eq!(
+        runtime_state(
+            /*approvals*/ 0, /*active_turn*/ true, /*queued*/ 1,
+            /*has_error*/ true
+        ),
+        RuntimeState::WorkingQueued
+    );
+    assert_eq!(
+        runtime_state(
+            /*approvals*/ 0, /*active_turn*/ true, /*queued*/ 0,
+            /*has_error*/ true
+        ),
+        RuntimeState::Working
+    );
+    assert_eq!(
+        runtime_state(
+            /*approvals*/ 0, /*active_turn*/ false, /*queued*/ 1,
+            /*has_error*/ true
+        ),
+        RuntimeState::Blocked
+    );
+    assert_eq!(
+        runtime_state(
+            /*approvals*/ 0, /*active_turn*/ false, /*queued*/ 1,
+            /*has_error*/ false
+        ),
+        RuntimeState::Recovering
+    );
+    assert_eq!(
+        runtime_state(
+            /*approvals*/ 0, /*active_turn*/ false, /*queued*/ 0,
+            /*has_error*/ true
+        ),
+        RuntimeState::Blocked
+    );
+    assert_eq!(
+        runtime_state(
+            /*approvals*/ 0, /*active_turn*/ false, /*queued*/ 0,
+            /*has_error*/ false
+        ),
+        RuntimeState::Idle
+    );
 }
 
 #[test]
@@ -47,11 +86,11 @@ fn every_status_has_a_concrete_next_action() {
 
 #[test]
 fn thousands_groups_every_magnitude() {
-    assert_eq!(thousands(0), "0");
-    assert_eq!(thousands(999), "999");
-    assert_eq!(thousands(1_000), "1,000");
-    assert_eq!(thousands(178_010), "178,010");
-    assert_eq!(thousands(683_203_904), "683,203,904");
+    assert_eq!(thousands(/*value*/ 0), "0");
+    assert_eq!(thousands(/*value*/ 999), "999");
+    assert_eq!(thousands(/*value*/ 1_000), "1,000");
+    assert_eq!(thousands(/*value*/ 178_010), "178,010");
+    assert_eq!(thousands(/*value*/ 683_203_904), "683,203,904");
 }
 
 /// The reported thread outgrew every signal the chat surfaced: it ran for two
@@ -61,8 +100,14 @@ fn thousands_groups_every_magnitude() {
 #[test]
 fn status_reports_window_occupancy_and_the_unbounded_thread_total() {
     let usage = ThreadTokenUsage {
-        total: breakdown(684_885_374, 683_203_904, 1_681_470),
-        last: breakdown(178_010, 177_000, 1_010),
+        total: breakdown(
+            /*total*/ 684_885_374,
+            /*input*/ 683_203_904,
+            /*output*/ 1_681_470,
+        ),
+        last: breakdown(
+            /*total*/ 178_010, /*input*/ 177_000, /*output*/ 1_010,
+        ),
         model_context_window: Some(353_400),
     };
 
@@ -82,8 +127,12 @@ fn status_reports_window_occupancy_and_the_unbounded_thread_total() {
 #[test]
 fn status_omits_the_percentage_when_the_window_is_unknown() {
     let usage = ThreadTokenUsage {
-        total: breakdown(1_500, 1_200, 300),
-        last: breakdown(1_500, 1_200, 300),
+        total: breakdown(
+            /*total*/ 1_500, /*input*/ 1_200, /*output*/ 300,
+        ),
+        last: breakdown(
+            /*total*/ 1_500, /*input*/ 1_200, /*output*/ 300,
+        ),
         model_context_window: None,
     };
 
@@ -97,8 +146,12 @@ fn status_omits_the_percentage_when_the_window_is_unknown() {
 #[test]
 fn status_clamps_an_overfull_window() {
     let usage = ThreadTokenUsage {
-        total: breakdown(400_000, 399_000, 1_000),
-        last: breakdown(400_000, 399_000, 1_000),
+        total: breakdown(
+            /*total*/ 400_000, /*input*/ 399_000, /*output*/ 1_000,
+        ),
+        last: breakdown(
+            /*total*/ 400_000, /*input*/ 399_000, /*output*/ 1_000,
+        ),
         model_context_window: Some(353_400),
     };
 

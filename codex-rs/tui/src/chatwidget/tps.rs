@@ -277,7 +277,7 @@ mod tests {
     fn stream_estimate_renders_approximation_marker() {
         let start = Instant::now();
         let mut estimator = TpsEstimator::default();
-        estimator.start_turn(start, None);
+        estimator.start_turn(start, /*total_usage_at_start*/ None);
         assert!(estimator.record_stream_delta("12345678901234567890"));
 
         assert_eq!(
@@ -290,8 +290,15 @@ mod tests {
     fn provider_usage_renders_without_approximation_marker() {
         let start = Instant::now();
         let mut estimator = TpsEstimator::default();
-        estimator.start_turn(start, None);
-        assert!(estimator.record_provider_usage(&usage_info(usage(20, 5), usage(20, 5))));
+        estimator.start_turn(start, /*total_usage_at_start*/ None);
+        assert!(estimator.record_provider_usage(&usage_info(
+            usage(
+                /*output_tokens*/ 20, /*reasoning_output_tokens*/ 5
+            ),
+            usage(
+                /*output_tokens*/ 20, /*reasoning_output_tokens*/ 5
+            )
+        )));
         assert!(estimator.complete_turn(Some(1_000), start + Duration::from_secs(1)));
 
         assert_eq!(
@@ -304,9 +311,12 @@ mod tests {
     fn provider_usage_overrides_stream_estimate_for_active_turn() {
         let start = Instant::now();
         let mut estimator = TpsEstimator::default();
-        estimator.start_turn(start, None);
+        estimator.start_turn(start, /*total_usage_at_start*/ None);
         assert!(estimator.record_stream_delta("12345678901234567890"));
-        assert!(estimator.record_provider_usage(&usage_info(usage(8, 4), usage(8, 4))));
+        assert!(estimator.record_provider_usage(&usage_info(
+            usage(/*output_tokens*/ 8, /*reasoning_output_tokens*/ 4),
+            usage(/*output_tokens*/ 8, /*reasoning_output_tokens*/ 4)
+        )));
 
         assert_eq!(
             estimator.label(start + Duration::from_secs(2)),
@@ -318,8 +328,18 @@ mod tests {
     fn provider_usage_falls_back_to_cumulative_delta_for_active_turn() {
         let start = Instant::now();
         let mut estimator = TpsEstimator::default();
-        estimator.start_turn(start, Some(&usage(100, 0)));
-        assert!(estimator.record_provider_usage(&usage_info(usage(0, 0), usage(125, 0))));
+        estimator.start_turn(
+            start,
+            Some(&usage(
+                /*output_tokens*/ 100, /*reasoning_output_tokens*/ 0,
+            )),
+        );
+        assert!(estimator.record_provider_usage(&usage_info(
+            usage(/*output_tokens*/ 0, /*reasoning_output_tokens*/ 0),
+            usage(
+                /*output_tokens*/ 125, /*reasoning_output_tokens*/ 0
+            )
+        )));
         assert!(estimator.complete_turn(Some(5_000), start + Duration::from_secs(5)));
 
         assert_eq!(
@@ -332,14 +352,24 @@ mod tests {
     fn late_provider_usage_records_completed_zero_stream_turn() {
         let start = Instant::now();
         let mut estimator = TpsEstimator::default();
-        estimator.start_turn(start, Some(&usage(100, 0)));
+        estimator.start_turn(
+            start,
+            Some(&usage(
+                /*output_tokens*/ 100, /*reasoning_output_tokens*/ 0,
+            )),
+        );
         assert!(!estimator.complete_turn(Some(2_000), start + Duration::from_secs(2)));
         assert_eq!(
             estimator.label(start + Duration::from_secs(2)),
             "TPS: -- tok/s"
         );
 
-        assert!(estimator.record_provider_usage(&usage_info(usage(0, 0), usage(130, 0))));
+        assert!(estimator.record_provider_usage(&usage_info(
+            usage(/*output_tokens*/ 0, /*reasoning_output_tokens*/ 0),
+            usage(
+                /*output_tokens*/ 130, /*reasoning_output_tokens*/ 0
+            )
+        )));
 
         assert_eq!(
             estimator.label(start + Duration::from_secs(2)),
@@ -352,12 +382,31 @@ mod tests {
         let start = Instant::now();
         let mut estimator = TpsEstimator::default();
 
-        estimator.start_turn(start, None);
-        assert!(estimator.record_provider_usage(&usage_info(usage(100, 0), usage(100, 0))));
+        estimator.start_turn(start, /*total_usage_at_start*/ None);
+        assert!(estimator.record_provider_usage(&usage_info(
+            usage(
+                /*output_tokens*/ 100, /*reasoning_output_tokens*/ 0
+            ),
+            usage(
+                /*output_tokens*/ 100, /*reasoning_output_tokens*/ 0
+            )
+        )));
         assert!(estimator.complete_turn(Some(10_000), start + Duration::from_secs(10)));
 
-        estimator.start_turn(start + Duration::from_secs(10), Some(&usage(100, 0)));
-        assert!(estimator.record_provider_usage(&usage_info(usage(10, 0), usage(110, 0))));
+        estimator.start_turn(
+            start + Duration::from_secs(10),
+            Some(&usage(
+                /*output_tokens*/ 100, /*reasoning_output_tokens*/ 0,
+            )),
+        );
+        assert!(estimator.record_provider_usage(&usage_info(
+            usage(
+                /*output_tokens*/ 10, /*reasoning_output_tokens*/ 0
+            ),
+            usage(
+                /*output_tokens*/ 110, /*reasoning_output_tokens*/ 0
+            )
+        )));
         assert!(estimator.complete_turn(Some(1_000), start + Duration::from_secs(11)));
 
         assert_eq!(
@@ -373,15 +422,18 @@ mod tests {
 
         for i in 0..11 {
             let turn_start = start + Duration::from_secs(i);
-            estimator.start_turn(turn_start, None);
+            estimator.start_turn(turn_start, /*total_usage_at_start*/ None);
             assert!(estimator.record_provider_usage(&usage_info(
-                usage(10 + i as i64, 0),
-                usage(10 + i as i64, 0)
+                usage(10 + i as i64, /*reasoning_output_tokens*/ 0),
+                usage(10 + i as i64, /*reasoning_output_tokens*/ 0)
             )));
             assert!(estimator.complete_turn(Some(1_000), turn_start + Duration::from_secs(1)));
         }
 
-        estimator.start_turn(start + Duration::from_secs(20), None);
+        estimator.start_turn(
+            start + Duration::from_secs(20),
+            /*total_usage_at_start*/ None,
+        );
         assert!(estimator.record_stream_delta("12345678901234567890"));
 
         assert_eq!(
@@ -394,8 +446,15 @@ mod tests {
     fn positive_tokens_zero_duration_renders_placeholder() {
         let start = Instant::now();
         let mut estimator = TpsEstimator::default();
-        estimator.start_turn(start, None);
-        assert!(estimator.record_provider_usage(&usage_info(usage(10, 0), usage(10, 0))));
+        estimator.start_turn(start, /*total_usage_at_start*/ None);
+        assert!(estimator.record_provider_usage(&usage_info(
+            usage(
+                /*output_tokens*/ 10, /*reasoning_output_tokens*/ 0
+            ),
+            usage(
+                /*output_tokens*/ 10, /*reasoning_output_tokens*/ 0
+            )
+        )));
 
         assert_eq!(estimator.label(start), "TPS: -- tok/s");
     }
@@ -404,7 +463,7 @@ mod tests {
     fn cancel_discards_unfinished_active_sample() {
         let start = Instant::now();
         let mut estimator = TpsEstimator::default();
-        estimator.start_turn(start, None);
+        estimator.start_turn(start, /*total_usage_at_start*/ None);
         assert!(estimator.record_stream_delta("12345678901234567890"));
         estimator.cancel_active();
 

@@ -121,7 +121,7 @@ pub(crate) async fn handle_ambient_bridge_connection(
     if !request_line.contains("/v1/messages") {
         write_json_status_response(
             &mut stream,
-            404,
+            /*status*/ 404,
             serde_json::json!({ "error": { "type": "not_found", "message": "not found" } }),
         )
         .await?;
@@ -133,7 +133,7 @@ pub(crate) async fn handle_ambient_bridge_connection(
         Err(err) => {
             write_json_status_response(
                 &mut stream,
-                400,
+                /*status*/ 400,
                 serde_json::json!({
                     "type": "error",
                     "error": {
@@ -160,7 +160,7 @@ pub(crate) async fn handle_ambient_bridge_connection(
         Err(err) => {
             write_json_status_response(
                 &mut stream,
-                400,
+                /*status*/ 400,
                 serde_json::json!({
                     "type": "error",
                     "error": {
@@ -208,7 +208,7 @@ pub(crate) async fn handle_ambient_bridge_connection(
             } else {
                 write_json_status_response(
                     &mut stream,
-                    502,
+                    /*status*/ 502,
                     serde_json::json!({
                         "type": "error",
                         "error": {
@@ -263,7 +263,7 @@ pub(crate) async fn handle_ambient_bridge_connection(
             } else {
                 write_json_status_response(
                     &mut stream,
-                    502,
+                    /*status*/ 502,
                     serde_json::json!({
                         "type": "error",
                         "error": {
@@ -377,7 +377,7 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
     if !request_line.contains("/v1/messages") {
         write_json_status_response(
             &mut stream,
-            404,
+            /*status*/ 404,
             serde_json::json!({ "error": { "type": "not_found", "message": "not found" } }),
         )
         .await?;

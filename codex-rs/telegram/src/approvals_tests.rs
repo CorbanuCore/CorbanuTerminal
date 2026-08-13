@@ -36,7 +36,7 @@ fn command_approval_renders_escaped_command() {
         kind: PendingApprovalKind::Command(command_params(
             Some("echo <secret> && true"),
             Some("needs <network>"),
-            None,
+            /*available_decisions*/ None,
         )),
     };
 
@@ -52,12 +52,14 @@ fn command_decline_resolves_with_first_class_decline_decision() {
         request_id: RequestId::Integer(1),
         kind: PendingApprovalKind::Command(command_params(
             Some("false"),
-            None,
+            /*reason*/ None,
             Some(vec![CommandExecutionApprovalDecision::Decline]),
         )),
     };
 
-    let value = approval.resolve_value(0).expect("decline serializes");
+    let value = approval
+        .resolve_value(/*decision_index*/ 0)
+        .expect("decline serializes");
 
     assert_eq!(value, json!({ "decision": "decline" }));
 }
@@ -68,7 +70,7 @@ fn command_keyboard_uses_advertised_accept_and_cancel_decisions() {
         request_id: RequestId::Integer(1),
         kind: PendingApprovalKind::Command(command_params(
             Some("true"),
-            None,
+            /*reason*/ None,
             Some(vec![
                 CommandExecutionApprovalDecision::Accept,
                 CommandExecutionApprovalDecision::Cancel,
@@ -87,7 +89,7 @@ fn command_keyboard_shows_execpolicy_amendment_when_advertised() {
         request_id: RequestId::Integer(1),
         kind: PendingApprovalKind::Command(command_params(
             Some("true"),
-            None,
+            /*reason*/ None,
             Some(vec![
                 CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment {
                     execpolicy_amendment: ExecPolicyAmendment {
@@ -116,13 +118,13 @@ fn command_callback_for_unadvertised_decision_is_rejected() {
         request_id: RequestId::Integer(1),
         kind: PendingApprovalKind::Command(command_params(
             Some("true"),
-            None,
+            /*reason*/ None,
             Some(vec![CommandExecutionApprovalDecision::Accept]),
         )),
     };
 
     let err = approval
-        .resolve_value(1)
+        .resolve_value(/*decision_index*/ 1)
         .expect_err("unadvertised decision rejected");
 
     assert!(

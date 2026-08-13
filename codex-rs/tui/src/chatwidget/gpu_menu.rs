@@ -246,7 +246,7 @@ impl ChatWidget {
         if offers.is_empty() {
             self.add_info_message(
                 "No compatible verified GPU capacity is currently available.".to_string(),
-                None,
+                /*hint*/ None,
             );
             return;
         }

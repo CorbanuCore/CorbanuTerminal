@@ -2259,7 +2259,7 @@ mod tests {
             Some(resume_picker::SessionSelection::ResumePanesOnly { codex_thread_id })
                 if codex_thread_id == thread_id_text
         ));
-        assert!(explicit_fork_selection(Some(target), false).is_none());
+        assert!(explicit_fork_selection(Some(target), /*uses_remote_workspace*/ false).is_none());
     }
 
     #[test]
@@ -2279,12 +2279,12 @@ mod tests {
                 codex_home.path(),
                 &thread_id_text,
                 Some(target.clone()),
-                false,
+                /*uses_remote_workspace*/ false,
             ),
             Some(resume_picker::SessionSelection::Resume(_))
         ));
         assert!(matches!(
-            explicit_fork_selection(Some(target), false),
+            explicit_fork_selection(Some(target), /*uses_remote_workspace*/ false),
             Some(resume_picker::SessionSelection::Fork(_))
         ));
     }
@@ -2303,12 +2303,12 @@ mod tests {
                 codex_home.path(),
                 &thread_id.to_string(),
                 Some(target.clone()),
-                true,
+                /*uses_remote_workspace*/ true,
             ),
             Some(resume_picker::SessionSelection::Resume(_))
         ));
         assert!(matches!(
-            explicit_fork_selection(Some(target), true),
+            explicit_fork_selection(Some(target), /*uses_remote_workspace*/ true),
             Some(resume_picker::SessionSelection::Fork(_))
         ));
     }
