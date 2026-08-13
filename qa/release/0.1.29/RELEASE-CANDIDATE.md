@@ -83,6 +83,7 @@ All Rust tests used the repository's `just test` recipe.
 | PFTerminal runtime-entrypoint home isolation regressions | PASS, 9/9 across all three CLI binaries |
 | TUI/core dependency-boundary verifier | PASS; GPU runtime access is behind the app-server-client legacy seam |
 | TUI GPU runtime catalog regression | PASS, 1/1 |
+| `pnpm install --frozen-lockfile` with pinned pnpm 10.33.0 | PASS, including TypeScript SDK build |
 | `just bazel-lock-check` | PASS |
 | `bazel build //codex-rs/tasknode-session:tasknode-session //codex-rs/cli:codex` | PASS |
 | `just fix -p` for core, provider info, models manager, and TUI | PASS |
@@ -110,7 +111,9 @@ across the recovery branch. The candidate repairs the affected boundaries:
   and
 - newly disclosed `webbrowser` and `lru` advisories were resolved by upgrading
   to fixed versions, with the direct-HTTP migration debt explicitly enumerated
-  in the existing dependency-policy ratchet.
+  in the existing dependency-policy ratchet; and
+- the workspace pnpm lock was regenerated to restore the complete frozen
+  dependency graph used by repository and SDK CI.
 
 ## Linux production artifact
 
