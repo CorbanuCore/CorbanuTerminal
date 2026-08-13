@@ -956,10 +956,10 @@ handle_conflicting_install() {
       return
       ;;
     bun)
-      uninstall_cmd="bun remove -g @agticorp/pfterminal"
+      uninstall_cmd="bun remove -g @corbanucore/terminal @agticorp/pfterminal"
       ;;
     *)
-      uninstall_cmd="npm uninstall -g @agticorp/pfterminal"
+      uninstall_cmd="npm uninstall -g @corbanucore/terminal @agticorp/pfterminal"
       ;;
   esac
 

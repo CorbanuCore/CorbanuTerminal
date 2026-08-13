@@ -15,12 +15,12 @@ const require = createRequire(import.meta.url);
 const codexPackageRoot = realpathSync(path.join(__dirname, ".."));
 
 const PLATFORM_PACKAGE_BY_TARGET = {
-  "x86_64-unknown-linux-musl": "@agticorp/pfterminal-linux-x64",
-  "aarch64-unknown-linux-musl": "@agticorp/pfterminal-linux-arm64",
-  "x86_64-apple-darwin": "@agticorp/pfterminal-darwin-x64",
-  "aarch64-apple-darwin": "@agticorp/pfterminal-darwin-arm64",
-  "x86_64-pc-windows-msvc": "@agticorp/pfterminal-win32-x64",
-  "aarch64-pc-windows-msvc": "@agticorp/pfterminal-win32-arm64",
+  "x86_64-unknown-linux-musl": "@corbanucore/terminal-linux-x64",
+  "aarch64-unknown-linux-musl": "@corbanucore/terminal-linux-arm64",
+  "x86_64-apple-darwin": "@corbanucore/terminal-darwin-x64",
+  "aarch64-apple-darwin": "@corbanucore/terminal-darwin-arm64",
+  "x86_64-pc-windows-msvc": "@corbanucore/terminal-win32-x64",
+  "aarch64-pc-windows-msvc": "@corbanucore/terminal-win32-arm64",
 };
 
 const { platform, arch } = process;
@@ -105,10 +105,10 @@ function findCorbanuExecutable() {
   const packageManager = detectPackageManager();
   const updateCommand =
     packageManager === "bun"
-      ? "bun install -g @agticorp/pfterminal@latest"
+      ? "bun install -g @corbanucore/terminal@latest"
       : packageManager === "pnpm"
-        ? "pnpm add -g @agticorp/pfterminal@latest"
-        : "npm install -g @agticorp/pfterminal@latest";
+        ? "pnpm add -g @corbanucore/terminal@latest"
+        : "npm install -g @corbanucore/terminal@latest";
   throw new Error(
     `Missing optional dependency ${platformPackage}. Reinstall Corbanu Terminal: ${updateCommand}`,
   );

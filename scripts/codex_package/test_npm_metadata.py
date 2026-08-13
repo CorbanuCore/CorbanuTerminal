@@ -41,6 +41,13 @@ class NpmMetadataTest(unittest.TestCase):
                 "pfterminal": "bin/codex.js",
             },
         )
+        self.assertEqual(package_json["name"], "@corbanucore/terminal")
+        self.assertTrue(
+            all(
+                name.startswith("@corbanucore/terminal-")
+                for name in package_json["optionalDependencies"]
+            )
+        )
         self.assertIn("Corbanu Terminal", package_json["description"])
         self.assertEqual(
             package_json["repository"]["url"],

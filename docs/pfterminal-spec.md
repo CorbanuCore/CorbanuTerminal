@@ -58,7 +58,7 @@ The product changes are code-level: provider definitions, model metadata, reques
 Corbanu Terminal keeps upstream-compatible `codex` paths while adding product-facing command names:
 
 - `codex-rs/cli/Cargo.toml` defines both `codex` and `corbanu` binaries.
-- The npm package `@agticorp/pfterminal` exposes both `corbanu` and legacy
+- The npm package `@corbanucore/terminal` exposes both `corbanu` and legacy
   `pfterminal` command aliases for 0.1.30 compatibility.
 - The standalone installer creates a `corbanu` launcher and leaves any existing stock `codex` command alone.
 - State defaults to `$HOME/.corbanu`, separate from a stock Codex install using `$HOME/.codex`.
@@ -500,7 +500,7 @@ corbanu
 ### 11.4 npm package
 
 ```bash
-npm install -g @agticorp/pfterminal
+npm install -g @corbanucore/terminal
 corbanu --version
 ```
 

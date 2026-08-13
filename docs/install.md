@@ -153,13 +153,13 @@ install.
 
 ### npm Package
 
-The npm package remains `@agticorp/pfterminal` for 0.1.30 compatibility and
-exposes both `corbanu` and `pfterminal` command aliases. The launcher prefers
+The canonical npm package is `@corbanucore/terminal` and exposes both `corbanu`
+and `pfterminal` command aliases. The launcher prefers
 the bundled `corbanu` binary
 and defaults `CODEX_HOME` to `$HOME/.corbanu`.
 
 ```bash
-npm install -g @agticorp/pfterminal
+npm install -g @corbanucore/terminal
 corbanu --version
 ```
 

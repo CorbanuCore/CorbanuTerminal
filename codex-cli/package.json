@@ -1,5 +1,5 @@
 {
-  "name": "@agticorp/pfterminal",
+  "name": "@corbanucore/terminal",
   "version": "0.0.0-dev",
   "description": "Corbanu Terminal is a crypto-native AI services terminal based on the open-source Codex CLI.",
   "license": "Apache-2.0",

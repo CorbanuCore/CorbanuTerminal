@@ -1012,9 +1012,9 @@ function Maybe-HandleConflictingInstall {
     $manager = $Conflict.Manager
 
     $uninstallArgs = if ($manager -eq "bun") {
-        @("remove", "-g", "@agticorp/pfterminal")
+        @("remove", "-g", "@corbanucore/terminal", "@agticorp/pfterminal")
     } else {
-        @("uninstall", "-g", "@agticorp/pfterminal")
+        @("uninstall", "-g", "@corbanucore/terminal", "@agticorp/pfterminal")
     }
     $uninstallCommand = if ($manager -eq "bun") { "bun" } else { "npm" }
 

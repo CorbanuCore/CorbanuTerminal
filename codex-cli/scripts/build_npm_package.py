@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage and optionally package the @agticorp/pfterminal npm module."""
+"""Stage and optionally package the @corbanucore/terminal npm module."""
 
 import argparse
 import json
@@ -15,49 +15,49 @@ CODEX_CLI_ROOT = SCRIPT_DIR.parent
 REPO_ROOT = CODEX_CLI_ROOT.parent
 RESPONSES_API_PROXY_NPM_ROOT = REPO_ROOT / "codex-rs" / "responses-api-proxy" / "npm"
 CODEX_SDK_ROOT = REPO_ROOT / "sdk" / "typescript"
-CODEX_NPM_NAME = "@agticorp/pfterminal"
+CODEX_NPM_NAME = "@corbanucore/terminal"
 CODEX_PACKAGE_COMPONENT = "codex-package"
 
 # `npm_name` is the local optional-dependency alias consumed by `bin/codex.js`.
-# The underlying package published to npm is always `@agticorp/pfterminal`.
+# The underlying package published to npm is always `@corbanucore/terminal`.
 CODEX_PLATFORM_PACKAGES: dict[str, dict[str, str]] = {
     "codex-linux-x64": {
-        "npm_name": "@agticorp/pfterminal-linux-x64",
+        "npm_name": "@corbanucore/terminal-linux-x64",
         "npm_tag": "linux-x64",
         "target_triple": "x86_64-unknown-linux-musl",
         "os": "linux",
         "cpu": "x64",
     },
     "codex-linux-arm64": {
-        "npm_name": "@agticorp/pfterminal-linux-arm64",
+        "npm_name": "@corbanucore/terminal-linux-arm64",
         "npm_tag": "linux-arm64",
         "target_triple": "aarch64-unknown-linux-musl",
         "os": "linux",
         "cpu": "arm64",
     },
     "codex-darwin-x64": {
-        "npm_name": "@agticorp/pfterminal-darwin-x64",
+        "npm_name": "@corbanucore/terminal-darwin-x64",
         "npm_tag": "darwin-x64",
         "target_triple": "x86_64-apple-darwin",
         "os": "darwin",
         "cpu": "x64",
     },
     "codex-darwin-arm64": {
-        "npm_name": "@agticorp/pfterminal-darwin-arm64",
+        "npm_name": "@corbanucore/terminal-darwin-arm64",
         "npm_tag": "darwin-arm64",
         "target_triple": "aarch64-apple-darwin",
         "os": "darwin",
         "cpu": "arm64",
     },
     "codex-win32-x64": {
-        "npm_name": "@agticorp/pfterminal-win32-x64",
+        "npm_name": "@corbanucore/terminal-win32-x64",
         "npm_tag": "win32-x64",
         "target_triple": "x86_64-pc-windows-msvc",
         "os": "win32",
         "cpu": "x64",
     },
     "codex-win32-arm64": {
-        "npm_name": "@agticorp/pfterminal-win32-arm64",
+        "npm_name": "@corbanucore/terminal-win32-arm64",
         "npm_tag": "win32-arm64",
         "target_triple": "aarch64-pc-windows-msvc",
         "os": "win32",
