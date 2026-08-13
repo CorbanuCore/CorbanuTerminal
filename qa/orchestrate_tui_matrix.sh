@@ -378,6 +378,11 @@ row_6() {
   switch_pane "Manager"
   submit_user "QA_BAD_DISPATCH"
   wait_layout '.orchestrate_whips | to_entries[0].value.state == "paused"'
+  # The durable state transition and terminal rendering are delivered on
+  # separate event paths. A fast hosted runner can observe `paused` before the
+  # retry-failure notice reaches the viewport, so synchronize on both product
+  # signals before capturing evidence.
+  wait_screen "dispatch retry failed" 100 || fail 6 "retry failure was not visible"
   local evidence
   capture "dispatch-failure-paused" >/dev/null
   evidence=$LAST_CAPTURE_PATH
