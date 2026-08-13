@@ -12,7 +12,9 @@
   },
   "resolutions": {
     "@modelcontextprotocol/sdk": "1.26.0",
+    "@eslint/eslintrc>ajv": "6.12.6",
     "ajv": "8.18.0",
+    "eslint>ajv": "6.12.6",
     "braces": "^3.0.3",
     "esbuild": "0.28.1",
     "fast-uri": "3.1.1",
