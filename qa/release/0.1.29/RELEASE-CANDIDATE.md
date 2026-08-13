@@ -120,7 +120,9 @@ across the recovery branch. The candidate repairs the affected boundaries:
   runnable after the planned repository transfer and rename; and
 - the GPU market library explicitly disables an empty doctest target, keeping
   the workspace manifest warning-free under the CI `cargo shear
-  --deny-warnings` policy.
+  --deny-warnings` policy; and
+- the README's agent-hierarchy notation now follows the repository's enforced
+  ASCII-only policy.
 
 ## Linux production artifact
 

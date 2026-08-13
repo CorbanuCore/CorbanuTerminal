@@ -98,7 +98,7 @@ rm -rf "${PFTERMINAL_HOME:-$HOME/.pfterminal}"
 - Encrypted `/vault` storage for provider API keys and user credentials.
 - `pfterminal telegram` connector for allowlisted Telegram chats.
 - Codex-level coding workflows in a local terminal.
-- Native pane orchestration for Sauron → Nazgul → Troll → Orc agent workflows.
+- Native pane orchestration for Sauron -> Nazgul -> Troll -> Orc agent workflows.
 - Separate PFTerminal home at `$HOME/.pfterminal`, so it does not collide with
   a stock Codex install.
 
