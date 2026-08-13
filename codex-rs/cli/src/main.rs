@@ -1078,7 +1078,7 @@ fn stage_str(stage: Stage) -> &'static str {
 }
 
 fn main() -> anyhow::Result<()> {
-    pfterminal_home::configure_for_entrypoint(env!("CARGO_BIN_NAME"))?;
+    pfterminal_home::configure_for_current_process()?;
     let remote_control_disabled = codex_app_server::take_remote_control_disabled_env();
     arg0_dispatch_or_else(move |arg0_paths: Arg0DispatchPaths| async move {
         cli_main(arg0_paths, remote_control_disabled).await?;

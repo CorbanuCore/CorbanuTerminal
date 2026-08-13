@@ -9,6 +9,7 @@ Candidate commits:
 - `a6109561e6` — audited 0.1.28 remediation base and evidence
 - `d41a57722d` — Grok 4.6 and DeepSeek V4 Pro model integration
 - `1cdaeeafc4` — 0.1.29 version and release preparation
+- `997dcc719b` — release-validation and explicit provider-fallback corrections
 
 This candidate has not been installed, tagged, published, promoted to Latest,
 or deployed to production.
@@ -73,6 +74,15 @@ All Rust tests used the repository's `just test` recipe.
 | Updater deletion/revalidation tests in release profile | PASS, 3/3 |
 | `python3 scripts/install/test_pfterminal_release_contract.py` | PASS, 2/2 |
 | `python3 scripts/install/test_install_sh.py` | PASS, 17/17 |
+| Blob-size policy regressions | PASS, 5/5; pre-existing oversized blobs pass only when they do not grow |
+| Cargo workspace manifest policy | PASS |
+| `cargo shear --deny-warnings` | PASS |
+| `cargo deny check advisories bans licenses sources` | PASS |
+| `just test -p codex-utils-cache -p codex-mcp` | PASS, 145/145 |
+| `just test -p codex-utils-home-dir` | PASS, 5/5 |
+| PFTerminal runtime-entrypoint home isolation regressions | PASS, 9/9 across all three CLI binaries |
+| `just bazel-lock-check` | PASS |
+| `bazel build //codex-rs/tasknode-session:tasknode-session //codex-rs/cli:codex` | PASS |
 | `just fix -p` for core, provider info, models manager, and TUI | PASS |
 | `just fmt` | PASS |
 
@@ -80,6 +90,23 @@ The first clean-worktree code-mode test attempt failed because
 `codex-code-mode-host` had not yet been built. After building the host included
 by the release workflow, the exact regression and its broader filter passed.
 This was a test-environment prerequisite, not a product behavior failure.
+
+The first pull-request CI pass also exposed repository-policy drift accumulated
+across the recovery branch. The candidate repairs the affected boundaries:
+
+- the blob-size gate now blocks new or growing oversized blobs while allowing an
+  already-oversized file to be edited only when its size does not increase;
+- Cargo feature exceptions follow the code-mode sandbox feature to its current
+  crate, and the unused home-directory feature was removed;
+- the Task Node session crate is represented in the Bazel graph and the module
+  lock is current;
+- the CLI derives its entrypoint from runtime argv rather than a Cargo-only
+  compile-time variable, preserving state isolation in Bazel builds;
+- stale unlinked quarantine test residue and unused dependencies were removed;
+  and
+- newly disclosed `webbrowser` and `lru` advisories were resolved by upgrading
+  to fixed versions, with the direct-HTTP migration debt explicitly enumerated
+  in the existing dependency-policy ratchet.
 
 ## Linux production artifact
 
@@ -151,7 +178,9 @@ remain visible evidence rather than being hidden or converted to skips.
 
 This is not yet a publish recommendation:
 
-1. Linux ARM64, macOS, and Windows packaging still require the release CI matrix.
+1. The release CI matrix must pass against the final post-remediation candidate
+   SHA; the earlier non-publishing matrix remains in progress and cannot qualify
+   a later SHA.
 2. PowerShell installer tests were not run because `pwsh` is unavailable on this
    Linux host.
 3. No tag, GitHub release, installer target, package pointer, or production

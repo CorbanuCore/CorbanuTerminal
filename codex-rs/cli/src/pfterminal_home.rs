@@ -4,6 +4,16 @@ use std::path::PathBuf;
 const STABLE_HOME_ENV: &str = "PFTERMINAL_HOME";
 const DEBUG_HOME_ENV: &str = "PFTERMINAL_DEBUG_HOME";
 
+pub(crate) fn configure_for_current_process() -> anyhow::Result<()> {
+    let Some(arg0) = std::env::args_os().next() else {
+        return Ok(());
+    };
+    let Some(entrypoint) = entrypoint_from_argv0(&arg0) else {
+        return Ok(());
+    };
+    configure_for_entrypoint(&entrypoint)
+}
+
 pub(crate) fn configure_for_entrypoint(entrypoint: &str) -> anyhow::Result<()> {
     let home = match entrypoint {
         "pfterminal" => resolve_home(
@@ -25,6 +35,20 @@ pub(crate) fn configure_for_entrypoint(entrypoint: &str) -> anyhow::Result<()> {
     // sharing databases even when the invoking shell exports a stock CODEX_HOME.
     unsafe { std::env::set_var("CODEX_HOME", home) };
     Ok(())
+}
+
+fn entrypoint_from_argv0(arg0: &std::ffi::OsStr) -> Option<String> {
+    let arg0 = arg0.to_string_lossy();
+    let file_name = arg0
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|name| !name.is_empty())?;
+    Some(
+        file_name
+            .strip_suffix(".exe")
+            .unwrap_or(file_name)
+            .to_owned(),
+    )
 }
 
 fn resolve_home(
@@ -73,6 +97,18 @@ mod tests {
                 ".pfterminal-debug"
             ),
             Some(debug_override),
+        );
+    }
+
+    #[test]
+    fn runtime_entrypoint_handles_paths_and_windows_executables() {
+        assert_eq!(
+            entrypoint_from_argv0(std::ffi::OsStr::new("/usr/local/bin/pfterminal")),
+            Some("pfterminal".to_string())
+        );
+        assert_eq!(
+            entrypoint_from_argv0(std::ffi::OsStr::new(r"C:\Tools\pfterminal-debug.exe")),
+            Some("pfterminal-debug".to_string())
         );
     }
 }

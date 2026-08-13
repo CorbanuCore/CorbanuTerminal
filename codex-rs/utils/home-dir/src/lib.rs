@@ -2,9 +2,6 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use dirs::home_dir;
 use std::path::PathBuf;
 
-#[cfg(feature = "upstream-home")]
-const DEFAULT_HOME_DIR: &str = ".codex";
-#[cfg(not(feature = "upstream-home"))]
 const DEFAULT_HOME_DIR: &str = ".pfterminal";
 
 /// Returns the path to the Codex configuration directory, which can be specified by the

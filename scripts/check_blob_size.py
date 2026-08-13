@@ -17,6 +17,7 @@ DEFAULT_MAX_BYTES = 500 * 1024
 class ChangedBlob:
     path: str
     size_bytes: int
+    base_size_bytes: int | None
     is_allowlisted: bool
     is_binary: bool
 
@@ -75,6 +76,18 @@ def blob_size(commit: str, path: str) -> int:
     return int(run_git("cat-file", "-s", f"{commit}:{path}").strip())
 
 
+def base_blob_size(base: str, path: str) -> int | None:
+    result = subprocess.run(
+        ["git", "cat-file", "-s", f"{base}:{path}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    return int(result.stdout.strip())
+
+
 def collect_changed_blobs(
     base: str, head: str, allowlist: set[str]
 ) -> list[ChangedBlob]:
@@ -84,6 +97,7 @@ def collect_changed_blobs(
             ChangedBlob(
                 path=path,
                 size_bytes=blob_size(head, path),
+                base_size_bytes=base_blob_size(base, path),
                 is_allowlisted=path in allowlist,
                 is_binary=is_binary_change(base, head, path),
             )
@@ -93,6 +107,30 @@ def collect_changed_blobs(
 
 def format_kib(size_bytes: int) -> str:
     return f"{size_bytes / 1024:.1f} KiB"
+
+
+def violates_size_policy(blob: ChangedBlob, max_bytes: int) -> bool:
+    if blob.is_allowlisted or blob.size_bytes <= max_bytes:
+        return False
+
+    # Existing oversized blobs are migration debt, but changing an unrelated line in one
+    # must not force a risky refactor into the same pull request. Grandfather only blobs
+    # that were already oversized and did not grow; new or growing oversized blobs fail.
+    return (
+        blob.base_size_bytes is None
+        or blob.base_size_bytes <= max_bytes
+        or blob.size_bytes > blob.base_size_bytes
+    )
+
+
+def blob_status(blob: ChangedBlob, max_bytes: int, is_violation: bool) -> str:
+    if is_violation:
+        return "blocked"
+    if blob.is_allowlisted:
+        return "allowlisted"
+    if blob.size_bytes > max_bytes:
+        return "grandfathered (not grown)"
+    return "ok"
 
 
 def write_step_summary(
@@ -121,9 +159,7 @@ def write_step_summary(
             ]
         )
         for blob in blobs:
-            status = "allowlisted" if blob.is_allowlisted else "ok"
-            if blob in violations:
-                status = "blocked"
+            status = blob_status(blob, max_bytes, blob in violations)
             kind = "binary" if blob.is_binary else "non-binary"
             lines.append(
                 f"| `{blob.path}` | {kind} | `{blob.size_bytes}` bytes ({format_kib(blob.size_bytes)}) | {status} |"
@@ -159,11 +195,7 @@ def main() -> int:
 
     allowlist = load_allowlist(args.allowlist)
     blobs = collect_changed_blobs(args.base, args.head, allowlist)
-    violations = [
-        blob
-        for blob in blobs
-        if blob.size_bytes > args.max_bytes and not blob.is_allowlisted
-    ]
+    violations = [blob for blob in blobs if violates_size_policy(blob, args.max_bytes)]
 
     write_step_summary(args.max_bytes, blobs, violations)
 
@@ -175,9 +207,7 @@ def main() -> int:
         f"Checked {len(blobs)} changed file(s) against the {args.max_bytes}-byte limit."
     )
     for blob in blobs:
-        status = "allowlisted" if blob.is_allowlisted else "ok"
-        if blob in violations:
-            status = "blocked"
+        status = blob_status(blob, args.max_bytes, blob in violations)
         kind = "binary" if blob.is_binary else "non-binary"
         print(
             f"- {blob.path}: {blob.size_bytes} bytes ({format_kib(blob.size_bytes)}) [{kind}, {status}]"
