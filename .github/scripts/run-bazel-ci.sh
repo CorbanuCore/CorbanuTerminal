@@ -257,9 +257,11 @@ fi
 
 if [[ "${RUNNER_OS:-}" == "Windows" && $windows_cross_compile -eq 1 && -z "${BUILDBUDDY_API_KEY:-}" ]]; then
   # Windows cross-compilation depends on authenticated RBE. Preserve the local
-  # Windows build shape when credentials are unavailable.
+  # Windows GNU/Clang build shape when credentials are unavailable. The
+  # `common:windows` Bazel config already selects `//:local_windows`; forcing
+  # the MSVC host platform here would mix MSVC Rust linker arguments with the
+  # GNU-targeting Clang C++ toolchain.
   ci_config=ci-windows
-  windows_msvc_host_platform=1
 fi
 
 post_config_bazel_args=()
