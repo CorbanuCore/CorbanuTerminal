@@ -9,6 +9,16 @@ from tempfile import TemporaryDirectory
 
 
 class RunBazelCiTest(unittest.TestCase):
+    def test_sdk_stages_required_runtime_companions(self) -> None:
+        workflow = (
+            Path(__file__).parents[1] / "workflows" / "sdk.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("//codex-rs/cli:codex", workflow)
+        self.assertIn("//codex-rs/code-mode-host:codex-code-mode-host", workflow)
+        self.assertIn("stage_bazel_binary //codex-rs/cli:codex codex", workflow)
+        self.assertIn("codex-code-mode-host", workflow)
+
     def test_explicit_bazel_wrapper_job_timeouts_allow_cold_local_builds(self) -> None:
         workflows_dir = Path(__file__).parents[1] / "workflows"
 
