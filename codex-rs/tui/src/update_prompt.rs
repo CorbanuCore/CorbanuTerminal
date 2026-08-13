@@ -12,6 +12,7 @@ use crate::tui::Tui;
 use crate::tui::TuiEvent;
 use crate::update_action::UpdateAction;
 use crate::updates;
+use crate::updates_cache;
 use codex_product_brand::GITHUB_LATEST_RELEASE_URL;
 use color_eyre::Result;
 use crossterm::event::KeyCode;
@@ -77,7 +78,8 @@ pub(crate) async fn run_update_prompt_if_needed(
         }
         Some(UpdateSelection::NotNow) | None => Ok(UpdatePromptOutcome::Continue),
         Some(UpdateSelection::DontRemind) => {
-            if let Err(err) = updates::dismiss_version(config, screen.latest_version()).await {
+            if let Err(err) = updates_cache::dismiss_version(config, screen.latest_version()).await
+            {
                 tracing::error!("Failed to persist update dismissal: {err}");
             }
             Ok(UpdatePromptOutcome::Continue)
