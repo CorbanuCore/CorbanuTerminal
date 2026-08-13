@@ -15,6 +15,25 @@ from codex_package.targets import TARGET_SPECS
 
 
 class PackageLayoutTest(unittest.TestCase):
+    def test_telegram_powershell_installer_uses_identifier_safe_parameters(self) -> None:
+        script = (
+            Path(__file__).resolve().parents[2]
+            / "codex-rs"
+            / "scripts"
+            / "install-telegram-task.ps1"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("[string]$TerminalPath", script)
+        self.assertIn("Get-Command corbanu", script)
+        self.assertIn("Get-Command pfterminal", script)
+        declarations = [line for line in script.splitlines() if "[string]$" in line]
+        self.assertTrue(declarations)
+        for declaration in declarations:
+            self.assertRegex(
+                declaration,
+                r"^\s*\[string\]\$[A-Za-z_][A-Za-z0-9_]*\s*=",
+            )
+
     def test_macos_package_preserves_prebuilt_resource_binaries(self) -> None:
         for variant_name in ("corbanu", "pfterminal", "codex", "codex-app-server"):
             for target in ("aarch64-apple-darwin", "x86_64-apple-darwin"):

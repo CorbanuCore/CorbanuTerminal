@@ -7,7 +7,7 @@ on:
         description: "Release version; must match codex-rs/Cargo.toml."
         required: true
         type: string
-        default: "0.1.29"
+        default: "0.1.30"
       publish_release:
         description: "Create or update the matching GitHub release."
         required: true
@@ -18,6 +18,11 @@ on:
         required: true
         type: boolean
         default: false
+      reuse_run_id:
+        description: "Optional failed release run whose successful non-Windows artifacts should be reused."
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -57,6 +62,11 @@ jobs:
             exit 1
           fi
 
+          if [[ -n "${{ inputs.reuse_run_id }}" && ! "${{ inputs.reuse_run_id }}" =~ ^[0-9]+$ ]]; then
+            echo "reuse_run_id must be a numeric GitHub Actions run id"
+            exit 1
+          fi
+
           echo "version=${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=rust-v${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
 
@@ -65,6 +75,7 @@ jobs:
 
   build-macos:
     needs: validate
+    if: ${{ inputs.reuse_run_id == '' }}
     name: Build macOS package - ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     # Intel hosted runners can take more than two hours for a cold build. Keep
@@ -247,6 +258,7 @@ jobs:
 
   build-linux:
     needs: validate
+    if: ${{ inputs.reuse_run_id == '' }}
     name: Build Linux package - ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     # A cold Corbanu x86 GNU build now takes about 58 minutes before archive
@@ -584,12 +596,29 @@ jobs:
       - build-windows
     name: Assemble release assets
     runs-on: ubuntu-latest
+    if: >-
+      ${{
+        always() &&
+        needs.validate.result == 'success' &&
+        needs.build-windows.result == 'success' &&
+        (needs.build-macos.result == 'success' || needs.build-macos.result == 'skipped') &&
+        (needs.build-linux.result == 'success' || needs.build-linux.result == 'skipped')
+      }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: Download package archives
+      - if: ${{ inputs.reuse_run_id != '' }}
+        name: Download qualified artifacts from recovery run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          run-id: ${{ inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: downloaded
+          pattern: pfterminal-package-*
+
+      - name: Download package archives from this run
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: downloaded

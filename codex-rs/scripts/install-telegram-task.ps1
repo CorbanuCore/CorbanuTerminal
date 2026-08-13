@@ -1,11 +1,17 @@
 [CmdletBinding()]
 param(
-    [string]$Corbanu Terminal = (Get-Command pfterminal -ErrorAction Stop).Source,
+    [string]$TerminalPath = $(
+        $command = Get-Command corbanu -ErrorAction SilentlyContinue
+        if ($null -eq $command) {
+            $command = Get-Command pfterminal -ErrorAction Stop
+        }
+        $command.Source
+    ),
     [string]$TaskName = "Corbanu Terminal Telegram"
 )
 
 $ErrorActionPreference = "Stop"
-$resolved = (Resolve-Path $Corbanu Terminal).Path
+$resolved = (Resolve-Path $TerminalPath).Path
 
 Write-Host "Checking Telegram configuration, bot identity, provider, workspace, and sandbox..."
 & $resolved telegram --health

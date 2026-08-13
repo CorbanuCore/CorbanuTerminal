@@ -57,6 +57,18 @@ class SourceBinariesForTargetTest(unittest.TestCase):
         self.assertEqual(workflow.count("--bin bwrap"), 1)
         self.assertEqual(workflow.count("--bwrap-bin "), 1)
 
+    def test_release_workflow_can_reuse_qualified_platform_artifacts(self) -> None:
+        workflow = (
+            Path(__file__).resolve().parents[2]
+            / ".github"
+            / "workflows"
+            / "pfterminal-release.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("reuse_run_id:", workflow)
+        self.assertIn("run-id: ${{ inputs.reuse_run_id }}", workflow)
+        self.assertEqual(workflow.count("if: ${{ inputs.reuse_run_id == '' }}"), 2)
+
     def test_cli_accepts_repeated_prebuilt_extra_binaries(self) -> None:
         with patch.object(
             sys,
